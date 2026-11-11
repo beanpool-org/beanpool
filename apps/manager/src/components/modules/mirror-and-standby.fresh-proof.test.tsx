@@ -10,7 +10,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * the server a standby copies from (server backup.ts replication-config/save) ask an owner's fresh proof. Each of the
  * three viewers × the server's refusal → the code box, the "Manage again" sentence or the "from your phone" sentence.
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', credential: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', automationToken: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to add or change a mirror link', totpRequired: true };
 const WRONG = { error: 'That 2FA code was already used. Wait for the next one from your authenticator app.', totpRequired: true };
@@ -50,7 +50,7 @@ async function saveCopySource() {
 describe('PeerConnectorsPanel: a link the server guards asks the fresh proof (S4a)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('password viewer: add opens the code box; a spent code says so and stays; a new code re-sends the same add once', async () => {
+    it('token viewer: add opens the code box; a spent code says so and stays; a new code re-sends the same add once', async () => {
         const sent: Array<Record<string, unknown>> = [];
         mockNode('/api/local/connectors', [[401, CODE_ASK], [401, WRONG], [200, { success: true }]], sent);
         await addMirrorLink();
@@ -92,7 +92,7 @@ describe('PeerConnectorsPanel: a link the server guards asks the fresh proof (S4
 describe('StandbyReplicationPanel: the server it copies from asks the fresh proof (S4a)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('password viewer: the code box, then the same save re-sent once with the code', async () => {
+    it('token viewer: the code box, then the same save re-sent once with the code', async () => {
         const sent: Array<Record<string, unknown>> = [];
         mockNode('/api/local/admin/replication-config/save', [[401, { ...CODE_ASK, error: 'Enter a current code from your authenticator app (or a backup code) to change which server this standby copies from' }], [200, { success: true }]], sent);
         await saveCopySource();
@@ -101,8 +101,8 @@ describe('StandbyReplicationPanel: the server it copies from asks the fresh proo
         fireEvent.click(screen.getByTestId('standby-proof-confirm'));
         await waitFor(() => expect(screen.getByText(/saved successfully/)).toBeInTheDocument());
         expect(sent).toEqual([
-            { password: 'pw', primaryUrl: 'https://new.example.org' },
-            { password: 'pw', primaryUrl: 'https://new.example.org', code: '123456' },
+            { primaryUrl: 'https://new.example.org' },
+            { primaryUrl: 'https://new.example.org', code: '123456' },
         ]);
     });
 

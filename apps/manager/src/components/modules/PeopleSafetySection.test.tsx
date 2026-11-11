@@ -20,11 +20,12 @@ vi.mock('./PostModerationPanel', () => ({
 // So does the card of who reports stopped from sending message requests (its own tests: RequestLimitsCard.test.tsx).
 vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => <div data-testid="request-limits-card" /> }));
 
+const TOKEN = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    credential: 'admin-password',
+    automationToken: TOKEN,
 };
 
 const realServerReports: any[] = [
@@ -328,7 +329,8 @@ describe('PeopleSafetySection Component', () => {
         expect(asked).toHaveLength(1);
         expect(asked[0]).toMatch(/\/api\/local\/admin\/reports\/rep_msg\/message$/);
         const [, init] = fetchMock.mock.calls.find(([u]) => String(u).includes('/message')) as unknown as [string, RequestInit];
-        expect((init.headers as Record<string, string>)['X-Admin-Password']).toBe('admin-password');
+        expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+        expect((init.headers as Record<string, string>)['X-Admin-Password']).toBeUndefined();
         vi.unstubAllGlobals();
     });
 
@@ -445,7 +447,7 @@ describe('PeopleSafetySection Component', () => {
 
     // MCP-MODERATION S4: the posts screen draws "taken down by an assistant" only for a session that may read that record, so the
     // section must tell it who is looking, exactly as it tells the cards beside it.
-    it('tells the posts screen who is looking: the password, or the signed-in key and its role', () => {
+    it('tells the posts screen who is looking: a token, or the signed-in key and its role', () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
         renderModeration([]);
         expect(JSON.parse(screen.getByTestId('post-moderation-panel').getAttribute('data-viewer') ?? 'null')).toEqual({ kind: 'token' });
@@ -692,7 +694,7 @@ describe('People & Safety: Onboarding Funnel', () => {
         id: 'local-node',
         name: 'Local Sovereign Node',
         url: window.location.origin,
-        credential: 'break-glass-pass',
+        automationToken: TOKEN,
         isPrimary: true,
     };
 
@@ -725,7 +727,6 @@ describe('People & Safety: Onboarding Funnel', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         setKeySessionCsrfToken(null);
-        setTfaSessionToken('local-node', undefined);
     });
 
     it('offers the funnel as a sub-tab, right after Invites & QR', async () => {
@@ -736,8 +737,7 @@ describe('People & Safety: Onboarding Funnel', () => {
         expect(screen.getByRole('button', { name: /^Onboarding Funnel$/ })).toBeInTheDocument();
     });
 
-    it('reads the funnel with the break-glass password sign-in, through the shared admin headers', async () => {
-        setTfaSessionToken('local-node', 'tfa-abc');
+    it('reads the funnel with an automation token, through the shared admin headers', async () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => FUNNEL });
         vi.stubGlobal('fetch', fetchMock);
 
@@ -748,8 +748,10 @@ describe('People & Safety: Onboarding Funnel', () => {
         const [url, init] = funnelCalls(fetchMock)[0];
         // Same origin as the page, so no /proxy/ hop -- exactly what the members directory and invites do.
         expect(String(url)).toBe(`${window.location.origin}/api/local/admin/onboarding-funnel?days=30`);
-        expect(init.headers['X-Admin-Password']).toBe('break-glass-pass');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-abc');
+        expect(init.headers.Authorization).toBe(`Bearer ${TOKEN}`);
+        // The token is the only credential it carries: no password, no 2FA session.
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
         expect(init.headers['X-CSRF-Token']).toBeUndefined();
 
         await waitFor(() => expect(screen.getByText('Entered an invite code')).toBeInTheDocument());
@@ -757,19 +759,20 @@ describe('People & Safety: Onboarding Funnel', () => {
         expect(screen.getByText('Code had expired')).toBeInTheDocument();
     });
 
-    it('reads the funnel under a key sign-in: no password, the session cookie and its CSRF token instead', async () => {
+    it('reads the funnel under a key sign-in: no token, the session cookie and its CSRF token instead', async () => {
         setKeySessionCsrfToken('csrf-from-key-session');
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => FUNNEL });
         vi.stubGlobal('fetch', fetchMock);
 
         // An owner or admin signed in from the app: App.tsx leaves credential undefined, and the httpOnly
         // admin_session cookie authenticates the request by itself.
-        await act(async () => { renderPeople({ ...singleNode, credential: undefined }); });
+        await act(async () => { renderPeople({ ...singleNode, automationToken: undefined }); });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Onboarding Funnel$/ })); });
 
         await waitFor(() => expect(funnelCalls(fetchMock).length).toBe(1));
         const [url, init] = funnelCalls(fetchMock)[0];
         expect(String(url)).toBe(`${window.location.origin}/api/local/admin/onboarding-funnel?days=30`);
+        expect(init.headers.Authorization).toBeUndefined();
         expect(init.headers['X-Admin-Password']).toBeUndefined();
         expect(init.headers['X-CSRF-Token']).toBe('csrf-from-key-session');
 

@@ -8,7 +8,7 @@ import { NodeIdentityPanel } from './NodeIdentityPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchNodePrivatePreview, type DiagnosticsResponse } from '../../lib/node-client';
 
-const node: NodeProfile = { id: 'pp-node', name: 'Global', url: 'https://global.test', credential: 'pw' };
+const node: NodeProfile = { id: 'pp-node', name: 'Global', url: 'https://global.test', automationToken: 'pw' };
 const diag = { status: 'healthy', callsign: 'global', communityName: 'Global' } as unknown as DiagnosticsResponse;
 
 function stubInfo(info: unknown | Error) {

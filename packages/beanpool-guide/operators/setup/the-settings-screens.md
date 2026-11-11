@@ -28,7 +28,7 @@ The top of the side bar (on a phone, the **☰** menu and the right of the top b
 
 Settings remembers where you came from until you close the tab, so it still says the right thing after a reload.
 
-**View my profile** sits under it when you signed in from the app, and opens your own profile in the same place. After a password sign-in there is no person to show, so it is not there. It is not there either when Settings cannot tell where you came from, which happens with an older copy of the app: update the app to get it.
+**View my profile** sits under it when you signed in from the app, and opens your own profile in the same place. It is not there when Settings cannot tell where you came from, which happens with an older copy of the app: update the app to get it.
 
 ## On a laptop
 

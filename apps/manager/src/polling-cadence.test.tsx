@@ -130,7 +130,7 @@ function countOf(fragment: string) {
 function seedProfiles(...urls: string[]) {
     localStorage.setItem(
         'bp_fleet_profiles',
-        JSON.stringify(urls.map((url, i) => ({ id: i === 0 ? 'local-node' : `node-${i}`, name: `Node ${i}`, url, credential: 'pw' }))),
+        JSON.stringify(urls.map((url, i) => ({ id: i === 0 ? 'local-node' : `node-${i}`, name: `Node ${i}`, url }))),
     );
 }
 
@@ -527,7 +527,7 @@ describe('Node Settings polling cadence', () => {
 });
 
 describe('Section timers obey the same pause', () => {
-    const activeNode: NodeProfile = { id: 'local-node', name: 'Local', url: 'https://localhost:8443', credential: 'pw' };
+    const activeNode: NodeProfile = { id: 'local-node', name: 'Local', url: 'https://localhost:8443', automationToken: 'pw' };
 
     beforeEach(resetSharedState);
     afterEach(restoreSharedState);

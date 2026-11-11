@@ -2,8 +2,7 @@
  * Key sign-in for the node's own /settings (docs/admin-surface.md §2.3).
  *
  * The member app opens `/settings#handoff=<token>[&section=<id>]`. The token is a 60-second, single-use
- * credential the node minted after the member signed its challenge with their key (and, if the owner turned
- * it on, gave the node's 2FA code). It rides in the URL FRAGMENT so no server, proxy log or Referer ever
+ * credential the node minted after the member signed its challenge with their key. It rides in the URL FRAGMENT so no server, proxy log or Referer ever
  * sees it; this module takes it out of the address bar first, then posts it to the node once. The node
  * answers with an httpOnly `admin_session` cookie — every later request carries it automatically, same
  * origin — and a CSRF token, which has to go on every request because the cookie is ambient.

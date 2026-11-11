@@ -7,7 +7,7 @@ import type { NodeProfile } from '../../lib/profiles';
 // Notices from the address service (registrar slice S2): Settings → Public Address shows what the BeanPool project wrote
 // to this community's name, read after the status check that brings them (apps/server services/registrar-notices.ts).
 
-const node: NodeProfile = { id: 'local-node', name: 'Kestrel Node', url: 'http://localhost:8080', credential: 'test-password' };
+const node: NodeProfile = { id: 'local-node', name: 'Kestrel Node', url: 'http://localhost:8080', automationToken: 'test-password' };
 const REPLY = `https://beanpool.org/reply/${'a'.repeat(43)}`;
 
 function mockNotices(notices: unknown, status = 200): string[] {

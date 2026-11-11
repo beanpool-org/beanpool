@@ -3,7 +3,9 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RestorePointsPanel, type RestorePointInfo } from './RestorePointsPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'home', name: 'Home', url: 'https://home.example.org', credential: 'home-pw' };
+// A real automation token's shape (bp_ + 12 hex + _ + 64 hex): only this travels as a Bearer.
+const TOKEN = `bp_${'c'.repeat(12)}_${'d'.repeat(64)}`;
+const node: NodeProfile = { id: 'home', name: 'Home', url: 'https://home.example.org', automationToken: TOKEN };
 const POINTS: RestorePointInfo[] = [
     { name: '2026-10-16T02-30-00.123Z-before-restore', why: 'restore', takenAt: '2026-10-16T02:30:00.123Z', bytes: 3 * 1024 * 1024,
         keptAtLeastUntil: '2026-10-23T02:30:00.123Z', keptAtMostUntil: '2026-11-15T02:30:00.123Z' },
@@ -42,7 +44,8 @@ describe('RestorePointsPanel', () => {
         expect(screen.getAllByRole('button', { name: 'Roll back to this point' })).toHaveLength(2);
         expect(calls).toHaveLength(1);
         expect(calls[0]).toMatchObject({ path: '/api/local/admin/restore-points', method: 'GET' });
-        expect(calls[0].headers).toMatchObject({ 'X-Admin-Password': 'home-pw' });
+        expect(calls[0].headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+        expect(calls[0].headers['X-Admin-Password']).toBeUndefined();
     });
 
     it('draws nothing for an admin and asks the server nothing (owners only, as the server)', async () => {
@@ -63,12 +66,11 @@ describe('RestorePointsPanel', () => {
         expect(await screen.findByText('The restore points could not be listed: disk unreadable')).toBeInTheDocument();
     });
 
-    it('Roll back opens the fresh-proof step in the page (no confirm()); the code goes to the server with the point\'s name', async () => {
+    it('Roll back opens the fresh-proof step in the page (no confirm()); the point\'s name goes to the server with no code and no password', async () => {
         const confirmSpy = vi.spyOn(window, 'confirm');
         const calls = stubFetch((path, body) => {
             if (path === '/api/local/admin/restore-points') return { status: 200, body: { points: POINTS } };
             if (path === '/api/local/admin/restore-points/roll-back') {
-                if (!body?.code) return { status: 401, body: { error: 'Enter a current code from your authenticator app (or a backup code) to roll back to a restore point', code: 'totpRequired' } };
                 return { status: 200, body: { success: true, rolledBackTo: body.name,
                     restorePointNote: 'Restore point 2026-10-16T05-00-00.000Z-before-roll-back is kept until at least 2026-10-23.',
                     restartNote: 'The server restarts now; sign in again.' } };
@@ -79,19 +81,25 @@ describe('RestorePointsPanel', () => {
         fireEvent.click((await screen.findAllByRole('button', { name: 'Roll back to this point' }))[0]);
         const step = screen.getByTestId('roll-back-step');
         expect(step.textContent).toContain('A restore point of the server as it is now is taken first');
+        // No authenticator-code field: a node has no second factor to type.
+        expect(screen.queryByLabelText(/authenticator|current code/)).toBeNull();
+        expect(step.querySelector('input')).toBeNull();
+        expect(screen.getByText('From your phone: press Manage again, then roll back within 90 seconds.')).toBeInTheDocument();
         const roll = screen.getByRole('button', { name: 'Roll back' });
-        expect(roll).toBeDisabled();
-        fireEvent.change(screen.getByLabelText(/current code from your authenticator app/), { target: { value: '123456' } });
+        expect(roll).toBeEnabled();
         fireEvent.click(roll);
         expect(await screen.findByText(/Rolled back to the restore point of/)).toBeInTheDocument();
         expect(screen.getByText(/Restore point 2026-10-16T05-00-00.000Z-before-roll-back is kept until at least 2026-10-23\. The server restarts now; sign in again\./)).toBeInTheDocument();
         const post = calls.find((c) => c.path === '/api/local/admin/restore-points/roll-back')!;
         expect(post.method).toBe('POST');
-        expect(post.body).toMatchObject({ name: POINTS[0].name, code: '123456', password: 'home-pw' });
+        // The request carries the point's name only: no code, no password.
+        expect(post.body).toEqual({ name: POINTS[0].name });
+        expect(post.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+        expect(post.headers['X-Admin-Password']).toBeUndefined();
         expect(confirmSpy).not.toHaveBeenCalled();
     });
 
-    it('a key viewer gets the phone sentence instead of a code field, and the server\'s refusal in its own words', async () => {
+    it('an owner key viewer gets the same phone sentence (no code field), and the server\'s refusal in its own words', async () => {
         stubFetch((path) => {
             if (path === '/api/local/admin/restore-points') return { status: 200, body: { points: POINTS } };
             if (path === '/api/local/admin/restore-points/roll-back') return { status: 403, body: { error: 'Press Manage on your phone again, then do this within 90 seconds', code: 'step_up_required' } };

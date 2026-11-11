@@ -20,13 +20,13 @@ describe('OnboardingModule', () => {
             id: 'node-1',
             name: 'Node Alpha',
             url: 'https://alpha.beanpool.org',
-            credential: 'secretpassword1',
+            automationToken: 'token-alpha',
         },
         {
             id: 'node-2',
             name: 'Node Beta',
             url: 'https://beta.beanpool.org',
-            credential: 'secretpassword2',
+            automationToken: 'token-beta',
         },
     ];
 
@@ -56,9 +56,8 @@ describe('OnboardingModule', () => {
         expect(screen.getByText('Reading the funnel…')).toBeInTheDocument();
         expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
             'https://alpha.beanpool.org',
-            'secretpassword1',
-            30,
-            undefined
+            'token-alpha',
+            30
         );
     });
 
@@ -340,9 +339,8 @@ describe('OnboardingModule', () => {
         await waitFor(() => {
             expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
                 'https://alpha.beanpool.org',
-                'secretpassword1',
-                30,
-                undefined
+                'token-alpha',
+                30
             );
         });
 
@@ -351,9 +349,8 @@ describe('OnboardingModule', () => {
 
         expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
             'https://alpha.beanpool.org',
-            'secretpassword1',
-            7,
-            undefined
+            'token-alpha',
+            7
         );
 
         const nodeSelect = screen.getByRole('combobox', {
@@ -364,25 +361,26 @@ describe('OnboardingModule', () => {
         expect(mockSelectNode).toHaveBeenCalledWith('node-2');
     });
 
-    it('forwards the 2FA session token the page holds for the profile', async () => {
-        // 2FA session tokens are held in memory now, never in sessionStorage (Fable's web review, M1).
-        nodeClient.setTfaSessionToken('node-1', 'tfa-session-token-123');
+    it("reads a node's funnel with that profile's own token and the days, and nothing else", async () => {
         vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
             days: 30,
             rows: [],
         });
 
-        renderModule();
+        render(
+            <OnboardingModule
+                profiles={mockProfiles}
+                activeProfileId="node-2"
+                onSelectNode={mockSelectNode}
+            />
+        );
 
         await waitFor(() => {
             expect(nodeClient.fetchOnboardingFunnel).toHaveBeenCalledWith(
-                'https://alpha.beanpool.org',
-                'secretpassword1',
-                30,
-                'tfa-session-token-123'
+                'https://beta.beanpool.org',
+                'token-beta',
+                30
             );
         });
-
-        nodeClient.setTfaSessionToken('node-1', undefined);
     });
 });

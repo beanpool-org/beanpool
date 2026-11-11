@@ -33,18 +33,12 @@ You can add a reason. Both people get a notification, a message in their chat an
 
 ## Who may rule
 
-Any owner or admin, with two exceptions:
+Any owner or admin, with one exception:
 
 - **You cannot rule on a deal you are part of**: as the buyer, as the seller, or as a keeper of an enterprise that is either one. Settings refuses. Ask another admin.
-- **The admin password cannot rule when an owner is part of the deal**, because it cannot show which owner is acting. Another admin must rule from their own sign-in from the app.
 
 This is why a community needs more than one admin.
 
 ## What the two people see
 
-The chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words. The notification itself says only that there is news on one of your trades:
-
-- **Signed in with your own key:** your callsign.
-- **Signed in with the admin password:** "a community admin".
-
-They never show a key or "owner:password". The server keeps the exact signer in its records. Settings shows the other admins the same name the two people see.
+The chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words: your callsign, since you rule signed in with your own key. The notification itself says only that there is news on one of your trades. They never show a key. The server keeps the exact signer in its records. Settings shows the other admins the same name the two people see.

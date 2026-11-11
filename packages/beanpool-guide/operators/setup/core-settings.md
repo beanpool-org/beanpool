@@ -39,7 +39,7 @@ Each core setting has its own **Unlock to change** button. There is never an unl
 
 - Press **Unlock to change** on the setting. The setting opens, with what changing it will do.
 - Make the change. For the three one-way changes you also type a word before **Save** works: **off** (Beans off), **stop** (sharing outside off) or **nowhere** (copies go nowhere).
-- Press **Save**. Settings asks your proof when you save: from your phone, you pressed **Manage** within the last 90 seconds (if not, it says **Press Manage on your phone again, then make this change within 90 seconds**); with the admin password, a current code from your authenticator app (turn on two-factor sign-in first, if you have not). A computer signed in with your phone's key is told to do it from the phone.
+- Press **Save**. Settings asks your proof when you save: you pressed **Manage** on your phone within the last 90 seconds (if not, it says **Press Manage on your phone again, then make this change within 90 seconds**). A computer signed in with your phone's key is told to do it from the phone.
 - The change is saved with a **Unlocked** line in **Changes**, every owner is told, and members are told in the usual words. The settings are locked again at once.
 
 Everything the server refuses stays refused, and its own line says why. Beans cannot be switched off once anything has traded. Beans cannot be switched on while the open door is set.

@@ -205,7 +205,7 @@ export const DOOR_PRESETS: ReadonlyArray<{ door: 'members' | 'admins'; name: str
         name: 'Known',
         plain: 'only admins invite',
         detail: 'Only owners and admins can make invites and answer requests to join. Members are told to ask an admin, and their app shows no invite to make. '
-            + 'Owners and admins can also keep a names list of who the members are: it opens in the BeanPool app on their own phones, signed in with their key, not with this password.',
+            + 'Owners and admins can also keep a names list of who the members are: it opens in the BeanPool app on their own phones, signed in with their key.',
     },
 ];
 

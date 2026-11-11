@@ -68,7 +68,7 @@ beforeEach(() => { vi.restoreAllMocks(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
-    it('password viewer: Make a re-key code opens the box; a wrong code stays; a new code re-sends issue-code once with `code`', async () => {
+    it('token viewer: Make a re-key code opens the box; a wrong code stays; a new code re-sends issue-code once with `code`', async () => {
         const sent = mockNode({ issue: [[401, CODE_ASK], [401, WRONG], [200, ISSUED]] });
         render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         await tickAndMake();
@@ -86,7 +86,7 @@ describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
         expect(sent.issue.every((s) => s.headers['X-Fresh-Proof'] === undefined)).toBe(true);
     });
 
-    it('password viewer: Bind their phone opens the box; the code goes as X-Fresh-Proof, the body keeps the re-key code and the number', async () => {
+    it('token viewer: Bind their phone opens the box; the code goes as X-Fresh-Proof, the body keeps the re-key code and the number', async () => {
         const sent = mockNode({ pendingFromStart: true, complete: [[401, CODE_ASK], [200, BOUND]] });
         render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         await typeNumberAndBind('47');
@@ -103,7 +103,7 @@ describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
         expect(sent.complete.map((s) => s.body)).toEqual([{ code: RK, match: '47' }, { code: RK, match: '47' }]);
     });
 
-    it('password viewer, Paste a key instead: the same box; the pasted key and the re-key code stay in the body', async () => {
+    it('token viewer, Paste a key instead: the same box; the pasted key and the re-key code stay in the body', async () => {
         const sent = mockNode({ pendingFromStart: true, complete: [[401, CODE_ASK], [200, BOUND]] });
         render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Paste a key instead' }));

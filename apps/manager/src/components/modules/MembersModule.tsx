@@ -944,7 +944,7 @@ export function MembersModule({
                 <div className="p-12 text-center text-nature-400 text-xs">
                     {nodeDataLoading
                         ? 'Fetching node member roster from target API...'
-                        : 'Authenticate with Admin Password to view node member standing and trust calculations.'}
+                        : 'Sign in to view node member standing and trust calculations.'}
                 </div>
             )}
 

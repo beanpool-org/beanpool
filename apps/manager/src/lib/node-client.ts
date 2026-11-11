@@ -2284,9 +2284,6 @@ export async function getRegistrarPending(
     credential?: string,
 ): Promise<RegistrarAllocation[]> {
     const headers = buildAdminHeaders(credential);
-    if (credential && !isAutomationToken(credential)) {
-        headers['x-admin-secret'] = credential;
-    }
     const endpoint = nodeUrl
         ? resolveNodeApiUrl(nodeUrl, '/api/local/admin/registrar/pending')
         : '/api/local/admin/registrar/pending';
@@ -2319,9 +2316,6 @@ export async function approveRegistrarClaim(
     }
 
     const headers = buildAdminHeaders(token);
-    if (token && !isAutomationToken(token)) {
-        headers['x-admin-secret'] = token;
-    }
     const endpoint = nodeUrl
         ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name || '')}/approve`)
         : `/api/local/admin/registrar/${encodeURIComponent(name || '')}/approve`;
@@ -2353,9 +2347,6 @@ export async function revokeRegistrarClaim(
     }
 
     const headers = buildAdminHeaders(token);
-    if (token && !isAutomationToken(token)) {
-        headers['x-admin-secret'] = token;
-    }
     const endpoint = nodeUrl
         ? resolveNodeApiUrl(nodeUrl, `/api/local/admin/registrar/${encodeURIComponent(name || '')}/revoke`)
         : `/api/local/admin/registrar/${encodeURIComponent(name || '')}/revoke`;

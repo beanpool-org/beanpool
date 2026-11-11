@@ -45,13 +45,13 @@ describe('no window confirm() for a destructive action', () => {
             return hits.filter((i) => !/await\s*$/.test(f.text.slice(Math.max(0, i - 12), i + 1))).map(() => f.rel);
         });
         expect(unawaited).toEqual([]);
-        // And the hook is in use: the eleven actions, in nine files, this lane moved off window.confirm(); and Settings →
-        // Public Address → "Your own address" asks before Remove (HTTPS S4).
+        // And the hook is in use: the actions, in these files, this lane moved off window.confirm(); and Settings →
+        // Public Address → "Your own address" asks before Remove (HTTPS S4). (ApplianceSection's "Turn off two-factor
+        // sign-in?" went with the 2FA card: the node has no 2FA.)
         const asking = files.filter((f) => /await ask\(\{/.test(f.text)).map((f) => f.rel).sort();
         expect(asking).toEqual([
             'App.tsx',
             'components/modules/AddressesPanel.tsx',
-            'components/modules/ApplianceSection.tsx',
             'components/modules/AssistantTakedownsPanel.tsx',
             'components/modules/AutomationTokensPanel.tsx',
             'components/modules/BulletinSection.tsx',

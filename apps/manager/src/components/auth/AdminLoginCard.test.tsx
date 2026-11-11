@@ -2,24 +2,43 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AdminLoginCard } from './AdminLoginCard';
+import * as nodeClaim from '../../lib/node-claim';
+import { STANDBY_RECOVER_COMMAND } from '../../lib/node-claim';
 
-// These tests are about the password form on a node that has an owner. The claim check (useClaimState) answers that
-// without a request, so each test's fetch mock sees only the password sign-in. AdminLoginCard.claim.test.tsx covers
-// the check itself.
+// A node has no admin password: the card is the phone sign-in alone (PhoneSignIn), the claim card while the node has no
+// owner, and a note on a standby. The claim check (useClaimState) is answered here without a request, so each test sees
+// only what the card itself asks. AdminLoginCard.claim.test.tsx covers the check itself, with the real route.
 vi.mock('../../lib/node-claim', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../lib/node-claim')>()),
     fetchClaimState: vi.fn(async () => ({ kind: 'claimed' })),
     fetchCommunityInfo: vi.fn(async () => ({ primaryAddress: null, addresses: [] })),
 }));
 
+// The phone sign-in's own behaviour is PhoneSignIn.test.tsx's; here it is a stand-in that can hand a session up.
+vi.mock('./PhoneSignIn', () => ({
+    PhoneSignIn: ({ onSignedIn, ...rest }: { onSignedIn: (s: { memberPubkey: string; role: 'owner' }, csrf: string) => void }) => (
+        <section data-testid="phone-signin-stub" data-props={Object.keys(rest).join(',')}>
+            <button type="button" onClick={() => onSignedIn({ memberPubkey: 'f'.repeat(64), role: 'owner' }, 'csrf-abc')}>stub: phone approves</button>
+        </section>
+    ),
+}));
+
+// The claim card draws a QR; its picture does not matter here.
+vi.mock('../../lib/qr', () => ({ generateOfflineQrUrl: (text: string) => `data:text/plain,${encodeURIComponent(text)}` }));
+
 describe('AdminLoginCard component', () => {
-    const mockOnPasswordSession = vi.fn();
+    const onKeySession = vi.fn();
     const nodeUrl = 'http://localhost:3000';
 
     beforeEach(() => {
         vi.clearAllMocks();
         sessionStorage.clear();
         localStorage.clear();
+        vi.mocked(nodeClaim.fetchClaimState).mockResolvedValue({ kind: 'claimed' });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
     });
 
     /** Every key and value this origin's web storage holds. */
@@ -34,135 +53,79 @@ describe('AdminLoginCard component', () => {
         return out.join('\n');
     }
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
-    it('renders admin password input and unlock button', () => {
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
+    it('renders the Node Settings title and the phone sign-in', () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
         expect(screen.getByText('Node Settings')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        expect(screen.getByTestId('phone-signin')).toContainElement(screen.getByTestId('phone-signin-stub'));
     });
 
-    it('shows error if submitted with empty password', async () => {
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
-        const form = screen.getByRole('button', { name: /Unlock Settings/i }).closest('form')!;
-        fireEvent.submit(form);
-        expect(await screen.findByText('Please enter the admin password')).toBeInTheDocument();
-        expect(mockOnPasswordSession).not.toHaveBeenCalled();
+    it('draws no password form: no password field, no Unlock Settings button, no 2FA field, no fold', async () => {
+        const { container } = render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        // After the claim check has answered too, not only before it.
+        await waitFor(() => expect(nodeClaim.fetchClaimState).toHaveBeenCalled());
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+        expect(screen.queryByPlaceholderText(/6-digit code/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Show' })).toBeNull();
+        expect(screen.queryByTestId('admin-password-field')).toBeNull();
+        expect(screen.queryByTestId('claim-password-fold')).toBeNull();
+        expect(container.querySelector('form')).toBeNull();
+        expect(container.querySelector('input')).toBeNull();
+        expect(container.querySelector('details')).toBeNull();
+        expect(container.textContent).not.toMatch(/admin password/i);
     });
 
-    it('toggles password field visibility when Show/Hide is clicked', () => {
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
-        const passwordInput = screen.getByPlaceholderText('Password') as HTMLInputElement;
-        const toggleBtn = screen.getByRole('button', { name: 'Show' });
-
-        expect(passwordInput.type).toBe('password');
-        fireEvent.click(toggleBtn);
-        expect(passwordInput.type).toBe('text');
-        expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    it('gives PhoneSignIn nothing but its way to hand a session up (no "use the password" option)', () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        expect(screen.getByTestId('phone-signin-stub').getAttribute('data-props')).toBe('');
     });
 
-    it('keeps the Show/Hide button beside the password input rather than drawn over it', () => {
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
-        const field = screen.getByTestId('admin-password-field');
-        const passwordInput = screen.getByPlaceholderText('Password');
-        const toggleBtn = screen.getByRole('button', { name: 'Show' });
-
-        // Siblings in one flex row: the input shrinks, the button keeps its own space.
-        expect(field).toHaveClass('flex');
-        expect(passwordInput.parentElement).toBe(field);
-        expect(toggleBtn.parentElement).toBe(field);
-        expect(passwordInput).toHaveClass('flex-1', 'min-w-0');
-        expect(toggleBtn).toHaveClass('shrink-0');
-        expect(toggleBtn.className).not.toMatch(/(^|\s)absolute(\s|$)/);
+    it('hands the key session and its CSRF token up when the phone signs in', () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        fireEvent.click(screen.getByRole('button', { name: 'stub: phone approves' }));
+        expect(onKeySession).toHaveBeenCalledTimes(1);
+        expect(onKeySession).toHaveBeenCalledWith({ memberPubkey: 'f'.repeat(64), role: 'owner' }, 'csrf-abc');
+        expect(storedText()).not.toContain('csrf-abc');
     });
 
-    it('exchanges the password for the node\'s session cookie and keeps no copy of it anywhere in web storage', async () => {
-        // Until 2026-10-01 this test asserted the opposite: the password and its 2FA session in sessionStorage, on the
-        // origin the members' web app shares (Fable's web review, M1).
-        const mockFetch = vi.fn().mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: async () => ({ success: true, role: 'owner', csrfToken: 'csrf-xyz' }),
-        });
-        vi.stubGlobal('fetch', mockFetch);
-
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
-        fireEvent.change(screen.getByPlaceholderText('Password'), {
-            target: { value: 'correct-password' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
-
-        await waitFor(() => {
-            expect(mockOnPasswordSession).toHaveBeenCalledWith('csrf-xyz', false);
-        });
-        // One request, to the session sign-in, carrying the password in its body and nowhere else.
-        expect(mockFetch).toHaveBeenCalledTimes(1);
-        const [url, init] = mockFetch.mock.calls[0];
-        expect(String(url)).toMatch(/\/api\/local\/admin\/auth\/password$/);
-        expect(init.method).toBe('POST');
-        expect(init.credentials).toBe('same-origin');
-        expect(JSON.parse(init.body)).toEqual({ password: 'correct-password' });
-        expect(JSON.stringify(init.headers)).not.toContain('correct-password');
-        // Nothing of it is left on the origin.
-        expect(storedText()).not.toContain('correct-password');
-        expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
-        expect(sessionStorage.getItem('bp-2fa-session')).toBeNull();
-        // And the form no longer holds it either.
-        expect(mockOnPasswordSession.mock.calls[0]).not.toContain('correct-password');
+    it('makes no sign-in request of its own: it asks the node nothing but the claim check', async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        await waitFor(() => expect(nodeClaim.fetchClaimState).toHaveBeenCalled());
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('prompts for 2FA TOTP code when server returns 401 with totpRequired', async () => {
-        const mockFetch = vi.fn()
-            .mockResolvedValueOnce({
-                ok: false,
-                status: 401,
-                json: async () => ({ error: '2FA code required', totpRequired: true }),
-            })
-            .mockResolvedValueOnce({
-                ok: true,
-                status: 200,
-                json: async () => ({ success: true, role: 'owner', csrfToken: 'csrf-after-totp' }),
-            });
-        vi.stubGlobal('fetch', mockFetch);
-
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
-        fireEvent.change(screen.getByPlaceholderText('Password'), {
-            target: { value: 'password123' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
-
-        expect(await screen.findByText('2FA is enabled. Please enter your 6-digit TOTP code.')).toBeInTheDocument();
-        const totpInput = screen.getByPlaceholderText('6-digit code (e.g. 123456)');
-        expect(totpInput).toBeInTheDocument();
-
-        fireEvent.change(totpInput, { target: { value: '654321' } });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
-
-        await waitFor(() => {
-            expect(mockOnPasswordSession).toHaveBeenCalledWith('csrf-after-totp', false);
-        });
-        expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({ password: 'password123', totpCode: '654321' });
-        expect(storedText()).not.toContain('password123');
+    it('where the caller cannot take a key session (fleet mode), draws no sign-in and says what to use', () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} />);
+        expect(screen.queryByTestId('phone-signin-stub')).toBeNull();
+        expect(screen.getByTestId('phone-signin')).toHaveTextContent("Open this server's own /settings page to sign in with your phone, or use an automation token.");
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
     });
 
-    it('displays error message when server returns an authentication failure', async () => {
-        const mockFetch = vi.fn().mockResolvedValue({
-            ok: false,
-            status: 403,
-            json: async () => ({ error: 'Invalid admin credentials' }),
-        });
-        vi.stubGlobal('fetch', mockFetch);
+    it('on a standby with no owner of its own, says how an owner makes one, above the phone sign-in', async () => {
+        vi.mocked(nodeClaim.fetchClaimState).mockResolvedValue({ kind: 'claimed', standby: true });
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        const note = await screen.findByTestId('standby-signin-note');
+        expect(note).toHaveTextContent(STANDBY_RECOVER_COMMAND);
+        expect(note.compareDocumentPosition(screen.getByTestId('phone-signin')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByTestId('phone-signin-stub')).toBeInTheDocument();
+    });
 
-        render(<AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={mockOnPasswordSession} />);
-        fireEvent.change(screen.getByPlaceholderText('Password'), {
-            target: { value: 'wrong-pass' },
-        });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
+    it('says nothing of a standby on a node with an owner', async () => {
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        await waitFor(() => expect(nodeClaim.fetchClaimState).toHaveBeenCalled());
+        expect(screen.queryByTestId('standby-signin-note')).toBeNull();
+    });
 
-        expect(await screen.findByText('Invalid admin credentials')).toBeInTheDocument();
-        expect(mockOnPasswordSession).not.toHaveBeenCalled();
+    it('on an unclaimed node, shows the claim card instead of the phone sign-in', async () => {
+        vi.mocked(nodeClaim.fetchClaimState).mockResolvedValue({
+            kind: 'unclaimed', codeId: 'a1b2c3d4', communityName: 'Test Town', primaryAddress: null, address: null, addresses: [],
+        });
+        render(<AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />);
+        expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-signin-stub')).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+        expect(screen.queryByTestId('claim-password-fold')).toBeNull();
     });
 });

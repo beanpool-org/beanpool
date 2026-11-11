@@ -499,7 +499,7 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
  * (apps/pwa/src/lib/language.ts languageHeaders, as an older node's preflight would refuse it), so a web app on another
  * origin still reads refusals in English until that changes.
  */
-const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
+const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
 /**
  * The three calls an applicant's web app makes to a community it asks to join: the knock itself (front doors S2), how the

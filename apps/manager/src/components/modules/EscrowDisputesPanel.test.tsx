@@ -8,7 +8,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    credential: 'admin-secret-password',
+    automationToken: 'admin-secret-token',
 };
 
 const mockDisputes: nodeClient.EscrowDisputeItem[] = [
@@ -92,7 +92,6 @@ function routeLike(rows: nodeClient.EscrowDisputeItem[]) {
         _url: string,
         minDays = 7,
         _pw?: string,
-        _tfa?: string,
         options?: nodeClient.EscrowDisputesOptions
     ): Promise<nodeClient.EscrowDisputesResponse> => {
         const status = options?.status ?? 'all';
@@ -200,8 +199,7 @@ describe('EscrowDisputesPanel Component', () => {
             'tx_escrow_101',
             'release_to_seller',
             'Seller left wood at gate with photo proof',
-            'admin-secret-password',
-            undefined
+            'admin-secret-token'
         );
     });
 
@@ -227,8 +225,7 @@ describe('EscrowDisputesPanel Component', () => {
             'tx_escrow_101',
             'refund_to_buyer',
             undefined,
-            'admin-secret-password',
-            undefined
+            'admin-secret-token'
         );
     });
 
@@ -257,8 +254,7 @@ describe('EscrowDisputesPanel Component', () => {
             'tx_escrow_101',
             'split',
             undefined,
-            'admin-secret-password',
-            undefined
+            'admin-secret-token'
         );
     });
 
@@ -457,8 +453,7 @@ describe('EscrowDisputesPanel Component', () => {
         expect(fetchSpy).toHaveBeenCalledWith(
             mockProfile.url,
             7,
-            mockProfile.credential,
-            undefined,
+            mockProfile.automationToken,
             expect.objectContaining({ limit: 50, offset: 50 })
         );
     });

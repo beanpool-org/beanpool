@@ -117,7 +117,7 @@ describe('MemberKnownFloorPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Yes, set it' }));
         await waitFor(() => expect(posts(f)).toHaveLength(1));
         expect(posts(f)[0].url).toMatch(/mullum\.test\/api\/local\/admin\/known-floor\/exception$/);
-        expect(posts(f)[0].body).toEqual({ password: 'pw', memberPubkey: KIM, amount_c: 30000 });
+        expect(posts(f)[0].body).toEqual({ memberPubkey: KIM, amount_c: 30000 });
         expect(await screen.findByTestId('member-known-floor-line')).toHaveTextContent('Lowered to 300 Beans');
         expect(onChanged).toHaveBeenCalledWith(KIM, { amount_c: 30000, frozen: false });
     });
@@ -130,7 +130,7 @@ describe('MemberKnownFloorPanel', () => {
         expect(screen.getByText("Set Kim's known floor to 299.50 Beans?")).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Yes, set it' }));
         await waitFor(() => expect(posts(f)).toHaveLength(1));
-        expect(posts(f)[0].body).toEqual({ password: 'pw', memberPubkey: KIM, amount_c: 29950 });
+        expect(posts(f)[0].body).toEqual({ memberPubkey: KIM, amount_c: 29950 });
         expect(await screen.findByTestId('member-known-floor-line')).toHaveTextContent('Lowered to 299.50 Beans');
     });
 
@@ -150,7 +150,7 @@ describe('MemberKnownFloorPanel', () => {
         expect(screen.getByText(/Freeze Kim's known floor\?/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Yes, freeze it' }));
         await waitFor(() => expect(posts(f)).toHaveLength(1));
-        expect(posts(f)[0].body).toEqual({ password: 'pw', memberPubkey: KIM, frozen: true });
+        expect(posts(f)[0].body).toEqual({ memberPubkey: KIM, frozen: true });
         expect(await screen.findByTestId('member-known-floor-line')).toHaveTextContent('Frozen');
         expect(onChanged).toHaveBeenCalledWith(KIM, { amount_c: null, frozen: true });
     });
@@ -163,7 +163,7 @@ describe('MemberKnownFloorPanel', () => {
         expect(screen.getByText('Restore Kim to the community default (1,000 Beans)?')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Yes, restore it' }));
         await waitFor(() => expect(posts(f)).toHaveLength(1));
-        expect(posts(f)[0].body).toEqual({ password: 'pw', memberPubkey: KIM, clear: true });
+        expect(posts(f)[0].body).toEqual({ memberPubkey: KIM, clear: true });
         expect(await screen.findByTestId('member-known-floor-line')).toHaveTextContent('Community default (1,000 Beans)');
         expect(onChanged).toHaveBeenCalledWith(KIM, null);
     });
@@ -176,6 +176,17 @@ describe('MemberKnownFloorPanel', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent("Sign in with your own key to change a member's known floor.");
         expect(onChanged).not.toHaveBeenCalled();
         expect(screen.getByTestId('member-known-floor-line')).toHaveTextContent('Community default (1,000 Beans)');
+    });
+
+    it("shows a refusal that carries totpRequired as the node's own words, with no 2FA wording of its own", async () => {
+        mockNode(undefined, { ok: false, status: 401, body: { error: 'The node says no.', totpRequired: true } });
+        const onChanged = renderPanel();
+        fireEvent.click(await screen.findByRole('button', { name: 'Freeze' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Yes, freeze it' }));
+        const alert = await screen.findByRole('alert');
+        expect(alert).toHaveTextContent('The node says no.');
+        expect(alert).not.toHaveTextContent(/2FA|re-authenticate/i);
+        expect(onChanged).not.toHaveBeenCalled();
     });
 
     it('refuses an amount finer than a cent, or not an amount, or above the cap, before asking', async () => {
@@ -214,6 +225,9 @@ describe('MemberKnownFloorPanel', () => {
         // The log keeps hundredths text: '29950' is 299.50 Beans.
         expect(describeKnownFloorLogLine({ ...LOG[0], action: 'exception_lowered', oldValue: 'default', newValue: '29950' }, 100000))
             .toBe('Ada set it: from the community default (1,000 Beans) to 299.50 Beans');
+        // A line the node wrote itself, with no member behind it, names the node.
+        expect(describeKnownFloorLogLine({ ...LOG[0], actor: 'node', actorCallsign: null }, 100000))
+            .toBe('The node itself raised it: from frozen to 1,800 Beans');
     });
 
     it("shows the member's changes, newest first, with when", async () => {
@@ -229,10 +243,10 @@ describe('MemberKnownFloorPanel', () => {
     });
 
     // #1614 review r4178406974: Set / Freeze / Restore showed where the node refuses every change.
-    it('a password or token sign-in sees the line and why, and no controls', async () => {
+    it('an automation-token sign-in sees the line and why, and no controls', async () => {
         const f = mockNode({ ok: true, body: { ...LINE, exception: { memberPubkey: KIM, amount_c: 30000, frozen: false }, knownGrant: 30000, changeRefused: 'key_session_only' } });
         renderPanel();
-        expect(await screen.findByTestId('member-known-floor-refused')).toHaveTextContent('Sign in with your own key to change it');
+        expect(await screen.findByTestId('member-known-floor-refused')).toHaveTextContent("Sign in with your own key to change it: automation tokens can't.");
         expect(screen.getByTestId('member-known-floor-line')).toHaveTextContent('Lowered to 300 Beans');
         for (const name of ['Set', 'Freeze', 'Restore the default']) expect(screen.queryByRole('button', { name })).toBeNull();
         expect(screen.queryByLabelText(/New known floor/)).toBeNull();

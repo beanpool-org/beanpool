@@ -955,7 +955,7 @@ const TAKEOVER_STATUS = {
 /** An obviously FAKE recovery code in the printed shape. Never a real one. */
 export const FAKE_RECOVERY_CODE = 'BPRC-3  FAKE-FAKE-FAKE-FAKE-FAKE-FAKE-FAKE';
 
-const REPLICATION_CONFIG = { primaryUrl: 'https://primary-riverbend.example.org', hasPassword: true, hasToken: true };
+const REPLICATION_CONFIG = { primaryUrl: 'https://primary-riverbend.example.org', hasToken: true };
 
 // ---------------------------------------------------------------------------
 // UNKNOWN — pathnames the harness asked about that this module has no explicit case for.
@@ -1548,11 +1548,6 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/snapshots/config') return ok({ config: SNAPSHOT_SCHEDULE });
     if (pathname === '/api/local/admin/snapshots/download') return ok({});
 
-    // ---- 2FA ----
-    if (pathname === '/api/local/admin/2fa/status') return ok({ totpEnabled: true, enabled: true });
-    if (pathname === '/api/local/admin/2fa/setup') return ok({ qrDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', secret: 'JBSWY3DPEHPK3PXP' });
-    if (pathname === '/api/local/admin/2fa/verify') return ok({ success: true, tfaSessionToken: `tfa_${longToken('tfa-session', 32)}` });
-    if (pathname === '/api/local/admin/2fa/disable') return ok({ success: true });
 
     // ---- identity / node config ----
     if (pathname === '/api/local/community-info') {
@@ -1597,7 +1592,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/commons/projects') return ok({ projects: COMMONS_PROJECTS });
     if (pathname === '/api/local/admin/commons/reject') return ok({ success: true });
 
-    // ---- auth / session (this app runs the password-login path, never the key handoff) ----
+    // ---- auth / session (the harness signs in as a key session; signed out it shows the phone sign-in) ----
     if (pathname === '/api/local/admin/auth/session') return ok({ authenticated: false });
     if (pathname === '/api/local/admin/auth/exchange') return ok({ authenticated: false });
     if (pathname === '/api/local/admin/auth/logout') return ok({ success: true });
@@ -1608,9 +1603,6 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/auth/pairing') return ok({ pairingId: 'ab'.repeat(32), shortCode: 'K7F3QX', expiresAt: Date.now() + 120000, ttlMs: 120000 });
     if (/^\/api\/local\/admin\/auth\/pairing\/[0-9a-f]{64}\/wait$/.test(pathname)) return ok({ status: 'waiting', expiresAt: Date.now() + 120000 });
     if (pathname === '/api/local/admin/csrf-token') return ok({ csrfToken: `csrf_${longToken('csrf', 24)}` });
-    if (pathname === '/api/local/verify-password' || pathname === '/api/verify-password') return ok({ success: true });
-    if (pathname === '/api/local/admin/auth/password') return ok({ success: true, role: 'owner', csrfToken: `csrf_${longToken('signin', 24)}` });
-    if (pathname === '/api/local/change-password') return ok({ success: true });
     if (pathname === '/api/local/reset') return ok({ success: true });
     if (pathname === '/api/admin/login') return ok({ success: true });
     if (pathname === '/api/admin/check-update') return ok({ updateAvailable: false, currentVersion: '1.4.2' });

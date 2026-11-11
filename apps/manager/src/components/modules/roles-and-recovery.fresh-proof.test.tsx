@@ -11,7 +11,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * roleChangeProof) ask an owner's fresh proof. Each viewer × the server's refusal → the box or the sentence; the code
  * travels in `code` (POST) or X-Fresh-Proof (the DELETE, which has no body).
  */
-const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', credential: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', automationToken: 'pw' };
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to replace the recovery code', totpRequired: true };
 const WRONG = { error: 'Invalid 2FA code', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
@@ -47,7 +47,7 @@ beforeEach(() => { vi.restoreAllMocks(); localStorage.clear(); sessionStorage.cl
 afterEach(() => vi.unstubAllGlobals());
 
 describe('TakeoverLockPanel: Replace asks the fresh proof (S4a)', () => {
-    it('password viewer: the code box; a wrong code says so and stays; a new code re-sends the same replace once', async () => {
+    it('token viewer: the code box; a wrong code says so and stays; a new code re-sends the same replace once', async () => {
         const sent: Array<{ body: Record<string, unknown>; headers: Record<string, string> }> = [];
         mockNode([[401, CODE_ASK], [401, WRONG], [200, MADE]], sent);
         await pressReplace();
@@ -87,7 +87,7 @@ describe('node roles and the recovery code: how the proof travels (S4a)', () => 
         await expect(grantNodeRoleApi(node.url, 'b'.repeat(64), 'admin', 'pw')).rejects.toMatchObject({ refusal: { kind: 'code' } });
         await expect(grantNodeRoleApi(node.url, 'b'.repeat(64), 'admin', 'pw')).rejects.toMatchObject({ refusal: { kind: 'phone' } });
         await expect(grantNodeRoleApi(node.url, 'b'.repeat(64), 'admin', 'pw')).rejects.toBeInstanceOf(FreshProofRequiredError);
-        await grantNodeRoleApi(node.url, 'b'.repeat(64), 'admin', 'pw', undefined, '123456');
+        await grantNodeRoleApi(node.url, 'b'.repeat(64), 'admin', 'pw', '123456');
         expect(sent[0].body.code).toBeUndefined();
         expect(sent[3].body).toMatchObject({ pubkey: 'b'.repeat(64), role: 'admin', code: '123456' });
     });
@@ -97,7 +97,7 @@ describe('node roles and the recovery code: how the proof travels (S4a)', () => 
         mockNode([[401, CODE_ASK], [200, { success: true }]], sent);
         await expect(revokeNodeRoleApi(node.url, 'b'.repeat(64), 'owner', 'pw')).rejects.toMatchObject({ refusal: { kind: 'code' } });
         expect(sent[0].headers['X-Fresh-Proof']).toBeUndefined();
-        await revokeNodeRoleApi(node.url, 'b'.repeat(64), 'owner', 'pw', undefined, '654321');
+        await revokeNodeRoleApi(node.url, 'b'.repeat(64), 'owner', 'pw', '654321');
         expect(sent[1].headers['X-Fresh-Proof']).toBe('654321');
     });
 
@@ -105,7 +105,7 @@ describe('node roles and the recovery code: how the proof travels (S4a)', () => 
         const sent: Array<{ body: Record<string, unknown>; headers: Record<string, string> }> = [];
         mockNode([[409, { error: 'A recovery code already exists.' }], [200, MADE]], sent);
         await expect(makeRecoveryCode(node.url, true, 'pw')).rejects.toThrow('A recovery code already exists.');
-        await makeRecoveryCode(node.url, true, 'pw', undefined, '999999');
+        await makeRecoveryCode(node.url, true, 'pw', '999999');
         expect(sent[1].body).toMatchObject({ replace: true, code: '999999' });
     });
 });

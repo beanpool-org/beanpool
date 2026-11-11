@@ -603,7 +603,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                 </div>
             )}
 
-            {/* Your own sign-ins: only a key session has any (the password and a fleet profile are nobody's). */}
+            {/* Your own sign-ins: only a key session has any (a fleet profile's token is nobody's). */}
             {viewer.kind === 'key' && onSignedOutEverywhere && <SignOutEverywhere onSignedOut={onSignedOutEverywhere} />}
         </div>
     );

@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LightsOutCard, hallHref } from './LightsOutCard';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'hall-node', name: 'Hall', url: 'http://localhost:8080', credential: '' };
+const node: NodeProfile = { id: 'hall-node', name: 'Hall', url: 'http://localhost:8080', automationToken: '' };
 const OWNER_KEY = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' } as const;
 const ADMIN_KEY = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' } as const;
 

@@ -60,18 +60,21 @@ describe('node-claim lib', () => {
         });
 
         it.each([
-            ['a claimed new install with no admin password', { unclaimed: false, password: false }, { kind: 'claimed', password: false, retired: false }],
-            ['a claimed server whose password an owner retired', { unclaimed: false, password: false, passwordRetired: true }, { kind: 'claimed', password: false, retired: true }],
-            ['a claimed server with an admin password', { unclaimed: false, password: true }, { kind: 'claimed' }],
-            ['a standby with no admin password', { unclaimed: false, standby: true, password: false }, { kind: 'claimed', password: false, retired: false, standby: true }],
-            ['a standby with an admin password', { unclaimed: false, standby: true, password: true }, { kind: 'claimed', standby: true }],
-            ['a standby flag that is not true', { unclaimed: false, standby: 'yes', password: true }, { kind: 'claimed' }],
+            ['a claimed server', { unclaimed: false }, { kind: 'claimed' }],
+            ['a claimed server that still answers the old password fields (ignored: a node has no admin password)', { unclaimed: false, password: false, passwordRetired: true }, { kind: 'claimed' }],
+            ['a claimed server that still answers password: true (ignored)', { unclaimed: false, password: true }, { kind: 'claimed' }],
+            ['a standby', { unclaimed: false, standby: true }, { kind: 'claimed', standby: true }],
+            ['a standby that still answers an old password field (ignored)', { unclaimed: false, standby: true, password: false }, { kind: 'claimed', standby: true }],
+            ['a standby flag that is not true', { unclaimed: false, standby: 'yes' }, { kind: 'claimed' }],
         ])('reads %s', async (_name, body, expected) => {
             vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => body } as Response));
-            expect(await fetchClaimState('/api/local/claim')).toEqual(expected);
+            const got = await fetchClaimState('/api/local/claim');
+            expect(got).toEqual(expected);
+            expect(got).not.toHaveProperty('password');
+            expect(got).not.toHaveProperty('retired');
         });
 
-        it('returns unclaimed state with codeId, communityName, and password when valid', async () => {
+        it('returns unclaimed state with codeId and communityName when valid', async () => {
             vi.stubGlobal(
                 'fetch',
                 vi.fn().mockResolvedValue({
@@ -80,7 +83,6 @@ describe('node-claim lib', () => {
                         unclaimed: true,
                         codeId: 'deadbeef',
                         communityName: '  Bean Town  ',
-                        password: false,
                     }),
                 } as Response)
             );
@@ -90,36 +92,38 @@ describe('node-claim lib', () => {
                 kind: 'unclaimed',
                 codeId: 'deadbeef',
                 communityName: 'Bean Town',
-                password: false,
                 primaryAddress: null,
                 address: null,
                 addresses: [],
             });
         });
 
-        it('defaults password to true if password !== false', async () => {
-            vi.stubGlobal(
-                'fetch',
-                vi.fn().mockResolvedValue({
-                    ok: true,
-                    json: async () => ({
-                        unclaimed: true,
-                        codeId: '00000000',
-                        communityName: 'Test',
-                    }),
-                } as Response)
-            );
+        it('ignores a password field an older server still sends: the state has no password', async () => {
+            for (const password of [false, true]) {
+                vi.stubGlobal(
+                    'fetch',
+                    vi.fn().mockResolvedValue({
+                        ok: true,
+                        json: async () => ({
+                            unclaimed: true,
+                            codeId: '00000000',
+                            communityName: 'Test',
+                            password,
+                        }),
+                    } as Response)
+                );
 
-            const result = await fetchClaimState('/api/local/claim');
-            expect(result).toEqual({
-                kind: 'unclaimed',
-                codeId: '00000000',
-                communityName: 'Test',
-                password: true,
-                primaryAddress: null,
-                address: null,
-                addresses: [],
-            });
+                const result = await fetchClaimState('/api/local/claim');
+                expect(result).toEqual({
+                    kind: 'unclaimed',
+                    codeId: '00000000',
+                    communityName: 'Test',
+                    primaryAddress: null,
+                    address: null,
+                    addresses: [],
+                });
+                expect(result).not.toHaveProperty('password');
+            }
         });
 
         it('sanitizes invalid codeId or communityName to null', async () => {
@@ -140,7 +144,6 @@ describe('node-claim lib', () => {
                 kind: 'unclaimed',
                 codeId: null,
                 communityName: null,
-                password: true,
                 primaryAddress: null,
                 address: null,
                 addresses: [],
@@ -230,7 +233,6 @@ describe('node-claim lib', () => {
                 kind: 'unclaimed',
                 codeId: 'deadbeef',
                 communityName: 'Test Town',
-                password: true,
                 primaryAddress: null,
                 address: null,
                 addresses: [],

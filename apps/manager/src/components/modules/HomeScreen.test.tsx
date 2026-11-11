@@ -395,7 +395,7 @@ describe('HomeScreen Component', () => {
             expect(onNavigate).toHaveBeenCalledWith('shape', 'review', undefined);
         });
 
-        it('the password owner is offered it too', () => {
+        it('an owner-token viewer is offered it too', () => {
             render(<HomeScreen {...defaultProps} viewer={{ kind: 'token' }} nodeData={read as any} diag={diag} shape={baseShape(UNLOCKED)} />);
             expect(screen.getByRole('button', { name: /Core settings not confirmed yet/ })).toBeInTheDocument();
         });

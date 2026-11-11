@@ -157,7 +157,7 @@ describe('MembersModule Component', () => {
         );
 
         expect(
-            screen.getByText(/Authenticate with Admin Password to view node member standing/i)
+            screen.getByText(/Sign in to view node member standing/i)
         ).toBeInTheDocument();
     });
 
@@ -258,8 +258,7 @@ describe('MembersModule seed offer', () => {
             'https://node.example.com',
             'pk-eggs',
             expect.objectContaining({ title: 'Dozen free-range eggs', photos: [PICKED_PHOTO], repeatable: true, price_c: 1200 }),
-            'admin-pw',
-            undefined
+            'admin-pw'
         );
         expect(seed.mock.calls[0][2]).not.toHaveProperty('credits');
     });
@@ -336,7 +335,6 @@ describe('MembersModule seed offer', () => {
             'https://node.example.com',
             expect.objectContaining({ name: 'Seed Bank', creditLine_c: 15075 }),
             'admin-pw',
-            undefined,
         );
         expect(create.mock.calls[0][1]).not.toHaveProperty('creditLine');
     });

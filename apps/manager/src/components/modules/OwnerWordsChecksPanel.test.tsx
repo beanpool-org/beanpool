@@ -6,10 +6,10 @@ import type { NodeProfile } from '../../lib/profiles';
 
 vi.mock('../../lib/node-client', async () => {
     const actual = await vi.importActual('../../lib/node-client');
-    return { ...actual, getOwnerWordsChecks: vi.fn(), getTfaSessionToken: vi.fn(() => undefined) };
+    return { ...actual, getOwnerWordsChecks: vi.fn() };
 });
 
-const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://test.beanpool.org', credential: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://test.beanpool.org', automationToken: 'pw' };
 const NOW = Date.UTC(2026, 8, 20);
 const DAY = 24 * 3600_000;
 
@@ -35,7 +35,7 @@ describe('OwnerWordsChecksPanel (Settings → Backups & Restore)', () => {
         // Self-attested, and says so: never that the server checked anything.
         expect(panel.textContent).toMatch(/this shows what they\s+reported/);
         expect(panel.textContent).toMatch(/The words never reach this server/);
-        expect(nodeClient.getOwnerWordsChecks).toHaveBeenCalledWith('https://test.beanpool.org', 'pw', undefined);
+        expect(nodeClient.getOwnerWordsChecks).toHaveBeenCalledWith('https://test.beanpool.org', 'pw');
     });
 
     it('all checked reads green; no owner says so', async () => {

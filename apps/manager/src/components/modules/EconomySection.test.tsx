@@ -13,7 +13,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    credential: 'admin-password',
+    automationToken: 'admin-password',
 };
 
 const mockTreasuries: nodeClient.NodeTreasury[] = [
@@ -154,8 +154,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_bob',
-            mockProfile.credential,
-            undefined
+            mockProfile.automationToken,
         );
     });
 
@@ -238,8 +237,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             { lat: -28.55, lng: 153.501 },
-            mockProfile.credential,
-            undefined
+            mockProfile.automationToken,
         );
     });
 
@@ -280,8 +278,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.clearEnterpriseLocation).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_1234567890',
-            mockProfile.credential,
-            undefined
+            mockProfile.automationToken,
         );
     });
 
@@ -362,8 +359,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_alice',
-            mockProfile.credential,
-            undefined
+            mockProfile.automationToken,
         );
     });
 
@@ -605,8 +601,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_custom_keeper',
             'nostr_pubkey_keeper_999',
-            mockProfile.credential,
-            undefined
+            mockProfile.automationToken,
         );
     });
 
@@ -668,9 +663,7 @@ describe('EconomySection Component', () => {
         expect(optionValues).not.toContain('already_assigned_pk');
     });
 
-    it('forwards 2FA session token to createNodeTreasury when creating an enterprise', async () => {
-        nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-sess-economy');
-
+    it('calls createNodeTreasury with the node credential and no 2FA argument when creating an enterprise', async () => {
         await act(async () => {
             render(
                 <EconomySection
@@ -697,11 +690,10 @@ describe('EconomySection Component', () => {
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
             expect.objectContaining({ name: 'Community Bakery' }),
-            mockProfile.credential,
-            'tfa-sess-economy'
+            mockProfile.automationToken,
         );
-
-        nodeClient.setTfaSessionToken(mockProfile.id, undefined);
+        // Three arguments only: the node, the enterprise, the credential. A node has no 2FA session to forward.
+        expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0]).toHaveLength(3);
     });
 
     it('sends a typed ceiling as whole hundredths, and refuses one finer than a cent before sending anything', async () => {
@@ -730,8 +722,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
             expect.objectContaining({ name: 'Community Bakery', workingCapitalCeiling_c: 20050 }),
-            mockProfile.credential,
-            undefined,
+            mockProfile.automationToken,
         );
         expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0][1]).not.toHaveProperty('workingCapitalCeiling');
         alertSpy.mockRestore();
@@ -755,13 +746,11 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             expect.objectContaining({ title: 'Half dozen eggs', price_c: 1250 }),
-            mockProfile.credential,
-            undefined,
+            mockProfile.automationToken,
         );
     });
 
-    it('forwards 2FA session token to seedTreasuryOffer when posting an initial offer', async () => {
-        nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-sess-economy');
+    it('calls seedTreasuryOffer with the node credential and no 2FA argument when posting an initial offer', async () => {
         vi.spyOn(nodeClient, 'seedTreasuryOffer').mockResolvedValue({
             success: true,
             post: {},
@@ -799,12 +788,11 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             expect.objectContaining({ title: 'Organic Veggie Box', photos: [PICKED_PHOTO], price_c: 1500 }),
-            mockProfile.credential,
-            'tfa-sess-economy'
+            mockProfile.automationToken,
         );
+        // Four arguments only: the node, the treasury, the offer, the credential.
+        expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0]).toHaveLength(4);
         expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).not.toHaveProperty('credits');
-
-        nodeClient.setTfaSessionToken(mockProfile.id, undefined);
     });
 
     it('the initial offer says "📷 Add a photo" and posts nothing until a photo is chosen (the node refuses an Offer with none)', async () => {
@@ -836,7 +824,7 @@ describe('EconomySection Component', () => {
         expect(screen.getByRole('button', { name: '📷 Add a photo' })).toBeDisabled();
     });
 
-    it('forwards tfaToken prop to assignTreasuryKeeper and revokeTreasuryKeeper', async () => {
+    it('passes the node credential, and no 2FA argument, to fetchTreasuryKeepers, assignTreasuryKeeper and revokeTreasuryKeeper', async () => {
         const confirmSpy = vi.spyOn(window, 'confirm');
 
         await act(async () => {
@@ -844,7 +832,6 @@ describe('EconomySection Component', () => {
                 <EconomySection
                     activeNode={mockProfile}
                     nodeData={mockNodeData}
-                    tfaToken="tfa-prop-xyz"
                     onRefresh={vi.fn()}
                 />
             );
@@ -858,8 +845,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.fetchTreasuryKeepers).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_1234567890',
-            mockProfile.credential,
-            'tfa-prop-xyz'
+            mockProfile.automationToken,
         );
 
         const select = screen.getByLabelText(/Select Member/i);
@@ -876,8 +862,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_bob',
-            mockProfile.credential,
-            'tfa-prop-xyz'
+            mockProfile.automationToken,
         );
 
         const revokeButton = screen.getAllByRole('button', { name: /revoke/i })[0];
@@ -891,8 +876,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_alice',
-            mockProfile.credential,
-            'tfa-prop-xyz'
+            mockProfile.automationToken,
         );
     });
 
@@ -1374,8 +1358,7 @@ describe('EconomySection Component', () => {
             expect(fetchKeepersSpy).toHaveBeenCalledWith(
                 mockProfile.url,
                 'treasury_missing_keepers_prop',
-                mockProfile.credential,
-                undefined
+                mockProfile.automationToken,
             );
         });
     });

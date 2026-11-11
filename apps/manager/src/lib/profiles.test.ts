@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { loadNodeProfiles, saveNodeProfiles, addNodeProfile, removeNodeProfile, updateNodeProfile } from './profiles';
+import { loadNodeProfiles, saveNodeProfiles, addNodeProfile, removeNodeProfile, updateNodeProfile, nodeCredential } from './profiles';
 
 let store: Record<string, string> = {};
 const mockLocalStorage = {
@@ -47,28 +47,40 @@ describe('profiles management', () => {
         expect(loadNodeProfiles().some(p => p.id === added.id)).toBe(false);
     });
 
-    // Fable's web review, M1: localStorage on a node is the members' web app's origin too. A profile's password or
-    // replication token is held in memory for the page's lifetime and never written there.
-    it('never writes a profile password or replication token to localStorage, and drops ones an older build stored', () => {
+    // Fable's web review, M1: localStorage on a node is the members' web app's origin too. A profile's automation token
+    // is held in memory for the page's lifetime and never written there, and a list an older build stored (with an admin
+    // password or a replication token in it) is scrubbed on load.
+    it('never writes a profile token to localStorage, and drops the old password and replication token an older build stored', () => {
         store['bp_fleet_profiles'] = JSON.stringify([
-            { id: 'local-node', name: 'Local', url: 'http://localhost:3000', credential: 'old-stored-pw', replicationToken: 'old-stored-token' },
+            { id: 'local-node', name: 'Local', url: 'http://localhost:3000', adminPassword: 'old-stored-pw', replicationToken: 'old-stored-token', automationToken: 'old-stored-automation' },
         ]);
         const loaded = loadNodeProfiles();
-        expect(loaded[0].credential).toBeUndefined();
-        expect(loaded[0].replicationToken).toBeUndefined();
+        expect(loaded[0].automationToken).toBeUndefined();
+        expect((loaded[0] as unknown as Record<string, unknown>).adminPassword).toBeUndefined();
+        expect((loaded[0] as unknown as Record<string, unknown>).replicationToken).toBeUndefined();
         expect(store['bp_fleet_profiles']).not.toContain('old-stored-pw');
         expect(store['bp_fleet_profiles']).not.toContain('old-stored-token');
+        expect(store['bp_fleet_profiles']).not.toContain('old-stored-automation');
+        expect(store['bp_fleet_profiles']).not.toContain('adminPassword');
+        expect(store['bp_fleet_profiles']).not.toContain('replicationToken');
 
-        const added = addNodeProfile({ name: 'Fleet Node', url: 'https://fleet.beanpool.org', credential: 'typed-pw' });
-        const updated = updateNodeProfile(added.id, { replicationToken: 'typed-token' });
-        expect(updated.find(p => p.id === added.id)).toMatchObject({ credential: 'typed-pw', replicationToken: 'typed-token' });
-        expect(store['bp_fleet_profiles']).not.toContain('typed-pw');
+        const added = addNodeProfile({ name: 'Fleet Node', url: 'https://fleet.beanpool.org', automationToken: 'typed-token' });
+        const updated = updateNodeProfile(added.id, { automationToken: 'typed-token-2' });
+        expect(updated.find(p => p.id === added.id)).toMatchObject({ automationToken: 'typed-token-2' });
         expect(store['bp_fleet_profiles']).not.toContain('typed-token');
         // Still there for this page, until it reloads.
-        expect(loadNodeProfiles().find(p => p.id === added.id)).toMatchObject({ credential: 'typed-pw', replicationToken: 'typed-token' });
+        expect(loadNodeProfiles().find(p => p.id === added.id)).toMatchObject({ automationToken: 'typed-token-2' });
         saveNodeProfiles(loadNodeProfiles());
-        expect(store['bp_fleet_profiles']).not.toContain('typed-pw');
+        expect(store['bp_fleet_profiles']).not.toContain('typed-token');
         removeNodeProfile(added.id);
+    });
+
+    it('a profile has one credential, its automation token', () => {
+        expect(nodeCredential({ automationToken: 'bp_tok' })).toBe('bp_tok');
+        expect(nodeCredential({})).toBeUndefined();
+        expect(nodeCredential(null)).toBeUndefined();
+        // An old profile's password key is not a credential.
+        expect(nodeCredential({ adminPassword: 'old-pw' } as never)).toBeUndefined();
     });
 
     it('updates a node profile', () => {

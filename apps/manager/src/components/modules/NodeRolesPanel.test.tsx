@@ -10,7 +10,6 @@ vi.mock('../../lib/node-client', async (importOriginal) => {
         fetchNodeRoles: vi.fn(),
         grantNodeRoleApi: vi.fn(),
         revokeNodeRoleApi: vi.fn(),
-        getTfaSessionToken: vi.fn(() => undefined),
     };
 });
 
@@ -22,7 +21,7 @@ const fetchRoles = vi.mocked(fetchNodeRoles);
 const grant = vi.mocked(grantNodeRoleApi);
 const revoke = vi.mocked(revokeNodeRoleApi);
 
-const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', credential: 'pw' };
+const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', automationToken: 'pw' };
 
 const ALICE = 'a1'.repeat(32);
 const BOB = 'b2'.repeat(32);
@@ -73,7 +72,7 @@ describe('NodeRolesPanel', () => {
 
     it('lists each role holder with callsign, short key, role and who added them when', async () => {
         await renderPanel();
-        expect(fetchRoles).toHaveBeenCalledWith('https://node.test', 'pw', undefined);
+        expect(fetchRoles).toHaveBeenCalledWith('https://node.test', 'pw');
 
         const aliceRow = screen.getByTestId(`role-row-${ALICE}`);
         expect(within(aliceRow).getByText('alice')).toBeInTheDocument();
@@ -370,12 +369,12 @@ describe('NodeRolesPanel', () => {
         expect(screen.getByRole('status').textContent).toContain('You are now an owner.');
     });
 
-    it('with no owner, a password session is sent to search, with Owner chosen', async () => {
+    it('with no owner, a token session is sent to search, with Owner chosen', async () => {
         fetchRoles.mockResolvedValue([]);
         await renderPanel();
         expect(screen.getByText('Nobody holds a role yet.')).toBeInTheDocument();
         const banner = screen.getByTestId('no-owner-banner');
-        expect(banner.textContent).toContain('Search for your own callsign');
+        expect(banner.textContent).toContain('You are signed in with an automation token. Search for your own callsign below and choose Owner.');
         await click(within(banner).getByRole('button', { name: 'Find myself' }));
         expect(document.activeElement).toBe(screen.getByLabelText(/Search by callsign/));
 
@@ -387,9 +386,9 @@ describe('NodeRolesPanel', () => {
     });
 
     it("shows the node's answer when the list itself is refused", async () => {
-        fetchRoles.mockRejectedValue(new Error('Break-glass mode active: password authentication restricted to key enrolment only'));
+        fetchRoles.mockRejectedValue(new Error('Sign in with your own key to see who holds a role'));
         await renderPanel();
-        expect(screen.getByRole('alert').textContent).toContain('Break-glass mode active');
+        expect(screen.getByRole('alert').textContent).toContain('Sign in with your own key to see who holds a role');
         expect(screen.queryByTestId('no-owner-banner')).not.toBeInTheDocument();
         expect(screen.queryByTestId('add-role')).not.toBeInTheDocument();
     });

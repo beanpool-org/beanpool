@@ -3,13 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import type { NodeProfile } from '../../lib/profiles';
-import { setTfaSessionToken } from '../../lib/node-client';
 
 const mockActiveNode: NodeProfile = {
     id: 'local-node',
     name: 'Mullumbimby Node',
     url: 'http://localhost:8080',
-    credential: 'test-password',
+    automationToken: 'test-token',
 };
 
 describe('PeerConnectorsPanel Component', () => {
@@ -167,10 +166,9 @@ describe('PeerConnectorsPanel Component', () => {
         expect(screen.getByTestId('connectors-list')).toBeInTheDocument();
     });
 
-    // Peer-link changes are held to 2FA on the node now, like every admin route: they must carry the 2FA session.
-    it('sends the 2FA session when connecting a peer', async () => {
-        // 2FA session tokens are held in memory now, never in sessionStorage (Fable's web review, M1).
-        setTfaSessionToken(mockActiveNode.id, 'tfa-peer-token');
+    // The automation token is the only credential a peer-link change carries: no password and no 2FA session exist any more.
+    it('connects a peer with the automation token as a Bearer header and nothing else', async () => {
+        const token = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
         const connectHeaders: Record<string, string>[] = [];
         vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
             const strUrl = String(url);
@@ -187,20 +185,17 @@ describe('PeerConnectorsPanel Component', () => {
             }
             return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) } as Response);
         });
-        try {
-            render(<PeerConnectorsPanel activeNode={mockActiveNode} />);
-            await waitFor(() => {
-                expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
-            });
-            fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
-            await waitFor(() => {
-                expect(connectHeaders).toHaveLength(1);
-            });
-            expect(connectHeaders[0]['X-Admin-2FA-Session']).toBe('tfa-peer-token');
-            expect(connectHeaders[0]['X-Admin-Password']).toBe(mockActiveNode.credential);
-        } finally {
-            setTfaSessionToken(mockActiveNode.id, undefined);
-        }
+        render(<PeerConnectorsPanel activeNode={{ ...mockActiveNode, automationToken: token }} />);
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        await waitFor(() => {
+            expect(connectHeaders).toHaveLength(1);
+        });
+        expect(connectHeaders[0].Authorization).toBe(`Bearer ${token}`);
+        expect(connectHeaders[0]['X-Admin-Password']).toBeUndefined();
+        expect(connectHeaders[0]['X-Admin-2FA-Session']).toBeUndefined();
     });
 
     it('connects and disconnects a peer connector', async () => {
@@ -514,7 +509,7 @@ describe('PeerConnectorsPanel Component', () => {
             expect(addBody.trustLevel).toBe('peer');
             expect(addBody.enabled).toBe(true);
             expect(addBody.publicUrl).toBe('https://us.beanpool.org:8450');
-            expect(addBody.password).toBe('test-password');
+            expect(addBody).not.toHaveProperty('password');
         });
     });
 

@@ -4,11 +4,13 @@ import { NodeIdentityPanel, DIRECTORY_HELD_BACK_LINES } from './NodeIdentityPane
 import type { NodeProfile } from '../../lib/profiles';
 import { type DiagnosticsResponse } from '../../lib/node-client';
 
+// A real automation token's shape (bp_ + 12 hex + _ + 64 hex): only this travels as a Bearer.
+const TOKEN = `bp_${'a'.repeat(12)}_${'b'.repeat(64)}`;
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    credential: 'test-admin-password',
+    automationToken: TOKEN,
 };
 
 const mockDiag: DiagnosticsResponse = {
@@ -449,9 +451,13 @@ describe('NodeIdentityPanel Component', () => {
             expect.stringContaining('/api/local/admin/directory/push'),
             expect.objectContaining({
                 method: 'POST',
-                body: JSON.stringify({ password: mockProfile.credential }),
+                // No password in the body: the node takes the token in the header.
+                body: JSON.stringify({}),
             })
         );
+        const pushCall = (global.fetch as any).mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/admin/directory/push'));
+        expect(pushCall[1].headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+        expect(pushCall[1].headers['X-Admin-Password']).toBeUndefined();
 
         await waitFor(() => {
             expect(screen.getByText(/Published!/i)).toBeInTheDocument();
@@ -492,26 +498,22 @@ describe('NodeIdentityPanel Component', () => {
         }
     });
 
-    // The node holds update-identity to 2FA now, like every admin route: the save must carry the 2FA session.
-    it('sends the 2FA session with the identity save', async () => {
-        // 2FA session tokens are held in memory now, never in sessionStorage (Fable's web review, M1).
-        setTfaSessionToken(mockProfile.id, 'tfa-identity-token');
-        try {
-            await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
-            });
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
-            });
-            const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
-                call[0].includes('/api/local/update-identity')
-            );
-            expect(updateCall).toBeDefined();
-            expect(updateCall[1].headers['X-Admin-2FA-Session']).toBe('tfa-identity-token');
-            expect(updateCall[1].headers['X-Admin-Password']).toBe(mockProfile.credential);
-        } finally {
-            setTfaSessionToken(mockProfile.id, undefined);
-        }
+    // A node has no admin password and no 2FA session: the save carries the token as a Bearer and nothing else.
+    it('sends the token with the identity save, and no 2FA session or admin password', async () => {
+        await act(async () => {
+            render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+        });
+        const updateCall = (global.fetch as any).mock.calls.find((call: any[]) =>
+            call[0].includes('/api/local/update-identity')
+        );
+        expect(updateCall).toBeDefined();
+        expect(updateCall[1].headers['Authorization']).toBe(`Bearer ${TOKEN}`);
+        expect(updateCall[1].headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(updateCall[1].headers['X-Admin-Password']).toBeUndefined();
+        expect('password' in JSON.parse(updateCall[1].body)).toBe(false);
     });
 
     it('saves the town or area a stranger\'s card names with the service area, trimmed (front doors S15)', async () => {
@@ -570,7 +572,6 @@ describe('NodeIdentityPanel Component', () => {
         );
         expect(updateCall).toBeDefined();
         expect(JSON.parse(updateCall[1].body)).toEqual({
-            password: mockProfile.credential,
             callsign: 'mullum-prime',
             lat: -28.55,
             lng: 153.5,
@@ -585,7 +586,6 @@ describe('NodeIdentityPanel Component', () => {
             expect.objectContaining({
                 method: 'POST',
                 body: JSON.stringify({
-                    password: mockProfile.credential,
                     directoryPushIntervalHours: 24,
                     serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 50 },
                     // The town or area a stranger's card names (front doors S15): none typed, none sent as a name.
@@ -611,7 +611,7 @@ describe('NodeIdentityPanel Component', () => {
             if (url.includes('/api/node/config') && !url.includes('/admin/')) {
                 const headers = (init?.headers ?? {}) as Record<string, string>;
                 configReads.push(headers);
-                const admin = headers['X-Admin-Password'] === mockProfile.credential;
+                const admin = headers['Authorization'] === `Bearer ${TOKEN}`;
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({
@@ -628,7 +628,8 @@ describe('NodeIdentityPanel Component', () => {
             render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
         });
         await waitFor(() => expect(configReads).toHaveLength(1));
-        expect(configReads[0]['X-Admin-Password']).toBe(mockProfile.credential);
+        expect(configReads[0]['Authorization']).toBe(`Bearer ${TOKEN}`);
+        expect(configReads[0]['X-Admin-Password']).toBeUndefined();
 
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
@@ -700,7 +701,6 @@ describe('NodeIdentityPanel Component', () => {
         expect(updateCall).toBeDefined();
         const payload = JSON.parse(updateCall[1].body);
         expect(payload).toEqual({
-            password: mockProfile.credential,
             callsign: 'unlocated',
             communityName: 'Unlocated Node',
             contactEmail: '',
@@ -710,7 +710,7 @@ describe('NodeIdentityPanel Component', () => {
         expect('lng' in payload).toBe(false);
     });
 
-    it('displays 2FA session expired error when identity succeeds but config fails with totpRequired', async () => {
+    it("shows the node's own error when identity succeeds but config fails, even with an old totpRequired answer: no 2FA special case", async () => {
         const onRefreshDiag = vi.fn();
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/local/community-info')) {
@@ -735,7 +735,7 @@ describe('NodeIdentityPanel Component', () => {
                 return Promise.resolve({
                     ok: false,
                     status: 403,
-                    json: () => Promise.resolve({ error: '2FA required', totpRequired: true }),
+                    json: () => Promise.resolve({ error: 'Owners only', totpRequired: true }),
                 });
             }
             return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
@@ -757,7 +757,8 @@ describe('NodeIdentityPanel Component', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText(/2FA session expired. Please re-authenticate./i)).toBeInTheDocument();
+            expect(screen.getByText('Owners only')).toBeInTheDocument();
+            expect(screen.queryByText(/2FA session expired/i)).toBeNull();
             const statusEl = document.getElementById('identity-status');
             expect(statusEl).toHaveAttribute('role', 'alert');
             expect(statusEl).toHaveAttribute('aria-live', 'assertive');
@@ -1133,7 +1134,8 @@ describe('NodeIdentityPanel Component', () => {
             expect(emailInput).not.toBeDisabled();
             expect(phoneInput).not.toBeDisabled();
             const adminCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/admin/diagnostics'));
-            expect(adminCall![1].headers['X-Admin-Password']).toBe(mockProfile.credential);
+            expect(adminCall![1].headers['Authorization']).toBe(`Bearer ${TOKEN}`);
+            expect(adminCall![1].headers['X-Admin-Password']).toBeUndefined();
 
             await saveNow();
             const body = identityBody(fetchMock);

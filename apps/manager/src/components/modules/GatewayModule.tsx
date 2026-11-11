@@ -88,9 +88,10 @@ export function GatewayModule({
                         className="space-y-4"
                     >
                         <div>
-                            <label className="block text-nature-300 font-semibold mb-1.5">Owner automation token</label>
+                            <label htmlFor="gateway-owner-token" className="block text-nature-300 font-semibold mb-1.5">Owner automation token</label>
                             <div className="relative">
                                 <input
+                                    id="gateway-owner-token"
                                     type={showAdminInput ? 'text' : 'password'}
                                     autoComplete="off"
                                     value={adminInput}

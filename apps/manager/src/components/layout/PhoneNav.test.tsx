@@ -39,10 +39,10 @@ describe('Settings on a phone', () => {
         localStorage.clear();
         sessionStorage.clear();
         window.history.replaceState(null, '');
-        // Signed in: the node says this browser's session cookie is a live password session (lib/key-session.ts).
+        // Signed in: the node says this browser's session cookie is a live key session (lib/key-session.ts).
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (String(url).includes('/api/local/admin/auth/session')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'ab'.repeat(32) }) });
             }
             if (String(url).includes('/api/local/admin/csrf-token')) {
                 return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ csrfToken: 'csrf-phone' }) });
@@ -185,7 +185,8 @@ describe('Settings on a phone', () => {
         await act(async () => { render(<App isFleetMode={false} />); });
         const bar = screen.getByRole('button', { name: 'Show menu' }).parentElement as HTMLElement;
         await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Log Out' })); });
-        expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /unlock settings/i })).toBeNull();
         const calls = (globalThis.fetch as any).mock.calls as Array<[string]>;
         expect(calls.some(([u]) => String(u).includes('/api/local/admin/auth/logout'))).toBe(true);
     });

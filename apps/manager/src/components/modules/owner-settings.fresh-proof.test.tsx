@@ -3,7 +3,6 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { GatewayModule } from './GatewayModule';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
-import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { ApplianceSection } from './ApplianceSection';
 import { updateGatewayConfig, type GatewayConfig, type OffboxStatus } from '../../lib/node-client';
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
@@ -12,11 +11,11 @@ import type { NodeProfile } from '../../lib/profiles';
 
 /**
  * Owner-delete S4a: the owner's settings whose routes call requireFreshProof: the gateway (amendment 1), off-box
- * destinations removed, changed or kept fewer days, a break-glass code made (C7), an automation token made (C10, key
- * sessions only) and the password retired (C4, Manage within 90 s). Each viewer × the refusal → the box or the sentence;
+ * destinations removed, changed or kept fewer days, a break-glass code made (C7) and an automation token made (C10, key
+ * sessions only). Each viewer × the refusal → the box or the sentence;
  * the code is re-sent once with the same request; nothing is re-sent without one.
  */
-const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', credential: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', automationToken: 'pw' };
 const CODE_ASK = (what: string) => ({ error: `Enter a current code from your authenticator app (or a backup code) to ${what}`, totpRequired: true });
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
@@ -54,9 +53,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Gateway save (S4a; opus-1984 N4)', () => {
     /** As App's handleSaveGateway: the proof is the screen's to ask; anything else it says itself. */
-    const onSave = (code?: string) => updateGatewayConfig(node.url, gateway, 'pw', undefined, code).then(() => {});
+    const onSave = (code?: string) => updateGatewayConfig(node.url, gateway, 'pw', code).then(() => {});
 
-    it('password viewer: the box; a wrong code stays; a new code re-sends the same settings once with `code`', async () => {
+    it('token viewer: the box; a wrong code stays; a new code re-sends the same settings once with `code`', async () => {
         const sent = mockNode('/api/local/admin/gateway', [[401, CODE_ASK('change the gateway settings')], [401, { error: 'Invalid 2FA code', totpRequired: true }], [200, { success: true, gateway }]]);
         render(<GatewayModule gateway={gateway} gatewayLoading={false} gatewaySuccess={null} onChangeGateway={vi.fn()} onSaveGateway={onSave} />);
         fireEvent.click(screen.getByRole('button', { name: /Save Gateway Config/ }));
@@ -97,7 +96,7 @@ describe('Off-box destination removed (S4a)', () => {
         retentionDays: 30, retentionFrom: 'default', maxRetentionDays: 30, maxIntervalHours: 168, running: false, destinations,
     } as unknown as OffboxStatus);
 
-    it('password viewer: Remove opens the box; the code re-sends the same removeId once', async () => {
+    it('token viewer: Remove opens the box; the code re-sends the same removeId once', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         const sent = mockNode('/offbox-backups/settings', [[401, CODE_ASK('remove, change or shorten where backups go off the box')], [200, { success: true, status: status([]) }]],
             { '/offbox-backups/status': status([dest]) });
@@ -121,42 +120,55 @@ describe('Off-box destination removed (S4a)', () => {
 });
 
 describe('Break-glass code made (S4a, C7)', () => {
-    it('password viewer: the box; the code re-sent once with the same owner key', async () => {
-        const sent = mockNode('/auth/break-glass/issue', [[401, CODE_ASK('make a break-glass code')], [200, { breakGlassCode: 'BG-TEST-0000' }]]);
+    const renderAccess = async (rolesViewer?: Parameters<typeof ApplianceSection>[0]['rolesViewer']) => {
         await act(async () => {
             render(
                 <ApplianceSection activeNode={node} diag={null} gateway={null} gatewayLoading={false} gatewaySuccess={null} gatewaySaving={false}
                     nodeLogs={[]} onChangeGateway={vi.fn()} onSaveGateway={vi.fn()} onRefreshDiag={vi.fn()} onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()} onRunLedgerAudit={vi.fn()} auditState={{ running: false, result: null }} initialSubTab="access" />
+                    onDownloadBackup={vi.fn()} onRunLedgerAudit={vi.fn()} auditState={{ running: false, result: null }} initialSubTab="access"
+                    rolesViewer={rolesViewer} />
             );
         });
-        fireEvent.change(screen.getByLabelText("Owner's member key"), { target: { value: 'b'.repeat(64) } });
+    };
+
+    it('owner key viewer: the box (when the node asks for a code); the code re-sent once, the request carrying only the code', async () => {
+        const sent = mockNode('/auth/break-glass/issue', [[401, CODE_ASK('make a break-glass code')], [200, { breakGlassCode: 'BG-TEST-0000' }]]);
+        await renderAccess(OWNER_KEY);
+        // The code is made for the signed-in owner's own key: there is no owner-key field to fill in.
+        expect(screen.queryByLabelText("Owner's member key")).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Make a break-glass code' }));
         await enterCode('break-glass-proof', '864200');
         expect(await screen.findByText('BG-TEST-0000')).toBeInTheDocument();
-        expect(sent.map((s) => [s.body.memberPubkey, s.body.code])).toEqual([['b'.repeat(64), undefined], ['b'.repeat(64), '864200']]);
+        expect(sent.map((s) => s.body.code)).toEqual([undefined, '864200']);
+        // No member key and no password in either request.
+        expect(sent.map((s) => Object.keys(s.body).sort())).toEqual([[], ['code']]);
+    });
+
+    it('owner key viewer, hand-off stale: the Manage-again sentence; nothing re-sent', async () => {
+        const sent = mockNode('/auth/break-glass/issue', [[403, STEP_UP]]);
+        await renderAccess(OWNER_KEY);
+        fireEvent.click(screen.getByRole('button', { name: 'Make a break-glass code' }));
+        expect(await screen.findByTestId('break-glass-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(sent).toHaveLength(1);
+    });
+
+    it('token viewer: a sentence about the owner\'s phone instead of the button; no request', async () => {
+        const sent = mockNode('/auth/break-glass/issue', [[200, { breakGlassCode: 'BG-TEST-0000' }]]);
+        await renderAccess();
+        expect(screen.getByText(/An owner makes a break-glass code from their own phone: Settings, Community admin, Break-glass code in the BeanPool app\./)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Make a break-glass code' })).toBeNull();
+        expect(sent).toHaveLength(0);
     });
 });
 
-describe('Automation token made and the password retired: key sessions only (S4a, C10, C4)', () => {
+describe('Automation token made: key sessions only (S4a, C10)', () => {
     it('token, computer viewer: the from-your-phone sentence; one request; no token shown', async () => {
         const sent = mockNode('/api/local/admin/automation-tokens', [[403, PHONE]]);
-        render(<AutomationTokensPanel activeNode={{ ...node, credential: undefined }} viewer={OWNER_KEY} />);
+        render(<AutomationTokensPanel activeNode={{ ...node, automationToken: undefined }} viewer={OWNER_KEY} />);
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Dash' } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Make token' })); });
         expect(await screen.findByTestId('token-proof-phone')).toHaveTextContent('Do this from your phone');
         expect(sent).toHaveLength(1);
         expect(screen.queryByTestId('automation-token-value')).toBeNull();
-    });
-
-    it('retire, phone viewer with a stale hand-off: the Manage-again sentence; one request; still not retired', async () => {
-        const state = { passwordRetired: false, owners: 2, hasBreakGlassCode: true };
-        const sent = mockNode('/auth/retire-password', [[403, STEP_UP]], { '/auth/password-retirement': state });
-        render(<RetirePasswordPanel activeNode={{ ...node, credential: undefined }} viewer={OWNER_KEY} />);
-        const confirmBox = await screen.findByLabelText('Type RETIRE to confirm');
-        fireEvent.change(confirmBox, { target: { value: 'RETIRE' } });
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retire the admin password' })); });
-        expect(await screen.findByTestId('retire-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
-        expect(sent).toHaveLength(1);
     });
 });

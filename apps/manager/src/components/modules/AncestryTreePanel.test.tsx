@@ -21,7 +21,7 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         id: 'test-node-id',
         name: 'Test Node',
         url: 'https://test-node.local',
-        credential: 'test-admin-secret',
+        automationToken: 'test-admin-secret',
     };
 
     beforeEach(() => {
@@ -416,8 +416,7 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
             expect(nodeClient.pruneInviteBranch).toHaveBeenCalledWith(
                 mockNode.url,
                 'pk_alice_genesis_0000000000',
-                mockNode.credential,
-                undefined
+                mockNode.automationToken
             );
         });
 

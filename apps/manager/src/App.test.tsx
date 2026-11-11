@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from './App';
 
 /**
- * A node answering as if this browser holds a live password session (the httpOnly cookie the password sign-in sets):
+ * A node answering as if this browser holds a live key session (the httpOnly cookie a phone sign-in sets):
  * /auth/session says so, /csrf-token gives its token. `onAdmin` sees every other request.
  */
 /** The pages the console reads after the node's summary (members, then posts): one member, so the node is not a brand-new one. */
@@ -14,13 +14,29 @@ function pagedAnswer(url: string) {
     return null;
 }
 
-function stubPasswordSession(onAdmin?: (url: string, opts?: any) => unknown) {
+/**
+ * The phone sign-in's own requests (a pairing, then a poll the node holds open), answered so the card shows its QR. The
+ * card is the page's only sign-in now, so it asks whenever the page shows it; a bare `{ success: true }` here would make it
+ * say the node did not answer, in an alert of its own beside the page's notices.
+ */
+function pairingAnswer(url: string): Promise<unknown> | null {
+    const u = String(url);
+    if (/\/api\/local\/admin\/auth\/pairing$/.test(u)) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ pairingId: 'a'.repeat(64), shortCode: 'K7F3QX', ttlMs: 120_000 }) });
+    }
+    if (/\/api\/local\/admin\/auth\/pairing\/[0-9a-f]{64}\/wait$/.test(u)) return new Promise(() => { /* held open, as the node does */ });
+    return null;
+}
+
+function stubKeySession(onAdmin?: (url: string, opts?: any) => unknown) {
     const fetchMock = vi.fn().mockImplementation((url: string, opts?: any) => {
+        const pairing = pairingAnswer(url);
+        if (pairing) return pairing;
         if (String(url).includes('/api/local/admin/auth/session')) {
             return Promise.resolve({
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({ authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null }),
+                json: () => Promise.resolve({ authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'ab'.repeat(32) }),
             });
         }
         if (String(url).includes('/api/local/admin/csrf-token')) {
@@ -151,8 +167,11 @@ describe('App Component', () => {
             });
 
             expect(screen.getByText('Node Settings')).toBeInTheDocument();
-            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-            expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+            // The phone is the only sign-in: no password field, no Unlock button, no 2FA field.
+            expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
+            expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /unlock settings/i })).not.toBeInTheDocument();
+            expect(screen.queryByPlaceholderText(/6-digit code/)).not.toBeInTheDocument();
             // The old static Settings page is gone (design case 18, D9): no link to it.
             expect(screen.queryByText(/legacy settings/i)).not.toBeInTheDocument();
             expect(document.querySelector('a[href="/settings-legacy"]')).toBeNull();
@@ -164,18 +183,22 @@ describe('App Component', () => {
         /**
          * Queue item 26 (2026-10-04): an Android Custom Tab brought back to the front loads the app's new link into the
          * /settings page it still shows (signed out by a node restart or the phone idle). Only the fragment changes, so
-         * nothing reloads: the page must read the link from the hashchange, not leave the password form up.
+         * nothing reloads: the page must read the link from the hashchange, not leave the sign-in screen up.
          */
         it('a phone link that reaches the page already open (fragment change only) signs in, or says why not', async () => {
             sessionStorage.clear();
             window.history.replaceState(null, '', '/settings');
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => pairingAnswer(url)
+                ?? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: false }) })));
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
-            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
 
             let exchange: 'ok' | 'expired' = 'ok';
             const fetchMock = vi.fn().mockImplementation((url: string) => {
+                const pairing = pairingAnswer(url);
+                if (pairing) return pairing;
                 if (String(url).includes('/api/local/admin/auth/exchange')) {
                     return Promise.resolve(exchange === 'ok'
                         ? { ok: true, status: 200, json: () => Promise.resolve({ success: true, role: 'owner', memberPubkey: 'ab'.repeat(32), csrfToken: 'csrf-link' }) }
@@ -188,13 +211,14 @@ describe('App Component', () => {
             });
             vi.stubGlobal('fetch', fetchMock);
 
-            // A spent link first: said, in plain words, above the password form.
+            // A spent link first: said, in plain words, above the phone sign-in, with no word of a password to fall back on.
             exchange = 'expired';
             await act(async () => {
                 window.history.replaceState(null, '', `/settings#handoff=${'c'.repeat(64)}&section=home&from=app`);
                 window.dispatchEvent(new HashChangeEvent('hashchange'));
             });
             expect(screen.getByRole('alert')).toHaveTextContent(/sign-in link from your phone has expired.*Tap Manage again/);
+            expect(screen.getByRole('alert')).not.toHaveTextContent(/password/i);
             expect(window.location.hash).toBe('');
 
             // A fresh one: signed in, no password asked.
@@ -217,6 +241,8 @@ describe('App Component', () => {
             sessionStorage.clear();
             let live = { memberPubkey: 'ab'.repeat(32), callsign: 'Ada' };
             const fetchMock = vi.fn().mockImplementation((url: string) => {
+                const pairing = pairingAnswer(url);
+                if (pairing) return pairing;
                 if (String(url).includes('/api/local/admin/auth/exchange')) {
                     return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: 'x', replay: true, mintedFor: 'ab'.repeat(32) }) });
                 }
@@ -251,12 +277,13 @@ describe('App Component', () => {
             });
             const logout = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/local/admin/auth/logout'));
             expect(logout?.[1]?.headers?.['X-CSRF-Token']).toBe('csrf-live');
-            expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
+            expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
             expect(screen.getByRole('alert')).toHaveTextContent(/Signed out\. Tap Manage again/);
         });
 
         it('verifies document title does not contain "Fleet" in single-node mode', async () => {
-            stubPasswordSession();
+            stubKeySession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -265,7 +292,7 @@ describe('App Component', () => {
         });
 
         it('renders single-node shell with HomeScreen when authenticated', async () => {
-            stubPasswordSession();
+            stubKeySession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -293,7 +320,7 @@ describe('App Component', () => {
             ['an unlocked file (no recovery code yet: no keys)', 'no', 'tar.gz', 'downloadedPlainAt'],
         ])('a download of %s is noted for "Ready for the hall", in this browser, under its own kind', async (_what, locked, ext, key) => {
             const blob = new Blob(['backup']);
-            stubPasswordSession((url) => (url.endsWith('/api/local/admin/backup')
+            stubKeySession((url) => (url.endsWith('/api/local/admin/backup')
                 ? Promise.resolve({
                     ok: true,
                     status: 200,
@@ -320,7 +347,7 @@ describe('App Component', () => {
         });
 
         it('a download that fails is not noted', async () => {
-            stubPasswordSession((url) => (url.endsWith('/api/local/admin/backup')
+            stubKeySession((url) => (url.endsWith('/api/local/admin/backup')
                 ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'boom' }), headers: new Headers() })
                 : undefined));
             vi.stubGlobal('alert', vi.fn());
@@ -335,7 +362,7 @@ describe('App Component', () => {
         });
 
         it('navigates across the 4 plain-English sections', async () => {
-            stubPasswordSession();
+            stubKeySession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -370,7 +397,7 @@ describe('App Component', () => {
         });
 
         it('logs out: the node ends the session (with its CSRF token) and the sign-in card is back', async () => {
-            const fetchMock = stubPasswordSession();
+            const fetchMock = stubKeySession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -380,33 +407,33 @@ describe('App Component', () => {
                 fireEvent.click(logoutBtn);
             });
 
-            expect(screen.getByText(/unlock settings/i)).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
+            expect(screen.queryByText(/unlock settings/i)).not.toBeInTheDocument();
             const logout = fetchMock.mock.calls.find((call: any[]) => String(call[0]).includes('/api/local/admin/auth/logout'));
             expect(logout).toBeTruthy();
             expect(logout![1].headers['X-CSRF-Token']).toBe('csrf-session');
             expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
         });
 
-        // Fable's web review, M1: the members' web app shares this origin, so a password kept in its storage is one
-        // script away from it. Until 2026-10-01 this test asserted the password and its 2FA session WERE kept in
-        // sessionStorage after sign-in.
-        it('signing in with the password leaves no admin secret in the origin\'s storage, and no password on later requests', async () => {
+        // Fable's web review, M1: the members' web app shares this origin, so a credential kept in its storage is one
+        // script away from it. A phone sign-in keeps nothing there: the session is an httpOnly cookie, and its CSRF
+        // token lives in memory only.
+        it('signing in with the phone leaves no sign-in secret in the origin\'s storage, and no password on later requests', async () => {
             sessionStorage.clear();
             localStorage.clear();
+            window.history.replaceState(null, '', '/settings');
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
-
-            const passInput = screen.getByPlaceholderText('Password');
-            const unlockBtn = screen.getByRole('button', { name: /unlock settings/i });
+            expect(screen.queryByPlaceholderText('Password')).not.toBeInTheDocument();
 
             const adminCalls: Array<{ url: string; headers: Record<string, string> }> = [];
             vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: any) => {
-                if (String(url).includes('/api/local/admin/auth/password')) {
+                if (String(url).includes('/api/local/admin/auth/exchange')) {
                     return Promise.resolve({
                         ok: true,
                         status: 200,
-                        json: () => Promise.resolve({ success: true, role: 'owner', csrfToken: 'csrf-from-signin' }),
+                        json: () => Promise.resolve({ success: true, role: 'owner', memberPubkey: 'ab'.repeat(32), csrfToken: 'csrf-from-signin' }),
                     });
                 }
                 if (String(url).includes('/api/local/admin/')) adminCalls.push({ url: String(url), headers: opts?.headers || {} });
@@ -420,16 +447,16 @@ describe('App Component', () => {
             }));
 
             await act(async () => {
-                fireEvent.change(passInput, { target: { value: 'secret-pass-123' } });
-                fireEvent.click(unlockBtn);
+                window.history.replaceState(null, '', `/settings#handoff=${'e'.repeat(64)}&section=home&from=app`);
+                window.dispatchEvent(new HashChangeEvent('hashchange'));
             });
 
             expect(screen.getByRole('button', { name: /appliance & data/i })).toBeInTheDocument();
-            expect(storedText()).not.toContain('secret-pass-123');
+            for (const secret of ['csrf-from-signin', 'e'.repeat(64)]) expect(storedText()).not.toContain(secret);
             expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
             expect(sessionStorage.getItem('bp_tfa_session_local-node')).toBeNull();
             expect(sessionStorage.getItem('bp-2fa-session')).toBeNull();
-            // Later admin requests ride the cookie, with the session's CSRF token, and never carry the password.
+            // Later admin requests ride the cookie, with the session's CSRF token, and never carry a password or a token.
             const auditBtn = screen.getByRole('button', { name: /run ledger audit/i });
             await act(async () => {
                 fireEvent.click(auditBtn);
@@ -437,92 +464,32 @@ describe('App Component', () => {
             const audit = adminCalls.find(c => c.url.includes('/api/local/admin/ledger-audit'));
             expect(audit).toBeTruthy();
             expect(audit!.headers['X-Admin-Password']).toBeUndefined();
+            expect(audit!.headers['X-Admin-2FA-Session']).toBeUndefined();
+            expect(audit!.headers['Authorization']).toBeUndefined();
             expect(audit!.headers['X-CSRF-Token']).toBe('csrf-from-signin');
             expect(adminCalls.length).toBeGreaterThan(0);
-            for (const c of adminCalls) expect(JSON.stringify(c.headers)).not.toContain('secret-pass-123');
+            for (const c of adminCalls) expect(JSON.stringify(c.headers)).not.toMatch(/X-Admin-Password|X-Admin-2FA-Session|Authorization/i);
         });
 
-        it('a session the node has ended (idle, restarted, password changed) sends the operator back to sign-in, saying so', async () => {
-            stubPasswordSession((url) => (url.includes('/api/local/admin/diagnostics')
+        it('a session the node has ended (idle or restarted) sends the operator back to sign-in, saying so', async () => {
+            stubKeySession((url) => (url.includes('/api/local/admin/diagnostics')
                 ? Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: 'Session expired (2h idle timeout)', sessionExpired: true }) })
                 : undefined));
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
-            expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /unlock settings/i })).not.toBeInTheDocument();
             expect(screen.getByRole('alert')).toHaveTextContent(/signed out \(Session expired \(2h idle timeout\)\)\. Sign in again\./);
         });
 
-        // Design step 6 (D3): on a node with 2FA off the password opens the 2FA card and nothing else until a code is
-        // confirmed; confirming opens Settings in the same session.
-        it('a password sign-in on a node with 2FA off lands on the 2FA card only, saying why; a confirmed code opens Settings', async () => {
-            sessionStorage.clear();
-            await act(async () => {
-                render(<App isFleetMode={false} />);
-            });
-            const codes = ['aaaa-1111', 'bbbb-2222', 'cccc-3333', 'dddd-4444', 'eeee-5555', 'ffff-6666', 'gggg-7777', 'hhhh-8888'];
-            const gatedCalls: string[] = [];
-            let confirmed = false;
-            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: any) => {
-                const u = String(url);
-                const json = (status: number, body: unknown) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) });
-                if (u.includes('/api/local/admin/auth/password')) {
-                    return json(200, { success: true, role: 'owner', csrfToken: 'csrf-gated', totpSetupRequired: true });
-                }
-                if (u.includes('/api/local/admin/2fa/setup')) {
-                    expect(opts?.headers?.['X-CSRF-Token']).toBe('csrf-gated');
-                    return json(200, { success: true, secret: 'JBSWY3DPEHPK3PXP', formattedSecret: 'JBSW Y3DP EHPK 3PXP', backupCodes: codes });
-                }
-                if (u.includes('/api/local/admin/2fa/verify')) {
-                    const code = JSON.parse(opts?.body || '{}').code;
-                    if (code !== '123456') return json(400, { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' });
-                    confirmed = true;
-                    return json(200, { success: true, totpEnabled: true });
-                }
-                if (u.includes('/api/local/admin/') && !confirmed) {
-                    gatedCalls.push(u);
-                    return json(403, { error: 'Set up two-factor sign-in to open Settings: the admin password alone is not enough.', code: 'totp_setup_required', totpSetupRequired: true });
-                }
-                return json(200, { success: true, health: { flags: [] }, reports: [] });
-            }));
-
-            await act(async () => {
-                fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'pw' } });
-                fireEvent.click(screen.getByRole('button', { name: /unlock settings/i }));
-            });
-            expect(screen.getByTestId('totp-setup-gate')).toBeInTheDocument();
-            expect(screen.getByText('Set up two-factor sign-in to open Settings: the admin password alone is not enough.')).toBeInTheDocument();
-            expect(screen.queryByRole('button', { name: /appliance & data/i })).toBeNull();
-            expect(gatedCalls).toEqual([]);
-
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /set up two-factor sign-in/i }));
-            });
-            const shown = screen.getByTestId('totp-gate-backup-codes');
-            for (const c of codes) expect(shown).toHaveTextContent(c);
-            expect(screen.getByTestId('totp-gate-secret')).toHaveTextContent('JBSW Y3DP EHPK 3PXP');
-
-            await act(async () => {
-                fireEvent.change(screen.getByLabelText(/type the 6-digit code/i), { target: { value: '000000' } });
-                fireEvent.click(screen.getByRole('button', { name: /confirm and open settings/i }));
-            });
-            expect(screen.getByRole('alert')).toHaveTextContent(/Invalid 6-digit 2FA code/);
-            expect(screen.queryByRole('button', { name: /appliance & data/i })).toBeNull();
-
-            await act(async () => {
-                fireEvent.change(screen.getByLabelText(/type the 6-digit code/i), { target: { value: '123456' } });
-                fireEvent.click(screen.getByRole('button', { name: /confirm and open settings/i }));
-            });
-            expect(screen.queryByTestId('totp-setup-gate')).toBeNull();
-            expect(screen.getByRole('button', { name: /appliance & data/i })).toBeInTheDocument();
-            expect(gatedCalls).toEqual([]);
-        });
-
-        it('a reload with a password session the node still holds to the 2FA card shows that card, not Settings', async () => {
+        // A node has no admin password and no 2FA: a cookie that is not a key session is never resumed, and there is no
+        // 2FA card to land on.
+        it('a /auth/session answer that is not a key session is never resumed: the phone sign-in shows, not Settings', async () => {
             const fetchMock = vi.fn().mockImplementation((url: string) => {
                 const u = String(url);
                 if (u.includes('/api/local/admin/auth/session')) {
-                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null, totpSetupRequired: true }) });
+                    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null }) });
                 }
                 if (u.includes('/api/local/admin/csrf-token')) {
                     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ csrfToken: 'csrf-session' }) });
@@ -533,24 +500,22 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
-            expect(screen.getByTestId('totp-setup-gate')).toBeInTheDocument();
+            expect(screen.getByRole('heading', { name: 'Sign in with your phone' })).toBeInTheDocument();
             expect(screen.queryByRole('button', { name: /appliance & data/i })).toBeNull();
-            // Signing out from the card ends the session.
-            await act(async () => {
-                fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
-            });
-            expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/local/admin/auth/logout'))).toBe(true);
-            expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+            expect(screen.queryByTestId('totp-setup-gate')).toBeNull();
+            // It did not even ask for a CSRF token to carry on with that session.
+            expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/api/local/admin/csrf-token'))).toBe(false);
         });
 
-        it('a password session the node starts refusing with totp_setup_required (2FA turned off) is shown the 2FA card', async () => {
-            stubPasswordSession((url) => (url.includes('/api/local/admin/diagnostics')
-                ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'Set up two-factor sign-in to open Settings: the admin password alone is not enough.', code: 'totp_setup_required', totpSetupRequired: true }) })
+        it('a refusal that once sent the operator to the 2FA card is just a refusal now: there is no 2FA card', async () => {
+            stubKeySession((url) => (url.includes('/api/local/admin/diagnostics')
+                ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'Set up two-factor sign-in to open Settings.', code: 'totp_setup_required', totpSetupRequired: true }) })
                 : undefined));
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
-            expect(screen.getByTestId('totp-setup-gate')).toBeInTheDocument();
+            expect(screen.queryByTestId('totp-setup-gate')).toBeNull();
+            expect(screen.queryByRole('button', { name: /set up two-factor sign-in/i })).toBeNull();
         });
 
         it('what an older build stored in a fleet profile (a password, a replication token) is removed on load and never sent', async () => {
@@ -560,12 +525,12 @@ describe('App Component', () => {
                 id: 'local-node',
                 name: 'Local Sovereign Node',
                 url: 'http://localhost',
-                credential: 'stale-password-from-storage',
+                adminPassword: 'stale-password-from-storage',
                 replicationToken: 'stale-replication-token',
             }]));
 
             let lastAdminHeaders: Record<string, string> = {};
-            stubPasswordSession((url, opts) => {
+            stubKeySession((url, opts) => {
                 if (url.includes('/api/local/admin/ledger-audit')) {
                     lastAdminHeaders = opts?.headers || {};
                     return Promise.resolve({
@@ -592,6 +557,7 @@ describe('App Component', () => {
 
             expect(lastAdminHeaders['X-Admin-Password']).toBeUndefined();
             expect(lastAdminHeaders['X-Admin-2FA-Session']).toBeUndefined();
+            expect(lastAdminHeaders['Authorization']).toBeUndefined();
             expect(lastAdminHeaders['X-CSRF-Token']).toBe('csrf-session');
         });
 

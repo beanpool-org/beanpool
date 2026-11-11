@@ -53,13 +53,13 @@ describe('Prune branch with an owner in it (S4a)', () => {
     const root = { publicKey: owner, callsign: 'anna' };
     // The node's figures for the branch are in before Confirm can be pressed (PruneBranchModal).
     const press = async () => {
-        render(<PruneBranchModal rootMember={root} loadFigures={() => Promise.resolve({ members: 1, badDebt_c: 0, surplus_c: 0, net_c: 0 })} onConfirm={(pk, code) => pruneInviteBranch(NODE, pk, 'pw', undefined, code).then(() => {})} onClose={() => {}} />);
+        render(<PruneBranchModal rootMember={root} loadFigures={() => Promise.resolve({ members: 1, badDebt_c: 0, surplus_c: 0, net_c: 0 })} onConfirm={(pk, code) => pruneInviteBranch(NODE, pk, 'pw', code).then(() => {})} onClose={() => {}} />);
         fireEvent.change(screen.getByPlaceholderText(/Type "anna" to confirm/i), { target: { value: 'anna' } });
         await waitFor(() => expect(screen.getByRole('button', { name: /Prune Entire Branch/i })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: /Prune Entire Branch/i }));
     };
 
-    it('password viewer: the box; a wrong code stays; a new code re-sends the same prune once with `code`', async () => {
+    it('token viewer: the box; a wrong code stays; a new code re-sends the same prune once with `code`', async () => {
         const sent = mockNode(`/branches/${owner}/prune`, [[401, CODE_ASK], [401, WRONG], [200, { success: true }]]);
         await press();
         await enterCode('prune-branch-proof', '111111');
@@ -95,7 +95,7 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
         expect(screen.queryByText(/Suspended\./)).toBeNull();
     });
 
-    it('suspend, password viewer: the code re-sent once beside the reason', async () => {
+    it('suspend, token viewer: the code re-sent once beside the reason', async () => {
         const sent = mockNode(`/users/${owner}/suspend`, [[401, CODE_ASK], [200, { success: true, decision: { id: 'd1', closesAt: '2026-10-23T00:00:00.000Z' } }]]);
         render(<MemberDetailModal member={member} isFrozen={false} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE} credential="pw" />);
         fireEvent.click(screen.getByText('⏸️ Suspend'));
@@ -117,7 +117,7 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
                 nodeDataLoading={false}
                 activeNodeUrl={NODE}
                 onRefresh={onRefresh}
-                onPruneUser={(pk, code) => pruneNodeUser(NODE, pk, 'pw', undefined, code).then(() => {})}
+                onPruneUser={(pk, code) => pruneNodeUser(NODE, pk, 'pw', code).then(() => {})}
             />
         );
         fireEvent.click(await screen.findByText('Anna Owner'));
@@ -131,7 +131,7 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
 });
 
 describe('Offboard an owner (S4a)', () => {
-    it('password viewer: the box; the code re-sent once with the same resolution', async () => {
+    it('token viewer: the box; the code re-sent once with the same resolution', async () => {
         const sent = mockNode(`/members/${owner}/offboard`, [[401, CODE_ASK], [200, { success: true, memberPubkey: owner, callsign: 'anna', resolution: 'prune_zero_balance', balanceSettled: 0 }]],
             { [`/members/${owner}/offboard/preview`]: PREVIEW });
         const onSuccess = vi.fn();

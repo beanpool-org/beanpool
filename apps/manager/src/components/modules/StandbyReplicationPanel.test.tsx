@@ -10,7 +10,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         id: 'node-standby-1',
         name: 'Standby Replica Node',
         url: 'https://standby.example.com',
-        credential: 'test-admin-secret',
+        automationToken: 'test-admin-secret',
     };
 
     beforeEach(() => {
@@ -434,6 +434,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
             expect(screen.getByLabelText(/Primary Replication Token/i)).toBeInTheDocument();
         });
         expect(screen.queryByLabelText(/Admin Password/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/admin password/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
         await userEvent.type(screen.getByLabelText(/Primary Replication Token/i), 'pasted-token');
@@ -445,6 +446,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
             const body = JSON.parse(String((saveCall![1] as RequestInit).body));
             expect(body.primaryToken).toBe('pasted-token');
             expect(body).not.toHaveProperty('primaryPassword');
+            expect(body).not.toHaveProperty('password');
         });
     });
 });

@@ -12,11 +12,10 @@ vi.mock('../../lib/node-client', async () => {
         getAppAddresses: vi.fn(),
         confirmAppAddress: vi.fn(),
         removeAppAddress: vi.fn(),
-        getTfaSessionToken: vi.fn(() => undefined),
     };
 });
 
-const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://community.example.org', credential: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://community.example.org', automationToken: 'pw' };
 const report = (over: Partial<nodeClient.AppAddressesReport> = {}): nodeClient.AppAddressesReport => ({
     addresses: [], unconfirmed: [],
     unboundSignaturesUntil: '2026-12-15', unboundSignaturesAccepted: true, ...over,
@@ -58,7 +57,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         // Refused on every day since the cutover (1.4.0), whatever the node's date for addresses it doesn't know.
         expect(screen.getByTestId('old-apps').textContent).toBe('Apps too old to name this community are refused here. Members using one see a message asking them to update BeanPool.');
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
-        expect(nodeClient.getAppAddresses).toHaveBeenCalledWith('https://community.example.org', 'pw', undefined);
+        expect(nodeClient.getAppAddresses).toHaveBeenCalledWith('https://community.example.org', 'pw');
     });
 
     it("a node with no address: says so, offers this page's own address with one tap, and what apps reached it at once ticked", async () => {
@@ -82,7 +81,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(nodeClient.confirmAppAddress).not.toHaveBeenCalled();
         fireEvent.click(within(held).getByRole('checkbox'));
         fireEvent.click(confirm);
-        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://community.example.org', 'bp.example.net', 'pw', undefined));
+        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://community.example.org', 'bp.example.net', 'pw'));
         expect((await addressRow('bp.example.net')).textContent).toMatch(/confirmed in Settings/);
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
@@ -201,7 +200,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         fireEvent.click(yes('mallory.example'));
         expect(nodeClient.confirmAppAddress).not.toHaveBeenCalled();
         fireEvent.click(within(offer).getByRole('button'));
-        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://community.example.org', 'community.example.org', 'pw', undefined));
+        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://community.example.org', 'community.example.org', 'pw'));
     });
 
     it("a node with the guard that doesn't offer this page's address: nothing is one tap", async () => {
@@ -242,7 +241,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(confirm.disabled).toBe(false);
         expect((screen.getByText('Yes, nameless.example is its address') as HTMLButtonElement).disabled).toBe(true);
         fireEvent.click(confirm);
-        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://192.168.1.20:8443', 'riverbend.example', 'pw', undefined));
+        await waitFor(() => expect(nodeClient.confirmAppAddress).toHaveBeenCalledWith('https://192.168.1.20:8443', 'riverbend.example', 'pw'));
         expect((await addressRow('riverbend.example')).textContent).toMatch(/confirmed in Settings/);
     });
 

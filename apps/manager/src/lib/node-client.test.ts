@@ -3,17 +3,13 @@ import {
     isAutomationToken,
     isAuthFailure,
     nodeReadLimits,
-    PASSWORD_NEEDS_2FA_HINT,
-    PASSWORD_RETIRED_HINT,
     fetchHarvesterStatus,
     triggerHarvesterSync,
     fetchNodeHistory,
     normalizeNodeUrl,
     resolveNodeApiUrl,
     buildAdminHeaders,
-    isTotpRequired,
-    clearAllTfaSessionTokens,
-    loginToNode,
+    setKeySessionCsrfToken,
     fetchNodeTreasuries,
     createNodeTreasury,
     updateEnterpriseLocation,
@@ -67,10 +63,8 @@ import {
     getTlsStatus,
     setOwnAddress,
     forgetStandby,
-    passwordNeeds2faError,
     getReplicationTokenStatus,
     generateReplicationToken,
-    setReplicationTokenMode,
     clearReplicationToken,
     fetchStrandedEscrows,
     writeOffStrandedEscrow,
@@ -84,6 +78,10 @@ import { FreshProofRequiredError } from './fresh-proof';
 
 /** An Offer's photo as the Manager sends it: the node refuses a new Offer with none. */
 const PHOTO = 'data:image/jpeg;base64,cmVzaXplZA==';
+
+/** An owner automation token as the node makes it (bp_ + 12 hex + _ + 64 hex): the one credential a request carries, as a bearer. */
+const TOKEN = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
+const BEARER = `Bearer ${TOKEN}`;
 
 describe('normalizeNodeUrl', () => {
     it('returns default URL when rawUrl is empty or whitespace', () => {
@@ -111,72 +109,36 @@ describe('buildAdminHeaders', () => {
         expect(buildAdminHeaders()).toEqual({ 'Content-Type': 'application/json' });
     });
 
-    it('includes X-Admin-Password when password is provided', () => {
-        expect(buildAdminHeaders('secret123')).toEqual({
+    it('sends an automation token as Authorization: Bearer, and nothing else', () => {
+        expect(buildAdminHeaders(TOKEN)).toEqual({
             'Content-Type': 'application/json',
-            'X-Admin-Password': 'secret123',
+            Authorization: BEARER,
         });
     });
 
-    it('includes X-Admin-2FA-Session when token is provided', () => {
-        expect(buildAdminHeaders(undefined, 'tfa-token-abc')).toEqual({
-            'Content-Type': 'application/json',
-            'X-Admin-2FA-Session': 'tfa-token-abc',
-        });
+    it('sends no credential for one that is not token-shaped: no X-Admin-Password, no bearer', () => {
+        for (const notAToken of ['secret123', 'x', 'bp_short', `${TOKEN}0`, `${TOKEN.toUpperCase()}`, '']) {
+            expect(buildAdminHeaders(notAToken), notAToken).toEqual({ 'Content-Type': 'application/json' });
+        }
     });
 
-    it('includes both password and 2FA session token when provided', () => {
-        expect(buildAdminHeaders('secret123', 'tfa-token-abc')).toEqual({
-            'Content-Type': 'application/json',
-            'X-Admin-Password': 'secret123',
-            'X-Admin-2FA-Session': 'tfa-token-abc',
-        });
-    });
-});
-
-describe('isTotpRequired', () => {
-    it('returns true when response body totpRequired is true', () => {
-        expect(isTotpRequired({ totpRequired: true })).toBe(true);
+    it('never sends X-Admin-Password or X-Admin-2FA-Session', () => {
+        for (const credential of [undefined, 'secret123', TOKEN]) {
+            const h = buildAdminHeaders(credential);
+            expect(h['X-Admin-Password']).toBeUndefined();
+            expect(h['X-Admin-2FA-Session']).toBeUndefined();
+        }
     });
 
-    it('returns false when response body totpRequired is false or missing', () => {
-        expect(isTotpRequired({ totpRequired: false })).toBe(false);
-        expect(isTotpRequired({})).toBe(false);
-        expect(isTotpRequired(null)).toBe(false);
-        expect(isTotpRequired(undefined)).toBe(false);
-    });
-});
-
-describe('TFA Session Token Helpers', () => {
-    beforeEach(() => {
-        sessionStorage.clear();
-    });
-
-    it('sets and gets TFA session token', () => {
-        expect(getTfaSessionToken('profile1')).toBeUndefined();
-
-        setTfaSessionToken('profile1', 'token-123');
-        expect(getTfaSessionToken('profile1')).toBe('token-123');
-    });
-
-    it('removes token when setting token to undefined', () => {
-        setTfaSessionToken('profile1', 'token-123');
-        expect(getTfaSessionToken('profile1')).toBe('token-123');
-
-        setTfaSessionToken('profile1', undefined);
-        expect(getTfaSessionToken('profile1')).toBeUndefined();
-    });
-
-    it('clears all TFA session tokens without affecting other sessionStorage keys', () => {
-        setTfaSessionToken('profile1', 'token-1');
-        setTfaSessionToken('profile2', 'token-2');
-        sessionStorage.setItem('unrelated_key', 'value');
-
-        clearAllTfaSessionTokens();
-
-        expect(getTfaSessionToken('profile1')).toBeUndefined();
-        expect(getTfaSessionToken('profile2')).toBeUndefined();
-        expect(sessionStorage.getItem('unrelated_key')).toBe('value');
+    it('adds the key session CSRF token when one is set, with or without a bearer', () => {
+        setKeySessionCsrfToken('csrf-abc');
+        try {
+            expect(buildAdminHeaders()).toEqual({ 'Content-Type': 'application/json', 'X-CSRF-Token': 'csrf-abc' });
+            expect(buildAdminHeaders(TOKEN)).toEqual({ 'Content-Type': 'application/json', Authorization: BEARER, 'X-CSRF-Token': 'csrf-abc' });
+        } finally {
+            setKeySessionCsrfToken(null);
+        }
+        expect(buildAdminHeaders()).toEqual({ 'Content-Type': 'application/json' });
     });
 });
 
@@ -227,7 +189,7 @@ describe('checkRecoveryCodeApi', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await checkRecoveryCodeApi('https://node.example', 'ABCD-EFGH', 'admin-pass', 'tfa-123');
+        const res = await checkRecoveryCodeApi('https://node.example', 'ABCD-EFGH', TOKEN);
 
         expect(res).toEqual({ matches: true, codeId: 42 });
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -236,12 +198,11 @@ describe('checkRecoveryCodeApi', () => {
         expect(init.method).toBe('POST');
         expect(init.headers).toEqual({
             'Content-Type': 'application/json',
-            'X-Admin-Password': 'admin-pass',
-            'X-Admin-2FA-Session': 'tfa-123',
+            Authorization: BEARER,
         });
+        // The body is the code and nothing else: no password rides in it.
         expect(JSON.parse(init.body)).toEqual({
             code: 'ABCD-EFGH',
-            password: 'admin-pass',
         });
         vi.unstubAllGlobals();
     });
@@ -307,13 +268,14 @@ describe('stranded escrows helpers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await fetchStrandedEscrows('https://node.example', 'pw123', 'tfa-1');
+        const res = await fetchStrandedEscrows('https://node.example', TOKEN);
         expect(res).toEqual(mockData);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/stranded-escrows');
         expect(init.cache).toBe('no-store');
-        expect(init.headers['X-Admin-Password']).toBe('pw123');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockResolvedValueOnce({
             ok: false,
@@ -343,13 +305,14 @@ describe('stranded escrows helpers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await writeOffStrandedEscrow('https://node.example', 'esc-123', 'Deficit approved', true, 'pw123', 'tfa-1');
+        const res = await writeOffStrandedEscrow('https://node.example', 'esc-123', 'Deficit approved', true, TOKEN);
         expect(res).toEqual(mockResult);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/stranded-escrows/esc-123/write-off');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('pw123');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
         expect(JSON.parse(init.body)).toEqual({ reason: 'Deficit approved', confirmDeficit: true });
 
         vi.unstubAllGlobals();
@@ -420,35 +383,35 @@ describe('money reads in whole hundredths (DESIGN-atomic-beans)', () => {
     it('generateNodeInvite sends a vouch only as whole hundredths', async () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, code: 'INV-1', type: 'standard', vouchAmount: 2500 }) });
         vi.stubGlobal('fetch', fetchMock);
-        await generateNodeInvite('https://node.example', 'pw', 'standard', undefined, 2500);
+        await generateNodeInvite('https://node.example', TOKEN, 'standard', 2500);
         expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ type: 'standard', vouchAmount: 2500 });
-        await generateNodeInvite('https://node.example', 'pw', 'standard', undefined, 25.5);
+        await generateNodeInvite('https://node.example', TOKEN, 'standard', 25.5);
         expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty('vouchAmount');
         vi.unstubAllGlobals();
     });
 });
 
 describe('replication token helpers', () => {
-    it('getReplicationTokenStatus posts to /api/local/admin/replication-token/status with auth headers and body password', async () => {
+    it('getReplicationTokenStatus posts to /api/local/admin/replication-token/status with the bearer and an empty body', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
-            json: async () => ({ hasToken: true, tokenOnly: false, createdAt: '2026-10-31T00:00:00.000Z' }),
+            json: async () => ({ hasToken: true, createdAt: '2026-10-31T00:00:00.000Z' }),
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const status = await getReplicationTokenStatus('https://node.example.com', 'admin-pass', 'tfa-sess-123');
-        expect(status).toEqual({ hasToken: true, tokenOnly: false, createdAt: '2026-10-31T00:00:00.000Z' });
+        const status = await getReplicationTokenStatus('https://node.example.com', TOKEN);
+        expect(status).toEqual({ hasToken: true, createdAt: '2026-10-31T00:00:00.000Z' });
         expect(fetchMock).toHaveBeenCalledWith(
             resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/status'),
             expect.objectContaining({
                 method: 'POST',
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-pass',
-                    'X-Admin-2FA-Session': 'tfa-sess-123',
-                }),
-                body: JSON.stringify({ password: 'admin-pass' }),
+                headers: expect.objectContaining({ Authorization: BEARER }),
+                body: JSON.stringify({}),
             })
         );
+        const headers = fetchMock.mock.calls[0][1].headers;
+        expect(headers['X-Admin-Password']).toBeUndefined();
+        expect(headers['X-Admin-2FA-Session']).toBeUndefined();
 
         vi.unstubAllGlobals();
     });
@@ -472,19 +435,19 @@ describe('replication token helpers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await generateReplicationToken('https://node.example.com', 'admin-pass', 'tfa-sess-123');
+        const res = await generateReplicationToken('https://node.example.com', TOKEN);
         expect(res).toEqual({ success: true, token: 'rep_tok_abc123' });
         expect(fetchMock).toHaveBeenCalledWith(
             resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/generate'),
             expect.objectContaining({
                 method: 'POST',
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-pass',
-                    'X-Admin-2FA-Session': 'tfa-sess-123',
-                }),
-                body: JSON.stringify({ password: 'admin-pass' }),
+                headers: expect.objectContaining({ Authorization: BEARER }),
+                body: JSON.stringify({}),
             })
         );
+        const headers = fetchMock.mock.calls[0][1].headers;
+        expect(headers['X-Admin-Password']).toBeUndefined();
+        expect(headers['X-Admin-2FA-Session']).toBeUndefined();
 
         vi.unstubAllGlobals();
     });
@@ -502,45 +465,6 @@ describe('replication token helpers', () => {
         vi.unstubAllGlobals();
     });
 
-    it('setReplicationTokenMode posts tokenOnly mode and returns updated status', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => ({ success: true, tokenOnly: true }),
-        });
-        vi.stubGlobal('fetch', fetchMock);
-
-        const res = await setReplicationTokenMode('https://node.example.com', true, 'admin-pass', 'tfa-sess-123');
-        expect(res).toEqual({ success: true, tokenOnly: true });
-        expect(fetchMock).toHaveBeenCalledWith(
-            resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/mode'),
-            expect.objectContaining({
-                method: 'POST',
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-pass',
-                    'X-Admin-2FA-Session': 'tfa-sess-123',
-                }),
-                body: JSON.stringify({ tokenOnly: true, password: 'admin-pass' }),
-            })
-        );
-
-        vi.unstubAllGlobals();
-    });
-
-    it('setReplicationTokenMode throws fallback HTTP status error when response body is empty', async () => {
-        const fetchMock = vi.fn().mockResolvedValue({
-            ok: false,
-            status: 502,
-            statusText: 'Bad Gateway',
-            json: async () => {
-                throw new Error('invalid json');
-            },
-        });
-        vi.stubGlobal('fetch', fetchMock);
-
-        await expect(setReplicationTokenMode('https://node.example.com', false)).rejects.toThrow('HTTP 502: Bad Gateway');
-        vi.unstubAllGlobals();
-    });
-
     it('clearReplicationToken posts to /api/local/admin/replication-token/clear and returns success', async () => {
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
@@ -548,19 +472,19 @@ describe('replication token helpers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await clearReplicationToken('https://node.example.com', 'admin-pass', 'tfa-sess-123');
+        const res = await clearReplicationToken('https://node.example.com', TOKEN);
         expect(res).toEqual({ success: true });
         expect(fetchMock).toHaveBeenCalledWith(
             resolveNodeApiUrl('https://node.example.com', '/api/local/admin/replication-token/clear'),
             expect.objectContaining({
                 method: 'POST',
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-pass',
-                    'X-Admin-2FA-Session': 'tfa-sess-123',
-                }),
-                body: JSON.stringify({ password: 'admin-pass' }),
+                headers: expect.objectContaining({ Authorization: BEARER }),
+                body: JSON.stringify({}),
             })
         );
+        const headers = fetchMock.mock.calls[0][1].headers;
+        expect(headers['X-Admin-Password']).toBeUndefined();
+        expect(headers['X-Admin-2FA-Session']).toBeUndefined();
 
         vi.unstubAllGlobals();
     });
@@ -593,17 +517,17 @@ describe('enterprise location helpers', () => {
             'https://node.example.com',
             'treasury-pub-1',
             { lat: -33.8688, lng: 151.2093 },
-            'secret123',
-            'tfa-sess-1'
+            TOKEN
         );
         expect(res).toEqual(mockSuccess);
 
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/treasury/treasury-pub-1/location');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('secret123');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess-1');
-        expect(JSON.parse(init.body)).toEqual({ lat: -33.8688, lng: 151.2093, password: 'secret123' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(JSON.parse(init.body)).toEqual({ lat: -33.8688, lng: 151.2093 });
 
         vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
             ok: false,
@@ -626,15 +550,16 @@ describe('enterprise location helpers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await clearEnterpriseLocation('https://node.example.com', 'treasury-pub-1', 'secret123', 'tfa-sess-1');
+        const res = await clearEnterpriseLocation('https://node.example.com', 'treasury-pub-1', TOKEN);
         expect(res).toEqual(mockSuccess);
 
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/treasury/treasury-pub-1/location');
         expect(init.method).toBe('DELETE');
-        expect(init.headers['X-Admin-Password']).toBe('secret123');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess-1');
-        expect(JSON.parse(init.body)).toEqual({ password: 'secret123' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(JSON.parse(init.body)).toEqual({});
 
         vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
             ok: false,
@@ -661,22 +586,16 @@ describe('automation token, auth failure, and read limits helpers', () => {
         expect(isAutomationToken(null)).toBe(false);
     });
 
-    it('passwordField includes password field only when credential is not an automation token', () => {
-        const token = 'bp_1234567890ab_' + '0123456789abcdef'.repeat(4);
-        expect(passwordField(token)).toEqual({});
-        expect(passwordField('my-secret-password')).toEqual({ password: 'my-secret-password' });
-        expect(passwordField(undefined)).toEqual({ password: undefined });
-    });
-
     it('isAuthFailure recognizes authentication failure indicators', () => {
         expect(isAuthFailure('HTTP 401: Unauthorized')).toBe(true);
         expect(isAuthFailure('Error: unauthorized access')).toBe(true);
-        expect(isAuthFailure('Invalid admin password provided')).toBe(true);
-        expect(isAuthFailure(`Error: ${PASSWORD_NEEDS_2FA_HINT}`)).toBe(true);
-        expect(isAuthFailure(`Error: ${PASSWORD_RETIRED_HINT}`)).toBe(true);
+        expect(isAuthFailure("Wrong or missing token for this node — check it under the node's settings.")).toBe(true);
 
         expect(isAuthFailure('HTTP 500: Internal Server Error')).toBe(false);
         expect(isAuthFailure('Failed to fetch node data')).toBe(false);
+        // The old password words are not an auth failure any more: the node has no admin password to be wrong.
+        expect(isAuthFailure('Invalid admin password provided')).toBe(false);
+        expect(isAuthFailure('Wrong or missing admin password for this node')).toBe(false);
     });
 
     it('nodeReadLimits enforces answer timeout and abort signal', async () => {
@@ -714,8 +633,8 @@ describe('automation token, auth failure, and read limits helpers', () => {
     });
 });
 
-describe('forgetStandby and passwordNeeds2faError', () => {
-    it('forgetStandby sends POST with standby id, password, and tfaToken and parses banner response', async () => {
+describe('forgetStandby', () => {
+    it('forgetStandby sends POST with the standby id and the bearer (no password) and parses banner response', async () => {
         const mockBanner = {
             success: true,
             incident: null,
@@ -728,15 +647,16 @@ describe('forgetStandby and passwordNeeds2faError', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await forgetStandby('https://node.example.com', 'sb-1', 'adminpw', 'tfa-sess-999');
+        const res = await forgetStandby('https://node.example.com', 'sb-1', TOKEN);
         expect(res).toEqual(mockBanner);
 
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/standby-health/forget');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('adminpw');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess-999');
-        expect(JSON.parse(init.body)).toEqual({ id: 'sb-1', password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(JSON.parse(init.body)).toEqual({ id: 'sb-1' });
 
         vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
             ok: false,
@@ -748,54 +668,13 @@ describe('forgetStandby and passwordNeeds2faError', () => {
         vi.unstubAllGlobals();
     });
 
-    it('passwordNeeds2faError handles non-403 responses, password_retired, and password_needs_2fa status codes', async () => {
-        // Non-403 response
-        const res200 = new Response(JSON.stringify({ ok: true }), { status: 200 });
-        expect(await passwordNeeds2faError(res200)).toBeNull();
-
-        // password_retired response
-        const resRetired = new Response(
-            JSON.stringify({ code: 'password_retired', error: 'Password retired' }),
-            { status: 403 }
-        );
-        const errRetired = await passwordNeeds2faError(resRetired);
-        expect(errRetired).toBeInstanceOf(Error);
-        expect(errRetired?.message).toContain(PASSWORD_RETIRED_HINT);
-
-        // password_needs_2fa with custom error text
-        const resNeeds2faCustom = new Response(
-            JSON.stringify({ code: 'password_needs_2fa', error: 'Custom 2FA required message' }),
-            { status: 403 }
-        );
-        const errCustom = await passwordNeeds2faError(resNeeds2faCustom);
-        expect(errCustom).toBeInstanceOf(Error);
-        expect(errCustom?.message).toContain('Custom 2FA required message');
-        expect(errCustom?.message).toContain(PASSWORD_NEEDS_2FA_HINT);
-
-        // password_needs_2fa with default fallback error text
-        const resNeeds2faDefault = new Response(
-            JSON.stringify({ code: 'password_needs_2fa', error: '' }),
-            { status: 403 }
-        );
-        const errDefault = await passwordNeeds2faError(resNeeds2faDefault);
-        expect(errDefault).toBeInstanceOf(Error);
-        expect(errDefault?.message).toContain('This node needs two-factor sign-in for the admin password.');
-        expect(errDefault?.message).toContain(PASSWORD_NEEDS_2FA_HINT);
-
-        // 403 with irrelevant code
-        const resOther403 = new Response(
-            JSON.stringify({ code: 'permission_denied', error: 'Access denied' }),
-            { status: 403 }
-        );
-        expect(await passwordNeeds2faError(resOther403)).toBeNull();
-    });
 });
 
 describe('getTlsStatus and setOwnAddress', () => {
     it('getTlsStatus returns parsed status on success, null on 403/404, and throws on failure/network error', async () => {
         const tlsData = { ca: "Let's Encrypt", testCa: false, orders: true, identifiers: [] };
         vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, status: 200, json: async () => tlsData }));
-        const got = await getTlsStatus('https://node.example', 'pw', 'tfa-1');
+        const got = await getTlsStatus('https://node.example', TOKEN);
         expect(got).toEqual(tlsData);
 
         vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({}) }));
@@ -816,11 +695,12 @@ describe('getTlsStatus and setOwnAddress', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await setOwnAddress('https://node.example', { domain: 'node.example.org' }, 'pw', 'tfa-1', 'code-123');
+        const res = await setOwnAddress('https://node.example', { domain: 'node.example.org' }, TOKEN, 'code-123');
         expect(res).toEqual({ address: 'node.example.org', kind: 'own', communityAddress: true, primaryAddress: 'node.example.org' });
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/public-address/own');
-        expect(JSON.parse(init.body)).toEqual({ domain: 'node.example.org', password: 'pw', code: 'code-123' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(JSON.parse(init.body)).toEqual({ domain: 'node.example.org', code: 'code-123' });
 
         vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
             ok: false,
@@ -853,45 +733,53 @@ describe('alerts and offbox backup helpers', () => {
     });
 
     it('getAlertsStatus posts to /api/local/admin/alerts/status with credentials', async () => {
-        await getAlertsStatus('https://node.example.com', 'adminpw', 'tfa-123');
+        await getAlertsStatus('https://node.example.com', TOKEN);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/alerts/status');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('adminpw');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-123');
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
     });
 
     it('saveAlertsChannel posts channel config update', async () => {
-        await saveAlertsChannel('https://node.example.com', { url: 'https://ntfy.sh/mychannel', format: 'ntfy' }, 'adminpw', 'tfa-123');
+        await saveAlertsChannel('https://node.example.com', { url: 'https://ntfy.sh/mychannel', format: 'ntfy' }, TOKEN);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/alerts/settings');
-        expect(JSON.parse(init.body)).toEqual({ url: 'https://ntfy.sh/mychannel', format: 'ntfy', password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(JSON.parse(init.body)).toEqual({ url: 'https://ntfy.sh/mychannel', format: 'ntfy' });
     });
 
     it('acknowledgeAlerts and sendTestAlert trigger alert management actions', async () => {
-        await acknowledgeAlerts('https://node.example.com', 'adminpw', 'tfa-123');
+        await acknowledgeAlerts('https://node.example.com', TOKEN);
         expect(fetchMock.mock.calls[0][0]).toContain('/api/local/admin/alerts/acknowledge');
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(BEARER);
 
-        await sendTestAlert('https://node.example.com', 'adminpw', 'tfa-123');
+        await sendTestAlert('https://node.example.com', TOKEN);
         expect(fetchMock.mock.calls[1][0]).toContain('/api/local/admin/alerts/test');
+        expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe(BEARER);
     });
 
     it('getOffboxStatus, saveOffboxSettings, runOffboxBackupNow, and listOffboxBackups execute offbox API requests', async () => {
-        await getOffboxStatus('https://node.example.com', 'adminpw', 'tfa-123');
+        await getOffboxStatus('https://node.example.com', TOKEN);
         expect(fetchMock.mock.calls[0][0]).toContain('/api/local/admin/offbox-backups/status');
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(BEARER);
 
-        await saveOffboxSettings('https://node.example.com', { intervalHours: 24, retentionDays: 7 }, 'adminpw', 'tfa-123', 'proof-code-123');
+        await saveOffboxSettings('https://node.example.com', { intervalHours: 24, retentionDays: 7 }, TOKEN, 'proof-code-123');
         const [saveUrl, saveInit] = fetchMock.mock.calls[1];
         expect(saveUrl).toContain('/api/local/admin/offbox-backups/settings');
-        expect(JSON.parse(saveInit.body)).toEqual({ intervalHours: 24, retentionDays: 7, code: 'proof-code-123', password: 'adminpw' });
+        expect(saveInit.headers.Authorization).toBe(BEARER);
+        expect(JSON.parse(saveInit.body)).toEqual({ intervalHours: 24, retentionDays: 7, code: 'proof-code-123' });
 
-        await runOffboxBackupNow('https://node.example.com', 'adminpw', 'tfa-123');
+        await runOffboxBackupNow('https://node.example.com', TOKEN);
         expect(fetchMock.mock.calls[2][0]).toContain('/api/local/admin/offbox-backups/run');
+        expect(fetchMock.mock.calls[2][1].headers.Authorization).toBe(BEARER);
 
-        await listOffboxBackups('https://node.example.com', 's3-bucket-1', 'adminpw', 'tfa-123');
+        await listOffboxBackups('https://node.example.com', 's3-bucket-1', TOKEN);
         const [listUrl, listInit] = fetchMock.mock.calls[3];
         expect(listUrl).toContain('/api/local/admin/offbox-backups/list');
-        expect(JSON.parse(listInit.body)).toEqual({ destination: 's3-bucket-1', password: 'adminpw' });
+        expect(listInit.headers.Authorization).toBe(BEARER);
+        expect(JSON.parse(listInit.body)).toEqual({ destination: 's3-bucket-1' });
     });
 });
 
@@ -1002,50 +890,55 @@ describe('node admin decisions and suspensions', () => {
     });
 
     it('emergencySuspendMember sends POST to suspend user with reason', async () => {
-        await emergencySuspendMember('https://node.test', 'pubkey-123', 'Repeated policy violations', 'adminpw', 'tfa-1');
+        await emergencySuspendMember('https://node.test', 'pubkey-123', 'Repeated policy violations', TOKEN);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/users/pubkey-123/suspend');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('adminpw');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
-        expect(JSON.parse(init.body)).toEqual({ reason: 'Repeated policy violations', password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Repeated policy violations' });
     });
 
     it('haltDecision sends POST to halt decision with reason', async () => {
-        await haltDecision('https://node.test', 'dec-456', 'Quorum error identified', 'adminpw');
+        await haltDecision('https://node.test', 'dec-456', 'Quorum error identified', TOKEN);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/decisions/dec-456/halt');
         expect(init.method).toBe('POST');
-        expect(JSON.parse(init.body)).toEqual({ reason: 'Quorum error identified', password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Quorum error identified' });
     });
 
     it("takeDownDecisionReply sends POST to take down a removal vote's reply with reason", async () => {
-        await takeDownDecisionReply('https://node.test', 'dec-789', "It gave a member's address", 'adminpw', 'tfa-1');
+        await takeDownDecisionReply('https://node.test', 'dec-789', "It gave a member's address", TOKEN);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/decisions/dec-789/hide-reply');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
-        expect(JSON.parse(init.body)).toEqual({ reason: "It gave a member's address", password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(JSON.parse(init.body)).toEqual({ reason: "It gave a member's address" });
     });
 
     it('ownerDecideRemoval sends POST with the reason and the code, and turns a refusal asking the phone into the fresh proof error', async () => {
-        await ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it', 'adminpw', 'tfa-1', '123456');
+        await ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it', TOKEN, '123456');
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/decisions/dec-790/owner-decision');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
-        expect(JSON.parse(init.body)).toEqual({ reason: 'Only two could vote and both saw it', code: '123456', password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Only two could vote and both saw it', code: '123456' });
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({ error: 'Do this from your phone', code: 'phone_required', phoneRequired: true }) });
         await expect(ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it')).rejects.toBeInstanceOf(FreshProofRequiredError);
     });
 
     it('liftMemberSuspension sends POST to reactivate member', async () => {
-        await liftMemberSuspension('https://node.test', 'pubkey-123', 'adminpw');
+        await liftMemberSuspension('https://node.test', 'pubkey-123', TOKEN);
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/users/pubkey-123/status');
         expect(init.method).toBe('POST');
-        expect(JSON.parse(init.body)).toEqual({ status: 'active', password: 'adminpw' });
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(JSON.parse(init.body)).toEqual({ status: 'active' });
     });
 });
 
@@ -1065,11 +958,12 @@ describe('shutdown, storage, and health helpers', () => {
             json: async () => ({ success: true, shutdownStatus: mockStatus }),
         });
 
-        const res = await acknowledgeShutdownStatus('https://node.test', 'pw123', 'tfa-sess');
+        const res = await acknowledgeShutdownStatus('https://node.test', TOKEN);
         expect(res).toEqual({ success: true, shutdownStatus: mockStatus });
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/shutdown-status/acknowledge');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess');
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
     });
 
     it('fetchDiskHealth, fetchStorageCleanPreview, and cleanStorageAndCompressLogs handle disk/storage ops', async () => {
@@ -1157,7 +1051,7 @@ describe('harvester helpers send no credential', () => {
     });
 });
 
-describe('registrar claim helpers send admin password header', () => {
+describe('registrar claim helpers send the bearer and no password', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     const lastCall = () => fetchMock.mock.calls[0];
@@ -1173,26 +1067,42 @@ describe('registrar claim helpers send admin password header', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('approveRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and credential are provided', async () => {
+    it('approveRegistrarClaim sends Authorization: Bearer and an empty body when nodeUrl, name, and credential are provided', async () => {
         const { approveRegistrarClaim } = await import('./node-client');
-        await approveRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
+        await approveRegistrarClaim('https://node.example.com', 'mycommunity', TOKEN);
         const [url, init] = lastCall();
         expect(url).toContain('/api/local/admin/registrar/mycommunity/approve');
-        expect(headersOf(init)['X-Admin-Password']).toBe('secret123');
-        expect(JSON.parse((init as any).body)).toEqual({ password: 'secret123' });
+        expect(headersOf(init).Authorization).toBe(BEARER);
+        expect(headersOf(init)['X-Admin-Password']).toBeUndefined();
+        expect(JSON.parse((init as any).body)).toEqual({});
     });
 
-    it('revokeRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and credential are provided', async () => {
+    it('revokeRegistrarClaim sends Authorization: Bearer and an empty body when nodeUrl, name, and credential are provided', async () => {
         const { revokeRegistrarClaim } = await import('./node-client');
-        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
+        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', TOKEN);
         const [url, init] = lastCall();
         expect(url).toContain('/api/local/admin/registrar/mycommunity/revoke');
-        expect(headersOf(init)['X-Admin-Password']).toBe('secret123');
-        expect(JSON.parse((init as any).body)).toEqual({ password: 'secret123' });
+        expect(headersOf(init).Authorization).toBe(BEARER);
+        expect(headersOf(init)['X-Admin-Password']).toBeUndefined();
+        expect(JSON.parse((init as any).body)).toEqual({});
+    });
+
+    it('a credential that is not an automation token is sent nowhere, not even as x-admin-secret', async () => {
+        const { getRegistrarPending, approveRegistrarClaim, revokeRegistrarClaim } = await import('./node-client');
+        await getRegistrarPending('https://node.example.com', 'secret123');
+        await approveRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
+        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        for (const [, init] of fetchMock.mock.calls) {
+            const h = Object.fromEntries(Object.entries(headersOf(init)).map(([k, v]) => [k.toLowerCase(), v]));
+            expect(h['x-admin-secret']).toBeUndefined();
+            expect(h['x-admin-password']).toBeUndefined();
+            expect(h.authorization).toBeUndefined();
+        }
     });
 });
 
-describe('2FA session token transmission in node client admin actions', () => {
+describe('node client admin actions send the bearer and never a 2FA session', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     const lastCall = () => fetchMock.mock.calls[0];
@@ -1208,30 +1118,38 @@ describe('2FA session token transmission in node client admin actions', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('freezeNodeUser, updateNodeUserTier, updateNodeUserOperator, and generateNodeInvite send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    /** The one credential a request carries is the bearer; nothing from the old password and 2FA headers. */
+    const expectBearerOnly = (init: unknown) => {
+        const h = headersOf(init);
+        expect(h.Authorization).toBe(BEARER);
+        expect(h['X-Admin-Password']).toBeUndefined();
+        expect(h['X-Admin-2FA-Session']).toBeUndefined();
+    };
+
+    it('freezeNodeUser, updateNodeUserTier, updateNodeUserOperator, and generateNodeInvite send the bearer and no 2FA session header', async () => {
         const { freezeNodeUser, updateNodeUserTier, updateNodeUserOperator, generateNodeInvite } = await import('./node-client');
 
-        await freezeNodeUser('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await freezeNodeUser('https://node.example.com', 'pub123', true, TOKEN);
+        expectBearerOnly(lastCall()[1]);
 
         fetchMock.mockClear();
 
-        await updateNodeUserTier('https://node.example.com', 'pub123', 'Resident', 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await updateNodeUserTier('https://node.example.com', 'pub123', 'Resident', TOKEN);
+        expectBearerOnly(lastCall()[1]);
 
         fetchMock.mockClear();
 
-        await updateNodeUserOperator('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await updateNodeUserOperator('https://node.example.com', 'pub123', true, TOKEN);
+        expectBearerOnly(lastCall()[1]);
 
         fetchMock.mockClear();
-        fetchMock.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: async () => ({ success: true, code: 'INV-2FA-TEST', type: 'standard' }) });
+        fetchMock.mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', json: async () => ({ success: true, code: 'INV-TEST', type: 'standard' }) });
 
-        await generateNodeInvite('https://node.example.com', 'secret123', 'standard', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await generateNodeInvite('https://node.example.com', TOKEN, 'standard');
+        expectBearerOnly(lastCall()[1]);
     });
 
-    it('downloadAdminFile sends X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    it('downloadAdminFile sends the bearer and no 2FA session header', async () => {
         const { downloadAdminFile } = await import('./node-client');
         const origCreate = URL.createObjectURL;
         const origRevoke = URL.revokeObjectURL;
@@ -1245,36 +1163,36 @@ describe('2FA session token transmission in node client admin actions', () => {
             blob: async () => new Blob(['test']),
         });
 
-        await downloadAdminFile('/proxy/https/node.example.com/api/local/admin/snapshots/download', { name: 'test' }, 'secret123', 'test.db', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await downloadAdminFile('/proxy/https/node.example.com/api/local/admin/snapshots/download', { name: 'test' }, TOKEN, 'test.db');
+        expectBearerOnly(lastCall()[1]);
 
         URL.createObjectURL = origCreate;
         URL.revokeObjectURL = origRevoke;
     });
 
-    it('registrar helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    it('registrar helpers send the bearer and no 2FA session header', async () => {
         const {
             getRegistrarPending,
             approveRegistrarClaim,
             revokeRegistrarClaim,
         } = await import('./node-client');
 
-        await getRegistrarPending('https://node.example.com', 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await getRegistrarPending('https://node.example.com', TOKEN);
+        expectBearerOnly(lastCall()[1]);
 
         fetchMock.mockClear();
 
-        await approveRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await approveRegistrarClaim('https://node.example.com', 'mycommunity', TOKEN);
+        expectBearerOnly(lastCall()[1]);
 
         fetchMock.mockClear();
 
-        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        await revokeRegistrarClaim('https://node.example.com', 'mycommunity', TOKEN);
+        expectBearerOnly(lastCall()[1]);
     });
 });
 
-describe('node client login, treasury, snapshot, and replication helpers', () => {
+describe('node client treasury, snapshot, and replication helpers', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     const lastCall = () => fetchMock.mock.calls[0];
@@ -1285,29 +1203,12 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('loginToNode posts password and totpCode and returns body on success', async () => {
-        fetchMock.mockResolvedValueOnce({
-            ok: true,
-            status: 200,
-            json: async () => ({ success: true, tfaSessionToken: 'sess-123' }),
-        });
-
-        const res = await loginToNode('https://node.example.com', 'pwd123', '654321');
-
-        expect(res).toEqual({ success: true, tfaSessionToken: 'sess-123' });
-        const [url, init] = lastCall();
-        expect(url).toContain('/api/admin/login');
-        expect(JSON.parse((init as any).body)).toEqual({ password: 'pwd123', totpCode: '654321' });
-    });
-
-    it('loginToNode throws custom error message on login failure', async () => {
-        fetchMock.mockResolvedValueOnce({
-            ok: false,
-            status: 401,
-            json: async () => ({ error: 'Invalid TOTP code' }),
-        });
-
-        await expect(loginToNode('https://node.example.com', 'pwd123', '000000')).rejects.toThrow('Invalid TOTP code');
+    it('there is no password login to call: a node has no admin password', async () => {
+        const client = await import('./node-client') as Record<string, unknown>;
+        for (const gone of ['loginToNode', 'passwordField', 'isTotpRequired', 'getTfaSessionToken', 'setTfaSessionToken',
+            'clearAllTfaSessionTokens', 'passwordNeeds2faError', 'PASSWORD_NEEDS_2FA_HINT', 'PASSWORD_RETIRED_HINT', 'setReplicationTokenMode']) {
+            expect(client[gone], gone).toBeUndefined();
+        }
     });
 
     it('fetchNodeTreasuries returns treasuries array on success and empty array on failure', async () => {
@@ -1317,13 +1218,14 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             json: async () => ({ treasuries: mockTreasuries }),
         });
 
-        const treasuries = await fetchNodeTreasuries('https://node.example.com', 'pwd123', 'tfa-session');
+        const treasuries = await fetchNodeTreasuries('https://node.example.com', TOKEN);
         expect(treasuries).toEqual(mockTreasuries);
-        // The public list is members' on every node: Settings asks the admin route, with the admin password.
+        // The public list is members' on every node: Settings asks the admin route, with the owner's token.
         const [url, init] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
         expect(url).toBe(resolveNodeApiUrl('https://node.example.com', '/api/local/admin/treasury'));
-        expect(init?.headers?.['X-Admin-Password']).toBe('pwd123');
-        expect(init?.headers?.['X-Admin-2FA-Session']).toBe('tfa-session');
+        expect(init?.headers?.Authorization).toBe(BEARER);
+        expect(init?.headers?.['X-Admin-Password']).toBeUndefined();
+        expect(init?.headers?.['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
         const empty = await fetchNodeTreasuries('https://node.example.com');
@@ -1339,21 +1241,21 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         const res = await createNodeTreasury(
             'https://node.example.com',
             { name: 'Reserve', avatar: 'sprout', creditLine_c: 100050 },
-            'adminpass',
-            'tfa123'
+            TOKEN
         );
 
         expect(res).toEqual({ success: true, publicKey: 'new-treasury-pub' });
         const [url, init] = lastCall();
         expect(url).toContain('/api/local/admin/treasury');
-        expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(headersOf(init).Authorization).toBe(BEARER);
+        expect(headersOf(init)['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(init)['X-Admin-2FA-Session']).toBeUndefined();
         // The credit line as the node takes it: `creditLine_c`, whole hundredths (routes/treasury.ts optionalHundredthsOf).
+        // No password rides in the body.
         expect(JSON.parse((init as any).body)).toEqual({
             name: 'Reserve',
             avatar: 'sprout',
             creditLine_c: 100050,
-            password: 'adminpass',
         });
     });
 
@@ -1368,7 +1270,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', price_c: 100, photos: [PHOTO] }, 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
     });
 
-    it('seedTreasuryOffer sends POST to seed an offer with 2FA session token', async () => {
+    it('seedTreasuryOffer sends POST to seed an offer with the bearer', async () => {
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ success: true, post: { id: 'offer-1', title: 'Farm Eggs' } }),
@@ -1378,15 +1280,15 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             'https://node.example.com',
             'treasury-pubkey-123',
             { title: 'Farm Eggs', category: 'food', price_c: 1025, photos: [PHOTO], description: 'Fresh eggs', repeatable: true },
-            'adminpass',
-            'tfa123'
+            TOKEN
         );
 
         expect(res).toEqual({ success: true, post: { id: 'offer-1', title: 'Farm Eggs' } });
         const [url, init] = lastCall();
         expect(url).toContain('/api/local/admin/treasury/treasury-pubkey-123/offer');
-        expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(headersOf(init).Authorization).toBe(BEARER);
+        expect(headersOf(init)['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(init)['X-Admin-2FA-Session']).toBeUndefined();
         // The price as the node takes it: `price_c`, whole hundredths (the route refuses `credits`, routes/treasury.ts).
         expect(JSON.parse((init as any).body)).toEqual({
             title: 'Farm Eggs',
@@ -1395,36 +1297,38 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             photos: [PHOTO],
             description: 'Fresh eggs',
             repeatable: true,
-            password: 'adminpass',
         });
     });
 
-    it('fetchTreasuryKeepers, assignTreasuryKeeper, and revokeTreasuryKeeper send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    it('fetchTreasuryKeepers, assignTreasuryKeeper, and revokeTreasuryKeeper send the bearer and no 2FA session header', async () => {
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ keepers: ['keeper-1'] }),
         });
-        await fetchTreasuryKeepers('https://node.example.com', 'treasury-1', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await fetchTreasuryKeepers('https://node.example.com', 'treasury-1', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ keepers: ['keeper-1', 'keeper-2'] }),
         });
-        await assignTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await assignTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ keepers: ['keeper-1'] }),
         });
-        await revokeTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await revokeTreasuryKeeper('https://node.example.com', 'treasury-1', 'keeper-2', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
     });
 
     it('fetchNodeLogs retrieves typed log entries and forwards admin headers', async () => {
@@ -1437,12 +1341,13 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
                 ],
             }),
         });
-        const logs = await fetchNodeLogs('https://node.example.com', 'adminpass', 'tfa123');
+        const logs = await fetchNodeLogs('https://node.example.com', TOKEN);
         expect(logs).toHaveLength(2);
         expect(logs[0].message).toBe('Node online');
         expect(logs[1].level).toBe('error');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
     });
 
     it("re-key helpers pass the node's own sentence through when it asks for a fresh proof (#1984 confirmation R1)", async () => {
@@ -1450,7 +1355,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         const askCode = 'Enter a current code from your authenticator app (or a backup code) to re-key an owner or admin';
         const askPhone = 'Do this from your phone: open BeanPool, press Manage, then make this change there.';
         fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: askCode, totpRequired: true }) });
-        await expect(issueRekeyCodeApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123')).rejects.toThrow(askCode);
+        await expect(issueRekeyCodeApi('https://node.example.com', 'pub1', TOKEN)).rejects.toThrow(askCode);
         fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
         await expect(completeRekeyApi('https://node.example.com', 'pub1', 'RK-AB12-CD34', 'pub2')).rejects.toThrow(askPhone);
         fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
@@ -1465,7 +1370,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         const askPhone = 'Do this from your phone: open BeanPool, press Manage, then make this change there.';
         const stale = 'Press Manage on your phone again, then make this change within 90 seconds.';
         fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: askCode, totpRequired: true }) });
-        await expect(pruneNodeUser('https://node.example.com', 'pub1', 'adminpass', 'tfa123')).rejects.toThrow(askCode);
+        await expect(pruneNodeUser('https://node.example.com', 'pub1', TOKEN)).rejects.toThrow(askCode);
         fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: askPhone, code: 'phone_required', phoneRequired: true }) });
         await expect(pruneInviteBranch('https://node.example.com', 'pub1')).rejects.toThrow(askPhone);
         fetchMock.mockResolvedValueOnce({ ok: false, status: 403, statusText: 'Forbidden', json: async () => ({ error: stale, code: 'step_up_required' }) });
@@ -1474,13 +1379,13 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(executeOffboardApi('https://node.example.com', 'pub1', { resolution: 'prune_zero_balance' })).rejects.toMatchObject({ message: askPhone, code: 'phone_required', status: 403 });
         const fewer = 'Enter a current code from your authenticator app (or a backup code) to keep fewer snapshots, or make them cover less time';
         fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({ error: fewer, totpRequired: true }) });
-        await expect(updateNodeSnapshotSchedule('https://node.example.com', { keep: 3 }, 'adminpass', 'tfa123')).rejects.toThrow(fewer);
+        await expect(updateNodeSnapshotSchedule('https://node.example.com', { keep: 3 }, TOKEN)).rejects.toThrow(fewer);
         // A node that answers no sentence still says something.
         fetchMock.mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error', json: async () => { throw new Error('not json'); } });
         await expect(pruneNodeUser('https://node.example.com', 'pub1')).rejects.toThrow('HTTP 500: Server Error');
     });
 
-    it('member rekey and offboard helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    it('member rekey and offboard helpers send the bearer and no 2FA session header', async () => {
         const {
             fetchRekeyStatusApi,
             issueRekeyCodeApi,
@@ -1493,27 +1398,30 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             ok: true,
             json: async () => ({ isInvalidated: false, invalidatedInfo: null, pendingRequest: null, history: [] }),
         });
-        await fetchRekeyStatusApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await fetchRekeyStatusApi('https://node.example.com', 'pub1', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ success: true, code: '123456', oldPubkey: 'pub1', callsign: 'alice', expiresAt: '', operator: 'op' }),
         });
-        await issueRekeyCodeApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await issueRekeyCodeApi('https://node.example.com', 'pub1', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ success: true, oldPubkey: 'pub1', newPubkey: 'pub2', callsign: 'alice' }),
         });
-        await completeRekeyApi('https://node.example.com', 'pub1', '123456', 'pub2', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await completeRekeyApi('https://node.example.com', 'pub1', '123456', 'pub2', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
@@ -1529,46 +1437,51 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
                 activeMembers: [],
             }),
         });
-        await fetchOffboardPreviewApi('https://node.example.com', 'pub1', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await fetchOffboardPreviewApi('https://node.example.com', 'pub1', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ success: true, memberPubkey: 'pub1', callsign: 'alice', resolution: 'donate_to_commons', balanceSettled: 0 }),
         });
-        await executeOffboardApi('https://node.example.com', 'pub1', { resolution: 'donate_to_commons' }, 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await executeOffboardApi('https://node.example.com', 'pub1', { resolution: 'donate_to_commons' }, TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
     });
 
-    it('fetchNodeRoles, grantNodeRoleApi, and revokeNodeRoleApi send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    it('fetchNodeRoles, grantNodeRoleApi, and revokeNodeRoleApi send the bearer and no 2FA session header', async () => {
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ roles: [] }),
         });
-        await fetchNodeRoles('https://node.example.com', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await fetchNodeRoles('https://node.example.com', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ success: true }),
         });
-        await grantNodeRoleApi('https://node.example.com', 'pub1', 'admin', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await grantNodeRoleApi('https://node.example.com', 'pub1', 'admin', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
 
         fetchMock.mockClear();
         fetchMock.mockResolvedValueOnce({
             ok: true,
             json: async () => ({ success: true }),
         });
-        await revokeNodeRoleApi('https://node.example.com', 'pub1', 'admin', 'adminpass', 'tfa123');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('adminpass');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa123');
+        await revokeNodeRoleApi('https://node.example.com', 'pub1', 'admin', TOKEN);
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBeUndefined();
+        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBeUndefined();
     });
 
     it("fetchNodeRoles passes the node's own refusal through", async () => {
@@ -1622,15 +1535,17 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
             json: async () => ({ success: true }),
         });
 
-        await updateNodeReplicationCadence('https://node.example.com', 30, 5, 'pwd');
+        await updateNodeReplicationCadence('https://node.example.com', 30, 5, TOKEN);
         expect(lastCall()[0]).toContain('/api/local/admin/backup-config');
-        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ pullSeconds: 30, reconcileMinutes: 5, password: 'pwd' });
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ pullSeconds: 30, reconcileMinutes: 5 });
 
         fetchMock.mockClear();
 
-        await forceNodeResync('https://node.example.com', 'pwd');
+        await forceNodeResync('https://node.example.com', TOKEN);
         expect(lastCall()[0]).toContain('/api/local/admin/replication-resync');
-        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({ password: 'pwd' });
+        expect(headersOf(lastCall()[1]).Authorization).toBe(BEARER);
+        expect(JSON.parse((lastCall()[1] as any).body)).toEqual({});
     });
 });
 
@@ -1809,13 +1724,14 @@ describe('pruneInviteBranch', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await pruneInviteBranch('https://node.example.com', '  pubkey123  ', 'pwd1', 'sess1');
+        const res = await pruneInviteBranch('https://node.example.com', '  pubkey123  ', TOKEN);
         expect(res).toEqual({ success: true });
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/branches/pubkey123/prune');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('pwd1');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
     });
 });
 
@@ -1839,13 +1755,14 @@ describe('deleteNodePost', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
 
-        const res = await deleteNodePost('https://node.example.com', '  post-456  ', 'pwd1', 'sess1');
+        const res = await deleteNodePost('https://node.example.com', '  post-456  ', TOKEN);
         expect(res).toEqual({ success: true });
         const [url, init] = fetchMock.mock.calls[0];
         expect(url).toContain('/api/local/admin/posts/post-456/delete');
         expect(init.method).toBe('POST');
-        expect(init.headers['X-Admin-Password']).toBe('pwd1');
-        expect(init.headers['X-Admin-2FA-Session']).toBe('sess1');
+        expect(init.headers.Authorization).toBe(BEARER);
+        expect(init.headers['X-Admin-Password']).toBeUndefined();
+        expect(init.headers['X-Admin-2FA-Session']).toBeUndefined();
         expect(init.credentials).toBe('same-origin');
     });
 });

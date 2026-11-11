@@ -21,7 +21,7 @@ What your server does keep in the clear: that an entry exists, which admin made 
 
 ### Whoever runs your server
 
-Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked, on a call or in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone's code, or an admin who was removed to work with it (below).
+Whoever runs the server can change what it stores and what it tells each phone, and an owner can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked, on a call or in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone's code, or an admin who was removed to work with it (below).
 
 What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; a PDF or a note an admin writes; and an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had.
 
@@ -31,7 +31,7 @@ Members don't see the names. Showing real names to members, as some LETS directo
 
 ## Before you start
 
-The names list opens in the app, not in Settings: on an owner's or admin's phone, open **Settings**, then **Community admin**, then **Names list**. It needs an admin who signs in with their own key. The admin password opens no name, through the app or the server. It does let whoever holds it make admins and re-key accounts, which is why admins check each other's codes, on a call or in person.
+The names list opens in the app, not in Settings: on an owner's or admin's phone, open **Settings**, then **Community admin**, then **Names list**. It needs an admin who signs in with their own key. Settings and the server open no name. An owner can make admins and re-key accounts, which is why admins check each other's codes, on a call or in person.
 
 Keep a paper copy, or a PDF, somewhere safe. If every admin who holds the list's keys loses their phone at once, that copy is how you type the list in again.
 
@@ -107,7 +107,7 @@ An owner or admin can set one member's known floor: lower it (a smaller limit wh
 
 It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. Under the controls, **Changes to their known floor** lists every change to this member's line, newest first: which admin made it, from what to what, and when. Every owner and admin who opens the member sees it. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
 
-A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. Signed in with the password (or an automation token), the panel shows the line and its changes but no controls, and says "Sign in with your own key to change it". Nobody sets their own: on your own row it says "Another admin or the owner sets your own known floor." The older built-in settings page signs in only with the password, so it has no known floor controls.
+A change needs an owner or admin signed in with their own key, so the log can say who made it: the server refuses a change made with an automation token. Signed in with a token, the panel shows the line and its changes but no controls, and says "Sign in with your own key to change it: automation tokens can't." Nobody sets their own: on your own row it says "Another admin or the owner sets your own known floor."
 
 **Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
 

@@ -219,8 +219,8 @@ export function ReadyForTheHallCard({ activeNode, diag, viewer = { kind: 'token'
                     </div>
                 )}
                 <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">
-                    The kit page also covers what this list cannot see: the authenticator app on a phone that will be in the hall, every
-                    member having the app, and the printed poster.
+                    The kit page also covers what this list cannot see: every member having the app, and the printed
+                    poster.
                 </p>
                 {manual && (
                     <button type="button" className={BUTTON} onClick={() => manual.openManual(HALL_KIT_PAGE)}>

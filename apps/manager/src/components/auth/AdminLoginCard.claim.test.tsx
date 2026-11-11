@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 
 // The QR's text is what matters here, not its picture: record what the card asks to encode.
 const qrTexts: string[] = [];
@@ -16,8 +16,8 @@ import { CLAIM_POLL_MS, CLAIM_TIMEOUT_MS } from '../../lib/node-claim';
 
 /**
  * The unclaimed card (sign-in step 8, stage B4): before sign-in the page asks GET /api/local/claim, and while the node
- * has no owner it shows how to claim it instead of the password form. The page is public: the QR carries the node's
- * address and the code's public id, never the code.
+ * has no owner it shows how to claim it instead of the phone sign-in (a node has no admin password, so there is no other
+ * sign-in). The page is public: the QR carries the node's address and the code's public id, never the code.
  */
 
 const CODE_ID = 'a1b2c3d4';
@@ -69,10 +69,18 @@ const unclaimed = (extra: Record<string, unknown> = {}): Answer => ({
 });
 const claimed: Answer = { status: 200, body: { unclaimed: false } };
 
+/** The card's own phone sign-in: a div that holds PhoneSignIn (whose section carries the same test id), so the first match. */
+const phoneSignIn = () => screen.queryAllByTestId('phone-signin')[0] ?? null;
+
+/** The claim check has been asked and its answer has been taken up (the phone sign-in shows before either, so wait for both). */
+async function settled(claimCalls: unknown[]) {
+    await waitFor(() => expect(claimCalls).toHaveLength(1));
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+}
+
 let hidden = false;
 
 describe('AdminLoginCard: the unclaimed card', () => {
-    const onPasswordSession = vi.fn();
     const onKeySession = vi.fn();
 
     beforeEach(() => {
@@ -90,12 +98,12 @@ describe('AdminLoginCard: the unclaimed card', () => {
 
     function renderCard(nodeUrl = window.location.origin) {
         return render(
-            <AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={onPasswordSession} onKeySession={onKeySession} />,
+            <AdminLoginCard nodeUrl={nodeUrl} onKeySession={onKeySession} />,
         );
     }
 
 
-    it('asks the claim route with no cookie and, while the node is unclaimed, shows the card instead of the form', async () => {
+    it('asks the claim route with no cookie and, while the node is unclaimed, shows the card instead of the sign-in', async () => {
         const { claimCalls } = stubNode([unclaimed()]);
         renderCard();
 
@@ -103,9 +111,10 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(screen.getByTestId('claim-card')).toHaveTextContent('On the server, run:');
         expect(screen.getByTestId('claim-command')).toHaveTextContent('docker compose exec beanpool-node beanpool claim');
         expect(screen.getByTestId('claim-card')).toHaveTextContent("Then on your phone, scan this, or open BeanPool → Find a community, type this server's address in the search box and tap Claim ‹name›.");
-        // The form is not the page's first thing any more, and no phone sign-in is offered: no one can sign in yet.
+        // No sign-in is offered, phone or any other: no one can sign in yet.
+        expect(phoneSignIn()).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
         expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
-        expect(screen.queryByRole('button', { name: /Sign in with your phone/i })).toBeNull();
 
         expect(claimCalls).toHaveLength(1);
         expect(claimCalls[0].init?.credentials).toBe('omit');
@@ -242,65 +251,62 @@ describe('AdminLoginCard: the unclaimed card', () => {
 
 
 
-    it('shows the sign-in form when the node has an owner', async () => {
+    it('shows the phone sign-in when the node has an owner, and no password form', async () => {
         const { claimCalls } = stubNode([claimed]);
         renderCard();
-        await waitFor(() => expect(claimCalls).toHaveLength(1));
-        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Sign in with your phone/i })).toBeInTheDocument();
+        await settled(claimCalls);
+        expect(phoneSignIn()).not.toBeNull();
         expect(screen.queryByTestId('claim-card')).toBeNull();
-    });
-
-    it('shows the phone sign-in and no password form on a claimed server with no admin password (a new install)', async () => {
-        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false, password: false } }]);
-        renderCard();
-        const box = await screen.findByTestId('no-password-signin');
-        expect(box).toHaveTextContent('This server has no admin password. Owners and admins sign in with the BeanPool app on your phone.');
-        expect(box).not.toHaveTextContent(/retired/);
-        expect(screen.getByTestId('phone-signin')).toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Password')).toBeNull();
         expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
+    });
+
+    it('says nothing of a password on a claimed server, even one that still answers the old password fields', async () => {
+        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false, password: false, passwordRetired: true } }]);
+        renderCard();
+        await settled(claimCalls);
+        expect(phoneSignIn()).not.toBeNull();
+        // The old notices ("no admin password", "an owner retired it") are gone, and so is the form.
+        expect(screen.queryByTestId('no-password-signin')).toBeNull();
         expect(screen.queryByTestId('password-retired-signin')).toBeNull();
-        expect(claimCalls).toHaveLength(1);
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
+        expect(screen.queryByText(/admin password/i)).toBeNull();
     });
 
     it('on a standby, says it has no owner of its own and names the shell command that makes one, above the phone sign-in', async () => {
-        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false, standby: true, password: false } }]);
+        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false, standby: true } }]);
         renderCard();
         const note = await screen.findByTestId('standby-signin-note');
         expect(note).toHaveTextContent("This server is a standby copy of its community. It has no owner of its own: its owners are the main server's, and a take-over brings them.");
         expect(note).toHaveTextContent('docker compose exec beanpool-node beanpool recover --key @your-callsign');
-        expect(screen.getByTestId('no-password-signin')).toBeInTheDocument();
+        expect(phoneSignIn()).not.toBeNull();
+        expect(note.compareDocumentPosition(phoneSignIn()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.queryByTestId('claim-card')).toBeNull();
         expect(screen.queryByText(/beanpool claim/)).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
         expect(claimCalls).toHaveLength(1);
     });
 
     it('says nothing of a standby on a main server', async () => {
-        stubNode([{ status: 200, body: { unclaimed: false, password: false } }]);
+        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false } }]);
         renderCard();
-        await screen.findByTestId('no-password-signin');
+        await settled(claimCalls);
+        expect(phoneSignIn()).not.toBeNull();
         expect(screen.queryByTestId('standby-signin-note')).toBeNull();
     });
 
-    it('says nothing of a standby once the standby has an owner of its own, and keeps its password sign-in', async () => {
+    it('says nothing of a standby once the standby has an owner of its own, and keeps its phone sign-in', async () => {
         // After beanpool recover --key the server answers as any server with an owner: no standby flag (routes/node-claim.ts).
-        stubNode([{ status: 200, body: { unclaimed: false, password: true } }]);
+        const { claimCalls } = stubNode([{ status: 200, body: { unclaimed: false } }]);
         renderCard();
-        await screen.findByTestId('admin-password-field');
+        await settled(claimCalls);
+        expect(phoneSignIn()).not.toBeNull();
         expect(screen.queryByTestId('standby-signin-note')).toBeNull();
         expect(screen.queryByTestId('claim-card')).toBeNull();
     });
 
-    it('says an owner retired the password only when the claim answer says so', async () => {
-        stubNode([{ status: 200, body: { unclaimed: false, password: false, passwordRetired: true } }]);
-        renderCard();
-        expect(await screen.findByTestId('password-retired-signin')).toHaveTextContent('This server has no admin password: an owner retired it.');
-        expect(screen.queryByTestId('no-password-signin')).toBeNull();
-        expect(screen.queryByPlaceholderText('Password')).toBeNull();
-    });
-
-    it('asks again every 5 s and swaps to the sign-in form the moment the node is claimed, then stops asking', async () => {
+    it('asks again every 5 s and swaps to the phone sign-in the moment the node is claimed, then stops asking', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: false });
         const { claimCalls } = stubNode([unclaimed(), unclaimed(), claimed]);
         renderCard();
@@ -317,7 +323,7 @@ describe('AdminLoginCard: the unclaimed card', () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
         expect(claimCalls).toHaveLength(3);
         expect(screen.queryByTestId('claim-card')).toBeNull();
-        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        expect(phoneSignIn()).not.toBeNull();
 
         await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS * 4); });
         expect(claimCalls).toHaveLength(3);
@@ -369,42 +375,19 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(screen.queryByTestId('claim-card')).toBeNull();
     });
 
-    it('keeps today\'s password form under a closed fold, and it still signs in', async () => {
-        const { fetchMock } = stubNode([unclaimed()]);
-        renderCard();
-        const fold = await screen.findByTestId('claim-password-fold');
-        expect(fold.tagName).toBe('DETAILS');
-        expect(fold).not.toHaveAttribute('open');
-        expect(fold.querySelector('summary')).toHaveTextContent('This server also has an admin password');
-        // The form is the card's second thing, under the claim, not beside it.
-        const card = screen.getByTestId('claim-card');
-        expect(card.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-        fireEvent.click(fold.querySelector('summary')!);
-        const input = screen.getByPlaceholderText('Password');
-        expect(fold).toContainElement(input);
-
-        fetchMock.mockImplementationOnce(async () => ({
-            ok: true, status: 200, json: async () => ({ success: true, role: 'owner', csrfToken: 'csrf-fold' }),
-        }) as Response);
-        fireEvent.change(input, { target: { value: 'pw' } });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
-        await waitFor(() => expect(onPasswordSession).toHaveBeenCalledWith('csrf-fold', false));
-    });
-
-    it('has no fold and no password form when the node answers password: false', async () => {
-        stubNode([unclaimed({ password: false })]);
+    it.each([
+        ['an answer with no password field', {}],
+        ['an older server\'s password: false', { password: false }],
+        ['an older server\'s password: true', { password: true }],
+    ])('has no password fold and no password form on the claim card, whatever the node answers: %s', async (_label, extra) => {
+        stubNode([unclaimed(extra)]);
         renderCard();
         await screen.findByTestId('claim-card');
         expect(screen.queryByTestId('claim-password-fold')).toBeNull();
         expect(screen.queryByText('This server also has an admin password')).toBeNull();
         expect(screen.queryByPlaceholderText('Password')).toBeNull();
-    });
-
-    it('keeps the fold for any answer other than password: false', async () => {
-        stubNode([unclaimed({ password: true })]);
-        renderCard();
-        expect(await screen.findByTestId('claim-password-fold')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
+        expect(document.querySelector('details')).toBeNull();
     });
 
     it.each([
@@ -413,14 +396,14 @@ describe('AdminLoginCard: the unclaimed card', () => {
         ['an older node without the route', { status: 404, body: { error: 'Not Found' } } as Answer],
         ['an answer that is not JSON (a proxy page)', 'not-json' as Answer],
         ['an answer of the wrong shape', { status: 200, body: { hello: 'world' } } as Answer],
-    ])('shows today\'s sign-in, and asks no more, after %s', async (_label, answer) => {
+    ])('shows the phone sign-in, and asks no more, after %s', async (_label, answer) => {
         vi.useFakeTimers({ shouldAdvanceTime: false });
         const { claimCalls } = stubNode([answer, unclaimed()]);
         renderCard();
         await act(async () => { await vi.advanceTimersByTimeAsync(0); });
         expect(claimCalls).toHaveLength(1);
-        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Sign in with your phone/i })).toBeInTheDocument();
+        expect(phoneSignIn()).not.toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
         expect(screen.queryByTestId('claim-card')).toBeNull();
         await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS * 4); });
         expect(claimCalls).toHaveLength(1);
@@ -432,14 +415,14 @@ describe('AdminLoginCard: the unclaimed card', () => {
         const { claimCalls } = stubNode(['hang']);
         renderCard();
         // Before any answer.
-        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        expect(phoneSignIn()).not.toBeNull();
         await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_TIMEOUT_MS); });
         expect((claimCalls[0].init?.signal as AbortSignal).aborted).toBe(true);
-        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        expect(phoneSignIn()).not.toBeNull();
         expect(screen.queryByTestId('claim-card')).toBeNull();
     });
 
-    it('keeps the password form open in the fold if the operator submitted before a slow claim check answered unclaimed', async () => {
+    it('swaps the phone sign-in for the claim card if a slow check answers unclaimed after the sign-in was already showing', async () => {
         let resolveClaim!: (res: Response) => void;
         const claimPromise = new Promise<Response>((resolve) => {
             resolveClaim = resolve;
@@ -450,13 +433,6 @@ describe('AdminLoginCard: the unclaimed card', () => {
             if (url.endsWith('/api/local/claim')) {
                 return claimPromise;
             }
-            if (url.endsWith('/api/local/admin/auth/password')) {
-                return {
-                    ok: false,
-                    status: 401,
-                    json: async () => ({ error: 'Invalid password' }),
-                } as Response;
-            }
             if (url.endsWith('/api/community/info')) {
                 return {
                     ok: true,
@@ -464,17 +440,16 @@ describe('AdminLoginCard: the unclaimed card', () => {
                     json: async () => ({ addresses: [], primaryAddress: null }),
                 } as Response;
             }
-            throw new Error(`unexpected request ${url}`);
+            // The phone sign-in's own pairing request: the node has no owner to approve one.
+            return { ok: false, status: 404, json: async () => ({}) } as Response;
         });
         vi.stubGlobal('fetch', fetchMock);
 
         renderCard();
 
-        const passwordInput = screen.getByPlaceholderText('Password');
-        fireEvent.change(passwordInput, { target: { value: 'wrong-password' } });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
-
-        expect(await screen.findByText('Invalid password')).toBeInTheDocument();
+        // The sign-in is there while the check is still being asked, and it is the phone's, never a password form.
+        expect(phoneSignIn()).not.toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
 
         await act(async () => {
             resolveClaim({
@@ -485,61 +460,8 @@ describe('AdminLoginCard: the unclaimed card', () => {
         });
 
         expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
-        const fold = screen.getByTestId('claim-password-fold');
-        expect(fold).toHaveAttribute('open');
-        expect(screen.getByText('Invalid password')).toBeInTheDocument();
-        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-    });
-
-    it('keeps the fold open with the 2FA field if 2FA was required before a slow claim check answered unclaimed', async () => {
-        let resolveClaim!: (res: Response) => void;
-        const claimPromise = new Promise<Response>((resolve) => {
-            resolveClaim = resolve;
-        });
-
-        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-            const url = String(input);
-            if (url.endsWith('/api/local/claim')) {
-                return claimPromise;
-            }
-            if (url.endsWith('/api/local/admin/auth/password')) {
-                return {
-                    ok: false,
-                    status: 401,
-                    json: async () => ({ totpRequired: true, error: '2FA required' }),
-                } as Response;
-            }
-            if (url.endsWith('/api/community/info')) {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ addresses: [], primaryAddress: null }),
-                } as Response;
-            }
-            throw new Error(`unexpected request ${url}`);
-        });
-        vi.stubGlobal('fetch', fetchMock);
-
-        renderCard();
-
-        const passwordInput = screen.getByPlaceholderText('Password');
-        fireEvent.change(passwordInput, { target: { value: 'my-password' } });
-        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
-
-        expect(await screen.findByPlaceholderText(/6-digit code/)).toBeInTheDocument();
-
-        await act(async () => {
-            resolveClaim({
-                ok: true,
-                status: 200,
-                json: async () => ({ unclaimed: true, codeId: CODE_ID }),
-            } as Response);
-        });
-
-        expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
-        const fold = screen.getByTestId('claim-password-fold');
-        expect(fold).toHaveAttribute('open');
-        expect(screen.getByPlaceholderText(/6-digit code/)).toBeInTheDocument();
+        expect(phoneSignIn()).toBeNull();
+        expect(screen.queryByTestId('claim-password-fold')).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
     });
 });
-

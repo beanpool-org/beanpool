@@ -9,7 +9,7 @@ const node: NodeProfile = {
     id: 'local-node',
     name: 'Mullumbimby Node',
     url: 'http://localhost:8080',
-    credential: 'test-password',
+    automationToken: 'test-token',
 };
 
 const NEW_TOKEN = 'bp_abc123_SECRETSECRETSECRETSECRET';
@@ -63,11 +63,14 @@ describe('AutomationTokensPanel', () => {
         vi.restoreAllMocks();
     });
 
-    it('an owner (key or password) sees the card; an admin and a moderator do not, and nothing is fetched for them', async () => {
+    it('an owner (key or token) sees the card; an admin and a moderator do not, and nothing is fetched for them', async () => {
         const calls = fakeNode({ tokens: [] });
         const { unmount } = render(<AutomationTokensPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }} />);
         expect(await screen.findByText('Automation tokens')).toBeInTheDocument();
         expect(screen.getByText(/never makes\s+owner-only changes/i)).toBeInTheDocument();
+        // No password or 2FA exists to name: the card lists roles, tokens, break-glass, the public address and restore.
+        expect(screen.getByText(/never makes\s+owner-only changes: roles, tokens, break-glass, the public address, restore\./i)).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/password|2FA/i);
         unmount();
 
         const second = render(<AutomationTokensPanel activeNode={node} />);
@@ -164,7 +167,7 @@ describe('AutomationTokensPanel', () => {
         expect(screen.getByText('No tokens yet.')).toBeInTheDocument();
     });
 
-    it('a password session sees no "Make a token" form, only why, and still lists and revokes', async () => {
+    it('a token session sees no "Make a token" form, only why, and still lists and revokes', async () => {
         const calls = fakeNode({ tokens: [row] });
         const confirmSpy = vi.spyOn(window, 'confirm');
         render(<AutomationTokensPanel activeNode={node} viewer={{ kind: 'token' }} />);
@@ -175,6 +178,8 @@ describe('AutomationTokensPanel', () => {
         // A computer's session can no longer make one (the fresh proof, C10): the line says the phone (opus-1984 N4).
         expect(screen.getByTestId('automation-token-needs-key')).toHaveTextContent(/open BeanPool on your phone, press Manage/i);
         expect(screen.getByTestId('automation-token-needs-key')).not.toHaveTextContent(/scanning a code/i);
+        expect(screen.getByTestId('automation-token-needs-key')).toHaveTextContent('Tokens are made with an owner’s key from the phone: open BeanPool on your phone, press Manage, then make the token there.');
+        expect(screen.getByTestId('automation-token-needs-key')).not.toHaveTextContent(/password/i);
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Revoke Nightly backups' })); });
         await answerInPageConfirm('Revoke');
@@ -184,7 +189,7 @@ describe('AutomationTokensPanel', () => {
         expect(calls.some((c) => c.url.endsWith('/api/local/admin/automation-tokens') && c.init?.method === 'POST')).toBe(false);
     });
 
-    it('an owner\'s key session sees the "Make a token" form and not the password line', async () => {
+    it('an owner\'s key session sees the "Make a token" form and not the needs-a-key line', async () => {
         fakeNode({ tokens: [] });
         render(<AutomationTokensPanel activeNode={node} viewer={OWNER_KEY} />);
         await screen.findByText('No tokens yet.');

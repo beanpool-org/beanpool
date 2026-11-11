@@ -11,7 +11,7 @@ vi.mock('../../lib/node-client', async () => {
     return { ...actual, fetchAppVersions: vi.fn() };
 });
 
-const node: NodeProfile = { id: 'node-1', name: 'Node Alpha', url: 'https://alpha.beanpool.org', credential: 'pw-alpha' };
+const node: NodeProfile = { id: 'node-1', name: 'Node Alpha', url: 'https://alpha.beanpool.org', automationToken: 'pw-alpha' };
 
 function platform(p: Partial<AppPlatformVersions>): AppPlatformVersions {
     return { floor: '1.2.60', store: '1.2.61', enforced: '1.2.60', held: false, from: null, fromInvalid: false, blocking: true, versions: [], ...p };
@@ -35,7 +35,7 @@ describe('AppVersionsCard', () => {
         render(<AppVersionsCard node={node} />);
         expect(screen.getByRole('heading', { name: /Phone app versions/i })).toBeInTheDocument();
         expect(screen.getByText('Counting…')).toBeInTheDocument();
-        expect(nodeClient.fetchAppVersions).toHaveBeenCalledWith('https://alpha.beanpool.org', 'pw-alpha', undefined);
+        expect(nodeClient.fetchAppVersions).toHaveBeenCalledWith('https://alpha.beanpool.org', 'pw-alpha');
     });
 
     it('shows each platform\'s versions with member counts, and how many are below the floor', async () => {

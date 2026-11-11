@@ -11,7 +11,7 @@ import { OwnerPhoneBanner } from '../components/auth/OwnerPhoneBanner';
 
 const NODE = 'https://node.example';
 const TOKEN = `bp_${'b2'.repeat(6)}_${'0e'.repeat(32)}`;
-const PASSWORD = 'correct-horse-battery-staple';
+const NOT_A_TOKEN = 'correct-horse-battery-staple';
 
 let inner: ReturnType<typeof vi.fn>;
 let events: CustomEvent[];
@@ -36,10 +36,10 @@ describe('an owner-only action with a token', () => {
     });
 
     it('covers the routes refused to every token and the owner-only ones', () => {
-        for (const p of ['/api/local/admin/auth/password', '/api/local/admin/automation-tokens', '/api/local/admin/2fa/setup',
+        for (const p of ['/api/local/admin/auth/session', '/api/local/admin/automation-tokens',
             '/api/local/admin/ws-ticket', '/api/local/admin/csrf-token', '/api/local/admin/public-address/claim',
             '/api/local/admin/takeover/open', '/api/local/admin/stranded-escrows/e1/write-off',
-            '/api/local/change-password', '/api/local/admin/offbox-backups/settings',
+            '/api/local/admin/offbox-backups/settings',
             '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check',
             '/api/local/admin/takeover/confirm', '/api/local/admin/takeover/cancel',
             '/api/local/admin/takeover/phone/start', '/api/local/admin/takeover/phone/wait',
@@ -60,8 +60,14 @@ describe('an owner-only action with a token', () => {
         }
     });
 
-    it('a password request to the same route goes to the node untouched', async () => {
-        await forgetStandby(NODE, 'standby-1', PASSWORD);
+    it('the 2FA and change-password routes are gone from the list: the node no longer has them', () => {
+        for (const p of ['/api/local/admin/2fa/setup', '/api/local/admin/2fa/verify', '/api/local/change-password']) {
+            expect(tokenCannotReach(p), p).toBe(false);
+        }
+    });
+
+    it('a request that carries no token goes to the node untouched', async () => {
+        await forgetStandby(NODE, 'standby-1', NOT_A_TOKEN);
         expect(inner).toHaveBeenCalledTimes(1);
         expect(events).toHaveLength(0);
     });
@@ -119,9 +125,9 @@ describe('a 401 the node gives a token (revoked, expired or wrong)', () => {
         await expect(fetchNodeData(NODE, TOKEN)).rejects.toThrow(NODE_WORDS);
     });
 
-    it('a password\'s 401 is left as the node said it', async () => {
+    it('the 401 of a request that carries no token is left as the node said it', async () => {
         inner.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, statusText: 'Unauthorized' }));
-        const res = await fetch(`${NODE}/api/local/admin/diagnostics`, { headers: buildAdminHeaders(PASSWORD) });
+        const res = await fetch(`${NODE}/api/local/admin/diagnostics`, { headers: buildAdminHeaders(NOT_A_TOKEN) });
         expect(res.statusText).toBe('Unauthorized');
     });
 });

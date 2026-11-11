@@ -5,7 +5,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
 
-const node: NodeProfile = { id: 'test-node', name: 'Test Node', url: 'https://test-node.local', credential: 'pw' };
+const node: NodeProfile = { id: 'test-node', name: 'Test Node', url: 'https://test-node.local', automationToken: 'pw' };
 
 const keepVote: nodeClient.AdminDecisionItem = {
     id: 'dec-keep-1',
@@ -108,7 +108,7 @@ describe('DecisionsAdminPanel', () => {
         expect(confirm).not.toBeDisabled();
         fireEvent.click(confirm);
 
-        await waitFor(() => expect(halt).toHaveBeenCalledWith('https://test-node.local', 'dec-keep-1', 'Suspended the wrong account', 'pw', undefined));
+        await waitFor(() => expect(halt).toHaveBeenCalledWith('https://test-node.local', 'dec-keep-1', 'Suspended the wrong account', 'pw'));
     });
 
     it('a pause\'s own vote: halting it lifts the suspension, said as for a keep vote; a removal a member proposed is not one', async () => {
@@ -170,7 +170,7 @@ describe('DecisionsAdminPanel', () => {
         expect(dialog.textContent).not.toMatch(/vote|Halt/i);
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'Wrong account suspended' } });
         fireEvent.click(screen.getByRole('button', { name: 'Lift suspension' }));
-        await waitFor(() => expect(halt).toHaveBeenCalledWith('https://test-node.local', 'dec-novote-1', 'Wrong account suspended', 'pw', undefined));
+        await waitFor(() => expect(halt).toHaveBeenCalledWith('https://test-node.local', 'dec-novote-1', 'Wrong account suspended', 'pw'));
     });
 
     it('with Decisions off, a suspension that opened as a vote before the switch is worded as one without', async () => {
@@ -247,7 +247,7 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: '  Two witnesses showed it false  ' } });
         expect(confirm).not.toBeDisabled();
         fireEvent.click(confirm);
-        await waitFor(() => expect(hide).toHaveBeenCalledWith('https://test-node.local', 'dec-pause-1', 'Two witnesses showed it false', 'pw', undefined));
+        await waitFor(() => expect(hide).toHaveBeenCalledWith('https://test-node.local', 'dec-pause-1', 'Two witnesses showed it false', 'pw'));
     });
 
     it('a hidden case shows the reason members read, not the button; closed removal votes are listed to hide one', async () => {
@@ -269,7 +269,7 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.click(within(pastRow).getByRole('button', { name: 'Hide case' }));
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'The deposit was refunded in full' } });
         fireEvent.click(within(screen.getByRole('dialog', { name: 'Hide case' })).getByRole('button', { name: 'Hide case' }));
-        await waitFor(() => expect(hide).toHaveBeenCalledWith('https://test-node.local', 'dec-closed-1', 'The deposit was refunded in full', 'pw', undefined));
+        await waitFor(() => expect(hide).toHaveBeenCalledWith('https://test-node.local', 'dec-closed-1', 'The deposit was refunded in full', 'pw'));
     });
 
     it('no Hide case on a suspension nobody votes on, and the node\'s refusal shows when hiding fails', async () => {
@@ -311,13 +311,13 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: "  It gave a neighbour's address  " } });
         expect(confirm).not.toBeDisabled();
         fireEvent.click(confirm);
-        await waitFor(() => expect(takeDown).toHaveBeenCalledWith('https://test-node.local', 'dec-pause-1', "It gave a neighbour's address", 'pw', undefined));
+        await waitFor(() => expect(takeDown).toHaveBeenCalledWith('https://test-node.local', 'dec-pause-1', "It gave a neighbour's address", 'pw'));
 
         const pastRow = within(screen.getByTestId('past-removal-votes')).getByTestId('past-removal-row');
         fireEvent.click(within(pastRow).getByRole('button', { name: 'Take down reply' }));
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'It gave a phone number' } });
         fireEvent.click(within(screen.getByRole('dialog', { name: 'Take down reply' })).getByRole('button', { name: 'Take down reply' }));
-        await waitFor(() => expect(takeDown).toHaveBeenCalledWith('https://test-node.local', 'dec-closed-2', 'It gave a phone number', 'pw', undefined));
+        await waitFor(() => expect(takeDown).toHaveBeenCalledWith('https://test-node.local', 'dec-closed-2', 'It gave a phone number', 'pw'));
     });
 
     it('a reply taken down shows the reason members read, not the button; no button with no reply; the refusal shows when it fails', async () => {
@@ -411,8 +411,8 @@ describe('DecisionsAdminPanel', () => {
         expect(confirm).toBeDisabled();
         fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: '  Only Tia and Uma could vote; both saw it  ' } });
         fireEvent.click(confirm);
-        await waitFor(() => expect(decide).toHaveBeenCalledWith('https://test-node.local', 'dec-few-1', 'Only Tia and Uma could vote; both saw it', 'pw', undefined, undefined));
-        // The password viewer is asked a current code in the box, and nothing was decided yet.
+        await waitFor(() => expect(decide).toHaveBeenCalledWith('https://test-node.local', 'dec-few-1', 'Only Tia and Uma could vote; both saw it', 'pw', undefined));
+        // A viewer the node asks for a typed code is shown the code box, and nothing was decided yet.
         expect(await screen.findByTestId('owner-decision-proof-code')).toBeInTheDocument();
         expect(decide).toHaveBeenCalledTimes(1);
         // The code re-sends the words of the press that opened the box: they hold still while it shows, or a correction made

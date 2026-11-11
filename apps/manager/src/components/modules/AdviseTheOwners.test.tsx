@@ -15,15 +15,11 @@ vi.mock('../../lib/community-shape', async (importOriginal) => {
     };
 });
 
-vi.mock('../../lib/node-client', () => ({
-    getTfaSessionToken: vi.fn(() => 'test-tfa-token'),
-}));
-
 const mockNode: NodeProfile = {
     id: 'node-1',
     name: 'Primary Node',
     url: 'https://primary.example.com',
-    credential: 'test-password',
+    automationToken: 'test-token',
 };
 
 const mockUpdatedShape = {
@@ -129,10 +125,9 @@ describe('AdviseTheOwners', () => {
         expect(communityShape.adviseOwners).toHaveBeenCalledTimes(1);
         expect(communityShape.adviseOwners).toHaveBeenCalledWith(
             'https://primary.example.com',
-            'test-password',
+            'test-token',
             'beans',
             'Consider reopening beans for summer',
-            'test-tfa-token',
         );
 
         await waitFor(() => {

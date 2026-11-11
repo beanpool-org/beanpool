@@ -11,7 +11,7 @@ import type { RolesViewer } from './NodeRolesPanel';
  * Lights-out: the owner's switch for the hall, in Settings (server routes/lights-out.ts; design
  * scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §4.1, §4.2, §3.5, §3.6). When the internet and the phone network
  * are down, members' phones reach this laptop by its number on the hall Wi-Fi. Turning it on asks an owner's fresh proof:
- * Manage on the phone within 90 seconds, or the admin password with a current authenticator code. An admin sees the switch
+ * Manage on the phone within 90 seconds. An admin sees the switch
  * as it stands and is told only an owner can change it. The words name the day and the time, never "stale".
  */
 
@@ -60,7 +60,7 @@ export const LIGHTS_OUT_WORDS = {
     ownerOnly: word('Only an owner can turn lights-out on or off.'),
     standby: word('This server is a standby. Take over as the main server first, then turn lights-out on.'),
     standDownTitle: word('Stand down: go back to being the standby'),
-    noLaptopWord: word("No phone and no password? On the laptop's own shell: docker compose exec beanpool-node beanpool lights-out on"),
+    noLaptopWord: word("No phone? On the laptop's own shell: docker compose exec beanpool-node beanpool lights-out on"),
 };
 
 export interface LightsOutCardProps {

@@ -364,14 +364,14 @@ it('opening the wizard makes no code: it only reads the status (queue item 22)',
             success: true, cancelled: true, oldPubkey: mockMember.publicKey, callsign: 'alice', status: 'active',
         });
         const issueSpy = vi.spyOn(nodeClient, 'issueRekeyCodeApi');
-        render(<RekeyMemberWizard member={mockMember} nodeUrl="http://localhost:3000" credential="pw" tfaToken="t" onClose={() => {}} />);
+        render(<RekeyMemberWizard member={mockMember} nodeUrl="http://localhost:3000" credential="pw" onClose={() => {}} />);
 
         await waitFor(() => expect(screen.getByText('RK-WAIT-0001')).toBeDefined());
         expect(screen.getByText(/5 h 12 min left/)).toBeDefined();
         fireEvent.click(screen.getByRole('button', { name: /Cancel this code/ }));
 
         await waitFor(() => expect(screen.getByTestId('rekey-notice').textContent).toMatch(/Code cancelled\. @alice's key works again; their status is active\./));
-        expect(cancelSpy).toHaveBeenCalledWith('http://localhost:3000', mockMember.publicKey, 'pw', 't');
+        expect(cancelSpy).toHaveBeenCalledWith('http://localhost:3000', mockMember.publicKey, 'pw');
         expect(screen.queryByText('RK-WAIT-0001')).toBeNull();
         expect(screen.getAllByRole('checkbox').every((cb) => !(cb as HTMLInputElement).checked)).toBe(true);
         expect(issueSpy).not.toHaveBeenCalled();
@@ -561,7 +561,7 @@ describe('RekeyMemberWizard: the phone asks, the admin binds its number (#1768)'
         const complete = vi.spyOn(nodeClient, 'completeRekeyApi');
         render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Not theirs' }));
-        await waitFor(() => expect(decline).toHaveBeenCalledWith('https://mullum.example.org', member.publicKey, thief, undefined, undefined));
+        await waitFor(() => expect(decline).toHaveBeenCalledWith('https://mullum.example.org', member.publicKey, thief, undefined));
         await waitFor(() => expect(screen.queryAllByTestId('rekey-proposal').length).toBe(0));
         expect(complete).not.toHaveBeenCalled();
     });

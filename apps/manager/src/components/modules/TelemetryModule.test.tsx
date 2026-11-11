@@ -9,13 +9,13 @@ describe('TelemetryModule', () => {
             id: 'node-1',
             name: 'Primary Node',
             url: 'http://localhost:8080',
-            credential: 'secret1',
+            automationToken: 'secret1',
         },
         {
             id: 'node-2',
             name: 'Secondary Node',
             url: 'http://localhost:8081',
-            credential: 'secret2',
+            automationToken: 'secret2',
         },
     ];
 
@@ -110,8 +110,21 @@ describe('TelemetryModule', () => {
         expect(mockHandlers.onRefreshFleet).toHaveBeenCalledTimes(1);
     });
 
+    it('a profile without a real token whose node answers 401 is asked for a token, never a password', () => {
+        render(<TelemetryModule profiles={mockProfiles} activeProfileId="node-1" fleetDiags={mockFleetDiags} {...mockHandlers} />);
+        // Condensed grid, then the expanded cards.
+        for (const view of ['Condensed Grid', 'Expanded Cards']) {
+            fireEvent.click(screen.getByText(view));
+            expect(screen.queryByText(/password/i), view).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Set Token/ }), view).toBeInTheDocument();
+        }
+        expect(screen.getByText(/Auth Required: Enter an owner automation token to view node telemetry/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Set Token/ }));
+        expect(mockHandlers.onEditNode).toHaveBeenCalledWith(mockProfiles[1]);
+    });
+
     it('a token profile\'s 401 says to make a new token from the phone, never to set a password', () => {
-        const tokenProfiles: NodeProfile[] = [mockProfiles[0], { ...mockProfiles[1], credential: undefined, automationToken: `bp_${'c3'.repeat(6)}_${'0d'.repeat(32)}` }];
+        const tokenProfiles: NodeProfile[] = [mockProfiles[0], { ...mockProfiles[1], automationToken: `bp_${'c3'.repeat(6)}_${'0d'.repeat(32)}` }];
         const diags = { ...mockFleetDiags, 'node-2': { diag: null, loading: false, error: 'HTTP 401: Invalid, revoked or expired automation token' } };
         render(<TelemetryModule profiles={tokenProfiles} activeProfileId="node-1" fleetDiags={diags} {...mockHandlers} />);
         // Condensed grid, then the expanded cards.

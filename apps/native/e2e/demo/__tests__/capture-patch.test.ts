@@ -57,7 +57,8 @@ describe('capture.mjs patchTree', () => {
     it("sets the status bar on the post page only, inside the post page's own component, and gives it back on leaving", () => {
         patchTree(tree, { ios: false });
         const src = read('app/post/[id].tsx');
-        const at = src.indexOf('export default function PostDetailModal() {');
+        // The listing screen's own component; the route's default export (PostRoute) draws it.
+        const at = src.indexOf('\nfunction PostDetailModal() {');
         expect(at).toBeGreaterThan(0);
         expect(src.slice(0, at)).toContain("import { setStatusBarStyle as demoBarStyle } from 'expo-status-bar';");
         const body = src.slice(at);

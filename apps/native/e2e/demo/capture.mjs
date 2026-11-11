@@ -179,7 +179,8 @@ export function patchTree(tree, { ios }) {
     const post = path.join(tree, 'apps/native/app/post/[id].tsx');
     let p = fs.readFileSync(post, 'utf8');
     const hook = '    const { theme, colors } = useTheme();\n';
-    const at = p.indexOf('export default function PostDetailModal() {');
+    // The listing screen's own component (the route's default export, PostRoute, draws it, or a page of Local knowledge instead).
+    const at = p.indexOf('\nfunction PostDetailModal() {');
     if (at < 0 || !p.slice(at).includes(hook) || !p.includes('import React, { useState,')) throw new Error('the post page no longer reads as the status-bar patch expects');
     p = p.slice(0, at).replace('import React, { useState,', "import { setStatusBarStyle as demoBarStyle } from 'expo-status-bar';\nimport React, { useState,")
         // asserted again every half second: the tabs underneath re-render as the phone syncs and would put their own style back

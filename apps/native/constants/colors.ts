@@ -242,6 +242,8 @@ export const lightColors = {
     chip: {
         quiet: { fg: brandLight.chip.quiet.ink, bg: brandLight.chip.quiet.tint },
         info: { fg: brandLight.chip.info.ink, bg: brandLight.chip.info.tint },
+        // Learn and Local knowledge (core chip.learn, teal): the topic chip, "LOCAL KNOWLEDGE" on a page, the 📖 tile.
+        learn: { fg: brandLight.chip.learn.ink, bg: brandLight.chip.learn.tint },
     },
 
     // Category tile tints and inks
@@ -398,6 +400,7 @@ export const darkColors = {
     chip: {
         quiet: { fg: brandDark.chip.quiet.ink, bg: brandDark.chip.quiet.tint },
         info: { fg: brandDark.chip.info.ink, bg: brandDark.chip.info.tint },
+        learn: { fg: brandDark.chip.learn.ink, bg: brandDark.chip.learn.tint },
     },
 
     // Category tile tints and inks

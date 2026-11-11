@@ -11,6 +11,7 @@ import {
     sampleRowNote, t, tn,
 } from '@beanpool/core';
 import type { DecisionWithTally, EnterpriseLedgerResponse, MyPoolVoting, TreasurySummary } from '../../utils/db';
+import type { KnowledgePage } from '../../utils/learn-copy';
 
 /** When an example row was, in the member's language ("yesterday", "3 days ago"). */
 const when = (daysAgo: number) => (daysAgo === 1 ? t('yesterday') : tn(daysAgo, '{n} day ago', '{n} days ago'));
@@ -224,4 +225,27 @@ export function samplePoolVoting(): MyPoolVoting {
         voiceCredits: SAMPLE_COMMUNITY.voiceCredits,
         hasCompletedTrade: true,
     };
+}
+
+/**
+ * Example Valley's three sample pages (core SAMPLE_COMMUNITY.knowledge) in the shape Learn reads its copy (utils/learn-copy.ts
+ * KnowledgePage), for the worldwide community's preview (DESIGN-local-knowledge-fable.md amended §2.9): app/learn.tsx is the
+ * member's own Learn fed these. Ids start `sample-`; they carry no source and no writer, and nothing in the preview opens them:
+ * every action there opens the sheet that leads to a local community.
+ */
+export function samplePages(now: number = Date.now()): KnowledgePage[] {
+    return SAMPLE_COMMUNITY.knowledge.map((s) => ({
+        id: s.id,
+        title: t(s.title),
+        description: t(s.body),
+        category: s.topic,
+        status: 'active',
+        createdAt: new Date(now - s.checkedDaysAgo * DAY_MS).toISOString(),
+        knowledge: {
+            sources: [],
+            place: s.place ? t(s.place) : null,
+            checkedAt: new Date(now - s.checkedDaysAgo * DAY_MS).toISOString(),
+            helped: s.helped,
+        },
+    }));
 }

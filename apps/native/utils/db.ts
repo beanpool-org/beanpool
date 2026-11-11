@@ -383,13 +383,16 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
  * cannot be read again from the node: it is its own step, kept one build (a conversion-code row in the log), never this one.
  * 4 (1.4.0): money is whole hundredths of a Bean (DESIGN-atomic-beans-fable.md M2). Every money column is an INTEGER `*_c`,
  * as the node's are, so a copy that held Beans as REAL (`posts.credits`, `accounts.balance`, ...) is dropped, never converted.
+ * 5 (Learn, slice K2): a new cache table, `knowledge_posts` (Local knowledge, DESIGN-local-knowledge-fable.md §4.3). A copy at 4
+ * was read without the pages, and its cursor is past any page written before this build, so only a read from the start
+ * brings them. It is cleared and read again, as the rule above says for a change to the cache's shape: nothing is rewritten.
  */
-export const COPY_SCHEMA = 4;
+export const COPY_SCHEMA = 5;
 
 /** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
 const CACHE_TABLES = [
     'messages', 'conversation_participants', 'conversations', 'posts', 'marketplace_transactions', 'transactions', 'accounts', 'members',
-    'projects', 'friends', 'ratings', 'member_reviews_read', 'poll_votes', 'event_rsvps', 'nearby_tied', 'nearby_held',
+    'projects', 'friends', 'ratings', 'member_reviews_read', 'poll_votes', 'event_rsvps', 'nearby_tied', 'nearby_held', 'knowledge_posts',
 ] as const;
 const DROP_CACHE_TABLES_SQL = CACHE_TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`).join(' ');
 
@@ -598,6 +601,19 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
+
+        -- 3b. Local knowledge, read in Learn (DESIGN-local-knowledge-fable.md section 4.3). Its own table, so no query over
+        -- posts (the Market, the map, the calendar) can ever meet a page: the sync's one writer puts a row whose type is
+        -- 'knowledge' here and never in posts. post is the page as the node sent it (JSON); the rest is what Learn lists by.
+        CREATE TABLE IF NOT EXISTS knowledge_posts (
+            id TEXT PRIMARY KEY,
+            topic TEXT NOT NULL,
+            post TEXT NOT NULL,
+            checked_at TEXT,
+            updated_at TEXT,
+            active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_knowledge_posts_topic ON knowledge_posts(topic) WHERE active = 1;
 
         -- 4. Marketplace Transactions
         CREATE TABLE IF NOT EXISTS marketplace_transactions (
@@ -3882,6 +3898,48 @@ async function noteSealedAnswer(txn: SQLite.SQLiteDatabase, p: any): Promise<voi
 }
 
 /**
+ * One page of Local knowledge as the node sends it (the sync reads pages only because the phone names the type: utils/events.ts
+ * SYNC_TYPES_QUERY). Kept whole as JSON in its own table, with what Learn lists by beside it. A page the node tombstones
+ * (`active: 0`, or a status that isn't 'active') stays as an inactive row, so a page taken down leaves Learn at the next sync;
+ * the Market reads `posts` alone and never meets one.
+ */
+async function writeKnowledgePost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    if (typeof p?.id !== 'string' || !p.id) return;
+    const showing = p.active !== 0 && p.active !== false && (p.status === undefined || p.status === 'active');
+    const checkedAt = typeof p.knowledge?.checkedAt === 'string' ? p.knowledge.checkedAt : (p.createdAt ?? p.created_at ?? null);
+    await txn.runAsync(
+        'INSERT OR REPLACE INTO knowledge_posts (id, topic, post, checked_at, updated_at, active) VALUES (?, ?, ?, ?, ?, ?)',
+        [p.id, typeof p.category === 'string' ? p.category : '', JSON.stringify(p), checkedAt, p.updatedAt ?? p.updated_at ?? p.createdAt ?? null, showing ? 1 : 0]);
+}
+
+/** Every page of Local knowledge this phone holds that is showing, as the node sent it. Learn groups and orders them (utils/learn-copy.ts). */
+export async function getKnowledgePosts(): Promise<any[]> {
+    const database = await waitForInit();
+    const rows = await database.getAllAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE active = 1');
+    const pages: any[] = [];
+    for (const r of rows) {
+        try {
+            pages.push(JSON.parse(r.post));
+        } catch {
+            // A row that doesn't read is no page; the next sync writes it again.
+        }
+    }
+    return pages;
+}
+
+/** One page this phone holds, showing, or null. */
+export async function getKnowledgePost(id: string): Promise<any | null> {
+    const database = await waitForInit();
+    const row = await database.getFirstAsync<{ post: string }>('SELECT post FROM knowledge_posts WHERE id = ? AND active = 1', [id]);
+    if (!row) return null;
+    try {
+        return JSON.parse(row.post);
+    } catch {
+        return null;
+    }
+}
+
+/**
  * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
  * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
  * it leaves out, it puts it back to the table default, which is how every sync once cleared the 💸 marker and
@@ -3889,6 +3947,8 @@ async function noteSealedAnswer(txn: SQLite.SQLiteDatabase, p: any): Promise<voi
  * sends it and nothing reads it.
  */
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    // A page of Local knowledge goes to its own table and never into `posts` (writeKnowledgePost).
+    if (p?.type === 'knowledge') return writeKnowledgePost(txn, p);
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
@@ -4025,6 +4085,8 @@ async function dropListingsOfARefusedCommunity(txn: SQLite.SQLiteDatabase, selfP
     await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${others})`, [own]);
     const gone = await txn.runAsync('DELETE FROM posts WHERE author_pubkey IS NOT ?', [own]);
     if (gone.changes > 0) console.log(`[DB] applyDelta: ${gone.changes} listing(s) of a community that keeps its listings for its members left this phone`);
+    // Its pages of Local knowledge are its members' too: a phone the community refused keeps none.
+    await txn.runAsync('DELETE FROM knowledge_posts');
 }
 
 /**
@@ -4039,6 +4101,13 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
         await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
     }
     if (gone.length > 0) console.log(`[DB] applyDelta: ${gone.length} listing(s) the node no longer has left this phone`);
+    // The same rule for the pages of Local knowledge, which the pull carries (utils/events.ts SYNC_TYPES_QUERY).
+    const heldPages = await txn.getAllAsync<HeldListing>("SELECT id, updated_at AS at, 'public' AS scope FROM knowledge_posts");
+    const gonePages = postsTheNodeNoLongerHas(posts, heldPages, new Set(Array.isArray(sentOnly) ? sentOnly.map(String) : []));
+    for (let i = 0; i < gonePages.length; i += 500) {
+        const batch = gonePages.slice(i, i + 500);
+        await txn.runAsync(`DELETE FROM knowledge_posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
+    }
 }
 
 /**
@@ -4192,6 +4261,9 @@ export async function readNearbyTag(): Promise<string | null> {
  * removal cancels the row exactly as the node's own removal does (status 'cancelled', active 0, and an event's
  * state 'cancelled'), and creates nothing when the phone never had the listing. `updated_at` is left alone: the
  * node's tombstone carries the real one, and the next catch-up sync writes it over this row as usual.
+ * A removal names an id, not a type, so it is also a page of Local knowledge's (a take-down, or Settings' removal): that page
+ * lives in `knowledge_posts` (writeKnowledgePost), and leaves Learn, the Market's 📖 line and an open page at once, as the
+ * node's tombstone does at the next sync (DESIGN-local-knowledge-fable.md §7, "takedown at once").
  */
 async function applyLivePostRow(txn: SQLite.SQLiteDatabase, change: LivePostChange): Promise<void> {
     if (change.kind === 'remove') {
@@ -4200,6 +4272,7 @@ async function applyLivePostRow(txn: SQLite.SQLiteDatabase, change: LivePostChan
                               event_state = CASE WHEN type = 'event' THEN 'cancelled' ELSE event_state END
              WHERE id = ?`,
             [change.id]);
+        await txn.runAsync('UPDATE knowledge_posts SET active = 0 WHERE id = ?', [change.id]);
         return;
     }
     const local = await txn.getFirstAsync<{ updated_at: string | null }>('SELECT updated_at FROM posts WHERE id = ?', [change.post.id]);

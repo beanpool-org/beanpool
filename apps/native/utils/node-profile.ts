@@ -126,6 +126,12 @@ export interface NodeFeatures {
      * node that doesn't say (the worldwide one, Beans off, a node from before it) sends no such push and takes no switch.
      */
     askedPush?: boolean;
+    /**
+     * Local knowledge is read in Learn here (@beanpool/core knowledge.ts, DESIGN-local-knowledge-fable.md §2.9): on a local
+     * community, off on the worldwide one. Unlike the older switches a node that doesn't say is OFF, not on: a server from
+     * before Learn has none (knowledgeFeatureMode reads `=== true`).
+     */
+    knowledge?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -140,7 +146,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush',
+    'askedPush', 'knowledge',
 ];
 
 export interface NodeProfile {

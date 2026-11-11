@@ -112,11 +112,13 @@ const LATE_COLUMNS: Record<string, string[]> = {
 const MONEY_COLUMN = /^(\w*_c|balance|amount|tax_fee|fee|credits|post_credits|earned_credit|goal_amount|current_amount)$/;
 const CACHE_TABLES = ['members', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'conversations', 'projects'];
 
-describe("the phone's copy and its schema number (COPY_SCHEMA 4: whole hundredths)", () => {
+// The number is 5 since Learn (slice K2: the new cache table knowledge_posts, utils/db.ts COPY_SCHEMA); 4 was the whole-hundredths
+// cutover this file is about, and a copy of 4 is now cleared and read again like a 1.3 one (utils/__tests__/learn-copy-sync.test.ts).
+describe("the phone's copy and its schema number (whole hundredths since 4; COPY_SCHEMA 5)", () => {
     it('a 1.3 copy (user_version 3, Beans as REAL) loses its cache and every old figure, keeps the tools and group keys, and is read whole again', async () => {
         oldCopy();
         await getDb();
-        expect(userVersion()).toBe(4);
+        expect(userVersion()).toBe(5);
         // Dropped, not converted: no row of the old copy is carried, so no old figure can be read as hundredths.
         for (const table of ['members', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'conversations']) expect(count(table), table).toBe(0);
         expect(await getPosts()).toEqual([]);
@@ -153,7 +155,7 @@ describe("the phone's copy and its schema number (COPY_SCHEMA 4: whole hundredth
         await closeDB();
         adapter.execAsync.mockClear();
         await getDb();
-        expect(userVersion()).toBe(4);
+        expect(userVersion()).toBe(5);
         expect(sql.prepare("SELECT price_c FROM posts WHERE id = 'L2'").get()).toEqual({ price_c: 4925 });
         expect(removed).toEqual([]);
         // The standing rule: the schema is the whole shape, so opening a copy at the number runs no ALTER TABLE and drops nothing.

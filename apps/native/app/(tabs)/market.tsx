@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation, AppState } from 'react-native';
+import { fabClearanceDp } from '../../utils/fab-band';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
 import * as SecureStore from 'expo-secure-store';
@@ -2063,7 +2064,7 @@ export default function MarketScreen() {
                         {showExamples && realMatchingCount + fillRows.length > 0 ? <ExampleListings /> : null}
                     </>
                 ) : null}
-                contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
+                contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset, paddingBottom: fabClearanceDp(fontScale) }]}
                 showsVerticalScrollIndicator={false}
                 {...qr.listProps}
                 keyboardShouldPersistTaps="handled"

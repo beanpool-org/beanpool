@@ -163,13 +163,13 @@ describe('a deal already under way on the listing (deal_open)', () => {
         await screen.findByRole('heading', { name: /Glazed vase/ });
         await settle();
         expect(screen.getByText('🤝 Accept Offer')).toBeInTheDocument();
-        expect(screen.queryByText(/Release Credits/)).toBeNull();
+        expect(screen.queryByText(/Release Beans/)).toBeNull();
 
         // And a one-off held for someone else: never the member's Release.
         view.rerender(<MarketplacePage identity={identity} isMember={true} openPostId="offer-mower" onPostOpened={onPostOpened} transactions={[deal({})]} />);
         await screen.findByRole('heading', { name: /Old lawn mower/ });
         await settle();
-        expect(screen.queryByText(/Release Credits/)).toBeNull();
+        expect(screen.queryByText(/Release Beans/)).toBeNull();
     });
 
     it('the deal the node named is the one opened, by its id: a request still waiting (nothing held) as well', async () => {

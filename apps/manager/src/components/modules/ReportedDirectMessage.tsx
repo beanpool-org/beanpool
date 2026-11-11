@@ -21,11 +21,10 @@ function when(iso: string | null): string {
     return Number.isNaN(t.getTime()) ? '' : t.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export function ReportedDirectMessage({ nodeUrl, reportId, adminPassword, tfaToken }: {
+export function ReportedDirectMessage({ nodeUrl, reportId, credential }: {
     nodeUrl: string;
     reportId: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
 }) {
     const [message, setMessage] = useState<ReportedDirectLine | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -34,11 +33,11 @@ export function ReportedDirectMessage({ nodeUrl, reportId, adminPassword, tfaTok
         let live = true;
         setMessage(null);
         setError(null);
-        fetchReportedDirectMessage(nodeUrl, reportId, adminPassword, tfaToken)
+        fetchReportedDirectMessage(nodeUrl, reportId, credential)
             .then((m) => { if (live) setMessage(m); })
             .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'The node did not answer'); });
         return () => { live = false; };
-    }, [nodeUrl, reportId, adminPassword, tfaToken]);
+    }, [nodeUrl, reportId, credential]);
 
     const author = message?.authorCallsign || (message?.authorPubkey ? `@${message.authorPubkey.slice(0, 8)}` : null);
     const lineNow = message ? LINE_NOW[message.line] : null;

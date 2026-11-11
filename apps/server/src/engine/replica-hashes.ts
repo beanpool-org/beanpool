@@ -174,13 +174,26 @@ export interface TableHashes {
  * copy never crosses the change.
  */
 /**
- * 30: bills (engine/bills.ts, DESIGN-getting-paid-fable.md slice B1): a new plain table, bills. Raised for the same reason as
+ * 30: a new table, standing_period_changes (a standing deal's period lowered, an ask and its answer, DESIGN-getting-paid-
+ * fable.md slice L1). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
+ * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is a
+ * lowering: after a take-over from such a copy a lowered period is paid at the price its payer signed, never more, and the
+ * two can lower it again.
+ */
+/**
+ * 31: posts gains seven knowledge_* columns (Local knowledge, DESIGN-local-knowledge-fable.md §4.1, slice K1). Raised for the
+ * same reason as 8. REPLICA_FORMAT stays: each side's import writes only the columns its own table has; what an older
+ * importer drops is a knowledge post's sources, place, language, checked date, mark and count, and after a take-over from
+ * such a copy the page still shows its title and words, "Checked" reading the day it was made.
+ */
+/**
+ * 32: bills (engine/bills.ts, DESIGN-getting-paid-fable.md slice B1): a new plain table, bills. Raised for the same reason as
  * 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's import writes only
  * the tables its own database has. What an older importer drops is the bills themselves (a request to pay, holding no
  * Beans): after a takeover from such a copy the bills out are gone and their senders send them again; a paid one's ledger
  * row is copied with the ledger whatever the importer.
  */
-export const TABLE_HASHES_VERSION = 30;
+export const TABLE_HASHES_VERSION = 32;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

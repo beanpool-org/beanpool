@@ -18,6 +18,9 @@ import {
     KnownFloorSettings,
 } from './community-shape';
 
+/** An owner automation token (bp_ + 12 hex + _ + 64 hex): what a request carries, as a bearer. */
+const TOKEN = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
+
 describe('community-shape lib', () => {
     describe('hoursWording', () => {
         // Whole hundredths of a Bean: 4000 is 40 Beans, an hour of work (PROTOCOL_CONSTANTS.REFERENCE_RATE).
@@ -188,11 +191,14 @@ describe('community-shape lib', () => {
                 json: async () => mockShape,
             } as Response);
 
-            const res = await fetchCommunityShape('http://localhost:8080', 'secret_pass');
+            const res = await fetchCommunityShape('http://localhost:8080', TOKEN);
             expect(res).toEqual(mockShape);
             expect(globalThis.fetch).toHaveBeenCalledWith(
                 '/proxy/http/localhost:8080/api/local/admin/community-shape',
-                expect.objectContaining({ credentials: 'same-origin' })
+                expect.objectContaining({
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+                })
             );
         });
 
@@ -208,7 +214,7 @@ describe('community-shape lib', () => {
 
         it('updateCommunityShape rejects multiple changes', async () => {
             await expect(
-                updateCommunityShape('http://localhost:8080', 'pass', { a: 1, b: 2 })
+                updateCommunityShape('http://localhost:8080', TOKEN, { a: 1, b: 2 })
             ).rejects.toThrow('A save writes exactly one change: never send multiple changes in one request.');
         });
 
@@ -219,14 +225,15 @@ describe('community-shape lib', () => {
                 json: async () => mockRes,
             } as Response);
 
-            const res = await updateCommunityShape('http://localhost:8080', 'pass', { openDoor: true }, 'a note');
+            const res = await updateCommunityShape('http://localhost:8080', TOKEN, { openDoor: true }, 'a note');
             expect(res).toEqual(mockRes);
+            // The bearer is the credential; no password rides in the body.
             expect(globalThis.fetch).toHaveBeenCalledWith(
                 '/proxy/http/localhost:8080/api/local/admin/community-shape',
                 expect.objectContaining({
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
                     body: JSON.stringify({
-                        password: 'pass',
                         changes: { openDoor: true },
                         note: 'a note',
                     }),
@@ -242,7 +249,7 @@ describe('community-shape lib', () => {
             } as Response);
 
             try {
-                await updateCommunityShape('http://localhost:8080', 'pass', { openDoor: false });
+                await updateCommunityShape('http://localhost:8080', TOKEN, { openDoor: false });
                 expect.fail('Should have thrown');
             } catch (err: any) {
                 expect(err.message).toBe('Invalid value');

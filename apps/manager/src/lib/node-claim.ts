@@ -1,16 +1,15 @@
 /**
  * Whether this node has an owner yet (sign-in step 8, the claim): GET /api/local/claim, asked before sign-in.
  *
- * The route is public and answers `{ unclaimed: false, password }` once an owner exists, or `{ unclaimed: true, codeId,
- * communityName, password }` while the one-time claim code waits (apps/server/src/routes/node-claim.ts). `password` says
- * whether the server has an admin password at all, and `passwordRetired: true` comes with it when an owner retired it. It
- * never answers the code itself, and this page never shows it: the page is public, the code is read on the server.
- * A standby with no owner of its own answers `{ unclaimed: false, standby: true, password }`: it has no claim code, and an
+ * The route is public and answers `{ unclaimed: false }` once an owner exists, or `{ unclaimed: true, codeId,
+ * communityName }` while the one-time claim code waits (apps/server/src/routes/node-claim.ts). It never answers the code
+ * itself, and this page never shows it: the page is public, the code is read on the server.
+ * A standby with no owner of its own answers `{ unclaimed: false, standby: true }`: it has no claim code, and an
  * owner of the community gets in with `beanpool recover --key` on its shell (STANDBY_RECOVER_COMMAND). Once one has, it
  * answers as any server with an owner, with no standby flag.
  *
  * A failed or unreadable answer is `unknown`, and the sign-in card treats it as "show the sign-in": the check must
- * never stand between an operator and the password.
+ * never stand between an operator and the phone sign-in.
  */
 
 import { audienceOf } from '@beanpool/core';
@@ -33,17 +32,11 @@ export interface CommunityAddresses {
 
 export type ClaimState =
     | { kind: 'unknown' }
-    /**
-     * `password: false`: this server has no admin password, so no password field is drawn. A new install never had one;
-     * `retired`: an owner retired it (design step 10). Absent `password` (any other answer) keeps the password form.
-     */
-    | { kind: 'claimed'; password?: false; retired?: boolean; standby?: true }
-    /** `password: false` once the node has no admin password (stage C); any other answer keeps the password's fold. */
+    | { kind: 'claimed'; standby?: true }
     | {
         kind: 'unclaimed';
         codeId: string | null;
         communityName: string | null;
-        password: boolean;
         primaryAddress: string | null;
         address: string | null;
         addresses: string[];
@@ -97,7 +90,7 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         const b = body as Record<string, unknown>;
         if (b.unclaimed === false) {
             const standby = b.standby === true ? { standby: true as const } : {};
-            return b.password === false ? { kind: 'claimed', password: false, retired: b.passwordRetired === true, ...standby } : { kind: 'claimed', ...standby };
+            return { kind: 'claimed', ...standby };
         }
         if (b.unclaimed !== true) return { kind: 'unknown' };
 
@@ -106,7 +99,6 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
             // Only something shaped like an id ever reaches the QR.
             codeId: typeof b.codeId === 'string' && CODE_ID.test(b.codeId) ? b.codeId : null,
             communityName: typeof b.communityName === 'string' && b.communityName.trim() ? b.communityName.trim() : null,
-            password: b.password !== false,
             primaryAddress: null,
             address: null,
             addresses: [],

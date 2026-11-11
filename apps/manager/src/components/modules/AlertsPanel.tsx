@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { acknowledgeAlerts, getAlertsStatus, saveAlertsChannel, sendTestAlert, getTfaSessionToken, type AlertsStatus } from '../../lib/node-client';
+import { acknowledgeAlerts, getAlertsStatus, saveAlertsChannel, sendTestAlert, type AlertsStatus } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 
 /**
@@ -40,7 +40,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
     const [form, setForm] = useState<{ url: string; format: 'ntfy' | 'json'; token: string } | null>(null);
     const [busy, setBusy] = useState(false);
 
-    const creds = useCallback(() => [nodeCredential(activeNode), getTfaSessionToken(activeNode.id)] as const, [activeNode.id, nodeCredential(activeNode)]);
+    const creds = useCallback(() => [nodeCredential(activeNode)] as const, [activeNode.id, nodeCredential(activeNode)]);
 
     const load = useCallback(async () => {
         try {

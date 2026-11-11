@@ -14,13 +14,11 @@ import { beansFigure } from '../../lib/beans';
 
 interface EscrowDisputesPanelProps {
     activeNode: NodeProfile;
-    tfaToken?: string;
     onRefresh?: () => void;
 }
 
 export function EscrowDisputesPanel({
     activeNode,
-    tfaToken,
     onRefresh,
 }: EscrowDisputesPanelProps) {
     const [disputes, setDisputes] = useState<EscrowDisputeItem[]>([]);
@@ -54,7 +52,6 @@ export function EscrowDisputesPanel({
                 activeNode.url,
                 minDays,
                 nodeCredential(activeNode),
-                tfaToken,
                 { limit: PAGE_SIZE, offset: page * PAGE_SIZE, status: filterStatus }
             );
             const list = data.disputes || [];
@@ -137,8 +134,7 @@ export function EscrowDisputesPanel({
                 selectedDispute.id,
                 selectedAction,
                 reason.trim() || undefined,
-                nodeCredential(activeNode),
-                tfaToken
+                nodeCredential(activeNode)
             );
 
             setActionFeedback({

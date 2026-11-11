@@ -198,6 +198,14 @@ export interface ProfileSwitches {
      *  community"), which stops every link at once. Off (the global community): its listings are a visitor's read
      *  already, so a plain link shows them. Never on in a private preview, which shows visitors nothing. */
     shareOutside: boolean;
+    /** Local knowledge, read in Learn (scratch/fable-design/DESIGN-local-knowledge-fable.md §2.9, Marty's picks, 11 Nov 2026):
+     *  members' pages about this place, each approved by an owner or admin (engine/knowledge.ts). On (a local community):
+     *  every /api/knowledge route answers, and a member's read of the posts may name the type. Off (the global community,
+     *  which is not a place and whose moderators can't know a town's facts): every /api/knowledge route is 404 `feature_off`
+     *  (routes/profile-feature-gate.ts), and no read of the posts gives one, asked or not; the apps preview Learn from
+     *  Example Valley where `showcase` is on. Set by the server's kind in this build (KIND_ONLY_SWITCHES); the owners'
+     *  override under How this community works comes with the Settings slice. */
+    knowledge: boolean;
     /** Bills (engine/bills.ts; DESIGN-getting-paid-fable.md §4): a member, or an enterprise by a keeper, sends a member a
      *  request to pay that never pays itself. On wherever Beans are on (a local community); off where they are off (the
      *  global node), where every /api/bills route refuses. A bill holds no Beans, so an operator may turn it off on a live
@@ -241,6 +249,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         retention: false,
         dmRequests: false,
         shareOutside: true,
+        knowledge: true,
         bills: true,
     },
     global: {
@@ -291,6 +300,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         dmRequests: true,
         // Its listings are a visitor's read already (guestListingsOnly): a plain link to one shows it to anyone.
         shareOutside: false,
+        // Not a place (Marty, 11 Nov 2026): Local knowledge lives in a local community; global previews it (showcase).
+        knowledge: false,
         // No Beans here, so no bills (DESIGN-getting-paid-fable §4.1).
         bills: false,
     },
@@ -386,6 +397,9 @@ export interface NodeFeatures {
      *  so on the What are you into? card and show its switch (`notify_asked`) in Settings → Notifications only here: a
      *  server from before it sends no such push and refuses the key. */
     askedPush?: true;
+    /** Present, and true, only where `knowledge` is on: the apps show Learn, and its routes answer (/api/knowledge/*). Absent
+     *  (the global community, or a server from before it): no Learn, which @beanpool/core knowledgeFeatureMode reads as off. */
+    knowledge?: true;
     /** Present, and true, only where bills are on (`bills`, engine/bills.ts): the apps offer "Send a bill" and list Your
      *  deals → Bills. Absent (the global community, a server from before it): no bills, as before. */
     bills?: true;
@@ -651,6 +665,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.dmRequests ? { dmRequests: true as const } : {}),
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
+        ...(s.knowledge ? { knowledge: true as const } : {}),
         ...(s.bills ? { bills: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a

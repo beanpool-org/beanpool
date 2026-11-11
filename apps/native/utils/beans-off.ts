@@ -43,7 +43,7 @@ export function groupPostMissingFields(features: NodeFeatures | null | undefined
 }
 
 /*
- * Talk's sort (app/(tabs)/chats.tsx). With Beans off there is no "Credits: High / Low" chip, so a Beans sort picked
+ * Talk's sort (app/(tabs)/chats.tsx). With Beans off there is no "Beans: High / Low" chip, so a Beans sort picked
  * earlier (before the node's profile arrived, or on another community) would sort by a chip nobody can see and light
  * the options badge with nothing selected to explain it. It goes back to Recent. With Beans on, the pick stands.
  */

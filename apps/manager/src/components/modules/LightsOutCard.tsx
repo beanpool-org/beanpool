@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { word } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { proofField, t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import type { RolesViewer } from './NodeRolesPanel';
@@ -11,7 +11,7 @@ import type { RolesViewer } from './NodeRolesPanel';
  * Lights-out: the owner's switch for the hall, in Settings (server routes/lights-out.ts; design
  * scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §4.1, §4.2, §3.5, §3.6). When the internet and the phone network
  * are down, members' phones reach this laptop by its number on the hall Wi-Fi. Turning it on asks an owner's fresh proof:
- * Manage on the phone within 90 seconds, or the admin password with a current authenticator code. An admin sees the switch
+ * Manage on the phone within 90 seconds. An admin sees the switch
  * as it stands and is told only an owner can change it. The words name the day and the time, never "stale".
  */
 
@@ -60,7 +60,7 @@ export const LIGHTS_OUT_WORDS = {
     ownerOnly: word('Only an owner can turn lights-out on or off.'),
     standby: word('This server is a standby. Take over as the main server first, then turn lights-out on.'),
     standDownTitle: word('Stand down: go back to being the standby'),
-    noLaptopWord: word("No phone and no password? On the laptop's own shell: docker compose exec beanpool-node beanpool lights-out on"),
+    noLaptopWord: word("No phone? On the laptop's own shell: docker compose exec beanpool-node beanpool lights-out on"),
 };
 
 export interface LightsOutCardProps {
@@ -74,9 +74,9 @@ function when(iso: string | null): string {
     return Number.isFinite(d.getTime()) ? d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : iso;
 }
 
-export function LightsOutCard({ activeNode, viewer = { kind: 'password' } }: LightsOutCardProps) {
+export function LightsOutCard({ activeNode, viewer = { kind: 'token' } }: LightsOutCardProps) {
     const W = LIGHTS_OUT_WORDS;
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const [state, setState] = useState<LightsOutState | null>(null);
     const [address, setAddress] = useState('');
     const [busy, setBusy] = useState(false);
@@ -84,7 +84,7 @@ export function LightsOutCard({ activeNode, viewer = { kind: 'password' } }: Lig
     const proof = useFreshProof();
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 

@@ -132,7 +132,7 @@ describe('Chat deal strip: the payer', () => {
         mockTxs = [deal('tx-new', { createdAt: '2026-10-21T00:00:00Z' }), deal('tx-old', { createdAt: '2026-10-19T00:00:00Z', amount_c: 700 })];
         await openChat();
         const card = within(await strip()).getByRole('group', { name: 'Bread tx-old' });
-        fireEvent.click(within(card).getByRole('button', { name: 'Release credits for Bread tx-old' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Release Beans for Bread tx-old' }));
         expect(said[0]).toBe('Release 7 Beans to the provider? This action is final.');
         await waitFor(() => expect(completeMarketplaceTransaction).toHaveBeenCalledTimes(1));
         expect(completeMarketplaceTransaction).toHaveBeenCalledWith('tx-old', 'my-pubkey');
@@ -155,7 +155,7 @@ describe('Chat deal strip: the payer', () => {
         vi.spyOn(window, 'confirm').mockImplementation(() => false);
         await openChat();
         const card = within(await strip()).getByRole('group', { name: 'Bread tx-old' });
-        fireEvent.click(within(card).getByRole('button', { name: 'Release credits for Bread tx-old' }));
+        fireEvent.click(within(card).getByRole('button', { name: 'Release Beans for Bread tx-old' }));
         fireEvent.click(within(card).getByRole('button', { name: 'Cancel deal' }));
         expect(completeMarketplaceTransaction).not.toHaveBeenCalled();
         expect(cancelMarketplaceTransaction).not.toHaveBeenCalled();
@@ -314,7 +314,7 @@ describe('Chat list: Action Required counts the deals whose step is mine', () =>
         render(<MessagesPage identity={me} />);
         await screen.findByText('Bob');
         await waitFor(() => expect(chip()).not.toBeNull());
-        expect(chip()!.textContent).toBe('⚡Release Credits (2)');
+        expect(chip()!.textContent).toBe('⚡Release Beans (2)');
     });
 
     it('Beans held for me (I am the payee): no chip, my step is in the world', async () => {
@@ -366,7 +366,7 @@ describe('Chat deal strip in the member\'s language', () => {
         fireEvent.click(await screen.findByText('Bob'));
         const s = await strip();
         expect(within(s).getByText(xx('⏳ Awaiting release'))).toBeInTheDocument();
-        expect(within(s).getAllByRole('button', { name: xx('Release credits for {title}').replace('{title}', 'Bread tx-old') })).toHaveLength(1);
+        expect(within(s).getAllByRole('button', { name: xx('Release Beans for {title}').replace('{title}', 'Bread tx-old') })).toHaveLength(1);
         expect(within(s).getByRole('button', { name: xx('Leave a review for {title}').replace('{title}', 'Bread tx-d') })).toBeInTheDocument();
         expect(bypassing(document.body, { others: ['Bob', 'Bread tx-new', 'Bread tx-s', 'Bread tx-d', 'Bread tx-old'] })).toEqual([]);
     });

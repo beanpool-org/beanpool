@@ -3,6 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
+import { STANDING_ASKS_PER_PERIOD, isHundredths, type StandingAsk } from '@beanpool/core';
 import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
 
 type Db = Database.Database;
@@ -53,6 +54,15 @@ export interface MarketplaceTransaction {
     standingEndedReason?: string | null;
     standingStoppedBy?: string | null;
     standingEndedAt?: string | null;
+    /**
+     * A short week (DESIGN-getting-paid-fable §3, §5), on a running standing deal's current row, for the period due next
+     * (paid) or now due (short): what it costs when it is lowered by agreement (absent at the full price), the payer's ask
+     * still open about it, and how many more asks the payer may make about it. standingAsksLeft is always there on a
+     * running one: an app shows the lowering steps only to a node that takes them (@beanpool/core standingLowerable).
+     */
+    standingDueBeans_c?: number;
+    standingAsk?: StandingAsk | null;
+    standingAsksLeft?: number;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.
 }
@@ -74,10 +84,39 @@ function standingFields(r: any): Partial<MarketplaceTransaction> {
             out.standingEndedReason = r.sdEndedReason ?? null;
             out.standingStoppedBy = r.sdStoppedBy ?? null;
             out.standingEndedAt = r.sdEndedAt ?? null;
+        } else {
+            if (isHundredths(r.sdDueBeans) && r.sdDueBeans >= 0 && r.sdDueBeans < r.sdBeans) out.standingDueBeans_c = r.sdDueBeans;
+            out.standingAsk = askOf(r.sdAsk);
+            out.standingAsksLeft = Math.max(0, STANDING_ASKS_PER_PERIOD - (Number(r.sdAsksMade) || 0));
         }
     }
     return out;
 }
+
+/** The open ask as the read's subquery writes it (json_object), or null. */
+function askOf(raw: unknown): StandingAsk | null {
+    if (typeof raw !== 'string') return null;
+    try {
+        const a = JSON.parse(raw);
+        return a && typeof a.id === 'string' && isHundredths(a.beans_c) && Number.isInteger(a.periodNo)
+            ? { id: a.id, beans_c: a.beans_c, periodNo: a.periodNo, askedAt: String(a.askedAt ?? '') } : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The period due on a running standing deal's current row (the one after the last paid): the smallest agreed lowering of it,
+ * its open ask, and the payer's asks about it (schema.sql standing_period_changes). Read only where the row is a running
+ * one's current period; any other row costs no lookup.
+ */
+const STANDING_DUE_COLUMNS = `
+               CASE WHEN sd.phase IN ('paid', 'short') THEN (SELECT MIN(c.beans_c) FROM standing_period_changes c
+                    WHERE c.standing_id = sd.id AND c.period_no = sd.periods_done + 1 AND c.state = 'agreed') END as sdDueBeans,
+               CASE WHEN sd.phase IN ('paid', 'short') THEN (SELECT json_object('id', c.id, 'beans_c', c.beans_c, 'periodNo', c.period_no, 'askedAt', c.created_at)
+                    FROM standing_period_changes c WHERE c.standing_id = sd.id AND c.period_no = sd.periods_done + 1 AND c.state = 'asked' LIMIT 1) END as sdAsk,
+               CASE WHEN sd.phase IN ('paid', 'short') THEN (SELECT COUNT(*) FROM standing_period_changes c
+                    WHERE c.standing_id = sd.id AND c.period_no = sd.periods_done + 1 AND c.side = 'payer') END as sdAsksMade`;
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
     if (ids.length === 0) return [];
@@ -101,7 +140,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
                sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
                sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
-               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
+               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt,${STANDING_DUE_COLUMNS}
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id
@@ -162,7 +201,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
                sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
                sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
-               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
+               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt,${STANDING_DUE_COLUMNS}
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id

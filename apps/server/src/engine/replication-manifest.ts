@@ -214,10 +214,10 @@ export const TABLES: Record<string, TableEntry> = {
     // `search_keywords` is the main server's too; one it holds empty (a linked community's listing cached before tags
     // slice T2, which now writes them as it caches) is filled by each server's boot backfill alike, from the same words
     // (state-engine.ts backfillSearchKeywords). `tags` and `free_tags` are the main server's verbatim (engine/sync.ts postTags,
-    // postFreeTags).
+    // postFreeTags), and so are a knowledge post's seven columns (engine/sync.ts postKnowledge).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description price_c author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price shown_takes_questions'),
+        columns: cols('id type category title description price_c author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price shown_takes_questions knowledge_sources knowledge_place knowledge_lang knowledge_checked_at knowledge_outdated_at knowledge_outdated_note knowledge_helped'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -357,6 +357,11 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
         columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since from_epoch'),
     },
+    // The "Declined" line of the member who made a group invitation (engine/group-invitations.ts), kept 30 days and read by
+    // that member alone. A standby that takes over starts without them: a sender loses a line that fades in a month.
+    group_invite_declines: {
+        kind: 'local', reason: "a declined invitation, shown to the member who made it for 30 days and to nobody else (engine/group-invitations.ts); a promoted standby starts without them",
+    },
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
         columns: cols('member_pubkey provider join_hash joined_at updated_at join_cohort'),
@@ -411,6 +416,9 @@ export const TABLES: Record<string, TableEntry> = {
     // Standing deals (engine/standing-deals.ts): the arrangement and its signed authorisation. A promoted standby carries
     // on from this row; a standby itself ticks nothing (the tick runs on a main server only).
     standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period_c period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
+    // A short week (engine/standing-deals.ts, DESIGN-getting-paid-fable.md §5): a period lowered, an ask and its answer. A
+    // promoted standby pays each period what was agreed, never the full price of one lowered on the main server.
+    standing_period_changes: plain('id standing_id period_no beans_c side asked_by state answered_by answered_at created_at updated_at'),
     // Bills (engine/bills.ts): a request to pay. A paid one names its ledger row; copied with the ledger (engine/sync.ts
     // LEDGER_SET), so a promoted standby never finds a bill waiting that its main server saw paid.
     bills: plain('id biller_pubkey sent_by payer_pubkey invite_code amount_c what_for post_id standing_id state created_at delivered_at expires_at answered_at ledger_tx_id report_id updated_at'),

@@ -79,7 +79,7 @@ try {
             });
             if (theme === 'light') await page.evaluate(() => document.documentElement.classList.remove('dark'));
             await page.getByRole('button', { name: /Launch Cold-Start Wizard/ }).click();
-            await page.getByRole('button', { name: /Next: Owner & 2FA/ }).click();
+            await page.getByRole('button', { name: /Next: Owners/ }).click();
             await page.getByRole('button', { name: /Next: Create First Enterprise/ }).click();
             await page.getByLabel('Add photo').setInputFiles(PHOTO);
             await page.getByRole('img', { name: 'photo 1' }).waitFor({ timeout: 10000 });

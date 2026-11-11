@@ -1,11 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { FRESH_PROOF_WORDS as W, freshProofRefusalOf, isSecondFactorAsk, isSecondFactorAskOf, refusalOf, t, type FreshProofRefusal } from '../../lib/fresh-proof';
+import { FRESH_PROOF_WORDS as W, freshProofRefusalOf, refusalOf, t, type FreshProofRefusal } from '../../lib/fresh-proof';
 
 /**
  * An owner's fresh proof on a manager screen (lib/fresh-proof.ts; server admin-auth.ts requireFreshProof). A screen's
  * send function takes an optional code and reports the server's answer to `check` (a Response) or `checkError` (a
  * thrown FreshProofRequiredError). When the server asks the proof, the box opens:
- *   the password viewer   a code field; Confirm re-sends the SAME request once with that code. A wrong or spent code
+ *   a typed code          (the old authenticator ask, which the server no longer makes) a code field; Confirm re-sends the SAME request once with that code. A wrong or spent code
  *                         keeps the field open with the server's sentence, and Confirm waits for a different code;
  *   the phone viewer      (a stale Manage hand-off) "Press Manage on your phone again…";
  *   the computer viewer   (a key session from "Sign in with your phone") "Do this from your phone…".
@@ -32,13 +32,6 @@ export interface FreshProof {
     close: () => void;
 }
 
-/**
- * The fleet manager's 2FA prompt (App.tsx promptForTotp), for a request refused because the 4-hour 2FA session ended:
- * that 401 is checkAdminAuth's own, not the fresh proof, and a code typed in the box would never reach it (opus-2028 N4).
- * Single-node Settings provides none: its sign-in is a session cookie.
- */
-export const SecondFactorPromptContext = createContext<(() => void) | undefined>(undefined);
-
 export function useFreshProof(): FreshProof {
     const [refusal, setRefusal] = useState<FreshProofRefusal | null>(null);
     const [lastCode, setLastCode] = useState<string | undefined>(undefined);
@@ -48,7 +41,6 @@ export function useFreshProof(): FreshProof {
     const retryRef = useRef<((code: string) => Promise<unknown>) | null>(null);
     /** The kind on screen now, read synchronously (a retry's answer arrives in the same tick as the click). */
     const kindRef = useRef<FreshProofRefusal['kind'] | null>(null);
-    const askSecondFactor = useContext(SecondFactorPromptContext);
 
     const open = useCallback((r: FreshProofRefusal | null, retry: (code: string) => Promise<unknown>, sentCode?: string) => {
         // Kept only while the box shows: no code outlives the ask it answered (opus-2028 confirm N2).
@@ -73,14 +65,12 @@ export function useFreshProof(): FreshProof {
     }, []);
 
     const check = useCallback(async (res: Response, retry: (code: string) => Promise<unknown>, sentCode?: string) => {
-        if (await isSecondFactorAskOf(res)) askSecondFactor?.();
         return open(await freshProofRefusalOf(res), retry, sentCode);
-    }, [open, askSecondFactor]);
+    }, [open]);
 
     const checkError = useCallback((err: unknown, retry: (code: string) => Promise<unknown>, sentCode?: string) => {
-        if (isSecondFactorAsk(err)) askSecondFactor?.();
         return open(refusalOf(err), retry, sentCode);
-    }, [open, askSecondFactor]);
+    }, [open]);
 
     const submit = useCallback(async (typed: string) => {
         const retry = retryRef.current;
@@ -133,7 +123,7 @@ export function FreshProofBox({ proof, testId = 'fresh-proof', onCancel }: { pro
     if (!refusal) return null;
 
     if (refusal.kind !== 'code') {
-        const sentence = refusal.kind === 'phone' ? t(W.phone) : refusal.kind === 'step-up' ? t(W.stepUp) : t(W.needs2fa);
+        const sentence = refusal.kind === 'phone' ? t(W.phone) : t(W.stepUp);
         return (
             <div ref={(el) => { boxRef.current = el; }} tabIndex={-1}
                 className="mt-3 p-3 rounded-xl border border-amber-500/40 bg-bp-chip-warn-tint text-sm text-bp-chip-warn-ink break-words scroll-mt-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"

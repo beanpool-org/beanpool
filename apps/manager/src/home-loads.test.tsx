@@ -34,7 +34,7 @@ function diagnostics(extra: Record<string, unknown> = {}): Record<string, unknow
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) });
 const refused = (status: number, body: unknown) => Promise.resolve({ ok: false, status, statusText: status === 401 ? 'Unauthorized' : 'Error', json: () => Promise.resolve(body) });
-const NOT_SIGNED_IN = { error: 'Not signed in: no admin session or password was sent', sessionExpired: true, notSignedIn: true };
+const NOT_SIGNED_IN = { error: 'Not signed in: no admin session was sent', sessionExpired: true, notSignedIn: true };
 
 interface NodeStub {
     signedIn: boolean;

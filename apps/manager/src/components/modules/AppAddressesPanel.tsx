@@ -26,8 +26,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { addressStandingText, audienceOf } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import {
-    confirmAppAddress, getAppAddresses, getTfaSessionToken,
-    type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
+    confirmAppAddress, getAppAddresses, type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 
@@ -135,7 +134,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
 
     const load = useCallback(async () => {
         try {
-            const got = asReport(await getAppAddresses(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
+            const got = asReport(await getAppAddresses(activeNode.url, nodeCredential(activeNode)));
             setReport(got);
             setLoadFailed(!got);
         } catch {
@@ -149,7 +148,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
         setBusy(address);
         setActionError(null);
         try {
-            const got = asReport(await confirmAppAddress(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
+            const got = asReport(await confirmAppAddress(activeNode.url, address, nodeCredential(activeNode)));
             if (got) setReport(got); else await load();
             onChanged?.();
         } catch (e) {

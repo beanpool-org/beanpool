@@ -6,7 +6,7 @@
  *  1. At the press (opus-2028 B1): Claim, connector add, the re-key wizard and offboard put the box far from the button
  *     pressed. Right after the press, with NO scrolling by this script, the whole box is on screen (its top, when it is
  *     taller than the screen), the point at the centre of what shows is inside the box (not under a modal), and focus is
- *     in it. 320 @130% and 1280, for the phone's stale hand-off (the sentence) and the password's code (the field).
+ *     in it. 320 @130% and 1280, for the phone's stale hand-off (the sentence) and the typed code (the field, the old authenticator ask, still wired).
  *     Connector Remove and "Replace it" (the recovery code) close a confirm modal around the refusal, with the node
  *     answering at once: going back past the modal's history entry must not scroll the page back to where it stood when
  *     the modal opened (opus-2028 confirm B1). Once no modal is open (closed from the page, or by Back), the page's

@@ -6,7 +6,6 @@ import {
     runOffboxBackupNow,
     listOffboxBackups,
     downloadOffboxBackup,
-    getTfaSessionToken,
     type OffboxStatus,
     type OffboxDestinationStatus,
     type OffboxDestinationInput,
@@ -72,7 +71,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
     const [saving, setSaving] = useState(false);
     const [listing, setListing] = useState<{ id: string; backups: OffboxListedBackup[] } | null>(null);
 
-    const creds = useCallback(() => [nodeCredential(activeNode), getTfaSessionToken(activeNode.id)] as const, [activeNode.id, nodeCredential(activeNode)]);
+    const creds = useCallback(() => [nodeCredential(activeNode)] as const, [activeNode.id, nodeCredential(activeNode)]);
 
     const load = useCallback(async () => {
         try {
@@ -102,7 +101,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
         setSaving(true);
         setMessage(null);
         try {
-            const res = await saveOffboxSettings(activeNode.url, update, ...creds(), ...(code ? [code] : []));
+            const res = await saveOffboxSettings(activeNode.url, update, ...creds(), code);
             proof.close();
             const saved = checked(res.status);
             setStatus(saved);

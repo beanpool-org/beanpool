@@ -14,7 +14,6 @@ import {
     revokeRegistrarClaim,
     downloadAdminFile,
     resolveNodeApiUrl,
-    getTfaSessionToken,
     type HarvesterNodeState,
     type HistoryFileItem,
     type SnapshotItem,
@@ -80,7 +79,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const items = await getRegistrarPending(
                 activeNode?.url,
                 nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setRegistrarAllocations(items);
         } catch (e: unknown) {
@@ -113,7 +111,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 activeNode?.url,
                 name,
                 nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `✅ Approved claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
@@ -130,7 +127,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 activeNode?.url,
                 name,
                 nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `🚫 Rejected claim for domain ${name}.beanpool.org` });
             setConfirmAction(null);
@@ -147,7 +143,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 activeNode?.url,
                 name,
                 nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `⚠️ Revoked active allocation for domain ${name}.beanpool.org` });
             setConfirmAction(null);
@@ -183,7 +178,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const items = await fetchNodeSnapshots(
                 targetSnapshotNode.url,
                 nodeCredential(targetSnapshotNode),
-                getTfaSessionToken(targetSnapshotNode.id),
             );
             setSnapshots(items);
         } catch {
@@ -205,7 +199,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
     /**
-     * These two used to be <a href> links with the admin password on the query string,
+     * These two used to be <a href> links with the credential on the query string,
      * which put a live credential in the DOM and in browser history — and one of them
      * serves the node's identity keys. A link cannot send a header, so they are fetches
      * now, which also means failures can be reported instead of opening a tab containing
@@ -231,7 +225,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 kind === 'db'
                     ? `beanpool-backup-${slug}.tar.gz`
                     : `identity-bundle-${slug}.tar.gz`,
-                node ? getTfaSessionToken(node.id) : undefined,
             );
             const said = downloadedAlert(`The backup held for ${slug}`, notice);
             if (said) alert(said);
@@ -239,7 +232,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const msg = e instanceof Error ? e.message : String(e);
             // "Failed to fetch" is what a browser says when the request never got an answer
             // at all, and on its own it leaves the operator unable to tell that from a
-            // rejected password. These endpoints are same-origin — served by the node this
+            // rejected token. These endpoints are same-origin — served by the node this
             // dashboard is loaded from, or proxied there in dev — so there is no CORS
             // preflight in the picture and no remote hop to blame: it means the backend
             // behind this page did not respond.
@@ -273,7 +266,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 { name: snapName },
                 nodeCredential(targetSnapshotNode),
                 snapName,
-                getTfaSessionToken(targetSnapshotNode.id),
             );
             const said = downloadedAlert(snapName, notice);
             if (said) alert(said);
@@ -291,7 +283,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                 { nodeId, filename },
                 nodeCredential(historyNode),
                 filename,
-                historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
             const said = downloadedAlert(filename, notice);
             if (said) alert(said);
@@ -323,7 +314,6 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await createNodeSnapshot(
                 targetSnapshotNode.url,
                 nodeCredential(targetSnapshotNode),
-                getTfaSessionToken(targetSnapshotNode.id),
             );
             await loadSnapshots();
         } catch (e: unknown) {
@@ -341,7 +331,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setCadenceSaving(true);
         setCadenceMsg(null);
         try {
-            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, nodeCredential(activeNode));
             setCadenceMsg('✅ Replication cadence updated!');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -356,7 +346,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!activeNode || !(await ask({ title: `Force a full resync for ${activeNode.name}?`, body: 'The standby discards the rows it copied that drifted, and copies them again from the main server.', confirmLabel: 'Resync' }))) return;
         setResyncing(true);
         try {
-            await forceNodeResync(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            await forceNodeResync(activeNode.url, nodeCredential(activeNode));
             alert('Replication resync requested.');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -894,7 +884,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <div className="font-bold text-sky-400 text-sm">Step 1: Download Node Backups from Manager</div>
                             <p className="text-nature-400">
                                 Click <strong className="text-white">⬇ DB</strong> and <strong className="text-white">🔑 Identity</strong> on the Harvested Fleet Backups tab to download the latest SQLite database (<code className="text-amber-400">state.db</code>) and cryptographic keys (<code className="text-emerald-400">identity-bundle.tar.gz</code>).
-                                The keys are collected only for nodes whose admin password is saved here: a replication token copies the database but never the keys, so a token-only node shows <strong className="text-amber-400">Partial</strong>.
+                                The keys are collected only for nodes with an owner automation token saved here: a replication token copies the database but never the keys, so a node with only that shows <strong className="text-amber-400">Partial</strong>.
                             </p>
                         </div>
 

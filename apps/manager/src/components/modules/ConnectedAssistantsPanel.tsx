@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { useInPageConfirm } from '../common/InPageConfirm';
@@ -14,7 +14,7 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  * every connected assistant and can disconnect any; an admin sees and disconnects their own. "What it sees" runs the very
  * tools the assistant would, so the answer shown is the answer it gets. An owner can turn AI assistants off.
  *
- * Only an owner's KEY session connects one (an assistant acts for a member; the password is nobody's). Admins connect
+ * Only an owner's KEY session connects one (an assistant acts for a member; a token is nobody's). Admins connect
  * theirs with the phone's approval once that lands (S2, OAuth); until then the card tells them so and offers no Connect
  * button, and "What would my assistant see?" still shows what theirs will read. The token is shown
  * ONCE: it lives in this component's state and nowhere else (never web storage, a log or the list), appears in the page
@@ -122,11 +122,11 @@ function commandLine(mcpUrl: string, token: string): string {
     return `claude mcp add --transport http beanpool ${mcpUrl} --header "Authorization: Bearer ${token}"`;
 }
 
-export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'password' } }: ConnectedAssistantsPanelProps) {
+export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'token' } }: ConnectedAssistantsPanelProps) {
     // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
     const [ask, confirmation] = useInPageConfirm();
-    const drawn = viewer.kind === 'password' || viewer.role === 'owner' || viewer.role === 'admin';
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+    const drawn = viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin';
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
 
     const [data, setData] = useState<GrantsAnswer | null>(null);
     const [listMessage, setListMessage] = useState('');
@@ -161,7 +161,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const [previewMessage, setPreviewMessage] = useState('');
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 
@@ -639,7 +639,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
                             <p className="text-[11px] text-amber-300 m-0 break-words">
-                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}{shownCanModerate ? ', and can take posts down' : ''}.
+                                Copy the token now: it is not shown again. Keep it private: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}{shownCanModerate ? ', and can take posts down' : ''}.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
                                 <button
@@ -668,7 +668,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                     ) : !data.canConnect ? (
                         data.role === 'owner' ? (
                             <p className="text-xs text-nature-400 m-0 break-words" data-testid="agent-needs-key">
-                                An assistant acts for a member, so it is connected with your own key, never the password: use Manage in the app, or
+                                An assistant acts for a member, so it is connected with your own key, never a token: use Manage in the app, or
                                 sign in on a computer by scanning a code.
                             </p>
                         ) : (

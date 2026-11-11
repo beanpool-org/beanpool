@@ -11,7 +11,6 @@ import { nodeCredential } from '../../lib/profiles';
 interface EnterpriseLocationPickerProps {
     treasury: NodeTreasury;
     activeNode: NodeProfile;
-    effectiveTfaToken?: string;
     onLocationSaved: (lat: number | null, lng: number | null) => void;
     onClose: () => void;
 }
@@ -19,7 +18,6 @@ interface EnterpriseLocationPickerProps {
 export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> = ({
     treasury,
     activeNode,
-    effectiveTfaToken,
     onLocationSaved,
     onClose,
 }) => {
@@ -150,8 +148,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 activeNode.url,
                 treasury.publicKey,
                 { lat, lng },
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
             onLocationSaved(res.lat, res.lng);
             onClose();
@@ -169,8 +166,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             await clearEnterpriseLocation(
                 activeNode.url,
                 treasury.publicKey,
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
             setLat(null);
             setLng(null);

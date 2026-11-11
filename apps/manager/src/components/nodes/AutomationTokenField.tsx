@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { isAutomationToken } from '../../lib/node-client';
 
 /**
- * A node profile's automation token (node sign-in step 7b-1): masked, pasted, held in this page's memory only like the
- * password (profiles.ts). When set, it is the only credential the profile's requests carry.
+ * A node profile's automation token (node sign-in step 7b-1): masked, pasted, held in this page's memory only
+ * (profiles.ts). When set, it is the only credential the profile's requests carry.
  */
 export function AutomationTokenField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
     const [show, setShow] = useState(false);
@@ -61,8 +61,8 @@ export function AutomationTokenField({ value, onChange }: { value: string; onCha
                     In this node&rsquo;s Settings, under Automation tokens, made from your phone: open Settings with Manage in
                     the BeanPool app, or sign in on a computer by scanning the code with the app, as an owner. Pick what it may
                     do, then Make a token. It is shown once: copy it and paste it here. It stays in this page only and is asked again after a reload.
-                    With a token, the password is not sent. A token never makes an owner-only change (owners, 2FA, the public
-                    address, take-over, restoring): for those the manager says so and sends you to sign in with your phone.
+                    A token never makes an owner-only change (owners, the public address, take-over, restoring): for those the
+                    manager says so and sends you to sign in with your phone.
                 </p>
             </details>
         </div>

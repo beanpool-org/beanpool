@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
-import { FreshProofBox, SecondFactorPromptContext, useFreshProof } from './FreshProofBox';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import * as freshProofBox from './FreshProofBox';
+import { FreshProofBox, useFreshProof } from './FreshProofBox';
 import { FreshProofRequiredError, throwIfFreshProof } from '../../lib/fresh-proof';
 
 const ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to change who is an owner or admin', totpRequired: true };
@@ -178,25 +179,19 @@ describe('FreshProofBox words (opus-2028 N2)', () => {
     });
 });
 
-describe("checkAdminAuth's own 2FA ask is not the box (opus-2028 N4)", () => {
-    it('a 401 "2FA code required" opens the 2FA prompt, not the code box', async () => {
-        const prompt = vi.fn();
-        render(
-            <SecondFactorPromptContext.Provider value={prompt}>
-                <Screen sent={[]} answers={[{ status: 401, body: { error: '2FA code required', totpRequired: true } }]} />
-            </SecondFactorPromptContext.Provider>,
-        );
-        await act(async () => { fireEvent.click(screen.getByText('Remove admin')); });
-        await waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
-        expect(screen.queryByTestId('p-code')).toBeNull();
+describe('there is no fleet 2FA prompt any more', () => {
+    it('the module offers no second-factor prompt context: a node has no 2FA session to end', () => {
+        expect('SecondFactorPromptContext' in freshProofBox).toBe(false);
     });
 
-    it("a node-client helper throws it as its own error (the sentence kept), never FreshProofRequiredError", () => {
-        let thrown: unknown;
-        try { throwIfFreshProof(401, { error: '2FA code required', totpRequired: true }); } catch (e) { thrown = e; }
-        expect(thrown).toBeInstanceOf(Error);
-        expect(thrown).not.toBeInstanceOf(FreshProofRequiredError);
-        expect((thrown as Error).message).toBe('2FA code required');
+    it('a 401 "2FA code required" is an ordinary typed-code ask now, opening the code box and not a 2FA prompt', async () => {
+        render(<Screen sent={[]} answers={[{ status: 401, body: { error: '2FA code required', totpRequired: true } }]} />);
+        fireEvent.click(screen.getByText('Remove admin'));
+        expect(await screen.findByTestId('p-code')).toHaveTextContent('2FA code required');
+    });
+
+    it("a node-client helper throws every typed-code ask as FreshProofRequiredError, with no second-factor error class beside it", () => {
         expect(() => throwIfFreshProof(401, ASK)).toThrow(FreshProofRequiredError);
+        expect(() => throwIfFreshProof(401, { error: '2FA code required', totpRequired: true })).toThrow(FreshProofRequiredError);
     });
 });

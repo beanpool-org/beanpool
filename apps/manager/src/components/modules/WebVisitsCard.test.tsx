@@ -11,7 +11,7 @@ vi.mock('../../lib/node-client', async () => {
     return { ...actual, fetchWebVisits: vi.fn() };
 });
 
-const node: NodeProfile = { id: 'node-1', name: 'Node Alpha', url: 'https://alpha.beanpool.org', adminPassword: 'pw-alpha' };
+const node: NodeProfile = { id: 'node-1', name: 'Node Alpha', url: 'https://alpha.beanpool.org', automationToken: 'pw-alpha' };
 
 /** 30 days ending 2026-09-29, oldest first, as the node sends them. */
 function series(visitsOf: (i: number) => number, uniquesOf: (i: number) => number = (i) => Math.ceil(visitsOf(i) / 2)): WebVisitDay[] {
@@ -37,7 +37,7 @@ describe('WebVisitsCard', () => {
         render(<WebVisitsCard node={node} />);
         expect(screen.getByRole('heading', { name: /Web app visits/i })).toBeInTheDocument();
         expect(screen.getByText('Counting…')).toBeInTheDocument();
-        expect(nodeClient.fetchWebVisits).toHaveBeenCalledWith('https://alpha.beanpool.org', 'pw-alpha', 30, undefined);
+        expect(nodeClient.fetchWebVisits).toHaveBeenCalledWith('https://alpha.beanpool.org', 'pw-alpha', 30);
     });
 
     it("renders with data: today's number, visitors, a sparkline ending on today, the 30-day total and a table", async () => {

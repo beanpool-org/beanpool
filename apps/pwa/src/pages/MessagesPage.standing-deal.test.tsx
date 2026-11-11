@@ -171,7 +171,7 @@ describe("the web chat: a standing deal's rows never show Release, Cancel or Hol
         render(<MessagesPage identity={me} />);
         fireEvent.click(await screen.findByText('Bob'));
         await screen.findByText(/Trust Hold/);
-        expect(holdButtons()).toEqual(['✅ Release Credits', 'Cancel']);
+        expect(holdButtons()).toEqual(['✅ Release Beans', 'Cancel']);
     });
 
     it("reviewed once: the first period asks for a review; a later period's line and strip ask nothing", async () => {

@@ -9,7 +9,7 @@ import { guardTokenFetch } from '../../lib/token-guard';
 import * as nodeClient from '../../lib/node-client';
 
 const TOKEN = `bp_${'c3'.repeat(6)}_${'9d'.repeat(32)}`;
-const node = { id: 'node-1', name: 'Primary Node', url: 'https://primary.example', adminPassword: 'pass123' };
+const node = { id: 'node-1', name: 'Primary Node', url: 'https://primary.example' };
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -24,7 +24,7 @@ describe('the token field', () => {
         expect(document.querySelectorAll('input[type="password"]')).toHaveLength(1);
         await userEvent.click(screen.getByText('Save Settings'));
         expect(onSave).toHaveBeenCalledWith('node-1', expect.objectContaining({ automationToken: TOKEN }));
-        expect(onSave.mock.calls[0][1]).not.toHaveProperty('adminPassword');
+        expect(onSave.mock.calls[0][1]).not.toHaveProperty('credential');
     });
 
     it('refuses something that is not a token, and saves nothing', async () => {

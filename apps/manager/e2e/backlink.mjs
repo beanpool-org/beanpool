@@ -70,7 +70,7 @@ try {
                 check(mb && mb.height >= 48, `${tag}: menu link is at least 48px tall`);
                 const prof = menu.getByRole('link', { name: 'View my profile' });
                 check(o.profile ? (await prof.getAttribute('href')) === o.profile : (await prof.count()) === 0,
-                    `${tag}: View my profile ${o.profile ? `→ ${o.profile}` : o.why ?? 'hidden under the password'}`);
+                    `${tag}: View my profile ${o.profile ? `→ ${o.profile}` : o.why ?? 'hidden for a token profile'}`);
                 await shot(page, `back-${o.from}-360-menu`);
             } else {
                 const aside = page.locator('#settings-sidebar');
@@ -78,7 +78,7 @@ try {
                 check((await back.getAttribute('href')) === o.href, `${tag}: sidebar has "${o.label}" → ${o.href}`);
                 const prof = aside.getByRole('link', { name: 'View my profile' });
                 check(o.profile ? (await prof.getAttribute('href')) === o.profile : (await prof.count()) === 0,
-                    `${tag}: View my profile ${o.profile ? `→ ${o.profile}` : o.why ?? 'hidden under the password'}`);
+                    `${tag}: View my profile ${o.profile ? `→ ${o.profile}` : o.why ?? 'hidden for a token profile'}`);
                 await shot(page, `back-${o.from}-1280`);
             }
 

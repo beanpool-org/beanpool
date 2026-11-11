@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { restoreDoneWords } from '../../lib/restore-words';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 
 /**
  * Restore → a locked backup (`.bpsealed`, sealed-keys.md §6.2). The server has read the file's public header and said
@@ -13,8 +12,8 @@ import { passwordField } from '../../lib/node-client';
  * same, #2017: a file's code and owner stanzas are whoever sealed it, so "it opened" proves nothing about this
  * community), says what is lost and that a restore point is taken first, then asks for one way to open it: the printed
  * recovery code (X-Recovery-Code), or an owner's phone (the file waits on the server, the owner scans a QR, the phone
- * opens it for this server). A backup's keys bring back the community's admin password, so this server's own stops
- * working part-way: the phone path follows the restore with the one-time follow token the upload answered, and says
+ * opens it for this server). A backup's keys bring back the community's owners, so this server's own sign-ins end
+ * part-way: the phone path follows the restore with the one-time follow token the upload answered, and says
  * "restarting" when the server goes quiet.
  */
 
@@ -80,7 +79,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
         (async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-enroll'), {
-                    method: 'GET', headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    method: 'GET', headers: buildAdminHeaders(nodeCredential(activeNode)),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
@@ -97,7 +96,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     }, [activeNode]);
 
     const upload = async (extra: Record<string, string>) => {
-        const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+        const headers = buildAdminHeaders(nodeCredential(activeNode));
         delete headers['Content-Type'];
         const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore'), {
             method: 'POST', headers: { ...headers, ...extra }, body: file,
@@ -173,8 +172,8 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     const cancel = () => {
         if (phone) {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/unlock/cancel'), {
-                method: 'POST', headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
+                method: 'POST', headers: buildAdminHeaders(nodeCredential(activeNode)),
+                body: JSON.stringify({ sessionId: phone.sessionId }),
             }).catch(() => {});
         }
         onCancel();

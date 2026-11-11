@@ -690,7 +690,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
         // One live line per short standing deal, per side (DESIGN-standing-deals-upfront-amend-fable §2), written from the row
         // on every answer, so its "N days overdue" moves with the clock and nothing is kept; it leaves the moment the period
         // is paid or the deal ends, and no ✕ or Clear all touches it. The payer's is their step (amber, counted); the
-        // payee's is listed, calm. Its target is the deal, which the apps' own builders dedupe against by txId.
+        // payee's is listed, calm. Its target is the deal, which the apps' own builders dedupe against by txId. And the
+        // payee's line while the payer asks to pay less for a period (DESIGN-getting-paid-fable §3.3): their step, amber and
+        // counted, gone once it is answered, taken back or closed (the read's standingAsk, core standingAskNeedsLine).
         for (const line of standingNeedsLines(open, me, c.now, homeDay)) {
             if (!line.txId || !line.postId) continue;
             items.push({ kind: 'deal', count: 1, accent: line.accent, label: clip(line.label, LINE_CHARS), target: { to: 'deal', postId: line.postId, txId: line.txId } });

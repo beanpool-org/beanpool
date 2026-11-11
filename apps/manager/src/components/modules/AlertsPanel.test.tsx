@@ -6,7 +6,7 @@ import { AlertsPanel } from './AlertsPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import type { AlertsStatus } from '../../lib/node-client';
 
-const node: NodeProfile = { id: 'node-1', name: 'Node', url: 'https://node.example.com', adminPassword: 'pw-owner' };
+const node: NodeProfile = { id: 'node-1', name: 'Node', url: 'https://node.example.com', automationToken: 'pw-owner' };
 
 function status(over: Partial<AlertsStatus>): AlertsStatus {
     return {

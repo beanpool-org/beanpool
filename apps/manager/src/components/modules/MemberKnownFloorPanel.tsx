@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useState } from 'react';
 import { isHundredths } from '@beanpool/core';
-import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from '../../lib/node-client';
+import { buildAdminHeaders, resolveNodeApiUrl } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import { beansFigure, beansRefusalText, parseBeans } from '../../lib/beans';
 
@@ -17,7 +17,7 @@ import { beansFigure, beansRefusalText, parseBeans } from '../../lib/beans';
  * whole hundredths of a Bean (server config/known-floor.ts knownFloorForMember: `knownFloor_c`, `creditCap_c`, the
  * exception's `amount_c`, and `knownGrant` under its old name; the log keeps each value as hundredths text, '30000' for 300
  * Beans), and a change is sent as `amount_c` (setKnownFloorException). Where the node
- * would refuse a change (`changeRefused`: a password or token sign-in, or the admin's own line), the controls are not
+ * would refuse a change (`changeRefused`: a token sign-in, or the admin's own line), the controls are not
  * shown and one line says why. A node older than this, a viewer who isn't an owner or admin, or a community with the dial
  * off: nothing is shown.
  *
@@ -66,7 +66,7 @@ export function readMemberKnownFloor(v: unknown): MemberKnownFloor | null {
 
 /** Why the controls aren't there, in one line: what the node would answer a change from this sign-in. */
 export const CHANGE_REFUSED_TEXT: Record<ChangeRefused, string> = {
-    key_session_only: "Sign in with your own key to change it: the node password and automation tokens can't.",
+    key_session_only: "Sign in with your own key to change it: automation tokens can't.",
     own_floor: 'Another admin or the owner sets your own known floor.',
 };
 
@@ -87,7 +87,7 @@ const LOG_VERBS: Record<string, string> = {
 
 /** One log line in plain words: "Ada raised it from the community default (1,000 Beans) to 2,000 Beans". */
 export function describeKnownFloorLogLine(l: KnownFloorLogLine, knownFloor_c: number): string {
-    const who = l.actorCallsign || (/^[0-9a-f]{64}$/.test(l.actor) ? `${l.actor.slice(0, 8)}…` : 'The node password');
+    const who = l.actorCallsign || (/^[0-9a-f]{64}$/.test(l.actor) ? `${l.actor.slice(0, 8)}…` : 'The node itself');
     const verb = LOG_VERBS[l.action] ?? l.action.replace(/_/g, ' ');
     return `${who} ${verb}: from ${logValue(l.oldValue, knownFloor_c)} to ${logValue(l.newValue, knownFloor_c)}`;
 }
@@ -117,13 +117,12 @@ interface Props {
     nodeUrl: string;
     pubkey: string;
     displayName: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     /** After a change the node accepted: the member's exception now (null = the community default). */
     onChanged?: (pubkey: string, exception: KnownFloorException | null) => void;
 }
 
-export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassword, tfaToken, onChanged }: Props) {
+export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, credential, onChanged }: Props) {
     const [line, setLine] = useState<MemberKnownFloor | null>(null);
     const [amount, setAmount] = useState('');
     const [pending, setPending] = useState<Pending | null>(null);
@@ -133,11 +132,11 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
 
     const load = useCallback(async (): Promise<MemberKnownFloor | null> => {
         const res = await fetch(resolveNodeApiUrl(nodeUrl, `/api/local/admin/known-floor/member/${encodeURIComponent(pubkey)}`), {
-            headers: buildAdminHeaders(adminPassword, tfaToken),
+            headers: buildAdminHeaders(credential),
         }).catch(() => null);
         if (!res || !res.ok) return null;
         return readMemberKnownFloor(await res.json().catch(() => null));
-    }, [nodeUrl, pubkey, adminPassword, tfaToken]);
+    }, [nodeUrl, pubkey, credential]);
 
     useEffect(() => {
         let mounted = true;
@@ -182,15 +181,14 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
         try {
             const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/known-floor/exception'), {
                 method: 'POST',
-                headers: buildAdminHeaders(adminPassword, tfaToken),
-                body: JSON.stringify({ ...passwordField(adminPassword), memberPubkey: pubkey, ...body }),
+                headers: buildAdminHeaders(credential),
+                body: JSON.stringify({ memberPubkey: pubkey, ...body }),
             });
-            const data = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown; exception?: unknown };
+            const data = await res.json().catch(() => ({})) as { error?: unknown; exception?: unknown };
             if (!res.ok) {
                 setStatus({
                     kind: 'error',
-                    text: data.totpRequired === true ? '2FA session expired. Please re-authenticate.'
-                        : typeof data.error === 'string' && data.error.trim() ? data.error : 'Not changed: the node refused.',
+                    text: typeof data.error === 'string' && data.error.trim() ? data.error : 'Not changed: the node refused.',
                 });
                 return;
             }

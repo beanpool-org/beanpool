@@ -9,7 +9,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * /api/local/admin/directory/promise); nothing here reaches a node. The headline is the node's own word (`kept`), the two
  * measured lines are shown and never ticked, the two ticked lines and the closing day are an owner's.
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', automationToken: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 function status(over: Partial<PromiseStatus> = {}): PromiseStatus {

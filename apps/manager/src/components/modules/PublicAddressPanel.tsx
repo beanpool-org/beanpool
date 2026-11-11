@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ADDRESS_SCREEN_WORDS } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 import { proofField } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import type { RolesViewer } from './NodeRolesPanel';
@@ -26,7 +25,7 @@ export interface PublicAddressStatus {
     hostname?: string;
     mode?: 'tunnel' | 'direct' | string;
     tunnelToken?: string;
-    /** The server has a tunnel token but shows it only to an owner (the admin password counts as one). */
+    /** The server has a tunnel token but shows it only to an owner. */
     tunnelTokenOwnerOnly?: boolean;
     pubkey?: string;
     cached?: boolean;
@@ -195,8 +194,8 @@ interface ExtraName { name: string; hostname?: string; state?: string | null; re
  */
 const stillWorks = (n: ExtraName): boolean => n.state === 'live' && !n.fromInstall;
 
-export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' }, onStatus, onChanged, refreshSignal = 0, claiming = false }: PublicAddressPanelProps) {
-    const isOwnerViewer = viewer.kind === 'password' || viewer.role === 'owner';
+export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind: 'token' }, onStatus, onChanged, refreshSignal = 0, claiming = false }: PublicAddressPanelProps) {
+    const isOwnerViewer = viewer.kind === 'token' || viewer.role === 'owner';
     // Take offline, Release and a claim while the node publishes an address ask an owner's fresh proof each time (server requireFreshProof).
     const proof = useFreshProof();
     const [statusData, setStatusData] = useState<PublicAddressStatus | null>(null);
@@ -246,7 +245,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/logs');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
             });
             if (res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -293,7 +292,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/notices');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
             });
             const data = res.ok ? await res.json().catch(() => ({})) : {};
             setNotices(Array.isArray(data?.notices)
@@ -310,7 +309,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/status');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
             });
             const data: PublicAddressStatus = await res.json().catch(() => ({ status: 'error', error: 'Invalid JSON response' }));
             if (res.ok) {
@@ -339,7 +338,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/extra-names');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
             });
             const data = res.ok ? await res.json().catch(() => ({})) : {};
             setExtraNames(Array.isArray(data?.names) ? data.names.filter((n: ExtraName) => typeof n?.name === 'string') : []);
@@ -355,10 +354,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ name, ...passwordField(nodeCredential(activeNode)), ...proofField(code) }),
+                body: JSON.stringify({ name, ...proofField(code) }),
             });
             if (await proof.check(res, (c) => releaseExtraName(name, c), code)) return;
             const data = await res.json().catch(() => ({}));
@@ -490,10 +489,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), ...proofField(code) }),
+                body: JSON.stringify({ ...proofField(code) }),
             });
             if (await proof.check(res, (c) => takeOffline(c), code)) {
                 setActionMessage(null);
@@ -540,10 +539,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                    body: JSON.stringify({}),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
@@ -567,10 +566,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag, viewer = { kind:
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                    body: JSON.stringify({}),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {

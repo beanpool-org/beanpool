@@ -11,7 +11,7 @@ This is the page for the day itself. One tired person can do it from here: one a
 
 **What works today, and what comes with the next release.** Today: the laptop becomes your community (path A or path B), and you reach Settings on the laptop's own screen. **Coming with the next release:** the lights-out switch, the hall door in the BeanPool app, the poster page and the banner on members' phones. Steps marked **Coming with the next release** do not work yet. Until they ship, phones cannot join the hall; the laptop can only hold the community's record.
 
-**One more thing that is true today.** Signing in to the laptop's Settings with no internet needs the admin password. A community that has none, which is every new community, needs the owner's phone to reach the laptop, and that is what the hall door is for. So until it ships, path A cannot be counted on with no internet for such a community, and path B can: it needs no sign-in at all. This is why Before the lights go out asks you to keep a locked backup file on the laptop as well.
+**One more thing that is true today.** Signing in to the laptop's Settings with no internet needs the owner's phone to reach the laptop, and that is what the hall door is for. So until it ships, path A cannot be counted on with no internet, and path B can: it needs no sign-in at all. This is why Before the lights go out asks you to keep a locked backup file on the laptop as well.
 
 **Two rules before you start.**
 
@@ -20,7 +20,7 @@ This is the page for the day itself. One tired person can do it from here: one a
 
 ## Choose your path
 
-- **Path A: the laptop was your standby.** The record is about a minute old. Use it if you made the laptop your standby (the second of the three must-haves in Before the lights go out), and your community still has an admin password or the hall door has shipped.
+- **Path A: the laptop was your standby.** The record is about a minute old. Use it if you made the laptop your standby (the second of the three must-haves in Before the lights go out), and the hall door has shipped.
 - **Path B: you have a locked backup file.** The record is as old as the file. Use it if the laptop was never your standby, or if path A cannot sign in.
 
 Do one, never both. Both start the same way.
@@ -59,7 +59,7 @@ This way needs no phone and no Settings, so it works on a laptop nobody can sign
 - **Step 4.** If you saw "Type yes to go on:", type yes and press Enter. Type nothing else there, and never the recovery code: this question shows what you type. The warning is true of this laptop, because it made a community of its own when it first started, and the backup replaces it. You see: a request for the recovery code, with "not shown as you type" beside it. If you saw that request at once, carry on.
 - **Step 5.** Type the recovery code at the prompt that says it is not shown as you type, and nowhere else. Never put it on the command line. You see: the restore finishes and says what it brought back.
 - **Step 6.** Make the laptop the main server, now that the restore is done. In the file named .env, in the folder with docker-compose.yml, change the line NODE_ROLE=backup to NODE_ROLE=primary. Do it after the restore, never before: the restore knows the file came from your main server only while the laptop is still a standby. The restore does not change the role itself, and a standby refuses every trade and send. You see: the line in the file now reads NODE_ROLE=primary. If there is no NODE_ROLE line, carry on.
-- **Step 7.** Run docker compose up -d. You see: beanpool-node running again. It is now the community, with the same server key, and with the old admin password and two-factor sign-in if the community had them. Everyone who opens the app is told the community was restored from a backup, and the day it was made.
+- **Step 7.** Run docker compose up -d. You see: beanpool-node running again. It is now the community, with the same server key and the owners that were in the file. Everyone who opens the app is told the community was restored from a backup, and the day it was made.
 - **Step 8.** Coming with the next release: turn lights-out on (below). It needs the owner's way in below, or the laptop's shell.
 - **Step 9.** Show the poster, and say the record's age out loud (below).
 
@@ -69,11 +69,10 @@ The community's owners come back with the file. If nobody can sign in afterwards
 
 ## Reaching Settings and the switch with no internet
 
-The switch (coming with the next release) is an owner's alone. It answers an owner's key, the admin password or the laptop's shell, and nobody else: a member's phone is refused, and so is a stranger on the Wi-Fi. These ways need no internet, from the one that needs least to the one that needs most:
+The switch (coming with the next release) is an owner's alone. It answers an owner's key or the laptop's shell, and nobody else: a member's phone is refused, and so is a stranger on the Wi-Fi. These ways need no internet, from the one that needs least to the one that needs most:
 
 - **The laptop's shell.** Coming with the next release: docker compose exec beanpool-node beanpool lights-out on, and off, and status. It needs nothing but the laptop. Whoever can run it already holds the data folder, and the log keeps a SECURITY line.
-- **Settings on the laptop itself, with the admin password**, at http://127.0.0.1:8080/settings, if your community still has an admin password. This address always answers on the laptop itself. After the password, Settings asks for the authenticator's code. It comes from the authenticator app on a phone and needs no internet, because it counts time.
-- **Settings on the laptop itself, with your phone.** Open the same address and scan the code the sign-in page shows (see On a computer, with your phone, in Signing in). The phone has to reach the laptop, which is what the hall door is for. Coming with the next release.
+- **Settings on the laptop itself, with your phone.** Open http://127.0.0.1:8080/settings on the laptop: this address always answers on the laptop itself. Scan the code the sign-in page shows (see On a computer, with your phone, in Signing in). The phone has to reach the laptop, which is what the hall door is for. Coming with the next release.
 - **The app's Manage button**, on an owner's phone. Coming with the next release: a row, **Lights-out: the hall laptop**, with the address the laptop reports and the record's age.
 - **If every owner's key is gone,** the laptop's shell makes you an owner: docker compose exec beanpool-node beanpool recover --key @callsign.
 

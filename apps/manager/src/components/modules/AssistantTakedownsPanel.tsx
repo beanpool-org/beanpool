@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
@@ -80,8 +80,8 @@ const removeWarning = (p: PostLine) => {
 };
 const SINCE_CHOICES = [{ days: 1, label: 'the last day' }, { days: 2, label: 'the last 2 days' }, { days: 7, label: 'the last 7 days' }];
 
-export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password' }, onChanged }: AssistantTakedownsPanelProps) {
-    const drawn = viewer.kind === 'password' || viewer.role === 'owner' || viewer.role === 'admin';
+export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'token' }, onChanged }: AssistantTakedownsPanelProps) {
+    const drawn = viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin';
     const [data, setData] = useState<Answer | null>(null);
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
@@ -91,7 +91,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
     const removeProof = useFreshProof();
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 

@@ -44,7 +44,7 @@ const mockActiveNode: NodeProfile = {
     id: 'test-node-1',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'secret-admin-password',
+    automationToken: 'secret-admin-password',
 };
 
 const mockTreasuryWithCoords: NodeTreasury = {
@@ -77,7 +77,6 @@ describe('EnterpriseLocationPicker Component', () => {
             <EnterpriseLocationPicker
                 treasury={mockTreasuryWithCoords}
                 activeNode={mockActiveNode}
-                effectiveTfaToken="tfa-session-token"
                 onLocationSaved={vi.fn()}
                 onClose={vi.fn()}
             />
@@ -166,7 +165,6 @@ describe('EnterpriseLocationPicker Component', () => {
             <EnterpriseLocationPicker
                 treasury={mockTreasuryWithCoords}
                 activeNode={mockActiveNode}
-                effectiveTfaToken="tfa-session-token"
                 onLocationSaved={onLocationSaved}
                 onClose={onClose}
             />
@@ -182,7 +180,6 @@ describe('EnterpriseLocationPicker Component', () => {
             'pubkey-12345',
             { lat: -28.55, lng: 153.50 },
             'secret-admin-password',
-            'tfa-session-token'
         );
 
         expect(onLocationSaved).toHaveBeenCalledWith(-28.55, 153.50);
@@ -254,7 +251,6 @@ describe('EnterpriseLocationPicker Component', () => {
             <EnterpriseLocationPicker
                 treasury={mockTreasuryWithCoords}
                 activeNode={mockActiveNode}
-                effectiveTfaToken="tfa-session-token"
                 onLocationSaved={onLocationSaved}
                 onClose={onClose}
             />
@@ -269,7 +265,6 @@ describe('EnterpriseLocationPicker Component', () => {
             'https://test-node.local',
             'pubkey-12345',
             'secret-admin-password',
-            'tfa-session-token'
         );
 
         expect(onLocationSaved).toHaveBeenCalledWith(null, null);

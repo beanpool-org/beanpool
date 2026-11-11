@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { TIER_LEVELS, isHundredths, tierForCredit, tierIndexForName } from '@beanpool/core';
 import { beansFigure } from '../../lib/beans';
 import type { NodeProfile } from '../../lib/profiles';
-import { pruneInviteBranch, fetchBranchPruneFigures, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
+import { pruneInviteBranch, fetchBranchPruneFigures, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
 import { LoadMoreRow } from '../../lib/node-data-pages';
 import { nodeCredential } from '../../lib/profiles';
@@ -312,7 +312,6 @@ export function AncestryTreePanel({
                 activeNode.url,
                 pubkey,
                 nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id),
                 ...proof
             );
             onRefresh?.();
@@ -716,7 +715,7 @@ export function AncestryTreePanel({
                         pubkey: pruneTarget.pubkey,
                         callsign: pruneTarget.callsign,
                     }}
-                    loadFigures={(pk) => fetchBranchPruneFigures(activeNode.url, pk, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))}
+                    loadFigures={(pk) => fetchBranchPruneFigures(activeNode.url, pk, nodeCredential(activeNode))}
                     onClose={() => setPruneTarget(null)}
                     onConfirm={handleExecutePrune}
                 />

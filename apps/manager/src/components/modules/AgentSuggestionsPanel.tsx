@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 import { POST_ON_HOLD_WORDS } from '../../lib/post-on-hold-words';
 import type { RolesViewer } from './NodeRolesPanel';
@@ -58,14 +58,14 @@ function hoursLeft(expiresAt: number, now = Date.now()): string {
     return h <= 1 ? 'less than an hour' : `${h} hours`;
 }
 
-export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' }, onChanged }: AgentSuggestionsPanelProps) {
-    const drawn = viewer.kind === 'password' || viewer.role === 'owner' || viewer.role === 'admin';
+export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'token' }, onChanged }: AgentSuggestionsPanelProps) {
+    const drawn = viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin';
     const [items, setItems] = useState<SuggestionCard[] | null>(null);
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState<string | null>(null);
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 
@@ -153,10 +153,10 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                             <p className="text-sm text-nature-200 m-0 break-words whitespace-pre-wrap" data-testid="agent-reason">{s.reason.text}</p>
                         </div>
                         <p className="text-xs text-nature-400 m-0">Goes away in {hoursLeft(s.expiresAt)} if nobody answers.</p>
-                        {!s.approve && (viewer.kind === 'password' || s.mine) && (
+                        {!s.approve && (viewer.kind === 'token' || s.mine) && (
                             <p className="text-xs text-nature-300 m-0 break-words" data-testid="agent-approve-hint">
-                                {viewer.kind === 'password'
-                                    ? 'Its member approves from Manage in the app, signed in with their own key; this password session can only decline.'
+                                {viewer.kind === 'token'
+                                    ? 'Its member approves from Manage in the app, signed in with their own key; this token can only decline.'
                                     : 'Nothing left to approve: the report was closed since, or what it was about is gone. Decline clears it.'}
                             </p>
                         )}

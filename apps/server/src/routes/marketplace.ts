@@ -16,7 +16,7 @@ import {
     closePoll, votePoll, rsvpEvent, letInEvent, isReportRateLimited,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
-    stopStandingDeal, extendStandingDeal,
+    stopStandingDeal, extendStandingDeal, lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
 } from '../state-engine.js';
 import { STANDING_AUTH_CODE, type StandingStart } from '../engine/standing-deals.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
@@ -341,7 +341,16 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     ctx.body = { data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
 });
 
-const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
+const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event', 'knowledge'] as const;
+
+/**
+ * The kinds of post this route makes (DESIGN-local-knowledge-fable.md §1 row 4). Any other word is a 400: a made-up type
+ * made a post every app drew as a Need, outside the "Offer first" rule. Local knowledge is made only through Learn
+ * (routes/knowledge.ts, engine/knowledge.ts publishKnowledge).
+ */
+const CREATABLE_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
+const isCreatablePostType = (t: unknown): t is (typeof CREATABLE_POST_TYPES)[number] =>
+    typeof t === 'string' && (CREATABLE_POST_TYPES as readonly string[]).includes(t);
 
 /**
  * On a sync read paged by key (`paged=1`, then `pageAfter=<key>`), the key the next page starts below, while this one
@@ -562,6 +571,12 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
+    // Local knowledge is OPT-IN as events are, and stricter (DESIGN-local-knowledge-fable.md §2.3): every read leaves it out,
+    // by id and by ids included, unless it names the type (`types=…,knowledge` or `type=knowledge`), and then only for a
+    // member of this node where the `knowledge` switch is on. A visitor's read gets none in v1; neither does the global
+    // community, which has none. An app built before it asks for none, so it never meets one (engine PostFilter.withKnowledge).
+    const asksKnowledge = type === 'knowledge' || !!types?.includes('knowledge');
+    const withKnowledge = asksKnowledge && switches.knowledge && includeVoters && !!reader;
     // Where anyone can join in a minute (`openMembership`, the global node), a member is someone who spent a minute, so
     // each listing's place reaches them to its neighbourhood (about 1.1 km across both ways) inside the query, distance and order
     // too, all but their own and the events they may read in full (engine PostFilter.neighbourhood, exactPlacesFor;
@@ -624,7 +639,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
         && !assignedTo && nodesOwnRadius && (audienceScope === undefined || audienceScope === 'public') && ctx.query.online === undefined;
     const pinsNow = pinsFirst ? livePinIds(db) : [];
     const pinsPart = pinsNow.length > 0 ? `:pins-${pinsNow.join(',')}` : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}${pinsPart}`;
+    // A read that asks for Local knowledge says whether it got it: the owners' switch changes the answer and no post.
+    const knowledgePart = asksKnowledge ? `:know-${withKnowledge ? 1 : 0}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}${pinsPart}${knowledgePart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -688,6 +705,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         id, ids, type, types, excludeEvents, category, query: q, tags, free, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
         neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId, asKeeper: asKeeper || undefined,
+        withKnowledge: withKnowledge || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
@@ -801,6 +819,11 @@ router.post('/api/marketplace/posts', async (ctx) => {
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
         return;
     }
+    if (!isCreatablePostType(type)) {
+        ctx.status = 400;
+        ctx.body = { error: 'type is offer, need, poll or event. Local knowledge is added in Learn (POST /api/knowledge/posts).', code: 'unknown_type' };
+        return;
+    }
     if (!assertActorEntitled(ctx, authorPublicKey)) return;
     // This route posts as the SIGNER and nobody else.
     //
@@ -857,9 +880,10 @@ router.post('/api/marketplace/posts', async (ctx) => {
             : createPost(
             // A listing put in a shop with no category of its own starts in the shop's (engine/shops.ts newListingCategory).
             type, category || newListingCategory(shopId) || 'other', title, description || '',
-            // A loan's fee may be per day or per week too (S3), and is passed as sent, so one priced by the hour or the month
-            // is refused in the engine's words rather than made one fee. Any other listing is one fee or by the hour, as before.
-            price_c ?? 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            // How the price is counted is passed as sent (one fee when none is named): the engine checks it against
+            // POST_PRICE_TYPES (assertPostFields), and a loan's against the lendable ones, so a wrong one is refused in the engine's
+            // words rather than made one fee. A weekly or monthly Offer must stay weekly or monthly: that is what makes a standing deal.
+            price_c ?? 0, priceType ?? 'fixed', authorPublicKey,
             // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
@@ -1526,7 +1550,12 @@ function standingFromBody(ctx: any, standing: any): StandingStart | undefined {
 }
 
 /** A standing deal's own refusals: their status and code with their words (engine/standing-deals.ts, engine/escrow.ts). */
-const STANDING_CODES = new Set([STANDING_AUTH_CODE, 'standing_keeper', 'standing_gone', 'standing_payer_only']);
+const STANDING_CODES = new Set([
+    STANDING_AUTH_CODE, 'standing_keeper', 'standing_gone', 'standing_payer_only',
+    // A short week's refusals (DESIGN-getting-paid-fable §3.1): each says why in the member's words.
+    'standing_payee_only', 'standing_change_body', 'standing_change_taken', 'standing_lower_moved', 'standing_lower_amount', 'standing_ask_open',
+    'standing_ask_limit', 'standing_ask_gone',
+]);
 function respondStandingRefusal(ctx: any, err: any): boolean {
     if (!STANDING_CODES.has(err?.code)) return false;
     ctx.status = typeof err.status === 'number' ? err.status : 400;
@@ -1719,6 +1748,14 @@ async function standingStep(ctx: any, step: (id: string, actor: string, body: an
 router.post('/api/marketplace/standing/:id/stop', (ctx) => standingStep(ctx, (id, actor) => stopStandingDeal(id, actor)));
 router.post('/api/marketplace/standing/:id/extend', (ctx) => standingStep(ctx, (id, actor, body) =>
     extendStandingDeal(id, actor, standingFromBody(ctx, body.standing ?? body) ?? { authorisation: { payload: '', signature: '' } })));
+// A short week (DESIGN-getting-paid-fable §3.1): the payee lowers one period alone, or the payer asks to pay less (the side
+// is the signer's); the payee answers an ask, yes or no; the payer takes it back. The change's id is the app's UUID.
+router.post('/api/marketplace/standing/:id/lower', (ctx) => standingStep(ctx, (id, actor, body) =>
+    lowerStandingPeriod(id, actor, { id: body.id, periodNo: body.periodNo, beans_c: body.beans_c })));
+router.post('/api/marketplace/standing/:id/lower/:changeId/answer', (ctx) => standingStep(ctx, (id, actor, body) =>
+    answerStandingAsk(id, String(ctx.params.changeId), actor, body.yes)));
+router.post('/api/marketplace/standing/:id/lower/:changeId/withdraw', (ctx) => standingStep(ctx, (id, actor) =>
+    withdrawStandingAsk(id, String(ctx.params.changeId), actor)));
 
 router.post('/api/marketplace/transactions/cancel', async (ctx) => {
     try {

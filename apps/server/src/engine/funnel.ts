@@ -172,7 +172,7 @@ function derivedCohort(since: string): FunnelRow[] {
                m.avatar_ref IS NOT NULL AS hasPhoto,
                EXISTS (
                    SELECT 1 FROM posts p
-                   WHERE p.author_pubkey = m.public_key AND p.origin_node IS NULL
+                   WHERE p.author_pubkey = m.public_key AND p.origin_node IS NULL AND p.type != 'knowledge'
                ) AS posted,
                CASE WHEN substr(COALESCE(m.invited_by, ''), 1, 5) = 'open:' THEN m.invited_by END AS openDoor
         FROM members m
@@ -233,7 +233,7 @@ function derivedActivated(since: string): FunnelRow[] {
             SELECT p.author_pubkey, MIN(p.created_at) AS first_post
             FROM posts p
             JOIN members m ON m.public_key = p.author_pubkey
-            WHERE p.origin_node IS NULL
+            WHERE p.origin_node IS NULL AND p.type != 'knowledge'
               AND ${JOINED_HERE}
             GROUP BY p.author_pubkey
         )

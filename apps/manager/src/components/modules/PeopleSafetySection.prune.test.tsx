@@ -20,11 +20,12 @@ vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => null }));
 // So does "Taken down by assistants" (its own tests: AssistantTakedownsPanel.test.tsx).
 vi.mock('./AssistantTakedownsPanel', () => ({ AssistantTakedownsPanel: () => null }));
 
+const TOKEN = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-password',
+    automationToken: TOKEN,
 };
 
 const stale = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `old_${i}`, createdAt: '2020-01-01T00:00:00Z', title: `Old ${i}` }));
@@ -102,7 +103,7 @@ describe('Prune Stale Posts sends batches of at most 200, one after another', ()
         expect(sizesOf(calls).every((s: number) => s <= 200)).toBe(true);
         // Every stale id sent exactly once, in order, with the admin headers.
         expect(calls.flatMap(([, init]: any) => JSON.parse(init.body).postIds)).toEqual(stale(n).map(p => p.id));
-        expect(calls.every(([, init]: any) => init.method === 'POST' && init.headers['X-Admin-Password'] === 'admin-password')).toBe(true);
+        expect(calls.every(([, init]: any) => init.method === 'POST' && init.headers.Authorization === `Bearer ${TOKEN}` && init.headers['X-Admin-Password'] === undefined)).toBe(true);
         // Never in parallel.
         expect(maxInFlight).toBe(1);
         expect(onRefresh).toHaveBeenCalledTimes(1);

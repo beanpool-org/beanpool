@@ -18,7 +18,7 @@ import { CORE_SETTINGS, typedWordFor, type Shape, type ShapeSettings } from '../
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
-const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
+const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', automationToken: 'pw' };
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
 const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
 
@@ -138,13 +138,13 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(within(screen.getByTestId('shape-row-decisions')).getByRole('button', { name: 'Unlock to change' })).toBeInTheDocument();
     });
 
-    it('Unlock opens the row; a password owner is asked a code, and the save carries it', async () => {
+    it('Unlock opens the row; a token viewer shown the code box is asked a code, and the save carries it', async () => {
         const after = locked();
         const { sent } = mockApi(locked(), [
             { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
             { ok: true, status: 200, body: { shape: after, told: 'members' } },
         ]);
-        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
         await screen.findByText('🧭');
         fireEvent.click(within(screen.getByTestId('shape-row-decisions')).getByRole('button', { name: 'Unlock to change' }));
         fireEvent.click(screen.getByRole('checkbox', { name: /Community votes active/ }));
@@ -277,7 +277,7 @@ describe('Core settings — locked: Unlock to change', () => {
             { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
             { ok: true, status: 200, body: { shape, told: 'members' } },
         ]);
-        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
         await screen.findByText('🧭');
 
         fireEvent.click(within(screen.getByTestId('shape-row-voucherBudget')).getByRole('button', { name: 'Unlock to change' }));
@@ -302,7 +302,7 @@ describe('Core settings — locked: Unlock to change', () => {
             { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
             { ok: true, status: 200, body: { shape, told: 'members' } },
         ]);
-        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
         await screen.findByText('🧭');
 
         fireEvent.click(within(screen.getByTestId('shape-row-memberGift')).getByRole('button', { name: 'Unlock to change' }));
@@ -654,7 +654,7 @@ describe('Core settings — an admin advises the owners (C4)', () => {
         await waitFor(() => expect(sent).toHaveLength(1));
         expect(sent[0].url).toContain('/api/local/admin/community-shape/advice');
         expect(sent[0].body).toMatchObject({ setting: 'beans', advice: 'Keep Beans on: the market needs them.' });
-        expect(Object.keys(sent[0].body).sort()).toEqual(['advice', 'password', 'setting']);
+        expect(Object.keys(sent[0].body).sort()).toEqual(['advice', 'setting']);
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sent. Every owner is told, and your words are under Changes below.'));
         const log = screen.getByTestId('shape-audit-log');
         expect(log).toHaveTextContent('@ada (admin) · 💬 Advised the owners about Beans · “Keep Beans on: the market needs them.”');

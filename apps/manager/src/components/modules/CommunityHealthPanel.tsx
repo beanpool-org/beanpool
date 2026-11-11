@@ -2,7 +2,7 @@ import React, { useEffect, useId, useState } from 'react';
 import { FIRST_TRADE_WORDS as W, NEEDS_COUNT_WORDS as N } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
-import { buildAdminHeaders, getTfaSessionToken, resolveNodeApiUrl, passwordField } from '../../lib/node-client';
+import { buildAdminHeaders, resolveNodeApiUrl } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { t as say, tn } from '../../lib/fresh-proof';
@@ -216,7 +216,7 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
     const [status, setStatus] = useState<Status | null>(null);
     const ids = useId();
     const ownerOnlyId = `${ids}-owner-only`;
-    const blocked = !(viewer.kind === 'password' || viewer.role === 'owner');
+    const blocked = !(viewer.kind === 'token' || viewer.role === 'owner');
 
     useEffect(() => {
         let mounted = true;
@@ -226,7 +226,7 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
         (async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-health'), {
-                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(nodeCredential(activeNode)),
                 }).catch(() => null);
                 if (!res || !res.ok) return;
                 const h = readHealth(await res.json().catch(() => null));
@@ -265,24 +265,23 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-health'), {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), debtLinePct: pctN, quietDays: daysN }),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
+                body: JSON.stringify({ debtLinePct: pctN, quietDays: daysN }),
             });
-            const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown; debtLinePct?: unknown; quietDays?: unknown };
+            const body = await res.json().catch(() => ({})) as { error?: unknown; debtLinePct?: unknown; quietDays?: unknown };
             if (res.ok && num(body.debtLinePct) && num(body.quietDays)) {
                 setHealth({ ...health, settings: { debtLinePct: body.debtLinePct as number, quietDays: body.quietDays as number } });
                 setStatus({ kind: 'saved', text: 'Saved. A looser line applies now; a tighter one reaches members 14 days from now.' });
                 // The answer has the lines, not their dates: "applies from" comes from a fresh read.
                 const again = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/community-health'), {
-                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(nodeCredential(activeNode)),
                 }).catch(() => null);
                 const fresh = again?.ok ? readHealth(await again.json().catch(() => null)) : null;
                 if (fresh) setHealth(fresh);
             } else {
                 setStatus({
                     kind: 'error',
-                    text: body.totpRequired === true ? '2FA session expired. Please re-authenticate.'
-                        : typeof body.error === 'string' && body.error.trim() ? body.error : 'Not saved: the node refused.',
+                    text: typeof body.error === 'string' && body.error.trim() ? body.error : 'Not saved: the node refused.',
                 });
             }
         } catch (err: unknown) {

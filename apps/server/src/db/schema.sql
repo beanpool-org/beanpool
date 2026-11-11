@@ -388,6 +388,18 @@ CREATE TABLE IF NOT EXISTS posts (
     shown_price TEXT,
     -- 1 while the member takes questions about this Offer or Need (engine/event-copy.ts). Anything else: nobody is named.
     shown_takes_questions INTEGER,
+    -- Local knowledge (type 'knowledge'; scratch/fable-design/DESIGN-local-knowledge-fable.md §4.1; apps/server
+    -- engine/knowledge.ts, the only writer): its sources (a JSON list of at most 5 {url, label}), its place in words (≤ 80;
+    -- a knowledge post has no lat/lng ever), its writer's app language, when an owner or admin last confirmed it, when it
+    -- was marked "may be out of date" and why (≤ 140), and how many members it helped. Empty on every other row, and
+    -- `knowledge_helped` 0. No trigger, index or default here calls a connection function, so an older image boots on this file.
+    knowledge_sources TEXT,
+    knowledge_place TEXT,
+    knowledge_lang TEXT,
+    knowledge_checked_at TEXT,
+    knowledge_outdated_at TEXT,
+    knowledge_outdated_note TEXT,
+    knowledge_helped INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
@@ -649,7 +661,36 @@ CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubk
 CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
 CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);
 
--- 5c. Bills (DESIGN-getting-paid-fable.md §4, §5; engine/bills.ts): a request to pay, never a payment. From a member, or an
+-- 5c. A short week (DESIGN-getting-paid-fable.md §3, §5; Marty's decisions, 11 Nov 2026): one period of a standing deal
+-- lowered, from 0 up to just under the price the payer signed. The payee lowers it alone (side 'payee', agreed at once), or
+-- the payer asks (side 'payer', 'asked') and the payee says yes (agreed) or no (declined); the payer may take an ask back
+-- (withdrawn); an ask unanswered when its period is paid, its grace runs out or the standing deal stops lapses. What a
+-- period costs is the smallest agreed change for it, else the price (@beanpool/core standingPeriodAmount), so a period
+-- lowered can be lowered again and never raised back; engine/standing-deals.ts pays it. A new table: no column of another
+-- is added, no row of another is rewritten, nothing at boot reads one.
+CREATE TABLE IF NOT EXISTS standing_period_changes (
+    -- The app's UUID: a retry of the same change is the same change.
+    id TEXT PRIMARY KEY,
+    standing_id TEXT NOT NULL REFERENCES standing_deals(id),
+    period_no INTEGER NOT NULL CHECK (period_no >= 1),
+    -- What the period would cost, whole hundredths of a Bean.
+    beans_c INTEGER NOT NULL CHECK (beans_c >= 0),
+    -- Who made it: the payer's ask, or the payee's own lowering.
+    side TEXT NOT NULL CHECK (side IN ('payer', 'payee')),
+    -- The key that signed it: the member, or a keeper of the enterprise on that side.
+    asked_by TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('asked', 'agreed', 'declined', 'withdrawn', 'lapsed')),
+    answered_by TEXT,
+    answered_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- One open ask a period.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_standing_period_changes_open ON standing_period_changes(standing_id, period_no) WHERE state = 'asked';
+CREATE INDEX IF NOT EXISTS idx_standing_period_changes_period ON standing_period_changes(standing_id, period_no, state);
+CREATE INDEX IF NOT EXISTS idx_standing_period_changes_updated_at ON standing_period_changes(updated_at);
+
+-- 5d. Bills (DESIGN-getting-paid-fable.md §4, §5; engine/bills.ts): a request to pay, never a payment. From a member, or an
 -- enterprise a keeper sent it for (sent_by signed it), to one member, who pays it, declines it or leaves it. A bill is no
 -- deal and holds nothing: paying it is one ledger row (ledger_tx_id) written with the flip sent → paid. Nothing here is
 -- read from any other table's old rows: a new table, empty on every node until a bill is sent.
@@ -1664,6 +1705,14 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE standing_deals SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS standing_period_changes_touch_updated_at
+AFTER UPDATE ON standing_period_changes
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE standing_period_changes SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS bills_touch_updated_at
@@ -2902,6 +2951,25 @@ BEGIN
     UPDATE group_members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
     WHERE group_id = NEW.group_id AND member_pubkey = NEW.member_pubkey;
 END;
+
+-- An invitation to a group that the person invited declined. Declining deletes their group_members row (engine
+-- removeGroupMember), so without this the member who made the invitation could not tell a no from no answer yet
+-- ("Invitations should show whether they have been used", Rob, 11 Nov 2026). One row per person per group, written in the
+-- same transaction as the delete, and read ONLY by the member who made the invitation (`invited_by`): never by the group,
+-- its convenors or the person who declined (engine/group-invitations.ts). Kept for DECLINE_KEPT_DAYS from `declined_at`,
+-- dropped when the group next records a decline, gone at once when the person is invited again, joins or leaves.
+-- Not replicated: a standby that takes over starts with none, which costs the sender a "Declined" line and nothing else
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_invite_declines (
+    group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    invitee_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    invited_by TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    -- When the invitation was made (the group_members.joined_at it held), and when it was declined.
+    invited_at DATETIME,
+    declined_at DATETIME NOT NULL,
+    PRIMARY KEY (group_id, invitee_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_invite_declines_sender ON group_invite_declines(group_id, invited_by);
 
 CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
 AFTER DELETE ON groups

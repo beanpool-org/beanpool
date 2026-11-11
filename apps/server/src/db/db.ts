@@ -539,6 +539,15 @@ export function initSchema() {
     db.exec('DROP TRIGGER IF EXISTS members_touch_updated_at');
     // ── The end of the CUT2 steps ─────────────────────────────────────────────────────────────────────────────────────
 
+    // Born with Local knowledge (slice K1; DESIGN-local-knowledge-fable.md §4.1, §4.4): seven columns on posts, empty on every
+    // row that is there (knowledge_helped takes its default, 0). Additions, not conversion code (Marty's pick 6, 11 Nov
+    // 2026): nothing is read or rewritten. Not part of CUT2, so they don't go with its removal; on a fresh install each finds
+    // its column and does nothing.
+    for (const column of ['knowledge_sources TEXT', 'knowledge_place TEXT', 'knowledge_lang TEXT', 'knowledge_checked_at TEXT',
+        'knowledge_outdated_at TEXT', 'knowledge_outdated_note TEXT', 'knowledge_helped INTEGER NOT NULL DEFAULT 0']) {
+        try { db.prepare(`ALTER TABLE posts ADD COLUMN ${column}`).run(); } catch { }
+    }
+
     // An older conversion pass not yet removed: it finds nothing to do on a file the gate opens (every kept node ran it;
     // MEASURE-conversion-code.md M2), and goes in its own removal with the seal's half (the split-off N1b lists it). Push
     // tokens stored in the clear go aside for the boot to lock or drop (services/push-token-seal.ts, A25).

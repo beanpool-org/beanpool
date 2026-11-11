@@ -23,7 +23,7 @@ describe('InvitesModule', () => {
         id: 'node-1',
         name: 'Test Node',
         url: 'https://test-node.beanpool.org',
-        adminPassword: 'secretpassword',
+        automationToken: 'secret-token',
     };
 
     beforeEach(() => {
@@ -74,9 +74,8 @@ describe('InvitesModule', () => {
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledTimes(5);
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
             'https://test-node.beanpool.org',
-            'secretpassword',
-            'standard',
-            undefined
+            'secret-token',
+            'standard'
         );
         expect(screen.getAllByText('INV-API-PASS-1').length).toBeGreaterThan(0);
     });
@@ -84,7 +83,7 @@ describe('InvitesModule', () => {
     // This used to assert that a made-up INV-XXXX-XXXX code appeared when the node refused. Owners printed those
     // codes on cards and they never worked. A refusal must show the node's reason and no code at all.
     it('shows the node\'s reason and no code, QR or print button when the node refuses', async () => {
-        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error('Invalid password'));
+        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error('The node does not accept this token'));
 
         render(<InvitesModule activeNode={mockNode} />);
 
@@ -96,7 +95,7 @@ describe('InvitesModule', () => {
 
         const alert = await screen.findByRole('alert');
         expect(alert).toHaveTextContent('No invites were made');
-        expect(alert).toHaveTextContent('Invalid password');
+        expect(alert).toHaveTextContent('The node does not accept this token');
         expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
 
         expect(screen.queryByText(/Generated Passes/)).not.toBeInTheDocument();
@@ -179,9 +178,8 @@ describe('InvitesModule', () => {
 
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
             'https://test-node.beanpool.org',
-            'secretpassword',
-            'trusted',
-            undefined
+            'secret-token',
+            'trusted'
         );
         expect(screen.getAllByText('🏠 Resident').length).toBeGreaterThan(0);
     });
@@ -298,15 +296,15 @@ describe('InvitesModule', () => {
     describe('Voucher Presets on Invites & QR (V5)', () => {
         const OWNER_KEY: any = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
         const ADMIN_KEY: any = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
-        const PASSWORD_VIEWER: any = { kind: 'password' };
+        const TOKEN_VIEWER: any = { kind: 'token' };
 
-        it('does NOT render presets under password session', () => {
-            render(<InvitesModule activeNode={mockNode} viewer={PASSWORD_VIEWER} />);
+        it('does NOT render presets under a token session', () => {
+            render(<InvitesModule activeNode={mockNode} viewer={TOKEN_VIEWER} />);
             expect(screen.queryByTestId('vouch-preset-section')).not.toBeInTheDocument();
             expect(nodeClient.fetchMyVouching).not.toHaveBeenCalled();
         });
 
-        it('does NOT render presets when viewer is not provided (defaults to password)', () => {
+        it('does NOT render presets when viewer is not provided (a token session)', () => {
             render(<InvitesModule activeNode={mockNode} />);
             expect(screen.queryByTestId('vouch-preset-section')).not.toBeInTheDocument();
             expect(nodeClient.fetchMyVouching).not.toHaveBeenCalled();
@@ -393,9 +391,8 @@ describe('InvitesModule', () => {
             // The preset as the node takes it: `vouchAmount` in whole hundredths, 25 Beans is 2500.
             expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
                 'https://test-node.beanpool.org',
-                'secretpassword',
+                'secret-token',
                 'standard',
-                undefined,
                 2500
             );
 

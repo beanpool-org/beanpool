@@ -161,13 +161,14 @@ try {
         {
             const { context, page } = await openSettings(browser, origin, { width: WIDTH, textScale, signedIn: false });
             record(`sign-in ${at}`, await horizontalOverflow(page));
-            // "Sign in with your phone": the QR card fits, its QR stays inside the card, every button is a 48px target.
-            await page.getByRole('button', { name: /Sign in with your phone/ }).click();
+            // "Sign in with your phone" is the whole sign-in (no password to choose instead, so no button first): the QR
+            // card fits, its QR stays inside the card, every button is a 48px target.
             await page.getByTestId('phone-signin-qr').waitFor();
             await settle(page);
             record(`phone sign-in ${at}`, await horizontalOverflow(page));
             checks++;
-            const card = await page.getByTestId('phone-signin').evaluate((el) => {
+            // .first(): the card's wrapper and PhoneSignIn's own section both carry this id; the wrapper is the outer one.
+            const card = await page.getByTestId('phone-signin').first().evaluate((el) => {
                 const box = el.getBoundingClientRect();
                 const qr = el.querySelector('[data-testid="phone-signin-qr"]').getBoundingClientRect();
                 const short = [...el.querySelectorAll('button')]
@@ -186,7 +187,7 @@ try {
         }
         {
             // The unclaimed card (a node with no owner yet): it fits, its QR scales down inside it, a long address
-            // wraps rather than widening the page, and the password's fold is a 48px target whose form fits open.
+            // wraps rather than widening the page.
             const { context, page } = await openSettings(browser, origin, {
                 width: WIDTH, textScale, signedIn: false,
                 overrides: { '/api/local/claim': () => ({ unclaimed: true, codeId: 'a1b2c3d4', communityName: 'Harcourt Orchard Exchange' }) },
@@ -209,16 +210,12 @@ try {
                 }).map((c) => `<${c.tagName.toLowerCase()}> "${(c.textContent || '').trim().slice(0, 30)}"`);
                 return { qrWidth: Math.round(qr.width), qrInside: inside(qr), out };
             });
-            const fold = await page.getByTestId('claim-password-fold').locator('summary').evaluate((el) => Math.round(el.getBoundingClientRect().height));
-            if (!card.qrInside || card.qrWidth < 160 || card.out.length || fold < 47.5) {
-                failures.push(`unclaimed card ${at}: QR ${card.qrWidth}px${card.qrInside ? '' : ' (outside the card)'}; outside: ${card.out.join(', ') || 'none'}; fold ${fold}px tall`);
+            if (!card.qrInside || card.qrWidth < 160 || card.out.length) {
+                failures.push(`unclaimed card ${at}: QR ${card.qrWidth}px${card.qrInside ? '' : ' (outside the card)'}; outside: ${card.out.join(', ') || 'none'}`);
                 console.log(`  ✗ unclaimed card contents ${at}`);
             } else {
-                console.log(`  ✓ unclaimed card contents ${at} (QR ${card.qrWidth}px, fold ${fold}px)`);
+                console.log(`  ✓ unclaimed card contents ${at} (QR ${card.qrWidth}px)`);
             }
-            await page.getByTestId('claim-password-fold').locator('summary').click();
-            await page.getByPlaceholder('Password').waitFor();
-            record(`unclaimed card, password fold open ${at}`, await horizontalOverflow(page));
             await context.close();
         }
 

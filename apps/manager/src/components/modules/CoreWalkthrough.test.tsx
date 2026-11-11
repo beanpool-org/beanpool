@@ -31,7 +31,7 @@ const NODE: NodeProfile = {
     id: 'node-test-1',
     name: 'Test Node',
     url: 'https://node.example.org',
-    adminPassword: 'secret-admin-pass',
+    automationToken: 'secret-admin-pass',
 };
 
 function makeShape(over: { core?: Shape['core']; settings?: Partial<ShapeSettings>; kind?: 'local' | 'global' } = {}): Shape {
@@ -363,8 +363,7 @@ describe('CoreWalkthrough Component', () => {
             expect(communityShapeLib.confirmCoreSettings).toHaveBeenCalledWith(
                 NODE.url,
                 'secret-admin-pass',
-                {},
-                undefined
+                {}
             );
             expect(onLocked).toHaveBeenCalledWith(updatedShape, 'nobody');
         });

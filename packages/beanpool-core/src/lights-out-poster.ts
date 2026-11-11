@@ -200,3 +200,9 @@ ${o.recordAsOf ? `<p>${escapeHtml(w.t(W.record, { when: `${FSI}${o.recordAsOf}${
 </html>
 `;
 }
+
+/**
+ * For the other printed pages that draw a code (beans-sign.ts): the same drawing with the same checks, the same escaping and the
+ * same list of right-to-left languages, so a second page never has a copy of them to drift.
+ */
+export { qrSvg as printedQrSvg, escapeHtml as printedEscapeHtml, RTL as PRINTED_RTL_LANGS };

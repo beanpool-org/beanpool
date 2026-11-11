@@ -52,6 +52,7 @@ async function main() {
         retention: true,
         dmRequests: true,
         shareOutside: false,
+        knowledge: false,
         bills: false,
     };
 

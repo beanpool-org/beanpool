@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
-import { getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
@@ -80,7 +79,7 @@ export function CommunityShapeSection({
     openWalkthrough = null,
     onUnconfirmedChange,
 }: CommunityShapeSectionProps) {
-    const isOwner = viewer?.kind === 'password' || viewer?.role === 'owner';
+    const isOwner = viewer?.kind === 'token' || viewer?.role === 'owner';
     // An admin reads every Core setting and advises the owners about it (slice C4); a moderator never gets this page.
     const isAdmin = !isOwner && viewer?.kind === 'key' && viewer.role === 'admin';
 
@@ -107,7 +106,6 @@ export function CommunityShapeSection({
             const data = await fetchCommunityShape(
                 activeNode.url,
                 nodeCredential(activeNode),
-                getTfaSessionToken(activeNode.id),
             );
             setShape(data);
             onUnconfirmedChange?.(coreAwaitsOwner(data, isOwner));
@@ -202,7 +200,6 @@ export function CommunityShapeSection({
                 nodeCredential(activeNode),
                 { [settingKey]: sent },
                 note,
-                getTfaSessionToken(activeNode.id),
                 code,
             );
             proof.close();

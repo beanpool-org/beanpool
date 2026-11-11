@@ -101,12 +101,13 @@ describe('FleetSidebar Component', () => {
 
         render(<FleetSidebar {...defaultProps} nodeHealthMap={nodeHealthMap} />);
 
-        expect(screen.getByTitle('Admin password needed')).toBeInTheDocument();
+        expect(screen.getByTitle('Token needed')).toBeInTheDocument();
     });
 
     it('a token profile the node refused says to make a new token, never that a password is needed', () => {
-        const profiles = defaultProps.profiles.map((p, i) => i === 1 ? { ...p, adminPassword: undefined, automationToken: `bp_${'d4'.repeat(6)}_${'0c'.repeat(32)}` } : p);
+        const profiles = defaultProps.profiles.map((p, i) => i === 1 ? { ...p, automationToken: `bp_${'d4'.repeat(6)}_${'0c'.repeat(32)}` } : p);
         render(<FleetSidebar {...defaultProps} profiles={profiles} nodeHealthMap={{ 'node-1': 'online', 'node-2': 'auth_required' }} />);
+        expect(screen.queryByTitle('Token needed')).not.toBeInTheDocument();
         expect(screen.queryByTitle('Admin password needed')).not.toBeInTheDocument();
         expect(screen.getByTitle('Token refused. Make a new token from your phone (Settings → Automation tokens)')).toBeInTheDocument();
     });

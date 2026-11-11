@@ -18,10 +18,9 @@ import {
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
-const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
+const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', automationToken: 'pw' };
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
 const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
-const PASSWORD: RolesViewer = { kind: 'password' };
 
 function makeDefaultShape(overrides: Partial<ShapeSettings> = {}, meta: Partial<Shape> = {}): Shape {
     return {
@@ -278,7 +277,7 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         const payload = JSON.parse(postCall![1].body);
         expect(payload.changes).toEqual({ join: 'admins' });
         expect(payload.note).toBe('Winter lockdown');
-        expect(payload.password).toBe('pw');
+        expect(payload).not.toHaveProperty('password');
     });
 
     it('owner can configure known floor numbers and saves { knownFloor: { on, floor_c, cap_c } } in whole hundredths', async () => {

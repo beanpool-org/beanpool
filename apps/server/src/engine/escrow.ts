@@ -415,8 +415,9 @@ export function requestPost(
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
     }
-    if (post.type === 'poll' || post.type === 'event') {
-        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
+    if (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') {
+        // Local knowledge is a page, never a listing (DESIGN-local-knowledge-fable.md §2.3): refused by name, never read as a Need.
+        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : post.type === 'knowledge' ? 'Local knowledge cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     const isOffer = post.type === 'offer';
@@ -681,9 +682,21 @@ export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { re
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
             .run(p.postId, p.txId);
     }
+    // A period lowered to 0 by agreement (DESIGN-getting-paid-fable §5): its deal row only. Nothing moves, so there is no
+    // Ledger row and no fee, and transfer() is never called.
+    if (p.amount_c === 0) return { releaseResult: null, releaseCredits: 0 };
     const releaseResult = cb.transfer(p.parties.payer, p.parties.payee, p.amount_c, p.memo, 'escrow', false, p.auth);
     if (!releaseResult) throw short(new Error(word('Insufficient balance to accept this offer')));
     return { releaseResult, releaseCredits: p.amount_c };
+}
+
+/**
+ * After a standing deal's period of 0 Beans is written (DESIGN-getting-paid-fable §5): the deal row's change, live to both
+ * sides and their keepers, as a release's is. Nothing moved, so no earned surplus, no activity, no chat line and no push.
+ */
+export function afterZeroPeriod(cb: EscrowCallbacks, txId: string): void {
+    const tx = getMarketplaceTransaction(db, txId);
+    if (tx) cb.broadcast({ type: 'transaction_completed', transaction: tx }, tradeRecipients(cb, tx));
 }
 
 /** A request's deal as approvePostRequest's checks read it: a requested row, or a standing deal's next period on a Need. */
@@ -793,11 +806,14 @@ export function requestHoldChecks(
     }
     const parties: HoldParties = { payer: row.buyer_pubkey, payee: row.seller_pubkey, isEnterprisePayer, isPayeeKeeper };
 
-    assertHoldFunded(cb, parties, row.amount_c, {
-        payerName: buyerMember?.callsign || 'This enterprise',
-        insufficient: word('Buyer has insufficient balance to cover escrow'),
-        claim: opts.scheduled ? null : { postId: row.post_id, transactionId: row.id },
-    });
+    // A standing deal's period lowered to 0 (DESIGN-getting-paid-fable §5) moves nothing, so there is nothing to fund.
+    if (!(opts.scheduled && row.amount_c === 0)) {
+        assertHoldFunded(cb, parties, row.amount_c, {
+            payerName: buyerMember?.callsign || 'This enterprise',
+            insufficient: word('Buyer has insufficient balance to cover escrow'),
+            claim: opts.scheduled ? null : { postId: row.post_id, transactionId: row.id },
+        });
+    }
 
     // One deal at a time (a one-off listing, or a lendable Offer): refused here, before the escrow opens, when the listing
     // is no longer on the board, rather than by the update below, inside it (a throw there unwinds the ledger). A standing
@@ -827,7 +843,7 @@ export function approvePostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+    if (!post || post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') return null;
 
     // A standing deal on a Need (DESIGN-standing-deals-upfront-fable §1): the author pays, and signs as they approve. What
     // they signed must be this listing, this helper and its price per period; the period's Beans are what is paid. Read
@@ -910,7 +926,7 @@ export function rejectPostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+    if (!post || post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') return null;
 
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
@@ -948,7 +964,7 @@ export function cancelPostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+    if (!post || post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') return null;
 
     const isOffer = post.type === 'offer';
     const expectedRequesterRole = isOffer ? row.buyer_pubkey : row.seller_pubkey;
@@ -1034,8 +1050,9 @@ export function offerHoldChecks(
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
     }
-    if (post.type === 'poll' || post.type === 'event') {
-        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
+    if (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') {
+        // Local knowledge is a page, never a listing (DESIGN-local-knowledge-fable.md §2.3): refused by name, never read as a Need.
+        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : post.type === 'knowledge' ? 'Local knowledge cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     if (post.type !== 'offer') {
@@ -1089,11 +1106,14 @@ export function offerHoldChecks(
     }
     const parties: HoldParties = { payer: buyerPublicKey, payee: post.authorPublicKey, isEnterprisePayer, isPayeeKeeper };
 
-    assertHoldFunded(cb, parties, finalCredits, {
-        payerName: buyerMember?.callsign || 'This enterprise',
-        insufficient: word('Insufficient balance to accept this offer'),
-        claim: opts.scheduled ? null : { postId: post.id },
-    });
+    // A standing deal's period lowered to 0 (DESIGN-getting-paid-fable §5) moves nothing, so there is nothing to fund.
+    if (!(opts.scheduled && finalCredits === 0)) {
+        assertHoldFunded(cb, parties, finalCredits, {
+            payerName: buyerMember?.callsign || 'This enterprise',
+            insufficient: word('Insufficient balance to accept this offer'),
+            claim: opts.scheduled ? null : { postId: post.id },
+        });
+    }
     return { ...parties, amount_c: finalCredits, buyerCallsign: buyerMember?.callsign };
 }
 
@@ -1416,7 +1436,7 @@ export function completePostTransaction(
     }
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (post && (post.type === 'poll' || post.type === 'event')) return null;
+    if (post && (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge')) return null;
     // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
     // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
     // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
@@ -1554,7 +1574,7 @@ export function cancelPostTransaction(
     assertDealRowAmount(row.amount_c, 'pending');
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (post && (post.type === 'poll' || post.type === 'event')) return null;
+    if (post && (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge')) return null;
     const completedAt = new Date().toISOString();
 
     cb.conservingTransaction(() => {

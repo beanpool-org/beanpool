@@ -33,6 +33,8 @@ vi.mock('../lib/api', async (orig) => ({
     handOverGroupLead: vi.fn(),
     updateGroup: vi.fn(),
     createGroup: vi.fn(),
+    // "Invited, not joined yet" (GroupInvitedList): the node says nothing here, so the section is not drawn.
+    getGroupInvitations: vi.fn(async () => null),
     getGroupSuccession: vi.fn(),
     proposeGroupSuccession: vi.fn(),
     voteGroupSuccession: vi.fn(),

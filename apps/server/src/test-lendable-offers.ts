@@ -301,9 +301,16 @@ async function main(): Promise<void> {
     assert(plainMade.status === 200 && pw.lendable === 0 && pw.repeatable === 0 && pw.lend_max_days === null && pw.lend_terms === null && pw.replacement_value === null
         && !('lendable' in plainMade.body.post) && !('replacementValue' in plainMade.body.post),
         'a listing that isn\'t lent keeps no terms, and reads as it always did');
-    const plainHourly = await offer(dave, { title: 'Garden help', price_c: hc(3), priceType: 'daily' });
-    assert(plainHourly.status === 200 && postRow(plainHourly.body.post.id).price_type === 'fixed',
-        'a listing that isn\'t lent is still made one fee or by the hour, as before');
+    // A listing that isn't lent keeps the unit its maker chose: a weekly or monthly Offer is what a standing deal is taken up from
+    // (before this, every unit but the hour was saved as one fee, so no member could make a standing deal from the create form).
+    for (const per of ['daily', 'weekly', 'monthly', 'hourly', 'fixed'] as const) {
+        const made = await offer(dave, { title: `Garden help ${per}`, price_c: hc(3), priceType: per });
+        assert(made.status === 200 && postRow(made.body.post.id).price_type === per, `a listing that isn't lent is saved ${per}, as chosen (${brief(made)})`);
+    }
+    const noUnit = await offer(dave, { title: 'Garden help, one fee', price_c: hc(3) });
+    assert(noUnit.status === 200 && postRow(noUnit.body.post.id).price_type === 'fixed', 'a listing that names no unit is one fee');
+    const badUnit = await offer(dave, { title: 'Garden help yearly', price_c: hc(3), priceType: 'yearly' });
+    assert(badUnit.status >= 400 && badUnit.status < 500, `a unit that isn't one of the five is refused, not made one fee (${brief(badUnit)})`);
 
     // ── 2. lendable=1 ────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 2. lendable=1');

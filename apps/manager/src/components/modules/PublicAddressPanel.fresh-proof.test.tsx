@@ -7,10 +7,10 @@ import type { NodeProfile } from '../../lib/profiles';
 
 /**
  * Owner-delete S4a: Take offline, Release a name and Claim over a live name ask an owner's fresh proof (server
- * public-address.ts requireFreshProof). The server's three refusals → the code box (password viewer), the "Manage again"
+ * public-address.ts requireFreshProof). The server's three refusals → the code box (token viewer), the "Manage again"
  * sentence (a stale phone hand-off) or the "from your phone" sentence (a computer's key session).
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', automationToken: 'pw' };
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to take this community offline', totpRequired: true };
@@ -42,7 +42,7 @@ async function pressTakeOffline() {
 describe('PublicAddressPanel: an owner\'s fresh proof (S4a)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('password viewer: Take offline opens the code box; Confirm re-sends the same request once, with the code', async () => {
+    it('token viewer: Take offline opens the code box; Confirm re-sends the same request once, with the code', async () => {
         const sent: Array<Record<string, unknown>> = [];
         mockNode([[401, CODE_ASK], [200, { success: true, status: 'none' }]], sent);
         render(<PublicAddressPanel activeNode={node} />);
@@ -59,7 +59,7 @@ describe('PublicAddressPanel: an owner\'s fresh proof (S4a)', () => {
         expect(screen.queryByTestId('address-proof-code')).not.toBeInTheDocument();
     });
 
-    it('password viewer: a wrong or spent code says so, the field stays, and the same code is never sent twice', async () => {
+    it('token viewer: a wrong or spent code says so, the field stays, and the same code is never sent twice', async () => {
         const sent: Array<Record<string, unknown>> = [];
         mockNode([[401, CODE_ASK], [401, WRONG], [200, { success: true, status: 'none' }]], sent);
         render(<PublicAddressPanel activeNode={node} />);
@@ -79,6 +79,8 @@ describe('PublicAddressPanel: an owner\'s fresh proof (S4a)', () => {
         fireEvent.click(screen.getByTestId('address-proof-confirm'));
         await waitFor(() => expect(screen.getByText(/Public address released/)).toBeInTheDocument());
         expect(sent.map((b) => b.code)).toEqual([undefined, '111111', '222222']);
+        // No password rides along with any of them: a node has none.
+        expect(sent.every((b) => !('password' in b))).toBe(true);
     });
 
     it('phone viewer, hand-off stale: says press Manage on the phone again; no code box, nothing re-sent', async () => {
@@ -112,7 +114,7 @@ describe('PublicAddressPanel: an owner\'s fresh proof (S4a)', () => {
         fireEvent.change(await screen.findByTestId('address-proof-input'), { target: { value: '654321' } });
         fireEvent.click(screen.getByTestId('address-proof-confirm'));
         await waitFor(() => expect(screen.getByText(/old-cairns.beanpool.org released/)).toBeInTheDocument());
-        expect(sent).toEqual([{ name: 'old-cairns', password: 'pw' }, { name: 'old-cairns', password: 'pw', code: '654321' }]);
+        expect(sent).toEqual([{ name: 'old-cairns' }, { name: 'old-cairns', code: '654321' }]);
     });
 
     it('Claim over a live name from a computer: says do this from your phone', async () => {

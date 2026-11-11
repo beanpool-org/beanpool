@@ -140,7 +140,7 @@ function joinedAtMs(pubkey: string): number | null {
 export function keptPostCount(pubkey: string): number {
     const row = db.prepare(
         `SELECT COUNT(*) AS c FROM posts
-          WHERE author_pubkey = ? AND origin_node IS NULL
+          WHERE author_pubkey = ? AND origin_node IS NULL AND type != 'knowledge'
             AND removed_by_moderator_at IS NULL AND hidden_by_reports_at IS NULL`
     ).get(pubkey) as { c: number };
     return row.c;
@@ -229,7 +229,7 @@ export function isEstablishedMember(pubkey: string, now: number = Date.now()): b
         if (!getProfileSwitches().probation) return true;
         const kept = db.prepare(
             `SELECT COUNT(*) AS c FROM (SELECT 1 FROM posts
-              WHERE author_pubkey = ? AND origin_node IS NULL
+              WHERE author_pubkey = ? AND origin_node IS NULL AND type != 'knowledge'
                 AND removed_by_moderator_at IS NULL AND hidden_by_reports_at IS NULL LIMIT ?)`
         ).get(pubkey, PROBATION.keptPosts) as { c: number };
         return kept.c >= PROBATION.keptPosts;

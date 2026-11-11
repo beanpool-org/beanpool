@@ -106,7 +106,7 @@ describe('MemberDetailModal', () => {
         expect(screen.getByText('⚠️ Confirm Permanent Prune / Delete')).toBeInTheDocument();
 
         await userEvent.click(screen.getByText('Yes, Prune Account'));
-        expect(handlePrune).toHaveBeenCalledWith('pubkey-1234567890-abcdef');
+        expect(handlePrune).toHaveBeenCalledWith('pubkey-1234567890-abcdef', undefined);
     });
 
     it('renders security flags matching the member pubkey', () => {
@@ -150,7 +150,7 @@ describe('MemberDetailModal', () => {
 
         expect(screen.getByText('No Node Role')).toBeInTheDocument();
         await userEvent.click(screen.getByText('⚡ Grant Admin'));
-        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'admin');
+        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'admin', undefined);
     });
 
     it('does not call a newly granted owner the only one when another owner exists (ownerCount 1)', async () => {
@@ -169,7 +169,7 @@ describe('MemberDetailModal', () => {
 
         expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
         await userEvent.click(screen.getByText('👑 Grant Owner'));
-        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
+        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner', undefined);
         // ownerCount 1 is someone else: granting makes two owners, so this member is NOT the only one
         await screen.findByText('Revoke owner');
         expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
@@ -226,7 +226,7 @@ describe('MemberDetailModal', () => {
 
         expect(screen.getByText("This is the community's only owner. Another owner must be added before this one can step down or be removed.")).toBeInTheDocument();
         await userEvent.click(screen.getByText('Revoke owner'));
-        expect(handleRevokeRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
+        expect(handleRevokeRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner', undefined);
         expect(await screen.findByText(/Cannot remove the last owner/)).toBeInTheDocument();
     });
 
@@ -357,8 +357,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onPruneBranch={vi.fn()}
                 nodeUrl="https://node.example"
-                adminPassword="pw"
-                tfaToken="tfa"
+                credential="pw"
                 onClose={vi.fn()}
             />
         );
@@ -370,7 +369,7 @@ describe('MemberDetailModal', () => {
         // Verify PruneBranchModal opened on the node's figures for this member's branch
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
         expect(await screen.findByText('2')).toBeInTheDocument();
-        expect(figures).toHaveBeenCalledWith('https://node.example', 'pubkey-1234567890-abcdef', 'pw', 'tfa');
+        expect(figures).toHaveBeenCalledWith('https://node.example', 'pubkey-1234567890-abcdef', 'pw');
         expect(document.getElementById('prune-debt-written-off')?.textContent).toContain('150 🫘 bad debt');
         expect(document.getElementById('prune-credit-confiscated')?.textContent).toContain('350 🫘 credit');
         expect(document.getElementById('prune-net-impact')?.textContent).toContain('+200 🫘');
@@ -443,7 +442,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
                 onSuspensionChanged={onChanged}
             />
         );
@@ -476,7 +475,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
             />
         );
         await userEvent.click(screen.getByText('⏸️ Suspend'));
@@ -502,7 +501,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
                 onSuspensionChanged={vi.fn()}
             />
         );
@@ -524,11 +523,11 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
             />
         );
         await userEvent.click(screen.getByText('Lift suspension'));
-        expect(lift).toHaveBeenCalledWith('https://test-node.local', 'pubkey-1234567890-abcdef', 'pw', undefined);
+        expect(lift).toHaveBeenCalledWith('https://test-node.local', 'pubkey-1234567890-abcdef', 'pw');
         expect(await screen.findByText(/Suspension lifted/)).toBeInTheDocument();
     });
 
@@ -551,7 +550,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
                 onPrune={vi.fn()}
                 {...extra}
             />

@@ -58,7 +58,7 @@ const cases = [
     {
         id: 'release', wait: '[data-testid="deal-row-tx-d"]', target: '[data-testid="release-line-tx-d"]',
         act: async (page) => {
-            await page.locator('[data-testid="deal-row-tx-d"] button', { hasText: 'Release Credits' }).first().click();
+            await page.locator('[data-testid="deal-row-tx-d"] button', { hasText: 'Release Beans' }).first().click();
             await page.locator('[data-testid="deal-row-tx-d"] input').fill('5');
         },
     },

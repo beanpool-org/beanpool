@@ -1343,7 +1343,7 @@ async function main(): Promise<void> {
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/chat/report', 'POST /api/groups/:id/join',
             'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
             'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
-            'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
+            'GET /api/groups/:id/members', 'GET /api/groups/:id/invitations', 'DELETE /api/groups/:id/invitations/:pubkey', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             // A chat group's votes (routes/group-decisions.ts): its members see them, everyone else 404.
@@ -1356,6 +1356,9 @@ async function main(): Promise<void> {
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
             'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
             'POST /api/invite/asks', 'GET /api/invite/asks', 'GET /api/invite/asks/mine', 'POST /api/invite/asks/:id/withdraw', 'POST /api/invite/asks/:id/send', 'POST /api/invite/asks/:id/no',
+            // Local knowledge, read in Learn (routes/knowledge.ts): a member's reads, an owner's or admin's writes, all signed.
+            'GET /api/knowledge/front', 'POST /api/knowledge/posts', 'POST /api/knowledge/posts/:id/edit', 'POST /api/knowledge/posts/:id/checked',
+            'POST /api/knowledge/posts/:id/outdated', 'POST /api/knowledge/posts/:id/outdated/clear', 'POST /api/knowledge/posts/:id/take-down',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
@@ -1449,6 +1452,8 @@ async function main(): Promise<void> {
             'POST /api/marketplace/transactions/cancel', 'POST /api/marketplace/transactions/cancel-request',
             'POST /api/marketplace/transactions/complete', 'POST /api/marketplace/transactions/reject',
             'POST /api/marketplace/standing/:id/stop', 'POST /api/marketplace/standing/:id/extend',
+            'POST /api/marketplace/standing/:id/lower', 'POST /api/marketplace/standing/:id/lower/:changeId/answer',
+            'POST /api/marketplace/standing/:id/lower/:changeId/withdraw',
             'POST /api/member/channels', 'POST /api/member/channels/:id', 'POST /api/member/channels/:id/delete',
             'POST /api/member/channels/:id/disconnect-oauth', 'POST /api/member/channels/:id/verify-oauth',
             'POST /api/member/pulse/channels/:id/dismiss-nudge', 'POST /api/member/pulse/items/:id/delete', 'POST /api/member/pulse/items/:id/mute',

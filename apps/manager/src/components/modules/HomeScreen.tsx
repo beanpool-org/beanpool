@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { HelpLink } from '../manual/Manual';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
-import { getTfaSessionToken } from '../../lib/node-client';
 import { FEEDBACK_LIVE, isHundredths } from '@beanpool/core';
 import { beansFigure } from '../../lib/beans';
 import { SuggestChangePanel } from './SuggestChangePanel';
@@ -83,7 +82,7 @@ export function HomeScreen({
         }
         let mounted = true;
         if (activeNode) {
-            fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
+            fetchCommunityShape(activeNode.url, nodeCredential(activeNode))
                 .then((data) => {
                     if (mounted) setCommunityShape(data);
                 })
@@ -232,7 +231,7 @@ export function HomeScreen({
     }
 
     // Core settings nobody has confirmed (Core settings design §3): offered to owners, never forced; it ends when the lock row exists.
-    const isOwnerViewer = viewer?.kind === 'password' || viewer?.role === 'owner';
+    const isOwnerViewer = viewer?.kind === 'token' || viewer?.role === 'owner';
     const coreUnconfirmed = Boolean(communityShape && !communityShape.standby && communityShape.core && !communityShape.core.lock);
     const coreOwnerItem = coreUnconfirmed && isOwnerViewer;
     const coreAdminLine = coreUnconfirmed && !isOwnerViewer && viewer?.role === 'admin';

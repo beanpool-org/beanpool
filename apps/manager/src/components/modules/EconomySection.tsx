@@ -18,7 +18,6 @@ import {
     type MemberItem,
     resolveNodeApiUrl,
     buildAdminHeaders,
-    getTfaSessionToken,
 } from '../../lib/node-client';
 import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
@@ -34,7 +33,6 @@ import { beansFigure, beansText, parseBeans, beansRefusalText } from '../../lib/
 interface EconomySectionProps {
     activeNode: NodeProfile;
     nodeData?: NodeDataPayload | null;
-    tfaToken?: string;
     /** Who is looking at /settings (the Decisions list offers owners an owner's decision). */
     rolesViewer?: RolesViewer;
     onRefresh: () => void;
@@ -79,15 +77,13 @@ const ENTERPRISE_PRESETS = [
 export function EconomySection({
     activeNode,
     nodeData,
-    tfaToken,
-    rolesViewer = { kind: 'password' },
+    rolesViewer = { kind: 'token' },
     onRefresh,
     initialSubTab = 'enterprises',
     onSubTabChange,
 }: EconomySectionProps) {
     // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
     const [ask, confirmation] = useInPageConfirm();
-    const effectiveTfaToken = tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
     const [subTab, setSubTab] = useSectionSubTab<'enterprises' | 'decisions' | 'pool' | 'disputes'>(initialSubTab, onSubTabChange);
 
     // Enterprises state
@@ -192,7 +188,7 @@ export function EconomySection({
     const loadTreasuries = async () => {
         setLoadingTreasuries(true);
         try {
-            const list = await fetchNodeTreasuries(activeNode.url, nodeCredential(activeNode), effectiveTfaToken);
+            const list = await fetchNodeTreasuries(activeNode.url, nodeCredential(activeNode));
             setTreasuries(list || []);
 
             // Populate keepers from list or fetch individually if not returned
@@ -213,8 +209,7 @@ export function EconomySection({
                             const keepers = await fetchTreasuryKeepers(
                                 activeNode.url,
                                 t.publicKey,
-                                nodeCredential(activeNode),
-                                effectiveTfaToken
+                                nodeCredential(activeNode)
                             );
                             return { pubkey: t.publicKey, keepers: Array.isArray(keepers) ? keepers : [] };
                         } catch {
@@ -244,7 +239,7 @@ export function EconomySection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/projects');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -286,8 +281,7 @@ export function EconomySection({
                     workingCapitalCeiling_c: ceiling_c,
                     purpose: newEnterprisePurpose.trim() || undefined,
                 },
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
 
             // If an initial keeper was selected, assign them immediately
@@ -297,8 +291,7 @@ export function EconomySection({
                         activeNode.url,
                         res.publicKey,
                         newEnterpriseKeeper.trim(),
-                        nodeCredential(activeNode),
-                        effectiveTfaToken
+                        nodeCredential(activeNode)
                     );
                 } catch (assignErr) {
                     console.error('Failed to assign initial keeper:', assignErr);
@@ -337,8 +330,7 @@ export function EconomySection({
             const keepers = await fetchTreasuryKeepers(
                 activeNode.url,
                 t.publicKey,
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
             setKeepersMap((prev) => ({ ...prev, [t.publicKey]: Array.isArray(keepers) ? keepers : [] }));
         } catch {
@@ -362,8 +354,7 @@ export function EconomySection({
                 activeNode.url,
                 manageKeepersTreasury.publicKey,
                 targetPubkey,
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
             setKeepersMap((prev) => ({
                 ...prev,
@@ -399,8 +390,7 @@ export function EconomySection({
                 activeNode.url,
                 manageKeepersTreasury.publicKey,
                 keeperPubkey,
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
             setKeepersMap((prev) => ({
                 ...prev,
@@ -435,8 +425,7 @@ export function EconomySection({
                     photos: offerPhotos,
                     description: `${seedOfferTreasury.name} community offer`,
                 },
-                nodeCredential(activeNode),
-                effectiveTfaToken
+                nodeCredential(activeNode)
             );
             setSeedOfferTreasury(null);
             setOfferTitle('');
@@ -456,7 +445,7 @@ export function EconomySection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/reject');
             await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
                 body: JSON.stringify({ projectId }),
             });
             await loadCommonsData();
@@ -686,7 +675,6 @@ export function EconomySection({
                                                 <EnterpriseLocationPicker
                                                     treasury={t}
                                                     activeNode={activeNode}
-                                                    effectiveTfaToken={effectiveTfaToken}
                                                     onLocationSaved={(newLat, newLng) => {
                                                         setTreasuries((prev) =>
                                                             prev.map((item) =>
@@ -738,7 +726,7 @@ export function EconomySection({
             {/* Subtab: Commons proposals */}
             {subTab === 'decisions' && (
                 <div className="space-y-6">
-                    <DecisionsAdminPanel activeNode={activeNode} tfaToken={effectiveTfaToken} viewer={rolesViewer} />
+                    <DecisionsAdminPanel activeNode={activeNode} viewer={rolesViewer} />
 
                     {/* Proposed Projects */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
@@ -1223,7 +1211,6 @@ export function EconomySection({
             {subTab === 'disputes' && (
                 <EscrowDisputesPanel
                     activeNode={activeNode}
-                    tfaToken={effectiveTfaToken}
                     onRefresh={onRefresh}
                 />
             )}

@@ -21,7 +21,6 @@ services:
       - "8443:8443" # Legacy HTTPS (fallback while Azure NSG is updated)
     environment:
       - PUBLIC_IP=${PUBLIC_IP:-}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - BEANPOOL_DATA_DIR=/data
       - CF_API_TOKEN=${CF_API_TOKEN:-}
       - CF_ZONE_ID=${CF_ZONE_ID:-}
@@ -41,10 +40,8 @@ services:
       # deploy.sh). See docs/SECURITY-CUTOVER-CHECKLIST.md.
       - NODE_ROLE=${NODE_ROLE:-}
       - BACKUP_PRIMARY_URL=${BACKUP_PRIMARY_URL:-}
-      # A standby copies with BACKUP_REPLICATION_TOKEN. BACKUP_ADMIN_PASSWORD is legacy: a standby
-      # that still has it swaps it for a token on start where it safely can, and warns otherwise.
+      # A standby copies with BACKUP_REPLICATION_TOKEN and nothing else.
       - BACKUP_REPLICATION_TOKEN=${BACKUP_REPLICATION_TOKEN:-}
-      - BACKUP_ADMIN_PASSWORD=${BACKUP_ADMIN_PASSWORD:-}
       - BACKUP_PULL_INTERVAL_MS=${BACKUP_PULL_INTERVAL_MS:-}
       - ENFORCE_READ_AUTH=${ENFORCE_READ_AUTH:-}
       - ENFORCE_WS_AUTH=${ENFORCE_WS_AUTH:-}
@@ -239,7 +236,7 @@ services:
       # exception. No effect on normal operation. See ops/watchdog/.
       # --report-exclude-env keeps the environment OUT of every one of those
       # reports, because /data is what an owner copies and hands to a stranger
-      # for help and the variables below include ADMIN_PASSWORD and CF_API_TOKEN.
+      # for help and the variables below include CF_API_TOKEN and the replication token.
       # The server also sets this from code (apps/server/src/report-privacy.ts);
       # the flag is here because it is the only form that reaches a WORKER
       # thread's copy of the setting, and it is on from the first instruction

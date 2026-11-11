@@ -18,7 +18,7 @@ export interface OwnerPhoneSession {
     link: string;
     owners: string[];
     envelope: { envelopeId: string; sealedAt: string };
-    /** A restore only: follows it after this server's admin password changes. */
+    /** A restore only: follows it after this server's owners change. */
     followToken?: string;
 }
 

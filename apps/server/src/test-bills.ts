@@ -27,6 +27,13 @@
  * 15. The Home answer: one line per bill waiting, known amber, a stranger's calm; none to an app that doesn't open a bill.
  * 16. What a bill may be about: the sender's own listing, or the standing deal between the two.
  *
+ * The deciding review of 6bc2ece9 (#3066), one section a finding:
+ * 17. A hold follows the person, both ways: a member held by reports sends no bill for an enterprise they keep, and the bill
+ *     they sent for it before is neither listed nor paid; an enterprise held by reports holds its keepers' own bills too.
+ * 18. Whether a report on a bill is child safety is the reporter's choice alone, never the bill's words: kept, marked, listed
+ *     and alerted on the reporter's reason; the queue still reads what the bill was for and how much.
+ * 19. A withdrawn bill still counts: towards the 3 not paid to one person in 30 days, and the day's counts.
+ *
  * Run: SERVER_SUITES_ONLY=test-bills TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
 
@@ -41,8 +48,9 @@ import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
     initStateEngine, transfer, createPost as rawCreatePost, getCommonsBalanceExact, runLedgerAudit, adminSetTier, acceptPost,
-    completePostTransaction, dismissReport, purgeMemberSelf,
+    completePostTransaction, dismissReport, purgeMemberSelf, getReports,
 } from './state-engine.js';
+import { getAlertsStatus } from './services/alerts.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { db } from './db/db.js';
@@ -135,6 +143,19 @@ function assertConserved(step: string): void {
     const audit = runLedgerAudit();
     assert(audit.ok && audit.drift === 0 && nodeTotal() === 0, `${step}: the Beans are conserved (audit ${audit.ok ? 'ok' : 'FAILED'}, drift ${audit.drift}, total ${nodeTotal()})`);
 }
+
+/** `member` keeps `enterprise`: a keeper's row, and can_operate, as createTreasury leaves its lead keeper. */
+function keepEnterprise(enterprise: Id, member: Id): void {
+    db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(enterprise.pk, member.pk);
+    db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(member.pk);
+}
+
+/** A report as the owners' queue reads it (getReports: what both queue routes answer). */
+const queued = (id: string | undefined) => getReports('all').reports.find((r) => r.id === id);
+/** A report's reason as the node keeps it. */
+const storedReason = (id: string | undefined) => (db.prepare('SELECT reason FROM abuse_reports WHERE id = ?').get(id ?? '') as { reason: string } | undefined)?.reason;
+/** Child-safety alerts told so far (each at once, urgent and pushed). */
+const childTold = () => getAlertsStatus().history.filter((e) => e.key === 'reports.child').reduce((n, e) => n + (e.count ?? 1), 0);
 
 /** A finished deal between the two on `seller`'s jam: what opens a payer's credit line to a seller's bills. */
 function finishDeal(buyer: Id, seller: Id & { jam: any }): void {
@@ -357,9 +378,13 @@ async function main(): Promise<void> {
     const report = (v: Id, billId: string) => post(v, '/api/reports', { reporterPubkey: v.pk, reason: 'Scam or fraud', targetBillId: billId });
     const rep1 = await report(victims[0], zedBills[0].id);
     const kept1 = db.prepare('SELECT * FROM abuse_reports WHERE id = ?').get(rep1.body?.report?.id) as any;
-    assert(rep1.status === 200 && kept1?.target_pubkey === zed.pk && /Scam or fraud · Bill: "Community fee", 40 Beans/.test(kept1?.reason ?? '')
+    // The report keeps its reporter's reason alone; the queue reads the bill beside it (§18: the sender's words never decide
+    // what kind of report it is).
+    const queued1 = queued(kept1?.id);
+    assert(rep1.status === 200 && kept1?.target_pubkey === zed.pk && kept1?.reason === 'Scam or fraud' && queued1?.targetPubkey === zed.pk
+        && queued1?.reason === 'Scam or fraud · Bill: "Community fee", 40 Beans'
         && billRow(zedBills[0].id).state === 'declined' && billRow(zedBills[0].id).report_id === kept1?.id,
-        `a report on a bill reaches the queue about Zed, with what for and how much, and declines the bill (${show(rep1)})`);
+        `a report on a bill reaches the queue about Zed, with what for and how much, and declines the bill (${show(rep1)}; queue: ${queued1?.reason})`);
     const notTheirs = await post(victims[1], '/api/reports', { reporterPubkey: victims[1].pk, reason: 'Spam', targetBillId: zedBills[0].id });
     assert(notTheirs.status === 404, `only its payer reports a bill (${show(notTheirs)})`);
     await report(victims[1], zedBills[1].id);
@@ -491,6 +516,114 @@ async function main(): Promise<void> {
     assert(badWhat.body?.code === 'bill_what_for' && badAmount.body?.code === 'bill_amount' && self.body?.code === 'bill_yourself',
         'what for is 3 to 80 characters; at most 2,000 Beans; nobody bills themselves');
     assertConserved('about');
+
+    // ── 17. A hold follows the person, both ways (the deciding review of 6bc2ece9, finding 1) ─────────────────────────────
+    console.log('── 17. A hold follows the person ──');
+    // A member held by reports on the bills they sent as themselves sends none for an enterprise they keep.
+    const zak = makeMember('Zak', 0);
+    const zakCo = makeMember('Zak Co', 0, { treasury: true });
+    const kai = makeMember('Kai', 0);
+    keepEnterprise(zakCo, zak);
+    keepEnterprise(zakCo, kai);
+    const dot = makeMember('Dot', 50);
+    const coBill = await bill(zak, dot, 10, 'Plum crate', { enterprise: zakCo.pk });
+    assert(coBill.status === 200 && billRow(coBill.id).biller_pubkey === zakCo.pk && billRow(coBill.id).sent_by === zak.pk,
+        `Zak sends Dot a bill for Zak Co, which he keeps (${show(coBill)})`);
+    for (const m of [makeMember('M1', 0), makeMember('M2', 0), makeMember('M3', 0)]) await report(m, (await bill(zak, m, 40, 'Community fee')).id);
+    const zakSelf = await bill(zak, dot, 1, 'Plums');
+    const zakAsCo = await bill(zak, makeMember('Fay', 0), 1, 'Community fee', { enterprise: zakCo.pk });
+    assert(zakSelf.status === 403 && zakSelf.body?.code === 'bills_on_hold', `three members reported Zak's bills: he sends none as himself (${show(zakSelf)})`);
+    assert(zakAsCo.status === 403 && zakAsCo.body?.code === 'bills_on_hold' && !billRow(zakAsCo.id),
+        `nor for Zak Co: the hold follows Zak into the enterprise he keeps, and nothing is written (${show(zakAsCo)})`);
+    const dot17 = bal(dot.pk);
+    const coPay = await pay(dot, coBill.id);
+    assert(!(await toPay(dot)).some((b) => b.id === coBill.id) && coPay.status === 409 && coPay.body?.code === 'bill_on_hold' && bal(dot.pk) === dot17
+        && billRow(coBill.id).state === 'sent',
+        `the bill Zak sent for Zak Co before the hold is neither listed for Dot nor paid (${show(coPay)})`);
+    const kaiCo = await bill(kai, makeMember('Gil', 0), 1, 'Plum crate', { enterprise: zakCo.pk });
+    assert(kaiCo.status === 200, `Kai keeps Zak Co too, and nobody reported its bills: he still sends for it (${show(kaiCo)})`);
+    // An enterprise held by reports on its bills: its keepers send none as themselves either (design §4.4 says "one sender's
+    // bills" and is silent on whether an enterprise's hold reaches its keepers, so the hold goes both ways).
+    const fen = makeMember('Fen', 0);
+    const flo = makeMember('Flo', 0);
+    const figCo = makeMember('Fig Co', 0, { treasury: true });
+    keepEnterprise(figCo, fen);
+    keepEnterprise(figCo, flo);
+    const ownerTold17 = notices(owner.pk, 'bills_on_hold').length;
+    const figReports: string[] = [];
+    for (const m of [makeMember('N1', 0), makeMember('N2', 0), makeMember('N3', 0)]) {
+        figReports.push((await report(m, (await bill(fen, m, 40, 'Membership dues', { enterprise: figCo.pk })).id)).body?.report?.id);
+    }
+    const figTold = notices(owner.pk, 'bills_on_hold').slice(ownerTold17);
+    assert(figTold.length === 1 && figTold[0].body.startsWith("Fig Co's bills are on hold: 3 members"), `the owner is told once, of Fig Co (${figTold.map((n) => n.body).join(' | ')})`);
+    const fenSelf = await bill(fen, makeMember('Hap', 0), 1, 'Hedge trim');
+    assert(fenSelf.status === 403 && fenSelf.body?.code === 'bills_on_hold', `Fen, who sent Fig Co's reported bills, sends none as himself (${show(fenSelf)})`);
+    const floSelf = await bill(flo, makeMember('Ida', 0), 1, 'Hedge trim');
+    const floAsFig = await bill(flo, makeMember('Jem', 0), 1, 'Membership dues', { enterprise: figCo.pk });
+    assert(floSelf.status === 403 && floSelf.body?.code === 'bills_on_hold' && floAsFig.status === 403 && floAsFig.body?.code === 'bills_on_hold',
+        `Flo keeps Fig Co and sent none of them: she sends none as herself while it is held, nor for it (${show(floSelf)} · ${show(floAsFig)})`);
+    dismissReport(figReports[0]);
+    const floAfter = await bill(flo, makeMember('Kip', 0), 1, 'Hedge trim');
+    const fenAfter = await bill(fen, makeMember('Lou', 0), 1, 'Hedge trim');
+    assert(floAfter.status === 200 && fenAfter.status === 200, `an owner handles one report: the hold lifts for Fig Co's keepers (${show(floAfter)} · ${show(fenAfter)})`);
+    assertConserved('a hold follows the person');
+
+    // ── 18. A report's kind is the reporter's choice (the deciding review of 6bc2ece9, finding 2) ──────────────────────────
+    console.log("── 18. A report's kind is the reporter's ──");
+    const sly = makeMember('Sly', 0);
+    const pat = makeMember('Pat', 50);
+    const peg = makeMember('Peg', 50);
+    finishDeal(pat, sly);
+    finishDeal(peg, sly);
+    const swimA = await bill(sly, pat, 20, 'Swim lessons');
+    const swimB = await bill(sly, pat, 20, 'Swim squad, underage group');
+    const swimC = await bill(sly, peg, 20, 'Swim lessons, underage squad');
+    const swimD = await bill(sly, peg, 5, 'Swim kit');
+    assert([swimA, swimB, swimC, swimD].every((r) => r.status === 200), 'Sly sends Pat and Peg two bills each, two of them for an "underage" squad');
+    const fileAs = (v: Id, billId: string, reason: string) => post(v, '/api/reports', { reporterPubkey: v.pk, reason, targetBillId: billId });
+    let child18 = childTold();
+    const repC = await fileAs(peg, swimC.id, 'Spam or scam');
+    const idC = repC.body?.report?.id;
+    assert(repC.status === 200 && storedReason(idC) === 'Spam or scam',
+        `Peg reports the bill "Swim lessons, underage squad" as Spam or scam: the report keeps her reason alone (${show(repC)}; kept ${JSON.stringify(storedReason(idC))})`);
+    assert(queued(idC)?.childSafety === false && childTold() === child18,
+        `it is no child-safety report: the queue doesn't mark it, and no urgent alert goes (marked ${queued(idC)?.childSafety}; ${childTold() - child18} told)`);
+    assert(queued(idC)?.reason === 'Spam or scam · Bill: "Swim lessons, underage squad", 20 Beans', `the queue still reads what the bill was for and how much (${queued(idC)?.reason})`);
+    const repA = await fileAs(pat, swimA.id, 'Spam or scam');
+    const idA = repA.body?.report?.id;
+    child18 = childTold();
+    const repB = await fileAs(pat, swimB.id, 'Spam or scam');
+    assert(repB.status === 200 && repB.body?.duplicate === true && repB.body?.report?.id === idA && storedReason(idA) === 'Spam or scam' && childTold() === child18
+        && billRow(swimB.id).state === 'declined' && billRow(swimB.id).report_id === idA,
+        `Pat's second report, on the "underage" bill, joins his report on file: still Spam or scam, no alert, the bill declined (${show(repB)}; kept ${JSON.stringify(storedReason(idA))})`);
+    assert(queued(idA)?.childSafety === false && queued(idA)?.reason === 'Spam or scam · Bill: "Swim lessons", 20 Beans · Bill: "Swim squad, underage group", 20 Beans',
+        `the queue reads both of Pat's bills on that report, not marked (${queued(idA)?.reason})`);
+    child18 = childTold();
+    const repD = await fileAs(peg, swimD.id, 'Child safety');
+    assert(repD.status === 200 && repD.body?.report?.id === idC && storedReason(idC) === 'Child safety' && queued(idC)?.childSafety === true && childTold() === child18 + 1,
+        `Peg picks Child safety on her other bill from Sly: her report becomes child safety, marked, and told at once (kept ${JSON.stringify(storedReason(idC))}; ${childTold() - child18} told)`);
+    assertConserved("a report's kind");
+
+    // ── 19. A withdrawn bill still counts (the deciding review of 6bc2ece9, finding 3) ─────────────────────────────────────
+    console.log('── 19. Withdrawn bills count ──');
+    const ora = makeMember('Ora', 0);
+    const opi = makeMember('Opi', 20);
+    finishDeal(opi, ora);
+    const round = [await bill(ora, opi, 1, 'Pot 1'), await bill(ora, opi, 1, 'Pot 2'), await bill(ora, opi, 1, 'Pot 3')];
+    const takenBack: Res[] = [];
+    for (const r of round) takenBack.push(await post(ora, `/api/bills/${r.id}/withdraw`));
+    const opiTold = notices(opi.pk, 'bill').length;
+    const fourthToOpi = await bill(ora, opi, 1, 'Pot 4');
+    assert(round.every((r) => r.status === 200) && takenBack.every((r) => r.status === 200) && fourthToOpi.status === 429 && fourthToOpi.body?.code === 'bills_to_one'
+        && !billRow(fourthToOpi.id) && notices(opi.pk, 'bill').length === opiTold,
+        `Ora sends Opi 3 bills and withdraws them: a 4th to Opi in 30 days is still 429, and Opi hears of no 4th (${show(fourthToOpi)})`);
+    const nia = makeMember('Nia', 0);
+    const newcomers = [makeMember('T1', 0), makeMember('T2', 0), makeMember('T3', 0), makeMember('T4', 0)];
+    for (const t of newcomers.slice(0, 3)) await post(nia, `/api/bills/${(await bill(nia, t, 1, 'Raffle ticket')).id}/withdraw`);
+    const fourthNew = await bill(nia, newcomers[3], 1, 'Raffle ticket');
+    assert(fourthNew.status === 429 && fourthNew.body?.code === 'bills_new_people_day',
+        `3 bills to people Nia never dealt with, withdrawn, still count among the day's 3: the 4th is 429 (${show(fourthNew)})`);
+    assertConserved('withdrawn bills count');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

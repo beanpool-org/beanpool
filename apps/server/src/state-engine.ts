@@ -97,7 +97,8 @@ import {
 } from './engine/standing-deals.js';
 import {
     sendBill as sendBillEngine, payBill as payBillEngine, declineBill as declineBillEngine, withdrawBill as withdrawBillEngine,
-    listBills as listBillsEngine, billReported as billReportedEngine, expireBills, endBillsOf, type BillRow, type BillSend, type PaidBill,
+    listBills as listBillsEngine, billReported as billReportedEngine, expireBills, endBillsOf, billReportReason, billsReportedIn,
+    type BillRow, type BillSend, type PaidBill,
 } from './engine/bills.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -7733,14 +7734,19 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
     }
 
     const rows = db.prepare(querySql).all(...queryParams) as any[];
-    const reports = rows.map(r => ({ 
+    // A report on a bill keeps its reporter's reason alone (routes/community.ts POST /api/reports): the queue reads what each
+    // bill it was filed on was for, and how much, after it. Marked and sorted on the reason kept, the reporter's, never on a
+    // bill's words (engine/bills.ts billReportReason).
+    const billsOf = billsReportedIn(rows.map((r) => r.id));
+    const reports = rows.map(r => ({
         // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
         // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
         // wrote beside it. So every screen that names or freezes the target names the right member.
         id: r.id, reporterPubkey: r.reporter_pubkey,
         targetPubkey: r.target_pulse_item_id ? (r.pulse_owner_pubkey || r.target_pubkey)
             : r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
-        targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id,
+        reason: billsOf.has(r.id) ? billReportReason(r.reason, billsOf.get(r.id)!) : r.reason, createdAt: r.created_at,
         childSafety: reportKind(r.reason) === 'child safety',
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],

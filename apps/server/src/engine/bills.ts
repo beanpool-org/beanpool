@@ -31,7 +31,10 @@
 // HELD BY REPORTS. A payer may report a bill (POST /api/reports with targetBillId): it is declined, and the report goes to the
 // owners' queue naming the sender, what for and how much. Three different members' open reports on one sender's bills within
 // 7 days hold that sender's bills: no new one goes, and none of theirs is listed or paid, until an owner or admin handles the
-// reports in the queue (dismissed or actioned, each is no longer open). The owners are told once, when it holds.
+// reports in the queue (dismissed or actioned, each is no longer open). The owners are told once, when it holds. The hold
+// follows the person, both ways (billsHeld): a member's reported bills count for them whichever account they sent them for,
+// and a member who keeps an enterprise held by reports is held with it. The report keeps its reporter's reason alone, so
+// the bill's words never make it a child-safety report; the queue reads the bill beside it (billReportReason).
 //
 // WHERE. A main server with Beans on and the `bills` switch on (config/node-profile.ts): Beans off answers 403
 // profile_no_beans, bills off 404 feature_off. A standby refuses every write (routes/standby-ledger-gate.ts) and moves nothing.
@@ -125,16 +128,18 @@ const hiddenFrom = (payer: string, bill: Pick<BillRow, 'biller_pubkey' | 'sent_b
 // ── Held by reports ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Whether `biller`'s bills are held now: within some 7 days, `reportersToHold` different members (each still active here)
- * filed reports on their bills that are still open in the owners' queue. Handling those reports (dismissed or actioned)
- * lifts it. Returns the reporters in the window that holds it, or 0.
+ * How many members hold `key`'s own bills by reporting them: within some 7 days, `reportersToHold` different members (each
+ * still active here) filed reports, still open in the owners' queue, on bills `key` was billed as (biller_pubkey: a member,
+ * or an enterprise) or sent (sent_by: a member, as themselves or for an enterprise they keep). Handling those reports
+ * (dismissed or actioned) lifts it. Returns the reporters in the window that holds it, or 0.
  */
-function billsHeldBy(biller: string): number {
+function reportersHolding(key: string): number {
     const rows = db.prepare(`SELECT ar.reporter_pubkey AS reporter, ar.created_at AS at FROM bills b
                                JOIN abuse_reports ar ON ar.id = b.report_id
                                JOIN members m ON m.public_key = ar.reporter_pubkey AND m.status = 'active'
-                              WHERE b.biller_pubkey = ? AND b.report_id IS NOT NULL AND (ar.status IS NULL OR ar.status = 'pending')`)
-        .all(biller) as { reporter: string; at: string }[];
+                              WHERE b.report_id IS NOT NULL AND (b.biller_pubkey = @key OR b.sent_by = @key)
+                                AND (ar.status IS NULL OR ar.status = 'pending')`)
+        .all({ key }) as { reporter: string; at: string }[];
     const times = rows.map((r) => ({ reporter: r.reporter, ms: Date.parse(r.at) })).filter((r) => Number.isFinite(r.ms)).sort((a, b) => a.ms - b.ms);
     const windowMs = BILL_RULES.reportWindowDays * DAY_MS;
     let most = 0;
@@ -144,6 +149,25 @@ function billsHeldBy(biller: string): number {
     }
     return most >= BILL_RULES.reportersToHold ? most : 0;
 }
+
+/**
+ * Whether `key`'s bills are held. Design §4.4: "Three different members reporting one sender's bills in 7 days stops that
+ * sender's bills". The hold follows the person (the deciding review of #3066, finding 1): the reports on the bills a member
+ * sent count for them whichever account the bills were for (reportersHolding reads sent_by), so a held member sends none
+ * as themselves or for any enterprise they keep. And the design names "one sender" without saying whether an enterprise's
+ * hold reaches the members who keep it, so it does: a member who keeps an enterprise whose bills are held is held with it.
+ * An enterprise is held by the reports on its own bills only, never by a keeper's: a keeper nobody reported still sends
+ * for it.
+ */
+function billsHeld(key: string): boolean {
+    if (reportersHolding(key) > 0) return true;
+    const kept = db.prepare('SELECT treasury_pubkey AS enterprise FROM treasury_operators WHERE member_pubkey = ?').all(key) as { enterprise: string }[];
+    return kept.some(({ enterprise }) => enterprise !== key && reportersHolding(enterprise) > 0);
+}
+
+/** A bill is held while the account it was billed as, or the member who sent it, is held (billsHeld); `held` may cache. */
+const billOnHold = (b: Pick<BillRow, 'biller_pubkey' | 'sent_by'>, held: (key: string) => boolean = billsHeld): boolean =>
+    held(b.biller_pubkey) || (b.sent_by !== b.biller_pubkey && held(b.sent_by));
 
 // ── Notices ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -205,8 +229,8 @@ function waitingFor(payer: string, now: number): BillRow[] {
     const rows = db.prepare(`SELECT * FROM bills WHERE payer_pubkey = ? AND state = 'sent' AND expires_at > ? ORDER BY created_at DESC LIMIT 200`)
         .all(payer, iso(now)) as BillRow[];
     const held = new Map<string, boolean>();
-    const isHeld = (biller: string) => held.get(biller) ?? (held.set(biller, billsHeldBy(biller) > 0), held.get(biller)!);
-    return rows.filter((b) => !hiddenFrom(payer, b) && !isHeld(b.biller_pubkey));
+    const isHeld = (key: string) => held.get(key) ?? (held.set(key, billsHeld(key)), held.get(key)!);
+    return rows.filter((b) => !hiddenFrom(payer, b) && !billOnHold(b, isHeld));
 }
 
 /**
@@ -268,8 +292,10 @@ function assertUnderLimits(biller: string, payer: string, now: number): void {
             throw refuse(429, 'bills_new_people_day', billLines.limitNewPeople(newLimit, whenWords(at)), iso(at));
         }
     }
-    // Declined bills count as not paid, so the limit never tells the sender a bill was declined.
-    const toOne = db.prepare(`SELECT created_at AS at FROM bills WHERE biller_pubkey = ? AND payer_pubkey = ? AND state IN ('sent', 'declined')
+    // Every bill to them in the 30 days that isn't paid counts: a declined one, so the limit never tells the sender a bill was
+    // declined, and a withdrawn one, so withdrawing frees nothing: each one sent was a push and a notice to them (the deciding
+    // review of #3066, finding 3). An expired one is past the 30 days already.
+    const toOne = db.prepare(`SELECT created_at AS at FROM bills WHERE biller_pubkey = ? AND payer_pubkey = ? AND state != 'paid'
                                AND created_at > ? ORDER BY created_at`).all(biller, payer, iso(now - BILL_RULES.waitDays * DAY_MS)) as { at: string }[];
     if (toOne.length >= BILL_RULES.unpaidToOnePer30Days) {
         const at = Date.parse(toOne[toOne.length - BILL_RULES.unpaidToOnePer30Days].at) + BILL_RULES.waitDays * DAY_MS;
@@ -334,7 +360,8 @@ export function sendBill(hooks: BillHooks, signer: string, body: BillSend, now: 
         if (!same) throw refuse(409, 'bill_id_reused', billLines.idReused());
         return billViewFor(prior, 'sent');
     }
-    if (billsHeldBy(biller) > 0) throw refuse(403, 'bills_on_hold', billLines.onHold());
+    // The hold follows the person (billsHeld): the signer's, whichever account they send for, and the enterprise's own.
+    if (billOnHold({ biller_pubkey: biller, sent_by: signer })) throw refuse(403, 'bills_on_hold', billLines.onHold());
     assertUnderLimits(biller, payer, now);
 
     const at = iso(now);
@@ -393,7 +420,7 @@ export function payBill(hooks: BillHooks, payer: string, billId: string, request
     // An enterprise pays no bill in v1 (design §4.1): none can be sent one, and none pays one.
     if (isEnterprise(payer)) throw refuse(403, 'bill_enterprise_payer', billLines.noEnterprisePayer());
     if (!activeHere(bill.biller_pubkey) || memberRow(bill.biller_pubkey)?.paused === 1) throw refuse(409, 'bill_biller_gone', billLines.billerGone());
-    if (billsHeldBy(bill.biller_pubkey) > 0) throw refuse(409, 'bill_on_hold', billLines.payOnHold());
+    if (billOnHold(bill)) throw refuse(409, 'bill_on_hold', billLines.payOnHold());
 
     const creditOpen = dealtWith(payer, bill.biller_pubkey);
     const read = hooks.getBalance(payer) as ReturnType<BillHooks['getBalance']> & { liveOffers?: number };
@@ -456,31 +483,57 @@ export function reportableBill(reporter: string, billId: unknown): BillRow | nul
     return bill && bill.payer_pubkey === reporter && !hiddenFrom(reporter, bill) ? bill : null;
 }
 
-/** The words the owners' queue keeps for a report on a bill: the reporter's reason, then what the bill was for and how much. */
-export function billReportReason(reason: string, bill: BillRow): string {
-    const tail = ` · Bill: "${bill.what_for}", ${formatHundredths(bill.amount_c, 'en')} Beans`;
-    return `${reason.slice(0, Math.max(0, 500 - tail.length))}${tail}`;
+/** A bill as the owners' queue reads it beside a report filed on it: what for, and how much. */
+export type ReportedBill = Pick<BillRow, 'what_for' | 'amount_c'>;
+
+/**
+ * The words the owners' queue reads for a report filed on bills (state-engine.ts getReports): the reporter's reason, then
+ * what each bill was for and how much. Read, never kept: the report keeps its reporter's reason alone, and everything that
+ * marks, sorts or alerts on a report reads that, so a bill's words, which its sender wrote, never make a report child
+ * safety (the deciding review of #3066, finding 2).
+ */
+export function billReportReason(reason: string, bills: readonly ReportedBill[]): string {
+    return `${reason}${bills.map((b) => ` · Bill: "${b.what_for}", ${formatHundredths(b.amount_c, 'en')} Beans`).join('')}`;
+}
+
+/** The bills each of `reportIds` was filed on (bills.report_id), oldest first: a payer's second bill joins their report on file. */
+export function billsReportedIn(reportIds: readonly string[]): Map<string, ReportedBill[]> {
+    const out = new Map<string, ReportedBill[]>();
+    if (!reportIds.length) return out;
+    const rows = db.prepare(`SELECT report_id, what_for, amount_c FROM bills WHERE report_id IN (SELECT value FROM json_each(?))
+                              ORDER BY created_at, rowid`).all(JSON.stringify(reportIds)) as Array<ReportedBill & { report_id: string }>;
+    for (const r of rows) {
+        const list = out.get(r.report_id) ?? [];
+        list.push({ what_for: r.what_for, amount_c: r.amount_c });
+        out.set(r.report_id, list);
+    }
+    return out;
 }
 
 /**
  * A report filed on a bill (routes/community.ts POST /api/reports with targetBillId), after the report is kept: the bill is
- * declined if it is still waiting, and names the report. When this makes three reporters within 7 days, the sender's bills
- * are held and every owner is told once (design §4.4, "one owner alert"): who, how many, and where to look.
+ * declined if it is still waiting, and names the report. The report counts for the account the bill was billed as and for
+ * the member who sent it (reportersHolding). When it makes three reporters within 7 days for either one, that one's bills are
+ * held and every owner is told once (design §4.4, "one owner alert"): who, how many, and where to look. One alert a report:
+ * if it holds both at once, it names the account the bill was billed as, which the queue names.
  */
 export function billReported(hooks: Pick<BillHooks, 'broadcast' | 'dispatchPushNotification'>, bill: BillRow, reportId: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
-    const before = billsHeldBy(bill.biller_pubkey);
+    const keys = [...new Set([bill.biller_pubkey, bill.sent_by])];
+    const before = keys.map(reportersHolding);
     let told: BillNotice[] = [];
     db.transaction(() => {
         db.prepare('UPDATE bills SET report_id = ? WHERE id = ?').run(reportId, bill.id);
         db.prepare(`UPDATE bills SET state = 'declined', answered_at = ? WHERE id = ? AND state = 'sent'`).run(iso(now), bill.id);
-        const after = billsHeldBy(bill.biller_pubkey);
-        if (before === 0 && after > 0) {
+        const after = keys.map(reportersHolding);
+        const crossed = keys.findIndex((_, i) => before[i] === 0 && after[i] > 0);
+        if (crossed >= 0) {
+            const key = keys[crossed];
             const owners = db.prepare(`SELECT nr.member_pubkey AS key FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
                                         WHERE nr.role = 'owner' AND m.status = 'active'`).all() as { key: string }[];
-            const body = billLines.heldForOwners(nameOf(bill.biller_pubkey), after);
-            told = owners.map((o) => keep(o.key, body, { kind: 'bills_on_hold', member: bill.biller_pubkey, screen: 'settings' }));
-            console.log(`🧾 Member ${bill.biller_pubkey.slice(0, 12)}…'s bills are held: ${after} members reported them within ${BILL_RULES.reportWindowDays} days.`);
+            const body = billLines.heldForOwners(nameOf(key), after[crossed]);
+            told = owners.map((o) => keep(o.key, body, { kind: 'bills_on_hold', member: key, screen: 'settings' }));
+            console.log(`🧾 Member ${key.slice(0, 12)}…'s bills are held: ${after[crossed]} members reported them within ${BILL_RULES.reportWindowDays} days.`);
         }
     })();
     tell(hooks, told, 'community.notice');

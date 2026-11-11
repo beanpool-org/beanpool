@@ -36,7 +36,7 @@ import {
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
     inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember, noteBillReported,
 } from '../state-engine.js';
-import { billReportReason, reportableBill, type BillRow } from '../engine/bills.js';
+import { reportableBill, type BillRow } from '../engine/bills.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
 import { CreditGiftError, creditGiftOffer, giveCreditLine } from '../engine/credit-gift.js';
@@ -2220,8 +2220,8 @@ router.post('/api/reports', async (ctx) => {
     // account keeps.
     if (!membersOnlyHere(ctx)) return;
     // A bill's report (engine/bills.ts; DESIGN-getting-paid-fable §4.3): its payer's alone, about its sender whoever the client
-    // named. Kept below with what the bill was for and how much, it declines the bill, and three members' within 7 days hold
-    // the sender's bills.
+    // named. It declines the bill, three members' within 7 days hold the sender's bills, and the queue reads what the bill
+    // was for and how much beside it (getReports): the report keeps its reporter's reason alone, below.
     let bill: BillRow | null = null;
     if (targetBillId !== undefined && targetBillId !== null && targetBillId !== '') {
         if ((targetPostId !== undefined && targetPostId !== null && targetPostId !== '') || (targetPulseItemId !== undefined && targetPulseItemId !== null)) {
@@ -2295,8 +2295,10 @@ router.post('/api/reports', async (ctx) => {
     // Repeating a still-pending report succeeds without a new row, even at the limit: the member's
     // report is already on file.
     // Every alert judges the 500 characters the queue keeps (submitReport), so a child-safety alert always points at a
-    // report the queue marks and lists first (the review of #1912, finding 6: words past them were told, then lost).
-    const kept = bill ? billReportReason(reason, bill) : reason.slice(0, 500);
+    // report the queue marks and lists first (the review of #1912, finding 6: words past them were told, then lost). On a
+    // bill too it is the reporter's reason alone: what the bill was for is its sender's words, and they never make a report
+    // child safety (the deciding review of #3066, finding 2).
+    const kept = reason.slice(0, 500);
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
         // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
@@ -2304,7 +2306,7 @@ router.post('/api/reports', async (ctx) => {
         // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
         // file was: words past them would make every repeat look like a change.
         if (reportKind(kept) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
-            const changed = updatePendingReportReason(pending.id, bill ? kept : reason);
+            const changed = updatePendingReportReason(pending.id, reason);
             if (changed) {
                 noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
                 if (bill) noteBillReported(bill, changed.id);
@@ -2321,7 +2323,7 @@ router.post('/api/reports', async (ctx) => {
         ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
         return;
     }
-    const report = submitReport(activeReporter, targetPubkey, bill ? kept : reason, targetPostId, targetPulseItemId || undefined);
+    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);
     if (!report) {
         ctx.status = 400;
         ctx.body = { error: word('Failed — must be a registered member, cannot report yourself') };

@@ -681,6 +681,8 @@ CREATE INDEX IF NOT EXISTS idx_bills_payer ON bills(payer_pubkey, state);
 CREATE INDEX IF NOT EXISTS idx_bills_biller ON bills(biller_pubkey, created_at);
 CREATE INDEX IF NOT EXISTS idx_bills_due ON bills(state, expires_at);
 CREATE INDEX IF NOT EXISTS idx_bills_updated_at ON bills(updated_at);
+-- The bills reports were filed on: all a hold (engine/bills.ts reportersHolding) and the reports queue (getReports) read.
+CREATE INDEX IF NOT EXISTS idx_bills_reported ON bills(report_id) WHERE report_id IS NOT NULL;
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (

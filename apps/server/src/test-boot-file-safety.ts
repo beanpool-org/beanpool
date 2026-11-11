@@ -336,7 +336,10 @@ async function main(): Promise<void> {
     console.log('\n10. index.ts makes the data dir safe before anything reads it');
     const index = fs.readFileSync(path.join(path.dirname(SCRIPT), 'index.ts'), 'utf8');
     const at = index.indexOf('secureDataDirAtBoot(');
-    check(at > 0 && at < index.indexOf('await ensureGenesis()') && at < index.indexOf('initAdminPassword()'), 'secureDataDirAtBoot runs before genesis and the first config read');
+    // The first steps that read local-config.json: the take-over's settle (step 2.4) and the state engine (step 2.5). The
+    // admin password's step 2, which read it first until 11 Nov 2026, is gone.
+    check(at > 0 && at < index.indexOf('await ensureGenesis()') && at < index.indexOf('settleTakeoverBeforeDatabaseBoot()')
+        && at < index.indexOf('initStateEngine()'), 'secureDataDirAtBoot runs before genesis and the first config read');
 
     console.log(`\n${failures === 0 ? '✅' : '❌'} boot-file-safety: ${passes}/${passes + failures} passed`);
     process.exit(failures === 0 ? 0 : 1);

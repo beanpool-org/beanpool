@@ -98,8 +98,9 @@ export async function ensureGenesis(): Promise<GenesisState> {
 
 /**
  * Files a server holds once it has finished a first start, or once a take-over or a restore has begun writing into it.
- * local-config.json and shutdown-sentinel.json are written in the start's steps 2 and 2.1 (initAdminPassword,
- * initShutdownRecovery), straight after genesis, and nothing writes them earlier; state.json is a pre-SQLite node's.
+ * shutdown-sentinel.json is written in the start's step 2.1 (initShutdownRecovery), straight after genesis, and
+ * local-config.json at the first save of a setting (on a new install, the claim code's in step 2.55); nothing writes
+ * either before genesis. state.json is a pre-SQLite node's.
  */
 const NOT_NEW_INSTALL_FILES = [
     'libp2p_key', 'connectors.json', 'recovery-seal.key', 'open-join.key', 'takeover-journal.json',

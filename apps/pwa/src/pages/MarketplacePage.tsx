@@ -795,15 +795,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     onPostOpened?.();
                 };
                 // Not a listing at all: a link to a page of Local knowledge (the Market never reads one) lands in Learn.
-                const inLearnOr = () => {
-                    if (!onNavigate) return notReadable();
-                    getLearnPost(id).then(
-                        page => { if (page) { setPostLinkNotice(null); onPostOpened?.(); onNavigate('learn-page', id); } else notReadable(); },
-                        () => notReadable(),
-                    );
+                // Its read is returned, so a Learn read that fails (not one that comes back empty) lands in the catch below with the
+                // Market's own: a dead connection is not "taken down".
+                const inLearnOr = (): Promise<void> => {
+                    if (!onNavigate) { notReadable(); return Promise.resolve(); }
+                    return getLearnPost(id).then(page => {
+                        if (page) { setPostLinkNotice(null); onPostOpened?.(); onNavigate('learn-page', id); } else notReadable();
+                    });
                 };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
-                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); if (openTxId) setSelectedTxId(openTxId); onPostOpened?.(); } else inLearnOr(); })
+                    .then(rows => {
+                        if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); if (openTxId) setSelectedTxId(openTxId); onPostOpened?.(); return; }
+                        return inLearnOr();
+                    })
                     // A failed read is not an answer: say so, and let the next View Post ask again (review #1980 N1).
                     .catch(() => {
                         deepLinkFetched.current = null;

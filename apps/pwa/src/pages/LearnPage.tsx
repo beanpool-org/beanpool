@@ -183,20 +183,50 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
 
     // One topic, a page at a time.
     const [more, setMore] = useState<{ topic: string; rows: KnowledgeRow[]; next: number | null; count: number } | null>(null);
+    // The topic's first page failed (nothing to keep: Failed, with Try again), and a later page failed (the rows read stay).
+    const [topicFailed, setTopicFailed] = useState(false);
+    const [topicTries, setTopicTries] = useState(0);
     const [moreFailed, setMoreFailed] = useState(false);
+    // A later page is out: a ref, so a second tap in the same frame (before the screen has drawn the first) is turned away too.
+    const [moreLoading, setMoreLoading] = useState(false);
+    const moreOut = useRef(false);
+    // Which read of the topic this is: an answer for an earlier one (another topic, or the same one read again) is dropped.
+    const topicRead = useRef(0);
     useEffect(() => {
+        topicRead.current += 1;
+        moreOut.current = false;
+        setMoreLoading(false);
+        setMoreFailed(false);
+        setTopicFailed(false);
         if (!open || !topic || pageId) { setMore(null); return; }
         let live = true;
-        setMoreFailed(false);
         const first: Promise<KnowledgeTopicPage> = preview ? Promise.resolve(learnTopicOf(samplePosts(), topic)) : getLearnTopic(topic);
-        first.then((p) => { if (live) setMore({ topic, rows: p.rows, next: p.next, count: p.count }); }, () => { if (live) setMoreFailed(true); });
+        first.then((p) => { if (live) setMore({ topic, rows: p.rows, next: p.next, count: p.count }); }, () => { if (live) setTopicFailed(true); });
         return () => { live = false; };
-    }, [open, preview, topic, pageId]);
+    }, [open, preview, topic, pageId, topicTries]);
     const showMore = useCallback(() => {
-        if (!more || more.next === null || !topic) return;
+        if (!more || more.next === null || !topic || moreOut.current) return;
         const from = more.next;
+        const mine = topicRead.current;
+        moreOut.current = true;
+        setMoreLoading(true);
+        setMoreFailed(false);
         const next: Promise<KnowledgeTopicPage> = preview ? Promise.resolve(learnTopicOf(samplePosts(), topic, from)) : getLearnTopic(topic, from);
-        next.then((p) => setMore((m) => (m && m.topic === topic ? { ...m, rows: [...m.rows, ...p.rows], next: p.next } : m)), () => setMoreFailed(true));
+        next.then(
+            (p) => {
+                if (topicRead.current !== mine) return;
+                moreOut.current = false;
+                setMoreLoading(false);
+                // Only the page that follows what is drawn: the same offset is never added twice.
+                setMore((m) => (m && m.topic === topic && m.next === from ? { ...m, rows: [...m.rows, ...p.rows], next: p.next } : m));
+            },
+            () => {
+                if (topicRead.current !== mine) return;
+                moreOut.current = false;
+                setMoreLoading(false);
+                setMoreFailed(true);
+            },
+        );
     }, [more, preview, topic]);
 
     // A search, 300 ms after the last key: the node's, or a plain match over the sample.
@@ -280,7 +310,10 @@ export function LearnPage({ identity, target, onTargetTaken, onBack, onOpenProfi
                         // K4: "Know something locals should know?" and the button join this line.
                         <p data-testid="learn-empty" className={`py-4 ${MUTED}`}>{t('Nothing here yet.')}</p>
                     ) : topic ? (
-                        <TopicView topic={topic} more={more} failed={moreFailed} onMore={showMore} onOpen={openPage} />
+                        <TopicView
+                            topic={topic} more={more} failed={topicFailed} onTopicAgain={() => setTopicTries((n) => n + 1)}
+                            moreFailed={moreFailed} moreLoading={moreLoading} onMore={showMore} onOpen={openPage}
+                        />
                     ) : (
                         <Front front={front.data} onOpen={openPage} onTopic={setTopic} />
                     )}
@@ -340,10 +373,12 @@ function Front({ front, onOpen, onTopic }: { front: KnowledgeFront; onOpen: (id:
     );
 }
 
-function TopicView({ topic, more, failed, onMore, onOpen }: {
-    topic: string; more: { topic: string; rows: KnowledgeRow[]; next: number | null } | null; failed: boolean; onMore: () => void; onOpen: (id: string) => void;
+function TopicView({ topic, more, failed, onTopicAgain, moreFailed, moreLoading, onMore, onOpen }: {
+    topic: string; more: { topic: string; rows: KnowledgeRow[]; next: number | null } | null; failed: boolean; onTopicAgain: () => void;
+    moreFailed: boolean; moreLoading: boolean; onMore: () => void; onOpen: (id: string) => void;
 }) {
-    if (failed) return <p role="alert" className={MUTED}>{t("Couldn't load Learn. Check your connection and try again.")}</p>;
+    // The topic's first page: nothing is drawn yet, so the alert with Try again stands in the list's place.
+    if (failed) return <Failed onAgain={onTopicAgain} />;
     if (!more || more.topic !== topic) return <p className={MUTED}>{t('Loading...')}</p>;
     return (
         <section data-testid="learn-topic-view">
@@ -352,7 +387,13 @@ function TopicView({ topic, more, failed, onMore, onOpen }: {
                 <span>{topicLabel(topic)}</span>
             </h2>
             <Rows rows={more.rows} onOpen={onOpen} />
-            {more.next !== null && <button type="button" data-testid="learn-show-more" onClick={onMore} className={LINK_BUTTON}>{t('Show more')}</button>}
+            {/* A later page that failed: the rows read stay, and Try again asks for that page again. */}
+            {moreFailed ? <Failed onAgain={onMore} />
+            : more.next !== null && (
+                <button type="button" data-testid="learn-show-more" onClick={onMore} disabled={moreLoading} aria-busy={moreLoading} className={`${LINK_BUTTON} disabled:cursor-wait disabled:opacity-60`}>
+                    {moreLoading ? t('Loading...') : t('Show more')}
+                </button>
+            )}
         </section>
     );
 }

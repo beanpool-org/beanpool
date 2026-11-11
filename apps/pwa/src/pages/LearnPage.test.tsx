@@ -45,7 +45,8 @@ const SERVICES = ['s1', 's2', 's3', 's4', 's5'].map((id, i) => page(id, { catego
 const OLD = page('old', { category: 'good-to-know', title: 'The old bus times', outdated: true, outdatedNote: 'The timetable changed in March' });
 const POSTS = [FLOOD, ...SERVICES, OLD];
 
-const node = { posts: POSTS as LearnPost[], failFront: false };
+// `gate`: a later page of a topic (offset > 0) waits for it. `failTopic` / `failMore`: the first page of a topic / a later one is refused.
+const node = { posts: POSTS as LearnPost[], failFront: false, failTopic: false, failMore: false, gate: null as Promise<void> | null };
 let request: MockInstance<typeof api.request>;
 const asked = () => request.mock.calls.map((c) => String(c[1]));
 
@@ -56,7 +57,13 @@ function stubNode() {
             return learnFrontOf(node.posts);
         }
         const q = new URLSearchParams(path.split('?')[1] ?? '');
-        if (path.startsWith('/api/knowledge/front?topic=')) return learnTopicOf(node.posts, q.get('topic')!, Number(q.get('offset') ?? 0));
+        if (path.startsWith('/api/knowledge/front?topic=')) {
+            const offset = Number(q.get('offset') ?? 0);
+            if (offset === 0 && node.failTopic) throw new Error('offline');
+            if (offset > 0 && node.gate) await node.gate;
+            if (offset > 0 && node.failMore) throw new Error('offline');
+            return learnTopicOf(node.posts, q.get('topic')!, offset);
+        }
         if (path.startsWith('/api/knowledge/front?q=')) return learnSearchOf(node.posts, q.get('q')!);
         if (path.startsWith('/api/marketplace/posts?')) return node.posts.filter((p) => p.id === q.get('id'));
         throw new Error(`unexpected ${path}`);
@@ -75,6 +82,9 @@ beforeEach(() => {
     info.current = { features: { knowledge: true } };
     node.posts = POSTS;
     node.failFront = false;
+    node.failTopic = false;
+    node.failMore = false;
+    node.gate = null;
     Object.values(props).forEach((v) => { if (typeof v === 'function' && 'mockClear' in v) (v as ReturnType<typeof vi.fn>).mockClear(); });
     stubNode();
 });
@@ -118,6 +128,64 @@ describe('the front', () => {
         await wait(30);
         expect(asked()).toContain('/api/knowledge/front?topic=emergencies&offset=50');
         expect(within(screen.getByTestId('learn-topic-view')).getAllByTestId('learn-row')).toHaveLength(53);
+    });
+
+    // Review of #3074, round 1: a double tap, and a failed page, on a topic of more than a page.
+    const MANY = (n: number) => Array.from({ length: n }, (_, i) => page(`p${String(i).padStart(3, '0')}`, { category: 'emergencies', title: `Page ${String(i).padStart(3, '0')}` }));
+    const rowNames = () => within(screen.getByTestId('learn-topic-view')).getAllByTestId('learn-row').map((r) => r.getAttribute('aria-label'));
+
+    it('a double tap on Show more asks once, and no row appears twice', async () => {
+        node.posts = MANY(120);
+        let release!: () => void;
+        node.gate = new Promise<void>((r) => { release = r; });
+        await openLearn({ target: { kind: 'topic', topic: 'emergencies' } });
+        const button = screen.getByTestId('learn-show-more');
+        // Both taps in one frame, before the screen has drawn the first: only a guard that is not a render stops the second.
+        act(() => { fireEvent.click(button); fireEvent.click(button); });
+        // Out for the answer: the button says so and cannot be pressed again.
+        expect(screen.getByTestId('learn-show-more')).toBeDisabled();
+        expect(screen.getByTestId('learn-show-more').textContent).toBe('Loading...');
+        release();
+        await wait(30);
+        expect(asked().filter((p) => p.includes('offset=50'))).toHaveLength(1);
+        const names = rowNames();
+        expect(names).toHaveLength(100);
+        expect(new Set(names).size).toBe(100);
+        expect(screen.getByTestId('learn-show-more').textContent).toBe('Show more');
+        expect(screen.getByTestId('learn-show-more')).toBeEnabled();
+    });
+
+    it('a failed Show more keeps the rows already shown and offers Try again, which asks for that page again', async () => {
+        node.posts = MANY(53);
+        await openLearn({ target: { kind: 'topic', topic: 'emergencies' } });
+        expect(rowNames()).toHaveLength(50);
+        node.failMore = true;
+        fireEvent.click(screen.getByTestId('learn-show-more'));
+        await wait(30);
+        expect(rowNames()).toHaveLength(50);
+        const view = within(screen.getByTestId('learn-topic-view'));
+        expect(view.getByRole('alert').textContent).toContain("Couldn't load Learn. Check your connection and try again.");
+        expect(screen.queryByTestId('learn-show-more')).toBeNull();
+        node.failMore = false;
+        fireEvent.click(view.getByRole('button', { name: 'Try again' }));
+        await wait(30);
+        expect(rowNames()).toHaveLength(53);
+        expect(new Set(rowNames()).size).toBe(53);
+        expect(within(screen.getByTestId('learn-topic-view')).queryByRole('alert')).toBeNull();
+        expect(asked().filter((p) => p.includes('offset=50'))).toHaveLength(2);
+    });
+
+    it('a topic whose first page fails says so with Try again, which reads it again', async () => {
+        node.failTopic = true;
+        await openLearn({ target: { kind: 'topic', topic: 'emergencies' } });
+        expect(screen.getByTestId('learn-failed')).toBeInTheDocument();
+        expect(screen.queryByTestId('learn-topic-view')).toBeNull();
+        node.failTopic = false;
+        fireEvent.click(within(screen.getByTestId('learn-failed')).getByRole('button', { name: 'Try again' }));
+        await wait(30);
+        expect(screen.queryByTestId('learn-failed')).toBeNull();
+        expect(within(screen.getByTestId('learn-topic-view')).getAllByTestId('learn-row')).toHaveLength(1);
+        expect(asked().filter((p) => p === '/api/knowledge/front?topic=emergencies&offset=0')).toHaveLength(2);
     });
 
     it('draws a row: topic chip, title, first line only, "Checked Oct 2026 · Helped 14", the topic tile for no photo, MAY BE OUT OF DATE in amber', async () => {

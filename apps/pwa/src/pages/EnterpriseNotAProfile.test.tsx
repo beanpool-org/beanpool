@@ -203,6 +203,9 @@ describe('every door on the web lands on the enterprise page', () => {
         // A profile's inviter and the people in its Brought in list (slice I3, as the phone's InvitedByCard): InvitedByCard
         // opens them by key through onOpenProfile, and PublicProfilePage only hands it App's onOpenProfile (checked below),
         // so the tap lands in the same one overlay.
+        // Learn's page (slice K2): the writer's name on a page of Local knowledge opens their profile by key. LearnPage only
+        // takes onOpenProfile as a prop and calls it from that one button; App.tsx hands it `(pubkey) => setOpenProfilePubkey(pubkey)`
+        // (checked above), so it is the same one overlay, and LearnPage draws no Trust Profile and no PublicProfilePage (checked in the loop).
         expect(doors.sort()).toEqual([
             path.join('components', 'ActivityWaterfall.tsx'),
             path.join('components', 'AppHeader.tsx'),
@@ -213,6 +216,7 @@ describe('every door on the web lands on the enterprise page', () => {
             path.join('components', 'PollCard.tsx'),
             path.join('components', 'PostAuthorTrust.tsx'),
             path.join('components', 'PulseFeedCard.tsx'),
+            path.join('pages', 'LearnPage.tsx'),
             path.join('pages', 'MarketplacePage.tsx'),
             path.join('pages', 'MessagesPage.tsx'),
             path.join('pages', 'PeoplePage.tsx'),

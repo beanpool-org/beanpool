@@ -15,9 +15,6 @@ import { ListPhoto } from './ListPhoto';
 import { CHIP, chip, listCard, LIST_TEXT } from './market-card-shell';
 
 const TOPIC_CHIP = `${CHIP} bg-bp-chip-learn-tint text-bp-chip-learn-ink`;
-/** The photo's slot: 64 wide and the card's height, `relative` so the photo and the tile fill it (ListPhoto). */
-const SLOT = 'relative w-16 min-h-16 self-stretch shrink-0 overflow-hidden';
-
 /** The topic's full-colour tile, filling the slot it is in: its glyph on the learn tint. */
 export function LearnTopicTile({ topic }: { topic: string }) {
     return (
@@ -43,7 +40,9 @@ export function LearnRow({ row, onOpen }: { row: KnowledgeRow; onOpen: () => voi
             aria-label={t('{kind}: {title}, checked {date}', { kind: t(KNOWLEDGE_NAMES.kind), title: row.title, date: monthYear(row.checkedAt) })}
             className={`${listCard()} text-start cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-learn`}
         >
-            <span className={SLOT}>
+            {/* The photo's slot: 64 wide and the card's height. It is `relative`, written out here where the list-photo slot check
+                (ListPhoto.slots.test.ts) reads it, so the photo and the tile fill THIS box while a photo loads, never an ancestor. */}
+            <span className="relative w-16 min-h-16 self-stretch shrink-0 overflow-hidden">
                 <ListPhoto
                     photo={row.photo}
                     // The web's image allow-list (lib/avatar.ts, PWA-2): a refused address draws the topic's tile, never itself.

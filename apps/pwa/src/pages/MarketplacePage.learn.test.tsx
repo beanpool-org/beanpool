@@ -51,7 +51,7 @@ const knowledgePage = (id: string) => ({
     createdAt: AT, status: 'active', knowledge: { sources: [], place: null, lang: null, checkedAt: AT, outdatedAt: null, outdatedNote: null, helped: 0, gathered: false },
 });
 
-const node = { feed: [listing('l1', 'Eggs')] as unknown[], learn: { total: 2, fail: false }, pages: [] as unknown[] };
+const node = { feed: [listing('l1', 'Eggs')] as unknown[], learn: { total: 2, fail: false }, pages: [] as unknown[], pageFail: false };
 let request: MockInstance<typeof api.request>;
 
 function stubNode() {
@@ -66,6 +66,7 @@ function stubNode() {
             return { total: node.learn.total, rows: [] };
         }
         if (path.startsWith('/api/marketplace/posts?type=knowledge')) {
+            if (node.pageFail) throw new Error('offline');
             const id = new URLSearchParams(path.split('?')[1]).get('id');
             return (node.pages as Array<{ id: string }>).filter((p) => p.id === id);
         }
@@ -107,6 +108,7 @@ beforeEach(() => {
     node.feed = [listing('l1', 'Eggs')];
     node.learn = { total: 2, fail: false };
     node.pages = [];
+    node.pageFail = false;
     stubNode();
 });
 afterEach(() => { cleanup(); });
@@ -220,11 +222,27 @@ describe('a link to a page of Local knowledge', () => {
         expect(screen.getByText('That listing can no longer be opened. It may have been taken down.')).toBeInTheDocument();
     });
 
-    it('is still "no longer opened" when Learn cannot be asked', async () => {
-        request.mockRejectedValue(new Error('offline'));
+    // Review of #3074, round 1 (and #1980 N1: a failed read is not an answer). This test used to pin "taken down" for a Learn read
+    // that REJECTED. That was the bug, not a rule: a dead connection is not a takedown. It now says what the member is told.
+    it('is not "taken down" when Learn cannot be asked: it says it could not load, and the same link asks again next time', async () => {
+        node.pageFail = true;
         const onNavigate = vi.fn();
-        await openMarket({ openPostId: 'know-1', onPostOpened: vi.fn(), onNavigate, sayWhenPostUnopened: true });
+        const onPostOpened = vi.fn();
+        const view = (opened: () => void) => <MarketplacePage identity={identity} isMember={true} transactions={[]} openPostId="know-1" onPostOpened={opened} onNavigate={onNavigate} sayWhenPostUnopened={true} />;
+        const { rerender } = render(view(onPostOpened));
+        await wait(60);
         expect(onNavigate).not.toHaveBeenCalled();
-        expect(screen.getByText('That listing can no longer be opened. It may have been taken down.')).toBeInTheDocument();
+        expect(onPostOpened).toHaveBeenCalled();
+        expect(screen.queryByText('That listing can no longer be opened. It may have been taken down.')).toBeNull();
+        expect(screen.getByText("That listing couldn't be loaded. Check your connection and try again.")).toBeInTheDocument();
+        // The link was not marked as asked: the same link, again, asks again (and now finds the page).
+        const asks = () => request.mock.calls.filter((c) => String(c[1]).startsWith('/api/marketplace/posts?type=knowledge')).length;
+        const before = asks();
+        node.pageFail = false;
+        node.pages = [knowledgePage('know-1')];
+        rerender(view(vi.fn()));
+        await wait(60);
+        expect(asks()).toBe(before + 1);
+        expect(onNavigate).toHaveBeenCalledWith('learn-page', 'know-1');
     });
 });

@@ -1460,6 +1460,8 @@ async function main(): Promise<void> {
             'GET /api/messages/conversations/:publicKey', 'POST /api/messages/delete', 'POST /api/messages/edit', 'POST /api/messages/mark-read',
             'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/report', 'POST /api/messages/request', 'POST /api/messages/request/ignore-all',
             'POST /api/messages/send',
+            // A member's locked contacts list (routes/contacts.ts): the signer's own copy only.
+            'GET /api/contacts/copy', 'PUT /api/contacts/copy', 'DELETE /api/contacts/copy',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
             'POST /api/names/entries/:id/invite', 'DELETE /api/names/entries/:id/invite', 'GET /api/names/invites',

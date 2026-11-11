@@ -155,9 +155,8 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     } while (copyMoving);
     const expectedDbName = getDatabaseFilenameForNode(url);
 
-    // The copy open now, when it is this community's: made, since `db` is set only once it is. During a switch `db` is
-    // still the community left until the open below closes it, so it is matched by its own file, never by the name the
-    // open on its way is for (currentDbName).
+    // The copy open now, when it is this community's: made, since `db` is set only once it is. Matched by its own file,
+    // never by the name an open on its way is for (currentDbName): the community left is never handed out under the new name.
     if (db && dbFileOf.get(db) === expectedDbName) {
         return db;
     }
@@ -179,10 +178,18 @@ interface CopyClear { alsoDrop: string }
  * cycle or socket holds a statement on it while its tables are dropped: SQLite refuses a DROP TABLE while a statement of
  * the same connection is still open ("database table is locked", SQLITE_LOCKED), which a reader that had the copy while
  * a 1.3 copy was cleared hit on 1.4.0 (11 Nov). A copy not made is closed and not handed out: the next ask opens it again.
- * `clear` (clearDB): the cache tables go whatever the copy's number. Another community's copy open now (a switch) is
- * closed first, under the sync lock, so a write in flight finishes on it first.
+ * `clear` (clearDB): the cache tables go whatever the copy's number.
+ *
+ * Another community's copy open now (getDb's own swap: an address written with no closeDB) is left at once: handed to no
+ * one from here, and closed under the sync lock on its own (leaveCopy), so a write in flight on it finishes first. The open
+ * takes no lock and waits for no close: a writer holding the lock as it asks (applyDelta, the deal and review writers, the
+ * ratings reads) waits on this open, which waited in turn for that lock until the app was killed (review of #3053, db.ts:161).
  */
 function openCopy(file: string, url: string | null, clear: CopyClear | null): Promise<SQLite.SQLiteDatabase> {
+    if (db) {
+        leaveCopy(db);
+        db = null;
+    }
     currentDbName = file;
     const seq = ++openSeq;
     // Cleared once it settles, unless another open has taken its place since, and before the asks waiting on it go on.
@@ -196,25 +203,37 @@ function openCopy(file: string, url: string | null, clear: CopyClear | null): Pr
 /** Each open's number (openCopy): only the latest is handed out. */
 let openSeq = 0;
 
-async function openAndMakeCopy(file: string, url: string | null, clear: CopyClear | null, seq: number): Promise<SQLite.SQLiteDatabase> {
-    // Force strict database isolation and hot-swap reconnect if matrix url changes
-    if (db) {
+/** The copies a swap has left (openCopy) that are not closed yet: each waits for the sync lock (leaveCopy, closeOpenCopy). */
+const copiesLeft = new Set<SQLite.SQLiteDatabase>();
+
+/**
+ * Close `copy`, left by a swap, once the sync lock is free: a writer that had it as it took the lock finishes on it first.
+ * On its own: nothing waits for it, so no asker that holds the lock waits on its own lock. closeOpenCopy closes it sooner
+ * when a closeDB, a clear or a move has the lock first.
+ */
+function leaveCopy(copy: SQLite.SQLiteDatabase): void {
+    copiesLeft.add(copy);
+    void (async () => {
         await acquireSyncLock({ urgent: true });
         try {
-            if (db) {
-                const oldDb = db;
-                db = null;
-                try {
-                    await oldDb.closeAsync();
-                } catch (e) {
-                    console.warn('[DB] Reconnect close warning:', e);
-                }
-            }
+            await closeLeftCopy(copy);
         } finally {
             releaseSyncLock();
         }
-    }
+    })();
+}
 
+/** Close `copy`, left by a swap, unless it is closed already. The caller holds the sync lock (leaveCopy, closeOpenCopy). */
+async function closeLeftCopy(copy: SQLite.SQLiteDatabase): Promise<void> {
+    if (!copiesLeft.delete(copy)) return;
+    try {
+        await copy.closeAsync();
+    } catch (e) {
+        console.warn('[DB] Reconnect close warning:', e);
+    }
+}
+
+async function openAndMakeCopy(file: string, url: string | null, clear: CopyClear | null, seq: number): Promise<SQLite.SQLiteDatabase> {
     // Auto-track nodes we jump into correctly inside the UI Matrix. Never one that isn't plain host[:port]
     // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
     if (url && isPlainNodeAddress(url)) await addSavedNode(url);
@@ -245,7 +264,8 @@ async function openAndMakeCopy(file: string, url: string | null, clear: CopyClea
 export async function closeDB() {
     await acquireSyncLock({ urgent: true });
     try {
-        // An open on its way finishes first, and its copy is closed with the rest: none is left open after this.
+        // An open on its way finishes first, and its copy is closed with the rest (the copies a swap left too): none is left
+        // open after this.
         await untilNoOpenOnItsWay();
         await closeOpenCopy();
     } finally {
@@ -254,8 +274,9 @@ export async function closeDB() {
 }
 
 /**
- * Called holding the sync lock, and back holding it: an open on its way (getDbPromise) finishes first, outside the lock,
- * since a hot swap in getDb takes the lock itself (closeDB, whileCopyMoves, clearDB).
+ * Called holding the sync lock, and back holding it: an open on its way (getDbPromise) finishes first (closeDB,
+ * whileCopyMoves, clearDB). An open takes no lock; the lock is let go meanwhile all the same, so the writers queued for it
+ * are not held up while a copy is made.
  */
 async function untilNoOpenOnItsWay(): Promise<void> {
     while (getDbPromise) {
@@ -266,8 +287,12 @@ async function untilNoOpenOnItsWay(): Promise<void> {
     }
 }
 
-/** Close the copy open, if one is. The caller holds the sync lock (closeDB, whileCopyMoves, clearDB). */
+/**
+ * Close the copy open, if one is, and every copy a swap left that is still open (its own close waits for the lock this
+ * caller holds). The caller holds the sync lock (closeDB, whileCopyMoves, clearDB).
+ */
 async function closeOpenCopy() {
+    for (const copy of [...copiesLeft]) await closeLeftCopy(copy);
     if (db) {
         const oldDb = db;
         db = null;
@@ -293,8 +318,8 @@ async function closeOpenCopy() {
  * lock first and publishes copyMoving only while holding it, and clears it before letting go. A writer that took the lock
  * first finishes, its getDb with it, before the move starts; one waiting for the lock gets it after the move, with
  * copyMoving clear. (Published before the lock was taken, each waited for the other for good: confirmation 2 of #2138.)
- * Moves wait for each other on the lock. An open already on its way finishes first, outside the lock, since a hot swap
- * in getDb takes the lock itself.
+ * Moves wait for each other on the lock. An open already on its way finishes first (untilNoOpenOnItsWay), and a copy a
+ * swap left is closed with the copy open (closeOpenCopy).
  */
 export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Promise<T> {
     const toFile = getDatabaseFilenameForNode(to);

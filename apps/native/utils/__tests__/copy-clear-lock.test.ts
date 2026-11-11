@@ -26,6 +26,8 @@ const h = vi.hoisted(() => ({
     failExec: null as RegExp | null,
     /** Every connection the app opened, by file, and whether it has been closed. */
     connections: [] as { name: string; closed: boolean }[],
+    /** Run at the next read of the address, which is answered a moment later, so whatever this starts reads it first: once. */
+    beforeAnchorRead: null as (() => void) | null,
 }));
 
 vi.mock('expo-sqlite', async () => {
@@ -94,7 +96,16 @@ vi.mock('expo-sqlite', async () => {
 });
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? h.anchor : h.store.get(k) ?? null)),
+        getItem: vi.fn(async (k: string) => {
+            if (k !== 'beanpool_anchor_url') return h.store.get(k) ?? null;
+            const before = h.beforeAnchorRead;
+            if (before) {
+                h.beforeAnchorRead = null;
+                before();
+                await new Promise((resolve) => setImmediate(resolve));
+            }
+            return h.anchor;
+        }),
         setItem: vi.fn(async (k: string, v: string) => { h.store.set(k, String(v)); }),
         removeItem: vi.fn(async (k: string) => { h.store.delete(k); }),
         getAllKeys: vi.fn(async () => [...h.store.keys()]),
@@ -133,6 +144,7 @@ beforeEach(() => {
     h.holds = [];
     h.failExec = null;
     h.connections = [];
+    h.beforeAnchorRead = null;
 });
 afterEach(async () => {
     for (const hold of h.holds) hold.release?.();
@@ -409,5 +421,147 @@ describe("a copy that can't be made is handed to no one, and the member's clears
         expect(disk.postColumns).toContain('price_c');
         // The account's own store goes as it leaves.
         expect(disk.toolDocs).toBe(0);
+    });
+});
+
+// The deciding review of #3053 at bfb2b396 (db.ts:161): a writer holding the sync lock asked for the copy (applyDelta, the
+// deal and review writers, the ratings reads: each takes the lock, then getDb) during getDb's own swap, the address written
+// with no closeDB (a door's key, a claim, welcome, restore-account, the sync's winning address). The swap's open waited for
+// that same lock to close the copy left, and the writer waited for the open: neither let go, and every later getDb and lock
+// taker queued behind them until the app was killed.
+describe('a writer holding the sync lock that asks for the copy during a swap gets it: no open waits for that lock', () => {
+    type Db = typeof import('../db');
+    let d: Db;
+    const X = 'https://x3.example.org';
+    const Y = 'https://y3.example.org';
+    const OTHER = 'b'.repeat(64);
+    const offline = globalThis.fetch;
+
+    /** `p`'s answer, or 'still waiting' when it has none within `ms`: a case that hangs fails, never holds up the run. */
+    async function within(p: Promise<unknown>, ms = 3000): Promise<string> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<string>((resolve) => { timer = setTimeout(() => resolve('still waiting'), ms); });
+        try {
+            return await Promise.race([p.then(() => 'answered', (e: unknown) => `refused: ${String((e as Error)?.message ?? e)}`), late]);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    const stillOpen = () => h.connections.filter((c) => !c.closed).map((c) => c.name);
+
+    // Each case in a module of its own: one that hangs keeps its module's lock for good, and fails alone.
+    beforeEach(async () => {
+        vi.resetModules();
+        d = await import('../db');
+        h.anchor = X;
+        await d.getDb(); // X's copy open and made
+    });
+    afterEach(async () => {
+        globalThis.fetch = offline;
+        await within(d.closeDB(), 1000);
+    });
+
+    /** Both answer; the screen has Y's copy, made; X's closes once the writer lets go of the lock, and Y's is the only one left. */
+    async function expectBothAnswer(row: string, writer: Promise<unknown>, screen: ReturnType<Db['getDb']>) {
+        const [w, s] = await Promise.all([within(writer), within(screen)]);
+        console.log(`${row}: writer ${w}, screen ${s}; connections open ${JSON.stringify(stillOpen())}`);
+        expect({ writer: w, screen: s }).toEqual({ writer: 'answered', screen: 'answered' });
+        expect(await (await screen).getFirstAsync('SELECT COUNT(*) AS n FROM posts')).toEqual({ n: 0 });
+        await vi.waitFor(() => expect(stillOpen()).toEqual([fileOf(Y)]));
+    }
+
+    it('row 1: a writer takes the lock, the address changes, a screen asks: both answer, and the page read for X lands in no other copy', async () => {
+        const writer = d.applyDelta({}, fileOf(X), undefined); // takes the sync lock, then asks for the copy
+        h.anchor = Y; // an address written with no closeDB
+        const screen = d.getDb(); // a screen asks: the swap to Y
+        await expectBothAnswer('row 1', writer, screen);
+        expect(await writer).toBe(false);
+    }, 10_000);
+
+    it("row 2: a screen's ask starts the swap, then a writer takes the lock and asks: both answer", async () => {
+        h.anchor = Y;
+        const screen = d.getDb(); // a screen's ask: the swap to Y
+        const writer = d.applyDelta({}, fileOf(X), undefined); // then a writer takes the lock and asks
+        await expectBothAnswer('row 2', writer, screen);
+        expect(await writer).toBe(false);
+    }, 10_000);
+
+    it("row 3 (control): the writer's own ask is the first to see the new address, and a screen asks after it: both answer", async () => {
+        h.anchor = Y;
+        const writer = d.applyDelta({}, fileOf(X), undefined); // the writer's own getDb starts the swap
+        await new Promise((resolve) => setImmediate(resolve));
+        const screen = d.getDb();
+        await expectBothAnswer('row 3', writer, screen);
+        expect(await writer).toBe(false);
+    }, 10_000);
+
+    it('closeDB queued behind a writer as a swap leaves the copy it reads: that writer finishes on it, and nothing is left open once closeDB answers', async () => {
+        // A writer holds the lock with a read open on X (the ratings it gave, from the copy: the node unreachable).
+        const reading = holdRead(/WHERE r\.rater_pubkey = \?/);
+        const writer = d.getRatingsGiven(ANA);
+        await reading.open;
+        let openAtClose: string[] | null = null;
+        const closing = d.closeDB().then(() => { openAtClose = stillOpen(); });
+        h.anchor = Y;
+        // Y's copy is made while the writer still holds the lock: its open never waits for the lock.
+        const screen = d.getDb();
+        expect(await within(screen)).toBe('answered');
+        expect(stillOpen()).toEqual([fileOf(X), fileOf(Y)]);
+        reading.release();
+        expect(await within(writer)).toBe('answered');
+        expect(await within(closing)).toBe('answered');
+        console.log(`closeDB behind a writer: open as closeDB answered ${JSON.stringify(openAtClose)}`);
+        // The copy left is closed by closeDB itself, not later: a caller deletes or carries the files once it answers.
+        expect(openAtClose).toEqual([]);
+    }, 10_000);
+
+    // The other lock takers the review names: each takes the lock after its request to the node (which answers, or is
+    // unreachable for the ratings reads, which then read the copy), then asks for the copy, as applyDelta does. The address
+    // is written with no closeDB while the request is out. "Overtaken": a screen's ask reads the new address just before the
+    // taker's own and starts the swap (rows 1 and 2). "Its own": the taker's ask is the first to see it (row 3).
+    const TX = { id: 'T1', postId: 'L1', buyerPublicKey: ANA, sellerPublicKey: OTHER, status: 'pending', amount_c: 100, createdAt: '2026-11-11T00:00:00.000Z' };
+    const TAKERS: { name: string; run: (db: Db) => Promise<unknown>; answer?: unknown }[] = [
+        { name: 'acceptMarketplacePost', run: (db) => db.acceptMarketplacePost('L1', ANA, 1), answer: { success: true, transaction: TX } },
+        { name: 'completeMarketplaceTransaction', run: (db) => db.completeMarketplaceTransaction('T1', ANA), answer: { success: true, transaction: TX } },
+        { name: 'cancelMarketplaceTransaction', run: (db) => db.cancelMarketplaceTransaction('T1', ANA), answer: { success: true } },
+        { name: 'requestMarketplacePost', run: (db) => db.requestMarketplacePost('L1', ANA, 1), answer: { success: true, transaction: { ...TX, status: 'requested' } } },
+        { name: 'submitRating', run: (db) => db.submitRating(ANA, OTHER, 5, 'Kind', 'T1'), answer: { success: true } },
+        { name: 'getMemberRatings', run: (db) => db.getMemberRatings(OTHER) },
+        { name: 'getRatingsGiven', run: (db) => db.getRatingsGiven(ANA) },
+    ];
+
+    /** The taker's request to the node: as it goes out, the address is written with no closeDB, and `meanwhile` runs. */
+    function whileTheRequestIsOut(answer: unknown, meanwhile: () => void): void {
+        let first = true;
+        globalThis.fetch = vi.fn(async () => {
+            if (first) {
+                first = false;
+                h.anchor = Y;
+                meanwhile();
+            }
+            if (answer === undefined) throw new TypeError('offline');
+            return { ok: true, status: 200, headers: { get: () => null }, json: async () => answer, text: async () => JSON.stringify(answer) };
+        }) as unknown as typeof fetch;
+    }
+
+    describe.each(TAKERS)('$name', ({ name, run, answer }) => {
+        it("overtaken: a screen's ask reads the new address just before the taker's own and starts the swap: both answer", async () => {
+            let screen: ReturnType<Db['getDb']> | null = null;
+            whileTheRequestIsOut(answer, () => { h.beforeAnchorRead = () => { screen = d.getDb(); }; });
+            const t = await within(run(d));
+            const s = screen ? await within(screen, 1000) : 'never asked';
+            console.log(`${name} overtaken: taker ${t}, screen ${s}; connections open ${JSON.stringify(stillOpen())}`);
+            expect({ taker: t, screen: s }).toEqual({ taker: 'answered', screen: 'answered' });
+            await vi.waitFor(() => expect(stillOpen()).toEqual([fileOf(Y)]));
+        }, 10_000);
+
+        it("its own: the taker's ask is the first to see the new address, and a screen asks after it: both answer", async () => {
+            whileTheRequestIsOut(answer, () => {});
+            const t = await within(run(d));
+            const s = await within(d.getDb(), 1000);
+            console.log(`${name} its own: taker ${t}, screen ${s}; connections open ${JSON.stringify(stillOpen())}`);
+            expect({ taker: t, screen: s }).toEqual({ taker: 'answered', screen: 'answered' });
+            await vi.waitFor(() => expect(stillOpen()).toEqual([fileOf(Y)]));
+        }, 10_000);
     });
 });

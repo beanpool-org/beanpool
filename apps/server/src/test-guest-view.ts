@@ -1359,6 +1359,9 @@ async function main(): Promise<void> {
             // Local knowledge, read in Learn (routes/knowledge.ts): a member's reads, an owner's or admin's writes, all signed.
             'GET /api/knowledge/front', 'POST /api/knowledge/posts', 'POST /api/knowledge/posts/:id/edit', 'POST /api/knowledge/posts/:id/checked',
             'POST /api/knowledge/posts/:id/outdated', 'POST /api/knowledge/posts/:id/outdated/clear', 'POST /api/knowledge/posts/:id/take-down',
+            // Its waiting list (slice K3): a member's suggestion, their own, taking one back; an owner's or admin's To check.
+            'POST /api/knowledge/drafts', 'GET /api/knowledge/drafts/mine', 'POST /api/knowledge/drafts/:id/withdraw', 'GET /api/knowledge/drafts',
+            'GET /api/knowledge/drafts/:id', 'POST /api/knowledge/drafts/:id/approve', 'POST /api/knowledge/drafts/:id/no',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

@@ -117,7 +117,7 @@ async function main() {
     }
     // Gone, and back.
     fs.rmSync(CONFIG);
-    assert(lc.getLocalConfig().communityName === null && lc.getLocalConfig().adminHash === null, 'a missing file reads as a new install, as before');
+    assert(lc.getLocalConfig().communityName === null && lc.getLocalConfig().callsign === null, 'a missing file reads as a new install, as before');
     lc.saveLocalConfig({ ...lc.getLocalConfig(), communityName: 'Back' });
     age();
     assert(lc.getLocalConfig().communityName === 'Back', 'and the file written again is read');

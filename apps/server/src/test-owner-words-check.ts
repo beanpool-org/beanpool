@@ -8,7 +8,7 @@
  *     derived from the words can be stored); the stored signature re-verifies against the owner's key.
  *  2. GET /api/node/owner/words-check: the owner's own last check, null before; a member → 403.
  *  3. POST /api/local/admin/takeover/words-checks: every current owner with "checked <date>" or null ("not yet");
- *     owners and admins by key session, the admin password too; unauthenticated → 401; a removed owner drops off.
+ *     owners and admins by key session (the node has no admin password); unauthenticated → 401; a removed owner drops off.
  *  4. A never-checked owner can still do everything: their owner routes answer 200.
  *  5. Nothing gates on the record: no server source outside this feature reads the table.
  *  6. The silent open check (slice 6): an owner's app reads the current lock's header (signed), opens its own stanza
@@ -32,7 +32,6 @@ import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -126,12 +125,7 @@ async function main() {
     grantNodeRole(anna.pub, 'owner', 'SYSTEM');
     grantNodeRole(ben.pub, 'owner', anna.pub);
     grantNodeRole(mo.pub, 'admin', anna.pub);
-    const adminPass = 'WordsCheck-Secret-123!';
-    const salt = crypto.randomBytes(16).toString('hex');
-    updateLocalConfig({
-        adminHash: crypto.scryptSync(adminPass, salt, 64).toString('hex'), salt,
-        totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'Words Test',
-    } as any);
+    updateLocalConfig({ communityName: 'Words Test' });
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -202,21 +196,12 @@ async function main() {
     const benSession = await keySession(ben);
     const moSession = await keySession(mo);
     {
-        // Step 7c: with the node's 2FA off, the admin password alone reads nothing (it used to read the list); with 2FA
-        // on, the password and a code read it. 2FA goes off again after.
-        const alone = await admin('POST', LIST, { 'x-admin-password': adminPass });
-        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.owners,
-            `with 2FA off the admin password alone is refused (got ${alone.status} ${alone.body?.code})`);
-        const twoFa = turnOn2faForTests(adminPass);
-        const pw = await admin('POST', LIST, twoFa.headers());
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-        assert(pw.status === 200, `with 2FA on, the admin password with a code reads the list (got ${pw.status})`);
-        const owners = pw.body.owners as any[];
+        const byOwner = await admin('POST', LIST, { 'x-admin-session': benSession });
+        assert(byOwner.status === 200, `an owner's key session reads it (got ${byOwner.status})`);
+        const owners = byOwner.body.owners as any[];
         assert(owners.length === 2 && owners.map((o) => o.callsign).join(',') === 'wcAnna,wcBen', `the list is the owners, oldest first (${owners.map((o) => o.callsign)})`);
         assert(typeof owners[0].wordsCheckedAt === 'number' && owners[1].wordsCheckedAt === null, 'Anna checked, Ben not yet');
-        assert(!JSON.stringify(pw.body).includes('signature') && !JSON.stringify(pw.body).includes('signed_payload'), 'the list carries the date only');
-        const byOwner = await admin('POST', LIST, { 'x-admin-session': benSession });
-        assert(byOwner.status === 200 && byOwner.body.owners.length === 2, `an owner's key session reads it (got ${byOwner.status})`);
+        assert(!JSON.stringify(byOwner.body).includes('signature') && !JSON.stringify(byOwner.body).includes('signed_payload'), 'the list carries the date only');
         const byAdmin = await admin('POST', LIST, { 'x-admin-session': moSession });
         assert(byAdmin.status === 200 && byAdmin.body.owners.length === 2, `an admin's key session reads it (got ${byAdmin.status})`);
         const none = await admin('POST', LIST, {});
@@ -246,7 +231,7 @@ async function main() {
     {
         const core = await import('@beanpool/core');
         const OPEN = core.OWNER_LOCK_OPEN_CHECK_PATH;
-        // Step 7c: the password alone reads nothing with 2FA off; Settings reads the list under Ben's owner key session.
+        // Settings reads the list under Ben's owner key session.
         const before = await admin('POST', LIST, { 'x-admin-session': benSession });
         const current = before.body.lock?.envelopeId as string | null;
         assert(typeof current === 'string' && /^[0-9a-f]{32}$/.test(current), `this server holds a take-over lock (${current})`);

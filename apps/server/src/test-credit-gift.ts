@@ -5,7 +5,7 @@
  *
  *  1. Beans off (before any Bean moves): the gift is refused and the tab isn't offered.
  *  2. What the signer may give (GET /api/credit/gift): offered with room someone gave them, never without.
- *  3. Refusals, each with its sentence and nothing written: unsigned and the password session, no trade yet, 101 over the
+ *  3. Refusals, each with its sentence and nothing written: unsigned and an owner's admin session, no trade yet, 101 over the
  *     setting of 100, not whole Beans, to yourself, to a key that never joined, to an enterprise, to a paused and to a
  *     frozen member (one sentence for both), from a frozen giver, from earned credit alone, from the known floor; all of
  *     it passed on, a sentence true for someone who gave theirs away (round 2, finding 4).
@@ -42,8 +42,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { seedOwnerForTests, ownerSessionHeaders, ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride, getProfileSwitches } from './config/node-profile.js';
@@ -51,7 +50,6 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { setMemberPhoto, roomHeldOf, creditCap } from '@beanpool/engine';
 import { vouchFromProfile, voucherSettings, VOUCHER_WORDS } from './engine/vouchers.js';
 import { CORE_SETTINGS_LOCK_KEY, coreLockRow } from './config/core-settings.js';
-import { createPasswordSession } from './admin-key-auth.js';
 import { setSecurityAlertHandler } from './services/security-signal.js';
 import { CREDIT_GIFT_WORDS, CreditGiftError, giveCreditLine } from './engine/credit-gift.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings } from './config/known-floor.js';
@@ -66,9 +64,10 @@ const createPost = wrapCreatePost(rawCreatePost);
 const hc = (beans: number) => Math.round(beans * 100);
 const words = (c: number) => formatHundredths(c, 'en');
 let BASE = '';
-const ADMIN_PW = 'Credit-Gift-Suite-Admin-Pw-58!';
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner who opens the community (the node has no admin password: an owner signs in with their key). */
+let OWNER = '';
+/** That owner's fresh proof: the phone's Manage hand-off, just unlocked, which passes every owner gate. */
+const asOwner = () => ownerPhoneSessionHeaders(OWNER);
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -155,13 +154,11 @@ async function main(): Promise<void> {
     await ensureGenesis();
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
+    OWNER = seedOwnerForTests('Olga');
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, asOwner());
     const owen = newId('Owen');
     require_(seed.status === 200 && (await call(owen, 'POST', '/api/invite/redeem', { code: seed.body?.code, publicKey: owen.pk, callsign: 'Owen' })).status === 200,
         `Owen joins with the seed invite (${show(seed)})`);
@@ -173,7 +170,7 @@ async function main(): Promise<void> {
     const [ada, dan, mel, sam, kim, lea, kay, ned, pia, fay, ent, zoe, rin, ria, rex, gus] = names.map(newId);
     for (const who of [ada, dan, mel, sam, kim, lea, kay, ned, pia, fay, ent, zoe, rin, ria, rex, gus]) enter(who);
     for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [dan, 'admin']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, asOwner())).status === 200, `${who.name} is made ${role}`);
     }
     // An admin is a voucher only when an owner makes them one (invites-vouching I5): Owen makes Ada and Dan vouchers.
     require_((await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk })).status === 201 && (await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: dan.pk })).status === 201, 'Owen makes Ada and Dan, admins, vouchers');
@@ -211,8 +208,8 @@ async function main(): Promise<void> {
     // ── 3. Refusals, each with its sentence, nothing written ───────────────────────────────────────────────────────
     const before3 = giftRows();
     const unsigned = await call(null, 'POST', '/api/credit/gift', { memberPubkey: kim.pk, amount_c: hc(10) });
-    const password = await call(null, 'POST', '/api/credit/gift', { memberPubkey: kim.pk, amount_c: hc(10) }, PASSWORD());
-    assert(unsigned.status === 401 && password.status === 401, `3. unsigned, and the password session, are refused 401 (${show(unsigned)} | ${show(password)})`);
+    const adminSession = await call(null, 'POST', '/api/credit/gift', { memberPubkey: kim.pk, amount_c: hc(10) }, ownerSessionHeaders(OWNER));
+    assert(unsigned.status === 401 && adminSession.status === 401, `3. unsigned, and an owner's admin session, are refused 401 (${show(unsigned)} | ${show(adminSession)})`);
     const noTrade = await gift(lea, kim, hc(10));
     assert(noTrade.status === 403 && noTrade.body?.code === 'no_trade_yet' && noTrade.body?.error === CREDIT_GIFT_WORDS.noTrade,
         `3. no trade yet is refused with the sentence (${show(noTrade)})`);
@@ -440,11 +437,11 @@ async function main(): Promise<void> {
 
     // ── 8. The owner's setting: a Core setting, changed in Core settings only ────────────────────────────────────────
     const SHAPE = '/api/local/admin/community-shape';
-    const shapeSet = (memberGift: unknown, headers: Record<string, string> = PASSWORD()) => call(null, 'POST', SHAPE, { changes: { memberGift } }, headers);
+    const shapeSet = (memberGift: unknown, headers: Record<string, string> = asOwner()) => call(null, 'POST', SHAPE, { changes: { memberGift } }, headers);
     /** Every line either log keeps of the gift's setting, an unlock naming it included. */
     const giftLines = () => count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'gift_setting'")
         + count("SELECT COUNT(*) AS n FROM community_settings_log WHERE setting = 'memberGift' OR (setting = 'core.unlock' AND new_value = 'memberGift')");
-    const shapeBefore = await call(null, 'GET', SHAPE, undefined, PASSWORD());
+    const shapeBefore = await call(null, 'GET', SHAPE, undefined, asOwner());
     // The community-shape keys keep their names; memberGift's value is whole hundredths.
     assert(shapeBefore.status === 200 && JSON.stringify(shapeBefore.body?.settings?.memberGift) === JSON.stringify({ value: hc(100), configured: hc(100), source: 'default', lock: null })
         && shapeBefore.body?.core?.settings?.includes('memberGift'),
@@ -501,8 +498,9 @@ async function main(): Promise<void> {
     const lockedBudget = await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: hc(1500) });
     assert(lockedBudget.status === 403 && lockedBudget.body?.code === 'core_locked',
         `8. locked: names list route refuses voucher budget with core_locked (${show(lockedBudget)})`);
-    const noProof = await shapeSet(0, { 'X-Admin-Session': createPasswordSession().sessionId });
-    assert(lockedList.status === 400 && lockedList.body?.code === 'moved_to_community_shape' && noProof.status === 401
+    // Without the fresh proof: an owner's computer session (key sign-in), which the phone's unlock is asked for.
+    const noProof = await shapeSet(0, ownerSessionHeaders(OWNER));
+    assert(lockedList.status === 400 && lockedList.body?.code === 'moved_to_community_shape' && noProof.status === 403 && noProof.body?.code === 'phone_required'
         && JSON.stringify(voucherSettings()) === lockedBefore.settings && giftLines() === lockedBefore.lines && alerts.length === 0,
         `8. locked: the names list's route refuses, Core settings without the fresh proof refuse, nothing written, no alert (${show(lockedList)} | ${show(noProof)})`);
     const proven = await shapeSet(hc(50));

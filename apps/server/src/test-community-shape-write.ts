@@ -3,9 +3,9 @@
  * /api/local/admin/community-shape; scratch/fable-design/DESIGN-community-shape-settings-fable.md §2.4, §2.5, §3.4, §6.1,
  * §7 S2, §8.2).
  *
- *   1. Who: an owner's key session, the phone's hand-off within its step-up, the password with 2FA. Never an admin, a
- *      moderator, an automation token of any scope, a member or nobody; and the phone's hand-off past its step-up. Each
- *      refusal writes nothing.
+ *   1. Who: an owner's key session, the phone's hand-off within its step-up. Never an admin, a moderator, an automation
+ *      token of any scope, a member or nobody; and the phone's hand-off past its step-up. Each refusal writes nothing.
+ *      The node has no admin password: one sent with a code is refused like nobody (section 9).
  *   2. Each setting the route takes, written through the node's own setter, so the node's gates follow it at once; one log
  *      line per setting changed and none for one sent unchanged; an owner alert (`sec.settings`) for every change, the
  *      owner's own included; and, for a members' rule, one notice kept for every member who keeps notices, in the fixed
@@ -39,7 +39,6 @@ delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.PRIVATE_PREVIEW;
 delete process.env.DIRECTORY_UNLISTED;
-// The suites' seam (scripts/server-suites.mjs sets it too): the password from .env, as on a node from before claim codes.
 // A directory push that got past every hold-back would go here: a closed port on this machine, never the registry.
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:9/directory-register';
 
@@ -70,7 +69,7 @@ async function main(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
-    const { ownerSessionHeaders, ownerTokenHeaders, ownerPhoneSessionHeaders, seedOwnerForTests, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerSessionHeaders, ownerTokenHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
@@ -655,15 +654,16 @@ async function main(): Promise<void> {
     assert(cfgRead.status === 200 && cfgRead.body?.acceptKnocks === false && cfgRead.body?.door === 'admins' && cfgRead.body?.dmRequests === false,
         `GET /api/node/config still answers acceptKnocks, door and dmRequests (${show(cfgRead)})`);
 
-    // ── 9. The password, with 2FA, is an owner's ─────────────────────────────────────────────────
-    console.log('\n── 9. the password ──');
-    const twoFa = turnOn2faForTests(process.env.ADMIN_PASSWORD!);
+    // ── 9. No admin password; the phone's hand-off is the owner's key ─────────────────────────────
+    console.log('\n── 9. an admin password is nobody; the phone is the owner ──');
+    // The node has no admin password (Marty, 11 Nov 2026): one sent with a code, as the password's 2FA went, is no credential.
+    await refusedClean('an admin password with a code', () => post({ changes: { join: 'members' } }, { 'X-Admin-Password': 'Shape-Old-Password-9!', 'X-Admin-TOTP': '123456' }), 401, null);
     mark = logMark(); aMark = alerts.length;
-    const pw = await post({ changes: { join: 'members' } }, twoFa.headers());
+    const byPhone = await post({ changes: { join: 'members' } }, ownerPhoneSessionHeaders(owenPk));
     lines = linesSince(mark);
-    assert(pw.status === 200 && getDoor() === 'members' && lines.length === 1 && lines[0].actor_pubkey === 'owner:password'
-        && alerts.slice(aMark).some((a) => a.actor === 'owner:password' && a.actorRole === 'admin password'),
-        `the password with a current code changes it, logged and alerted as the password (${show(pw)})`);
+    assert(byPhone.status === 200 && getDoor() === 'members' && lines.length === 1 && lines[0].actor_pubkey === owenPk && lines[0].actor_role === 'owner'
+        && alerts.slice(aMark).some((a) => a.actor === owenPk && a.actorRole === 'owner'),
+        `the owner's phone hand-off changes it, logged and alerted as the owner's key (${show(byPhone)})`);
 
     // ── 10. Advise the owners (core settings, slice C4) ──────────────────────────────────────────
     console.log('\n── 10. an admin advises the owners: one log line, one alert, nothing changed ──');

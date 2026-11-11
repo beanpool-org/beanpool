@@ -7356,13 +7356,21 @@ export function getListedUnreadCounts(pubkey: string): Record<string, number> {
 
 /** {@link getListedUnreadCounts}, each chat with its type. */
 function listedUnreadChats(pubkey: string): { id: string; type: string; unread: number }[] {
-    const typeOf = db.prepare('SELECT type FROM conversations WHERE id = ?');
     // A message request for them they haven't accepted is listed apart, with its own count (engine/dm-requests.ts).
     const held = heldFromUnread(pubkey);
+    const unreadEntries = Object.entries(getUnreadCounts(pubkey)).filter(([id]) => !held.has(id));
+    if (unreadEntries.length === 0) return [];
+
+    // Bolt: Batch conversation types across unread chats to eliminate N+1 queries.
+    const types = new Map<string, string>(
+        (db.prepare('SELECT id, type FROM conversations WHERE id IN (SELECT value FROM json_each(?))')
+            .all(JSON.stringify(unreadEntries.map(([id]) => id))) as { id: string; type: string }[])
+            .map(r => [r.id, r.type])
+    );
+
     const chats: { id: string; type: string; unread: number }[] = [];
-    for (const [id, unread] of Object.entries(getUnreadCounts(pubkey))) {
-        if (held.has(id)) continue;
-        const type = (typeOf.get(id) as { type: string } | undefined)?.type ?? '';
+    for (const [id, unread] of unreadEntries) {
+        const type = types.get(id) ?? '';
         if (!chatHiddenFrom({ id, type }, pubkey)) chats.push({ id, type, unread });
     }
     return chats;

@@ -14,6 +14,8 @@ export const POST_TYPE_LINES = {
     need: word("Something you're looking for"),
     poll: word('Ask a question with 2–4 options in the feed'),
     event: word('A gathering with a time and a place'),
+    /** Local knowledge (knowledge.ts): read in Learn, never in the Market. The chooser's fifth row comes with slice K4. */
+    knowledge: word('Something worth knowing about this place'),
 } as const;
 
 /** The kinds of post a member can start. */

@@ -483,7 +483,7 @@ export interface OpenKnock {
  */
 function viaLine(r: Pick<KnockRow, 'via_post_id' | 'via_sharer_pubkey'>): { title: string; sharer: string } | null {
     if (!r.via_post_id || !r.via_sharer_pubkey) return null;
-    const post = db.prepare(`SELECT title FROM posts WHERE id = ? AND active = 1 AND origin_node IS NULL AND hidden_by_reports_at IS NULL
+    const post = db.prepare(`SELECT title FROM posts WHERE id = ? AND active = 1 AND origin_node IS NULL AND hidden_by_reports_at IS NULL AND type != 'knowledge'
                                AND (audience_scope IS NULL OR audience_scope = 'public')`).get(r.via_post_id) as { title: string | null } | undefined;
     const title = post?.title?.trim();
     if (!title || !alreadyJoined(db, r.via_sharer_pubkey)) return null;

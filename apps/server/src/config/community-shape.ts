@@ -223,6 +223,8 @@ export interface Shape {
 export const KIND_ONLY_SWITCHES = [
     'distanceSortDefault', 'directoryMirror', 'exampleListings', 'announceJoins', 'announceProfiles', 'nearbyListings',
     'membersOnDemand', 'showcase', 'openMembership', 'retention',
+    // Local knowledge (Learn): the server's kind sets it in this build; the owners' setting comes with the Settings slice.
+    'knowledge',
 ] as const satisfies readonly ProfileSwitch[];
 
 /** Every profile switch, and the setting of the shape that reads it: a switch added later fails the suite until it has one. */

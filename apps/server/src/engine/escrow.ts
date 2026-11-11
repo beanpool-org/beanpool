@@ -415,8 +415,9 @@ export function requestPost(
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
     }
-    if (post.type === 'poll' || post.type === 'event') {
-        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
+    if (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') {
+        // Local knowledge is a page, never a listing (DESIGN-local-knowledge-fable.md §2.3): refused by name, never read as a Need.
+        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : post.type === 'knowledge' ? 'Local knowledge cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     const isOffer = post.type === 'offer';
@@ -842,7 +843,7 @@ export function approvePostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+    if (!post || post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') return null;
 
     // A standing deal on a Need (DESIGN-standing-deals-upfront-fable §1): the author pays, and signs as they approve. What
     // they signed must be this listing, this helper and its price per period; the period's Beans are what is paid. Read
@@ -925,7 +926,7 @@ export function rejectPostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+    if (!post || post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') return null;
 
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
@@ -963,7 +964,7 @@ export function cancelPostRequest(
     if (!row) return null;
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+    if (!post || post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') return null;
 
     const isOffer = post.type === 'offer';
     const expectedRequesterRole = isOffer ? row.buyer_pubkey : row.seller_pubkey;
@@ -1049,8 +1050,9 @@ export function offerHoldChecks(
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
         throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
     }
-    if (post.type === 'poll' || post.type === 'event') {
-        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
+    if (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge') {
+        // Local knowledge is a page, never a listing (DESIGN-local-knowledge-fable.md §2.3): refused by name, never read as a Need.
+        throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : post.type === 'knowledge' ? 'Local knowledge cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     if (post.type !== 'offer') {
@@ -1434,7 +1436,7 @@ export function completePostTransaction(
     }
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (post && (post.type === 'poll' || post.type === 'event')) return null;
+    if (post && (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge')) return null;
     // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
     // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
     // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
@@ -1572,7 +1574,7 @@ export function cancelPostTransaction(
     assertDealRowAmount(row.amount_c, 'pending');
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (post && (post.type === 'poll' || post.type === 'event')) return null;
+    if (post && (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge')) return null;
     const completedAt = new Date().toISOString();
 
     cb.conservingTransaction(() => {

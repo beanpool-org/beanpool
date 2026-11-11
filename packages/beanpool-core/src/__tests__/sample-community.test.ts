@@ -69,8 +69,8 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
     it('every id is a sample id, and every sample id is unique', () => {
         const ids = walk(SAMPLE_COMMUNITY).filter(([p]) => /\.id$/.test(p)).map(([, v]) => v);
         // The community, 6 rows, 3 deals, the enterprise, its listing, the project, the Decision, 3 invites, the invite
-        // tree's 3, and the P&L rows (the Bakery's 2, the project's 1: review of #2063, N5).
-        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 3 + 3 + 2 + 1);
+        // tree's 3, the P&L rows (the Bakery's 2, the project's 1: review of #2063, N5), and Learn's 3 pages (Local knowledge K0).
+        expect(ids.length).toBe(1 + 6 + 3 + 1 + 1 + 1 + 1 + 3 + 3 + 2 + 1 + 3);
         for (const id of ids) {
             expect(typeof id === 'string' && id.startsWith(SAMPLE_ID_PREFIX), String(id)).toBe(true);
             expect(isSampleId(id), String(id)).toBe(true);

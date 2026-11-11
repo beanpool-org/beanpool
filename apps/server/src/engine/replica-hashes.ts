@@ -180,7 +180,13 @@ export interface TableHashes {
  * lowering: after a take-over from such a copy a lowered period is paid at the price its payer signed, never more, and the
  * two can lower it again.
  */
-export const TABLE_HASHES_VERSION = 30;
+/**
+ * 31: posts gains seven knowledge_* columns (Local knowledge, DESIGN-local-knowledge-fable.md §4.1, slice K1). Raised for the
+ * same reason as 8. REPLICA_FORMAT stays: each side's import writes only the columns its own table has; what an older
+ * importer drops is a knowledge post's sources, place, language, checked date, mark and count, and after a take-over from
+ * such a copy the page still shows its title and words, "Checked" reading the day it was made.
+ */
+export const TABLE_HASHES_VERSION = 31;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

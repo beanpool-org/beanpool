@@ -47,7 +47,9 @@ function inCategory(p: any, state: MapFilterState): boolean {
 export function marketPinMatchesFilter(p: any, state: MapFilterState): boolean {
     if (p.status && p.status !== 'active') return false;
     const pt = (p.type || '').toLowerCase();
-    if (pt === 'event') return false;
+    // Local knowledge is never pinned (knowledge.ts; DESIGN-local-knowledge-fable.md §2.6): it has no place, and an app
+    // that met one would draw it as an Offer or a Need. Refused by name, whatever the filter.
+    if (pt === 'event' || pt === 'knowledge') return false;
     if (state.type === 'events') return false;
     if (state.type === 'offers' && pt !== 'offer') return false;
     if (state.type === 'needs' && pt !== 'need') return false;

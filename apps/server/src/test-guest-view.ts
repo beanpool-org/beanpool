@@ -1356,6 +1356,9 @@ async function main(): Promise<void> {
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
             'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
             'POST /api/invite/asks', 'GET /api/invite/asks', 'GET /api/invite/asks/mine', 'POST /api/invite/asks/:id/withdraw', 'POST /api/invite/asks/:id/send', 'POST /api/invite/asks/:id/no',
+            // Local knowledge, read in Learn (routes/knowledge.ts): a member's reads, an owner's or admin's writes, all signed.
+            'GET /api/knowledge/front', 'POST /api/knowledge/posts', 'POST /api/knowledge/posts/:id/edit', 'POST /api/knowledge/posts/:id/checked',
+            'POST /api/knowledge/posts/:id/outdated', 'POST /api/knowledge/posts/:id/outdated/clear', 'POST /api/knowledge/posts/:id/take-down',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',

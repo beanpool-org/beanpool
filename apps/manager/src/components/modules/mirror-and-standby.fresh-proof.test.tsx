@@ -8,12 +8,11 @@ import type { NodeProfile } from '../../lib/profiles';
 /**
  * Owner-delete S4a (S2b D2's closing list): a `mirror` link's add, change, disconnect and remove (server community.ts) and
  * the server a standby copies from (server backup.ts replication-config/save) ask an owner's fresh proof. Each of the
- * three viewers × the server's refusal → the code box, the "Manage again" sentence or the "from your phone" sentence.
+ * two viewers × the server's refusal → the "Manage again" sentence or the "from your phone" sentence. The server asks no
+ * typed code, so no request carries one.
  */
 const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', automationToken: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to add or change a mirror link', totpRequired: true };
-const WRONG = { error: 'That 2FA code was already used. Wait for the next one from your authenticator app.', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const MIRROR = { address: 'wss://main.example.org', trustLevel: 'mirror', callsign: 'Main', enabled: false };
@@ -50,18 +49,15 @@ async function saveCopySource() {
 describe('PeerConnectorsPanel: a link the server guards asks the fresh proof (S4a)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('token viewer: add opens the code box; a spent code says so and stays; a new code re-sends the same add once', async () => {
+    it('add with a stale unlock: the Manage-again sentence (no code field); the next Add Peer sends the same add once more, with no code', async () => {
         const sent: Array<Record<string, unknown>> = [];
-        mockNode('/api/local/connectors', [[401, CODE_ASK], [401, WRONG], [200, { success: true }]], sent);
+        mockNode('/api/local/connectors', [[403, STEP_UP], [200, { success: true }]], sent);
         await addMirrorLink();
-        fireEvent.change(await screen.findByTestId('connector-proof-input'), { target: { value: '111111' } });
-        fireEvent.click(screen.getByTestId('connector-proof-confirm'));
-        await waitFor(() => expect(screen.getByTestId('connector-proof-error')).toHaveTextContent('already used'));
-        expect(screen.getByTestId('connector-proof-confirm')).toBeDisabled();
-        fireEvent.change(screen.getByTestId('connector-proof-input'), { target: { value: '222222' } });
-        fireEvent.click(screen.getByTestId('connector-proof-confirm'));
-        await waitFor(() => expect(screen.queryByTestId('connector-proof-code')).not.toBeInTheDocument());
-        expect(sent.map((b) => b.code)).toEqual([undefined, '111111', '222222']);
+        expect(await screen.findByTestId('connector-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('connector-proof-input')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Add Peer/i }));
+        await waitFor(() => expect(screen.queryByTestId('connector-proof-step-up')).not.toBeInTheDocument());
+        expect(sent.map((b) => b.code)).toEqual([undefined, undefined]);
         expect(new Set(sent.map((b) => b.address))).toEqual(new Set(['wss://new-main.example.org']));
     });
 
@@ -92,17 +88,17 @@ describe('PeerConnectorsPanel: a link the server guards asks the fresh proof (S4
 describe('StandbyReplicationPanel: the server it copies from asks the fresh proof (S4a)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('token viewer: the code box, then the same save re-sent once with the code', async () => {
+    it('a stale unlock: the Manage-again sentence (no code field), then the same save sent once more on the next press, with no code', async () => {
         const sent: Array<Record<string, unknown>> = [];
-        mockNode('/api/local/admin/replication-config/save', [[401, { ...CODE_ASK, error: 'Enter a current code from your authenticator app (or a backup code) to change which server this standby copies from' }], [200, { success: true }]], sent);
+        mockNode('/api/local/admin/replication-config/save', [[403, STEP_UP], [200, { success: true }]], sent);
         await saveCopySource();
-        expect(await screen.findByText(/to change which server this standby copies from/)).toBeInTheDocument();
-        fireEvent.change(screen.getByTestId('standby-proof-input'), { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('standby-proof-confirm'));
+        expect(await screen.findByTestId('standby-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('standby-proof-input')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Save Connection/i }));
         await waitFor(() => expect(screen.getByText(/saved successfully/)).toBeInTheDocument());
         expect(sent).toEqual([
             { primaryUrl: 'https://new.example.org' },
-            { primaryUrl: 'https://new.example.org', code: '123456' },
+            { primaryUrl: 'https://new.example.org' },
         ]);
     });
 

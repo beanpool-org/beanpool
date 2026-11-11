@@ -46,16 +46,19 @@ describe('LightsOutCard', () => {
         expect(screen.getByRole('link', { name: 'Show the poster' })).toHaveAttribute('href', 'http://192.168.8.1:8080/hall');
     });
 
-    it('asks the fresh proof when the server does, and re-sends with the code', async () => {
-        const calls = fakeNode(off(), [{ status: 401, body: { error: 'Invalid 2FA code', totpRequired: true } }]);
+    it('asks the Manage unlock again when the server does: the box says so, and the next press of the switch goes through with no code', async () => {
+        const calls = fakeNode(off(), [{ status: 403, body: { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' } }]);
         render(<LightsOutCard activeNode={node} viewer={{ kind: 'token' }} />);
         fireEvent.click(await screen.findByTestId('lights-out-switch'));
-        const field = await screen.findByLabelText('Current code');
-        fireEvent.change(field, { target: { value: '123456' } });
-        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+        expect(await screen.findByTestId('lights-out-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByLabelText('Current code')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull();
+        fireEvent.click(screen.getByTestId('lights-out-switch'));
         await waitFor(() => expect(calls.filter((c) => c.init?.method === 'POST')).toHaveLength(2));
-        const second = calls.filter((c) => c.init?.method === 'POST')[1];
-        expect(JSON.parse(String(second.init?.body)).code).toBe('123456');
+        const posts = calls.filter((c) => c.init?.method === 'POST');
+        expect(JSON.parse(String(posts[1].init?.body)).code).toBeUndefined();
+        expect(JSON.parse(String(posts[1].init?.body))).toEqual(JSON.parse(String(posts[0].init?.body)));
+        await waitFor(() => expect(screen.queryByTestId('lights-out-proof-step-up')).toBeNull());
     });
 
     it('an admin sees the switch as it stands and is told only an owner can change it', async () => {

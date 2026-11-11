@@ -18,10 +18,8 @@ const NEEDS_OWNER = { error: 'The community decided on dave on 2026-10-30. Only 
 const SAME_REASON = { error: 'The last pause of dave gave this same reason. Pausing them again before 2026-11-29 needs a new one.', code: 'repause_same_reason' };
 const THIRD = { error: 'dave has been paused twice in 90 days already. A third time needs the community: propose a Decision.', code: 'third_pause' };
 const TRIP = { error: "You have 5 pauses whose votes are still open, so another needs an owner's fresh proof.", code: 'open_pauses_need_proof' };
-const TRIP_CODE_ASK = {
-    error: 'Enter a current code from your authenticator app (or a backup code) to pause someone while five of your pauses still wait on their votes',
-    totpRequired: true,
-};
+// The tripwire's proof from a phone's Manage unlock gone stale: the same box an owner's other proofs open.
+const TRIP_STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 
 type Sent = { body: Record<string, unknown> };
 
@@ -68,34 +66,34 @@ describe('Suspend: the chain rules refuse in the node\'s words (removal S4)', ()
         });
     }
 
-    it('an owner with five open, asked for a typed code: the code box, in the node\'s words; the code re-sent once', async () => {
-        const sent = mockNode([[401, TRIP_CODE_ASK], [200, { success: true, decision: { id: 'd6', closesAt: '2026-11-06T00:00:00.000Z', effect: 'remove_member' } }]]);
+    it('an owner with five open and a stale unlock: the Manage-again box; the next press re-sends the same words once more, with no code', async () => {
+        const sent = mockNode([[403, TRIP_STEP_UP], [200, { success: true, decision: { id: 'd6', closesAt: '2026-11-06T00:00:00.000Z', effect: 'remove_member' } }]]);
         pressSuspend('A wave of spam from new accounts', 'pw');
-        expect(await screen.findByText(TRIP_CODE_ASK.error)).toBeInTheDocument();
-        fireEvent.change(await screen.findByTestId('suspend-proof-input'), { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('suspend-proof-confirm'));
+        expect(await screen.findByTestId('suspend-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('suspend-proof-input')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
         expect(await screen.findByText(/^Suspended\. Members now vote until .+ on removing them/)).toBeInTheDocument();
-        await waitFor(() => expect(sent.map((s) => s.body.code)).toEqual([undefined, '123456']));
+        await waitFor(() => expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]));
         expect(sent.every((s) => s.body.reason === 'A wave of spam from new accounts')).toBe(true);
     });
 
-    it('the code re-sends the words it was asked for, so they hold still while its box shows; cancelling frees them', async () => {
-        mockNode([[401, TRIP_CODE_ASK]]);
+    it('the press re-sends the words it was asked for, so they hold still while the box shows; dismissing the box frees them', async () => {
+        mockNode([[403, TRIP_STEP_UP]]);
         pressSuspend('A wave of spam from new accounts', 'pw');
-        await screen.findByTestId('suspend-proof-code');
+        await screen.findByTestId('suspend-proof-step-up');
         const reason = screen.getByLabelText('Reason (members will see this)');
         expect(reason).toBeDisabled();
-        fireEvent.click(screen.getByTestId('suspend-proof-cancel'));
+        fireEvent.click(screen.getByTestId('suspend-proof-dismiss'));
         expect(reason).toBeEnabled();
     });
 
-    it('Cancel on the form takes the code box with it: the words it cancelled can\'t be sent, and the next ones aren\'t locked', async () => {
-        mockNode([[401, TRIP_CODE_ASK]]);
+    it('Cancel on the form takes the box with it: the words it cancelled can\'t be sent, and the next ones aren\'t locked', async () => {
+        mockNode([[403, TRIP_STEP_UP]]);
         pressSuspend('A wave of spam from new accounts', 'pw');
-        await screen.findByTestId('suspend-proof-code');
-        const [, formCancel] = screen.getAllByRole('button', { name: 'Cancel' });
+        await screen.findByTestId('suspend-proof-step-up');
+        const formCancel = screen.getAllByRole('button', { name: 'Cancel' }).find((b) => b.getAttribute('data-testid') !== 'suspend-proof-dismiss')!;
         fireEvent.click(formCancel);
-        expect(screen.queryByTestId('suspend-proof-code')).toBeNull();
+        expect(screen.queryByTestId('suspend-proof-step-up')).toBeNull();
         fireEvent.click(screen.getByText('⏸️ Suspend'));
         expect(screen.getByLabelText('Reason (members will see this)')).toBeEnabled();
     });

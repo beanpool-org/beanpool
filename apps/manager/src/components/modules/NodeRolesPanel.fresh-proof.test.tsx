@@ -5,8 +5,8 @@ import type { NodeProfile } from '../../lib/profiles';
 
 /**
  * Owner-delete S4a: granting or taking an owner's or admin's role asks an owner's fresh proof (server roleChangeProof).
- * The panel itself, through the real node client: each viewer × the refusal → the box or the sentence; a grant carries
- * the code in its body, a removal (a DELETE, no body) as X-Fresh-Proof; nothing is re-sent without a new code.
+ * The panel itself, through the real node client: each viewer × the refusal → the box or the sentence. The server asks no
+ * typed code, so nothing here carries one: an old typed-code answer opens no box.
  */
 const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', automationToken: 'pw' };
 const ALICE = 'a1'.repeat(32);
@@ -19,8 +19,8 @@ const members = [
 ];
 const aliceOwner = { member_pubkey: ALICE, role: 'owner', granted_at: '2026-09-15T10:00:00.000Z', granted_by: 'owner:password', callsign: 'alice' };
 const bobAdmin = { member_pubkey: BOB, role: 'admin', granted_at: '2026-09-16T10:00:00.000Z', granted_by: ALICE, callsign: 'bob' };
-const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to change who is an owner or admin', totpRequired: true };
-const WRONG = { error: 'Invalid 2FA code', totpRequired: true };
+// The old typed-code ask: the server never sends it any more, so an answer that carries it opens no box.
+const OLD_CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to change who is an owner or admin', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: ALICE, role: 'owner' };
@@ -66,38 +66,30 @@ async function pressRemoveBob() {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Yes, remove admin' })); });
 }
 
-async function enterCode(code: string) {
-    fireEvent.change(await screen.findByTestId('roles-proof-input'), { target: { value: code } });
-    await act(async () => { fireEvent.click(screen.getByTestId('roles-proof-confirm')); });
-}
-
 beforeEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('NodeRolesPanel: the fresh proof (S4a)', () => {
-    it('token viewer, grant: the box; a wrong code stays; a new code re-sends the same grant once with `code`', async () => {
-        const sent = mockNode([[401, CODE_ASK], [401, WRONG], [200, { success: true }]]);
+    it('token viewer, grant: an answer asking a typed code (the old shape) opens no box; the node\'s own sentence shows; one request, no code', async () => {
+        const sent = mockNode([[401, OLD_CODE_ASK], [200, { success: true }]]);
         await render_({ kind: 'token' });
         await pressGrantCarolAdmin();
         expect(await screen.findByText(/to change who is an owner or admin/)).toBeInTheDocument();
-        await enterCode('111111');
-        await waitFor(() => expect(screen.getByTestId('roles-proof-error')).toHaveTextContent('Invalid 2FA code'));
-        expect(screen.getByTestId('roles-proof-confirm')).toBeDisabled();
-        await enterCode('222222');
-        expect(await screen.findByText('carol is now an admin.')).toBeInTheDocument();
         expect(screen.queryByTestId('roles-proof-code')).toBeNull();
-        expect(sent.map((s) => [s.method, s.body.pubkey, s.body.role, s.body.code])).toEqual([
-            ['POST', CAROL, 'admin', undefined], ['POST', CAROL, 'admin', '111111'], ['POST', CAROL, 'admin', '222222'],
-        ]);
+        expect(screen.queryByTestId('roles-proof-input')).toBeNull();
+        expect(screen.queryByText('carol is now an admin.')).toBeNull();
+        expect(sent.map((s) => [s.method, s.body.pubkey, s.body.role, s.body.code])).toEqual([['POST', CAROL, 'admin', undefined]]);
     });
 
-    it('token viewer, remove: the box; the code travels as X-Fresh-Proof on the same DELETE', async () => {
-        const sent = mockNode([[401, CODE_ASK], [200, { success: true }]]);
+    it('token viewer, remove: an answer asking a typed code opens no box; one DELETE, no X-Fresh-Proof; bob still listed', async () => {
+        const sent = mockNode([[401, OLD_CODE_ASK], [200, { success: true }]]);
         await render_({ kind: 'token' });
         await pressRemoveBob();
-        await enterCode('333333');
-        expect(await screen.findByText('bob is no longer an admin.')).toBeInTheDocument();
-        expect(sent.map((s) => [s.method, s.url.endsWith(`/node-roles/${BOB}/admin`), s.proof])).toEqual([['DELETE', true, undefined], ['DELETE', true, '333333']]);
+        expect(await screen.findByText(/to change who is an owner or admin/)).toBeInTheDocument();
+        expect(screen.queryByTestId('roles-proof-code')).toBeNull();
+        expect(sent.map((s) => [s.method, s.url.endsWith(`/node-roles/${BOB}/admin`), s.proof])).toEqual([['DELETE', true, undefined]]);
+        expect(screen.getByTestId(`role-row-${BOB}`)).toBeInTheDocument();
+        expect(screen.queryByText('bob is no longer an admin.')).toBeNull();
     });
 
     it('phone viewer, hand-off stale, grant: the Manage-again sentence; one request; carol not shown as an admin', async () => {

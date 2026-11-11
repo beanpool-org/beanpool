@@ -12,11 +12,10 @@ import type { NodeProfile } from '../../lib/profiles';
 /**
  * Owner-delete S4a: the owner's settings whose routes call requireFreshProof: the gateway (amendment 1), off-box
  * destinations removed, changed or kept fewer days, a break-glass code made (C7) and an automation token made (C10, key
- * sessions only). Each viewer × the refusal → the box or the sentence;
- * the code is re-sent once with the same request; nothing is re-sent without one.
+ * sessions only). Each viewer × the refusal → the sentence; the same request is sent again on the next press, with no
+ * code (the server asks none); nothing is re-sent before that.
  */
 const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', automationToken: 'pw' };
-const CODE_ASK = (what: string) => ({ error: `Enter a current code from your authenticator app (or a backup code) to ${what}`, totpRequired: true });
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const OWNER_KEY = { kind: 'key' as const, memberPubkey: 'a'.repeat(64), role: 'owner' as const };
@@ -43,11 +42,6 @@ function mockNode(route: string, answers: Array<[number, unknown]>, reads: Recor
     return sent;
 }
 
-async function enterCode(testId: string, code: string) {
-    fireEvent.change(await screen.findByTestId(`${testId}-input`), { target: { value: code } });
-    fireEvent.click(screen.getByTestId(`${testId}-confirm`));
-}
-
 beforeEach(() => { vi.restoreAllMocks(); sessionStorage.clear(); });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -55,15 +49,16 @@ describe('Gateway save (S4a; opus-1984 N4)', () => {
     /** As App's handleSaveGateway: the proof is the screen's to ask; anything else it says itself. */
     const onSave = (code?: string) => updateGatewayConfig(node.url, gateway, 'pw', code).then(() => {});
 
-    it('token viewer: the box; a wrong code stays; a new code re-sends the same settings once with `code`', async () => {
-        const sent = mockNode('/api/local/admin/gateway', [[401, CODE_ASK('change the gateway settings')], [401, { error: 'Invalid 2FA code', totpRequired: true }], [200, { success: true, gateway }]]);
+    it('a stale unlock: the Manage-again sentence (no code field); the next Save sends the same settings once more, with no code', async () => {
+        const sent = mockNode('/api/local/admin/gateway', [[403, STEP_UP], [200, { success: true, gateway }]]);
         render(<GatewayModule gateway={gateway} gatewayLoading={false} gatewaySuccess={null} onChangeGateway={vi.fn()} onSaveGateway={onSave} />);
         fireEvent.click(screen.getByRole('button', { name: /Save Gateway Config/ }));
-        await enterCode('gateway-proof', '111111');
-        await waitFor(() => expect(screen.getByTestId('gateway-proof-error')).toHaveTextContent('Invalid 2FA code'));
-        await enterCode('gateway-proof', '222222');
-        await waitFor(() => expect(screen.queryByTestId('gateway-proof-code')).toBeNull());
-        expect(sent.map((s) => s.body.code)).toEqual([undefined, '111111', '222222']);
+        expect(await screen.findByTestId('gateway-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('gateway-proof-input')).toBeNull();
+        expect(sent).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: /Save Gateway Config/ }));
+        await waitFor(() => expect(screen.queryByTestId('gateway-proof-step-up')).toBeNull());
+        expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]);
         expect(sent.every((s) => JSON.stringify(s.body.features) === JSON.stringify(gateway.features))).toBe(true);
     });
 
@@ -96,16 +91,19 @@ describe('Off-box destination removed (S4a)', () => {
         retentionDays: 30, retentionFrom: 'default', maxRetentionDays: 30, maxIntervalHours: 168, running: false, destinations,
     } as unknown as OffboxStatus);
 
-    it('token viewer: Remove opens the box; the code re-sends the same removeId once', async () => {
+    it('Remove with a stale unlock: the Manage-again sentence (no code field); the next Remove sends the same removeId once more, with no code', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const sent = mockNode('/offbox-backups/settings', [[401, CODE_ASK('remove, change or shorten where backups go off the box')], [200, { success: true, status: status([]) }]],
+        const sent = mockNode('/offbox-backups/settings', [[403, STEP_UP], [200, { success: true, status: status([]) }]],
             { '/offbox-backups/status': status([dest]) });
         render(<OffboxBackupsPanel activeNode={node} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
         await answerInPageConfirm('Stop sending'); // S4b (#2029): Remove asks in the page first
-        await enterCode('offbox-proof', '135790');
+        expect(await screen.findByTestId('offbox-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('offbox-proof-input')).toBeNull();
+        fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+        await answerInPageConfirm('Stop sending');
         expect(await screen.findByText('Destination removed. What it holds stays there.')).toBeInTheDocument();
-        expect(sent.map((s) => [s.body.removeId, s.body.code])).toEqual([['d-1', undefined], ['d-1', '135790']]);
+        expect(sent.map((s) => [s.body.removeId, s.body.code])).toEqual([['d-1', undefined], ['d-1', undefined]]);
     });
 
     it('phone viewer, hand-off stale: the Manage-again sentence; nothing re-sent', async () => {
@@ -131,17 +129,19 @@ describe('Break-glass code made (S4a, C7)', () => {
         });
     };
 
-    it('owner key viewer: the box (when the node asks for a code); the code re-sent once, the request carrying only the code', async () => {
-        const sent = mockNode('/auth/break-glass/issue', [[401, CODE_ASK('make a break-glass code')], [200, { breakGlassCode: 'BG-TEST-0000' }]]);
+    it('owner key viewer: a stale unlock says press Manage again; the next press makes the code, and neither request carries anything', async () => {
+        const sent = mockNode('/auth/break-glass/issue', [[403, STEP_UP], [200, { breakGlassCode: 'BG-TEST-0000' }]]);
         await renderAccess(OWNER_KEY);
         // The code is made for the signed-in owner's own key: there is no owner-key field to fill in.
         expect(screen.queryByLabelText("Owner's member key")).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Make a break-glass code' }));
-        await enterCode('break-glass-proof', '864200');
+        expect(await screen.findByTestId('break-glass-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('break-glass-proof-input')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Make a break-glass code' }));
         expect(await screen.findByText('BG-TEST-0000')).toBeInTheDocument();
-        expect(sent.map((s) => s.body.code)).toEqual([undefined, '864200']);
-        // No member key and no password in either request.
-        expect(sent.map((s) => Object.keys(s.body).sort())).toEqual([[], ['code']]);
+        expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]);
+        // No member key, no code and no password in either request.
+        expect(sent.map((s) => Object.keys(s.body).sort())).toEqual([[], []]);
     });
 
     it('owner key viewer, hand-off stale: the Manage-again sentence; nothing re-sent', async () => {

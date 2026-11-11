@@ -13,7 +13,7 @@ import type { TlsStatus } from '../../lib/node-client';
  */
 const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', automationToken: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to remove 203.0.113.5', totpRequired: true };
+const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -258,10 +258,10 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         expect(screen.getByRole('alert')).toHaveTextContent(why);
     });
 
-    it('moving the live address to another asks the fresh proof on the screen; Confirm re-sends it with the code', async () => {
+    it('moving the live address to another asks the Manage unlock again on the screen (no code field); the next press sends it again', async () => {
         const sent: Sent[] = [];
         mockNode(() => tlsStatus(), {
-            '/public-address/own': [[401, { error: "Enter a current code from your authenticator app (or a backup code) to replace this community's live address", totpRequired: true }],
+            '/public-address/own': [[403, STEP_UP],
                 [200, { success: true, address: 'coop.example.net', kind: 'own', communityAddress: true, primaryAddress: 'coop.example.net' }]],
         }, sent);
         render(<AddressesPanel activeNode={node} />);
@@ -269,12 +269,13 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         openAdd('domain');
         fireEvent.change(screen.getByLabelText('Your own domain name'), { target: { value: 'coop.example.net' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
-        const input = await screen.findByTestId('address-proof-input');
-        fireEvent.change(input, { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('address-proof-confirm'));
-        await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("coop.example.net is this community's address now"));
-        expect(sent.map((s) => s.body.code)).toEqual([undefined, '123456']);
+        expect(await screen.findByTestId('address-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
         expect(screen.queryByTestId('address-proof-input')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
+        await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("coop.example.net is this community's address now"));
+        expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]);
+        expect(sent.map((s) => s.body.domain)).toEqual(['coop.example.net', 'coop.example.net']);
+        expect(screen.queryByTestId('address-proof-step-up')).toBeNull();
     });
 
     it('Try again now gives the same address again (the owner\'s retry past the back-off)', async () => {
@@ -306,9 +307,9 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         expect(sent).toHaveLength(0);
     });
 
-    it('Remove asks in the page first, then the fresh proof; Keep it sends nothing', async () => {
+    it('Remove asks in the page first, then the Manage unlock again if it is stale; Keep it sends nothing', async () => {
         const sent: Sent[] = [];
-        mockNode(() => tlsStatus(), { '/app-addresses/remove': [[401, CODE_ASK], [200, { addresses: [], unconfirmed: [] }]] }, sent);
+        mockNode(() => tlsStatus(), { '/app-addresses/remove': [[403, STEP_UP], [200, { addresses: [], unconfirmed: [] }]] }, sent);
         render(<PublicAddressPanel activeNode={node} />);
         await card();
         fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Remove 203.0.113.5' }));
@@ -319,13 +320,14 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         fireEvent.click(within(row('beans.example.org')).getByRole('button', { name: 'Remove beans.example.org' }));
         expect(await screen.findByTestId('in-page-confirm')).toHaveTextContent("It is this community's address.");
         fireEvent.click(within(screen.getByTestId('in-page-confirm')).getByRole('button', { name: 'Remove' }));
-        const input = await screen.findByTestId('own-address-proof-input');
+        expect(await screen.findByTestId('own-address-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('own-address-proof-input')).toBeNull();
         expect(sent).toEqual([{ path: '/app-addresses/remove', body: { address: 'beans.example.org' } }]);
-        fireEvent.change(input, { target: { value: '654321' } });
-        fireEvent.click(screen.getByTestId('own-address-proof-confirm'));
+        // After pressing Manage on the phone: the same removal, asked in the page again, with no code.
+        fireEvent.click(within(row('beans.example.org')).getByRole('button', { name: 'Remove beans.example.org' }));
+        fireEvent.click(within(await screen.findByTestId('in-page-confirm')).getByRole('button', { name: 'Remove' }));
         await waitFor(() => expect(screen.getByTestId('own-address-message')).toHaveTextContent('beans.example.org removed.'));
-        expect(sent[1].body).toEqual({ address: 'beans.example.org', code: '654321' });
-        // Asked once: the retry with the code is the same removal.
+        expect(sent[1].body).toEqual({ address: 'beans.example.org' });
         expect(screen.queryByTestId('in-page-confirm')).toBeNull();
     });
 
@@ -342,13 +344,13 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
 describe('AppAddressesPanel: Remove asks an owner\'s fresh proof (HTTPS S4)', () => {
     beforeEach(() => vi.restoreAllMocks());
 
-    it('the box opens on the node\'s ask; Confirm re-sends the removal once, with the code', async () => {
+    it('the box opens on the node\'s ask to press Manage again; the next Remove sends the removal once more, with no code', async () => {
         const sent: Sent[] = [];
         let report = { addresses: [{ address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 }], unconfirmed: [], heldBack: [], named: true, unboundSignaturesUntil: null, unboundSignaturesAccepted: false };
         vi.spyOn(global, 'fetch').mockImplementation(async (url, opts) => {
             if (opts?.method === 'POST' && String(url).includes('/app-addresses/remove')) {
                 sent.push({ path: 'remove', body: JSON.parse(String(opts.body || '{}')) });
-                if (sent.length === 1) return json(401, { ...CODE_ASK, error: CODE_ASK.error.replace('203.0.113.5', 'community.example.org') });
+                if (sent.length === 1) return json(403, STEP_UP);
                 report = { ...report, addresses: [], named: false };
                 return json(200, report);
             }
@@ -357,13 +359,13 @@ describe('AppAddressesPanel: Remove asks an owner\'s fresh proof (HTTPS S4)', ()
         render(<AddressesPanel activeNode={node} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Remove community.example.org' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
-        const input = await screen.findByTestId('address-proof-input');
-        expect(screen.getByText(/to remove community\.example\.org/)).toBeInTheDocument();
-        expect(screen.queryByRole('alert')).toBeNull();
-        fireEvent.change(input, { target: { value: '112233' } });
-        fireEvent.click(screen.getByTestId('address-proof-confirm'));
-        await waitFor(() => expect(screen.queryByTestId('address-row-community.example.org')).toBeNull());
-        expect(sent.map((s) => s.body)).toEqual([{ address: 'community.example.org' }, { address: 'community.example.org', code: '112233' }]);
+        expect(await screen.findByTestId('address-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
         expect(screen.queryByTestId('address-proof-input')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull();
+        fireEvent.click(await screen.findByRole('button', { name: 'Remove community.example.org' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(screen.queryByTestId('address-row-community.example.org')).toBeNull());
+        expect(sent.map((s) => s.body)).toEqual([{ address: 'community.example.org' }, { address: 'community.example.org' }]);
+        expect(screen.queryByTestId('address-proof-step-up')).toBeNull();
     });
 });

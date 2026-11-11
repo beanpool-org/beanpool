@@ -6,13 +6,12 @@ import * as nodeClient from '../../lib/node-client';
 
 /**
  * Owner-delete S4a: keeping fewer snapshots, or turning them off, asks an owner's fresh proof (server backup.ts
- * snapshotsLessened); keeping more asks nothing. The node decides which, so the schedule is sent without a code first:
- * a raise goes through in one request, a lowering opens the box (or the sentence) and the SAME schedule is re-sent once
- * with the code.
+ * snapshotsLessened); keeping more asks nothing. The node decides which, so the schedule is sent first: a raise goes
+ * through in one request, a lowering opens the sentence, and the SAME schedule is sent again on the next Save. No request
+ * carries a code (the server asks none).
  */
 const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', automationToken: 'pw' };
 const NOW = { enabled: true, intervalHours: 24, keep: 7 };
-const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to keep fewer snapshots, or make them cover less time', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 
@@ -64,18 +63,18 @@ describe('Snapshot schedule: fewer kept or off asks the fresh proof (S4a)', () =
         expect(screen.queryByTestId('schedule-proof-code')).toBeNull();
     });
 
-    it('token viewer, keeping fewer: the box; the code re-sends the same schedule once', async () => {
-        const sent = mockNode([[401, CODE_ASK], [200, {}]]);
+    it('keeping fewer with a stale unlock: the Manage-again sentence (no code field); the next Save sends the same schedule once more, with no code', async () => {
+        const sent = mockNode([[403, STEP_UP], [200, {}]]);
         await openBackups();
         fireEvent.change(screen.getByDisplayValue('Keep last 7 snapshots (1 week)'), { target: { value: '3' } });
         await save();
-        expect(await screen.findByText(/to keep fewer snapshots/)).toBeInTheDocument();
+        expect(await screen.findByTestId('schedule-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('schedule-proof-input')).toBeNull();
         // The refusal is the box's to say, not a status line of its own.
         expect(screen.queryByText('Backup schedule updated successfully.')).toBeNull();
-        fireEvent.change(screen.getByTestId('schedule-proof-input'), { target: { value: '246810' } });
-        fireEvent.click(screen.getByTestId('schedule-proof-confirm'));
+        await save();
         expect(await screen.findByText('Backup schedule updated successfully.')).toBeInTheDocument();
-        expect(sent.map((b) => [b.enabled, b.intervalHours, b.keep, b.code])).toEqual([[true, 24, 3, undefined], [true, 24, 3, '246810']]);
+        expect(sent.map((b) => [b.enabled, b.intervalHours, b.keep, b.code])).toEqual([[true, 24, 3, undefined], [true, 24, 3, undefined]]);
     });
 
     it('phone viewer, hand-off stale, turning them off: the Manage-again sentence; nothing re-sent', async () => {

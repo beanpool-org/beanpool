@@ -21,7 +21,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; madePosts: number }>; removeProof?: 'phone'; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number; perDayProof?: 'phone' | 'code' }) {
+function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; madePosts: number }>; removeProof?: 'phone'; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number; perDayProof?: 'phone' | 'stale' }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -62,12 +62,13 @@ function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; mad
         }
         if (url.endsWith('/api/local/admin/agent/posts-per-day')) {
             // The owner's fresh proof (server requireFreshProof): a computer's key session is sent to the phone; the
-            // typed-code kind of the box (still in the page) asks a current code (here 123456).
+            // phone's Manage unlock past its 90 seconds is asked again once, and the next press goes through.
             if (state.perDayProof === 'phone') {
                 return new Response(JSON.stringify({ error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true }), { status: 403 });
             }
-            if (state.perDayProof === 'code' && body.code !== '123456') {
-                return new Response(JSON.stringify({ error: body.code ? 'That code is not right.' : 'A current code is needed to change how many posts an assistant may make a day', totpRequired: true }), { status: 401 });
+            if (state.perDayProof === 'stale') {
+                state.perDayProof = undefined;
+                return new Response(JSON.stringify({ error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' }), { status: 403 });
             }
             state.postsPerDay = body.perDay;
             return new Response(JSON.stringify({ postsPerDay: body.perDay }), { status: 200 });
@@ -203,16 +204,19 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.queryByText(/^Saved:/)).toBeNull();
     });
 
-    it('the "Owner and admin limit" asked for a typed code shows the code box, and sends the code with the change', async () => {
-        const calls = fakeNode({ grants: [], perDayProof: 'code' });
+    it('the "Owner and admin limit" with a stale Manage unlock is told to press Manage again (no code field), and the next Save goes through with no code', async () => {
+        const calls = fakeNode({ grants: [], perDayProof: 'stale' });
         render(<ConnectedAssistantsPanel activeNode={node} />);
         fireEvent.change(await screen.findByLabelText(LIMIT), { target: { value: '500' } });
-        fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
-        fireEvent.change(await screen.findByTestId('agent-posts-per-day-proof-input'), { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('agent-posts-per-day-proof-confirm'));
+        const save = () => fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
+        save();
+        expect(await screen.findByTestId('agent-posts-per-day-proof-step-up')).toHaveTextContent('Press Manage on your phone again, then make this change within 90 seconds.');
+        expect(screen.queryByTestId('agent-posts-per-day-proof-input')).toBeNull();
+        expect(screen.queryByText(/^Saved:/)).toBeNull();
+        save();
         expect(await screen.findByText('Saved: 500 a day, from the next post.')).toBeInTheDocument();
-        expect(calls.filter((c) => c.url.endsWith('/agent/posts-per-day')).map((c) => c.body)).toEqual([{ perDay: 500 }, { perDay: 500, code: '123456' }]);
-        expect(screen.queryByTestId('agent-posts-per-day-proof-code')).toBeNull();
+        expect(calls.filter((c) => c.url.endsWith('/agent/posts-per-day')).map((c) => c.body)).toEqual([{ perDay: 500 }, { perDay: 500 }]);
+        expect(screen.queryByTestId('agent-posts-per-day-proof-step-up')).toBeNull();
         expect(await screen.findByTestId('agent-posts-per-day')).toHaveTextContent(`${LIMIT}: 500.`);
     });
 

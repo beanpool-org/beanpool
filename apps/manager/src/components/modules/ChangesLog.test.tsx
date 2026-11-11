@@ -45,7 +45,7 @@ describe('ChangesLog', () => {
         expect(container).toBeInTheDocument();
 
         // Check first entry
-        expect(screen.getByText('the owner (password)')).toBeInTheDocument();
+        expect(screen.getByText('the owner (old admin password)')).toBeInTheDocument();
         expect(screen.getByText('Who can join')).toBeInTheDocument();
         expect(screen.getByText(': Any member invites → Only admins invite')).toBeInTheDocument();
 

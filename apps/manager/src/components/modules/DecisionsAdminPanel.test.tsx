@@ -393,7 +393,7 @@ describe('DecisionsAdminPanel', () => {
         const serverRole: nodeClient.AdminDecisionItem = { ...tooFew, id: 'dec-few-3', params: { ...tooFew.params, serverRole: 'admin' } };
         vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([tooFew, decided, serverRole, pauseVote]);
         const decide = vi.spyOn(nodeClient, 'ownerDecideRemoval')
-            .mockRejectedValueOnce(new FreshProofRequiredError({ kind: 'code', error: 'A current code is required to decide a vote too few members could vote on' }, 401))
+            .mockRejectedValueOnce(new FreshProofRequiredError({ kind: 'step-up', error: 'Press Manage on your phone again, then make this change within 90 seconds.' }, 403, 'step_up_required'))
             .mockResolvedValueOnce({ success: true });
         render(<DecisionsAdminPanel activeNode={node} />);
         const [fewRow, decidedRow, roleRow, plainRow] = await screen.findAllByTestId('admin-decision-row');
@@ -412,14 +412,15 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: '  Only Tia and Uma could vote; both saw it  ' } });
         fireEvent.click(confirm);
         await waitFor(() => expect(decide).toHaveBeenCalledWith('https://test-node.local', 'dec-few-1', 'Only Tia and Uma could vote; both saw it', 'pw', undefined));
-        // A viewer the node asks for a typed code is shown the code box, and nothing was decided yet.
-        expect(await screen.findByTestId('owner-decision-proof-code')).toBeInTheDocument();
+        // A stale Manage unlock is told to press Manage again (no field to type in), and nothing was decided yet.
+        expect(await screen.findByTestId('owner-decision-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('owner-decision-proof-input')).toBeNull();
         expect(decide).toHaveBeenCalledTimes(1);
-        // The code re-sends the words of the press that opened the box: they hold still while it shows, or a correction made
-        // now would never be sent, and an owner's decision can't be taken back. Cancelling the box frees them.
+        // The next press re-sends the words of the press that opened the box: they hold still while it shows, or a correction
+        // made now would never be sent, and an owner's decision can't be taken back. Cancelling the box frees them.
         const reasonBox = within(dialog).getByLabelText('Reason (members will see this)');
         expect(reasonBox).toBeDisabled();
-        fireEvent.click(screen.getByTestId('owner-decision-proof-cancel'));
+        fireEvent.click(screen.getByTestId('owner-decision-proof-dismiss'));
         expect(reasonBox).toBeEnabled();
     });
 

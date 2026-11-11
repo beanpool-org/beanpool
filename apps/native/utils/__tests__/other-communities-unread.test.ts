@@ -62,7 +62,8 @@ function account(): Account {
 }
 
 /** How a community answers: its counts, a refusal, no connection, or nothing until the phone gives up. */
-type Answer = { unread: number; requests?: number; alerts?: unknown } | { status: number; body?: unknown } | 'down' | 'never';
+/** `contacts`, when given, is the number of the member's locked contacts copy kept there (apps/server routes/contacts.ts). */
+type Answer = { unread: number; requests?: number; alerts?: unknown; contacts?: unknown } | { status: number; body?: unknown } | 'down' | 'never';
 interface Asked { community: string; path: string; signed: boolean; method: string; headers: Record<string, string>; body: unknown }
 
 let kim: Account;
@@ -134,7 +135,8 @@ beforeEach(() => {
         if (!signed) return new Response(JSON.stringify({ error: 'A signed request is required' }), { status: 401 });
         // `alerts` is `unread` unless a test says otherwise; set to undefined, it isn't sent: a node from before it.
         const alerts = 'alerts' in a ? a.alerts : a.unread;
-        return new Response(JSON.stringify({ unread: a.unread, alerts, requests: a.requests ?? 0, asOf: new Date(clock).toISOString() }), { status: 200 });
+        const contacts = 'contacts' in a ? { contacts: a.contacts } : {};
+        return new Response(JSON.stringify({ unread: a.unread, alerts, requests: a.requests ?? 0, ...contacts, asOf: new Date(clock).toISOString() }), { status: 200 });
     }));
 });
 
@@ -1175,6 +1177,60 @@ describe('wired in where the design says', () => {
         expect(task).toContain('await postNoticesAfterSync()');
         const service = fs.readFileSync(path.resolve(__dirname, '../../services/push-notifications.ts'), 'utf8');
         expect(service).toContain('return await noticesAfterSync({');
+    });
+});
+
+describe('each answer reaches the private contacts sync, with no request of its own (contacts-sync.ts contactsHeard; PR #3073 review 4542103837)', () => {
+    const phone = (): PhoneNotices => ({ mayNotify: async () => true, post: async (n) => { posted.push(n); }, setBadge: async (n) => { badges.push(n); } });
+    const OTHER = 'https://other.example.org';
+    const BROKEN = 'https://broken.example.org';
+
+    it('an open round hands `heard` each community\'s whole answer, and nothing for a refusal, an error or no answer', async () => {
+        keep(HOME, CASTLEMAINE, BYRON, OTHER, BROKEN);
+        answers.set(CASTLEMAINE, { unread: 2, contacts: { seq: 4 } });
+        answers.set(BYRON, { status: 403, body: { error: 'Not a member', code: 'not_a_member' } });
+        answers.set(OTHER, 'down');
+        answers.set(BROKEN, { status: 500, body: { error: 'Server error' } });
+        const heard = vi.fn();
+        await roundWhileOpen(AsyncStorage, kim, phone(), heard);
+        expect(heard.mock.calls).toEqual([[CASTLEMAINE, expect.objectContaining({ unread: 2, contacts: { seq: 4 } })]]);
+        // The round's own question to each, and nothing more: the sync asks nobody for it.
+        expect(asked.map((a) => `${a.method} ${a.community}${a.path}`).sort())
+            .toEqual([BROKEN, BYRON, CASTLEMAINE, OTHER].map((c) => `GET ${c}/api/me/unread`).sort());
+        // Mutation: drop `heard` from roundWhileOpen's askOtherCommunities(...), or countAt's call of it → never called.
+    });
+
+    it('a `heard` that throws costs the round nothing: its count, notice and badge stand', async () => {
+        keep(HOME, [CASTLEMAINE, 'Castlemaine']);
+        answers.set(CASTLEMAINE, { unread: 3, contacts: null });
+        const told = await roundWhileOpen(AsyncStorage, kim, phone(), () => { throw new Error('the contacts sync failed'); });
+        expect(told).toBe(1);
+        expect(await readNoticeCounts(AsyncStorage)).toEqual({ [CASTLEMAINE]: 3 });
+        expect(badges).toEqual([3]);
+    });
+
+    it('the open round as the app runs hands each answer on, as open; a closed round (the background sync\'s) hands none', () => {
+        const service = fs.readFileSync(path.resolve(__dirname, '../../services/push-notifications.ts'), 'utf8');
+        const fn = (src: string, head: string) => src.slice(src.indexOf(head), src.indexOf('\n}\n', src.indexOf(head)));
+        const open = fn(service, 'export async function askOtherCommunitiesNow');
+        expect(open).toContain('contactsHeard(me, community, body, true)');
+        expect(open).toContain('await roundWhileOpen(AsyncStorage, me, phoneNotices, heard);');
+        const rounds = fs.readFileSync(path.resolve(__dirname, '../other-communities-unread.ts'), 'utf8');
+        const closed = fn(rounds, 'export async function noticesAfterSync');
+        expect(closed).toContain('closed: true');
+        expect(closed).not.toMatch(/heard/);
+        expect(fn(service, 'export async function postNoticesAfterSync')).not.toMatch(/contacts/i);
+    });
+
+    it('the contacts sync as the app opens (the community in use asked) and as it comes back (only its waiting save set)', () => {
+        const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf8');
+        const between = (from: string, to: string) => layout.slice(layout.indexOf(from), layout.indexOf(to, layout.indexOf(from)));
+        expect(layout.slice(0, layout.indexOf('// Set up foreground polling fallback'))).toContain('void tendContacts(true);');
+        expect(between('// App state listener to trigger sync', 'appState.current = nextAppState;')).toContain('void tendContacts(false);');
+        const tend = between('const tendContacts = ', '}).catch(() => {});');
+        expect(tend).toContain('await sync.savePassWhenDue(me);');
+        expect(tend).toContain('if (ask) await sync.checkContactsHere(me);');
+        // Mutation: drop either call, or ask on a return → red here.
     });
 });
 

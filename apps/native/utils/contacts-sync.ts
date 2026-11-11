@@ -6,9 +6,13 @@
  *
  * **What each community gets** ({@link decide}): a community never heard from is asked its number (a tiny signed GET of
  * /api/me/unread) before anything is sent; one holding a number this phone hasn't merged has its copy fetched and merged
- * first; one holding exactly what this phone merged, or nothing, gets the phone's copy when it is newer. So a save never
- * overwrites people this phone hasn't seen. A 409 `stale_copy` (another phone of the member's saved there) is the same
- * fetch, merge and save again.
+ * first; one holding exactly what this phone merged, or nothing, gets the phone's copy when it is newer. A copy one number
+ * past the one heard there goes at once: the community takes only a newer number, so it refuses it (409) if another phone
+ * of the member's saved there since. Further past, that save would land under it with no 409, and the number heard may be
+ * days old, so the community is asked its number again first, in the same visit, and the copy goes only if it still holds
+ * what this phone merged, or nothing. So a save never overwrites people this phone hasn't seen, but for a save landing
+ * there in the moment between that answer and the PUT (the server would have to take a save only over the number it
+ * names to close that). A 409 `stale_copy` is the same fetch, merge and save again.
  *
  * **When.** A member's change waits a random 2 to 15 minutes before it leaves the phone at all (contacts-store.ts
  * `saveWait`; design §5.2: a save straight after a profile view would say who was added), then goes to the community the
@@ -16,8 +20,9 @@
  * hear their numbers ({@link contactsHeard}). The community in use is asked its number once each time the app opens, and
  * again when the Contacts screen opens ({@link checkContactsHere}).
  *
- * **What is sent.** Only the locked copy, signed, to the member's own community: no name, number or email of anyone ever
- * leaves the phone readable (utils/__tests__/contacts-sync.test.ts holds every request to that).
+ * **What is sent.** Only the locked copy, signed, to the member's own communities, never to one the phone only looks at as a
+ * guest ({@link contactsCommunities}): no name, number or email of anyone ever leaves the phone readable
+ * (utils/__tests__/contacts-sync.test.ts holds every request to that).
  *
  * **Refusals.** A community that keeps no lists (`contacts_off`, or a server from before them), whose server is full
  * (`node_full`), that took too many saves this hour, or that handed back a copy that doesn't open, is left alone for a
@@ -27,7 +32,7 @@ import { ContactsCryptoError, type ContactsList } from '@beanpool/core';
 import { onAccountOnPhone } from './account-on-phone';
 import {
     changeContacts, contactsRecordChanged, inTurn, loadContacts, phoneContactsDeps, readOnPhone, readStateFor, takeInCopy, writeState,
-    type ContactsAccount, type ContactsOnPhone, type ContactsRefusal, type ContactsStoreDeps, type ContactsSyncState,
+    type ContactsAccount, type ContactsKv, type ContactsOnPhone, type ContactsRefusal, type ContactsStoreDeps, type ContactsSyncState,
 } from './contacts-store';
 
 export const CONTACTS_COPY_PATH = '/api/contacts/copy';
@@ -39,7 +44,7 @@ const HOUR = 60 * 60 * 1000;
 const REFUSAL_WAIT: Record<ContactsRefusal, number> = {
     contacts_off: 24 * HOUR, node_full: 24 * HOUR, too_many_saves: HOUR, newer: 24 * HOUR, not_a_member: HOUR, unopened: 24 * HOUR, too_big: 24 * HOUR,
 };
-/** The most steps one community takes in a pass: ask, fetch, save, and once more after a 409. */
+/** The most steps one visit to a community takes: ask, fetch, save, and once more after a 409 (fetch, save). */
 const STEPS_MAX = 5;
 
 /** A signed request to one of the member's communities. Null when it didn't answer. */
@@ -60,16 +65,26 @@ export function contactsDue(s: Pick<ContactsSyncState, 'dueAt'>, now: number): b
     return s.dueAt === null || s.dueAt <= now;
 }
 
-/** The next step for `community` (see the header). */
-export function decide(community: string, s: ContactsSyncState, onPhone: ContactsOnPhone, now: number): ContactsStep {
+/**
+ * What `community` said in this visit ({@link level}): the number of the copy it keeps, null for none, and undefined before
+ * it has answered in it. As a step's result, undefined is "nothing learned", which ends the visit.
+ */
+type Said = number | null | undefined;
+
+/**
+ * The next step for `community` (see the header). `said`: what it gave in this visit. A save more than one number past the
+ * one heard there goes only on that word: the number heard may be days old, and a copy saved there since, under the
+ * phone's, would be replaced with no 409.
+ */
+export function decide(community: string, s: ContactsSyncState, onPhone: ContactsOnPhone, now: number, said?: Said): ContactsStep {
     const refused = s.refused[community];
     if ((refused && refused.until > now) || onPhone.kind === 'unreadable') return 'skip';
     const heard = s.heard[community];
     const seq = onPhone.kind === 'list' ? onPhone.seq : 0;
     if (heard === undefined) return seq > 0 ? 'ask' : 'level';
-    if (heard === null) return seq > 0 && contactsDue(s, now) ? 'put' : 'level';
-    if (heard !== s.merged[community]) return 'fetch';
-    return seq > heard && contactsDue(s, now) ? 'put' : 'level';
+    if (heard !== null && heard !== s.merged[community]) return 'fetch';
+    if (seq <= (heard ?? 0) || !contactsDue(s, now)) return 'level';
+    return seq > (heard ?? 0) + 1 && said !== heard ? 'ask' : 'put';
 }
 
 /**
@@ -106,108 +121,120 @@ function refusalOf(status: number, body: unknown): ContactsRefusal | null {
     return null;
 }
 
-/** One step for `community`. Returns whether anything was learned (so another step may follow). */
-async function step(account: ContactsAccount, community: string, what: ContactsStep, deps: ContactsSyncDeps): Promise<boolean> {
+/**
+ * One step for `community`, in a visit where it said `said` so far. Returns what it says now: the number of the copy it
+ * keeps, null for none, or undefined when nothing was learned (no answer, a refusal), which ends the visit.
+ */
+async function step(account: ContactsAccount, community: string, what: ContactsStep, deps: ContactsSyncDeps, said: Said): Promise<Said> {
     const now = (deps.now ?? Date.now)();
     if (what === 'fetch') {
         const answer = await deps.net.call(community, account, 'GET', CONTACTS_COPY_PATH);
-        if (!answer) return false;
+        if (!answer) return undefined;
         if (answer.status === 200) {
             try {
-                return (await takeInCopy(account, community, answer.body, deps)).kind === 'merged';
+                const took = await takeInCopy(account, community, answer.body, deps);
+                return took.kind === 'merged' ? took.seq : undefined;
             } catch (e) {
                 // Its copy and the phone's together can't be locked as one: rest a day rather than fetch it each pass.
                 if (!(e instanceof ContactsCryptoError)) throw e;
                 return note(account, deps, (s) => refuse(s, community, 'too_big', now));
             }
         }
-        return note(account, deps, (s) => {
+        return note(account, deps, (s): Said => {
             if (answer.status === 404 && codeOf(answer.body) === 'no_copy') {
                 s.heard[community] = null;
                 delete s.merged[community];
                 delete s.refused[community];
-                return true;
+                return null;
             }
             return refuse(s, community, refusalOf(answer.status, answer.body), now);
         });
     }
     if (what === 'ask') {
         const answer = await deps.net.call(community, account, 'GET', UNREAD_PATH);
-        if (!answer) return false;
-        return note(account, deps, (s) => {
+        if (!answer) return undefined;
+        return note(account, deps, (s): Said => {
             if (answer.status !== 200) return refuse(s, community, refusalOf(answer.status, answer.body), now);
             const contacts = answer.body && typeof answer.body === 'object' ? (answer.body as { contacts?: unknown }).contacts : undefined;
             // A server from before private contacts says nothing of them: it keeps none.
             if (contacts === undefined) return refuse(s, community, 'contacts_off', now);
             const seq = contacts === null ? null : seqOf(contacts);
-            if (contacts !== null && seq === null) return false;
+            if (contacts !== null && seq === null) return undefined;
             s.heard[community] = seq;
             delete s.refused[community];
-            return true;
+            return seq;
         });
     }
-    // 'put': the file's copy as it is, its number written down as sent before it goes.
+    // 'put': the file's copy as it is, its number written down as sent before it goes, and only while `decide` still says so
+    // on what this visit heard.
     const sending = await inTurn(account.publicKey, async () => {
         const onPhone = await readOnPhone(account, deps.disk);
         if (onPhone.kind !== 'list') return null;
         const s = await readStateFor(account, deps.kv, onPhone);
-        if (decide(community, s, onPhone, now) !== 'put') return null;
+        if (decide(community, s, onPhone, now, said) !== 'put') return null;
         s.sentSeq = Math.max(s.sentSeq, onPhone.seq);
         await writeState(account, deps.kv, s);
         return onPhone;
     });
-    if (!sending) return false;
+    if (!sending) return undefined;
     const answer = await deps.net.call(community, account, 'PUT', CONTACTS_COPY_PATH, sending.copy);
-    if (!answer) return false;
-    return note(account, deps, (s) => {
+    if (!answer) return undefined;
+    return note(account, deps, (s): Said => {
         if (answer.status === 200 && seqOf(answer.body) === sending.seq) {
             s.heard[community] = sending.seq;
             s.merged[community] = sending.seq;
             delete s.refused[community];
             s.savedAt = now;
             if (s.fileSeq === sending.seq) s.dueAt = null;
-            return true;
+            return sending.seq;
         }
         if (answer.status === 409 && codeOf(answer.body) === 'stale_copy') {
             // Another phone of the member's saved a newer copy there: fetched and merged next.
             const kept = seqOf(answer.body);
-            if (kept !== null) s.heard[community] = kept;
-            return kept !== null;
+            if (kept === null) return undefined;
+            s.heard[community] = kept;
+            return kept;
         }
         return refuse(s, community, refusalOf(answer.status, answer.body), now);
     });
 }
 
-function refuse(s: ContactsSyncState, community: string, code: ContactsRefusal | null, now: number): boolean {
-    if (!code) return false;
+/** A refusal noted for `community` (none for an answer that says nothing lasting). Nothing learned: the visit ends. */
+function refuse(s: ContactsSyncState, community: string, code: ContactsRefusal | null, now: number): undefined {
+    if (!code) return undefined;
     s.refused[community] = { code, until: now + REFUSAL_WAIT[code] };
     if (code === 'contacts_off') s.heard[community] = null;
-    return false;
+    return undefined;
 }
 
-/** `edit` applied to the record, in the account's turn, and written when it changed anything. */
-async function note(account: ContactsAccount, deps: ContactsSyncDeps, edit: (s: ContactsSyncState) => boolean): Promise<boolean> {
+/** `edit` applied to the record, in the account's turn, and written when it changed anything. Returns what `edit` returns. */
+async function note<T>(account: ContactsAccount, deps: ContactsSyncDeps, edit: (s: ContactsSyncState) => T): Promise<T> {
     return inTurn(account.publicKey, async () => {
         const onPhone = await readOnPhone(account, deps.disk);
         const s = await readStateFor(account, deps.kv, onPhone);
         const before = JSON.stringify(s);
-        const learned = edit(s);
+        const result = edit(s);
         // Nothing is written for an account with no list and nothing heard: nothing exists until a first contact.
         if (JSON.stringify(s) !== before && (onPhone.kind !== 'none' || Object.values(s.heard).some((n) => n !== null))) {
             await writeState(account, deps.kv, s);
             contactsRecordChanged(account.publicKey);
         }
-        return learned;
+        return result;
     });
 }
 
-/** `community` brought level, one step at a time (at most {@link STEPS_MAX}). Throws what the disk throws. */
+/**
+ * `community` brought level, one step at a time (at most {@link STEPS_MAX}), each on what it has said in this visit: a
+ * save far past the number heard there waits for its word ({@link decide}). Throws what the disk throws.
+ */
 async function level(account: ContactsAccount, community: string, deps: ContactsSyncDeps): Promise<void> {
+    let said: Said;
     for (let i = 0; i < STEPS_MAX; i++) {
         const { onPhone, state } = await loadContacts(account, deps);
-        const what = decide(community, state, onPhone, (deps.now ?? Date.now)());
+        const what = decide(community, state, onPhone, (deps.now ?? Date.now)(), said);
         if (what === 'level' || what === 'skip') return;
-        if (!await step(account, community, what, deps)) return;
+        said = await step(account, community, what, deps, said);
+        if (said === undefined) return;
     }
 }
 
@@ -378,16 +405,37 @@ export function phoneContactsNet(): ContactsNet {
     };
 }
 
-/** The phone's own: its disk, AsyncStorage, signed fetch and the communities it keeps. */
-export function phoneSyncDeps(): ContactsSyncDeps {
-    const base = phoneContactsDeps();
+/** The communities the phone only looks at as a guest (nodes.ts `markGuestNode`). */
+const GUEST_NODES_STORE_KEY = 'beanpool_guest_nodes';
+
+/**
+ * The communities a pass visits: every one the phone keeps (push-pins.ts `readKeptCommunities`), the one in use first, but
+ * none it only looks at as a guest (nodes.ts `markGuestNode`: Global after "Explore worldwide", say), the one in use among
+ * them. A look is not belonging, as push-registrations.ts `communitiesForAlerts` has it: such a community keeps no copy
+ * for a guest, and it isn't told of the member's key at the times their contacts change (design §5.1: BeanPool runs no
+ * service in this). Joining clears the mark. One with alerts off stays: the member belongs there. Throws when the phone's
+ * storage can't be read.
+ */
+export async function contactsCommunities(storage: Pick<ContactsKv, 'getItem'>): Promise<{ anchor: string | null; kept: string[] }> {
+    const { readKeptCommunities, sameCommunity } = await import('./push-pins');
+    const { anchor, kept } = await readKeptCommunities(storage);
+    let marks: unknown;
+    try {
+        marks = JSON.parse((await storage.getItem(GUEST_NODES_STORE_KEY)) ?? '[]');
+    } catch {
+        marks = [];
+    }
+    const looks = Array.isArray(marks) ? marks : [];
+    const belongs = (c: string) => !looks.some((look) => sameCommunity(look, c));
+    return { anchor: anchor !== null && belongs(anchor) ? anchor : null, kept: kept.filter(belongs) };
+}
+
+/** The phone's own: its disk, AsyncStorage, signed fetch and the member's communities ({@link contactsCommunities}). */
+export function phoneSyncDeps(base: ContactsStoreDeps = phoneContactsDeps()): ContactsSyncDeps {
     return {
         ...base,
         net: phoneContactsNet(),
-        communities: async () => {
-            const { readKeptCommunities } = await import('./push-pins');
-            return readKeptCommunities(base.kv);
-        },
+        communities: () => contactsCommunities(base.kv),
     };
 }
 

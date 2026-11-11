@@ -11,8 +11,8 @@ import {
     writeContactsList, contactsCopyWire, type ContactsList,
 } from '@beanpool/core';
 import {
-    CONTACTS_SAVE_WAIT_MS, ContactsUnreadableError, changeContacts, contactsSyncStoreKey, loadContacts, nextSeq, readSyncState, takeInCopy,
-    type ContactsAccount, type ContactsStoreDeps,
+    CONTACTS_SAVE_WAIT_MS, ContactsUnreadableError, backLineSeen, changeContacts, contactsSyncStoreKey, loadContacts, nextSeq, readSyncState,
+    takeInCopy, type ContactsAccount, type ContactsStoreDeps,
 } from '../contacts-store';
 
 function person(): ContactsAccount & { seed: Uint8Array } {
@@ -157,6 +157,26 @@ describe('a community\'s copy taken in', () => {
         expect(JSON.parse(deps.files.get(me.publicKey)!)).toEqual(wire);
         const { state } = await loadContacts(me, deps);
         expect(state).toMatchObject({ fileSeq: 7, heard: { [BYRON]: 7 }, merged: { [BYRON]: 7 }, back: 2 });
+    });
+
+    it('a later community\'s copy that adds people raises how many came back, until the member has seen the line', async () => {
+        // PR #3073 review 4542103615: design §4.5, "Copies from several communities are merged."
+        const me = person();
+        const deps = fakeDeps();
+        const two = putContact(putContact(emptyContactsList(), { ...dee(), name: 'Ana' }), { ...dee(), name: 'Ben' });
+        const three = putContact(two, { ...dee(), name: 'Cat' });
+        await takeInCopy(me, BYRON, copyOf(me, two, 1), deps);
+        expect((await loadContacts(me, deps)).state.back).toBe(2);
+        expect(await takeInCopy(me, 'https://global.example', copyOf(me, three, 2), deps)).toMatchObject({ kind: 'merged', changed: true, back: 3 });
+        expect((await loadContacts(me, deps)).state.back).toBe(3);
+        // A copy that adds nobody leaves the count as it is.
+        expect(await takeInCopy(me, 'https://castlemaine.example', copyOf(me, two, 1), deps)).toMatchObject({ kind: 'merged', changed: false, back: null });
+        expect((await loadContacts(me, deps)).state.back).toBe(3);
+        // Seen: the line is gone, and a copy merged later never brings it back.
+        await backLineSeen(me, deps);
+        await takeInCopy(me, 'https://castlemaine.example', copyOf(me, putContact(three, { ...dee(), name: 'Dan' }), 3), deps);
+        expect((await loadContacts(me, deps)).state.back).toBeNull();
+        // Mutation: count only while the phone holds no list → back stays 2 once Cat has come in.
     });
 
     it('merges with the phone\'s own list, keeping both, under a number past the copy\'s', async () => {

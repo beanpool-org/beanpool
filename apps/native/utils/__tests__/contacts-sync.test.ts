@@ -13,12 +13,14 @@ import {
 } from '@beanpool/core';
 import { contactsSyncStoreKey, loadContacts, readSyncState, type ContactsAccount } from '../contacts-store';
 import {
-    CONTACTS_COPY_PATH, checkContactsHere, contactsHeard, contactsKeptAt, decide, editContacts, resetContactsCheckForTests, syncContacts,
-    type ContactsNet, type ContactsSyncDeps,
+    CONTACTS_COPY_PATH, checkContactsHere, contactsHeard, contactsKeptAt, decide, editContacts, phoneSyncDeps, resetContactsCheckForTests,
+    syncContacts, type ContactsNet, type ContactsSyncDeps,
 } from '../contacts-sync';
+import { PUSH_ALERTS_OFF_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const BYRON = 'https://byron.example';
 const GLOBAL = 'https://global.example';
+const CASTLEMAINE = 'https://castlemaine.example';
 
 function person(): ContactsAccount {
     const seed = ed25519.utils.randomSecretKey();
@@ -67,17 +69,21 @@ class FakeCommunity {
     }
 }
 
-/** A phone: its own disk and AsyncStorage, the communities it keeps, and every request it makes. */
+/**
+ * A phone: its own disk and AsyncStorage, the communities it keeps, and every request it makes. `link.up` false: it has no
+ * connection, and no request is answered.
+ */
 function phone(communities: Record<string, FakeCommunity>, anchor: string | null, at = 1_800_000_000_000) {
     const files = new Map<string, string>();
     const kv = new Map<string, string>();
     const clock = { now: at };
+    const link = { up: true };
     const requests: Request[] = [];
     const net: ContactsNet = {
         async call(community, account, method, path, body) {
             requests.push({ community, method, path, body: body === undefined ? '' : JSON.stringify(body) });
             const c = communities[community];
-            return c ? c.answer(account.publicKey, method, path, body) : null;
+            return c && link.up ? c.answer(account.publicKey, method, path, body) : null;
         },
     };
     const deps: ContactsSyncDeps = {
@@ -87,7 +93,7 @@ function phone(communities: Record<string, FakeCommunity>, anchor: string | null
         net,
         communities: async () => ({ anchor, kept: Object.keys(communities) }),
     };
-    return { deps, files, kv, clock, requests };
+    return { deps, files, kv, clock, link, requests };
 }
 
 const person1 = (name: string, phones: string[] = [], emails: string[] = []) => ({ id: newContactId(), name, phones, emails, note: '', links: [], invite: null });
@@ -177,6 +183,58 @@ describe('a change leaves the phone only after its wait, and only to a community
         await checkContactsHere(me, b.deps);
         expect(await names(me, b.deps)).toEqual(['Ana', 'Ben', 'Cat']);
     });
+
+    it('a save more than one number past the one last heard asks first: a copy another phone saved there meanwhile is merged, never replaced', async () => {
+        // PR #3073 review 4542103140, measured there: the community lost Yan, and a new phone restored without her.
+        const byron = new FakeCommunity();
+        const me = person();
+        const one = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Xia')), one.deps);
+        one.clock.now += WAIT;
+        await syncContacts(me, one.deps);
+        const two = phone({ [BYRON]: byron }, BYRON);
+        await checkContactsHere(me, two.deps);
+        // Phone one has no connection while it adds Zed, then Wu: its save of Zed went unanswered, so its number climbs to 3.
+        one.link.up = false;
+        await editContacts(me, (l) => putContact(l, person1('Zed')), one.deps);
+        one.clock.now += WAIT;
+        await syncContacts(me, one.deps);
+        await editContacts(me, (l) => putContact(l, person1('Wu')), one.deps);
+        // Meanwhile phone two adds Yan and saves: Byron keeps 2 (Xia, Yan). Phone one last heard 1 there.
+        await editContacts(me, (l) => putContact(l, person1('Yan')), two.deps);
+        two.clock.now += WAIT;
+        await syncContacts(me, two.deps);
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(2);
+        one.link.up = true;
+        one.requests.length = 0;
+        one.clock.now += WAIT;
+        await syncContacts(me, one.deps);
+        // A new phone restores from Byron alone: Yan is there.
+        resetContactsCheckForTests();
+        const fresh = phone({ [BYRON]: byron }, BYRON);
+        await checkContactsHere(me, fresh.deps);
+        expect(await names(me, fresh.deps)).toEqual(['Wu', 'Xia', 'Yan', 'Zed']);
+        // 3 is two past the 1 phone one heard: it asked Byron first, and fetched and merged Yan before its save.
+        expect(one.requests.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /api/me/unread', `GET ${CONTACTS_COPY_PATH}`, `PUT ${CONTACTS_COPY_PATH}`]);
+        expect(await names(me, one.deps)).toEqual(['Wu', 'Xia', 'Yan', 'Zed']);
+        // Mutation: drop decide()'s ask before a save more than one past → one PUT of 3 replaces Byron's 2, and Yan is gone.
+    });
+
+    it('one number past the one heard saves at once: Byron refuses it (409) if anything was saved there since', async () => {
+        const byron = new FakeCommunity();
+        const me = person();
+        const p = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Xia')), p.deps);
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        await editContacts(me, (l) => putContact(l, person1('Zed')), p.deps);
+        p.requests.length = 0;
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        expect(p.requests.map((r) => `${r.method} ${r.path}`)).toEqual([`PUT ${CONTACTS_COPY_PATH}`]);
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(2);
+        // Mutation: ask before every save → a request more each time, for nothing the server doesn't already check.
+    });
 });
 
 describe('a new phone, and the other communities', () => {
@@ -194,6 +252,29 @@ describe('a new phone, and the other communities', () => {
         expect((await loadContacts(me, fresh.deps)).state.back).toBe(2);
         // Nothing was sent back: the copy is kept as it came.
         expect(fresh.requests.filter((r) => r.method === 'PUT')).toEqual([]);
+    });
+
+    it('copies from several communities are merged, and how many came back counts them all (design §4.5)', async () => {
+        // PR #3073 review 4542103615, measured there: 3 people came back, and `back` said 2.
+        const a = new FakeCommunity();
+        const b = new FakeCommunity();
+        const me = person();
+        const old = phone({ [BYRON]: a, [GLOBAL]: b }, BYRON);
+        await editContacts(me, (l) => putContact(putContact(l, person1('Ana')), person1('Ben')), old.deps);
+        old.clock.now += WAIT;
+        await syncContacts(me, old.deps);
+        // Cat is added by a phone that only ever saved at the second community.
+        const other = phone({ [GLOBAL]: b }, GLOBAL);
+        await checkContactsHere(me, other.deps);
+        await editContacts(me, (l) => putContact(l, person1('Cat')), other.deps);
+        other.clock.now += WAIT;
+        await syncContacts(me, other.deps);
+        resetContactsCheckForTests();
+        const fresh = phone({ [BYRON]: a, [GLOBAL]: b }, BYRON);
+        await checkContactsHere(me, fresh.deps);
+        expect(await names(me, fresh.deps)).toEqual(['Ana', 'Ben', 'Cat']);
+        expect((await loadContacts(me, fresh.deps)).state.back).toBe(3);
+        // Mutation: count only the first copy taken in → "Your contacts are back: 2 people" over a list of 3.
     });
 
     it('a phone with no list asks nothing more and writes nothing when no community keeps one', async () => {
@@ -416,6 +497,38 @@ describe('the save set for later', () => {
     });
 });
 
+describe('the communities a pass visits: the member\'s own, never a guest\'s look (PR #3073 review 4542103430)', () => {
+    it('a community the phone only looks at as a guest is never asked, the one in use included; one with alerts off still keeps the copy', async () => {
+        const byron = new FakeCommunity();
+        const castlemaine = new FakeCommunity();
+        const global = new FakeCommunity();
+        const me = person();
+        const p = phone({ [BYRON]: byron, [CASTLEMAINE]: castlemaine, [GLOBAL]: global }, GLOBAL);
+        // "Explore worldwide": the phone is on Global as a guest (global-guest-visit.ts marks the look first, spelled as it
+        // came), and keeps Byron and Castlemaine, the member's own; Castlemaine's alerts are off.
+        p.kv.set('beanpool_anchor_url', GLOBAL);
+        p.kv.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: BYRON }, { url: GLOBAL }, { url: CASTLEMAINE }]));
+        p.kv.set('beanpool_guest_nodes', JSON.stringify([`${GLOBAL}/`]));
+        p.kv.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([CASTLEMAINE]));
+        const deps: ContactsSyncDeps = { ...p.deps, communities: phoneSyncDeps({ disk: p.deps.disk, kv: p.deps.kv }).communities };
+        expect(await deps.communities()).toEqual({ anchor: null, kept: [BYRON, CASTLEMAINE] });
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), deps);
+        p.clock.now += WAIT;
+        await checkContactsHere(me, deps);
+        await syncContacts(me, deps);
+        expect(p.requests.filter((r) => r.community === GLOBAL)).toEqual([]);
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(castlemaine.copies.get(me.publicKey)?.seq).toBe(1);
+        // Joining clears the mark (nodes.ts clearGuestNode): the member belongs there now, and Global keeps the copy too.
+        p.kv.set('beanpool_guest_nodes', '[]');
+        resetContactsCheckForTests();
+        await checkContactsHere(me, deps);
+        expect(global.copies.get(me.publicKey)?.seq).toBe(1);
+        // Mutation: phoneSyncDeps's communities as readKeptCommunities alone → Global hears the member's key each pass;
+        // as push-registrations' communitiesForAlerts → the guest look in use is still asked, and Castlemaine keeps no copy.
+    });
+});
+
 describe('where the copy is kept (the Contacts footer)', () => {
     it('names the communities holding exactly the phone\'s copy, and those that keep no lists', async () => {
         const byron = new FakeCommunity();
@@ -440,12 +553,17 @@ describe('where the copy is kept (the Contacts footer)', () => {
 describe('decide', () => {
     const list = { kind: 'list' as const, list: { v: 1 as const, contacts: [], removed: [] }, seq: 4, copy: { header: '', signature: '', nonce: '', sealed: '' } };
     const s = (o: Partial<ReturnType<typeof readSyncState>>) => ({ ...readSyncState(null), ...o });
-    it('asks a community never heard from, fetches one holding an unmerged copy, saves to one behind, and leaves the rest', () => {
+    it('asks a community never heard from, fetches one holding an unmerged copy, saves to one behind (asking first when far behind), and leaves the rest', () => {
         expect(decide(BYRON, s({}), list, 0)).toBe('ask');
         expect(decide(BYRON, s({}), { kind: 'none' }, 0)).toBe('level');
         expect(decide(BYRON, s({ heard: { [BYRON]: 9 }, merged: { [BYRON]: 3 } }), list, 0)).toBe('fetch');
         expect(decide(BYRON, s({ heard: { [BYRON]: 3 }, merged: { [BYRON]: 3 } }), list, 0)).toBe('put');
-        expect(decide(BYRON, s({ heard: { [BYRON]: null } }), list, 0)).toBe('put');
+        // More than one past the number heard (4 is past "none" and past 2): asked again first, then saved only on that answer.
+        // The 'put' this line said at 64ce793c, with nothing asked, was the defect of review 4542103140.
+        expect(decide(BYRON, s({ heard: { [BYRON]: null } }), list, 0)).toBe('ask');
+        expect(decide(BYRON, s({ heard: { [BYRON]: null } }), list, 0, null)).toBe('put');
+        expect(decide(BYRON, s({ heard: { [BYRON]: 2 }, merged: { [BYRON]: 2 } }), list, 0)).toBe('ask');
+        expect(decide(BYRON, s({ heard: { [BYRON]: 2 }, merged: { [BYRON]: 2 } }), list, 0, 2)).toBe('put');
         expect(decide(BYRON, s({ heard: { [BYRON]: 4 }, merged: { [BYRON]: 4 } }), list, 0)).toBe('level');
         expect(decide(BYRON, s({ heard: { [BYRON]: 3 }, merged: { [BYRON]: 3 }, dueAt: 10 }), list, 5)).toBe('level');
         expect(decide(BYRON, s({ refused: { [BYRON]: { code: 'node_full', until: 10 } } }), list, 5)).toBe('skip');

@@ -85,7 +85,10 @@ export interface ContactsSyncState {
     refused: Record<string, { code: ContactsRefusal; until: number }>;
     /** When a community last took this phone's latest copy (ms). */
     savedAt: number | null;
-    /** How many people came back to a phone that held no list (design §4.5), until the member has seen it said. */
+    /**
+     * How many people came back to a phone that held no list (design §4.5), from every community's copy merged in before the
+     * member has seen it said; null then, and when nobody came back.
+     */
     back: number | null;
 }
 
@@ -319,7 +322,8 @@ export type TakeIn =
  * everything the phone does, under a newer number, it becomes the phone's file as it is (so that community holds exactly
  * the phone's copy); when the phone holds something it lacks, the merge is locked under a number past it, to be saved there.
  * A copy that doesn't open (another member's, damaged, forged) adds nobody and that community is left alone for a day: it
- * isn't fetched again each pass. One a newer app wrote is left alone too. A phone that held no list notes how many came back.
+ * isn't fetched again each pass. One a newer app wrote is left alone too. A phone that held no list notes how many came back,
+ * and counts again with each copy that changes the list until the member has seen that line.
  */
 export function takeInCopy(account: ContactsAccount, community: string, raw: unknown, deps: ContactsStoreDeps = phoneContactsDeps()): Promise<TakeIn> {
     return inTurn(account.publicKey, async () => {
@@ -356,22 +360,24 @@ export function takeInCopy(account: ContactsAccount, community: string, raw: unk
         // Nothing of the phone's is missing from their copy / nothing of theirs is missing from the phone's.
         const theyHaveAll = sameList(both, theirs.list);
         const weHaveAll = onPhone.kind === 'list' && sameList(both, mine);
+        // Their copy is the phone's list under a newer number: kept as it is, so that community holds exactly the phone's.
+        const keepTheirs = theyHaveAll && seq > fileSeq && seq > s.sentSeq;
+        // Both lists made one, under a number past theirs, so it can be saved there.
+        const lockBoth = !keepTheirs && (!weHaveAll || (!theyHaveAll && fileSeq <= seq));
+        const changed = keepTheirs || lockBoth;
+        // How many came back (design §4.5): to a phone that held no list, and again as each later copy changes it until the
+        // member has seen the line, so copies from several communities are all counted.
         let back: number | null = null;
-        if (onPhone.kind === 'none') {
+        if (onPhone.kind === 'none' || (changed && s.back !== null)) {
             back = both.contacts.length;
             s.back = back > 0 ? back : null;
         }
-        let changed = false;
-        if (theyHaveAll && seq > fileSeq && seq > s.sentSeq) {
-            // Their copy is the phone's list under a newer number: kept as it is, so that community holds exactly the phone's.
+        if (keepTheirs) {
             await deps.disk.write(account.publicKey, JSON.stringify(contactsCopyWire(opened.copy)));
             s.fileSeq = seq;
             await writeState(account, deps.kv, s);
-            changed = true;
-        } else if (!weHaveAll || (!theyHaveAll && fileSeq <= seq)) {
-            // Both lists made one, under a number past theirs, so it can be saved there.
+        } else if (lockBoth) {
             await writeList(account, deps, both, nextSeq(fileSeq, s), s);
-            changed = true;
         } else {
             await writeState(account, deps.kv, s);
         }

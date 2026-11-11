@@ -45,7 +45,11 @@ export function GroupInvitedList({ groupId, myPubkey, reloadKey = 0, onChanged }
 
     useEffect(() => { void load(); }, [load, reloadKey]);
 
-    if (!hasInvitationsToShow(inv)) return null;
+    // A refusal is said even when the re-read leaves nothing to list: withdrawing the only open invitation just after it was
+    // accepted must not look like it worked (the row would simply vanish).
+    if (!hasInvitationsToShow(inv)) {
+        return error ? <div className="mt-4" role="alert" data-testid="group-invited-error"><span className="text-xs text-red-600 dark:text-red-400">{error}</span></div> : null;
+    }
 
     const withdraw = async (p: InvitedPerson) => {
         const w = withdrawWords(p);

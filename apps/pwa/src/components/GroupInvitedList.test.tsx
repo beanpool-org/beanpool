@@ -164,6 +164,21 @@ describe('Invited, not joined yet', () => {
         expect(changed).toHaveBeenCalledTimes(1);
         confirm.mockRestore();
     });
+
+    it('still says "already joined" when the withdrawn person was the ONLY one listed (the list empties on the re-read; second review of #3061)', async () => {
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const joined = 'They have already joined the group, so there is no invitation to withdraw. They are in the roster now.';
+        const onlyMia = { ...convenorView(), pendingTotal: 1, pending: [convenorView().pending[0]] };
+        vi.mocked(withdrawGroupInvitation).mockRejectedValue(new Error(joined));
+        vi.mocked(getGroupInvitations).mockResolvedValueOnce(onlyMia).mockResolvedValueOnce({ ...convenorView(), pendingTotal: 0, pending: [] });
+        render(<GroupInvitedList groupId="g-1" myPubkey={ME} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Withdraw the invitation to Mia' }));
+        await waitFor(() => expect(getGroupInvitations).toHaveBeenCalledTimes(2));
+        expect(await screen.findByRole('alert')).toHaveTextContent(joined);
+        expect(screen.queryByText('Mia')).toBeNull();
+        expect(removeGroupMember).not.toHaveBeenCalled();
+        confirm.mockRestore();
+    });
 });
 
 describe('on the group sheet, under the members', () => {

@@ -2024,7 +2024,7 @@ export async function getGroupMembers(groupId: string, filter?: { status?: strin
  * Who has been invited to a group and has not joined yet, and which of the viewer's own invitations were declined, as the
  * node lets THIS member read them (a convenor every pending one, any other member the ones they made; the node decides,
  * not this app). Null when the node won't say (an older node, a refusal, no signal): the group's page then draws no list.
- * Withdrawing a pending one is removeGroupMember.
+ * Withdrawing a pending one is withdrawGroupInvitation (its own request, refused once they have joined), never removeGroupMember.
  */
 export async function getGroupInvitations(groupId: string): Promise<GroupInvitations | null> {
     try {

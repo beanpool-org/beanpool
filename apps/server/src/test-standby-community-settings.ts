@@ -407,7 +407,7 @@ type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kep
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
 // The community's node_config rows, as config/community-settings.ts COMMUNITY_NODE_CONFIG_KEYS lists them: voucher_budget and
 // member_gift are the vouchers' two (engine/vouchers.ts; amend2 §3: "both in COMMUNITY_NODE_CONFIG_KEYS so every copy carries them").
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock', 'contact_copies'] as const;
 const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours', 'areaName'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);

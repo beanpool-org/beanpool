@@ -187,13 +187,19 @@ export interface TableHashes {
  * such a copy the page still shows its title and words, "Checked" reading the day it was made.
  */
 /**
- * 32: bills (engine/bills.ts, DESIGN-getting-paid-fable.md slice B1): a new plain table, bills. Raised for the same reason as
+ * 32: a new table, contact_copies (each member's locked contacts list, DESIGN-private-contacts-fable.md slice C1). Raised for
+ * the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: what an older
+ * importer drops is a locked copy no server can open, and after a take-over from such a copy the member's phone, which keeps
+ * the list itself, sees no copy there and brings it level again in its rounds (contacts design §4.4, §4.5).
+ */
+/**
+ * 33: bills (engine/bills.ts, DESIGN-getting-paid-fable.md slice B1): a new plain table, bills. Raised for the same reason as
  * 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's import writes only
  * the tables its own database has. What an older importer drops is the bills themselves (a request to pay, holding no
  * Beans): after a takeover from such a copy the bills out are gone and their senders send them again; a paid one's ledger
  * row is copied with the ledger whatever the importer.
  */
-export const TABLE_HASHES_VERSION = 32;
+export const TABLE_HASHES_VERSION = 33;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

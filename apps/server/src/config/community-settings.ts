@@ -66,7 +66,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
     'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
-    'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock',
+    'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock', 'contact_copies',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -265,6 +265,8 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     // The core settings confirmed and locked (config/core-settings.ts): `{ at, by }` as JSON text, or null for never. A
     // standby promoted with it is locked from its first boot as a main server.
     core_settings_lock: orNull((v) => (parseCoreLockRow(v) ? v as string : BAD)),
+    // Whether members' locked contact lists are kept (config/contact-copies.ts): only the owners' `off` is stored.
+    contact_copies: orNull(oneOf('off')),
 };
 
 /**

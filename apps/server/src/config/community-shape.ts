@@ -72,6 +72,7 @@ import {
 import { isPrivatePreview, PRIVATE_PREVIEW_ENV } from './private-preview.js';
 import { DOOR_KEY, doorFor, doorFromRow, isCommunityDoor, type CommunityDoor } from './door.js';
 import { RECOVERY_COPIES_KEY, isRecoveryCopies, recoveryCopiesFromRow, type RecoveryCopies } from './recovery-copies.js';
+import { CONTACT_COPIES_KEY, contactCopiesKeptFromRow } from './contact-copies.js';
 import { REMOVAL_DECIDER_KEY, isRemovalDecider, removalDeciderFromRow, type RemovalDecider } from './removal-decider.js';
 import { MEMBER_GIFT_KEY, memberGiftFromRow, VOUCHER_BUDGET_KEY, voucherBudgetFromRow } from '../engine/vouchers.js';
 import { JURY_MIN_POOL, jurySnapshotDate } from '@beanpool/core';
@@ -166,6 +167,8 @@ export interface ShapeSettings {
     autoMute: ShapeSetting<boolean>;
     /** Where members' copies go (config/recovery-copies.ts, vault rethink VR2): the key vault, this server, or nowhere. */
     recoveryCopies: ShapeSetting<RecoveryCopies>;
+    /** Whether members' locked contact lists are kept here (config/contact-copies.ts, contacts design §4.3): on by default. */
+    contacts: ShapeSetting<boolean>;
     /** Who decides a removal (config/removal-decider.ts, DESIGN-removal-jury-fable.md §6): a jury from 100, everyone, or a
      *  jury. `lock` (pool_too_small) refuses a jury while the pool is under JURY_MIN_POOL; `poolSize` is today's pool. */
     removalDecider: ShapeSetting<RemovalDecider> & { poolSize: number };
@@ -339,6 +342,7 @@ interface CommunityRows {
     recoveryCopies: string | null;
     removalDecider: string | null;
     coreLock: string | null;
+    contacts: string | null;
     directory: Directory;
 }
 
@@ -364,6 +368,7 @@ function ownRows(): CommunityRows {
         recoveryCopies: row(RECOVERY_COPIES_KEY),
         removalDecider: row(REMOVAL_DECIDER_KEY),
         coreLock: row(CORE_SETTINGS_LOCK_KEY),
+        contacts: row(CONTACT_COPIES_KEY),
         directory: Object.fromEntries(DIRECTORY_FIELDS.map((f) => [f, n[f]])) as Directory,
     };
 }
@@ -395,6 +400,7 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
             recoveryCopies: copied(RECOVERY_COPIES_KEY, own.recoveryCopies),
             removalDecider: copied(REMOVAL_DECIDER_KEY, own.removalDecider),
             coreLock: copied(CORE_SETTINGS_LOCK_KEY, own.coreLock),
+            contacts: copied(CONTACT_COPIES_KEY, own.contacts),
             directory,
         },
         copiedAt: kept.copiedAt ?? null,
@@ -578,6 +584,12 @@ export function readShape(): Shape {
             value: recoveryCopiesFromRow(rows.recoveryCopies),
             configured: recoveryCopiesFromRow(rows.recoveryCopies),
             source: isRecoveryCopies(rows.recoveryCopies) ? 'owner' : 'default',
+            lock: null,
+        },
+        contacts: {
+            value: contactCopiesKeptFromRow(rows.contacts),
+            configured: contactCopiesKeptFromRow(rows.contacts),
+            source: rows.contacts === 'off' ? 'owner' : 'default',
             lock: null,
         },
         removalDecider: removalDeciderShape(rows.removalDecider),

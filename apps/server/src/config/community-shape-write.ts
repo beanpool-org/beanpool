@@ -57,6 +57,10 @@
  *   shareHealth: no lock.
  *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
  *               copies go; every copy a member already has stays theirs, and the members' sentence says so.
+ *   contacts    true | false: whether members' locked contact lists are kept here (config/contact-copies.ts, contacts
+ *               design §4.3); no lock. Set off, every copy kept here is deleted in the same transaction, each with a
+ *               tombstone (engine/contact-copies.ts dropEveryContactCopy): members' lists stay on their devices and at
+ *               their other communities. Members are told either way.
  *   removalDecider  'automatic' | 'everyone' | 'jury' (config/removal-decider.ts, DESIGN-removal-jury-fable.md §6): a jury
  *               refused while fewer than JURY_MIN_POOL members could serve on one (`pool_too_small`). A vote already open
  *               keeps the decider it opened with (params.decider).
@@ -76,6 +80,8 @@ import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
 import { setDoor, doorSettingRefusal, type CommunityDoor } from './door.js';
 import { isRecoveryCopies, setRecoveryCopies, type RecoveryCopies } from './recovery-copies.js';
+import { setKeepContactCopies } from './contact-copies.js';
+import { dropEveryContactCopy } from '../engine/contact-copies.js';
 import { isRemovalDecider, setRemovalDecider, type RemovalDecider } from './removal-decider.js';
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
@@ -129,7 +135,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 const SETTINGS_IN_ORDER = [
     'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
-    'recoveryCopies', 'removalDecider',
+    'recoveryCopies', 'contacts', 'removalDecider',
 ] as const;
 export type ShapeSettingName = (typeof SETTINGS_IN_ORDER)[number];
 
@@ -153,6 +159,7 @@ export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
     autoHide: 'Reported posts hidden and message requests cleared automatically', autoMute: 'Repeat offenders muted automatically',
     recoveryCopies: "Where members' copies go",
+    contacts: "Keep members' locked contact lists",
     removalDecider: 'Who decides a removal',
 };
 
@@ -191,6 +198,9 @@ const NOTICE = {
     copiesVault: word("Your community's owners changed how it works: BeanPool's key vault keeps members' sign-in copies now. Any copy you have stays where it is until you move or remove it."),
     copiesServer: word("Your community's owners changed how it works: this community's server keeps members' sign-in copies now. Any copy you have stays where it is until you move or remove it."),
     copiesNone: word("Your community's owners changed how it works: this community keeps no copies of members' accounts now, and doesn't use BeanPool's key vault. Any copy you have stays where it is until you remove it."),
+    // Whether members' locked contact lists are kept here (config/contact-copies.ts): a member's list is never only here.
+    contactsOn: word("Your community's owners changed how it works: this community keeps a locked copy of members' contact lists again. Only each member can open theirs."),
+    contactsOff: word("Your community's owners changed how it works: this community no longer keeps members' contact lists, and the locked copies it kept are deleted. Your list stays on your phone and at your other communities."),
     // Who decides a removal (config/removal-decider.ts, DESIGN-removal-jury-fable.md §6).
     deciderAutomatic: word("Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it."),
     deciderEveryone: word("Your community's owners changed how it works: every member can vote on whether someone is removed."),
@@ -218,6 +228,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'autoHide': return on ? tr(NOTICE.autoHideOn) : tr(NOTICE.autoHideOff);
         case 'autoMute': return on ? tr(NOTICE.autoMuteOn) : tr(NOTICE.autoMuteOff);
         case 'recoveryCopies': return change.to === 'none' ? tr(NOTICE.copiesNone) : change.to === 'server' ? tr(NOTICE.copiesServer) : tr(NOTICE.copiesVault);
+        case 'contacts': return on ? tr(NOTICE.contactsOn) : tr(NOTICE.contactsOff);
         case 'removalDecider': return change.to === 'jury' ? tr(NOTICE.deciderJury) : change.to === 'everyone' ? tr(NOTICE.deciderEveryone) : tr(NOTICE.deciderAutomatic);
         default: return null;
     }
@@ -279,6 +290,8 @@ interface ShapePlan {
     /** The member's credit-line gift to write (0 to 100), or null for no change. */
     gift: number | null;
     copies: RecoveryCopies | null;
+    /** Whether members' contact lists are kept here, or null for no change. */
+    contacts: boolean | null;
     decider: RemovalDecider | null;
     beansAfter: boolean;
 }
@@ -311,7 +324,7 @@ export function shapeChangeAsksFreshProof(body: unknown): boolean {
  */
 export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshProof?: boolean } = {}): { shape: Shape; told: 'members' | 'nobody'; changed: string[] } {
     const plan = planShapeChanges(body);
-    const { before, note, planned, core, switches, share, door, floorPlan, budget, gift, copies, decider, beansAfter } = plan;
+    const { before, note, planned, core, switches, share, door, floorPlan, budget, gift, copies, contacts, decider, beansAfter } = plan;
     const S = before.settings;
     const locked = before.core.lock !== null;
     // Read here, with the write that follows, whatever the route found: a lock written meanwhile still asks the proof.
@@ -343,6 +356,11 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
         if (gift !== null) writeMemberGiftSetting(by.actor, S.memberGift.configured, gift, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);
         if (copies) setRecoveryCopies(copies);
+        // Off keeps none: every copy here goes with the switch, each with a tombstone (config/contact-copies.ts).
+        if (contacts !== null) {
+            setKeepContactCopies(contacts);
+            if (!contacts) dropEveryContactCopy();
+        }
         if (decider) setRemovalDecider(decider);
         // A Core setting changed while locked: its lines follow a `core.unlock` line naming it, stamped alike (§8.5).
         let lastUnlocked: string | null = null;
@@ -467,6 +485,7 @@ function planShapeChanges(body: unknown): ShapePlan {
     let door: CommunityDoor | null = null;
     let floorPlan: KnownFloorPlan | null = null;
     let copies: RecoveryCopies | null = null;
+    let contacts: boolean | null = null;
     let decider: RemovalDecider | null = null;
 
     // Who can join: the door row, and the `invites` override (paused).
@@ -664,6 +683,15 @@ function planShapeChanges(body: unknown): ShapePlan {
         }
     }
 
+    // Whether members' locked contact lists are kept here: no lock (config/contact-copies.ts).
+    if (asked.contacts !== undefined) {
+        const v = boolOf('contacts', asked.contacts);
+        if (v !== S.contacts.configured) {
+            planned.push({ setting: 'contacts', from: onOff(S.contacts.configured), to: onOff(v) });
+            contacts = v;
+        }
+    }
+
     // Who decides a removal: a jury refused while the pool is too small for one (config/removal-decider.ts).
     if (asked.removalDecider !== undefined) {
         if (!isRemovalDecider(asked.removalDecider)) {
@@ -691,7 +719,7 @@ function planShapeChanges(body: unknown): ShapePlan {
         if (before.core.lock) throw new ShapeChangeError(409, 'core_locked', CORE_LOCKED_ALREADY);
         if (before.core.place.needed && !before.core.place.set) throw new ShapeChangeError(409, 'place_needed', CORE_PLACE_NEEDED);
     }
-    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, budget, gift, copies, decider, beansAfter };
+    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, budget, gift, copies, contacts, decider, beansAfter };
 }
 
 /** The notice's title, as every member reads it. */

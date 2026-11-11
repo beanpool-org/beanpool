@@ -2042,6 +2042,30 @@ CREATE TABLE IF NOT EXISTS names_copies (
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- A member's locked contacts list (scratch/fable-design/DESIGN-private-contacts-fable.md §4.4, slice C1): made on their
+-- device under a key only their account's secret makes (@beanpool/core contacts-crypto.ts), padded to 16 KiB steps, and
+-- signed by them. One row per member, written only by that member (routes/contacts.ts PUT /api/contacts/copy) and read
+-- only by them. This server never opens or changes one: it keeps the header's numbers and the rest as sent. Deleted with a
+-- tombstone when the member removes it, stops being a member here (removed, account deleted, replaced by a re-key), or
+-- the owners switch the community's copies off (engine/contact-copies.ts). Born empty: no existing row is read or moved.
+CREATE TABLE IF NOT EXISTS contact_copies (
+    owner_pubkey  TEXT PRIMARY KEY,
+    seq           INTEGER NOT NULL CHECK (seq >= 1),
+    -- The padded list's size: a whole number of 16 KiB steps, at most 512 KiB (what a server learns of its size).
+    padded_size   INTEGER NOT NULL CHECK (padded_size >= 16384 AND padded_size <= 524288 AND padded_size % 16384 = 0),
+    -- The device's clock, as signed: shown to the member, never compared.
+    saved_at      TEXT NOT NULL,
+    -- base64: the 24-byte nonce, and the locked bytes (the padded list and its tag).
+    nonce         TEXT NOT NULL,
+    sealed        TEXT NOT NULL,
+    digest        TEXT NOT NULL,
+    header        TEXT NOT NULL,
+    signature     TEXT NOT NULL,
+    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
 -- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
 -- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).

@@ -476,6 +476,9 @@ export const TABLES: Record<string, TableEntry> = {
     names_shares: plain('from_pubkey to_pubkey head_id key_ids trusts sealed_ring ring_iv ring_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
     // Each admin's locked copy of their own record, sealed to their key: a take-over serves it to the phone that lost its own.
     names_copies: plain('owner_pubkey seq head_n head_id saved_at sealed_copy copy_iv copy_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
+    // Each member's locked contacts list (engine/contact-copies.ts), text no server can open: a take-over serves it to the
+    // member's devices, and every delete (the member's own, leaving, the owners' switch) writes a tombstone.
+    contact_copies: plain('owner_pubkey seq padded_size saved_at nonce sealed digest header signature created_at updated_at'),
     // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
     names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.
@@ -778,6 +781,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
     recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },
     removal_decider: { kind: 'community-settings', reason: 'who decides a removal: a jury from 100 members, everyone, or a jury (config/removal-decider.ts)' },
+    contact_copies: { kind: 'community-settings', reason: "whether members' locked contact lists are kept here: the owners' switch, off stored as `off` (config/contact-copies.ts)" },
     core_settings_lock: { kind: 'community-settings', reason: "the core settings confirmed and locked by an owner, when and by whom (config/core-settings.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',

@@ -21,6 +21,9 @@ export interface UnreadAnswer {
     unread: number;
     requests: number;
     alerts?: number;
+    /** The number of the member's locked contacts list this community keeps, or null (none, or the community keeps none):
+     *  absent from a server from before private contacts (DESIGN-private-contacts-fable.md §4.4). */
+    contacts?: { seq: number } | null;
     asOf: string;
 }
 

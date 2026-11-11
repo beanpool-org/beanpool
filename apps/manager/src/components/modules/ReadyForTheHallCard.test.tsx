@@ -9,14 +9,14 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 vi.mock('../../lib/node-client', async () => {
     const actual = await vi.importActual('../../lib/node-client');
-    return { ...actual, fetchTakeoverStatus: vi.fn(), getOwnerWordsChecks: vi.fn(), getTfaSessionToken: vi.fn(() => undefined) };
+    return { ...actual, fetchTakeoverStatus: vi.fn(), getOwnerWordsChecks: vi.fn() };
 });
 
 const manualApi = { openManual: vi.fn() };
 let manualPresent = true;
 vi.mock('../manual/Manual', () => ({ useManual: () => (manualPresent ? manualApi : null) }));
 
-const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://test.beanpool.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://test.beanpool.org', automationToken: 'pw' };
 const NOW = Date.UTC(2026, 10, 4, 12, 0, 0);
 const MIN = 60_000;
 const DAY = 24 * 3600_000;
@@ -205,11 +205,11 @@ describe('ReadyForTheHallCard (Settings → Backups & Restore)', () => {
     describe('who sees it', () => {
         const key = (role: 'owner' | 'admin' | 'moderator'): RolesViewer => ({ kind: 'key', memberPubkey: 'pk', role });
 
-        it('an owner, and the admin password (owner level), see it', async () => {
+        it('an owner, and an owner automation token, see it', async () => {
             const a = await renderCard({ viewer: key('owner') });
             expect(screen.getByTestId('ready-for-the-hall')).toBeTruthy();
             a.unmount();
-            await renderCard({ viewer: { kind: 'password' } });
+            await renderCard({ viewer: { kind: 'token' } });
             expect(screen.getByTestId('ready-for-the-hall')).toBeTruthy();
         });
 

@@ -31,7 +31,7 @@ describe('TopologyModule Component', () => {
         id: 'node-1',
         name: 'Local Sovereign Node',
         url: 'http://localhost:3001',
-        adminPassword: 'admin',
+        automationToken: 'admin',
     };
 
     beforeEach(() => {
@@ -165,8 +165,7 @@ describe('TopologyModule Component', () => {
             expect(mockApproveRegistrarClaim).toHaveBeenCalledWith(
                 mockNode.url,
                 'testdomain',
-                mockNode.adminPassword,
-                undefined
+                mockNode.automationToken,
             );
         });
     });
@@ -208,10 +207,29 @@ describe('TopologyModule Component', () => {
         await waitFor(() => {
             expect(mockCreateNodeSnapshot).toHaveBeenCalledWith(
                 mockNode.url,
-                mockNode.adminPassword,
-                undefined
+                mockNode.automationToken,
             );
         });
+    });
+
+    it('the runbook says the keys are collected only for nodes with an owner automation token saved here, and names no admin password', async () => {
+        await act(async () => {
+            render(
+                <TopologyModule
+                    activeNode={mockNode}
+                    profiles={[mockNode]}
+                    diag={null}
+                    onRefresh={() => {}}
+                />
+            );
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByText('Disaster Recovery Runbook'));
+        });
+
+        expect(screen.getByText(/The keys are collected only for nodes with an owner automation token saved here/)).toBeInTheDocument();
+        expect(screen.queryByText(/admin password/i)).toBeNull();
     });
 
     it('downloads snapshot using resolveNodeApiUrl endpoint', async () => {
@@ -219,7 +237,7 @@ describe('TopologyModule Component', () => {
             id: 'node-remote',
             name: 'Remote Sovereign Node',
             url: 'https://test.beanpool.org',
-            adminPassword: 'secretpassword',
+            automationToken: 'secretpassword',
         };
         mockFetchNodeSnapshots.mockResolvedValueOnce([
             {
@@ -259,7 +277,6 @@ describe('TopologyModule Component', () => {
                 { name: 'snapshot-20260915.sqlite' },
                 'secretpassword',
                 'snapshot-20260915.sqlite',
-                undefined
             );
         });
     });

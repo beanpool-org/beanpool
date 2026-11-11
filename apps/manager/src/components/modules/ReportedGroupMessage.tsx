@@ -31,13 +31,12 @@ export function ReportVerdict({ ok, children }: { ok: boolean; children: React.R
     );
 }
 
-export function ReportedGroupMessage({ nodeUrl, reportId, groupName, adminPassword, tfaToken }: {
+export function ReportedGroupMessage({ nodeUrl, reportId, groupName, credential }: {
     nodeUrl: string;
     reportId: string;
     /** The chat's name as the Reports list has it, shown while the message opens. */
     groupName?: string | null;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
 }) {
     const [message, setMessage] = useState<ReportedMessage | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -46,11 +45,11 @@ export function ReportedGroupMessage({ nodeUrl, reportId, groupName, adminPasswo
         let live = true;
         setMessage(null);
         setError(null);
-        fetchReportedMessage(nodeUrl, reportId, adminPassword, tfaToken)
+        fetchReportedMessage(nodeUrl, reportId, credential)
             .then((m) => { if (live) setMessage(m); })
             .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'The node did not answer'); });
         return () => { live = false; };
-    }, [nodeUrl, reportId, adminPassword, tfaToken]);
+    }, [nodeUrl, reportId, credential]);
 
     const chat = message?.groupName ?? groupName ?? null;
     const author = message?.authorCallsign || (message?.authorPubkey ? `@${message.authorPubkey.slice(0, 8)}` : null);

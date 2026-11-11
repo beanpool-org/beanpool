@@ -12,11 +12,8 @@ import {
     generateNodeInvite,
     resolveNodeApiUrl,
     buildAdminHeaders,
-    getTfaSessionToken,
-    setTfaSessionToken,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 import { RecoveryCopiesLine, useRecoveryCopies } from './RecoveryCopiesLine';
 import { beans } from '@beanpool/core';
 import { parseBeans, beansRefusalText } from '../../lib/beans';
@@ -25,19 +22,11 @@ export interface ColdStartWizardProps {
     activeNode: NodeProfile;
     diag: DiagnosticsResponse | null;
     nodeData: NodeDataPayload | null;
-    tfaToken?: string;
     onComplete: () => void;
     onCancel?: () => void;
-    /** Leaves the wizard for Appliance & Data → Access & Security, where 2FA can be finished. */
-    onOpenAccessSecurity?: () => void;
     /**
-     * Asks the operator for a code from their authenticator (the manager's own 2FA prompt) and resolves with the 2FA
-     * session the node issued for it. Rejects when they cancel.
-     */
-    onRequestTfaCode?: () => Promise<string>;
-    /**
-     * Who opened Settings with a key (lib/key-session.ts), or null for the admin password. An owner's key is already
-     * an owner and never needs the 2FA code, so step 2 tells them that instead of the password holder's how-to.
+     * Who opened Settings with a key (lib/key-session.ts). An owner's key is already an owner, so step 2 tells them so;
+     * an admin's key is pointed to the owners.
      */
     keySession?: KeySession | null;
 }
@@ -87,12 +76,6 @@ const FIRST_ENTERPRISE_PRESETS = [
     },
 ];
 
-/**
- * What the wizard knows about two-factor sign-in. It says "on" only when the node said so: its status route
- * reported it on, or /2fa/verify accepted a code from the new authenticator.
- */
-type TfaState = 'checking' | 'unknown' | 'off' | 'starting' | 'awaiting-code' | 'verifying' | 'on';
-
 type Step1Outcome = { reachable: boolean; reachError: string | null; saved: boolean; saveError: string | null };
 
 // `offerPhoto`: the first offer has no photo yet, so it was not sent (the node refuses a new Offer with none).
@@ -108,20 +91,12 @@ export function ColdStartWizard({
     activeNode,
     diag,
     nodeData,
-    tfaToken,
     onComplete,
     onCancel,
-    onOpenAccessSecurity,
-    onRequestTfaCode,
     keySession,
 }: ColdStartWizardProps) {
-    // An owner who signed in with their phone key: already the owner, and keys never need the 2FA code. Step 2 says
-    // so instead of the password holder's how-to and 2FA setup. An admin's or moderator's key keeps today's step 2.
+    // An owner who signed in with their phone key is already the owner. An admin's or moderator's key is told who adds owners.
     const isOwnerKey = keySession?.role === 'owner';
-    // A 2FA session issued by turning 2FA on in step 2 outranks whatever the wizard was opened with: once 2FA is on,
-    // every later admin call needs it.
-    const [freshTfaToken, setFreshTfaToken] = useState<string | undefined>(undefined);
-    const effectiveTfaToken = freshTfaToken || tfaToken || (activeNode ? getTfaSessionToken(activeNode.id) : undefined);
     const [currentStep, setCurrentStep] = useState<number>(1);
 
     const nodeBaseUrl = activeNode?.url ? activeNode.url.replace(/\/+$/, '') : '';
@@ -140,57 +115,6 @@ export function ColdStartWizard({
     const [saveError, setSaveError] = useState<string | null>(null);
     const [savingStep1, setSavingStep1] = useState(false);
     const [step1Problem, setStep1Problem] = useState(false);
-    // The node refused the save because 2FA is on and this session has no code yet.
-    const [step1NeedsTfa, setStep1NeedsTfa] = useState(false);
-
-    // Step 2: 2FA, confirmed in place.
-    const [tfaState, setTfaState] = useState<TfaState>('checking');
-    // True only when a code was confirmed in this wizard. The status read that follows (the new 2FA session re-runs
-    // it) then reports 2FA on too, but that must not turn "turned on here" into "already on": the backup codes and
-    // the kit exist only for 2FA turned on here, and the node keeps only their hashes.
-    const [tfaTurnedOnHere, setTfaTurnedOnHere] = useState(false);
-    const [tfaStatusAttempt, setTfaStatusAttempt] = useState(0);
-    const [tfaError, setTfaError] = useState<string | null>(null);
-    const [tfaSetup, setTfaSetup] = useState<{ qrDataUrl?: string; formattedSecret: string; backupCodes: string[] } | null>(null);
-    const [tfaCode, setTfaCode] = useState('');
-    const [kitDownloaded, setKitDownloaded] = useState(false);
-
-    useEffect(() => {
-        // An owner's key never needs the code, so there is nothing to ask the node.
-        if (isOwnerKey) return;
-        let cancelled = false;
-        const loadTfaStatus = async () => {
-            if (!activeNode?.url) return;
-            try {
-                const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/status'), {
-                    method: 'GET',
-                    headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
-                });
-                if (cancelled) return;
-                const data = await res.json().catch(() => ({} as Record<string, unknown>));
-                if (cancelled) return;
-                // Only a state still waiting on this answer takes it; one the operator has moved on keeps its own.
-                if (res.ok && data && typeof data.totpEnabled === 'boolean') {
-                    setTfaState((s) => (s === 'checking' || s === 'unknown' ? (data.totpEnabled ? 'on' : 'off') : s));
-                } else if (res.status === 401 && data?.totpRequired) {
-                    // The node refused the password alone because 2FA is on: that is its answer.
-                    setTfaState((s) => (s === 'checking' || s === 'unknown' ? 'on' : s));
-                } else {
-                    setTfaState((s) => (s === 'checking' ? 'unknown' : s));
-                }
-            } catch {
-                if (!cancelled) setTfaState((s) => (s === 'checking' ? 'unknown' : s));
-            }
-        };
-        loadTfaStatus();
-        return () => { cancelled = true; };
-    }, [isOwnerKey, activeNode?.id, activeNode?.url, nodeCredential(activeNode), effectiveTfaToken, tfaStatusAttempt]);
-
-    const handleRetryTfaStatus = () => {
-        setTfaState('checking');
-        setTfaStatusAttempt((n) => n + 1);
-    };
-
     // Step 3: First Enterprise & First Offer
     const [selectedPresetId, setSelectedPresetId] = useState<'food' | 'tools' | 'machinery'>('food');
     const [enterpriseName, setEnterpriseName] = useState(FIRST_ENTERPRISE_PRESETS[0].name);
@@ -250,14 +174,14 @@ export function ColdStartWizard({
         await checkReachability();
     };
 
-    const saveName = async (tfa: string | undefined): Promise<{ ok: boolean; error: string | null }> => {
+    const saveName = async (): Promise<{ ok: boolean; error: string | null }> => {
         let res: Response | null = null;
         try {
             res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/update-identity'), {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), tfa),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     // The name the owner typed, and nothing else: the callsign stays as stored (none on a new community)
                     // rather than one the owner never chose ("node-genesis", or the "admin" diagnostics once stood in with).
                     communityName: communityName.trim(),
@@ -269,11 +193,9 @@ export function ColdStartWizard({
         if (res && res.ok) {
             setNameSaved(true);
             setSaveError(null);
-            setStep1NeedsTfa(false);
             return { ok: true, error: null };
         }
         const body = res ? await res.json().catch(() => null) : null;
-        setStep1NeedsTfa(!!res && res.status === 401 && !!body?.totpRequired);
         const error = !res ? 'no answer' : (body && typeof body.error === 'string' && body.error) || `HTTP ${res.status}`;
         setNameSaved(false);
         setSaveError(error);
@@ -282,13 +204,13 @@ export function ColdStartWizard({
 
     // `recheck` asks the node again even when an earlier check passed; Retry always does, so the step's status comes
     // from this attempt and never from a value read before it.
-    const runStep1 = async (opts: { recheck?: boolean; tfa?: string } = {}): Promise<Step1Outcome> => {
+    const runStep1 = async (opts: { recheck?: boolean } = {}): Promise<Step1Outcome> => {
         setSavingStep1(true);
         try {
             const reach = reachabilityStatus === 'reachable' && !opts.recheck
                 ? { ok: true, error: null }
                 : await checkReachability();
-            const save = await saveName(opts.tfa ?? effectiveTfaToken);
+            const save = await saveName();
             return { reachable: reach.ok, reachError: reach.error, saved: save.ok, saveError: save.error };
         } finally {
             setSavingStep1(false);
@@ -319,128 +241,7 @@ export function ColdStartWizard({
         finishStep1Attempt(await runStep1({ recheck: true }));
     };
 
-    // 2FA is on and this session has no code: ask for one with the manager's 2FA prompt, then save again with the
-    // session the node issued.
-    const handleStep1TfaCode = async () => {
-        if (!onRequestTfaCode) return;
-        let token: string;
-        try {
-            token = await onRequestTfaCode();
-        } catch {
-            return; // cancelled: the step stays as it was
-        }
-        if (!token) return;
-        setFreshTfaToken(token);
-        finishStep1Attempt(await runStep1({ recheck: true, tfa: token }));
-    };
-
     const step1Done = reachabilityStatus === 'reachable' && nameSaved;
-
-    // Step 2: start 2FA. The node keeps the new secret pending until a code from it is confirmed.
-    const handleStartTfa = async () => {
-        setTfaError(null);
-        setTfaState('starting');
-        let res: Response | null = null;
-        try {
-            res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup'), {
-                method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
-            });
-        } catch {
-            res = null;
-        }
-        if (res && res.ok) {
-            const data = await res.json().catch(() => ({} as Record<string, unknown>));
-            if (typeof data.secret === 'string' && data.secret) {
-                setTfaSetup({
-                    qrDataUrl: typeof data.qrDataUrl === 'string' ? data.qrDataUrl : undefined,
-                    formattedSecret: (typeof data.formattedSecret === 'string' && data.formattedSecret) || data.secret,
-                    backupCodes: Array.isArray(data.backupCodes) ? data.backupCodes.map(String) : [],
-                });
-                setTfaCode('');
-                setTfaState('awaiting-code');
-                return;
-            }
-        }
-        setTfaError(res && !res.ok ? await errorFrom(res) : 'The node did not return a 2FA secret');
-        setTfaState('off');
-    };
-
-    const handleConfirmTfa = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const code = tfaCode.trim();
-        if (!code) return;
-        setTfaError(null);
-        setTfaState('verifying');
-        let res: Response | null = null;
-        try {
-            res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/verify'), {
-                method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
-                body: JSON.stringify({ code }),
-            });
-        } catch {
-            res = null;
-        }
-        const data = res ? await res.json().catch(() => ({} as Record<string, unknown>)) : {};
-        if (res && res.ok && data.success === true && data.totpEnabled === true) {
-            const token = (data.tfaSessionToken || data.sessionToken) as string | undefined;
-            if (token) {
-                setTfaSessionToken(activeNode.id, token);
-                setFreshTfaToken(token);
-            }
-            setTfaCode('');
-            setTfaTurnedOnHere(true);
-            setTfaState('on');
-            return;
-        }
-        setTfaError((typeof data.error === 'string' && data.error) || (res ? `HTTP ${res.status}` : 'The node could not be reached'));
-        setTfaState('awaiting-code');
-    };
-
-    const tfaOnHere = tfaState === 'on' && tfaTurnedOnHere;
-    const kitBackupCodes = tfaOnHere && tfaSetup ? tfaSetup.backupCodes : [];
-
-    // Step 2: the recovery kit lists only things that work: this server's address, and — when 2FA was turned on
-    // here — the backup codes the node just made active. Nothing in it is made up on this screen.
-    const handleDownloadKit = () => {
-        const payload = `=====================================================
-BEANPOOL SERVER RECOVERY KIT
-=====================================================
-Server:         ${nodeBaseUrl || nodeHost}
-Community:      ${communityName.trim() || '(no name saved)'}
-Written:        ${new Date().toISOString()}
-
-2FA BACKUP CODES (each works once, in place of an authenticator code)
-${kitBackupCodes.map((c) => `  ${c}`).join('\n')}
-
-NOT IN THIS FILE
-- The admin password, if this server has one. A server set up before
-  new installs stopped making one keeps its own: the ADMIN_PASSWORD set
-  in .env, or the one it made up, in data/first-admin-password.txt until
-  the password is changed. A newer server has none: owners and admins
-  sign in with the BeanPool app.
-- Owners' own keys. Each owner gets back into their account with the 12
-  recovery words the BeanPool app showed them.
-
-KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
-=====================================================`;
-
-        const blob = new Blob([payload], { type: 'text/plain;charset=utf-8' });
-        if (typeof URL.createObjectURL === 'function') {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `beanpool-recovery-kit-${nodeHost.replace(/[^a-zA-Z0-9]/g, '_')}.txt`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            if (typeof URL.revokeObjectURL === 'function') {
-                URL.revokeObjectURL(url);
-            }
-        }
-        setKitDownloaded(true);
-    };
 
     // Step 3: Handle preset selection
     const handleSelectPreset = (presetId: 'food' | 'tools' | 'machinery') => {
@@ -475,8 +276,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             workingCapitalCeiling_c: beans(250),
                             purpose: enterprisePurpose.trim() || undefined,
                         },
-                        nodeCredential(activeNode),
-                        effectiveTfaToken
+                        nodeCredential(activeNode)
                     );
                     if (!res || !res.publicKey) throw new Error('The node did not return the new enterprise');
                     treasuryPk = res.publicKey;
@@ -488,7 +288,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
 
             if (treasuryPk && keeperPubkey && !keeperAssigned) {
                 try {
-                    await assignTreasuryKeeper(activeNode.url, treasuryPk, keeperPubkey, nodeCredential(activeNode), effectiveTfaToken);
+                    await assignTreasuryKeeper(activeNode.url, treasuryPk, keeperPubkey, nodeCredential(activeNode));
                     setKeeperAssigned(true);
                 } catch (err: unknown) {
                     errors.keeper = reason(err, 'The node could not be reached');
@@ -516,8 +316,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             photos: firstOfferPhotos,
                             description: `First community offer for ${enterpriseName}`,
                         },
-                        nodeCredential(activeNode),
-                        effectiveTfaToken
+                        nodeCredential(activeNode)
                     );
                     setOfferPosted(true);
                 } catch (err: unknown) {
@@ -551,8 +350,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                     const res = await generateNodeInvite(
                         activeNode.url,
                         nodeCredential(activeNode),
-                        'trusted',
-                        effectiveTfaToken
+                        'trusted'
                     );
                     code = res.code;
                 } catch (err: unknown) {
@@ -581,22 +379,12 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
     // A step shows ✓ only when what it does really happened; a step passed without that shows ⚠.
     const stepDone: Record<number, boolean> = {
         1: step1Done,
-        // An owner's key is already the owner and needs no 2FA code: step 2 has nothing left to do.
-        2: isOwnerKey || tfaState === 'on',
+        // An owner's key is already the owner: step 2 has nothing left to do.
+        2: isOwnerKey,
         3: step3Done,
         4: commonsRead,
         5: false,
     };
-
-    const accessSecurityButton = onOpenAccessSecurity && (
-        <button
-            type="button"
-            onClick={onOpenAccessSecurity}
-            className="min-h-[48px] px-4 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
-        >
-            Open Access &amp; Security
-        </button>
-    );
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 font-sans animate-fade-in py-4">
@@ -627,7 +415,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                 <div className="grid grid-cols-5 gap-2 pt-2">
                     {[
                         { num: 1, label: '1. Name & Check' },
-                        { num: 2, label: '2. Owner & 2FA' },
+                        { num: 2, label: '2. Owners' },
                         { num: 3, label: '3. First Enterprise' },
                         { num: 4, label: '4. The Commons' },
                         { num: 5, label: '5. Founding Cards' },
@@ -735,23 +523,8 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                         Your community name was not saved. The node said: <strong>{saveError}</strong>
                                     </p>
                                 )}
-                                {step1Problem && step1NeedsTfa && (
-                                    <p className="text-xs text-red-100 m-0 break-words">
-                                        2FA is on for this server, so saving needs a code from your authenticator app.
-                                    </p>
-                                )}
                                 {step1Problem && (
                                     <div className="flex flex-wrap gap-3">
-                                        {step1NeedsTfa && onRequestTfaCode && (
-                                            <button
-                                                type="button"
-                                                onClick={handleStep1TfaCode}
-                                                disabled={savingStep1}
-                                                className="min-h-[48px] px-5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
-                                            >
-                                                Enter 2FA code
-                                            </button>
-                                        )}
                                         <button
                                             type="button"
                                             onClick={handleRetryStep1}
@@ -779,7 +552,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                     disabled={savingStep1 || !communityName.trim()}
                                     className="min-h-[48px] px-6 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                                 >
-                                    {savingStep1 ? 'Saving...' : 'Next: Owner & 2FA →'}
+                                    {savingStep1 ? 'Saving...' : 'Next: Owners →'}
                                 </button>
                             </div>
                         )}
@@ -787,200 +560,56 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                 </div>
             )}
 
-            {/* STEP 2: Owner, 2FA and the recovery kit */}
+            {/* STEP 2: Owners */}
             {currentStep === 2 && (
                 <div className="bg-nature-900/80 border border-nature-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
                     <div>
                         <h3 className="text-lg font-black text-white m-0 flex items-center gap-2">
                             <span>🔑</span>
-                            <span>Step 2: Owner &amp; Two-Factor Sign-In</span>
+                            <span>Step 2: Owners</span>
                         </h3>
                         <p className="text-xs text-nature-400 m-0 mt-1">
                             {isOwnerKey
-                                ? "You signed in with your phone's key, so you are already the owner. Keys do not need the 2FA code."
-                                : 'Turn on two-factor sign-in for these settings, and see how your phone becomes an owner.'}
+                                ? "You signed in with your phone's key, so you are already the owner."
+                                : 'You signed in with your phone\'s key as an admin. Owners are added by an owner.'}
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Two-factor sign-in, confirmed in place */}
-                        <div className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
+                    {isOwnerKey ? (
+                        /* Signed in with the owner's own key: nothing to link, only a second owner to add */
+                        <div data-testid="owner-key-owner-card" className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
-                                Two-factor sign-in
+                                Owners
                             </h4>
-
-                            {isOwnerKey ? (
-                                <p data-testid="owner-key-no-2fa" className="text-xs text-nature-300 m-0 leading-relaxed">
-                                    You signed in with your key. Keys do not need the 2FA code, so there is nothing to set up here.
-                                </p>
-                            ) : tfaState === 'on' ? (
-                                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-xs text-emerald-300 font-semibold">
-                                    ✓ 2FA is on. {tfaTurnedOnHere
-                                        ? 'You turned it on here: signing in to these settings now needs a code from your authenticator app.'
-                                        : 'The node says it was already on.'}
-                                </div>
-                            ) : (
-                                <>
-                                    {tfaState === 'checking' ? (
-                                        <p className="text-xs text-nature-300 m-0 font-semibold">
-                                            Checking whether 2FA is on...
-                                        </p>
-                                    ) : tfaState === 'unknown' ? (
-                                        <div className="space-y-2">
-                                            <p className="text-xs text-amber-300 m-0 font-semibold">
-                                                Couldn't check whether 2FA is on.
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={handleRetryTfaStatus}
-                                                className="w-full min-h-[48px] rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
-                                            >
-                                                Retry
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-amber-300 m-0 font-semibold">
-                                            2FA is not on yet.
-                                        </p>
-                                    )}
-                                    {(tfaState === 'off' || tfaState === 'unknown' || tfaState === 'starting') && (
-                                        <>
-                                            <p className="text-[11px] text-nature-400 m-0">
-                                                You'll need an authenticator app on your phone, such as Aegis, 2FAS or Google Authenticator.
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={handleStartTfa}
-                                                disabled={tfaState === 'starting'}
-                                                className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
-                                            >
-                                                {tfaState === 'starting' ? 'Starting...' : 'Set up 2FA'}
-                                            </button>
-                                        </>
-                                    )}
-                                    {(tfaState === 'awaiting-code' || tfaState === 'verifying') && tfaSetup && (
-                                        <form onSubmit={handleConfirmTfa} className="space-y-3">
-                                            <p className="text-[11px] text-nature-400 m-0">
-                                                Scan this with your authenticator app, or type the key in. Then enter the 6-digit code it shows.
-                                            </p>
-                                            {tfaSetup.qrDataUrl && (
-                                                <div className="w-40 h-40 bg-white p-2 rounded-xl mx-auto">
-                                                    <img src={tfaSetup.qrDataUrl} alt="Authenticator setup QR" className="w-full h-full block" />
-                                                </div>
-                                            )}
-                                            <div className="font-mono text-xs text-white text-center break-all">
-                                                {tfaSetup.formattedSecret}
-                                            </div>
-                                            <label htmlFor="cold-start-tfa-code" className="block text-xs font-bold text-nature-300">
-                                                Code from your authenticator
-                                            </label>
-                                            <input
-                                                id="cold-start-tfa-code"
-                                                type="text"
-                                                inputMode="numeric"
-                                                autoComplete="one-time-code"
-                                                value={tfaCode}
-                                                onChange={(e) => setTfaCode(e.target.value)}
-                                                placeholder="123456"
-                                                className="w-full min-h-[48px] bg-nature-900 border border-nature-700 rounded-xl px-3.5 text-sm text-white font-mono focus:outline-none focus:border-terra-500"
-                                            />
-                                            <button
-                                                type="submit"
-                                                disabled={tfaState === 'verifying' || !tfaCode.trim()}
-                                                className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
-                                            >
-                                                {tfaState === 'verifying' ? 'Checking...' : 'Turn on 2FA'}
-                                            </button>
-                                        </form>
-                                    )}
-                                    {tfaError && (
-                                        <div role="alert" className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-xs text-red-100 break-words">
-                                            2FA is not on. The node said: <strong>{tfaError}</strong>
-                                        </div>
-                                    )}
-                                    <div className="pt-2 border-t border-nature-800 space-y-2">
-                                        <p className="text-[11px] text-nature-400 m-0">
-                                            You can also finish it later in Access &amp; Security.
-                                        </p>
-                                        {accessSecurityButton}
-                                    </div>
-                                </>
-                            )}
-
-                            {tfaOnHere && tfaSetup && tfaSetup.backupCodes.length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-[11px] text-nature-300 m-0">
-                                        Backup codes: each works once, in place of an authenticator code. Keep them off this computer.
-                                    </p>
-                                    <ul className="grid grid-cols-2 gap-1 font-mono text-xs text-white m-0 p-0 list-none">
-                                        {tfaSetup.backupCodes.map((c) => (
-                                            <li key={c} className="bg-nature-900 rounded px-2 py-1 text-center break-all">{c}</li>
-                                        ))}
-                                    </ul>
-                                    <button
-                                        type="button"
-                                        onClick={handleDownloadKit}
-                                        className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md"
-                                    >
-                                        💾 Download Recovery Kit (.txt)
-                                    </button>
-                                    {kitDownloaded && (
-                                        <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-[11px] text-emerald-300">
-                                            Recovery kit downloaded. Print it or keep it on an offline USB stick, then delete it here.
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                            <p className="text-sm font-bold text-white m-0 break-words">
+                                You are the owner.
+                            </p>
+                            <p className="text-[11px] text-nature-300 m-0 leading-relaxed">
+                                Add a second owner soon: if this phone is lost, a second owner can still manage the community.
+                            </p>
+                            {/* The reason an owner's way back matters (vault rethink VR8, design §6 door 7). */}
+                            <p className="text-[11px] text-nature-300 m-0 leading-relaxed" data-testid="owner-backups-reason">
+                                Your key also unlocks this community&apos;s backups. Keep your words, and make a second owner, so one can bring the other back.
+                            </p>
+                            <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
+                                Once they have joined, open <strong>People &amp; Safety → Owners &amp; admins</strong> here in
+                                Settings and add them as an owner.
+                            </p>
                         </div>
-
-                        {isOwnerKey ? (
-                            /* Signed in with the owner's own key: nothing to link, only a second owner to add */
-                            <div data-testid="owner-key-owner-card" className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
-                                    Owners
-                                </h4>
-                                <p className="text-sm font-bold text-white m-0 break-words">
-                                    You are the owner.
-                                </p>
-                                <p className="text-[11px] text-nature-300 m-0 leading-relaxed">
-                                    Add a second owner soon: if this phone is lost, a second owner can still manage the community.
-                                </p>
-                                {/* The reason an owner's way back matters (vault rethink VR8, design §6 door 7). */}
-                                <p className="text-[11px] text-nature-300 m-0 leading-relaxed" data-testid="owner-backups-reason">
-                                    Your key also unlocks this community&apos;s backups. Keep your words, and make a second owner, so one can bring the other back.
-                                </p>
-                                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
-                                    Once they have joined, open <strong>People &amp; Safety → Owners &amp; admins</strong> here in
-                                    Settings and add them as an owner.
-                                </p>
-                            </div>
-                        ) : (
-                            /* How an owner links their key: the real way */
-                            <div className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
-                                    Your phone as owner
-                                </h4>
-                                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
-                                    Right now the admin password is the only way into these settings. To manage them from your phone
-                                    with your own key instead:
-                                </p>
-                                <ol className="text-[11px] text-nature-300 m-0 pl-5 space-y-1.5 list-decimal leading-relaxed">
-                                    <li>Join the community in the BeanPool app with one of the founding invites from step 5.</li>
-                                    <li>
-                                        Here in Settings, open <strong>People &amp; Safety → Owners &amp; admins</strong> and add
-                                        yourself as an owner.
-                                    </li>
-                                    <li>
-                                        In the app's Settings, tap <strong>Manage {communityName.trim() || 'your community'}</strong>.
-                                        It opens these settings signed in with your key, with no password.
-                                    </li>
-                                </ol>
-                                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
-                                    Keep at least two owners, so losing one phone never locks the community out.
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                    ) : (
+                        <div data-testid="admin-key-owner-card" className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
+                                Owners
+                            </h4>
+                            <p className="text-sm font-bold text-white m-0 break-words">
+                                An owner of this community adds the owners.
+                            </p>
+                            <p className="text-[11px] text-nature-300 m-0 leading-relaxed">
+                                They open <strong>People &amp; Safety → Owners &amp; admins</strong> here in Settings and add
+                                the next owner. Keep at least two owners, so losing one phone never locks the community out.
+                            </p>
+                        </div>
+                    )}
 
                     <div className="pt-4 flex items-center justify-between gap-3 border-t border-nature-800">
                         <button

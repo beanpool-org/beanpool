@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DiagnosticsResponse, OwnerWordsCheck, TakeoverStatus } from '../../lib/node-client';
-import { fetchTakeoverStatus, getOwnerWordsChecks, getTfaSessionToken } from '../../lib/node-client';
+import { fetchTakeoverStatus, getOwnerWordsChecks } from '../../lib/node-client';
 import { nodeCredential, type NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 import { useManual } from '../manual/Manual';
@@ -53,7 +53,7 @@ function Command({ children }: { children: string }) {
 export interface ReadyForTheHallCardProps {
     activeNode: NodeProfile;
     diag: DiagnosticsResponse | null;
-    /** Who is looking. Without one, the password (owner level). */
+    /** Who is looking. Without one, a fleet profile's token (owner level for what a token may do). */
     viewer?: RolesViewer;
     /** A standby's Settings has its own panels; the card is the main server's. */
     isStandby?: boolean;
@@ -61,9 +61,9 @@ export interface ReadyForTheHallCardProps {
     now?: number;
 }
 
-export function ReadyForTheHallCard({ activeNode, diag, viewer = { kind: 'password' }, isStandby = false, now: nowProp }: ReadyForTheHallCardProps) {
+export function ReadyForTheHallCard({ activeNode, diag, viewer = { kind: 'token' }, isStandby = false, now: nowProp }: ReadyForTheHallCardProps) {
     const manual = useManual();
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const allowed = isOwner || (viewer.kind === 'key' && viewer.role === 'admin');
     const show = allowed && !isStandby;
 
@@ -78,11 +78,10 @@ export function ReadyForTheHallCard({ activeNode, diag, viewer = { kind: 'passwo
         let live = true;
         setCode({ status: 'loading' });
         setOwners({ status: 'loading' });
-        const tfa = getTfaSessionToken(activeNode.id);
-        fetchTakeoverStatus(activeNode.url, credential, tfa)
+        fetchTakeoverStatus(activeNode.url, credential)
             .then((value) => { if (live) setCode({ status: 'ok', value }); })
             .catch(() => { if (live) setCode({ status: 'error' }); });
-        getOwnerWordsChecks(activeNode.url, credential, tfa)
+        getOwnerWordsChecks(activeNode.url, credential)
             .then((r) => { if (live) setOwners(Array.isArray(r?.owners) ? { status: 'ok', value: r.owners } : { status: 'error' }); })
             .catch(() => { if (live) setOwners({ status: 'error' }); });
         return () => { live = false; };
@@ -220,8 +219,8 @@ export function ReadyForTheHallCard({ activeNode, diag, viewer = { kind: 'passwo
                     </div>
                 )}
                 <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">
-                    The kit page also covers what this list cannot see: the authenticator app on a phone that will be in the hall, every
-                    member having the app, and the printed poster.
+                    The kit page also covers what this list cannot see: every member having the app, and the printed
+                    poster.
                 </p>
                 {manual && (
                     <button type="button" className={BUTTON} onClick={() => manual.openManual(HALL_KIT_PAGE)}>

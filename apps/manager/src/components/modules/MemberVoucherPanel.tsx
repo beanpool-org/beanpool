@@ -6,8 +6,7 @@ export interface MemberVoucherPanelProps {
     nodeUrl: string;
     pubkey: string;
     displayName: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     initialCard?: VoucherCard | null;
 }
 
@@ -15,8 +14,7 @@ export function MemberVoucherPanel({
     nodeUrl,
     pubkey,
     displayName: _displayName,
-    adminPassword,
-    tfaToken,
+    credential,
     initialCard,
 }: MemberVoucherPanelProps) {
     const [card, setCard] = useState<VoucherCard | null>(initialCard ?? null);
@@ -32,7 +30,7 @@ export function MemberVoucherPanel({
         setLoading(true);
         const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/known-floor/vouchers/member/${encodeURIComponent(pubkey)}`);
         fetch(endpoint, {
-            headers: buildAdminHeaders(adminPassword, tfaToken),
+            headers: buildAdminHeaders(credential),
         })
             .then((res) => {
                 if (!res.ok) return null;
@@ -52,7 +50,7 @@ export function MemberVoucherPanel({
         return () => {
             mounted = false;
         };
-    }, [nodeUrl, pubkey, adminPassword, tfaToken, initialCard]);
+    }, [nodeUrl, pubkey, credential, initialCard]);
 
     if (loading || !card) return null;
 

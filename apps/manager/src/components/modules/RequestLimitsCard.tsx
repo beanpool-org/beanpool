@@ -10,8 +10,7 @@ import { fetchRequestLimits, undoRequestLimit, type RequestLimitHow, type Reques
 
 export interface RequestLimitsCardProps {
     nodeUrl: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     /** Changes when something was done elsewhere, so the list loads again. */
     reloadKey?: number;
 }
@@ -29,7 +28,7 @@ const day = (iso: string) => {
 
 const btn = 'min-h-[48px] px-4 rounded-xl text-sm font-bold transition-colors disabled:opacity-50';
 
-export function RequestLimitsCard({ nodeUrl, adminPassword, tfaToken, reloadKey = 0 }: RequestLimitsCardProps) {
+export function RequestLimitsCard({ nodeUrl, credential, reloadKey = 0 }: RequestLimitsCardProps) {
     const [limits, setLimits] = useState<RequestLimitRow[] | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
@@ -37,12 +36,12 @@ export function RequestLimitsCard({ nodeUrl, adminPassword, tfaToken, reloadKey 
 
     const load = useCallback(async () => {
         try {
-            setLimits(await fetchRequestLimits(nodeUrl, adminPassword, tfaToken));
+            setLimits(await fetchRequestLimits(nodeUrl, credential));
             setError(null);
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : 'Could not load who is limited');
         }
-    }, [nodeUrl, adminPassword, tfaToken]);
+    }, [nodeUrl, credential]);
 
     useEffect(() => { void load(); }, [load, reloadKey]);
 
@@ -50,7 +49,7 @@ export function RequestLimitsCard({ nodeUrl, adminPassword, tfaToken, reloadKey 
         setBusy(limit.publicKey);
         setError(null);
         try {
-            await undoRequestLimit(nodeUrl, limit.publicKey, adminPassword, tfaToken);
+            await undoRequestLimit(nodeUrl, limit.publicKey, credential);
             setNote(`${limit.callsign || 'They'} can send message requests again, and the ones cleared are back.`);
             await load();
         } catch (e: unknown) {

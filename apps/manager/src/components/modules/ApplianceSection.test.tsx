@@ -9,11 +9,13 @@ import type { DiagnosticsResponse, GatewayConfig } from '../../lib/node-client';
 import * as nodeClient from '../../lib/node-client';
 import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
+// A real automation token's shape (bp_ + 12 hex + _ + 64 hex): only this travels as a Bearer.
+const TOKEN = `bp_${'a'.repeat(12)}_${'b'.repeat(64)}`;
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-password',
+    automationToken: TOKEN,
 };
 
 const mockDiag: DiagnosticsResponse = {
@@ -49,7 +51,6 @@ describe('ApplianceSection Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         sessionStorage.clear();
-        nodeClient.clearAllTfaSessionTokens();
         vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue(mockSnapshots);
         vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({
             enabled: true,
@@ -218,7 +219,8 @@ describe('ApplianceSection Component', () => {
         expect(nodeClient.updateNodeSnapshotSchedule).toHaveBeenCalledWith(
             mockProfile.url,
             realSchedule,
-            mockProfile.adminPassword,
+            mockProfile.automationToken,
+            // The fresh-proof code: none typed.
             undefined
         );
         view.unmount();
@@ -347,8 +349,7 @@ describe('ApplianceSection Component', () => {
         expect(nodeClient.verifyNodeBackup).toHaveBeenCalledWith(
             mockProfile.url,
             undefined,
-            mockProfile.adminPassword,
-            undefined
+            mockProfile.automationToken
         );
         expect(screen.getByText(/Database verified, no corruption \(PRAGMA integrity_check: ok\)/i)).toBeInTheDocument();
     });
@@ -373,11 +374,10 @@ describe('ApplianceSection Component', () => {
             rolesViewer={rolesViewer}
         />
     );
-    /** fetch answering `route` with `answer`, and 2FA status as `totpEnabled`; every other call an empty 200. */
-    const fakeFetch = (route: string, answer: unknown, totpEnabled = false) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+    /** fetch answering `route` with `answer`; every other call an empty 200. */
+    const fakeFetch = (route: string, answer: unknown) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
         const url = String(input);
         if (url.includes(route)) return new Response(JSON.stringify(answer), { status: 200 });
-        if (url.includes('/api/local/admin/2fa/status')) return new Response(JSON.stringify({ totpEnabled, backupCodesRemaining: 3 }), { status: 200 });
         return new Response('{}', { status: 200 });
     });
 
@@ -404,40 +404,25 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByText('Automation tokens')).not.toBeInTheDocument();
     });
 
-    it('the password names the owner; an admin is told only an owner has a code', async () => {
+    it('a token viewer is told an owner makes a break-glass code from their own phone: no button, no owner-key field, no request', async () => {
         const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-0000-1111-2222-3333' });
-        await act(async () => { renderAccess({ kind: 'password' }); });
-        fireEvent.change(screen.getByLabelText(/Owner's member key/i), { target: { value: 'p'.repeat(64) } });
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Make a break-glass code/i })); });
-        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'));
-        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ memberPubkey: 'p'.repeat(64) });
-        expect(screen.getByTestId('break-glass-code')).toHaveTextContent('bg-0000-1111-2222-3333');
+        await act(async () => { renderAccess({ kind: 'token' }); });
+        expect(screen.getByText('An owner makes a break-glass code from their own phone: Settings, Community admin, Break-glass code in the BeanPool app.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Make a break-glass code/i })).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/Owner's member key/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Only an owner has a break-glass code/i)).not.toBeInTheDocument();
+        expect(fetchSpy.mock.calls.some(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'))).toBe(false);
     });
 
-    it('an admin sees no break-glass button and no backup codes', async () => {
-        fakeFetch('/never', {}, true);
+    it('an admin sees no break-glass button and no 2FA card; an admin is told only an owner has a code', async () => {
+        fakeFetch('/never', {});
         await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }); });
         expect(screen.getByText(/Only an owner has a break-glass code/i)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Make a break-glass code/i })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Show new backup codes/i })).not.toBeInTheDocument();
+        expect(screen.queryByText('Two-Factor Authentication (2FA)')).not.toBeInTheDocument();
     });
 
-    it('an owner sees new 2FA backup codes only after typing a 6-digit code', async () => {
-        const codes = ['aaaa1111', 'bbbb2222', 'cccc3333', 'dddd4444', 'eeee5555', 'ffff6666', 'a1a1b2b2', 'c3c3d4d4'];
-        const fetchSpy = fakeFetch('/api/local/admin/2fa/backup-codes', { success: true, backupCodes: codes }, true);
-        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
-        const button = await screen.findByRole('button', { name: /Show new backup codes/i });
-        await act(async () => { fireEvent.click(button); });
-        expect(fetchSpy.mock.calls.some(c => String(c[0]).includes('/api/local/admin/2fa/backup-codes'))).toBe(false);
-        expect(screen.getByText(/Enter the 6-digit code/i)).toBeInTheDocument();
-        fireEvent.change(screen.getByLabelText(/New backup codes/i), { target: { value: '123456' } });
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Show new backup codes/i })); });
-        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/2fa/backup-codes'));
-        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ code: '123456' });
-        expect(screen.getByTestId('backup-codes')).toHaveTextContent('aaaa1111');
-    });
-
-    it('sends password in POST body when checking for updates', async () => {
+    it('sends no password when checking for updates: an empty body, and the token as a Bearer', async () => {
         await act(async () => {
             render(
                 <ApplianceSection
@@ -469,12 +454,15 @@ describe('ApplianceSection Component', () => {
             expect.stringContaining('/api/admin/check-update'),
             expect.objectContaining({
                 method: 'POST',
-                body: JSON.stringify({ password: mockProfile.adminPassword }),
+                body: JSON.stringify({}),
+                headers: expect.objectContaining({ Authorization: `Bearer ${TOKEN}` }),
             })
         );
+        const checkCall = (global.fetch as any).mock.calls.find((c: any[]) => String(c[0]).includes('/api/admin/check-update'));
+        expect(checkCall[1].headers['X-Admin-Password']).toBeUndefined();
     });
 
-    it('sends password and callsign in body when saving node identity in identity tab', async () => {
+    it('sends the callsign, and no password, in body when saving node identity in identity tab', async () => {
         // The contacts come from the admin route; this node has none stored, so the empty boxes are what it has. The node
         // config read answers its directory settings, as a node does: a Save sends back only the settings it read.
         const generic = global.fetch as any;
@@ -521,7 +509,6 @@ describe('ApplianceSection Component', () => {
         expect(updateCall).toBeDefined();
         const payload = JSON.parse(updateCall[1].body);
         expect(payload).toEqual({
-            password: mockProfile.adminPassword,
             callsign: mockDiag.callsign,
             communityName: mockDiag.communityName,
             contactEmail: '',
@@ -535,7 +522,6 @@ describe('ApplianceSection Component', () => {
             expect.objectContaining({
                 method: 'POST',
                 body: JSON.stringify({
-                    password: mockProfile.adminPassword,
                     directoryPushIntervalHours: 12,
                     serviceRadius: null,
                     // The card's town or area (front doors S15), saved with the area: none typed clears it.
@@ -545,7 +531,7 @@ describe('ApplianceSection Component', () => {
         );
     });
 
-    it('sends password and peer address in body when adding peer connector', async () => {
+    it('sends the peer address, and no password, in body when adding peer connector', async () => {
         await act(async () => {
             render(
                 <ApplianceSection
@@ -581,7 +567,6 @@ describe('ApplianceSection Component', () => {
             expect.objectContaining({
                 method: 'POST',
                 body: JSON.stringify({
-                    password: mockProfile.adminPassword,
                     address: 'wss://peer.example.org:8443',
                 }),
             })
@@ -630,7 +615,8 @@ describe('ApplianceSection Component', () => {
             expect.stringContaining('/api/local/admin/restore'),
             expect.objectContaining({
                 method: 'POST',
-                headers: { 'X-Admin-Password': mockProfile.adminPassword },
+                // The token as a Bearer and nothing else (no admin password, and no Content-Type: the file is the body).
+                headers: { Authorization: `Bearer ${TOKEN}` },
                 body: dummyFile,
             })
         );
@@ -848,16 +834,9 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByLabelText(/printed recovery code/)).toBeInTheDocument();
     });
 
-    // A retired password took its 2FA with it, and the server refuses to set either up again (routes/settings.ts
-    // refuse2faWhileRetired): one line instead of the password and 2FA cards, at 320px with 130% text.
-    it('on a server whose password is retired, Access & Security shows one line instead of the password and 2FA cards', async () => {
-        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
-            const url = String(input);
-            if (url.includes('/api/local/admin/2fa/status')) {
-                return new Response(JSON.stringify({ success: true, totpEnabled: false, passwordRetired: true, backupCodesRemaining: 0 }), { status: 200 });
-            }
-            return new Response('{}', { status: 200 });
-        });
+    // A node has no admin password and no server 2FA: Access & Security draws neither card, at 320px with 130% text.
+    it('Access & Security draws no password card, no 2FA card and no retire card, and never asks the node about 2FA', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('{}', { status: 200 }));
         await act(async () => {
             render(
                 <div style={{ width: 320, fontSize: '130%' }}>
@@ -882,196 +861,21 @@ describe('ApplianceSection Component', () => {
                 </div>
             );
         });
-        const line = await screen.findByTestId('no-server-2fa');
-        expect(line).toHaveTextContent("This server has no admin password, so it has no server 2FA: your phone's lock is your second factor.");
-        // It wraps at 320px: nothing in it keeps it on one line.
-        expect(line.className).not.toMatch(/nowrap|truncate|\bw-\[|min-w-\[/);
+        // The rest of the tab is still there.
+        expect(await screen.findByText('Break-Glass Emergency Recovery')).toBeInTheDocument();
+        expect(screen.getByText('Automation tokens')).toBeInTheDocument();
+        // The old one-line "no server 2FA" notice went with the cards it stood in for.
+        expect(screen.queryByTestId('no-server-2fa')).not.toBeInTheDocument();
         expect(screen.queryByText('Two-Factor Authentication (2FA)')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /setup 2fa authenticator/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /disable 2fa/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /show new backup codes/i })).not.toBeInTheDocument();
         expect(screen.queryByText('Change Admin Password')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /update password/i })).not.toBeInTheDocument();
-        // The rest of the tab is still there.
-        expect(screen.getByText('Break-Glass Emergency Recovery')).toBeInTheDocument();
-        expect(fetchSpy.mock.calls.some(c => String(c[0]).includes('/api/local/admin/2fa/setup'))).toBe(false);
-    });
-
-    it('a server that does not say passwordRetired (not retired, or older) still shows both cards', async () => {
-        fakeFetch('/never', {});
-        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
-        expect(await screen.findByText('Two-Factor Authentication (2FA)')).toBeInTheDocument();
-        expect(screen.getByText('Change Admin Password')).toBeInTheDocument();
-        expect(screen.queryByTestId('no-server-2fa')).not.toBeInTheDocument();
-    });
-
-    it('correctly maps totpEnabled to enabled when rendering 2FA card in access subtab', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/admin/2fa/status')) {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({ success: true, totpEnabled: true }),
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ connectors: [] }),
-            });
-        }));
-
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
-
-        // 2FA status badge should display "Enabled"
-        expect(screen.getByText('Enabled')).toBeInTheDocument();
-        // Disable 2FA button should render
-        expect(screen.getByRole('button', { name: /disable 2fa/i })).toBeInTheDocument();
-    });
-
-    // The node turns 2FA off only with a code that is right now (an earlier sign-in is not enough), so the card asks
-    // for one and sends it, with the 2FA session and the password as every admin call does.
-    async function renderAccessWith2faOn(disableResponse: { ok: boolean; status?: number; body: unknown }) {
-        const fetchMock = vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/admin/2fa/status')) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, totpEnabled: true }) });
-            }
-            if (url.includes('/api/local/admin/2fa/disable')) {
-                return Promise.resolve({
-                    ok: disableResponse.ok,
-                    status: disableResponse.status ?? (disableResponse.ok ? 200 : 401),
-                    json: () => Promise.resolve(disableResponse.body),
-                });
-            }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
-        });
-        vi.stubGlobal('fetch', fetchMock);
-        nodeClient.setTfaSessionToken(mockProfile.id, 'tfa-session-abc');
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
-        const disableCalls = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/local/admin/2fa/disable'));
-        return { disableCalls };
-    }
-
-    it('shows 2FA as on when the status call answers 401 asking for a code (no 2FA session yet)', async () => {
-        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/admin/2fa/status')) {
-                return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: '2FA code required', totpRequired: true }) });
-            }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ connectors: [] }) });
-        }));
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
-        expect(screen.getByText('Enabled')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /setup 2fa authenticator/i })).not.toBeInTheDocument();
-    });
-
-    it('Disable 2FA asks for a current code and sends nothing without one', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
-        const { disableCalls } = await renderAccessWith2faOn({ ok: true, body: { success: true } });
-
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
-        });
-
-        expect(disableCalls()).toHaveLength(0);
-        expect(screen.getByText(/Enter a current code from your authenticator app/i)).toBeInTheDocument();
-    });
-
-    it('Disable 2FA sends the code with the 2FA session, and shows the node\'s refusal', async () => {
-        const confirmSpy = vi.spyOn(window, 'confirm');
-        const { disableCalls } = await renderAccessWith2faOn({ ok: false, status: 401, body: { error: 'Invalid 2FA code', totpRequired: true } });
-
-        await act(async () => {
-            fireEvent.change(screen.getByLabelText('Current 2FA or backup code'), { target: { value: ' 123456 ' } });
-        });
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
-        });
-        await answerInPageConfirm('Turn it off');
-        expect(confirmSpy).not.toHaveBeenCalled();
-
-        expect(disableCalls()).toHaveLength(1);
-        const [, init] = disableCalls()[0];
-        expect(JSON.parse(init.body)).toEqual({ code: '123456' });
-        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-session-abc');
-        expect(init.headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
-        expect(screen.getByText('2FA was not turned off: Invalid 2FA code')).toBeInTheDocument();
-        // Still on: the badge did not change.
-        expect(screen.getByText('Enabled')).toBeInTheDocument();
-    });
-
-    it('Disable 2FA takes a backup code: no number-only keypad, and the code is sent as typed', async () => {
-        const confirmSpy = vi.spyOn(window, 'confirm');
-        const { disableCalls } = await renderAccessWith2faOn({ ok: true, body: { success: true } });
-        const input = screen.getByLabelText('Current 2FA or backup code');
-        // Backup codes are 8 hex characters (a–f): a phone's numeric keypad could not type them.
-        expect(input.getAttribute('inputmode')).not.toBe('numeric');
-
-        await act(async () => {
-            fireEvent.change(input, { target: { value: 'a1b2c3d4' } });
-        });
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }));
-        });
-        await answerInPageConfirm('Turn it off');
-        expect(confirmSpy).not.toHaveBeenCalled();
-        expect(disableCalls()).toHaveLength(1);
-        expect(JSON.parse(disableCalls()[0][1].body)).toEqual({ code: 'a1b2c3d4' });
+        expect(screen.queryByText(/Retire the admin password/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Type RETIRE to confirm')).not.toBeInTheDocument();
+        const urls = fetchSpy.mock.calls.map(c => String(c[0]));
+        expect(urls.filter(u => /\/2fa\/|change-password|retire-password|password-retirement/.test(u))).toEqual([]);
     });
 
     it('surfaces error cleanly when update check returns HTTP error', async () => {
@@ -1080,7 +884,7 @@ describe('ApplianceSection Component', () => {
                 return Promise.resolve({
                     ok: false,
                     status: 401,
-                    json: () => Promise.resolve({ error: 'Invalid password' }),
+                    json: () => Promise.resolve({ error: "Wrong or missing token for this node — check it under the node's settings." }),
                 });
             }
             return Promise.resolve({
@@ -1115,7 +919,7 @@ describe('ApplianceSection Component', () => {
             fireEvent.click(checkBtn);
         });
 
-        expect(screen.getByText(/Update check failed: Invalid password/i)).toBeInTheDocument();
+        expect(screen.getByText(/Update check failed: Wrong or missing token for this node/i)).toBeInTheDocument();
         expect(screen.queryByText(/✓ Up to date/i)).not.toBeInTheDocument();
     });
 
@@ -1162,91 +966,12 @@ describe('ApplianceSection Component', () => {
         expect(confirmSpy).not.toHaveBeenCalled();
     });
 
-    it('stores issued 2FA session token upon successful 2FA verification to prevent lockout', async () => {
-        const setTokenSpy = vi.spyOn(nodeClient, 'setTfaSessionToken');
-        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-            if (url.includes('/api/local/admin/2fa/setup')) {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({
-                        qrDataUrl: 'data:image/png;base64,mockqr',
-                        secret: 'JBSWY3DPEHPK3PXP',
-                    }),
-                });
-            }
-            if (url.includes('/api/local/admin/2fa/verify')) {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({
-                        success: true,
-                        totpEnabled: true,
-                        tfaSessionToken: 'mock-tfa-session-token-12345',
-                    }),
-                });
-            }
-            if (url.includes('/api/local/admin/2fa/status')) {
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({ success: true, totpEnabled: false }),
-                });
-            }
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ connectors: [] }),
-            });
-        }));
-
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
-
-        // Click setup button to show the verify input
-        const setupBtn = screen.getByRole('button', { name: /setup 2fa authenticator/i });
-        await act(async () => {
-            fireEvent.click(setupBtn);
-        });
-
-        // Enter totp code
-        const codeInput = screen.getByPlaceholderText('Enter 6-digit code to verify');
-        fireEvent.change(codeInput, { target: { value: '123456' } });
-
-        const verifyBtn = screen.getByRole('button', { name: /verify & enable/i });
-        await act(async () => {
-            fireEvent.click(verifyBtn);
-        });
-
-        expect(setTokenSpy).toHaveBeenCalledWith(mockProfile.id, 'mock-tfa-session-token-12345');
-        // Held in memory, and never written to the origin's web storage (Fable's web review, M1). Until 2026-10-01 this
-        // asserted it WAS in sessionStorage.
-        expect(nodeClient.getTfaSessionToken(mockProfile.id)).toBe('mock-tfa-session-token-12345');
-        expect(sessionStorage.getItem('bp-2fa-session')).toBeNull();
-        expect(sessionStorage.getItem(`bp_tfa_session_${mockProfile.id}`)).toBeNull();
-    });
-
     it('remounts NodeIdentityPanel when activeNode changes in identity subtab', async () => {
         const otherNode: NodeProfile = {
             id: 'node-2',
             name: 'Second Node',
             url: 'https://node-2.local',
-            adminPassword: 'node-2-password',
+            automationToken: 'node-2-password',
         };
 
         const { rerender } = render(
@@ -1533,8 +1258,7 @@ describe('ApplianceSection Component', () => {
 
         expect(nodeClient.fetchStorageCleanPreview).toHaveBeenCalledWith(
             mockProfile.url,
-            mockProfile.adminPassword,
-            undefined
+            mockProfile.automationToken
         );
 
         // Preview should show item counts and sizes
@@ -1551,8 +1275,7 @@ describe('ApplianceSection Component', () => {
 
         expect(nodeClient.cleanStorageAndCompressLogs).toHaveBeenCalledWith(
             mockProfile.url,
-            mockProfile.adminPassword,
-            undefined
+            mockProfile.automationToken
         );
         expect(screen.getByText(/Cleanup Complete!/i)).toBeInTheDocument();
         expect(screen.getByText(/Successfully reclaimed/i)).toBeInTheDocument();

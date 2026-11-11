@@ -50,7 +50,6 @@ describe('useClaimState hook', () => {
             kind: 'unclaimed',
             codeId: '12345678',
             communityName: 'Test Community',
-            password: true,
             primaryAddress: null,
             address: null,
             addresses: [],
@@ -72,7 +71,6 @@ describe('useClaimState hook', () => {
             kind: 'unclaimed',
             codeId: '12345678',
             communityName: 'Test Community',
-            password: true,
             primaryAddress: 'https://community.example.com',
             address: 'https://community.example.com',
             addresses: ['https://community.example.com', 'https://alt.example.com'],
@@ -87,7 +85,6 @@ describe('useClaimState hook', () => {
                 kind: 'unclaimed',
                 codeId: '12345678',
                 communityName: 'Test',
-                password: true,
                 primaryAddress: null,
                 address: null,
                 addresses: [],
@@ -96,7 +93,6 @@ describe('useClaimState hook', () => {
                 kind: 'unclaimed',
                 codeId: '12345678',
                 communityName: 'Test',
-                password: true,
                 primaryAddress: null,
                 address: null,
                 addresses: [],
@@ -139,30 +135,30 @@ describe('useClaimState hook', () => {
         vi.useFakeTimers();
 
         fetchClaimStateMock
-            .mockResolvedValueOnce({ kind: 'claimed', password: false, retired: false, standby: true })
-            .mockResolvedValueOnce({ kind: 'claimed', password: false, retired: false, standby: true })
-            .mockResolvedValueOnce({ kind: 'claimed', password: false, retired: false });
+            .mockResolvedValueOnce({ kind: 'claimed', standby: true })
+            .mockResolvedValueOnce({ kind: 'claimed', standby: true })
+            .mockResolvedValueOnce({ kind: 'claimed' });
 
         const { result } = renderHook(() => useClaimState('https://example.com/api/local/claim'));
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(0);
         });
-        expect(result.current).toEqual({ kind: 'claimed', password: false, retired: false, standby: true });
+        expect(result.current).toEqual({ kind: 'claimed', standby: true });
         expect(fetchClaimStateMock).toHaveBeenCalledTimes(1);
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(nodeClaim.CLAIM_POLL_MS);
         });
         expect(fetchClaimStateMock).toHaveBeenCalledTimes(2);
-        expect(result.current).toEqual({ kind: 'claimed', password: false, retired: false, standby: true });
+        expect(result.current).toEqual({ kind: 'claimed', standby: true });
 
         // An owner made themselves one on the standby's shell (beanpool recover): the flag is gone, so the note goes
         await act(async () => {
             await vi.advanceTimersByTimeAsync(nodeClaim.CLAIM_POLL_MS);
         });
         expect(fetchClaimStateMock).toHaveBeenCalledTimes(3);
-        expect(result.current).toEqual({ kind: 'claimed', password: false, retired: false });
+        expect(result.current).toEqual({ kind: 'claimed' });
 
         await act(async () => {
             await vi.advanceTimersByTimeAsync(nodeClaim.CLAIM_POLL_MS * 3);
@@ -179,7 +175,6 @@ describe('useClaimState hook', () => {
             kind: 'unclaimed',
             codeId: '12345678',
             communityName: 'Test',
-            password: true,
             primaryAddress: null,
             address: null,
             addresses: [],

@@ -10,11 +10,13 @@ import { PICKED_PHOTO, pickOfferPhoto } from '../common/__tests__/offer-photo-he
 // jsdom decodes no pictures: a picked photo comes back as PICKED_PHOTO (offer-photo-helpers).
 vi.mock('../../lib/photo-resize', () => ({ resizePhotoFile: vi.fn(async () => 'data:image/jpeg;base64,cmVzaXplZA==') }));
 
+// A real automation token's shape (bp_ + 12 hex + _ + 64 hex): only this travels as a Bearer.
+const TOKEN = `bp_${'a'.repeat(12)}_${'b'.repeat(64)}`;
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Fresh Sovereign Node',
     url: 'https://mullum.local',
-    adminPassword: 'admin-password',
+    automationToken: TOKEN,
 };
 
 const mockDiag = {
@@ -50,17 +52,6 @@ function stubNode(routes: Record<string, Reply | ((init?: RequestInit) => Reply)
     const defaults: Record<string, Reply | ((init?: RequestInit) => Reply)> = {
         '/api/community/health': { status: 200, body: { ok: true } },
         '/api/local/update-identity': { status: 200, body: { success: true } },
-        '/api/local/admin/2fa/status': { status: 200, body: { success: true, totpEnabled: false } },
-        '/api/local/admin/2fa/setup': {
-            status: 200,
-            body: {
-                success: true,
-                secret: 'JBSWY3DPEHPK3PXP',
-                formattedSecret: 'JBSW Y3DP EHPK 3PXP',
-                qrDataUrl: 'data:image/png;base64,AAAA',
-                backupCodes: ['aaaa-1111', 'bbbb-2222'],
-            },
-        },
         ...routes,
     };
     const fn = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
@@ -125,7 +116,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         // Step 1: Name & check
         expect(screen.getByText('Step 1: Name & Check Your Server')).toBeInTheDocument();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
         expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/api/community/health'));
         expect(global.fetch).toHaveBeenCalledWith(
@@ -134,15 +125,15 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
                 method: 'POST',
                 // The name alone: the callsign stays as stored, never one the owner didn't choose (#1935 finding 1).
                 body: JSON.stringify({
-                    password: 'admin-password',
                     communityName: 'Mullumbimby Commons',
                 }),
             })
         );
 
-        // Step 2: 2FA is not on; moving on is never blocked
-        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
-        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
+        // Step 2: Owners. Nothing to set up here (a node has no 2FA), and moving on is never blocked.
+        expect(screen.getByText(/Step 2: Owners/i)).toBeInTheDocument();
+        expect(screen.getByTestId('admin-key-owner-card')).toBeInTheDocument();
+        expect(screen.queryByText(/2FA/)).not.toBeInTheDocument();
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
 
         // Step 3: Create First Enterprise from Preset & First Offer
@@ -157,7 +148,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         expect(nodeClient.createNodeTreasury).toHaveBeenCalled();
         expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
-            mockProfile.url, 'treasury_pk_first', 'owner_pk_1', mockProfile.adminPassword, undefined
+            mockProfile.url, 'treasury_pk_first', 'owner_pk_1', mockProfile.automationToken
         );
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalled();
 
@@ -178,7 +169,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByText('Founding Invite #3')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Print Founding Cards/i })).toBeInTheDocument();
 
-        // Steps that really happened carry ✓; 2FA was skipped, so step 2 does not.
+        // Steps that really happened carry ✓; this session is not an owner's key, so step 2 has nothing done and does not.
         expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('✓');
         expect(screen.getByTestId('wizard-step-2')).toHaveTextContent('⚠');
         expect(screen.getByTestId('wizard-step-2')).not.toHaveTextContent('✓');
@@ -196,7 +187,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
     /** Walks steps 1–4 with the default mocks and lands on step 5. */
     async function goToStep5(onComplete = vi.fn()) {
         await renderWizard({ onComplete });
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
         await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
@@ -206,14 +197,14 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
     }
 
     it("step 5: when the node refuses, shows its reason and no code, QR or print button — and setup can still finish", async () => {
-        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error('Invalid password'));
+        vi.mocked(nodeClient.generateNodeInvite).mockRejectedValue(new Error("Wrong or missing token for this node — check it under the node's settings."));
         const onComplete = await goToStep5();
 
         await click(screen.getByRole('button', { name: /Generate 3 Founding Invites/i }));
 
         const alert = screen.getByRole('alert');
         expect(alert).toHaveTextContent('No founding invites were made');
-        expect(alert).toHaveTextContent('Invalid password');
+        expect(alert).toHaveTextContent("Wrong or missing token for this node — check it under the node's settings.");
         // Stopped at the first refusal.
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledTimes(1);
 
@@ -276,7 +267,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         const box = screen.getByLabelText('Community Name') as HTMLInputElement;
         expect(box.value).toBe('');
         expect(box.required).toBe(true);
-        const next = screen.getByRole('button', { name: /Next: Owner & 2FA/i }) as HTMLButtonElement;
+        const next = screen.getByRole('button', { name: /Next: Owners/i }) as HTMLButtonElement;
         expect(next.disabled).toBe(true);
         await click(next);
         const identityCalls = () => (global.fetch as any).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/local/update-identity'));
@@ -286,7 +277,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(next.disabled).toBe(false);
         await click(next);
         expect(identityCalls()).toHaveLength(1);
-        expect(JSON.parse(identityCalls()[0][1].body)).toEqual({ password: 'admin-password', communityName: 'Riverbend Commons' });
+        expect(JSON.parse(identityCalls()[0][1].body)).toEqual({ communityName: 'Riverbend Commons' });
     });
 
     it('step 1: a failed Verify Reachable says so plainly, with what to check, and shows no ✓', async () => {
@@ -307,7 +298,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         stubNode({ '/api/community/health': () => (healthy ? { status: 200 } : null) });
         await renderWizard();
 
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
         // Did not move on.
         expect(screen.getByText('Step 1: Name & Check Your Server')).toBeInTheDocument();
@@ -319,7 +310,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         // No hard gate: Continue anyway moves on, and step 1 is marked unfinished, not done.
         await click(screen.getByRole('button', { name: /Continue anyway/i }));
-        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
+        expect(screen.getByText(/Step 2: Owners/i)).toBeInTheDocument();
         expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('⚠');
         expect(screen.getByTestId('wizard-step-1')).not.toHaveTextContent('✓');
 
@@ -327,7 +318,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await click(screen.getByRole('button', { name: /← Back/ }));
         healthy = true;
         await click(screen.getByRole('button', { name: 'Retry' }));
-        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
+        expect(screen.getByText(/Step 2: Owners/i)).toBeInTheDocument();
         expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('✓');
     });
 
@@ -335,7 +326,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         stubNode({ '/api/local/update-identity': { status: 403, body: { error: 'Only an owner or admin of this node can change its name, place or contact details' } } });
         await renderWizard();
 
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
         expect(screen.getByText('Step 1: Name & Check Your Server')).toBeInTheDocument();
         expect(screen.getByRole('alert')).toHaveTextContent('Your community name was not saved');
@@ -344,73 +335,74 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('⚠');
     });
 
-    it('step 2: no made-up recovery material and no pairing QR; the owner link is the app\'s Manage button', async () => {
+    it('step 2: no made-up recovery material and no pairing QR; an owner adds the owners under Owners & admins', async () => {
         await renderWizard();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
         expect(document.body.textContent).not.toMatch(/BP-RECOVERY/);
         expect(document.body.textContent).not.toMatch(/emergency seed/i);
         expect(screen.queryByAltText(/Pair Owner QR/i)).not.toBeInTheDocument();
         expect(document.body.innerHTML).not.toContain('pair-owner');
-        expect(screen.getByText(/Owners & admins/)).toBeInTheDocument();
-        expect(screen.getByText(/Manage Mullumbimby Commons/)).toBeInTheDocument();
-        // With 2FA off there are no backup codes, so there is no kit to download.
+        expect(screen.getByTestId('admin-key-owner-card')).toHaveTextContent('People & Safety → Owners & admins');
+        // There is no 2FA set-up, so there are no backup codes and no recovery kit to download.
         expect(screen.queryByRole('button', { name: /Recovery Kit/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Set up 2FA/i })).not.toBeInTheDocument();
     });
 
-    // Since claim stages A/B the installer's phone claims the node and is its owner; keys never need the 2FA code.
-    it('step 2 under an owner key session: "You are the owner.", a second owner soon, no 2FA setup and no password how-to', async () => {
+    // Since claim stages A/B the installer's phone claims the node and is its owner.
+    it('step 2 under an owner key session: "You are the owner.", a second owner soon, no 2FA and no admin card', async () => {
         await renderWizard({ keySession: { memberPubkey: 'owner_pk', role: 'owner' } });
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
         expect(screen.getByText('You are the owner.')).toBeInTheDocument();
         expect(screen.getByText(
             'Add a second owner soon: if this phone is lost, a second owner can still manage the community.'
         )).toBeInTheDocument();
         expect(screen.getByTestId('owner-key-owner-card')).toHaveTextContent('People & Safety → Owners & admins');
-        expect(screen.getByTestId('owner-key-no-2fa')).toHaveTextContent('Keys do not need the 2FA code');
+        expect(screen.queryByTestId('admin-key-owner-card')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('owner-key-no-2fa')).not.toBeInTheDocument();
 
-        // The password holder's how-to is gone.
+        // The older how-to is gone.
         expect(screen.queryByText(/Your phone as owner/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/admin password is the only way/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/admin password/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/Manage Mullumbimby Commons/)).not.toBeInTheDocument();
-        // Not pushed through 2FA: no setup button, no status line, and the node is never asked.
-        expect(screen.queryByRole('button', { name: 'Set up 2FA' })).not.toBeInTheDocument();
-        expect(screen.queryByText(/2FA is not on yet/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/Checking whether 2FA is on/)).not.toBeInTheDocument();
-        expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/2fa/'), expect.anything());
+        expect(screen.queryByText(/2FA/)).not.toBeInTheDocument();
 
         // Nothing is left to do in step 2, so moving on marks it ✓, not ⚠.
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
         expect(screen.getByTestId('wizard-step-2')).toHaveTextContent('✓');
     });
 
-    it('step 2 under a password session keeps today\'s text: the phone-as-owner how-to and 2FA setup', async () => {
+    it('step 2 with no key session (a token) says an owner adds the owners; no phone-as-owner how-to, no admin password, no 2FA', async () => {
         await renderWizard({ keySession: null });
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
-        expect(screen.getByText('Your phone as owner')).toBeInTheDocument();
-        expect(screen.getByText(/Right now the admin password is the only way into these settings/)).toBeInTheDocument();
-        expect(screen.getByText(/Manage Mullumbimby Commons/)).toBeInTheDocument();
-        expect(screen.getByText(/Keep at least two owners/)).toBeInTheDocument();
-        expect(screen.getByText(/Turn on two-factor sign-in for these settings/)).toBeInTheDocument();
-        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Set up 2FA' })).toBeInTheDocument();
+        const card = screen.getByTestId('admin-key-owner-card');
+        expect(card).toHaveTextContent('An owner of this community adds the owners.');
+        expect(card).toHaveTextContent('People & Safety → Owners & admins');
+        expect(card).toHaveTextContent('Keep at least two owners');
+        expect(screen.queryByText('Your phone as owner')).not.toBeInTheDocument();
+        expect(screen.queryByText(/admin password/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Manage Mullumbimby Commons/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/2FA/)).not.toBeInTheDocument();
         expect(screen.queryByText('You are the owner.')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('owner-key-no-2fa')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('owner-key-owner-card')).not.toBeInTheDocument();
+
+        // Nothing done in step 2 by this session: moving on marks it ⚠, never ✓.
+        await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        expect(screen.getByTestId('wizard-step-2')).toHaveTextContent('⚠');
+        expect(screen.getByTestId('wizard-step-2')).not.toHaveTextContent('✓');
     });
 
-    it('step 2 under an admin key session keeps today\'s text, never "You are the owner."', async () => {
+    it('step 2 under an admin key session points to the owners, never "You are the owner."', async () => {
         await renderWizard({ keySession: { memberPubkey: 'admin_pk', role: 'admin' } });
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
 
-        expect(screen.getByText('Your phone as owner')).toBeInTheDocument();
-        expect(screen.getByText(/Right now the admin password is the only way into these settings/)).toBeInTheDocument();
-        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Set up 2FA' })).toBeInTheDocument();
+        expect(screen.getByTestId('admin-key-owner-card')).toHaveTextContent('An owner of this community adds the owners.');
         expect(screen.queryByText('You are the owner.')).not.toBeInTheDocument();
         expect(screen.queryByText(/Add a second owner soon/)).not.toBeInTheDocument();
-        expect(screen.queryByTestId('owner-key-no-2fa')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('owner-key-owner-card')).not.toBeInTheDocument();
+        expect(screen.queryByText(/2FA/)).not.toBeInTheDocument();
     });
 
     it('the wizard source carries no BP-RECOVERY seed, emergency seed or pair-owner link', () => {
@@ -420,148 +412,22 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(src).not.toMatch(/pair-owner/);
     });
 
-    it('step 2: 2FA shows "on" only after the node accepts a code, then the kit holds the real backup codes', async () => {
-        let verifyCalls = 0;
-        // Like a real node: 2FA status reads off until a code is confirmed, and on from then on.
-        let nodeTfaOn = false;
-        const statusAnswers: boolean[] = [];
-        stubNode({
-            '/api/local/admin/2fa/status': () => {
-                statusAnswers.push(nodeTfaOn);
-                return { status: 200, body: { success: true, totpEnabled: nodeTfaOn } };
-            },
-            '/api/local/admin/2fa/verify': (init) => {
-                verifyCalls++;
-                const { code } = JSON.parse(String(init?.body));
-                if (code !== '654321') {
-                    return { status: 400, body: { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' } };
-                }
-                nodeTfaOn = true;
-                return { status: 200, body: { success: true, totpEnabled: true, tfaSessionToken: 'tfa-fresh' } };
-            },
-        });
-        vi.spyOn(nodeClient, 'setTfaSessionToken');
-        await renderWizard();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-
-        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
-        await click(screen.getByRole('button', { name: 'Set up 2FA' }));
-        expect(screen.getByAltText('Authenticator setup QR')).toBeInTheDocument();
-        expect(screen.getByText('JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
-        // A secret on screen is not 2FA on.
-        expect(screen.queryByText(/2FA is on/)).not.toBeInTheDocument();
-        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
-        // Backup codes are pending until verified: not shown yet.
-        expect(screen.queryByText('aaaa-1111')).not.toBeInTheDocument();
-
-        // A wrong code: still not on, and the node's reason shows.
-        fireEvent.change(screen.getByLabelText('Code from your authenticator'), { target: { value: '000000' } });
-        await click(screen.getByRole('button', { name: 'Turn on 2FA' }));
-        expect(verifyCalls).toBe(1);
-        expect(screen.queryByText(/2FA is on/)).not.toBeInTheDocument();
-        expect(screen.getByRole('alert')).toHaveTextContent('Invalid 6-digit 2FA code');
-
-        // The right code: the node confirms, and only now does the wizard say on.
-        fireEvent.change(screen.getByLabelText('Code from your authenticator'), { target: { value: '654321' } });
-        await click(screen.getByRole('button', { name: 'Turn on 2FA' }));
-        expect(screen.getByText(/✓ 2FA is on/)).toBeInTheDocument();
-        expect(nodeClient.setTfaSessionToken).toHaveBeenCalledWith('test-node', 'tfa-fresh');
-        // The new 2FA session re-read the status, and the node now says on. That must not make it "already on"
-        // or hide the codes, which the node cannot show again.
-        expect(statusAnswers).toEqual([false, true]);
-        expect(screen.getByText(/You turned it on here/)).toBeInTheDocument();
-        expect(screen.queryByText(/already on/)).not.toBeInTheDocument();
-        expect(screen.getByText('aaaa-1111')).toBeInTheDocument();
-        expect(screen.getByText('bbbb-2222')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Download Recovery Kit/i })).toBeInTheDocument();
-
-        // The kit lists only real things: the address and the node's backup codes.
-        let kitText = '';
-        const OrigBlob = globalThis.Blob;
-        vi.stubGlobal('Blob', class extends OrigBlob {
-            constructor(parts: BlobPart[], opts?: BlobPropertyBag) {
-                super(parts, opts);
-                kitText = parts.map(String).join('');
-            }
-        });
-        await click(screen.getByRole('button', { name: /Download Recovery Kit/i }));
-        vi.stubGlobal('Blob', OrigBlob);
-        expect(kitText).toContain('https://mullum.local');
-        expect(kitText).toContain('aaaa-1111');
-        expect(kitText).toContain('bbbb-2222');
-        expect(kitText).not.toMatch(/BP-RECOVERY|Emergency Seed|JBSWY3DPEHPK3PXP/);
-        expect(screen.getByText(/Recovery kit downloaded/i)).toBeInTheDocument();
-
-        // Later calls carry the fresh 2FA session.
-        await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
-        await pickOfferPhoto();
-        await click(screen.getByRole('button', { name: /Next: The Commons/i }));
-        expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
-            mockProfile.url, expect.any(Object), mockProfile.adminPassword, 'tfa-fresh'
-        );
-        expect(screen.getByTestId('wizard-step-2')).toHaveTextContent('✓');
-    });
-
-    it('step 2: when the node refuses 2FA setup, says 2FA is not on and offers Access & Security', async () => {
-        stubNode({ '/api/local/admin/2fa/setup': { status: 403, body: { error: 'Only an owner of this node can set up 2FA' } } });
-        const onOpenAccessSecurity = vi.fn();
-        await renderWizard({ onOpenAccessSecurity });
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-
-        await click(screen.getByRole('button', { name: 'Set up 2FA' }));
-        expect(screen.getByRole('alert')).toHaveTextContent('2FA is not on. The node said: Only an owner of this node can set up 2FA');
-        expect(screen.queryByText(/2FA is on/)).not.toBeInTheDocument();
-
-        await click(screen.getByRole('button', { name: /Open Access & Security/i }));
-        expect(onOpenAccessSecurity).toHaveBeenCalledTimes(1);
-    });
-
-    it('step 2: 2FA the node reports as already on shows as on, without starting a new setup', async () => {
-        stubNode({ '/api/local/admin/2fa/status': { status: 401, body: { error: '2FA code required', totpRequired: true } } });
-        await renderWizard();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-
-        expect(screen.getByText(/✓ 2FA is on/)).toBeInTheDocument();
-        expect(screen.getByText(/already on/)).toBeInTheDocument();
-        // No codes were made here, so there is no kit.
-        expect(screen.queryByRole('button', { name: /Recovery Kit/i })).not.toBeInTheDocument();
-        expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/2fa/setup'), expect.anything());
-    });
-
-    it('step 2: while the status is being read it says so, never "not on yet"', async () => {
-        stubNode();
-        vi.mocked(global.fetch).mockImplementation(((url: string) =>
-            url.includes('/2fa/status')
-                ? new Promise(() => {})
-                : Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true }) })) as typeof fetch);
-        await renderWizard();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-
-        expect(screen.getByText('Checking whether 2FA is on...')).toBeInTheDocument();
-        expect(screen.queryByText('2FA is not on yet.')).not.toBeInTheDocument();
-    });
-
-    it("step 2: a status read that failed says it couldn't check, and Retry asks again", async () => {
-        let statusOk = false;
-        stubNode({
-            '/api/local/admin/2fa/status': () =>
-                statusOk ? { status: 200, body: { success: true, totpEnabled: false } } : { status: 502, body: {} },
-        });
-        await renderWizard();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-
-        expect(screen.getByText("Couldn't check whether 2FA is on.")).toBeInTheDocument();
-        expect(screen.queryByText('2FA is not on yet.')).not.toBeInTheDocument();
-
-        statusOk = true;
-        await click(screen.getByRole('button', { name: 'Retry' }));
-        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
-        expect(screen.queryByText("Couldn't check whether 2FA is on.")).not.toBeInTheDocument();
+    it('step 2, whoever signed in: the node is never asked about 2FA, nothing is set up, and no admin password or recovery kit is mentioned', async () => {
+        for (const keySession of [null, { memberPubkey: 'admin_pk', role: 'admin' as const }, { memberPubkey: 'owner_pk', role: 'owner' as const }]) {
+            vi.mocked(global.fetch).mockClear();
+            const view = await renderWizard({ keySession });
+            await click(screen.getByRole('button', { name: /Next: Owners/i }));
+            expect(screen.getByText(/Step 2: Owners/i)).toBeInTheDocument();
+            expect(vi.mocked(global.fetch).mock.calls.some((c: any[]) => String(c[0]).includes('/2fa/'))).toBe(false);
+            expect(screen.queryByRole('button', { name: /2FA|Recovery Kit|Open Access/i })).not.toBeInTheDocument();
+            expect(document.body.textContent).not.toMatch(/2FA|two-factor|authenticator|admin password|recovery kit/i);
+            view.unmount();
+        }
     });
 
     it('step 4 never claims a transfer: it moves no beans, asks for no amount, and calls nothing on the node', async () => {
         await renderWizard();
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
         await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
@@ -579,19 +445,15 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.queryByText(/beans (were )?(moved|added|seeded)/i)).not.toBeInTheDocument();
     });
 
-    it('forwards 2FA session token to identity, treasury, keeper, offer, and invite calls when tfaToken is provided', async () => {
-        await renderWizard({ tfaToken: 'tfa-wizard-token', nodeData: ownerNodeData });
+    it('sends the token as a Bearer to the identity save, and passes the credential, with no 2FA argument, to the treasury, keeper, offer and invite calls', async () => {
+        await renderWizard({ nodeData: ownerNodeData });
 
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/local/update-identity'),
-            expect.objectContaining({
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-password',
-                    'X-Admin-2FA-Session': 'tfa-wizard-token',
-                }),
-            })
-        );
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
+        const identity = (global.fetch as any).mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/update-identity'));
+        expect(identity[1].headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+        expect(identity[1].headers['X-Admin-Password']).toBeUndefined();
+        expect(identity[1].headers['X-Admin-2FA-Session']).toBeUndefined();
+        expect('password' in JSON.parse(identity[1].body)).toBe(false);
 
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
         await pickOfferPhoto();
@@ -601,24 +463,21 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
             expect.objectContaining({ workingCapitalCeiling_c: 25000 }),
-            mockProfile.adminPassword,
-            'tfa-wizard-token'
+            mockProfile.automationToken
         );
         expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0][1]).not.toHaveProperty('workingCapitalCeiling');
         expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_first',
             'owner_pk_1',
-            mockProfile.adminPassword,
-            'tfa-wizard-token'
+            mockProfile.automationToken
         );
         // The food preset's 15 Beans, as the node takes a price: `price_c`, whole hundredths, never the old `credits`.
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_first',
             expect.objectContaining({ photos: [PICKED_PHOTO], price_c: 1500 }),
-            mockProfile.adminPassword,
-            'tfa-wizard-token'
+            mockProfile.automationToken
         );
         expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).not.toHaveProperty('credits');
 
@@ -627,55 +486,8 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
             mockProfile.url,
-            mockProfile.adminPassword,
-            'trusted',
-            'tfa-wizard-token'
-        );
-    });
-
-    it('re-checks 2FA status and sets up 2FA with the latest effectiveTfaToken', async () => {
-        const { rerender } = await renderWizard({ tfaToken: 'tfa-initial' });
-
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/local/admin/2fa/status'),
-            expect.objectContaining({
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-password',
-                    'X-Admin-2FA-Session': 'tfa-initial',
-                }),
-            })
-        );
-
-        await act(async () => {
-            rerender(
-                <ColdStartWizard
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    nodeData={{ members: [] }}
-                    tfaToken="tfa-updated"
-                    onComplete={vi.fn()}
-                />
-            );
-        });
-
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/local/admin/2fa/status'),
-            expect.objectContaining({
-                headers: expect.objectContaining({ 'X-Admin-2FA-Session': 'tfa-updated' }),
-            })
-        );
-
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-        await click(screen.getByRole('button', { name: 'Set up 2FA' }));
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/api/local/admin/2fa/setup'),
-            expect.objectContaining({
-                method: 'POST',
-                headers: expect.objectContaining({
-                    'X-Admin-Password': 'admin-password',
-                    'X-Admin-2FA-Session': 'tfa-updated',
-                }),
-            })
+            mockProfile.automationToken,
+            'trusted'
         );
     });
 
@@ -688,52 +500,35 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         });
         await renderWizard();
 
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
         expect(screen.getByRole('alert')).toHaveTextContent('database is locked');
         expect(screen.getByText(/Your server answered/)).toBeInTheDocument();
 
         await click(screen.getByRole('button', { name: 'Retry' }));
         expect(saves).toBe(2);
-        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
+        expect(screen.getByText(/Step 2: Owners/i)).toBeInTheDocument();
         expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('✓');
         expect(screen.getByTestId('wizard-step-1')).not.toHaveTextContent('⚠');
     });
 
-    it('step 1: with 2FA on and no 2FA session, asks for a code with the manager prompt and saves with it', async () => {
-        stubNode({
-            '/api/local/update-identity': (init) => {
-                const headers = (init?.headers || {}) as Record<string, string>;
-                return headers['X-Admin-2FA-Session'] === 'tfa-from-prompt'
-                    ? { status: 200, body: { success: true } }
-                    : { status: 401, body: { error: '2FA code required', totpRequired: true } };
-            },
-        });
-        const onRequestTfaCode = vi.fn().mockResolvedValue('tfa-from-prompt');
-        await renderWizard({ onRequestTfaCode });
+    it("step 1: a save the node refuses for the token is reported in the node's own words, with Retry; no 2FA prompt is offered", async () => {
+        const WRONG = "Wrong or missing token for this node — check it under the node's settings.";
+        stubNode({ '/api/local/update-identity': { status: 401, body: { error: WRONG } } });
+        await renderWizard();
 
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-        expect(screen.getByRole('alert')).toHaveTextContent('saving needs a code from your authenticator app');
-
-        await click(screen.getByRole('button', { name: 'Enter 2FA code' }));
-        expect(onRequestTfaCode).toHaveBeenCalledTimes(1);
-        expect(screen.getByText(/Step 2: Owner & Two-Factor Sign-In/i)).toBeInTheDocument();
-        expect(screen.getByTestId('wizard-step-1')).toHaveTextContent('✓');
-    });
-
-    it('step 1: cancelling the 2FA prompt leaves the step unfinished', async () => {
-        stubNode({ '/api/local/update-identity': { status: 401, body: { error: '2FA code required', totpRequired: true } } });
-        const onRequestTfaCode = vi.fn().mockRejectedValue(new Error('2FA_CANCELLED'));
-        await renderWizard({ onRequestTfaCode });
-
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
-        await click(screen.getByRole('button', { name: 'Enter 2FA code' }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
         expect(screen.getByText('Step 1: Name & Check Your Server')).toBeInTheDocument();
         expect(screen.getByRole('alert')).toHaveTextContent('Your community name was not saved');
+        expect(screen.getByRole('alert')).toHaveTextContent(WRONG);
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /2FA/ })).not.toBeInTheDocument();
+        expect(screen.queryByText(/authenticator/i)).not.toBeInTheDocument();
+        expect(screen.getByTestId('wizard-step-1')).not.toHaveTextContent('✓');
     });
 
     async function goToStep3(props: Partial<React.ComponentProps<typeof ColdStartWizard>> = {}) {
         await renderWizard(props);
-        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+        await click(screen.getByRole('button', { name: /Next: Owners/i }));
         await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
         expect(screen.getByText(/Step 3: Establish First Community Enterprise/i)).toBeInTheDocument();
     }

@@ -9,9 +9,11 @@ const sampleNode = {
     id: 'node-1',
     name: 'Primary Node',
     url: 'https://primary.beanpool.org',
-    adminPassword: 'pass123',
     status: 'online' as const,
 };
+
+/** An owner automation token (bp_ + 12 hex + _ + 64 hex): a profile's one credential. */
+const TOKEN = `bp_${'c3'.repeat(6)}_${'9d'.repeat(32)}`;
 
 describe('EditNodeModal', () => {
     it('renders input fields pre-populated with node profile data', () => {
@@ -22,10 +24,11 @@ describe('EditNodeModal', () => {
         expect(screen.getByText('Configure Node Credentials')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Primary Node')).toBeInTheDocument();
         expect(screen.getByDisplayValue('https://primary.beanpool.org')).toBeInTheDocument();
-        // The memory-held password is not shown, and there is no field to type one into: a profile's credential is its token.
-        expect(screen.queryByDisplayValue('pass123')).toBeNull();
+        // There is no field to type a password into: a profile's credential is its token.
         expect(screen.queryByText(/Admin Password/i)).toBeNull();
+        expect(screen.queryByPlaceholderText(/password/i)).toBeNull();
         expect(screen.getByLabelText('Automation token')).toBeInTheDocument();
+        expect(screen.getByLabelText('Automation token')).toHaveDisplayValue('');
     });
 
     it('calls onClose when close icon or cancel button is clicked', async () => {
@@ -40,7 +43,7 @@ describe('EditNodeModal', () => {
         expect(handleClose).toHaveBeenCalledTimes(2);
     });
 
-    it('submits updated values when save button is clicked, leaving a password held for this page alone', async () => {
+    it('submits updated values when save button is clicked, with no token when none was typed', async () => {
         const handleClose = vi.fn();
         const handleSave = vi.fn();
         render(<EditNodeModal node={sampleNode} onClose={handleClose} onSave={handleSave} />);
@@ -63,18 +66,33 @@ describe('EditNodeModal', () => {
         expect(handleClose).toHaveBeenCalledTimes(1);
     });
 
-    it('tests connection successfully when test button is clicked', async () => {
+    it('tests connection successfully when test button is clicked, sending the profile\'s token', async () => {
         const fetchDiagSpy = vi.spyOn(nodeClient, 'fetchDiagnostics').mockResolvedValueOnce({
             status: 'ok',
             communityName: 'Test Community',
         } as any);
 
-        render(<EditNodeModal node={sampleNode} onClose={vi.fn()} onSave={vi.fn()} />);
+        render(<EditNodeModal node={{ ...sampleNode, automationToken: TOKEN }} onClose={vi.fn()} onSave={vi.fn()} />);
 
         await userEvent.click(screen.getByText('⚡ Test Connection'));
 
-        expect(fetchDiagSpy).toHaveBeenCalledWith('https://primary.beanpool.org', 'pass123');
+        expect(fetchDiagSpy).toHaveBeenCalledWith('https://primary.beanpool.org', TOKEN);
         expect(await screen.findByText(/✅ Connection OK! Status: OK \(Test Community\)/)).toBeInTheDocument();
+    });
+
+    it('tests connection with no credential when the profile has no token, whatever else the object carries', async () => {
+        const fetchDiagSpy = vi.spyOn(nodeClient, 'fetchDiagnostics').mockResolvedValueOnce({
+            status: 'ok',
+            communityName: 'Test Community',
+        } as any);
+
+        // A profile object from before the password was removed may still carry one; it is never taken as a credential.
+        render(<EditNodeModal node={{ ...sampleNode, adminPassword: 'pass123' } as never} onClose={vi.fn()} onSave={vi.fn()} />);
+
+        await userEvent.click(screen.getByText('⚡ Test Connection'));
+
+        expect(fetchDiagSpy).toHaveBeenCalledWith('https://primary.beanpool.org', undefined);
+        expect(await screen.findByText(/✅ Connection OK!/)).toBeInTheDocument();
     });
 
     it('displays error status when test connection fails', async () => {

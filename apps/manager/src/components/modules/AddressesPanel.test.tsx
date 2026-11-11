@@ -11,7 +11,7 @@ const mockActiveNode: NodeProfile = {
     id: 'local-node',
     name: 'Byron Node',
     url: 'http://localhost:8080',
-    adminPassword: 'test-password',
+    automationToken: 'test-token',
 };
 
 const mockReport = {
@@ -802,7 +802,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         render(<AddressesPanel activeNode={mockActiveNode} />);
         fireEvent.click(await screen.findByTestId('make-main-btn-mullum.beanpool.org'));
         await waitFor(() => expect(posts).toHaveLength(1));
-        expect(posts[0].body).toEqual({ password: 'test-password', name: 'mullum', mode: 'tunnel' });
+        expect(posts[0].body).toEqual({ name: 'mullum', mode: 'tunnel' });
         expect(await screen.findByText('mullum.beanpool.org is now the main address.')).toBeInTheDocument();
     });
 
@@ -1050,7 +1050,7 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
             expect(posts).toHaveLength(1);
             expect(posts[0].body.name).toBe('byron-bay');
             expect(posts[0].body.mode).toBe('tunnel');
-            expect(posts[0].body.password).toBe('test-password');
+            expect(posts[0].body).not.toHaveProperty('password');
         });
     });
 

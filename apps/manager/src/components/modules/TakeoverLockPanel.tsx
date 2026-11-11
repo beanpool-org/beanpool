@@ -5,7 +5,6 @@ import {
     fetchBackupLock,
     makeRecoveryCode,
     checkRecoveryCodeApi,
-    getTfaSessionToken,
     type TakeoverStatus,
     type BackupLockStatus,
     type MadeRecoveryCode,
@@ -18,7 +17,7 @@ import { nodeCredential } from '../../lib/profiles';
 /**
  * "Who can unlock this community" — the take-over lock and the printed recovery code (sealed-keys.md §2.6, §3, §4,
  * §7, §9; slice 2b). Everyone signed in sees who the take-over keys are locked to and whether backups are locked;
- * owners (and the admin password, which is owner level) can make, replace and check the recovery code.
+ * owners can make, replace and check the recovery code.
  *
  * The code is shown ONCE. It lives in this component's state and nowhere else — never localStorage, sessionStorage,
  * IndexedDB, a log or another request — and is dropped the moment its card closes, or the node changes.
@@ -93,8 +92,8 @@ const PRINT_CSS = `
   [data-print-hide] { display: none !important; }
 }`;
 
-export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, communityName }: TakeoverLockPanelProps) {
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+export function TakeoverLockPanel({ activeNode, viewer = { kind: 'token' }, communityName }: TakeoverLockPanelProps) {
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
 
     const [status, setStatus] = useState<TakeoverStatus | null>(null);
     const [statusError, setStatusError] = useState<string | null>(null);
@@ -117,16 +116,15 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
 
     const load = useCallback(async () => {
         setLoading(true);
-        const tfa = getTfaSessionToken(activeNode.id);
         try {
-            setStatus(await fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode), tfa));
+            setStatus(await fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode)));
             setStatusError(null);
         } catch (e) {
             setStatus(null);
             setStatusError(`Could not read who can unlock this community: ${e instanceof Error ? e.message : 'the node did not answer'}.`);
         }
         try {
-            setBackupLock((await fetchBackupLock(activeNode.url, nodeCredential(activeNode), tfa)) ?? 'unknown');
+            setBackupLock((await fetchBackupLock(activeNode.url, nodeCredential(activeNode))) ?? 'unknown');
         } catch {
             setBackupLock('unknown');
         } finally {
@@ -167,7 +165,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         setMaking(true);
         setActionError(null);
         try {
-            const made = await makeRecoveryCode(activeNode.url, replace, nodeCredential(activeNode), getTfaSessionToken(activeNode.id), code);
+            const made = await makeRecoveryCode(activeNode.url, replace, nodeCredential(activeNode), code);
             if (nodeIdRef.current !== forNode) return;
             proof.close();
             setConfirmReplace(false);
@@ -175,7 +173,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
             setWrittenDown(false);
             setStatus(made.status);
             setStatusError(null);
-            fetchBackupLock(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
+            fetchBackupLock(activeNode.url, nodeCredential(activeNode))
                 .then((l) => setBackupLock(l ?? 'unknown'))
                 .catch(() => setBackupLock('unknown'));
         } catch (e) {
@@ -195,7 +193,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         setChecking(true);
         setCheckResult(null);
         try {
-            const r = await checkRecoveryCodeApi(activeNode.url, typed, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const r = await checkRecoveryCodeApi(activeNode.url, typed, nodeCredential(activeNode));
             if (r.typo) setCheckResult({ ok: false, text: r.message || 'That is not a recovery code: check what you typed.' });
             else if (r.matches) setCheckResult({ ok: true, text: `Yes — this is recovery code #${r.codeId}. Your paper is right.` });
             else setCheckResult({ ok: false, text: `No — this does not match recovery code #${r.codeId ?? status?.recoveryCode?.codeId ?? '?'}.` });

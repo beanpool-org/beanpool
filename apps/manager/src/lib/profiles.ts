@@ -4,13 +4,10 @@ export interface NodeProfile {
     id: string;
     name: string;
     url: string;
-    /** Fleet mode only, and in memory only (heldCredentials): never written to localStorage. */
-    adminPassword?: string;
-    /** Same: memory only. */
-    replicationToken?: string;
     /**
-     * An owner automation token (bp_<id>_<secret>, made in Settings from an owner's phone), memory only like the password.
-     * When set it is the profile's only credential: requests carry it as a bearer and never the password (nodeCredential).
+     * An owner automation token (bp_<id>_<secret>, made in Settings from an owner's phone). Fleet mode only, and in
+     * memory only (heldCredentials): never written to localStorage. It is the profile's only credential: requests carry
+     * it as a bearer (nodeCredential).
      */
     automationToken?: string;
     isPrimary?: boolean;
@@ -19,19 +16,19 @@ export interface NodeProfile {
 const PROFILES_KEY = 'bp_fleet_profiles';
 
 /**
- * A profile's credentials, by profile id, for this page's lifetime. The profile list itself is kept in localStorage,
- * which on a node is the members' web app's origin too: a password stored there is one script away from that app
- * (Fable's web review, M1). So the list is saved without them, and read without them: whatever a stored list holds of
- * that kind is never taken as a credential, and the list is saved back without it on load (loadNodeProfiles). A reload
- * asks for them again.
+ * A profile's token, by profile id, for this page's lifetime. The profile list itself is kept in localStorage, which on
+ * a node is the members' web app's origin too: a token stored there is one script away from that app (Fable's web
+ * review, M1). So the list is saved without it, and read without it: whatever a stored list holds of that kind is never
+ * taken as a credential, and the list is saved back without it on load (loadNodeProfiles). A reload asks for it again.
  */
-const heldCredentials = new Map<string, { adminPassword?: string; replicationToken?: string; automationToken?: string }>();
+const heldCredentials = new Map<string, { automationToken?: string }>();
 
 function withoutCredentials(p: NodeProfile): NodeProfile {
     const copy = { ...p };
-    delete copy.adminPassword;
-    delete copy.replicationToken;
-    delete copy.automationToken;
+    delete (copy as Partial<NodeProfile>).automationToken;
+    // Whatever else a stored list holds of the credential kind (an old profile's secrets) is dropped too.
+    delete (copy as Record<string, unknown>)['adminPassword'];
+    delete (copy as Record<string, unknown>)['replicationToken'];
     return copy;
 }
 
@@ -100,8 +97,8 @@ export function saveActiveProfileId(id: string): void {
 
 export function saveNodeProfiles(profiles: NodeProfile[]): void {
     for (const p of profiles) {
-        if (p.adminPassword || p.replicationToken || p.automationToken) {
-            heldCredentials.set(p.id, { adminPassword: p.adminPassword, replicationToken: p.replicationToken, automationToken: p.automationToken });
+        if (p.automationToken) {
+            heldCredentials.set(p.id, { automationToken: p.automationToken });
         }
         else heldCredentials.delete(p.id);
     }
@@ -132,10 +129,7 @@ export function removeNodeProfile(id: string): void {
     saveNodeProfiles(profiles);
 }
 
-/**
- * The one credential a profile's requests carry: its automation token when it has one, else its password (a profile from
- * before tokens). Never both: node-client sends a token as a bearer and leaves the password out of headers and bodies.
- */
-export function nodeCredential(p: Pick<NodeProfile, 'adminPassword' | 'automationToken'> | null | undefined): string | undefined {
-    return p?.automationToken || p?.adminPassword || undefined;
+/** The one credential a profile's requests carry: its automation token, sent as a bearer (node-client buildAdminHeaders). */
+export function nodeCredential(p: Pick<NodeProfile, 'automationToken'> | null | undefined): string | undefined {
+    return p?.automationToken || undefined;
 }

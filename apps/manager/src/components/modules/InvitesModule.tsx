@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { fetchMyVouching, generateNodeInvite, getTfaSessionToken, type MyVouchingResponse } from '../../lib/node-client';
+import { fetchMyVouching, generateNodeInvite, type MyVouchingResponse } from '../../lib/node-client';
 import { generateOfflineQrUrl } from '../../lib/qr';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
@@ -62,8 +62,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
         let mounted = true;
         void fetchMyVouching(
             activeNode.url,
-            nodeCredential(activeNode),
-            activeNode ? getTfaSessionToken(activeNode.id) : undefined
+            nodeCredential(activeNode)
         ).then((res) => {
             if (mounted) {
                 setVouchData(res && res.voucher ? res : null);
@@ -109,14 +108,12 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                             activeNode.url,
                             nodeCredential(activeNode),
                             inviteTier,
-                            activeNode ? getTfaSessionToken(activeNode.id) : undefined,
                             selectedPreset
                         )
                         : await generateNodeInvite(
                             activeNode.url,
                             nodeCredential(activeNode),
-                            inviteTier,
-                            activeNode ? getTfaSessionToken(activeNode.id) : undefined
+                            inviteTier
                         );
                     code = res.code;
                     issuedVouchAmount = typeof res.vouchAmount === 'number' ? res.vouchAmount : undefined;
@@ -144,8 +141,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
             if (viewer?.kind === 'key' && (viewer.role === 'owner' || viewer.role === 'admin')) {
                 void fetchMyVouching(
                     activeNode.url,
-                    nodeCredential(activeNode),
-                    activeNode ? getTfaSessionToken(activeNode.id) : undefined
+                    nodeCredential(activeNode)
                 ).then((res) => {
                     if (res && res.voucher) setVouchData(res);
                 });

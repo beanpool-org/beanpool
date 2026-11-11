@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { fetchWebVisits, getTfaSessionToken, type WebVisitDay } from '../../lib/node-client';
+import { fetchWebVisits, type WebVisitDay } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 
 /**
@@ -100,7 +100,7 @@ export function WebVisitsCard({ node }: { node: NodeProfile }) {
         setSeries(null);
         setError(null);
         setSelected(null);
-        fetchWebVisits(node.url, nodeCredential(node), DAYS, getTfaSessionToken(node.id))
+        fetchWebVisits(node.url, nodeCredential(node), DAYS)
             .then((res) => { if (!cancelled) setSeries(Array.isArray(res?.series) ? res.series : []); })
             .catch((e) => { if (!cancelled) setError(e?.message || 'Could not reach this node'); });
         return () => { cancelled = true; };

@@ -6,7 +6,7 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 /** People & Safety → "Community health" (community modes slice 6): the totals, the two lines (an owner's), the access log. */
 
-const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
+const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', automationToken: 'pw' };
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
 const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
 const HEALTH = {

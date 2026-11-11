@@ -21,7 +21,7 @@ export const OWNER_PHONE_MESSAGE = "This needs an owner's phone: sign in with yo
 /** The server's code on a token's 403 (admin-auth.ts TOKEN_REFUSED_CODE). */
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';
 export const OWNER_PHONE_EVENT = 'bp:owner-phone-needed';
-/** What to do about a token the node refused (revoked, expired or wrong): never a password, which isn't sent. */
+/** What to do about a token the node refused (revoked, expired or wrong): nothing else is sent in its place. */
 export const TOKEN_REPLACE_ADVICE = 'Make a new token from your phone (Settings → Automation tokens)';
 const TOKEN_REFUSED_WORDS = 'The node refused this automation token';
 
@@ -33,7 +33,6 @@ const OWNER_ONLY_FOR_TOKENS: readonly RegExp[] = [
     // Refused to every token (isRefusedToEveryToken).
     /^\/api\/local\/admin\/auth(\/|$)/,
     /^\/api\/local\/admin\/automation-tokens/,
-    /^\/api\/local\/admin\/2fa\//,
     /^\/api\/local\/admin\/ws-ticket$/,
     /^\/api\/local\/admin\/csrf-token$/,
     // Owner-only whatever is asked (requireAdminRole(['owner']) or requirePhoneStepUp on every request). A route that is
@@ -45,7 +44,6 @@ const OWNER_ONLY_FOR_TOKENS: readonly RegExp[] = [
     /^\/api\/local\/admin\/takeover\/(recovery-code(\/check)?|open|confirm|cancel|phone\/(start|wait))$/,
     /^\/api\/local\/admin\/standby-health(\/forget)?$/,
     /^\/api\/local\/admin\/offbox-backups\/(?!(status|list|run|download)$)/,
-    /^\/api\/local\/change-password$/,
 ];
 
 export function tokenCannotReach(pathname: string): boolean {
@@ -77,7 +75,7 @@ function ownerPhoneResponse(extra: Record<string, unknown> = {}): Response {
 
 /**
  * A token's 401: the node's own words, in the status line too (many callers show `HTTP 401: <statusText>`), and in the
- * body with what to do. It stays a 401, so the page's auth handling stops polling; no password is offered or sent.
+ * body with what to do. It stays a 401, so the page's auth handling stops polling.
  */
 async function tokenRefusedResponse(res: Response): Promise<Response> {
     const body = await res.clone().json().catch(() => null) as { error?: unknown } | null;

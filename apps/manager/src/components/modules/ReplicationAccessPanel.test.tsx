@@ -5,26 +5,28 @@ import userEvent from '@testing-library/user-event';
 import { ReplicationAccessPanel } from './ReplicationAccessPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
+// A real automation token's shape (bp_ + 12 hex + _ + 64 hex): only this travels as a Bearer.
+const TOKEN = `bp_${'a'.repeat(12)}_${'b'.repeat(64)}`;
+
 describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
     const mockNode: NodeProfile = {
         id: 'node-primary-1',
         name: 'Primary Node',
         url: 'https://primary.example.com',
-        adminPassword: 'test-admin-secret',
+        automationToken: TOKEN,
     };
 
     beforeEach(() => {
         vi.restoreAllMocks();
     });
 
-    it('renders with a real payload, supports generating token with confirmation, reveal & copy, mode toggle, and clear', async () => {
+    it('renders with a real payload, supports generating token with confirmation, reveal & copy, and clear, with no token-only switch', async () => {
         const fetchMock = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
             if (url.includes('/api/local/admin/replication-access')) {
                 return {
                     ok: true,
                     json: async () => ({
                         hasToken: true,
-                        tokenOnly: false,
                         totalPulls: 14,
                         lastPullAt: '2026-09-15T12:00:00.000Z',
                         lastPullIp: '192.168.1.100',
@@ -44,15 +46,6 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
                     json: async () => ({
                         success: true,
                         token: 'rep_tok_abc123xyz789_secret',
-                    }),
-                };
-            }
-            if (url.includes('/api/local/admin/replication-token/mode')) {
-                return {
-                    ok: true,
-                    json: async () => ({
-                        success: true,
-                        tokenOnly: true,
                     }),
                 };
             }
@@ -89,8 +82,19 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         // Check initial token status
         await waitFor(() => {
             const tokenState = document.getElementById('rep-token-state');
-            expect(tokenState?.textContent).toBe('set · admin-password fallback active');
+            expect(tokenState?.textContent).toBe('set');
         });
+
+        // A standby copies with the token and nothing else: no switch, no admin-password notice.
+        expect(document.getElementById('rep-token-only')).toBeNull();
+        expect(document.getElementById('rep-token-only-notice')).toBeNull();
+        expect(screen.queryByText(/Require token/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/admin password/i)).not.toBeInTheDocument();
+        // The read goes out as a Bearer token and carries no admin password.
+        const readCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/admin/replication-access'))!;
+        expect(readCall[1].headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+        expect(readCall[1].headers['X-Admin-Password']).toBeUndefined();
+        expect(JSON.parse(readCall[1].body)).toEqual({});
 
         // Check pull activity numbers
         const totalPulls = document.getElementById('rep-total-pulls');
@@ -132,21 +136,11 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         await userEvent.click(copyBtn);
         expect(clipboardWriteText).toHaveBeenCalledWith('rep_tok_abc123xyz789_secret');
 
-        // 2. Toggle Token-Only mode
-        const tokenOnlyCb = document.getElementById('rep-token-only') as HTMLInputElement;
-        expect(tokenOnlyCb.checked).toBe(false);
-        await userEvent.click(tokenOnlyCb);
-
-        await waitFor(() => {
-            expect(fetchMock).toHaveBeenCalledWith(
-                expect.stringContaining('/api/local/admin/replication-token/mode'),
-                expect.objectContaining({
-                    method: 'POST',
-                    body: expect.stringContaining('"tokenOnly":true'),
-                })
-            );
-            expect(screen.getByText(/Token-only enforced — admin-password pulls now rejected/i)).toBeInTheDocument();
-        });
+        // 2. There is no token-only mode to toggle: no route for it is ever called.
+        expect(fetchMock).not.toHaveBeenCalledWith(
+            expect.stringContaining('/api/local/admin/replication-token/mode'),
+            expect.anything()
+        );
 
         // 3. Clear token with confirmation modal
         const clearBtn = screen.getByRole('button', { name: /Remove Token/i });
@@ -161,8 +155,7 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
                 expect.stringContaining('/api/local/admin/replication-token/clear'),
                 expect.any(Object)
             );
-            // Token-only was switched on above and clearing leaves it on: the admin
-            // password is refused too, so nothing can copy (the old text said the password was in use).
+            // With no token nothing can copy.
             const tokenState = document.getElementById('rep-token-state');
             expect(tokenState?.textContent).toBe('not set · nothing can copy until you make a token');
         });
@@ -178,7 +171,7 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
 
         expect(screen.getByText('Replication Access')).toBeInTheDocument();
         const tokenState = document.getElementById('rep-token-state');
-        expect(tokenState?.textContent).toBe('not set · standbys copy with the admin password');
+        expect(tokenState?.textContent).toBe('not set · nothing can copy until you make a token');
 
         const totalPulls = document.getElementById('rep-total-pulls');
         expect(totalPulls?.textContent).toBe('0');
@@ -189,14 +182,12 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         const rejected = document.getElementById('rep-rejected');
         expect(rejected?.textContent).toBe('0');
 
-        const cb = document.getElementById('rep-token-only') as HTMLInputElement;
-        expect(cb.checked).toBe(false);
+        expect(document.getElementById('rep-token-only')).toBeNull();
     });
 
     it('renders safely with wrong-typed fields and malformed data', async () => {
         const malformedData: any = {
             hasToken: 'yes-is-token',
-            tokenOnly: 12345,
             totalPulls: 'invalid-pull-count',
             lastPullAt: 12345678,
             lastPullIp: 9999,
@@ -341,7 +332,7 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         // Resolve fetch
         resolveFetch({
             ok: true,
-            json: async () => ({ hasToken: true, tokenOnly: false, totalPulls: 5 }),
+            json: async () => ({ hasToken: true, totalPulls: 5 }),
         });
 
         await waitFor(() => {
@@ -350,37 +341,41 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         });
     });
 
-    it('a fresh install (token-only, no token) says nothing can copy, with no token-only-off notice', () => {
+    it('a fresh install (no token) says nothing can copy, with no notice and no switch', () => {
         render(
             <ReplicationAccessPanel
                 activeNode={mockNode}
-                initialData={{ hasToken: false, tokenOnly: true, totalPulls: 0 }}
+                initialData={{ hasToken: false, totalPulls: 0 }}
             />
         );
         const tokenState = document.getElementById('rep-token-state');
         expect(tokenState?.textContent).toBe('not set · nothing can copy until you make a token');
-        expect(tokenState?.textContent).not.toMatch(/admin password in use/);
+        expect(tokenState?.textContent).not.toMatch(/admin password/);
         expect(document.getElementById('rep-token-only-notice')).toBeNull();
+        expect(document.getElementById('rep-token-only')).toBeNull();
     });
 
-    it('shows the token-only-off notice, naming a standby that last copied with the admin password', () => {
+    it('draws no token-only notice and no switch, whatever the last pull used or an old server still sends', () => {
         const { rerender } = render(
             <ReplicationAccessPanel
                 activeNode={mockNode}
-                initialData={{ hasToken: true, tokenOnly: false, lastPullAuth: 'admin-pw' }}
+                initialData={{ hasToken: true, lastPullAuth: 'admin-pw', tokenOnly: false }}
             />
         );
-        expect(document.getElementById('rep-token-only-notice')?.textContent)
-            .toMatch(/A standby last copied with the admin password.*tick "Require token"/);
+        expect(document.getElementById('rep-token-state')?.textContent).toBe('set');
+        expect(document.getElementById('rep-token-only-notice')).toBeNull();
+        expect(document.getElementById('rep-token-only')).toBeNull();
+        expect(screen.queryByText(/Require token/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/tick/i)).not.toBeInTheDocument();
 
         rerender(
             <ReplicationAccessPanel
                 key="token-pulls"
                 activeNode={mockNode}
-                initialData={{ hasToken: true, tokenOnly: false, lastPullAuth: 'token' }}
+                initialData={{ hasToken: true, lastPullAuth: 'token' }}
             />
         );
-        expect(document.getElementById('rep-token-only-notice')?.textContent)
-            .toBe('Standbys can still copy with the admin password. Once every standby uses a token, tick "Require token".');
+        expect(document.getElementById('rep-token-state')?.textContent).toBe('set');
+        expect(document.getElementById('rep-token-only-notice')).toBeNull();
     });
 });

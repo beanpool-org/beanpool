@@ -11,7 +11,7 @@ import type { TlsStatus } from '../../lib/node-client';
  * HTTPS S4: Settings → Public Address → "Your own address" (OwnAddressCard), and removing an app address with an owner's
  * fresh proof (server app-addresses/remove requireFreshProof). The node is a fetch stub; nothing here reaches a node.
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', automationToken: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to remove 203.0.113.5', totpRequired: true };
 
@@ -235,12 +235,12 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         fireEvent.change(screen.getByLabelText("This server's public IP address"), { target: { value: ' 203.0.113.5 ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this IP address' }));
         await waitFor(() => expect(screen.getByTestId('addresses-action-message')).toHaveTextContent("203.0.113.5 is this community's address now"));
-        expect(sent[0]).toEqual({ path: '/public-address/own', body: { ip: '203.0.113.5', password: 'pw' } });
+        expect(sent[0]).toEqual({ path: '/public-address/own', body: { ip: '203.0.113.5' } });
         openAdd('domain');
         fireEvent.change(screen.getByLabelText('Your own domain name'), { target: { value: 'https://beans.example.org/settings' } });
         fireEvent.click(screen.getByRole('button', { name: 'Use this domain' }));
         await waitFor(() => expect(sent).toHaveLength(2));
-        expect(sent[1].body).toEqual({ domain: 'beans.example.org', password: 'pw' });
+        expect(sent[1].body).toEqual({ domain: 'beans.example.org' });
         expect(domainOf('HTTP://coop.example.net?x=1')).toBe('coop.example.net');
     });
 
@@ -284,7 +284,7 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         await card();
         fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Try again now' }));
         await waitFor(() => expect(screen.getByTestId('own-address-message')).toHaveTextContent('203.0.113.5 is being tried again now.'));
-        expect(sent[0].body).toEqual({ ip: '203.0.113.5', password: 'pw' });
+        expect(sent[0].body).toEqual({ ip: '203.0.113.5' });
     });
 
     it('an address that given again would become the community\'s address (retryOnly false) is offered no Try again now, only Remove', async () => {

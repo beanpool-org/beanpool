@@ -35,8 +35,8 @@ function mockNode(answers: Array<[number, unknown]>) {
 function open(nodeRole: 'owner' | 'admin' | null = null) {
     render(
         <MemberDetailModal member={member} isFrozen={false} nodeRole={nodeRole} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE}
-            onGrantNodeRole={(pk, role, code) => grantNodeRoleApi(NODE, pk, role, 'pw', undefined, code).then(() => {})}
-            onRevokeNodeRole={(pk, role, code) => revokeNodeRoleApi(NODE, pk, role, 'pw', undefined, code).then(() => {})} />,
+            onGrantNodeRole={(pk, role, code) => grantNodeRoleApi(NODE, pk, role, 'pw', code).then(() => {})}
+            onRevokeNodeRole={(pk, role, code) => revokeNodeRoleApi(NODE, pk, role, 'pw', code).then(() => {})} />,
     );
 }
 
@@ -44,7 +44,7 @@ beforeEach(() => { vi.restoreAllMocks(); });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Member detail: granting or taking an owner\'s or admin\'s role (S4a, opus-2028 B2)', () => {
-    it('Grant Admin, password viewer: the box beside the role; the code re-sends the same grant once with `code`', async () => {
+    it('Grant Admin, token viewer: the box beside the role; the code re-sends the same grant once with `code`', async () => {
         const sent = mockNode([[401, CODE_ASK], [200, { success: true }]]);
         open();
         fireEvent.click(screen.getByRole('button', { name: /Grant Admin/ }));
@@ -60,7 +60,7 @@ describe('Member detail: granting or taking an owner\'s or admin\'s role (S4a, o
         expect(screen.queryByText('Action Blocked')).toBeNull();
     });
 
-    it('Revoke owner, password viewer: the code travels as X-Fresh-Proof on the same DELETE', async () => {
+    it('Revoke owner, token viewer: the code travels as X-Fresh-Proof on the same DELETE', async () => {
         const sent = mockNode([[401, CODE_ASK], [200, { success: true }]]);
         open('owner');
         fireEvent.click(screen.getByRole('button', { name: 'Revoke owner' }));

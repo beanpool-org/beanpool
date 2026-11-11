@@ -4,7 +4,7 @@ import type { NodeProfile } from '../../lib/profiles';
 
 vi.mock('../../lib/node-client', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../lib/node-client')>();
-    return { ...actual, fetchNodeRoles: vi.fn(async () => []), getTfaSessionToken: vi.fn(() => undefined) };
+    return { ...actual, fetchNodeRoles: vi.fn(async () => []) };
 });
 
 import { setKeySessionCsrfToken } from '../../lib/node-client';
@@ -89,15 +89,15 @@ describe('SignOutEverywhere (Settings, a key session)', () => {
 });
 
 describe('Owners & admins offers it only to a key session', () => {
-    const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', adminPassword: 'pw' };
+    const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', automationToken: 'pw' };
     const renderPanel = async (viewer: RolesViewer, onSignedOutEverywhere?: () => void) => {
         await act(async () => {
             render(<NodeRolesPanel activeNode={node} members={[]} viewer={viewer} onSignedOutEverywhere={onSignedOutEverywhere} />);
         });
     };
 
-    it('the password (and every fleet profile, which Settings shows as the password) never sees it', async () => {
-        await renderPanel({ kind: 'password' }, vi.fn());
+    it('a token session (every fleet profile is one) never sees it', async () => {
+        await renderPanel({ kind: 'token' }, vi.fn());
         expect(screen.queryByRole('button', { name: 'Sign out everywhere' })).toBeNull();
     });
 

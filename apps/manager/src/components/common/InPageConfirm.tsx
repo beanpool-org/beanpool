@@ -15,7 +15,7 @@ import { ModalBackdrop } from './ModalBackdrop';
  *
  * Escape, the backdrop and Back (ModalBackdrop) answer "no".
  *
- * It is drawn in document.body, above every modal (z-50) and the z-[60] layers (the 2FA prompt, the phone menu), so a
+ * It is drawn in document.body, above every modal (z-50) and the z-[60] layers (the phone menu), so a
  * question asked from inside a modal is on top of it. Left where `{confirmation}` sits, it was a sibling of the modal at
  * the same z-index and earlier in the page, so the modal painted over it: Keepers → Revoke showed nothing (PR #2029,
  * B1; e2e/in-page-confirm.mjs). React events still bubble through the component tree as before.

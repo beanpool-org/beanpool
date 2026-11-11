@@ -3,7 +3,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { RestoreLockedBackup } from './RestoreLockedBackup';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'fresh', name: 'Fresh', url: 'https://fresh.example.org', adminPassword: 'fresh-pw' };
+// A real automation token's shape (bp_ + 12 hex + _ + 64 hex): only this travels as a Bearer.
+const TOKEN = `bp_${'a'.repeat(12)}_${'b'.repeat(64)}`;
+const node: NodeProfile = { id: 'fresh', name: 'Fresh', url: 'https://fresh.example.org', automationToken: TOKEN };
 const file = new File([new Uint8Array([1, 2, 3])], 'beanpool-backup.bpsealed');
 const BACKUP = { envelopeId: 'e'.repeat(32), createdAt: '2026-09-19T10:00:00.000Z', opensWith: '@anna, recovery code #1' };
 const PHONE = {
@@ -50,10 +52,11 @@ describe('RestoreLockedBackup', () => {
         fireEvent.click(screen.getByRole('button', { name: "Open with an owner's phone" }));
         await screen.findByTestId('owner-phone-unlock');
         const upload = calls.find((c) => c.path === '/api/local/admin/restore')!;
-        expect(upload.headers).toMatchObject({ 'X-Unlock-With': 'phone', 'X-Unlock-Server-Url': 'https://fresh.example.org', 'X-Admin-Password': 'fresh-pw' });
+        expect(upload.headers).toMatchObject({ 'X-Unlock-With': 'phone', 'X-Unlock-Server-Url': 'https://fresh.example.org', Authorization: `Bearer ${TOKEN}` });
+        expect(upload.headers['X-Admin-Password']).toBeUndefined();
         expect(upload.body).toBe(file);
         await waitFor(() => expect(calls.some((c) => c.path === '/api/local/admin/restore/phone/wait')).toBe(true));
-        // Followed with the token, not the password: the restore brings back the community's password.
+        // Followed with the one-time follow token, not this server's sign-in: the restore brings back the community's owners.
         expect(calls.find((c) => c.path === '/api/local/admin/restore/phone/wait')!.headers['X-Unlock-Follow']).toBe(PHONE.followToken);
         restored = true;
         await waitFor(() => expect(onDone).toHaveBeenCalledWith(expect.stringMatching(/opened by @anna's phone/)));
@@ -91,8 +94,8 @@ describe('RestoreLockedBackup', () => {
         expect(said).toMatch(/^Backup restored\./);
         expect(said).toContain('Restore point 2026-10-16T02-30-00.123Z-before-restore is kept until at least 2026-10-23.');
         expect(said).toContain('The server restarts now; sign in again.');
-        expect(said).toContain('its sign-in settings as they were when it was made: its admin password and two-factor sign-in, if it had them');
-        expect(said).not.toMatch(/sign in with (those|the|its) .*password/i);
+        expect(said).toContain("The backup brought back the community's keys and its recovery code. Sign in as one of its owners.");
+        expect(said).not.toMatch(/password|two-factor/i);
     });
 
     // The confirmation (design case 18 §3.4; the shell's prompt does the same, #2017): the file's community and the key that
@@ -112,7 +115,9 @@ describe('RestoreLockedBackup', () => {
         expect(signer.textContent).toContain(`This server: ${HERE.primaryPeerId}`);
         expect(screen.getByText(/beanpool-backup\.bpsealed, made/)).toBeInTheDocument();
         expect(screen.getByText(/will be lost\. A restore point is taken first/)).toBeInTheDocument();
-        expect(calls.find((c) => c.path === '/api/local/admin/backup-enroll')!.headers).toMatchObject({ 'X-Admin-Password': 'fresh-pw' });
+        const enrol = calls.find((c) => c.path === '/api/local/admin/backup-enroll')!.headers;
+        expect(enrol).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+        expect(enrol['X-Admin-Password']).toBeUndefined();
         // Nothing is sent to the restore route until a way to open it is chosen.
         expect(calls.some((c) => c.path === '/api/local/admin/restore')).toBe(false);
         expect(confirmSpy).not.toHaveBeenCalled();

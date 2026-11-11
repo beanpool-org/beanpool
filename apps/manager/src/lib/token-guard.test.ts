@@ -17,7 +17,6 @@ describe('token-guard standalone functions', () => {
             expect(tokenCannotReach('/api/local/admin/auth')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/auth/session')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/automation-tokens')).toBe(true);
-            expect(tokenCannotReach('/api/local/admin/2fa/verify')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/ws-ticket')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/csrf-token')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/stranded-escrows/abc123/write-off')).toBe(true);
@@ -25,12 +24,16 @@ describe('token-guard standalone functions', () => {
             expect(tokenCannotReach('/api/local/admin/takeover/recovery-code')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/standby-health')).toBe(true);
             expect(tokenCannotReach('/api/local/admin/offbox-backups/restore')).toBe(true);
-            expect(tokenCannotReach('/api/local/change-password')).toBe(true);
+        });
+
+        it('no longer lists the 2FA and change-password routes, which the node no longer has', () => {
+            expect(tokenCannotReach('/api/local/admin/2fa/verify')).toBe(false);
+            expect(tokenCannotReach('/api/local/change-password')).toBe(false);
         });
 
         it('handles proxied URLs', () => {
             expect(tokenCannotReach('/proxy/https/node.example.com/api/local/admin/auth')).toBe(true);
-            expect(tokenCannotReach('/proxy/http/localhost:8552/api/local/change-password/')).toBe(true);
+            expect(tokenCannotReach('/proxy/http/localhost:8552/api/local/admin/automation-tokens/')).toBe(true);
         });
 
         it('allows reachable routes for automation tokens', () => {
@@ -56,11 +59,11 @@ describe('token-guard standalone functions', () => {
 
             const fetchGuarded = guardTokenFetch(mockFetchImpl as unknown as typeof fetch);
             const res = await fetchGuarded('/api/local/admin/telemetry', {
-                headers: { authorization: 'Bearer standard_admin_password' },
+                headers: { authorization: 'Bearer not_an_automation_token' },
             });
 
             expect(mockFetchImpl).toHaveBeenCalledWith('/api/local/admin/telemetry', {
-                headers: { authorization: 'Bearer standard_admin_password' },
+                headers: { authorization: 'Bearer not_an_automation_token' },
             });
             expect(res).toBe(expectedResponse);
         });

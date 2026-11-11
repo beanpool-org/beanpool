@@ -4,7 +4,7 @@ import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client
 import { isAutomationToken } from '../../lib/node-client';
 import { TOKEN_REPLACE_ADVICE } from '../../lib/token-guard';
 
-/** A token profile's 401 (revoked, expired or wrong): the node's own words. A password is never the fix, nor sent. */
+/** A token profile's 401 (revoked, expired or wrong): the node's own words. Nothing else is sent in its place. */
 function tokenRefusal(profile: NodeProfile, error: string | null | undefined): string | null {
     if (!error || !/\b401\b/.test(error) || !isAutomationToken(profile.automationToken)) return null;
     return error.replace(/^HTTP 401:\s*/, '').trim() || 'The node refused this automation token';
@@ -497,7 +497,7 @@ export function TelemetryModule({
                                                     error.includes('401') ? 'text-amber-200' : 'text-red-200'
                                                 }`}
                                             >
-                                                {error.includes('401') ? 'Set Password' : 'Fix'}
+                                                {error.includes('401') ? 'Set Token' : 'Fix'}
                                             </button>
                                         </div>
                                     ) : loading && !diag ? (
@@ -649,7 +649,7 @@ export function TelemetryModule({
                                                  : 'bg-red-950/40 border border-red-800 text-red-300'
                                          }`}>
                                              <div className="flex items-center gap-2">
-                                                 <span>{error.includes('401') ? '🔒 Auth Required: Enter admin password to view node telemetry' : `❌ Unreachable: ${error}`}</span>
+                                                 <span>{error.includes('401') ? '🔒 Auth Required: Enter an owner automation token to view node telemetry' : `❌ Unreachable: ${error}`}</span>
                                              </div>
                                              <button
                                                  onClick={() => onEditNode(profile)}
@@ -659,7 +659,7 @@ export function TelemetryModule({
                                                          : 'bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-800'
                                                  }`}
                                              >
-                                                 {error.includes('401') ? '🔑 Set Password' : '⚙️ Update Settings'}
+                                                 {error.includes('401') ? '🔑 Set Token' : '⚙️ Update Settings'}
                                              </button>
                                          </div>
                                     ) : loading && !diag ? (

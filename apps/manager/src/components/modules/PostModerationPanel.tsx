@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { getTfaSessionToken, deleteNodePost, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
+import { deleteNodePost, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 import { nodeCredential } from '../../lib/profiles';
@@ -192,7 +192,7 @@ export function PostModerationPanel({
     const safePosts = Array.isArray(posts) ? posts : [];
 
     // Only an owner's or an admin's session may read the takedown record (the route says so as well): no one else is asked.
-    const mayReadTakedowns = viewer !== undefined && (viewer.kind === 'password' || viewer.role === 'owner' || viewer.role === 'admin');
+    const mayReadTakedowns = viewer !== undefined && (viewer.kind === 'token' || viewer.role === 'owner' || viewer.role === 'admin');
     const [held, setHeld] = useState<Map<string, HeldTakedown>>(() => new Map());
     const [takedownNote, setTakedownNote] = useState('');
     const [puttingBack, setPuttingBack] = useState<string | null>(null);
@@ -202,7 +202,7 @@ export function PostModerationPanel({
         if (!mayReadTakedowns) return;
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, TAKEDOWNS), {
-                headers: buildAdminHeaders(credential, getTfaSessionToken(activeNode.id)), credentials: 'same-origin',
+                headers: buildAdminHeaders(credential), credentials: 'same-origin',
             });
             const json = await res.json().catch(() => ({}));
             if (res.ok) {
@@ -228,7 +228,7 @@ export function PostModerationPanel({
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, `${TAKEDOWNS}/put-back`), {
                 method: 'POST', credentials: 'same-origin', body: JSON.stringify({ postId: post.id }),
-                headers: buildAdminHeaders(credential, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(credential),
             });
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
@@ -292,8 +292,7 @@ export function PostModerationPanel({
                 await deleteNodePost(
                     activeNode.url,
                     deletingPost.id,
-                    nodeCredential(activeNode),
-                    getTfaSessionToken(activeNode.id)
+                    nodeCredential(activeNode)
                 );
             }
             setActionMessage({ text: `Post "${deletingPost.title || deletingPost.id}" deleted successfully.`, isError: false });

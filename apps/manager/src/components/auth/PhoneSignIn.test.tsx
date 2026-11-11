@@ -57,7 +57,7 @@ describe('PhoneSignIn — the QR card', () => {
 
     it('shows a QR for this node with the pairing and short code, the code in two groups, and a countdown', async () => {
         fakeNode({ [ID1]: ['hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         const qr = await screen.findByTestId('phone-signin-qr');
         const code = screen.getByTestId('phone-signin-code').textContent!;
         expect(code).toMatch(/^[A-Z2-9]{3} [A-Z2-9]{3}$/);
@@ -65,12 +65,14 @@ describe('PhoneSignIn — the QR card', () => {
         expect(qr.getAttribute('alt')).toContain(code);
         expect(screen.getByTestId('phone-signin-status').textContent).toMatch(/Waiting for your phone… code changes in [12]:\d\d/);
         expect(screen.getByRole('button', { name: 'New code' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Use the password' })).toBeInTheDocument();
+        // The phone is the only sign-in: no way back to a password.
+        expect(screen.queryByRole('button', { name: 'Use the password' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /password/i })).toBeNull();
     });
 
     it("names the phone's row as the app shows it, a moderator's too, and the old name older apps still show", async () => {
         fakeNode({ [ID1]: ['hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         await screen.findByTestId('phone-signin-qr');
         const text = screen.getByTestId('phone-signin').textContent!.replace(/\s+/g, ' ');
         expect(text).toContain('Scan it inside the BeanPool app, not with the phone\'s camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”');
@@ -81,7 +83,7 @@ describe('PhoneSignIn — the QR card', () => {
     it('signs in when the phone approves: hands the key session and CSRF token up', async () => {
         fakeNode({ [ID1]: [{ body: { status: 'waiting' } }, { body: { status: 'signed-in', role: 'owner', memberPubkey: 'f'.repeat(64), csrfToken: 'csrf-1' } }] });
         const onSignedIn = vi.fn();
-        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={onSignedIn} />);
         // A "waiting" answered at once is followed by a 1 s pause before the next poll (no tight loop).
         await waitFor(() => expect(onSignedIn).toHaveBeenCalledTimes(1), { timeout: 3000 });
         expect(onSignedIn).toHaveBeenCalledWith({ memberPubkey: 'f'.repeat(64), role: 'owner' }, 'csrf-1');
@@ -90,14 +92,14 @@ describe('PhoneSignIn — the QR card', () => {
 
     it('keeps waiting but says so when a phone without owner/admin scanned', async () => {
         fakeNode({ [ID1]: [{ body: { status: 'waiting', notice: 'not-admin' } }, 'hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         expect(await screen.findByRole('alert')).toHaveTextContent(PHONE_SIGNIN_MESSAGES.notAdmin);
         expect(screen.getByTestId('phone-signin-qr')).toBeInTheDocument();
     });
 
     it('gets a new code by itself when one expires', async () => {
         const { calls } = fakeNode({ [ID1]: [{ status: 410, body: { status: 'expired' } }], [ID2]: ['hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         await waitFor(() => expect(calls.filter(c => c === 'POST /api/local/admin/auth/pairing')).toHaveLength(2));
         await waitFor(() => expect(calls).toContain(`POST /api/local/admin/auth/pairing/${ID2}/wait`));
         expect(screen.getByTestId('phone-signin-qr')).toBeInTheDocument();
@@ -108,7 +110,7 @@ describe('PhoneSignIn — the QR card', () => {
         const ids = Array.from({ length: AUTO_RENEWALS + 2 }, (_, i) => String(i + 1).repeat(64).slice(0, 64).replace(/[^0-9a-f]/g, 'a'));
         const scripts = Object.fromEntries(ids.map(id => [id, [expired]]));
         const { calls } = fakeNode(scripts, ids);
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         expect(await screen.findByRole('alert')).toHaveTextContent(/expired/i);
         expect(calls.filter(c => c === 'POST /api/local/admin/auth/pairing')).toHaveLength(AUTO_RENEWALS + 1);
         fireEvent.click(screen.getByRole('button', { name: 'New code' }));
@@ -122,7 +124,7 @@ describe('PhoneSignIn — the QR card', () => {
         ['used', 410, PHONE_SIGNIN_MESSAGES.used],
     ])('explains "%s" and offers a new code', async (status, http, message) => {
         const { calls } = fakeNode({ [ID1]: [{ status: http, body: { status } }], [ID2]: ['hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         expect(await screen.findByRole('alert')).toHaveTextContent(message);
         expect(screen.queryByTestId('phone-signin-qr')).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'New code' }));
@@ -132,13 +134,13 @@ describe('PhoneSignIn — the QR card', () => {
 
     it('says the node did not answer when the pairing is refused', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => json(404, {})));
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         expect(await screen.findByRole('alert')).toHaveTextContent(/did not answer \(404\)/);
     });
 
     it('"New code" abandons the waiting poll and asks for a fresh pairing', async () => {
         const { calls } = fakeNode({ [ID1]: ['hang'], [ID2]: ['hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         const first = (await screen.findByTestId('phone-signin-code')).textContent;
         fireEvent.click(screen.getByRole('button', { name: 'New code' }));
         await waitFor(() => expect(calls).toContain(`POST /api/local/admin/auth/pairing/${ID2}/wait`));
@@ -149,7 +151,7 @@ describe('PhoneSignIn — the QR card', () => {
         fakeNode({ [ID1]: ['hang'] });
         const QRCode = await import('qrcode');
         const spy = vi.spyOn(QRCode.default, 'create');
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         await screen.findByTestId('phone-signin-qr');
         const text = spy.mock.calls[0][0] as string;
         const parsed = parseSettingsSigninQr(text);
@@ -159,9 +161,9 @@ describe('PhoneSignIn — the QR card', () => {
 
     it('keeps its buttons at least 48px tall', async () => {
         fakeNode({ [ID1]: ['hang'] });
-        render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={vi.fn()} />);
         await screen.findByTestId('phone-signin-qr');
-        for (const name of ['New code', 'Use the password']) {
+        for (const name of ['New code']) {
             expect(screen.getByRole('button', { name }).className).toMatch(/min-h-\[48px\]/);
         }
         expect(screen.getByTestId('phone-signin-qr').className).toMatch(/w-full max-w-\[240px\]/);
@@ -173,20 +175,21 @@ describe('AdminLoginCard — phone option', () => {
     beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => json(404, {}))); });
     afterEach(() => { vi.unstubAllGlobals(); });
 
-    it('offers "Sign in with your phone" beside the password, and the password stays', async () => {
+    it('is the phone sign-in alone: the QR is there, and no password form, Unlock button or way to one', async () => {
         fakeNode({ [ID1]: ['hang'] });
-        render(<AdminLoginCard nodeUrl="" onPasswordSession={vi.fn()} onKeySession={vi.fn()} />);
-        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /Sign in with your phone/ }));
+        render(<AdminLoginCard nodeUrl="" onKeySession={vi.fn()} />);
         expect(await screen.findByTestId('phone-signin-qr')).toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Password')).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Use the password' }));
-        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Unlock Settings/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use the password' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /Sign in with your phone/ })).toBeNull();
     });
 
-    it('has no phone option where the caller cannot take a key session (fleet mode)', () => {
-        render(<AdminLoginCard nodeUrl="http://localhost:3000" onPasswordSession={vi.fn()} />);
-        expect(screen.queryByRole('button', { name: /Sign in with your phone/ })).toBeNull();
+    it('has no phone sign-in where the caller cannot take a key session (fleet mode), and says what to use', () => {
+        render(<AdminLoginCard nodeUrl="http://localhost:3000" />);
+        expect(screen.queryByTestId('phone-signin-qr')).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+        expect(screen.getByTestId('phone-signin')).toHaveTextContent("Open this server's own /settings page to sign in with your phone, or use an automation token.");
     });
 });
 
@@ -223,7 +226,7 @@ describe('phone-signin helpers', () => {
             { body: { status: 'signed-in', memberPubkey: 'f'.repeat(64), role: 'owner', csrfToken: 'csrf-1' } },
         ]);
         const onSignedIn = vi.fn();
-        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={onSignedIn} />);
         const box = await screen.findByLabelText(/Type the two digits your phone shows/i);
         expect(screen.queryByTestId('phone-signin-qr')).toBeNull();
         fireEvent.change(box, { target: { value: '12' } });
@@ -239,7 +242,7 @@ describe('phone-signin helpers', () => {
     it("ends the box honestly when the 30 seconds run out, rather than sitting at 0:00 (4171995318)", async () => {
         const { typed } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 1 } }] });
         const onSignedIn = vi.fn();
-        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={onSignedIn} />);
         await screen.findByLabelText(/Type the two digits your phone shows/i);
         await waitFor(() => expect(screen.queryByLabelText(/Type the two digits/i)).toBeNull(), { timeout: 3_000 });
         expect(screen.getByText(PHONE_SIGNIN_MESSAGES.confirmLate)).toBeTruthy();
@@ -253,7 +256,7 @@ describe('phone-signin helpers', () => {
             { status: 410, body: { status: 'refused' } },
         ]);
         const onSignedIn = vi.fn();
-        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        render(<PhoneSignIn onSignedIn={onSignedIn} />);
         const box = await screen.findByLabelText(/Type the two digits your phone shows/i);
         fireEvent.change(box, { target: { value: '99' } });
         fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));

@@ -17,23 +17,22 @@ Owners can do everything in Settings. Only owners can:
 - suspend an owner, or suspend an owner or an admin through a report;
 - lift a suspension that took away an owner's or an admin's role, which gives that role back;
 - end the waiting time early when an owner or admin is being removed;
-- change or retire the admin password, and turn two-factor sign-in on or off;
 - choose who may invite, turn requests to join and message requests on or off, set the known floor and the cap, and move the exception lines;
 - make or revoke automation tokens, set the alerts, and choose where off-box backups go;
 - make the recovery code, or take over;
 - allow or stop AI assistants;
 - write off a stuck escrow from the Commons;
 - sign other people out of Settings;
-- switch break-glass mode on or off, and be issued a break-glass code;
+- be issued a break-glass code;
 - restore a backup or roll back to a restore point, download a backup or a snapshot, or change when snapshots are taken and how many are kept;
-- make, replace or remove the replication token (a pairing code holds it), switch token-only on or off, set the address and token a standby copies with (which server a standby trusts is set only on its own shell: beanpool pair), forget a standby, and make a standby copy everything again (a full resync);
+- make, replace or remove the replication token (a pairing code holds it), set the address and token a standby copies with (which server a standby trusts is set only on its own shell: beanpool pair), forget a standby, and make a standby copy everything again (a full resync);
 - claim, rename, release or take offline the community's public address, make a new tunnel key, restart the tunnel, see its tunnel token, and remove an app address;
 - suspend a member again, with a new reason, within 30 days of a vote on removing them that ended without removing them;
 - delete posts in bulk, set a new ledger baseline, and prune a whole invite branch.
 
-From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in. The rarest of them, on the fresh-proof list in Access and security, ask more, every time: a current code from the authenticator with the password, or Manage pressed within 90 seconds on the phone. A computer signed in with the phone cannot make them.
+From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in. The rarest of them, on the fresh-proof list in Access and security, ask more, every time: Manage pressed within 90 seconds on the phone. A computer signed in with the phone cannot make them.
 
-The **admin password** counts as an owner. Anyone who knows it can do all of the above.
+No automation token makes any of these changes: a token never makes an owner-only change (see Access and security).
 
 ## Admin
 
@@ -49,17 +48,17 @@ Moderators look after reports, and nothing else. They sign in from the app's **M
 - dismiss a report, or mark it handled;
 - on the global community, see which accounts joined from the same internet connection within a day of a reported one, with each one's standing, and hide all their posts in one go, or undo that (see Reports and takedowns).
 
-That is all. A moderator cannot suspend, remove or freeze anyone, see members' details or the member list beyond those accounts, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
+That is all. A moderator cannot suspend, remove or freeze anyone, see members' details or the member list beyond those accounts, touch money, invites, backups, keys or the server's settings, or change anyone's role. Signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
 
 A moderator whose role is taken away, or changed, is signed out straight away.
 
-A moderator never needs the server's 6-digit code, and nor does an admin or an owner signing in from the app. Their phone's own lock (fingerprint, face or PIN) is their second factor: the app asks for it every time, and a phone with no screen lock can't manage or moderate at all. When someone is given a role, the app turns App Lock on for them once and says why; they can turn it off again in the app's Settings.
+Nobody types a code to sign in to Settings: not a moderator, an admin or an owner. Their phone's own lock (fingerprint, face or PIN) is the proof: the app asks for it every time, and a phone with no screen lock can't manage or moderate at all. When someone is given a role, the app turns App Lock on for them once and says why; they can turn it off again in the app's Settings.
 
 ## Owners & admins
 
 **People & Safety**, then **Owners & admins**, lists everyone who holds a role, what it is and who gave it.
 
-- Owners, signed in with their key or with the admin password, see the list and can add and remove people.
+- Owners, signed in with their key, see the list and can add and remove people.
 - Admins, signed in with their key, see the list and can add and remove **moderators**. Owners and admins are added and removed by an owner.
 - Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.
 - At the bottom, anyone signed in with their key finds **Sign out everywhere**: it ends all of their own Settings sign-ins at once. See Access and security.
@@ -114,7 +113,6 @@ An owner's key opens the community's locked backups and take-over keys (see Back
 
 A server with no owner, such as one set up before the claim code whose data has no founding member, shows "This community has no owner yet — add yourself" under **Owners & admins**. (A new server shows the claim card at sign-in instead: see First-time setup.) While that is true the server lets whoever is signed in make the first owner. Do it straight away.
 
-- Signed in with the admin password: press **Find myself**, search for your own callsign, choose **Owner** and confirm. After that, **Manage** appears in your app.
 - Signed in with your key (you are an admin, but the server has no owner): press **Make me the owner** and confirm.
 
 ## Every owner locked out

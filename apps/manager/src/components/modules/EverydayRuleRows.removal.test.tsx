@@ -12,7 +12,7 @@ import { REMOVAL_DECIDER_CHOICES, type Shape } from '../../lib/community-shape';
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
-const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
+const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', automationToken: 'pw' };
 const OWNER: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
 const ADMIN: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
 const on = (v: boolean) => ({ value: v, configured: v, source: 'default', lock: null });

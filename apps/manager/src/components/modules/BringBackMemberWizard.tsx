@@ -36,14 +36,13 @@ export const ONLY_IN_PERSON = 'Only bring back someone you have checked in perso
 export interface BringBackMemberWizardProps {
     member: { publicKey: string; callsign: string };
     nodeUrl: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     /** Opens Re-key instead (a member with no copy here, or a new key wanted). */
     onRekeyInstead?: () => void;
     onClose: () => void;
 }
 
-export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken, onRekeyInstead, onClose }: BringBackMemberWizardProps) {
+export function BringBackMemberWizard({ member, nodeUrl, credential, onRekeyInstead, onClose }: BringBackMemberWizardProps) {
     const [status, setStatus] = useState<RekeyStatusResponse | null>(null);
     const [statusFailed, setStatusFailed] = useState(false);
     const [checked, setChecked] = useState(false);
@@ -79,7 +78,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
     const read = useCallback(async () => {
         setStatusFailed(false);
         try {
-            const s = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            const s = await fetchRekeyStatusApi(nodeUrl, member.publicKey, credential);
             setStatus(s);
             const pending = s.pendingRequest;
             if (pending?.kind === 'bring_back' && pending.code && new Date(pending.expires_at).getTime() > Date.now()) {
@@ -91,7 +90,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         } catch {
             setStatusFailed(true);
         }
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken]);
+    }, [nodeUrl, member.publicKey, credential]);
 
     useEffect(() => { read(); }, [read]);
     useEffect(() => {
@@ -106,7 +105,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         let live = true;
         const id = setInterval(async () => {
             try {
-                const s = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+                const s = await fetchRekeyStatusApi(nodeUrl, member.publicKey, credential);
                 if (!live) return;
                 const pending = s.pendingRequest;
                 if (pending?.kind === 'bring_back' && pending.code === code) {
@@ -126,7 +125,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
             live = false;
             clearInterval(id);
         };
-    }, [code, expiresAt, done, stopped, gone, nodeUrl, member.publicKey, adminPassword, tfaToken]);
+    }, [code, expiresAt, done, stopped, gone, nodeUrl, member.publicKey, credential]);
 
     const kept = status?.communityCopy?.kept === true;
     const unopenable = kept ? null : status?.communityCopy?.unopenable ?? null;
@@ -138,7 +137,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         setBusy(true);
         setError(null);
         try {
-            const res = await issueBringBackCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken, ...(fresh ? [fresh] : []));
+            const res = await issueBringBackCodeApi(nodeUrl, member.publicKey, credential, ...(fresh ? [fresh] : []));
             proof.close();
             forgetCodeState();
             setCode(res.code);
@@ -163,7 +162,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         setBusy(true);
         setError(null);
         try {
-            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, code, match, adminPassword, tfaToken, ...(fresh ? [fresh] : []));
+            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, code, match, credential, ...(fresh ? [fresh] : []));
             proof.close();
             if (res.broughtBack) {
                 setDoneShared(res.placement === 'shared');
@@ -186,7 +185,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         setBusy(true);
         setError(null);
         try {
-            await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            await cancelRekeyCodeApi(nodeUrl, member.publicKey, credential);
             forgetCodeState();
             setCode(null);
             setExpiresAt(null);
@@ -203,7 +202,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         setDeclining(key);
         setError(null);
         try {
-            await declineRekeyProposalApi(nodeUrl, member.publicKey, key, adminPassword, tfaToken);
+            await declineRekeyProposalApi(nodeUrl, member.publicKey, key, credential);
             setProposals((list) => list.filter((p) => p.newPubkey !== key));
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to decline that phone');

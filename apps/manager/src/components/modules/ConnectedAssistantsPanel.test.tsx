@@ -62,7 +62,7 @@ function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; mad
         }
         if (url.endsWith('/api/local/admin/agent/posts-per-day')) {
             // The owner's fresh proof (server requireFreshProof): a computer's key session is sent to the phone; the
-            // password asks a current code (here 123456).
+            // typed-code kind of the box (still in the page) asks a current code (here 123456).
             if (state.perDayProof === 'phone') {
                 return new Response(JSON.stringify({ error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true }), { status: 403 });
             }
@@ -132,7 +132,7 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByTestId('agent-token-value')).toHaveTextContent(NEW_TOKEN);
         // Not ticked "May post for me" (off by default): it reads only, and the warning says only that.
-        expect(screen.getByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads.');
+        expect(screen.getByTestId('agent-token-shown')).toHaveTextContent('Keep it private: whoever holds it reads what your assistant reads.');
         expect(screen.getByTestId('agent-token-shown')).not.toHaveTextContent('can post as you');
         expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Claude on my laptop', days: 7, canPost: false });
         expect(countIn(container.innerHTML, NEW_TOKEN)).toBe(1);
@@ -203,7 +203,7 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.queryByText(/^Saved:/)).toBeNull();
     });
 
-    it('the "Owner and admin limit" with the password asks a current code, and sends it with the change', async () => {
+    it('the "Owner and admin limit" asked for a typed code shows the code box, and sends the code with the change', async () => {
         const calls = fakeNode({ grants: [], perDayProof: 'code' });
         render(<ConnectedAssistantsPanel activeNode={node} />);
         fireEvent.change(await screen.findByLabelText(LIMIT), { target: { value: '500' } });
@@ -223,10 +223,10 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.queryByLabelText(LIMIT)).toBeNull();
     });
 
-    it('the password session is told to connect with a key; the node\'s refusal is shown in its words', async () => {
+    it('a token session is told to connect with a key; the node\'s refusal is shown in its words', async () => {
         fakeNode({ grants: [grant({ mine: false, member: 'Adam', role: 'admin' })], canConnect: false });
         render(<ConnectedAssistantsPanel activeNode={node} />);
-        expect(await screen.findByTestId('agent-needs-key')).toHaveTextContent(/never the password/);
+        expect(await screen.findByTestId('agent-needs-key')).toHaveTextContent(/never a token/);
         expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
         expect(screen.getByText(/Adam · admin · by token/)).toBeInTheDocument();
     });

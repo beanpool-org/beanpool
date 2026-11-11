@@ -7,11 +7,12 @@ import type { NodeProfile } from '../../lib/profiles';
 import { answerInPageConfirm } from '../common/__tests__/in-page-confirm-helpers';
 
 describe('BulletinSection', () => {
+    const mockToken = 'bp_' + 'a'.repeat(12) + '_' + 'b'.repeat(64);
     const mockActiveNode: NodeProfile = {
         id: 'node-1',
         name: 'Alpha Node',
         url: 'https://alpha.beanpool.org',
-        adminPassword: 'secretpassword',
+        automationToken: mockToken,
     };
 
     const mockOnRefresh = vi.fn();
@@ -63,10 +64,13 @@ describe('BulletinSection', () => {
             '/proxy/https/alpha.beanpool.org/api/local/admin/pulse/channels',
             expect.objectContaining({
                 headers: expect.objectContaining({
-                    'X-Admin-Password': 'secretpassword',
+                    Authorization: `Bearer ${mockToken}`,
                 }),
             })
         );
+        // The automation token is the only credential it carries: no password header exists any more.
+        const sentHeaders = vi.mocked(globalThis.fetch).mock.calls[0][1]?.headers as Record<string, string>;
+        expect(sentHeaders).not.toHaveProperty('X-Admin-Password');
     });
 
     it('switches subtabs when clicking tab buttons', async () => {

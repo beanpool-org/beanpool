@@ -31,7 +31,7 @@ After every BeanPool update, run docker compose pull and docker compose up -d ag
 
 ### 2. A backup is on the laptop
 
-Take both. The first is the best. The second is there if the first ever stops, and today it is the one that works with no internet on a community that has no admin password (see When the lights go out).
+Take both. The first is the best. The second is there if the first ever stops, and today it is the one that works with no internet (see When the lights go out).
 
 **The laptop copies your community every minute.** It is your standby.
 
@@ -59,7 +59,6 @@ Take both. The first is the best. The second is there if the first ever stops, a
 
 - **A second owner**, and each owner's 12 words checked. One owner who is away or has lost a phone must not stop the rest (Owners' 12 words and phones, in Backups and replicas).
 - **Your callsign**, or your public key, written on the same sheet as the recovery code. On the day you type it once, to make yourself the laptop's owner.
-- **The authenticator app and its backup codes**, on a phone that will be in the hall, if your community still has an admin password. A new community has none (see Signing in).
 - **Every member has the app.** Tell them now. The web app does not work in the hall, and a Safari-only iPhone cannot join. The members' page In the hall says what to expect.
 - **The poster.** Print it with the laptop's address, and the Wi-Fi name and password written on it by hand. The four lines it carries are below. Until the poster page ships, write or print them large on a sheet.
 - **The laptop's address on its own Wi-Fi.** Start the laptop's hotspot (or the travel router), look the address up in the laptop's network settings, and write it on the poster. Hotspots differ by system. Try it once with one phone.

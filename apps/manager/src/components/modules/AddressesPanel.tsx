@@ -22,8 +22,8 @@ import { ADDRESS_SCREEN_WORDS, addressReachSentence, type AddressReach } from '@
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
-    buildAdminHeaders, checkAppAddresses, getAppAddresses, getTfaSessionToken, getTlsStatus,
-    passwordField, removeAppAddress, resolveNodeApiUrl, setOwnAddress,
+    buildAdminHeaders, checkAppAddresses, getAppAddresses, getTlsStatus,
+    removeAppAddress, resolveNodeApiUrl, setOwnAddress,
     type AppAddress, type AppAddressesReport,
 } from '../../lib/node-client';
 import { proofField, t, timeAgo, tn } from '../../lib/fresh-proof';
@@ -176,8 +176,8 @@ export interface AddressesPanelProps {
     viewer?: RolesViewer;
 }
 
-export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'password' } }: AddressesPanelProps) {
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'token' } }: AddressesPanelProps) {
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const [report, setReport] = useState<AppAddressesReport | null>(null);
     const [loading, setLoading] = useState(false);
     const [checking, setChecking] = useState(false);
@@ -222,7 +222,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
         setLoading(true);
         setError(null);
         try {
-            setReport(await getAppAddresses(activeNode.url, cred, getTfaSessionToken(activeNode.id)));
+            setReport(await getAppAddresses(activeNode.url, cred));
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : t('Failed to load addresses'));
         } finally {
@@ -261,7 +261,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
         setChecking(true);
         setActionMessage(null);
         try {
-            const updated = await checkAppAddresses(activeNode.url, cred, getTfaSessionToken(activeNode.id));
+            const updated = await checkAppAddresses(activeNode.url, cred);
             setReport(updated);
             const after = latestCheck(updated.addresses);
             if (updated.checking) {
@@ -292,9 +292,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 // No contact or community name: the claim keeps what this server holds (routes/public-address.ts).
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim'), {
                     method: 'POST',
-                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(cred),
                     body: JSON.stringify({
-                        ...passwordField(cred),
+                        
                         name,
                         mode: 'tunnel',
                         ...proofField(code),
@@ -321,9 +321,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                     return;
                 }
             } else if (isIpAddress(a.address)) {
-                got = await setOwnAddress(activeNode.url, { ip: a.address }, cred, getTfaSessionToken(activeNode.id), code);
+                got = await setOwnAddress(activeNode.url, { ip: a.address }, cred, code);
             } else {
-                got = await setOwnAddress(activeNode.url, { domain: a.address }, cred, getTfaSessionToken(activeNode.id), code);
+                got = await setOwnAddress(activeNode.url, { domain: a.address }, cred, code);
             }
             proof.close();
             if (got && !got.communityAddress) {
@@ -394,9 +394,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 const name = extractSubdomain(a.address);
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name'), {
                     method: 'POST',
-                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(cred),
                     body: JSON.stringify({
-                        ...passwordField(cred),
+                        
                         name,
                         ...proofField(code),
                     }),
@@ -407,7 +407,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                     throw new Error(body?.error || `HTTP ${res.status}`);
                 }
             } else {
-                await removeAppAddress(activeNode.url, a.address, cred, getTfaSessionToken(activeNode.id), code);
+                await removeAppAddress(activeNode.url, a.address, cred, code);
             }
             proof.close();
             const done = release
@@ -432,7 +432,7 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
 
     /** An own address taken: what happens next, and whether it became the community's address. */
     const ownAnswered = async (got: { address: string; communityAddress: boolean }) => {
-        const tls = await getTlsStatus(activeNode.url, cred, getTfaSessionToken(activeNode.id)).catch(() => null);
+        const tls = await getTlsStatus(activeNode.url, cred).catch(() => null);
         const ca = tls?.ca ?? 'the CA';
         setActionMessage({
             type: 'success',
@@ -458,9 +458,9 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 setClaiming(true);
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/claim'), {
                     method: 'POST',
-                    headers: buildAdminHeaders(cred, getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(cred),
                     body: JSON.stringify({
-                        ...passwordField(cred),
+                        
                         name,
                         // Always a tunnel: a direct name needs this server's public IPv4 address, which Settings can't know
                         // (SEC-REG-01, verified 2026-10-16). Direct stays for operators who set PUBLIC_ADDRESS_MODE=direct
@@ -479,11 +479,11 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                 setBeanpoolSubdomain('');
             } else if (addKind === 'ip') {
                 const ip = ipInput.trim();
-                await ownAnswered(await setOwnAddress(activeNode.url, { ip }, cred, getTfaSessionToken(activeNode.id), code));
+                await ownAnswered(await setOwnAddress(activeNode.url, { ip }, cred, code));
                 setIpInput('');
             } else {
                 const domain = domainOf(domainInput);
-                await ownAnswered(await setOwnAddress(activeNode.url, { domain }, cred, getTfaSessionToken(activeNode.id), code));
+                await ownAnswered(await setOwnAddress(activeNode.url, { domain }, cred, code));
                 setDomainInput('');
             }
             proof.close();

@@ -4,7 +4,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { TakeoverPanel, type TakeoverPreview, type TakeoverProgressData } from './TakeoverPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'standby-1', name: 'Standby', url: 'https://standby.example.org', adminPassword: 'standby-own-pw' };
+const node: NodeProfile = { id: 'standby-1', name: 'Standby', url: 'https://standby.example.org', automationToken: 'standby-own-pw' };
 
 const MISSING = ['Decisions and their votes', 'enterprise pledges and keeper changes', 'invites', "members' notification settings"];
 const STEPS = ['opened', 'undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'role', 'pull-config', 'restart', 'audit', 'announcement', 'reseal', 'tunnel', 'done'];
@@ -24,7 +24,7 @@ function progress(state: TakeoverProgressData['state'], doneUpTo = -1, extra: Pa
             ? { roles: { written: 2, owners: ['@Anna'], skipped: [] }, audit: { ok: true, drift: 0, strandedEscrows: 0 }, tunnel: { source: 'older-envelope', message: 'The newest keys had no tunnel token, so it came from the copy locked earlier.' } }
             : null,
         missing: MISSING,
-        afterwards: ["Sign in to this server's Settings with the community's admin password or an owner's key. This standby's own admin password no longer works."],
+        afterwards: ["Sign in to this server's Settings with an owner's phone (Sign in with your phone). There is no admin password."],
         codeUsed: state === 'complete' ? { codeId: 1, at: '2026-09-20T01:00:00.000Z', message: 'Your recovery code #1 was used to take over on 2026-09-20. Make a new one.' } : null,
         ...extra,
     };
@@ -117,7 +117,10 @@ describe('TakeoverPanel', () => {
         expect(within(dialog).getByText(/Do this only if the main server is really gone/)).toBeInTheDocument();
         const missing = dialog.querySelector('#takeover-missing')!;
         for (const m of MISSING) expect(within(missing as HTMLElement).getByText(m)).toBeInTheDocument();
-        expect(within(dialog).getByText(/this standby's own password stops working/)).toBeInTheDocument();
+        expect(within(dialog).getByText(/after it, sign in to Settings with an owner's phone/)).toBeInTheDocument();
+        // There is no admin password to take, or to lose.
+        expect(within(dialog).queryByText(/admin password/i)).toBeNull();
+        expect(within(dialog).queryByText(/own password stops working/)).toBeNull();
         expect(calls.some((c) => c.path.endsWith('/open'))).toBe(false);
 
         fireEvent.click(within(dialog).getByRole('button', { name: 'I understand, continue' }));
@@ -234,7 +237,7 @@ describe('TakeoverPanel', () => {
         expect(await screen.findByText(/This server is now the community's main server/)).toBeInTheDocument();
         expect(screen.getByText('The ledger adds up.')).toBeInTheDocument();
         expect(screen.getByText(/came from the copy locked earlier/)).toBeInTheDocument();
-        expect(screen.getByText(/This standby's own admin password no longer works/)).toBeInTheDocument();
+        expect(screen.getByText(/Sign in to this server's Settings with an owner's phone \(Sign in with your phone\)\. There is no admin password\./)).toBeInTheDocument();
         expect(screen.getByRole('alert').textContent).toContain('Make a new one');
         const steps = document.querySelectorAll('[data-step]');
         expect(steps).toHaveLength(14);

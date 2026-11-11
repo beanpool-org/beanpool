@@ -18,7 +18,7 @@ describe('GatewayModule component', () => {
         },
     };
 
-    it('renders admin authentication form when gateway is null', async () => {
+    it('renders the owner-token unlock form when gateway is null', async () => {
         const onAuthenticateMock = vi.fn();
         render(
             <GatewayModule
@@ -31,20 +31,40 @@ describe('GatewayModule component', () => {
             />
         );
 
-        expect(screen.getByText('Node Admin Authentication Required')).toBeInTheDocument();
-        const input = screen.getByPlaceholderText('Enter node admin password (e.g. admin)');
+        expect(screen.getByText('Node Access Required')).toBeInTheDocument();
+        expect(screen.getByText('Owner automation token')).toBeInTheDocument();
+        const input = screen.getByPlaceholderText('bp_…');
         expect(input).toHaveAttribute('type', 'password');
 
-        // Toggle password visibility
-        const toggleBtn = screen.getByTitle('Show password');
+        // Toggle token visibility
+        const toggleBtn = screen.getByTitle('Show token');
         fireEvent.click(toggleBtn);
         expect(input).toHaveAttribute('type', 'text');
+        expect(screen.getByTitle('Hide token')).toBeInTheDocument();
 
         // Submit form
-        await userEvent.type(input, 'secret-pass');
+        await userEvent.type(input, 'bp_secret-token');
         fireEvent.submit(input.closest('form')!);
 
-        expect(onAuthenticateMock).toHaveBeenCalledWith('secret-pass');
+        expect(onAuthenticateMock).toHaveBeenCalledWith('bp_secret-token');
+    });
+
+    it('asks for no admin password: the unlock form is for an owner automation token', () => {
+        render(
+            <GatewayModule
+                gateway={null}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+                onAuthenticate={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText('Node Admin Authentication Required')).toBeNull();
+        expect(screen.queryByPlaceholderText(/admin password/i)).toBeNull();
+        expect(screen.queryByTitle('Show password')).toBeNull();
+        expect(screen.queryByText(/Admin Password/i)).toBeNull();
     });
 
     it('renders loading state when gateway is null and gatewayLoading is true', () => {

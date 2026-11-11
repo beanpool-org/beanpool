@@ -86,7 +86,7 @@ export function PruneBranchModal({
         setIsPruning(true);
         setErrorMessage(null);
         try {
-            await onConfirm(rootPubkey, ...(code ? [code] : []));
+            await onConfirm(rootPubkey, code);
             proof.close();
             onClose();
         } catch (err: unknown) {

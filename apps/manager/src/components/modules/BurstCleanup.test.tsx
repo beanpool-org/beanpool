@@ -273,7 +273,7 @@ describe('ModeratorView with bursts', () => {
 describe('Triage & Moderation (owners and admins) with bursts', () => {
     const triage = (invitedBy: string, reports: unknown[] = [{ id: 'r1', targetPubkey: ANCHOR, reason: 'Spam', status: 'pending', outcome: 'open' }]) => render(
         <PeopleSafetySection
-            activeNode={{ id: 'global', name: 'Global', url: 'https://global.example', adminPassword: 'pw' }}
+            activeNode={{ id: 'global', name: 'Global', url: 'https://global.example', automationToken: 'pw' }}
             nodeData={{
                 reports: reports as any,
                 members: [{ publicKey: ANCHOR, callsign: 'Spammy', invitedBy, nodeRole: null }],

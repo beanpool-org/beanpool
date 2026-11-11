@@ -106,7 +106,7 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
 
         // Submitting triggers onConfirm with root pubkey
         await userEvent.click(pruneBtn);
-        expect(handleConfirm).toHaveBeenCalledWith('pk-root-elder-12345678');
+        expect(handleConfirm).toHaveBeenCalledWith('pk-root-elder-12345678', undefined);
         await waitFor(() => {
             expect(handleClose).toHaveBeenCalled();
         });

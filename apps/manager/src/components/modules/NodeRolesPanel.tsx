@@ -5,7 +5,6 @@ import {
     fetchNodeRoles,
     grantNodeRoleApi,
     revokeNodeRoleApi,
-    getTfaSessionToken,
     type MemberItem,
     type MemberNodeRole,
     type NodeRoleRecord,
@@ -25,9 +24,9 @@ import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
  * Operator manual text for this screen: packages/beanpool-guide/operators/people/roles.md — keep the two in step.
  */
 
-/** Who is looking at /settings: the admin password counts as owner level (admin-surface.md §2.5). */
+/** Who is looking at /settings: a key session, or (fleet manager) an owner automation token, which counts as owner level for what a token may do. */
 export type RolesViewer =
-    | { kind: 'password' }
+    | { kind: 'token' }
     | { kind: 'key'; memberPubkey: string; role: 'owner' | 'admin' | 'moderator' };
 
 interface NodeRolesPanelProps {
@@ -110,7 +109,6 @@ function formatWhen(iso: string): string {
 const BREAK_GLASS_MADE_BY: Record<string, string> = {
     'key-session': 'a key session in Settings',
     app: 'their phone',
-    password: 'the admin password',
     'break-glass': 'a break-glass sign-in',
     recover: 'beanpool recover on the server',
 };
@@ -152,10 +150,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
     const searchRef = useRef<HTMLInputElement>(null);
     const noticeRef = useRef<HTMLDivElement>(null);
 
-    const tfa = getTfaSessionToken(activeNode.id);
     const myKey = viewer.kind === 'key' ? viewer.memberPubkey : null;
     // Owner-level: may grant and revoke every role. The node enforces this; the UI only mirrors it.
-    const canManage = viewer.kind === 'password' || viewer.role === 'owner';
+    const canManage = viewer.kind === 'token' || viewer.role === 'owner';
     // An admin may appoint and remove MODERATORS, and nothing else (Marty, 2026-09-20). They may not
     // touch anyone who already holds a role, because granting replaces it -- see grantNodeRole.
     const isAdminViewer = viewer.kind === 'key' && viewer.role === 'admin';
@@ -166,7 +163,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            setRoles(await fetchNodeRoles(activeNode.url, nodeCredential(activeNode), tfa));
+            setRoles(await fetchNodeRoles(activeNode.url, nodeCredential(activeNode)));
             setLoadError(null);
         } catch (e: unknown) {
             const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'Could not load the list';
@@ -174,7 +171,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         } finally {
             setLoading(false);
         }
-    }, [activeNode.url, nodeCredential(activeNode), tfa]);
+    }, [activeNode.url, nodeCredential(activeNode)]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -252,7 +249,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         setBusy(true);
         setNotice(null);
         try {
-            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa, ...(code ? [code] : []));
+            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), code);
             proof.close();
             const who = target.pubkey === myKey ? 'You are' : `${target.name} is`;
             setNotice({ kind: 'success', text: `${who} now ${ROLE_ARTICLE[newRole]}.` });
@@ -275,7 +272,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
         setBusy(true);
         setNotice(null);
         try {
-            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa, ...(code ? [code] : []));
+            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), code);
             proof.close();
             setNotice({ kind: 'success', text: `${name} is no longer ${ROLE_ARTICLE[removing.role]}.` });
             setRemoving(null);
@@ -338,7 +335,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                 </div>
             )}
 
-            {/* Only to whoever can make an owner (an owner's key or the password): an admin's key unlocks no backups and an
+            {/* Only to whoever can make an owner (an owner's key): an admin's key unlocks no backups and an
                 admin can't add an owner, so the banner would tell them something false and offer them nothing to do. */}
             {oneOwner && canManage && (
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/40 space-y-1" data-testid="second-owner-banner">
@@ -355,7 +352,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                     <p className="text-sm text-amber-100/80 m-0">
                         {myKey
                             ? 'You are signed in with your own key, so you can make yourself the owner in one step.'
-                            : 'You are signed in with the admin password. Search for your own callsign below and choose Owner.'}
+                            : 'You are signed in with an automation token. Search for your own callsign below and choose Owner.'}
                     </p>
                     <button type="button" onClick={addYourself} className={`${btn} bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-bp-gold-fill`}>
                         {myKey ? 'Make me the owner' : 'Find myself'}
@@ -606,7 +603,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                 </div>
             )}
 
-            {/* Your own sign-ins: only a key session has any (the password and a fleet profile are nobody's). */}
+            {/* Your own sign-ins: only a key session has any (a fleet profile's token is nobody's). */}
             {viewer.kind === 'key' && onSignedOutEverywhere && <SignOutEverywhere onSignedOut={onSignedOutEverywhere} />}
         </div>
     );

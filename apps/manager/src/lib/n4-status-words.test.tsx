@@ -49,7 +49,7 @@ describe('N4: no bare HTTP status (S4a)', () => {
     it('the backup schedule card says it in words when the node cannot be read', async () => {
         vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue([]);
         answer(500, undefined);
-        const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: NODE, adminPassword: 'pw' };
+        const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: NODE, automationToken: 'pw' };
         await act(async () => {
             render(
                 <ApplianceSection activeNode={node} diag={null} gateway={null} gatewayLoading={false} gatewaySuccess={null} gatewaySaving={false}

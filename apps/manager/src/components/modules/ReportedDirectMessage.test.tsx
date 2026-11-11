@@ -32,14 +32,14 @@ afterEach(() => {
 describe('ReportedDirectMessage', () => {
     it('reads at 4.5:1 or better on both its cards: nothing in it is nature-500, which is 3.83:1', async () => {
         serve(base);
-        const { container } = render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r1" adminPassword="pw" />);
+        const { container } = render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r1" credential="pw" />);
         await screen.findByText('Rude words');
         expect(container.querySelector('.text-nature-500')).toBeNull();
     });
 
     it('opens the line through the report, and names a direct message from its sender', async () => {
         const fetchMock = serve(base);
-        render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r 1" adminPassword="pw" />);
+        render(<ReportedDirectMessage nodeUrl="https://node.example" reportId="r 1" credential="pw" />);
         await screen.findByText('Rude words');
         expect(String(fetchMock.mock.calls[0]?.[0 as never])).toMatch(/node\.example\/api\/local\/admin\/reports\/r%201\/message$/);
         expect(screen.getByText('Direct message · from Bob')).toBeInTheDocument();

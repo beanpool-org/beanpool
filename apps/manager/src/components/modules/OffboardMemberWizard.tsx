@@ -23,8 +23,7 @@ export interface OffboardMemberWizardProps {
         avatarUrl?: string;
     };
     nodeUrl: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     currentAdminPubkey?: string;
     hasKeyAuth?: boolean;
     onSuccess?: () => void;
@@ -34,8 +33,7 @@ export interface OffboardMemberWizardProps {
 export function OffboardMemberWizard({
     member,
     nodeUrl,
-    adminPassword,
-    tfaToken,
+    credential,
     currentAdminPubkey,
     hasKeyAuth = false,
     onSuccess,
@@ -59,7 +57,7 @@ export function OffboardMemberWizard({
             setLoading(true);
             setError(null);
             try {
-                const data = await fetchOffboardPreviewApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+                const data = await fetchOffboardPreviewApi(nodeUrl, member.publicKey, credential);
                 if (mounted) {
                     setPreview(data);
                     if (data.activeMembers.length > 0) {
@@ -82,7 +80,7 @@ export function OffboardMemberWizard({
         return () => {
             mounted = false;
         };
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken]);
+    }, [nodeUrl, member.publicKey, credential]);
 
     // Two-person rule check: Actor cannot gift to themselves
     const isSelfDealing = Boolean(
@@ -94,7 +92,7 @@ export function OffboardMemberWizard({
         giftRecipient.toLowerCase() === currentAdminPubkey.toLowerCase()
     );
 
-    // Who is signed in decides this one: a password-only session may not hand a departing balance to
+    // Who is signed in decides this one: a session with no key behind it (an automation token) may not hand a departing balance to
     // a named member at all, and with nobody left to receive it there is nothing to hand over.
     const giftBlockedByAuth = !hasKeyAuth;
     const giftBlockedNoRecipients = hasKeyAuth && (preview?.activeMembers?.length ?? 0) === 0;
@@ -144,9 +142,8 @@ export function OffboardMemberWizard({
                     resolution,
                     giftRecipientPubkey: resolution === 'gift_to_member' ? giftRecipient : undefined,
                 },
-                adminPassword,
-                tfaToken,
-                ...(code ? [code] : [])
+                credential,
+                code
             );
             proof.close();
             setCompleted(true);
@@ -324,7 +321,7 @@ export function OffboardMemberWizard({
                                                 className={`block mt-1 text-[11px] ${giftBlockedByAuth ? 'text-amber-400' : 'text-nature-400'}`}
                                             >
                                                 {giftBlockedByAuth
-                                                    ? '⚠️ Requires signed key-based admin authentication. Please authenticate with your admin key to enable member gifting; password-only sessions must donate departing balances to the Commons Pool.'
+                                                    ? '⚠️ Requires signed key-based admin authentication. Please authenticate with your admin key to enable member gifting; a token session must donate departing balances to the Commons Pool.'
                                                     : 'No other active members available to receive a gift. Departing balance will be donated to the Commons Pool.'}
                                             </span>
                                         )}

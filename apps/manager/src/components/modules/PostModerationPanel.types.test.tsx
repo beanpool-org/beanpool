@@ -50,7 +50,7 @@ function serve(list: { status?: number; body: any }, putBack: { status?: number;
     return served;
 }
 
-const OWNER = { kind: 'password' } as const;
+const OWNER = { kind: 'token' } as const;
 const row = (title: string) => screen.getByText(title).closest('[class*="flex-col"]') as HTMLElement;
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });

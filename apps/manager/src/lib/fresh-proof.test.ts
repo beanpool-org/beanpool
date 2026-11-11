@@ -2,12 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
     FRESH_PROOF_WORDS,
     FreshProofRequiredError,
-    SECOND_FACTOR_ASK,
-    SecondFactorRequiredError,
     freshProofRefusal,
     freshProofRefusalOf,
-    isSecondFactorAsk,
-    isSecondFactorAskOf,
     proofField,
     proofHeader,
     refusalOf,
@@ -21,15 +17,6 @@ describe('fresh-proof lib module', () => {
             expect(freshProofRefusal(401, null)).toBeNull();
             expect(freshProofRefusal(401, 'not-an-object')).toBeNull();
             expect(freshProofRefusal(200, { ok: true })).toBeNull();
-        });
-
-        it('returns null when 401 is checkAdminAuth second-factor ask', () => {
-            expect(
-                freshProofRefusal(401, {
-                    totpRequired: true,
-                    error: SECOND_FACTOR_ASK,
-                })
-            ).toBeNull();
         });
 
         it('returns code refusal for 401 totpRequired with standard error message', () => {
@@ -87,16 +74,14 @@ describe('fresh-proof lib module', () => {
             });
         });
 
-        it('returns needs-2fa refusal for 403 fresh_proof_needs_2fa', () => {
+        it('no longer knows the needs-2fa refusal: the server has no 2FA to turn on', () => {
             expect(
                 freshProofRefusal(403, {
                     code: 'fresh_proof_needs_2fa',
                     error: 'Enable 2FA first',
                 })
-            ).toEqual({
-                kind: 'needs-2fa',
-                error: 'Enable 2FA first',
-            });
+            ).toBeNull();
+            expect('needs2fa' in FRESH_PROOF_WORDS).toBe(false);
         });
     });
 
@@ -123,48 +108,7 @@ describe('fresh-proof lib module', () => {
         });
     });
 
-    describe('isSecondFactorAskOf and isSecondFactorAsk', () => {
-        it('isSecondFactorAskOf identifies 401 second-factor response', async () => {
-            const match = new Response(
-                JSON.stringify({ totpRequired: true, error: SECOND_FACTOR_ASK }),
-                { status: 401 }
-            );
-            const nonMatch = new Response(
-                JSON.stringify({ totpRequired: true, error: 'Other code error' }),
-                { status: 401 }
-            );
-            const badStatus = new Response(
-                JSON.stringify({ totpRequired: true, error: SECOND_FACTOR_ASK }),
-                { status: 403 }
-            );
-
-            expect(await isSecondFactorAskOf(match)).toBe(true);
-            expect(await isSecondFactorAskOf(nonMatch)).toBe(false);
-            expect(await isSecondFactorAskOf(badStatus)).toBe(false);
-        });
-
-        it('isSecondFactorAskOf returns false when response JSON parsing fails', async () => {
-            const badJson = new Response('not-json', { status: 401 });
-            expect(await isSecondFactorAskOf(badJson)).toBe(false);
-        });
-
-        it('isSecondFactorAsk identifies SecondFactorRequiredError instances', () => {
-            expect(isSecondFactorAsk(new SecondFactorRequiredError())).toBe(true);
-            expect(isSecondFactorAsk(new Error('Other'))).toBe(false);
-            expect(isSecondFactorAsk(null)).toBe(false);
-        });
-    });
-
     describe('throwIfFreshProof', () => {
-        it('throws SecondFactorRequiredError when second factor ask is present', () => {
-            expect(() =>
-                throwIfFreshProof(401, {
-                    totpRequired: true,
-                    error: SECOND_FACTOR_ASK,
-                })
-            ).toThrow(SecondFactorRequiredError);
-        });
-
         it('throws FreshProofRequiredError with refusal when fresh proof is required', () => {
             try {
                 throwIfFreshProof(403, {
@@ -186,6 +130,8 @@ describe('fresh-proof lib module', () => {
 
         it('does not throw when response body is not a fresh proof refusal', () => {
             expect(() => throwIfFreshProof(200, { ok: true })).not.toThrow();
+            // The needs-2fa refusal is gone with the server's 2FA: it is an ordinary answer now.
+            expect(() => throwIfFreshProof(403, { code: 'fresh_proof_needs_2fa', error: 'Enable 2FA first' })).not.toThrow();
         });
     });
 
@@ -222,6 +168,8 @@ describe('fresh-proof lib module', () => {
                     refusal: { kind: 'unknown-kind', error: 'Test' },
                 })
             ).toBeNull();
+            // The needs-2fa kind was removed with the server's 2FA.
+            expect(refusalOf({ refusal: { kind: 'needs-2fa', error: 'Test' } })).toBeNull();
         });
     });
 

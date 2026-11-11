@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 import { proofField } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
@@ -71,14 +70,14 @@ export function StandbyReplicationPanel({
     const loadData = useCallback(async () => {
         setLoadingStatus(true);
         try {
-            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const headers = buildAdminHeaders(nodeCredential(activeNode));
 
             // 1. Fetch live backup status
             const statusUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-status');
             const statusRes = await fetch(statusUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                body: JSON.stringify({}),
             }).catch(() => null);
 
             if (statusRes && statusRes.ok) {
@@ -94,7 +93,7 @@ export function StandbyReplicationPanel({
             const configRes = await fetch(configUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                body: JSON.stringify({}),
             }).catch(() => null);
 
             if (configRes && configRes.ok) {
@@ -122,7 +121,7 @@ export function StandbyReplicationPanel({
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/replication-config/save');
             const body: Record<string, unknown> = {
-                ...passwordField(nodeCredential(activeNode)),
+                
                 primaryUrl: primaryUrl.trim(),
             };
             if (primaryToken.trim()) {
@@ -134,7 +133,7 @@ export function StandbyReplicationPanel({
 
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
                 body: JSON.stringify(body),
             });
             if (await proof.check(res, (c) => handleSaveConfig(null, c), code)) return;
@@ -167,8 +166,8 @@ export function StandbyReplicationPanel({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/replication-resync');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
+                body: JSON.stringify({}),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
@@ -347,7 +346,7 @@ export function StandbyReplicationPanel({
                             Primary Replication Token
                         </label>
                         <p className="text-[11px] text-nature-400 m-0 mb-1.5">
-                            Make it on the main server under Replication Access. A standby never takes the main server&apos;s admin password.
+                            Make it on the main server under Replication Access.
                         </p>
                         <input
                             id="rep-primary-token"

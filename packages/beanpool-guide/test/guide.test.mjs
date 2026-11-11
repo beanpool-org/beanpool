@@ -511,7 +511,7 @@ test("the names list's pages say the design's sentences, and none of the old pro
     const members = words(guide.guides.find((g) => g.slug === 'what-the-admins-can-see'));
     for (const sentence of [
         "Only your owners and admins can read the names, on their own phones. Each name is sealed on an admin's phone before it is sent. A backup, a snapshot, a standby's copy, a stolen database and BeanPool hold nothing readable.",
-        "Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked, on a call or in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone's code, or an admin who was removed to work with it (below).",
+        "Whoever runs the server can change what it stores and what it tells each phone, and an owner can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked, on a call or in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone's code, or an admin who was removed to work with it (below).",
         // The fifth deciding review's BLOCKING finding (52e1a759), in the design addendum's (e) words: the new key protects
         // what the phones that took it write, and the limit is per phone.
         "When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on by a phone that has taken the new key can be read with the keys the person had. What they already saw, they keep, as with a paper list.",
@@ -1047,7 +1047,7 @@ test('lights-out, When the lights go out: both paths, the owner step a standby n
     for (const need of ['docker compose stop beanpool-node', 'beanpool restore /data/FILE.bpsealed', 'Never put it on the command line', 'docker compose up -d']) assert.ok(b.includes(need), `path B: ${need}`);
     // Reaching the switch: the owner's own ways, the shell and the laptop's loopback, and never a member.
     const ways = textsOf(underHeading(page, 'Reaching Settings and the switch with no internet')).join('\n');
-    for (const need of ['beanpool lights-out on', 'http://127.0.0.1:8080/settings', "authenticator", 'Manage', "a member's phone is refused"]) assert.ok(ways.includes(need), `reaching the switch: ${need}`);
+    for (const need of ['beanpool lights-out on', 'http://127.0.0.1:8080/settings', 'Scan the code the sign-in page shows', 'Manage', "a member's phone is refused"]) assert.ok(ways.includes(need), `reaching the switch: ${need}`);
     // The way back, with the Byron line: a tunnel on the host moves no address, so the old server is stopped by hand.
     const back = textsOf(underHeading(page, 'When the internet comes back')).join('\n');
     for (const need of ['Byron', 'docker compose stop beanpool-node', 'Never start the old main server again', 'read-only', 'one copy is the community, and the other is retired whole']) assert.ok(back.includes(need), `the way back: ${need}`);
@@ -1055,7 +1055,7 @@ test('lights-out, When the lights go out: both paths, the owner step a standby n
 
 // The checklist makes the laptop a standby (NODE_ROLE=backup). A standby refuses every trade and send
 // (apps/server/src/config/node-role.ts assertLedgerWritable), and nothing in the shell restore writes `nodeRole`
-// (sealed-backup.ts applyBundle writes only the admin, 2FA and break-glass fields). Path A's take-over writes it itself
+// (sealed-backup.ts applyBundle writes only the recovery code's record). Path A's take-over writes it itself
 // (services/takeover.ts); path B has no take-over, so it needs a step of its own (Opus review of #2823, finding 1).
 test('lights-out, path B: the laptop is made the main server after the restore and before docker compose up -d (a standby refuses every trade)', () => {
     const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);

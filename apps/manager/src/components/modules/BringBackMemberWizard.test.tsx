@@ -28,7 +28,7 @@ describe('BringBackMemberWizard', () => {
         expect(make.disabled).toBe(false);
         fireEvent.click(make);
         expect((await screen.findByTestId('bring-back-code')).textContent).toBe('BB-1234-5678');
-        expect(issue).toHaveBeenCalledWith('http://localhost:3000', member.publicKey, undefined, undefined);
+        expect(issue).toHaveBeenCalledWith('http://localhost:3000', member.publicKey, undefined);
         expect(screen.getByTestId('bring-back-in-person').textContent).toBe(ONLY_IN_PERSON);
     });
 
@@ -48,13 +48,13 @@ describe('BringBackMemberWizard', () => {
         fireEvent.change(screen.getByTestId('bring-back-number'), { target: { value: '47' } });
         fireEvent.click(screen.getByTestId('bring-back-confirm'));
         expect(await screen.findByTestId('bring-back-done')).toBeDefined();
-        expect(bind).toHaveBeenLastCalledWith('http://localhost:3000', member.publicKey, 'BB-1234-5678', '47', undefined, undefined);
+        expect(bind).toHaveBeenLastCalledWith('http://localhost:3000', member.publicKey, 'BB-1234-5678', '47', undefined);
     });
 
     it('half kept at BeanPool\'s key vault (vault rethink VR4): it says the day first, and after the number never says they are back', async () => {
         vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
             ...base,
-            pendingRequest: { id: 1, code: 'BB-1234-5678', kind: 'bring_back', old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'owner:password', status: 'pending', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3_600_000).toISOString() },
+            pendingRequest: { id: 1, code: 'BB-1234-5678', kind: 'bring_back', old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'b'.repeat(64), status: 'pending', created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3_600_000).toISOString() },
             communityCopy: { kept: true, since: null, placement: 'shared' },
         } as nodeClient.RekeyStatusResponse);
         vi.spyOn(nodeClient, 'bindRekeyByMatchApi').mockResolvedValue({ success: true, oldPubkey: member.publicKey, newPubkey: '', callsign: 'alice', broughtBack: true, placement: 'shared' });
@@ -100,7 +100,7 @@ describe('BringBackMemberWizard', () => {
 
             fireEvent.click(within(screen.getAllByTestId('bring-back-proposal')[1]).getByRole('button', { name: 'Not theirs' }));
             await waitFor(() => expect(screen.getAllByTestId('bring-back-proposal').length).toBe(1));
-            expect(decline).toHaveBeenCalledWith('http://localhost:3000', member.publicKey, phoneB, undefined, undefined);
+            expect(decline).toHaveBeenCalledWith('http://localhost:3000', member.publicKey, phoneB, undefined);
             expect(screen.getByTestId('bring-back-proposals').textContent).toContain('One phone has asked.');
             expect(screen.getByTestId('bring-back-proposal').textContent).toContain(phoneA.slice(0, 6));
         });

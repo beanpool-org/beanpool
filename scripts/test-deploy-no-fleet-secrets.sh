@@ -222,8 +222,10 @@ assert "a retired password, unlocked after Wipe & Reset, promises no made-up one
 assert "and says the password is retired" "$(echo "$out" | grep -c 'admin password is retired')" "1"
 assert "and is not told to claim it as a new install (retired is checked first)" "$(echo "$out" | grep -c 'beanpool claim')" "0"
 LC="$ROOT/apps/server/src/config/local-config.ts"
-assert "the file name is the server's own (FIRST_PASSWORD_FILE)" \
-       "$(grep -c "FIRST_PASSWORD_FILE = 'first-admin-password.txt'" "$LC")" "1"
+# The notice sends nobody to a password file because the server makes none: it has no admin password (Marty, 11 Nov
+# 2026), and no source of it names a first-password file. If one came back, the notice would have to name it again.
+hits=$(grep -rlE 'first-admin-password|FIRST_PASSWORD_FILE' "$ROOT/apps/server/src" | grep -vE '/test-[^/]*$' | sed "s|$ROOT/||")
+assert "the server makes no first-password file: none of its source names one" "${hits:-none}" "none"
 assert "the config file is the server's own (CONFIG_PATH)" \
        "$(grep -c "CONFIG_PATH = path.join(DATA_DIR, 'local-config.json')" "$LC")" "1"
 

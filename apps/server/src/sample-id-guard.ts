@@ -47,7 +47,7 @@ export function namesAnId(key: string): boolean {
 export const FREE_TEXT_KEYS: ReadonlySet<string> = new Set([
     'title', 'description', 'message', 'text', 'memo', 'comment', 'reason', 'name', 'bio', 'communityname',
     'community_name', 'callsign', 'slug', 'searchquery', 'contact', 'address', 'unit', 'work',
-    'purpose', 'resolution', 'seasonalityhint', 'password', 'currentpassword', 'newpassword',
+    'purpose', 'resolution', 'seasonalityhint',
 ]);
 
 /** A sample id as a token: `sample` then `-` or `_` and a letter or digit, not inside a longer word. */

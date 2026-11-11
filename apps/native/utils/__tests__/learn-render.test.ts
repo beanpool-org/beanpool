@@ -562,4 +562,56 @@ describe('the post route’s hook: which page a route names', () => {
         await act(async () => { (h.listeners.sync_data_updated || []).forEach((fn) => fn()); await new Promise((r) => setImmediate(r)); });
         expect(probe()).toBe('Arrived|settled');
     });
+
+    // An open page leaves when it leaves (review of #3070, finding 2). `isPage` keeps a route that showed a page a page's route,
+    // so PostRoute draws "This page isn't in Learn any more" and not the listing screen.
+    function PageProbe({ id, asked }: { id: string; asked: boolean }) {
+        const { page: p, settled, isPage } = useKnowledgePage(id, asked);
+        return createElement('div', { 'data-testid': 'probe' }, `${p ? p.title : 'none'}|${settled ? 'settled' : 'looking'}|${isPage ? 'page' : 'listing?'}`);
+    }
+    const syncLands = async () => {
+        await act(async () => { (h.listeners.sync_data_updated || []).forEach((fn) => fn()); await new Promise((r) => setImmediate(r)); });
+    };
+
+    it('a page from the copy that the copy no longer holds is gone, with or without a kind, and the route stays a page’s', async () => {
+        for (const asked of [false, true]) {
+            h.pages = [page({ id: 'held', title: 'Held page' })];
+            h.nodeSearch = null; // out of reach: the copy's word is enough
+            act(() => root.unmount());
+            root = createRoot(host);
+            await show(createElement(PageProbe, { id: 'held', asked }));
+            expect(probe()).toBe('Held page|settled|page');
+            h.pages = [];
+            await syncLands();
+            expect(probe()).toBe('none|settled|page');
+        }
+    });
+
+    it('a page from the node stays while the node is out of reach, and goes when the node answers without it', async () => {
+        const fromNode = page({ id: 'far', title: 'From the node' });
+        h.nodeSearch = async () => ({ ok: true, json: async () => [fromNode] });
+        await show(createElement(PageProbe, { id: 'far', asked: true }));
+        expect(probe()).toBe('From the node|settled|page');
+        h.nodeSearch = null;
+        await syncLands();
+        expect(probe()).toBe('From the node|settled|page');
+        h.nodeSearch = async () => ({ ok: false, status: 503, json: async () => ({}) });
+        await syncLands();
+        expect(probe()).toBe('From the node|settled|page');
+        h.nodeSearch = async () => ({ ok: true, json: async () => [] });
+        await syncLands();
+        expect(probe()).toBe('none|settled|page');
+        // Said once: not asked again on every sync after it.
+        const asks = h.nodeCalls.length;
+        await syncLands();
+        expect(h.nodeCalls.length).toBe(asks);
+    });
+
+    it('a route with no kind whose id is no page is never a page’s route (the listing screen draws)', async () => {
+        await show(createElement(PageProbe, { id: 'listing-1', asked: false }));
+        expect(probe()).toBe('none|settled|listing?');
+        await syncLands();
+        expect(probe()).toBe('none|settled|listing?');
+        expect(h.nodeCalls).toEqual([]);
+    });
 });

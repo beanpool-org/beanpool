@@ -84,11 +84,14 @@ const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
 const nav = vi.hoisted(() => ({ to: [] as unknown[] }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
+    const router = {
+        push(to: unknown) { nav.to.push(to); }, navigate(to: unknown) { nav.to.push(to); }, replace(to: unknown) { nav.to.push(to); },
+        back() {}, canGoBack: () => true, setParams() {},
+    };
     return {
-        router: {
-            push(to: unknown) { nav.to.push(to); }, navigate(to: unknown) { nav.to.push(to); }, replace(to: unknown) { nav.to.push(to); },
-            back() {}, canGoBack: () => true, setParams() {},
-        },
+        router,
+        // A page of Local knowledge's screens (components/learn/KnowledgeDetail.tsx) read the same router through the hook.
+        useRouter: () => router,
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => params.now,
@@ -1024,4 +1027,66 @@ describe('DP3: the listing page in the event page\'s order, at 320 × 569 and 1.
             expect(t.bottom).toBeCloseTo(top + 48, 1);
         });
     }
+});
+
+// A page of Local knowledge opens through this route too (PostRoute). A take-down pushes `post_removed`, which takes the page out of
+// the phone's copy and lands as `sync_data_updated`; an open page must then leave the screen (review of #3070, finding 2).
+describe('a page of Local knowledge open on the post route leaves when the copy no longer holds it', () => {
+    const PAGE = {
+        id: 'k-1', type: 'knowledge', title: 'Where the tip is', description: 'Off the Main Road, open every day.', category: 'local-services',
+        status: 'active', active: 1, authorPublicKey: 'bea-key', authorCallsign: 'Bea', createdAt: AT, updatedAt: AT,
+        knowledge: { sources: [], place: null, lang: 'en', checkedAt: AT, outdatedAt: null, outdatedNote: null, helped: 0, gathered: false },
+    };
+    const page = { copy: new Map<string, unknown>(), node: null as unknown[] | null, asked: [] as string[] };
+    async function openPage(extra: Record<string, string>) {
+        page.copy = new Map([[PAGE.id, PAGE]]);
+        page.asked = [];
+        const base = answers(listing({}));
+        net.answer = (name, args) => {
+            if (name === 'getKnowledgePost') return Promise.resolve(page.copy.get(String(args[0])) ?? null);
+            if (name === 'signedGet') {
+                page.asked.push(String(args[0]));
+                return page.node === null ? Promise.reject(new TypeError('offline')) : Promise.resolve({ ok: true, json: async () => page.node });
+            }
+            return base(name, args);
+        };
+        params.now = { id: PAGE.id, ...extra };
+        await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(PostDetailScreen)) as any); });
+        await settle();
+    }
+    const takenDown = async () => {
+        page.copy.delete(PAGE.id);
+        await act(async () => { for (const fn of events.listeners.get('sync_data_updated') ?? []) fn(); });
+        await settle();
+    };
+    const missing = () => host.querySelector('[data-testid="knowledge-missing"]');
+
+    const ways: Array<[string, Record<string, string>, unknown[] | null]> = [
+        ['opened from a Learn row (kind=knowledge), the node answering without it', { kind: 'knowledge' }, []],
+        ['opened from a Learn row (kind=knowledge), the node out of reach', { kind: 'knowledge' }, null],
+        ['opened from a pasted link (no kind)', {}, []],
+    ];
+    for (const [how, extra, node] of ways) {
+        it(`${how}: the page turns into "This page isn't in Learn any more", never the listing screen`, async () => {
+            page.node = node;
+            await openPage(extra);
+            expect(host.textContent).toContain('Where the tip is');
+            expect(missing()).toBeNull();
+            await takenDown();
+            expect(missing()).toBeTruthy();
+            expect(host.textContent).toContain('This page isn’t in Learn any more.');
+            expect(host.textContent).not.toContain('Where the tip is');
+            expect(host.textContent).not.toContain('Pottery course');
+        });
+    }
+
+    it('a page the copy still holds stays open when a sync lands, and the node is asked nothing', async () => {
+        page.node = [];
+        await openPage({ kind: 'knowledge' });
+        await act(async () => { for (const fn of events.listeners.get('sync_data_updated') ?? []) fn(); });
+        await settle();
+        expect(host.textContent).toContain('Where the tip is');
+        expect(missing()).toBeNull();
+        expect(page.asked).toEqual([]);
+    });
 });

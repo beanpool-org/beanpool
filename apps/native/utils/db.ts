@@ -4261,6 +4261,9 @@ export async function readNearbyTag(): Promise<string | null> {
  * removal cancels the row exactly as the node's own removal does (status 'cancelled', active 0, and an event's
  * state 'cancelled'), and creates nothing when the phone never had the listing. `updated_at` is left alone: the
  * node's tombstone carries the real one, and the next catch-up sync writes it over this row as usual.
+ * A removal names an id, not a type, so it is also a page of Local knowledge's (a take-down, or Settings' removal): that page
+ * lives in `knowledge_posts` (writeKnowledgePost), and leaves Learn, the Market's 📖 line and an open page at once, as the
+ * node's tombstone does at the next sync (DESIGN-local-knowledge-fable.md §7, "takedown at once").
  */
 async function applyLivePostRow(txn: SQLite.SQLiteDatabase, change: LivePostChange): Promise<void> {
     if (change.kind === 'remove') {
@@ -4269,6 +4272,7 @@ async function applyLivePostRow(txn: SQLite.SQLiteDatabase, change: LivePostChan
                               event_state = CASE WHEN type = 'event' THEN 'cancelled' ELSE event_state END
              WHERE id = ?`,
             [change.id]);
+        await txn.runAsync('UPDATE knowledge_posts SET active = 0 WHERE id = ?', [change.id]);
         return;
     }
     const local = await txn.getFirstAsync<{ updated_at: string | null }>('SELECT updated_at FROM posts WHERE id = ?', [change.post.id]);

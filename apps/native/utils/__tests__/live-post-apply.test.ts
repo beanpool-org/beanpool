@@ -49,7 +49,7 @@ vi.mock('../nodes', () => ({
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { applyDelta, getDb, getPost, getPosts } from '../db';
+import { applyDelta, getDb, getKnowledgePost, getKnowledgePosts, getPost, getPosts } from '../db';
 import { applyLivePostChange, performSync } from '../../services/pillar-sync';
 import { livePostChange } from '@beanpool/core';
 import { marketFeedQuery, type MarketTypeFilter } from '../market-filters';
@@ -82,7 +82,45 @@ beforeEach(async () => {
     fetchMock.mockReset().mockResolvedValue({ ok: false, status: 404, json: async () => ({}), text: async () => '' });
     (globalThis as any).fetch = fetchMock;
     await getDb(); // schema in place
-    for (const t of ['posts', 'marketplace_transactions', 'conversations']) sql.exec(`DELETE FROM ${t}`);
+    for (const t of ['posts', 'marketplace_transactions', 'conversations', 'knowledge_posts']) sql.exec(`DELETE FROM ${t}`);
+});
+
+/** A page of Local knowledge as the node sends it (the sync reads pages because the phone names the type). */
+function knowledgePage(id: string, extra: Record<string, unknown> = {}) {
+    return {
+        id, type: 'knowledge', category: 'local-services', title: `Page ${id}`, description: 'The answer first.', authorPublicKey: ANN,
+        status: 'active', active: 1, audienceScope: 'public', createdAt: '2026-11-02T00:00:00.000Z', updatedAt: '2026-11-02T00:00:00.000Z',
+        knowledge: { sources: [], place: null, lang: 'en', checkedAt: '2026-11-03T00:00:00.000Z', helped: 0, gathered: false },
+        ...extra,
+    };
+}
+
+// A take-down (POST /api/knowledge/posts/:id/take-down, or Settings' removal) pushes `post_removed` for the page's id and rings no
+// doorbell. A page lives in `knowledge_posts`, not `posts`, so the push itself must take it out of Learn's copy, at once
+// (DESIGN-local-knowledge-fable.md §7 "takedown at once"; review of #3070).
+describe('a take-down of a page of Local knowledge, pushed live', () => {
+    it("takes the page out of Learn's copy at once and is written (no catch-up sync needed), creating nothing in posts", async () => {
+        await applyDelta({ posts: [knowledgePage('k1'), knowledgePage('k2')] });
+        expect((await getKnowledgePosts()).map((p) => p.id).sort()).toEqual(['k1', 'k2']);
+        expect(await applyLivePostChange(removal('k1'), ctx)).toBe(true);
+        expect((await getKnowledgePosts()).map((p) => p.id)).toEqual(['k2']);
+        expect(await getKnowledgePost('k1')).toBeNull();
+        expect(sql.prepare('SELECT id, active FROM knowledge_posts ORDER BY id').all()).toEqual([{ id: 'k1', active: 0 }, { id: 'k2', active: 1 }]);
+        expect(rowCount('k1')).toBe(0);
+    });
+
+    it('a sync whose pull left the node before the take-down replays the push over its own copy: the page stays out', async () => {
+        await applyDelta({ posts: [knowledgePage('k1')] });
+        await applyDelta({ posts: [knowledgePage('k1')], liveChanges: [removal('k1')] });
+        expect(await getKnowledgePosts()).toEqual([]);
+    });
+
+    it("a listing's removal leaves the pages alone", async () => {
+        await applyDelta({ posts: [offer(), knowledgePage('k1')] });
+        expect(await applyLivePostChange(removal('post-1'), ctx)).toBe(true);
+        expect(row()).toMatchObject({ status: 'cancelled', active: 0 });
+        expect((await getKnowledgePosts()).map((p) => p.id)).toEqual(['k1']);
+    });
 });
 
 describe('applyDelta liveChanges: a pushed listing goes through the delta sync\'s own row writer', () => {

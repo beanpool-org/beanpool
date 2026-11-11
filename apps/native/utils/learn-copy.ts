@@ -9,7 +9,7 @@
  */
 import {
     KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPICS, KNOWLEDGE_TOPIC_PAGE, compareKnowledge, knowledgeFirstLine,
-    knowledgeTopic, pinLive, SAMPLE_COMMUNITY, t,
+    knowledgeTopic, pinLive,
     type KnowledgeFront, type KnowledgeRow, type KnowledgeSearch, type KnowledgeTopicPage,
 } from '@beanpool/core';
 
@@ -41,29 +41,8 @@ export interface KnowledgePage {
     };
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Example Valley's three sample pages (core SAMPLE_COMMUNITY.knowledge) as Learn's pages, for the worldwide community's preview
- * (amended §2.9). Ids start `sample-`; they carry no source and no writer, and nothing in the preview opens them: every action
- * there opens the sheet that leads to a local community.
- */
-export function samplePages(now: number = Date.now()): KnowledgePage[] {
-    return SAMPLE_COMMUNITY.knowledge.map((s) => ({
-        id: s.id,
-        title: t(s.title),
-        description: t(s.body),
-        category: s.topic,
-        status: 'active',
-        createdAt: new Date(now - s.checkedDaysAgo * DAY_MS).toISOString(),
-        knowledge: {
-            sources: [],
-            place: s.place ? t(s.place) : null,
-            checkedAt: new Date(now - s.checkedDaysAgo * DAY_MS).toISOString(),
-            helped: s.helped,
-        },
-    }));
-}
+// Example Valley's sample pages, for the worldwide community's preview, are read with the other samples, by the preview
+// components alone (components/showcase/sample-screens.ts samplePages).
 
 /** Whether a page shows in Learn: active, not hidden by reports (the node's own filter, engine/knowledge.ts showingTo). */
 export function pageShows(page: KnowledgePage): boolean {

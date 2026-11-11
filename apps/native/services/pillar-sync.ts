@@ -355,6 +355,8 @@ async function nearbyAreaForSync(
  *     about: one person, not a crowd, and their deals, chats and offer gate need the sync, not just the row;
  *   - a removal of a cached event or poll, whose removal means more than a cancelled row (an event's chat
  *     goes read-only; the rule for pushes is offers and needs only).
+ * A removal of a page of Local knowledge is written here: the page is not in `posts`, so no tie above holds it, and the write
+ * takes it out of Learn's copy at once (utils/db.ts applyLivePostRow).
  * Throws only if the write itself fails; the caller then rings the doorbell instead.
  */
 export async function applyLivePostChange(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KNOWLEDGE_FRONT_ROWS, KNOWLEDGE_SEARCH_MAX, KNOWLEDGE_TOPIC_PAGE, KNOWLEDGE_TOPICS, SAMPLE_COMMUNITY } from '@beanpool/core';
-import { learnFront, learnRows, learnSearch, learnTopic, pageShows, rowOfPage, samplePages, searchTerms, type KnowledgePage } from '../learn-copy';
+import { learnFront, learnRows, learnSearch, learnTopic, pageShows, rowOfPage, searchTerms, type KnowledgePage } from '../learn-copy';
+import { samplePages } from '../../components/showcase/sample-screens';
 
 // Learn on the phone reads the phone's own copy of the pages and must read as the node's own front does
 // (apps/server engine/knowledge.ts): the same row, the same order, the same scoring.

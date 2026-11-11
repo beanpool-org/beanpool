@@ -28,7 +28,8 @@ import { KnowledgeRowCard } from '../components/learn/KnowledgeRowCard';
 import { LearnPreviewSheet } from '../components/learn/LearnPreviewSheet';
 import { LEARN_LINES, topicOf } from '../components/learn/learn-lines';
 import { getKnowledgePosts, signedGet } from '../utils/db';
-import { learnFront, learnRows, learnSearch, samplePages, type KnowledgePage } from '../utils/learn-copy';
+import { learnFront, learnRows, learnSearch, type KnowledgePage } from '../utils/learn-copy';
+import { samplePages } from '../components/showcase/sample-screens';
 import { useLearnMode } from '../utils/use-learn-mode';
 
 /** The pause after the last key before the node is asked to search. */

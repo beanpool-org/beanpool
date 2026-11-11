@@ -2811,15 +2811,16 @@ function PostDetailModal() {
  * The route for a post. A page of Local knowledge opens here too (DESIGN-local-knowledge-fable.md amended §2.11): a Learn row,
  * a bell line and a shared link land on one place. A route that says it is a page (`kind=knowledge`, as Learn's rows do) is
  * never drawn as a listing; one that doesn't (a pasted link) draws the listing at once, and the page instead if the phone's
- * copy turns out to hold one by that id. The listing screen above is as it was.
+ * copy turns out to hold one by that id. A page that leaves while open (a take-down) turns into "This page isn't in Learn any
+ * more", never the listing screen. The listing screen above is as it was.
  */
 export default function PostRoute() {
     const { id, kind } = useLocalSearchParams<{ id?: string | string[]; kind?: string | string[] }>();
     const pageId = Array.isArray(id) ? id[0] : id;
     const asked = (Array.isArray(kind) ? kind[0] : kind) === 'knowledge';
-    const { page, settled } = useKnowledgePage(pageId, asked);
+    const { page, settled, isPage } = useKnowledgePage(pageId, asked);
     if (page) return <KnowledgeDetail page={page} />;
-    if (!asked) return <PostDetailModal />;
+    if (!isPage) return <PostDetailModal />;
     return <KnowledgeMissing settled={settled} />;
 }
 

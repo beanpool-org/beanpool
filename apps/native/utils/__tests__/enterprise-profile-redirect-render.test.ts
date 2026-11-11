@@ -541,6 +541,9 @@ describe('Every door lands on the enterprise page', () => {
             // The map's small cards open the item and never its owner (4 Nov), so the map is no longer a door. An event's own screen
             // is: the host's box ("HOSTED BY", components/AuthorCard.tsx) opens the host, as a listing's "POSTED BY" does.
             [path.join('components', 'EventDetail.tsx')]: 1,
+            // A page of Local knowledge (Learn, K2): the writer's box ("WRITTEN BY", components/AuthorCard.tsx) opens the writer, as
+            // a listing's "POSTED BY" and an event's host do. A page gathered with the assistant draws no box, so no door.
+            [path.join('components', 'learn', 'KnowledgeDetail.tsx')]: 1,
             // The full Community Pulse list: a row about a member opens them.
             [path.join('app', '(tabs)', 'market.tsx')]: 1,
             [path.join('app', '(tabs)', 'people.tsx')]: 2,

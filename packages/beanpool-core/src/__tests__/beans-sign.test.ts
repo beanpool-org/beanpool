@@ -155,7 +155,10 @@ describe.each(SIZES)('the %s sign', (size) => {
     it('is not made without a code', () => {
         expect(() => beansSignHtml(wordsIn('en'), { ...optionsFor(size), qr: '<svg onload=alert(1)>' as never })).toThrow();
         expect(() => beansSignHtml(wordsIn('en'), { ...optionsFor(size), qr: [[true, false]] })).toThrow();
-        expect(() => beansSignHtml(wordsIn('en'), { ...optionsFor(size), size: 'a3' as never })).toThrow();
+        // Only the two sizes: not another paper, and not a name every object has (`in` would let "constructor" draw a page with no paper).
+        for (const bad of ['a3', 'constructor', 'toString', '__proto__', '']) {
+            expect(() => beansSignHtml(wordsIn('en'), { ...optionsFor(size), size: bad as never }), bad).toThrow();
+        }
     });
 });
 

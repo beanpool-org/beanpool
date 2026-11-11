@@ -111,7 +111,8 @@ h1 { margin: 0; font-size: ${s.headlinePt}pt; line-height: 1.05; font-weight: 80
  * so a caller shows "couldn't be made" and prints no blank frame.
  */
 export function beansSignHtml(w: Pick<Words, 'lang' | 't'>, o: BeansSignOptions): string {
-    if (!(o.size in BEANS_SIGN_SIZES)) throw new Error('A sign is A4 or A6.');
+    // Own names only: `in` also finds "constructor" and "toString", which would draw a page with no paper.
+    if (!Object.prototype.hasOwnProperty.call(BEANS_SIGN_SIZES, o.size)) throw new Error('A sign is A4 or A6.');
     const qr = printedQrSvg(o.qr);
     if (!qr) throw new Error('A sign needs a code.');
     const W = BEANS_SIGN_WORDS;

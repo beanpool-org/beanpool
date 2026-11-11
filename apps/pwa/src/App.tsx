@@ -51,9 +51,10 @@ import { MessagesPage } from './pages/MessagesPage';
 import { onConversationRead } from './lib/conversation-read';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
+import { LearnPage, type LearnTarget } from './pages/LearnPage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { KNOWLEDGE_NAMES, dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
@@ -78,7 +79,8 @@ import { YourShopPage } from './pages/YourShopPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
 import { takeShopParam } from './lib/shop';
 
-type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
+// `pulse` and `learn` are pages with no entry in the nav: a card on Home, a line in the Market and a door open them.
+type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'learn' | 'messages' | 'people' | 'ledger' | 'projects';
 
 // Bottom nav sizing for a 320px phone at 1.3x text (docs: the audience runs old, small Androids).
 // Each tab's share of the row follows its label length, with a floor for the emoji above it.
@@ -308,6 +310,15 @@ export function App() {
         if (calendarReturnTab) setActiveTab(calendarReturnTab);
         setCalendarReturnTab(null);
     }, [calendarReturnTab]);
+    // Learn (local knowledge, slice K2): a page with no entry in the nav, as the Pulse is. A door names what to open (`learn`,
+    // `learn-topic` + topic, `learn-search` + words, `learn-page` + id); "‹ Back" returns the member to the tab they came from.
+    const [learnTarget, setLearnTarget] = useState<LearnTarget | null>(null);
+    const clearLearnTarget = useCallback(() => setLearnTarget(null), []);
+    const [learnReturnTab, setLearnReturnTab] = useState<Tab | null>(null);
+    const closeLearnBack = useCallback(() => {
+        setActiveTab(learnReturnTab ?? 'home');
+        setLearnReturnTab(null);
+    }, [learnReturnTab]);
     // Doors to the Market's filter (e.g. Home's "All events ›" opens the Events pill).
     const [openMarketFilter, setOpenMarketFilter] = useState<PostType | 'all' | 'for-you' | null>(null);
     const clearOpenMarketFilter = useCallback(() => setOpenMarketFilter(null), []);
@@ -504,6 +515,18 @@ export function App() {
             setCalendarReturnTab(activeTab !== 'map' ? activeTab : null);
             setActiveTab('map');
             setOpenMapCalendar(true);
+            return;
+        }
+        // Learn: the front, one topic, a search (the Market's "In Learn: 2 for …" line) or one page (a link, a bell line).
+        if (tab === 'learn' || tab === 'learn-topic' || tab === 'learn-search' || tab === 'learn-page') {
+            setShowSettings(false);
+            setLearnTarget(tab === 'learn-topic' ? { kind: 'topic', topic: contextId ?? '' }
+                : tab === 'learn-search' ? { kind: 'search', q: contextId ?? '' }
+                : tab === 'learn-page' && contextId ? { kind: 'page', id: contextId }
+                : { kind: 'front' });
+            // Asked for from another tab: Back returns there (from Learn itself, to where Learn was opened from).
+            if (activeTab !== 'learn') setLearnReturnTab(activeTab);
+            setActiveTab('learn');
             return;
         }
         if (tab === 'marketplace' && contextId === 'events') {
@@ -965,7 +988,7 @@ export function App() {
 
     // The mobile header's title (none on the map, which shows the community's name); MobileHeader sends the sync chip to its
     // dot alone where the title wouldn't fit beside the chip's words.
-    const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
+    const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTab === 'learn' ? t(KNOWLEDGE_NAMES.place) : activeTabEntry ? t(activeTabEntry.label) : '') : null;
 
     // The handoff's door, before anything else: it answers the page that opened it whether or not an account is held here.
     if (handoff && !loading) {
@@ -1410,6 +1433,17 @@ export function App() {
                                 <PulsePage
                                     identity={identity}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                />
+                            )}
+                            {activeTab === 'learn' && (
+                                <LearnPage
+                                    identity={identity}
+                                    target={learnTarget}
+                                    onTargetTaken={clearLearnTarget}
+                                    onBack={closeLearnBack}
+                                    onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onNearYou={() => { closePagesOver(); setActiveTab('home'); }}
                                 />
                             )}
                             {activeTab === 'messages' && (

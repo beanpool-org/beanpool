@@ -1890,3 +1890,31 @@ describe('MessagesPage: a chat with no picture has one ready-made face, the same
         expect(srcs(await screen.findByTestId('chat-owner-header'))).toEqual(['/preset/ent-pubkey']);
     });
 });
+
+describe('MessagesPage: private contacts in Chat (DESIGN-private-contacts-fable.md §3.1, slice C4)', () => {
+    it('Import contacts sits left of New DM with its hover line and an ⓘ, leads New Message, and goes on Groups as New DM does', async () => {
+        render(<MessagesPage identity={mockIdentity} onNavigate={vi.fn()} />);
+        const button = await screen.findByTestId('contacts-button');
+        const hover = 'A private contacts list you take wherever you go. Only you can open it.';
+        expect(button).toHaveTextContent('👥 Import contacts');
+        expect(button).toHaveAttribute('title', hover);
+        expect(button).toHaveAttribute('aria-description', hover);
+        const newDm = screen.getByText('✉️ New DM');
+        expect(button.compareDocumentPosition(newDm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.click(screen.getByTestId('contacts-info-button'));
+        expect(screen.getByTestId('contacts-info')).toHaveTextContent('Your private contacts');
+        fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+        expect(screen.queryByTestId('contacts-info')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Groups' }));
+        expect(screen.queryByTestId('contacts-button')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'All' }));
+
+        fireEvent.click(await screen.findByText('✉️ New DM'));
+        const row = await screen.findByTestId('new-message-contacts');
+        expect(row).toHaveTextContent('👥 Import contacts');
+        fireEvent.click(row);
+        expect(await screen.findByTestId('contacts-page')).toBeInTheDocument();
+    });
+});

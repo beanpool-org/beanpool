@@ -58,6 +58,9 @@ import { reportDmLine, reportRequestAndBlock } from '../lib/dm-line-report';
 import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
 import { ChatDealStrip } from '../components/ChatDealStrip';
 import { ChatMenuModal } from '../components/ChatMenuModal';
+import { ContactsPage } from './ContactsPage';
+import { ContactsInfo, contactsHoverLine } from '../components/ContactsInfo';
+import { clearContactsRestored, openContacts, useContacts } from '../lib/contacts-store';
 import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
 import { notifyConversationRead } from '../lib/conversation-read';
@@ -388,6 +391,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // The lines this tab is sending (lib/pending-chat-lines.ts): apart from `messages`, and from everything worked out of them.
     const pendingChatLines = usePendingChatLines();
     const [showNewDm, setShowNewDm] = useState(false);
+    // The member's private contacts (DESIGN-private-contacts-fable.md §3.1, slice C4): the page, opened on its list or on
+    // Import, and the ⓘ. The button reads Import contacts until there is someone in the list.
+    const [showContacts, setShowContacts] = useState<null | 'list' | 'import'>(null);
+    const [contactsInfo, setContactsInfo] = useState(false);
+    const contacts = useContacts();
+    useEffect(() => { void openContacts(identity); }, [identity]);
+    const hasContacts = contacts.key === identity.publicKey.toLowerCase() && (contacts.list?.contacts.length ?? 0) > 0;
+    const openContactsPage = () => { setShowNewDm(false); setShowContacts(hasContacts ? 'list' : 'import'); };
+    const contactsRow = (style: CSSProperties) => (
+        <button type="button" data-testid="new-message-contacts" onClick={openContactsPage} style={{
+            ...style, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '44px',
+            textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600, color: 'var(--text-primary)',
+        }}>
+            <span>{hasContacts ? t('👥 Your contacts') : t('👥 Import contacts')}</span><span aria-hidden="true">›</span>
+        </button>
+    );
     // Who this page can name: the member directory, or on a community where people are asked for, not read whole
     // (lib/members-on-demand, the worldwide one), the cards asked for by key, as the page needs them (below).
     const [members, setMembers] = useState<Array<Pick<Member, 'publicKey' | 'callsign' | 'avatarUrl'> & { joinedAt?: string }>>([]);
@@ -1971,6 +1990,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         </div>
     ) : null;
 
+    if (showContacts) {
+        return (
+            <ContactsPage
+                identity={identity}
+                start={showContacts}
+                onBack={() => setShowContacts(null)}
+                onMessage={(pubkey) => { setShowContacts(null); void handleStartDm(pubkey); }}
+            />
+        );
+    }
+
     // New DM overlay with members on demand (lib/members-on-demand): the people this member already talks to, named
     // from their chats' rows, then a search the node answers, never a list of everyone. Every control at least 44 px.
     if (showNewDm && membersOnDemand === true) {
@@ -2020,6 +2050,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </h2>
                 </div>
                 {chatRefusalNotice && <div style={{ marginBottom: '0.75rem' }}>{chatRefusalNotice}</div>}
+                {contactsRow({ ...cardStyle, marginBottom: '1rem' })}
 
                 <label htmlFor="new-message-search" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
                     {t('Find someone by name')}
@@ -2075,6 +2106,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </h2>
                 </div>
 
+                {contactsRow({ ...cardStyle, marginBottom: '1rem' })}
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
                     {t('Choose someone to message:')}
                 </p>
@@ -3703,9 +3735,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <h2 style={{ fontSize: '1.3rem', margin: 0 }}>{t('💬 Messages')}</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto' }}>
                     {activeTab !== 'groups' ? (
-                        <button onClick={() => { setShowNewDm(true); loadMembers(); }} style={headerButtonStyle}>
-                            {t('✉️ New DM')}
-                        </button>
+                        <>
+                            {/* Private contacts (design §3.1): left of New DM, hidden on Groups as New DM is; the hover line is
+                                its title and its aria-description, and the ⓘ says the rest. */}
+                            <span style={{ display: 'inline-flex', gap: '0.25rem' }}>
+                                <button type="button" data-testid="contacts-button" onClick={openContactsPage} style={headerButtonStyle}
+                                    title={contactsHoverLine()} {...{ 'aria-description': contactsHoverLine() }}>
+                                    {hasContacts ? t('👥 Contacts') : t('👥 Import contacts')}
+                                </button>
+                                <button type="button" data-testid="contacts-info-button" onClick={() => setContactsInfo(true)} aria-label={t('About your private contacts')}
+                                    style={{ ...headerButtonStyle, minWidth: '36px', padding: '0.4rem 0.5rem' }}>ⓘ</button>
+                            </span>
+                            <button onClick={() => { setShowNewDm(true); loadMembers(); }} style={headerButtonStyle}>
+                                {t('✉️ New DM')}
+                            </button>
+                        </>
                     ) : hasGroups && (
                         // As the phone's Groups: the empty view has its own two, so these show with a list.
                         <>
@@ -3719,6 +3763,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     )}
                 </div>
             </div>
+
+            {contactsInfo && <ContactsInfo onClose={() => setContactsInfo(false)} />}
+            {contacts.restored !== null && contacts.key === identity.publicKey.toLowerCase() && (
+                <div role="status" data-testid="contacts-restored" style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.25rem 0.25rem 0.25rem 1rem',
+                    background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: '12px', color: 'var(--text-primary)',
+                }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>{tn(contacts.restored, 'Your contacts are back: {n} person.', 'Your contacts are back: {n} people.')}</span>
+                    <button type="button" onClick={clearContactsRestored} aria-label={t('Dismiss')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', minWidth: '44px', minHeight: '44px', fontSize: '1rem' }}>✕</button>
+                </div>
+            )}
 
             {/* Wraps instead of scrolling: at 320px with 1.3x text the four chips need ~470px, and a sideways
                 scroller hid "Direct" behind a grey scrollbar. scrollbar-none in case a translation still overflows. */}

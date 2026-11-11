@@ -121,7 +121,7 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
                     : tn(view.added, "{n} contact added. It's locked with your key and will be kept at: {places}.", "{n} contacts added. They're locked with your key and will be kept at: {places}.", { places })}
             </p>
             {snap.where === 'device-only' && <p style={muted}>{contactsWhereWords('device-only', null)}</p>}
-            {view.fromPhone && <p style={muted}>{t("BeanPool read your contacts once, just now. It doesn't watch them. To bring new ones later, tap Import again.")}</p>}
+            {view.fromPhone && <p style={muted}>{t("BeanPool read your phone's contacts once, just now. It doesn't watch them. To bring new ones later, tap Import again.")}</p>}
             <button type="button" className={go} style={goStyle} onClick={() => back()}>{t('Done')}</button>
         </>);
     }

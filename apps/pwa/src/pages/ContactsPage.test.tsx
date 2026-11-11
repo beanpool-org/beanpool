@@ -133,7 +133,7 @@ describe('Contacts on the web', () => {
         expect(await screen.findByText('Found 1 contact. Nothing has left this device yet.')).toBeInTheDocument();
         expect(select).toHaveBeenCalledWith(['name', 'tel', 'email'], { multiple: true });
         fireEvent.click(screen.getByRole('button', { name: 'Import 1 contact' }));
-        expect(await screen.findByText("BeanPool read your contacts once, just now. It doesn't watch them. To bring new ones later, tap Import again.")).toBeInTheDocument();
+        expect(await screen.findByText("BeanPool read your phone's contacts once, just now. It doesn't watch them. To bring new ones later, tap Import again.")).toBeInTheDocument();
     });
 
     it('adds one by hand, opens it, and removes it after saying nobody is told', async () => {

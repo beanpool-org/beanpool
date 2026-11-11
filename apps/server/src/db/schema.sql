@@ -2860,6 +2860,25 @@ BEGIN
     WHERE group_id = NEW.group_id AND member_pubkey = NEW.member_pubkey;
 END;
 
+-- An invitation to a group that the person invited declined. Declining deletes their group_members row (engine
+-- removeGroupMember), so without this the member who made the invitation could not tell a no from no answer yet
+-- ("Invitations should show whether they have been used", Rob, 11 Nov 2026). One row per person per group, written in the
+-- same transaction as the delete, and read ONLY by the member who made the invitation (`invited_by`): never by the group,
+-- its convenors or the person who declined (engine/group-invitations.ts). Kept for DECLINE_KEPT_DAYS from `declined_at`,
+-- dropped when the group next records a decline, gone at once when the person is invited again, joins or leaves.
+-- Not replicated: a standby that takes over starts with none, which costs the sender a "Declined" line and nothing else
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_invite_declines (
+    group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    invitee_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    invited_by TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    -- When the invitation was made (the group_members.joined_at it held), and when it was declined.
+    invited_at DATETIME,
+    declined_at DATETIME NOT NULL,
+    PRIMARY KEY (group_id, invitee_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_invite_declines_sender ON group_invite_declines(group_id, invited_by);
+
 CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
 AFTER DELETE ON groups
 FOR EACH ROW

@@ -42,6 +42,7 @@ import {
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
 import { circleCardFor } from '../engine/place-circles.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
+import { groupInvitationsFor } from '../engine/group-invitations.js';
 import {
     GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
     rotateGroupEpoch, storeGroupTopUp,
@@ -420,6 +421,25 @@ export function createGroupRoutes(deps: RouteDeps): Router {
                 ?? storeRosterSnapshot(slot, key, view, JSON.stringify(withFormerKeys(getGroupMembers(group.id, { status: effectiveStatus, role }))));
             send(snap);
         });
+    });
+
+    // 5b. Who has been invited and has not joined yet, and who said no (engine/group-invitations.ts). Each viewer is answered
+    // only what they may read, here and not in the app: a convenor sees every pending invitation and who made it; any other
+    // member only the ones they made; a declined one only its sender. An invitee, someone who asked to join and a stranger
+    // are refused. An invite-only group the caller has no live row in is not found, as for every route that names a group.
+    router.get('/api/groups/:id/invitations', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireVisibleGroup(ctx, actor)) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        const invitations = groupInvitationsFor(ctx.params.id, actor);
+        if (!invitations) {
+            ctx.status = 403;
+            ctx.body = { error: word('Only members of this group can see its invitations') };
+            return;
+        }
+        ctx.status = 200;
+        ctx.body = invitations;
     });
 
     // 6. Invite a member or approve pending request (Convenor only)

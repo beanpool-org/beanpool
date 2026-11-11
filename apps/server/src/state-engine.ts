@@ -456,6 +456,7 @@ import {
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
 import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster, setMembershipFromEpoch } from './engine/group-keys.js';
+import { clearInviteDecline, recordInviteDecline } from './engine/group-invitations.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
     voteGroupConvenor as voteGroupConvenorEngine,
@@ -10997,6 +10998,16 @@ function getGroupActiveMemberRecipients(groupId: string, extraPubkeys: string[] 
 }
 
 /**
+ * Who hears that an invitation to a group was made, declined or withdrawn: the group's active convenors, the person invited
+ * and the member who made it. Never the group at large: who is invited is for the people who may read it
+ * (GET /api/groups/:id/invitations, engine/group-invitations.ts).
+ */
+function invitationAudience(groupId: string, ...extraPubkeys: Array<string | null | undefined>): string[] {
+    const convenors = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[];
+    return Array.from(new Set([...convenors.map(r => r.member_pubkey as string), ...extraPubkeys.filter((k): k is string => !!k)]));
+}
+
+/**
  * A group's picture as it is stored: it rides in every group listing, so without its metadata (G9a-3). Held to the
  * photo rule first (a JPEG, PNG, WebP or GIF whose bytes really are one, as a data URL or bare base64), because a
  * format the strip does not know — HEIC, AVIF, TIFF — would keep its GPS, and no app sends one. Any other string
@@ -11147,6 +11158,8 @@ const ROLE_WORDS: Record<GroupRole, string> = { convenor: 'a convenor', member: 
  * nothing — they are not in the group yet.
  */
 function afterGroupMembershipChange(groupId: string, targetPubkey: string, wasActive: boolean, meta: Record<string, unknown> = {}): void {
+    // Invited again, joined or admitted: an earlier "Declined" is no longer how things stand (engine/group-invitations.ts).
+    clearInviteDecline(groupId, targetPubkey);
     try {
         syncGroupThreadMembership(groupId, targetPubkey);
         const nowActive = isGroupMemberEngine(db, groupId, targetPubkey);
@@ -11346,10 +11359,19 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
     if (actorPubkey !== targetPubkey) assertGroupActorIsMember(actorPubkey);
     assertNotOpenLeadCandidate(groupId, actorPubkey, targetPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
+    const before = getGroupMemberEngine(db, groupId, targetPubkey);
     // A removal is the rotation (§2.4): the convenor's epoch, wrapped to everyone but the removed member, in the same
     // transaction. Leaving carries none (the leaver would know the key): the current epoch goes stale instead.
-    const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
-        { allowed: ['remove'], subject: targetPubkey });
+    const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => {
+        const removed = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
+        if (removed && actorPubkey === targetPubkey) {
+            // Their own leaving ends any earlier "Declined"; declining an open invitation is the one leaving that leaves one,
+            // for the member who made the invitation to read and nobody else (engine/group-invitations.ts).
+            clearInviteDecline(groupId, targetPubkey);
+            if (before?.status === 'invited') recordInviteDecline(groupId, targetPubkey, before.invitedBy, before.joinedAt, new Date().toISOString());
+        }
+        return removed;
+    }, { allowed: ['remove'], subject: targetPubkey });
     if (res) {
         afterLeavingCircle(groupId, targetPubkey);
         // Leaving drops their vote on the group's open votes; a removal by a convenor keeps it (§2.6).
@@ -11368,7 +11390,11 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
             }
         } catch (e) { console.warn('[Groups] Could not update the group chat after a removal:', e); }
         bumpGroupsVersion();
-        const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
+        // An invitation declined or withdrawn is not the group's business: only the convenors, the person invited and the
+        // member who made it hear of it. Everyone else hears of a member leaving or being removed.
+        const recipients = before?.status === 'invited'
+            ? invitationAudience(groupId, targetPubkey, before.invitedBy)
+            : getGroupActiveMemberRecipients(groupId, [targetPubkey]);
         broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey }, recipients);
     }
     return res;
@@ -11492,9 +11518,7 @@ export function inviteGroupMember(groupId: string, convenorPubkey: string, targe
     // Inviting someone who had asked to join admits them at once.
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
-    const convenors = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active'").all(groupId) as any[];
-    const recipients = Array.from(new Set([...convenors.map(r => r.member_pubkey), targetPubkey]));
-    broadcast({ type: 'group_member_invited', groupId, member: res }, recipients);
+    broadcast({ type: 'group_member_invited', groupId, member: res }, invitationAudience(groupId, convenorPubkey, targetPubkey));
     // Only an invitation this call made: one already open, or someone who had asked and is now admitted, is no new
     // invitation. After the answer, never inside it: the push is skipped for a member who has blocked the convenor, and
     // its work in the answer would tell the convenor so by how fast the answer came (#1403 review).

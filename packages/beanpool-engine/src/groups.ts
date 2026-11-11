@@ -944,14 +944,18 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
 export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, targetPubkey: string): boolean {
     const isConvenor = isGroupConvenor(db, groupId, actorPubkey);
     const isSelf = actorPubkey === targetPubkey;
+    const target = getGroupMember(db, groupId, targetPubkey);
+    // The member who made an invitation may withdraw it while it is open, whatever they are in the group now (a convenor
+    // who was made a member since): it is their own invitation, and taking it back lets no one in or out. It is the one
+    // removal that is not a convenor's power, so it is not paused with one either.
+    const withdrawsOwnInvitation = !isSelf && target?.status === 'invited' && !!target.invitedBy && target.invitedBy === actorPubkey;
 
-    if (!isConvenor && !isSelf) {
+    if (!isConvenor && !isSelf && !withdrawsOwnInvitation) {
         throw new Error(unauthorized(word('Only a group convenor can remove members, or a member may leave themselves')));
     }
     // Leaving is the member's own business, suspended or not; removing someone else is a convenor's power.
-    if (!isSelf) assertConvenorPowersActive(db, actorPubkey);
+    if (!isSelf && !withdrawsOwnInvitation) assertConvenorPowersActive(db, actorPubkey);
 
-    const target = getGroupMember(db, groupId, targetPubkey);
     if (!target) return false;
     // Already removed: nothing to do — and "leaving" must not erase the record and reopen the door.
     if (target.status === 'removed') return false;

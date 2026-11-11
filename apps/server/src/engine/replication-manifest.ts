@@ -357,6 +357,11 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
         columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since from_epoch'),
     },
+    // The "Declined" line of the member who made a group invitation (engine/group-invitations.ts), kept 30 days and read by
+    // that member alone. A standby that takes over starts without them: a sender loses a line that fades in a month.
+    group_invite_declines: {
+        kind: 'local', reason: "a declined invitation, shown to the member who made it for 30 days and to nobody else (engine/group-invitations.ts); a promoted standby starts without them",
+    },
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
         columns: cols('member_pubkey provider join_hash joined_at updated_at join_cohort'),

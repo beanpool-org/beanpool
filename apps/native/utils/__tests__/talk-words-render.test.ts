@@ -379,7 +379,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
     it('the sort and filter drawer, with Beans on', async () => {
         await renderIn('xx');
         await click(byLabel(pseudoLocalise('Filter and sort')), 'Filter and sort');
-        expect(host.textContent).toContain(pseudoLocalise('Credits: High'));
+        expect(host.textContent).toContain(pseudoLocalise('Beans: High'));
         expect(host.textContent).toContain(pseudoLocalise('👫 Friends Only'));
         expect(bypassing()).toEqual([]);
     });
@@ -548,7 +548,7 @@ describe('Talk in the pseudo-locale: every word on it came through t() (words S3
         await renderIn('en');
         expect(bracketed()).toBe(0);
         expect(host.textContent).toContain('Action Required');
-        expect(host.textContent).toContain('Release Credits (1)');
+        expect(host.textContent).toContain('Release Beans (1)');
         expect(host.textContent).toContain('HELD IN TRUST');
         expect(host.textContent).toContain('5 Beans held in trust.');
         expect(host.textContent).toContain('Started conversation');
@@ -642,7 +642,7 @@ describe('Talk at 320 dp with 1.3× text, in the pseudo-locale', () => {
     it('the drawer\'s chips wrap; the Groups pane\'s two buttons wrap and their words shrink', async () => {
         await renderIn('xx');
         await click(byLabel(pseudoLocalise('Filter and sort')), 'Filter and sort');
-        const chip = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === pseudoLocalise('Credits: High'))!;
+        const chip = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === pseudoLocalise('Beans: High'))!;
         expect(chip.parentElement!.getAttribute('data-wrap')).toBe('wrap');
         await pane('Groups');
         const newGroup = byLabel(pseudoLocalise('New group'))!;
@@ -828,12 +828,12 @@ describe("Talk's per-person chip counts the deals that need the member (core's d
         const kofi = rowOf('Kofi')!.textContent!;
         const mia = rowOf('Mia')!.textContent!;
         const zoe = rowOf('Zoe')!.textContent!;
-        expect(kofi).toContain('Release Credits (1)');
+        expect(kofi).toContain('Release Beans (1)');
         expect(mia).toContain('Action Required (3)');
         expect(mia).not.toContain('Review Needed');
         expect(zoe).toContain('Review Needed (1)');
         // Ivo has none: his preview, not a chip.
-        expect(rowOf('Ivo')!.textContent).not.toMatch(/Release Credits|Action Required|Review Needed/);
+        expect(rowOf('Ivo')!.textContent).not.toMatch(/Release Beans|Action Required|Review Needed/);
     });
 
     it('a request to answer is a card in the Action Required section, in core\'s words', async () => {

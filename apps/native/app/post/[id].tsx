@@ -1276,13 +1276,13 @@ export default function PostDetailModal() {
                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
                             </Pressable>
                             <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !completeHours)} onPress={() => releaseRow(m)}>
-                                <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Credits')}</Text>
+                                <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Beans')}</Text>
                             </Pressable>
                         </View>
                     </View>
                 ) : (
                     <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setReleaseRowId(tx.id!); setShowCompleteConfirm(true); if (post.price_type !== 'fixed') setCompleteHours((tx as any).hours ? formatNumber((tx as any).hours) : '1'); }}>
-                        <Text style={styles.acceptBtnText}>{t('✅ Release Credits')}</Text>
+                        <Text style={styles.acceptBtnText}>{t('✅ Release Beans')}</Text>
                     </Pressable>
                 ))}
                 {m.cancelHold && (
@@ -1799,13 +1799,13 @@ export default function PostDetailModal() {
                                                     hapticSuccess();
                                                 } catch(e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
                                             }}>
-                                                <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Credits')}</Text>
+                                                <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Beans')}</Text>
                                             </Pressable>
                                         </View>
                                     </View>
                                 ) : (
                                     <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setShowCompleteConfirm(true); if(post.price_type !== 'fixed' && !completeHours) setCompleteHours(activeTx?.hours ? formatNumber(activeTx.hours) : '1'); }}>
-                                        <Text style={styles.acceptBtnText}>{t('✅ Release Credits')}</Text>
+                                        <Text style={styles.acceptBtnText}>{t('✅ Release Beans')}</Text>
                                     </Pressable>
                                 )}
                             </>

@@ -329,7 +329,7 @@ describe('the Market in the pseudo-locale', () => {
         const view = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-1" onPostOpened={() => {}} transactions={[tx({})]} />);
         await screen.findByRole('heading', { name: /Bicycle Repair/ });
         await settle();
-        fireEvent.click(screen.getByText(xx('✅ Release Credits')));
+        fireEvent.click(screen.getByText(xx('✅ Release Beans')));
         expect(screen.getByText(xx('ACTUAL HOURS WORKED'))).toBeInTheDocument();
         fireEvent.click(screen.getByText(xx('❌ Cancel Hold')));
         expect(said).toEqual([xx('Cancel this transaction and return the post to the market?')]);

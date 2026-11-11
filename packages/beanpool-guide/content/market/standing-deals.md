@@ -17,7 +17,7 @@ Two names are used on this page. **The payer** is the person who pays: whoever t
 
 A one-off deal holds the payer's Beans in trust until the job is done. A standing deal holds nothing. Each week or month is **paid when it starts**, like rent paid in advance, so the provider has the Beans before the work.
 
-- There is no **Release Credits**, no **Cancel Trust Hold** and no **Hold back** on a standing deal. There is nothing held to release, so nobody has a tap to make each month.
+- There is no **Release Beans**, no **Cancel Trust Hold** and no **Hold back** on a standing deal. There is nothing held to release, so nobody has a tap to make each month.
 - The 1.5% market fee comes off what the provider is paid, as in any deal, and goes to your community's Commons.
 - A payment is final. If you pay for a month and get nothing, the most you lose is that month, because you can stop the rest with one tap. The app cannot take a paid month back, and with nothing held there is nothing for an admin to settle. See "When a deal goes wrong".
 

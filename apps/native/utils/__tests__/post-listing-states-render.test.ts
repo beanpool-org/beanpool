@@ -280,7 +280,7 @@ for (const theme of ['light', 'dark'] as const) {
             expect(row('tx-a')?.textContent).toContain('Marty · 45 Beans held · since 26 Oct');
             expect(row('tx-b')?.textContent).toContain('Kofi · 30 Beans held · since 24 Oct');
             expect(row('tx-a')?.textContent).toContain('⏳ Pending Release by Marty');
-            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('✅ Release Beans');
             expect(host.textContent?.match(/❌ Cancel Trust Hold/g)).toHaveLength(2);
             expect(host.textContent).not.toContain('🤝 Accept Offer');
         });
@@ -356,8 +356,8 @@ for (const theme of ['light', 'dark'] as const) {
             expect(r.textContent).not.toContain('❌ Cancel Trust Hold');
             // The keeper messages Mo as themselves (the panel this replaced did too).
             expect(r.textContent).toContain('💬 Message Mo');
-            await press(r, '✅ Release Credits');
-            await press(r, 'Release Credits');
+            await press(r, '✅ Release Beans');
+            await press(r, 'Release Beans');
             expect(net.calls).toContain('db.treasuryComplete');
             expect(net.calls).not.toContain('db.completeMarketplaceTransaction');
             // The enterprise's trade is not the keeper's to rate.
@@ -369,8 +369,8 @@ for (const theme of ['light', 'dark'] as const) {
             await open(listing({ type: 'need', title: 'Fix the fence', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000 }));
             const r = row('tx-h')!;
             expect(host.textContent).not.toContain('How was your experience');
-            await press(r, '✅ Release Credits');
-            await press(r, 'Release Credits');
+            await press(r, '✅ Release Beans');
+            await press(r, 'Release Beans');
             expect(net.calls).toContain('db.completeMarketplaceTransaction');
             expect(host.textContent).toContain('How was your experience with Helper?');
         });
@@ -379,7 +379,7 @@ for (const theme of ['light', 'dark'] as const) {
             node.mine = [deal({ id: 'tx-d', amount_c: 6000, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
             await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000, price_type: 'daily' }));
             const r = row('tx-d')!;
-            await press(r, '✅ Release Credits');
+            await press(r, '✅ Release Beans');
             expect(r.textContent).toContain('CONFIRM ACTUAL DAYS WORKED');
             expect(r.textContent).toContain('Adjust the final time up or down if the scope changed.');
             expect((r.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement).value).toBe('3');
@@ -389,7 +389,7 @@ for (const theme of ['light', 'dark'] as const) {
             node.mine = [deal({ id: 'tx-d', amount_c: 6000, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
             await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, price_c: 2000, price_type: 'daily' }));
             const r = row('tx-d')!;
-            await press(r, '✅ Release Credits');
+            await press(r, '✅ Release Beans');
             const line = () => r.querySelector('[data-testid="release-line-tx-d"]')?.textContent;
             expect(line()).toBe('Transferring 60 B to Helper');
             await typeInto(r.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement, '5');
@@ -402,7 +402,7 @@ for (const theme of ['light', 'dark'] as const) {
         it("one who took up an hourly Offer releases from the panel: the deal's own total, to the one they pay", async () => {
             node.mine = [deal({ id: 'tx-h', amount_c: 3000, hours: 2 })];
             await open(listing({ title: 'Garden help', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, price_c: 1500, price_type: 'hourly' }));
-            await press(host, '✅ Release Credits');
+            await press(host, '✅ Release Beans');
             const line = () => host.querySelector('[data-testid="release-line-panel"]')?.textContent;
             expect(line()).toBe('Transferring 30 B to Damo');
             await typeInto(host.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement, '3');
@@ -457,7 +457,7 @@ for (const theme of ['light', 'dark'] as const) {
             expect(panel?.textContent).toContain('the next 50 go on 9 Nov');
             expect(buttons()).toEqual(expect.arrayContaining(['Stop…', 'Message Damo']));
             expect(buttons()).not.toContain('Hold back this month');
-            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('✅ Release Beans');
             expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
         });
         // Month 2 (9 Nov – 9 Dec, 30 days) unpaid: its grace is 15 days, to 24 Nov (the same day in every time zone at 08:00 UTC).
@@ -467,7 +467,7 @@ for (const theme of ['light', 'dark'] as const) {
             await open(listing(storage));
             expect(host.querySelector('[data-testid="standing-status"]')?.textContent).toBe("⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends");
             expect(buttons()).toContain('Stop now');
-            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('✅ Release Beans');
         });
 
         // Round 2 of #3000 (deciding review on e07a97d3).
@@ -567,7 +567,7 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).toContain("You're helping with this · 20 Beans held for you");
             expect(host.textContent).toContain('⏳ Pending Release by Kofi');
             expect(host.textContent).toContain('❌ Cancel Trust Hold');
-            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('✅ Release Beans');
         });
 
         it('a helper on a free Need, approved: no Beans held, never "0 Beans held for you"', async () => {
@@ -586,7 +586,7 @@ for (const theme of ['light', 'dark'] as const) {
         it('a stranger reaching a one-off someone else has taken: told so, and shown nothing of their deal', async () => {
             await open(listing({ title: 'Lawn mower', repeatable: 0, status: 'pending', accepted_by: 'kofi-key' }));
             expect(host.querySelector('[data-testid="taken-by-other"]')?.textContent).toBe('Taken up by someone else for now.');
-            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('✅ Release Beans');
             expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
         });
     });
@@ -648,7 +648,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
             expect(buttons().some((b) => b.includes(k.takeUp))).toBe(true);
             expect(buttons()).toEqual(fromFeed);
             expect(over()).toBe(k.said);
-            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('✅ Release Beans');
             expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
         });
     }

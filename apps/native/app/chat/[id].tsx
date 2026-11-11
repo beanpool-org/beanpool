@@ -941,7 +941,7 @@ function ChatScreen({ id }: { id: string }) {
         await KeyboardController.dismiss(); // Alert = separate window; see review-modal note
         // English writes one form for both; a language with more forms has them.
         Alert.alert(
-            t('Release Credits'),
+            t('Release Beans'),
             tn((pendingTx.amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action cannot be undone.', 'Release {n} Beans to the provider? This action cannot be undone.', { n: formatHundredths(pendingTx.amount_c) }),
             [
                 { text: t('Cancel'), style: 'cancel' },
@@ -953,7 +953,7 @@ function ChatScreen({ id }: { id: string }) {
                         try {
                             await completeMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticSuccess();
-                            Alert.alert(t('Success'), t('Credits have been released!'));
+                            Alert.alert(t('Success'), t('The Beans have been released!'));
                             
                             // Immediately prompt for review
                             const targetPubkey = peerPubkey;
@@ -973,7 +973,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release credits.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release the Beans.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -1088,7 +1088,7 @@ function ChatScreen({ id }: { id: string }) {
     const handleReleaseDeal = async (txId: string, amount_c: number | null) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert(t('Release Credits'), tn((amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }), [
+        Alert.alert(t('Release Beans'), tn((amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }), [
             { text: t('Cancel'), style: 'cancel' },
             { text: t('Release'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
@@ -1101,7 +1101,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release credits.'));
+                    Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release the Beans.'));
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -1572,7 +1572,7 @@ function ChatScreen({ id }: { id: string }) {
                                 <View style={styles.dealCardActions}>
                                     {moves?.release && (
                                         <>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.amount_c ?? null)}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release Beans for {title}', { title: d.postTitle }) : t('Release Beans for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.amount_c ?? null)}>
                                                 <Text style={styles.dealBtnReleaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{actionLoading ? '…' : t('Release')}</Text>
                                             </Pressable>
                                             {moves.cancelHold && (
@@ -1633,10 +1633,10 @@ function ChatScreen({ id }: { id: string }) {
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                            {t('⚠️ Action Required: Release Credits')}
+                            {t('⚠️ Action needed: release the Beans')}
                         </Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber900, fontSize: 11, textAlign: 'center', paddingHorizontal: 16 }}>
-                            {t('Only release credits ONCE the provider has fulfilled the terms of the agreement. This action is final.')}
+                            {t("Only release the Beans once the provider has done what you agreed. This can't be undone.")}
                         </Text>
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>

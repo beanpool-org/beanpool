@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-sonnet-5-5 (machine draft, market order S1: the Newest within line, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, DNS robustness S3 fallback card, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, open-door-web-2563: refusals naming another community, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, names list S0b: a copy saved under the community's other address, 5 Nov 2026; meaning-check due); claude-opus-5-5 (machine draft, names-list S0 merge: two devices, 5 Nov); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, dns-robust-s4 words, 6 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c2: the chat card, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invite-adds-voucher A2: the names-list boxes on the phone, 8 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I2: Revoke and one live invite per entry, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4: the Vouchers block, the profile button and the invite-out words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4 fix round 1: a profile arrival that finds the person already confirmed or already a voucher, 10 Nov 2026, unreviewed)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-sonnet-5-5 (machine draft, vault VR4 shared placement, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, vault VR4 removed member, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, removal S6 small-community lines: the 3-Yes floor and an owner deciding when too few can vote, 31 Oct); claude-opus-5-5 (machine draft, removal S6: the owner's lines without their reason, cut from that day's drafts, 31 Oct); claude-opus-5-5 (machine draft, removal S6 fix round: once enough can vote, too few with the case hidden, a removal a reinstatement cancelled, 1 Nov); claude-opus-5-5 (machine draft, removal S6 fix round 2: a second pause after the Yes floor, a removal falls 7 days after the close, 1 Nov); claude-opus-5-5 (machine draft, vault VR4 review: a half this phone can't place yet, 1 Nov; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov); claude-opus-5-5 (machine draft, bring listings fix round: a Need waits for an Offer, 1 Nov); claude-opus-5-5 (machine draft, map bubble list, 2 Nov); claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, home-layout L2 Arrange 3 Nov); claude-opus-5-5 (machine draft, balance rule S2, 2 Nov); claude-sonnet-5-5 (machine draft, market order S1: the Newest within line, 3 Nov); claude-sonnet-5-5 (machine draft, front doors S10, 4 Nov); claude-opus-5-5 (machine draft, DNS robustness S3 fallback card, 4 Nov); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, open-door-web-2563: refusals naming another community, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the host's box on the event page: one label, 4 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, names list S0b: a copy saved under the community's other address, 5 Nov 2026; meaning-check due); claude-opus-5-5 (machine draft, names-list S0 merge: two devices, 5 Nov); claude-sonnet-5-5 (machine draft, cold-start N2: Asked near you and the First steps line for a Need, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, poll-change-confirm: ask before changing vote, 5 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, dns-robust-s4 words, 6 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, home-chat-c2: the chat card, 7 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invite-adds-voucher A2: the names-list boxes on the phone, 8 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109: the standing-deal, invite, ask-to-join, copy-message and recovery-find app words, 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, knock-empty-landing: nobody is waiting to join, and another owner or admin may have answered, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, owner-vouch-unlimited 9 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-1109b: the last missing app words, 9 Nov 2026, unreviewed); claude-opus-5-5 (machine draft, invites I2: Revoke and one live invite per entry, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4: the Vouchers block, the profile button and the invite-out words, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, invites I4 fix round 1: a profile arrival that finds the person already confirmed or already a voucher, 10 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, beans-words-addpost: Beans, not credits, in the deal release words, 11 Nov 2026, unreviewed)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-11-10",
+    "updated": "2026-11-11",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "فاصوليا",
@@ -1145,8 +1145,8 @@
   "Loading": "جارٍ التحميل",
   "Trust transaction details are still loading. Please wait a moment and try again.": "تفاصيل معاملة الضمان لا تزال قيد التحميل. يرجى الانتظار والمحاولة ثانية.",
   "Processing...": "جارٍ المعالجة...",
-  "Release Credits": "تحرير الرصيد",
-  "✅ Release Credits": "✅ تحرير الرصيد",
+  "Release Beans": "تحرير الفاصوليا",
+  "✅ Release Beans": "✅ تحرير الفاصوليا",
   "⏳ Pending Release by {name}": "⏳ بانتظار التحرير من {name}",
   "You are the Payee. Fulfill the terms exactly as agreed, then ask the Payer to release your credits. You will receive the net amount minus 1.5% transaction fee {owned} (retained to balance the pool).": "أنت المستلم. نفّذ الشروط كما تم الاتفاق، ثم اطلب من الدافع تحرير رصيدك. ستتلقى الصافي بعد خصم رسوم معاملة 1.5% {owned} (تُقتطع لدعم الصندوق المشترك).",
   "(100% community owned)": "(100% ملك للمجتمع)",
@@ -1570,7 +1570,7 @@
   "Messages\u0004talk pane": "الرسائل",
   "Groups\u0004talk pane": "المجموعات",
   "People\u0004talk pane": "الأشخاص",
-  "🔓 Release Credits": "🔓 تحرير الرصيد",
+  "🔓 Release Beans": "🔓 تحرير الفاصوليا",
   "⭐ Leave Review": "⭐ كتابة تقييم",
   "⚡ Action Required": "⚡ إجراء مطلوب",
   "Transaction": "معاملة",
@@ -1582,13 +1582,13 @@
     "many": "{n} إجراءً مطلوبًا",
     "other": "{n} إجراء مطلوب"
   },
-  "Release Credits ({n})|Release Credits ({n})": {
-    "zero": "تحرير الرصيد ({n})",
-    "one": "تحرير الرصيد",
-    "two": "تحرير الرصيدين",
-    "few": "تحرير الرصيد ({n})",
-    "many": "تحرير الرصيد ({n})",
-    "other": "تحرير الرصيد ({n})"
+  "Release Beans ({n})|Release Beans ({n})": {
+    "zero": "تحرير الفاصوليا ({n})",
+    "one": "تحرير الفاصوليا ({n})",
+    "two": "تحرير الفاصوليا ({n})",
+    "few": "تحرير الفاصوليا ({n})",
+    "many": "تحرير الفاصوليا ({n})",
+    "other": "تحرير الفاصوليا ({n})"
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "zero": "لا مراجعة مطلوبة ({n})",
@@ -1611,8 +1611,8 @@
   "Sort by": "الترتيب حسب",
   "⇅ Recent": "⇅ الأحدث",
   "✉ Unread": "✉ غير مقروءة",
-  "Credits: High": "الرصيد: من الأعلى",
-  "Credits: Low": "الرصيد: من الأقل",
+  "Beans: High": "فاصوليا: من الأعلى",
+  "Beans: Low": "فاصوليا: من الأقل",
   "Read Status": "حالة القراءة",
   "✓ All": "✓ الكل",
   "✉ Unread Only": "✉ غير المقروءة فقط",
@@ -1754,9 +1754,9 @@
     "other": "هل تريد تحرير {n} فاصوليا لمقدّم الخدمة؟ لا يمكن التراجع عن هذا الإجراء."
   },
   "Release": "تحرير",
-  "Credits have been released!": "تم تحرير الرصيد!",
+  "The Beans have been released!": "تم تحرير الفاصوليا!",
   "Failed": "فشل",
-  "Could not release credits.": "تعذر تحرير الرصيد.",
+  "Could not release the Beans.": "تعذّر تحرير الفاصوليا.",
   "Keep": "احتفاظ",
   "Deal": "صفقة",
   "Release {n} Beans to the provider? This action is final.|Release {n} Beans to the provider? This action is final.": {
@@ -1782,8 +1782,8 @@
   "Connected via Mullum Node": "متصل عبر خادم Mullum",
   "More options": "مزيد من الخيارات",
   "{amount} · completed": "{amount} · مكتملة",
-  "Release credits for {title}": "تحرير الرصيد لـ {title}",
-  "Release credits for deal": "تحرير الرصيد للصفقة",
+  "Release Beans for {title}": "تحرير الفاصوليا لـ {title}",
+  "Release Beans for deal": "تحرير الفاصوليا للصفقة",
   "Cancel deal": "إلغاء الصفقة",
   "⏳ Awaiting release": "⏳ بانتظار التحرير",
   "Leave a review for {title}": "كتابة تقييم لـ {title}",
@@ -1805,8 +1805,8 @@
     "many": "{n} فاصوليا",
     "other": "{n} فاصوليا"
   },
-  "⚠️ Action Required: Release Credits": "⚠️ إجراء مطلوب: تحرير الرصيد",
-  "Only release credits ONCE the provider has fulfilled the terms of the agreement. This action is final.": "لا تحرر الرصيد إلا بعد أن يفي مقدّم الخدمة بشروط الاتفاق. هذا الإجراء نهائي.",
+  "⚠️ Action needed: release the Beans": "⚠️ مطلوب إجراء: حرّر الفاصوليا",
+  "Only release the Beans once the provider has done what you agreed. This can't be undone.": "لا تحرّر الفاصوليا إلا بعد أن ينفّذ مقدّم الخدمة ما اتفقتما عليه. لا يمكن التراجع عن هذا الإجراء.",
   "Release {amount}": "تحرير {amount}",
   "Loading the chat": "جارٍ تحميل المحادثة",
   "You have blocked this user. Messaging is disabled.": "لقد حظرت هذا المستخدم. المراسلة معطلة.",

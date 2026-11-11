@@ -179,7 +179,7 @@ describe('Talk on the web in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
 
         // The deal's two actions and Block ask first, in the member's language.
-        fireEvent.click(screen.getByRole('button', { name: xx('✅ Release Credits') }));
+        fireEvent.click(screen.getByRole('button', { name: xx('✅ Release Beans') }));
         fireEvent.click(screen.getByRole('button', { name: xx('Cancel') }));
         fireEvent.click(screen.getByRole('button', { name: xx('Block user') }));
         expect(said).toEqual([
@@ -287,7 +287,7 @@ describe('Talk on the web in English', () => {
         // The time under a bubble: core's 24-hour time of day (was the browser's toLocaleTimeString).
         const d = new Date(NOW);
         expect(document.body.textContent).toContain(`edited · ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`);
-        fireEvent.click(screen.getByRole('button', { name: '✅ Release Credits' }));
+        fireEvent.click(screen.getByRole('button', { name: '✅ Release Beans' }));
         expect(said).toEqual(['Release 3 Beans to the provider? This action is final.']);
         expect(bracketed()).toBe(0);
     });

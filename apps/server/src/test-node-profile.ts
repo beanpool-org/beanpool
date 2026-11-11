@@ -97,10 +97,11 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // requests (DESIGN-message-a-friend-fable.md §4): on the lobby only, reported only while on (test-dm-requests). Sharing a post
 // outside (front doors S6): on for a local community, off on the lobby, whose listings a visitor reads already; reported only
 // while on (test-peek-ticket). The push when a neighbour asks for something a member starred (cold start N3): a local
-// community with Beans on, reported only there (test-asked-push). The PR that builds one of these changes its line here,
+// community with Beans on, reported only there (test-asked-push). Bills (DESIGN-getting-paid-fable §4): on where Beans are
+// on, reported only while on (test-bills). The PR that builds one of these changes its line here,
 // with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, askedPush: true, door: 'members' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, askedPush: true, bills: true, door: 'members' },
     global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, door: 'open' },
 };
 
@@ -168,6 +169,8 @@ async function main() {
         'message requests: a stranger\'s first message waits to be accepted on the lobby only; a local community\'s arrive as before (test-dm-requests)');
     assert(local.shareOutside === true && global.shareOutside === false,
         'sharing a post outside: on for a local community, off on the lobby, whose listings a visitor reads already (test-peek-ticket)');
+    assert(local.bills === true && global.bills === false,
+        'bills: on for a local community, off on the lobby, where Beans are off (DESIGN-getting-paid-fable §4.1; test-bills)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 

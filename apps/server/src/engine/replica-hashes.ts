@@ -173,7 +173,14 @@ export interface TableHashes {
  * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
  * copy never crosses the change.
  */
-export const TABLE_HASHES_VERSION = 29;
+/**
+ * 30: bills (engine/bills.ts, DESIGN-getting-paid-fable.md slice B1): a new plain table, bills. Raised for the same reason as
+ * 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's import writes only
+ * the tables its own database has. What an older importer drops is the bills themselves (a request to pay, holding no
+ * Beans): after a takeover from such a copy the bills out are gone and their senders send them again; a paid one's ledger
+ * row is copied with the ledger whatever the importer.
+ */
+export const TABLE_HASHES_VERSION = 30;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

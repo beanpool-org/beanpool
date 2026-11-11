@@ -162,6 +162,7 @@ import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { createToolRoutes } from './routes/tools.js';
 import { createShopRoutes } from './routes/shops.js';
+import { createBillRoutes } from './routes/bills.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startTidyingInviteAsks } from './engine/invite-asks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
@@ -2052,6 +2053,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createBlockRoutes(deps),
         createToolRoutes(deps),
         createShopRoutes(deps),
+        createBillRoutes(deps),
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),

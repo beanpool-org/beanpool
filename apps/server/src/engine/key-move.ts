@@ -240,6 +240,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('standing_deals', 'payer_pubkey');
     move('standing_deals', 'payee_pubkey');
     move('standing_deals', 'stopped_by');
+    // (s3) bills (engine/bills.ts): a bill waits on, or is owed to, the person, whichever key they hold.
+    move('bills', 'biller_pubkey');
+    move('bills', 'sent_by');
+    move('bills', 'payer_pubkey');
 
     // (t) settlements
     move('settlements', 'buyer_pubkey');

@@ -182,7 +182,7 @@ const IMPORT_CATEGORIES = {
  */
 export const LEDGER_SET: ReadonlySet<string> = new Set([
     'members', 'accounts', 'transactions', 'marketplace_transactions', 'settlements', 'treasury_operators',
-    'enterprise_pledges', 'invalidated_keys', 'deferred_wage_claims', 'standing_deals',
+    'enterprise_pledges', 'invalidated_keys', 'deferred_wage_claims', 'standing_deals', 'bills',
 ]);
 
 /**

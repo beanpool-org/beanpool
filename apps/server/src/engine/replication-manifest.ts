@@ -411,6 +411,9 @@ export const TABLES: Record<string, TableEntry> = {
     // Standing deals (engine/standing-deals.ts): the arrangement and its signed authorisation. A promoted standby carries
     // on from this row; a standby itself ticks nothing (the tick runs on a main server only).
     standing_deals: plain('id post_id payer_pubkey payee_pubkey beans_per_period_c period_unit starts_at max_periods phase periods_done current_tx_id next_due_at short_since stopped_by stopped_at ended_at ended_reason auth_signer auth_signature auth_payload created_at updated_at'),
+    // Bills (engine/bills.ts): a request to pay. A paid one names its ledger row; copied with the ledger (engine/sync.ts
+    // LEDGER_SET), so a promoted standby never finds a bill waiting that its main server saw paid.
+    bills: plain('id biller_pubkey sent_by payer_pubkey invite_code amount_c what_for post_id standing_id state created_at delivered_at expires_at answered_at ledger_tx_id report_id updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
     decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),

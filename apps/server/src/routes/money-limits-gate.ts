@@ -37,6 +37,9 @@
  *   POST .../release, .../pledge/release, .../backing/release, DELETE .../pledge, .../backing
  *                                                           L                               the member
  *   POST /api/crowdfund/projects/:id/pledge                 P (into its escrow), L          the member
+ *   POST /api/bills/:id/pay                                 P to the bill's sender          the payer (engine/bills.ts); nothing
+ *                                                                                           for a bill not waiting on them, so a
+ *                                                                                           retry of one paid counts nothing
  *   POST /api/federation/purchase, /api/federation/commission: checked in the route itself, just before the settlement
  *     escrows the Beans (a purchase: the buyer; a commission: the link's enterprise, known only once the route has found
  *     the listing's link, and the keeper's enterprise work), and counted from the settlements row that escrow writes (a
@@ -190,6 +193,16 @@ export const MONEY_ROUTES: readonly MoneyRoute[] = [
     {
         method: 'POST', path: /^\/api\/crowdfund\/projects\/[^/]+\/pledge\/?$/,
         plan: (actor) => ({ account: actor, acts: [{ kind: 'payment', recipient: null }, { kind: 'pledge' }] }),
+    },
+    {
+        // Paying a bill is a payment to its sender (DESIGN-getting-paid-fable §4.4), counted only while the bill waits on the
+        // signer: a retry of one already paid answers the first payment and counts nothing.
+        method: 'POST', path: /^\/api\/bills\/([^/]+)\/pay\/?$/,
+        plan: (actor, m) => {
+            const id = segment(m[1]);
+            const bill = id ? db.prepare(`SELECT biller_pubkey FROM bills WHERE id = ? AND payer_pubkey = ? AND state = 'sent'`).get(id, actor) as { biller_pubkey: string } | undefined : undefined;
+            return bill ? { account: actor, acts: [{ kind: 'payment', recipient: bill.biller_pubkey }] } : null;
+        },
     },
 ];
 

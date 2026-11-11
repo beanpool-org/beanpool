@@ -28,6 +28,8 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     // A standing deal's Stop and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
     // payments.
     /^\/api\/marketplace\/standing\/[^/]+\/(stop|extend)\/?$/,
+    // Paying a bill (engine/bills.ts): one ledger row.
+    /^\/api\/bills\/[^/]+\/pay\/?$/,
     /^\/api\/(treasury|enterprise)\/[^/]+\/(approve|complete|reject)\/?$/,
     // An enterprise's sweep to the Commons, a pledge to it (a crowdfund's moves Beans), and its wind-up's final sweep.
     /^\/api\/(treasury|enterprise)\/[^/]+\/(sweep|pledge|wind-up\/finalise)\/?$/,
@@ -100,6 +102,9 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/(treasury\/[^/]+\/)?tools\/[^/]+\/?$/,
     // A shop opened, changed, paused, closed or filled, a member's own or an enterprise's by a keeper (engine/shops.ts).
     /^\/api\/(shops\/mine|treasury\/[^/]+\/shop)(\/(close|offers))?\/?$/,
+    // A bill sent, declined or withdrawn (engine/bills.ts): its row, which a paid bill's ledger row is written beside.
+    /^\/api\/bills\/?$/,
+    /^\/api\/bills\/[^/]+\/(decline|withdraw)\/?$/,
     // The names list (engine/names-list.ts): an entry, the list's key, a confirmation, the owner's settings. Its reads are
     // refused on a standby too, by its own routes (routes/names-list.ts): a read writes the access log.
     /^\/api\/names(\/|$)/,

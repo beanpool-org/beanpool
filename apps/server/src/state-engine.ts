@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
@@ -95,6 +95,10 @@ import {
     tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
     extendStandingDeal as extendStandingDealEngine, hasShortStandingDeal, payShortStandingDealsOf, type StandingStart, type StandingHooks,
 } from './engine/standing-deals.js';
+import {
+    sendBill as sendBillEngine, payBill as payBillEngine, declineBill as declineBillEngine, withdrawBill as withdrawBillEngine,
+    listBills as listBillsEngine, billReported as billReportedEngine, expireBills, endBillsOf, type BillRow, type BillSend, type PaidBill,
+} from './engine/bills.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine, onHold,
@@ -1081,6 +1085,8 @@ function armMainServerTimers(): void {
         try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
         // Message requests that waited 30 days are over (engine/dm-requests.ts).
         try { expireOldRequests(); } catch (e) { console.warn('[Messaging] Request expiry failed:', e); }
+        // Bills past their 30 days expire (engine/bills.ts): a state flip, no Beans move.
+        try { expireBills(); } catch (e) { console.warn('[Bills] Expiry failed:', e); }
     }), 60 * 60 * 1000);
 
     // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
@@ -6860,6 +6866,28 @@ export function extendStandingDeal(id: string, actor: string, standing: Standing
     return extendStandingDealEngine(getEscrowCb(), id, actor, standing);
 }
 
+// Bills (engine/bills.ts; DESIGN-getting-paid-fable §4): a request to pay, never a payment, each step with this node's escrow
+// callbacks. Paying one is a transfer(); sending, declining and withdrawing write the bill alone.
+export function sendBill(signer: string, body: BillSend): BillView {
+    return sendBillEngine(getEscrowCb(), signer, body);
+}
+export function payBill(payer: string, billId: string, requestId?: unknown): PaidBill {
+    return payBillEngine(getEscrowCb(), payer, billId, requestId);
+}
+export function declineBill(payer: string, billId: string): BillView {
+    return declineBillEngine(payer, billId);
+}
+export function withdrawBill(signer: string, billId: string): BillView {
+    return withdrawBillEngine(getEscrowCb(), signer, billId);
+}
+export function listBills(signer: string, enterprise?: unknown): { toPay: BillView[]; sent: BillView[] } {
+    return listBillsEngine(getEscrowCb(), signer, enterprise);
+}
+/** A report filed on a bill: it is declined, names the report, and three reporters within 7 days hold its sender's bills. */
+export function noteBillReported(bill: BillRow, reportId: string): void {
+    billReportedEngine(getEscrowCb(), bill, reportId);
+}
+
 export type { EscrowDisputeAction };
 
 export function resolveEscrowDispute(
@@ -9002,6 +9030,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         // Their standing deals end at once (engine/standing-deals.ts): nothing more is held for or from them. A period still
         // held stays for the other side to close, as every open deal of a removed member does.
         endStandingDealsOf(publicKey);
+        // Their bills end (engine/bills.ts): the ones they sent are withdrawn, the ones waiting on them expire. None holds Beans.
+        endBillsOf(publicKey);
         const account = ledger.getAccount(publicKey);
         const balance = account.balance_c;
 
@@ -9190,6 +9220,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     conservingTransaction(() => {
         // Their standing deals end (engine/standing-deals.ts): the guard above already refused while a period is held.
         endStandingDealsOf(publicKey);
+        // Their bills end (engine/bills.ts): the ones they sent are withdrawn, the ones waiting on them expire.
+        endBillsOf(publicKey);
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
         const account = ledger.getAccount(publicKey);
         const balance = account.balance_c;

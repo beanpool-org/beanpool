@@ -237,6 +237,8 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     enterprises: 'beans',
     treasuries: 'beans',
     crowdfund: 'beans',
+    // Bills follow Beans (engine/bills.ts): on where they are on, off where they are off, and no owner setting of their own.
+    bills: 'beans',
     dmRequests: 'dmRequests',
     decisions: 'decisions',
     shareOutside: 'shareOutside',

@@ -112,6 +112,7 @@ import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, ha
 import { seatedJuror } from '../engine/removal-jury.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 import { keptListingRead, readsListingsAsAnyone } from './home-listings.js';
+import { billNeedsLinesFor } from '../engine/bills.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
 export const HOME_CARD_IDS = [
@@ -201,7 +202,7 @@ export const HOME_INTERESTS_PREF_KEY = 'interests';
 
 // ── what the answer holds ────────────────────────────────────────────────────────────────────────────────────────────
 
-export type NeedsKind = 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
+export type NeedsKind = 'admin' | 'knock' | 'ask' | 'deal' | 'bill' | 'vote' | 'invite' | 'message' | 'group';
 /** Where a tap lands: the same targets the header's "needs you" icons use (apps/native utils/needs-you.ts). */
 export type NeedsTarget =
     | { to: 'admin'; section: AdminSettingsSection }
@@ -222,7 +223,9 @@ export type NeedsTarget =
     | { to: 'invite'; id: string }
     | { to: 'invites' }
     /** People → Invites, where requests to join are listed and answered (front doors S1): only to an app that says it opens it (lands=people). */
-    | { to: 'people' };
+    | { to: 'people' }
+    /** One bill waiting on the member (engine/bills.ts): only to an app that says it opens a bill (lands=bills). */
+    | { to: 'bill'; id: string };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -433,8 +436,8 @@ export interface HomeReader {
  * one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N1): an app that does not say it draws
  * that line is not given a First steps card kept up for it alone.
  */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need' | 'bills';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need', 'bills']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -691,6 +694,15 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
         for (const line of standingNeedsLines(open, me, c.now, homeDay)) {
             if (!line.txId || !line.postId) continue;
             items.push({ kind: 'deal', count: 1, accent: line.accent, label: clip(line.label, LINE_CHARS), target: { to: 'deal', postId: line.postId, txId: line.txId } });
+        }
+    }
+
+    // Bills waiting on the member (engine/bills.ts; DESIGN-getting-paid-fable §4.4), one line each, written from state: from
+    // someone they know amber and counted, a stranger's calm and listed. Never one from someone they blocked, or held by
+    // reports. Only for an app that opens a bill (lands=bills): an older one has no such line, and none lands nowhere.
+    if (c.lands.has('bills')) {
+        for (const line of billNeedsLinesFor(me, c.now)) {
+            items.push({ kind: 'bill', count: 1, accent: line.accent, label: clip(line.label, LINE_CHARS), target: { to: 'bill', id: line.billId } });
         }
     }
 

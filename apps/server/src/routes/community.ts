@@ -34,8 +34,9 @@ import {
     lastActiveForViewer,
     contactVisibleTo, contactViewer, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
-    inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember,
+    inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember, noteBillReported,
 } from '../state-engine.js';
+import { billReportReason, reportableBill, type BillRow } from '../engine/bills.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
 import { CreditGiftError, creditGiftOffer, giveCreditLine } from '../engine/credit-gift.js';
@@ -2207,7 +2208,7 @@ function reportAsReporterSees<T extends { targetPubkey?: string }>(report: T, po
 }
 
 router.post('/api/reports', async (ctx) => {
-    const { reporterPubkey, reason, targetPostId, targetPulseItemId } = (ctx as any).requestBody || {};
+    const { reporterPubkey, reason, targetPostId, targetPulseItemId, targetBillId } = (ctx as any).requestBody || {};
     let { targetPubkey } = (ctx as any).requestBody || {};
     const activeReporter = ctx.state.actor as string | undefined;
     if (!activeReporter) {
@@ -2218,7 +2219,24 @@ router.post('/api/reports', async (ctx) => {
     // A Pulse item's report answers with its owner's key, and submitReport asks only for a member row, which a pruned
     // account keeps.
     if (!membersOnlyHere(ctx)) return;
-    if (targetPulseItemId !== undefined && targetPulseItemId !== null) {
+    // A bill's report (engine/bills.ts; DESIGN-getting-paid-fable §4.3): its payer's alone, about its sender whoever the client
+    // named. Kept below with what the bill was for and how much, it declines the bill, and three members' within 7 days hold
+    // the sender's bills.
+    let bill: BillRow | null = null;
+    if (targetBillId !== undefined && targetBillId !== null && targetBillId !== '') {
+        if ((targetPostId !== undefined && targetPostId !== null && targetPostId !== '') || (targetPulseItemId !== undefined && targetPulseItemId !== null)) {
+            ctx.status = 400;
+            ctx.body = { error: 'bill_report_names_more', message: 'A report on a bill names no post or Pulse item.' };
+            return;
+        }
+        bill = reportableBill(activeReporter, targetBillId);
+        if (!bill) {
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: word('That bill is not here.') };
+            return;
+        }
+        targetPubkey = bill.biller_pubkey;
+    } else if (targetPulseItemId !== undefined && targetPulseItemId !== null) {
         // A Pulse item report names the item; the reported member is always its owner, whatever
         // targetPubkey the client sent.
         if (typeof targetPulseItemId !== 'string' || !targetPulseItemId.trim()) {
@@ -2278,7 +2296,7 @@ router.post('/api/reports', async (ctx) => {
     // report is already on file.
     // Every alert judges the 500 characters the queue keeps (submitReport), so a child-safety alert always points at a
     // report the queue marks and lists first (the review of #1912, finding 6: words past them were told, then lost).
-    const kept = reason.slice(0, 500);
+    const kept = bill ? billReportReason(reason, bill) : reason.slice(0, 500);
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
         // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
@@ -2286,13 +2304,15 @@ router.post('/api/reports', async (ctx) => {
         // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
         // file was: words past them would make every repeat look like a change.
         if (reportKind(kept) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
-            const changed = updatePendingReportReason(pending.id, reason);
+            const changed = updatePendingReportReason(pending.id, bill ? kept : reason);
             if (changed) {
                 noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
+                if (bill) noteBillReported(bill, changed.id);
                 ctx.body = { success: true, report: reportAsReporterSees(changed, targetPostId), duplicate: true };
                 return;
             }
         }
+        if (bill) noteBillReported(bill, pending.id);
         ctx.body = { success: true, report: reportAsReporterSees(pending, targetPostId), duplicate: true };
         return;
     }
@@ -2301,12 +2321,13 @@ router.post('/api/reports', async (ctx) => {
         ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
         return;
     }
-    const report = submitReport(activeReporter, targetPubkey, reason, targetPostId, targetPulseItemId || undefined);
+    const report = submitReport(activeReporter, targetPubkey, bill ? kept : reason, targetPostId, targetPulseItemId || undefined);
     if (!report) {
         ctx.status = 400;
         ctx.body = { error: word('Failed — must be a registered member, cannot report yourself') };
         return;
     }
+    if (bill) noteBillReported(bill, report.id);
     // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
     // never holds the reporter's answer.
     noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));

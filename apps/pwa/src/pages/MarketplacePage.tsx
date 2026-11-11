@@ -1944,7 +1944,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     disabled={accepting || (selectedPost.priceType !== 'fixed' && !(completeHoursValue > 0))}
                                     className="flex-1 py-2 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60"
                                 >
-                                    {accepting ? t('Processing...') : t('Release Credits')}
+                                    {accepting ? t('Processing...') : t('Release Beans')}
                                 </button>
                             </div>
                         </div>
@@ -1959,7 +1959,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             disabled={accepting}
                             className="w-full py-2.5 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60"
                         >
-                            {t('✅ Release Credits')}
+                            {t('✅ Release Beans')}
                         </button>
                     ))}
                     {m.cancelHold && (
@@ -2279,7 +2279,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                                  }`}
                                              >
-                                                 {accepting ? t('Processing...') : t('Release Credits')}
+                                                 {accepting ? t('Processing...') : t('Release Beans')}
                                              </button>
                                          </div>
                                      </div>
@@ -2297,7 +2297,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                              accepting ? 'bg-bp-commit-fill cursor-not-allowed opacity-60' : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                          }`}
                                      >
-                                         {accepting ? t('Processing...') : t('✅ Release Credits')}
+                                         {accepting ? t('Processing...') : t('✅ Release Beans')}
                                      </button>
                                  )}
                              </>

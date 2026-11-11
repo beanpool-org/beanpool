@@ -41,7 +41,7 @@ import { getFunnel } from './engine/funnel.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 const ADMIN_PW = 'Door-Setting-Admin-Pw-48!';
@@ -114,8 +114,8 @@ function offlineTicket(inviter: Id): string {
 /** A member's own key opening Settings, as the app's Manage button does: challenge, signature, session. */
 async function keySession(id: Id): Promise<string | null> {
     const chal = await call(null, 'POST', '/api/local/admin/auth/challenge', {});
-    const signature = crypto.sign(null, Buffer.from(String(chal.body?.challenge), 'utf-8'), id.priv).toString('hex');
-    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, String(chal.body?.challengeId));
+    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (verified.status !== 200) return null;
     const ex = await call(null, 'POST', '/api/local/admin/auth/exchange', { token: verified.body?.handshakeToken });
     // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).

@@ -60,6 +60,7 @@ import { nodeHasOwner } from './engine/node-roles.js';
 import { issueRekeyCode } from './engine/member-wizards.js';
 import { readNodeView } from './claim-command.js';
 import { createPasswordSession } from './admin-key-auth.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 import { adminEmergencySuspend, adminLiftSuspension } from './decisions-engine.js';
 import { checkAdminAuth } from './admin-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
@@ -162,12 +163,12 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
 
     /** A real admin session: challenge, Ed25519 signature, handshake token, exchange. */
-    async function openKeySession(keys: { pub: string; sign: (m: string) => string }): Promise<string> {
+    async function openKeySession(keys: { pub: string; priv: Uint8Array }): Promise<string> {
         const chal: any = await (await fetch(`${base}/api/local/admin/auth/challenge`, { method: 'POST' })).json();
         const verify = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ challengeId: chal.challengeId, memberPubkey: keys.pub, signature: keys.sign(chal.challenge) }),
+            body: JSON.stringify({ challengeId: chal.challengeId, memberPubkey: keys.pub, ...adminSigninFields(keys.priv, chal.challengeId) }),
         });
         const solved: any = await verify.json();
         if (verify.status !== 200 || !solved.handshakeToken) {

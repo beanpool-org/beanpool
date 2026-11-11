@@ -44,6 +44,7 @@ import { resetAdminAuthTarpit, validateCsrfToken, PASSWORD_CSRF_BINDING, PASSWOR
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, createPasswordSession, validateAdminSession, revokeAdminSession, MAX_PASSWORD_SESSIONS } from './admin-key-auth.js';
 import { APP_DOCUMENT_CSP } from './app-document-csp.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -110,7 +111,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
 }

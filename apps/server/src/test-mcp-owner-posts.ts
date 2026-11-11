@@ -66,6 +66,7 @@ import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT, forge
 import { getAlertsStatus } from './services/alerts.js';
 import { OWNER_POST_TOOLS, enterpriseRef } from './agent/owner-posts.js';
 import type { AgentGrant } from './agent/tools.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -101,7 +102,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),

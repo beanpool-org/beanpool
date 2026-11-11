@@ -37,7 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -304,8 +304,8 @@ async function main() {
     // phone: the session the phone's Manage hand-off opens (its 15-minute idle limit), not a computer's.
     const keySession = (w: Who, phone = false): string => {
         const chal = createAdminChallenge();
-        const signature = Buffer.from(ed25519.sign(Buffer.from(chal.challenge, 'utf-8'), w.seed)).toString('hex');
-        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: w.pub, signature });
+        const { signature, signedFor } = adminSigninFields(w.seed, chal.challengeId);
+        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: w.pub, signature, signedFor });
         if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
         const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
         if (!ex.ok) throw new Error('handshake failed: ' + ex.error);

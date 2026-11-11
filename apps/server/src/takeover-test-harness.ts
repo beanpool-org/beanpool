@@ -476,8 +476,12 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
         const seed = Buffer.from(args.ownerSeedHex, 'hex');
         const pub = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
         const ch = auth.createAdminChallenge();
-        const sig = Buffer.from(ed25519.sign(new TextEncoder().encode(ch.challenge), seed)).toString('hex');
-        const solved = auth.verifyAndSolveChallenge({ challengeId: ch.challengeId, memberPubkey: pub, signature: sig });
+        // As today's app signs it (format 2, for the host it reaches the node at): this node's name once it has one, as
+        // recovery-seal-test-http.ts signs its requests.
+        const { publishedAddresses } = await import('./engine/own-addresses.js');
+        const { adminSigninFields, signedForHost } = await import('./signed-request-test-helper.js');
+        const signed = adminSigninFields(seed, ch.challengeId, publishedAddresses()[0] ?? signedForHost());
+        const solved = auth.verifyAndSolveChallenge({ challengeId: ch.challengeId, memberPubkey: pub, ...signed });
         const consumed = solved.ok ? auth.consumeHandshakeToken(solved.handshakeToken!) : null;
         const sessionId = (consumed as any)?.sessionId ?? (consumed as any)?.session?.sessionId ?? null;
         const valid = sessionId ? auth.validateAdminSession(sessionId) : null;

@@ -37,6 +37,7 @@ import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } fro
 import { resetAdminAuthTarpit, PASSWORD_RETIRED_CODE } from './admin-auth.js';
 import { issueBreakGlassCode, retireBreakGlassCode, backdateAdminSessionForTests, PHONE_STEP_UP_WINDOW_MS } from './admin-key-auth.js';
 import { logger } from './logger.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '', WSS = '';
 
@@ -89,7 +90,7 @@ function seedMember(callsign: string): Key {
 async function keySignIn(k: Key): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
 }
@@ -202,14 +203,14 @@ async function main(): Promise<void> {
         // A replayed step-up: the hand-off token Manage gave is single use, so it opens no second session.
         const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
         const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-            body: { challengeId: chal.body?.challengeId, memberPubkey: owner.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), owner.priv).toString('hex') },
+            body: { challengeId: chal.body?.challengeId, memberPubkey: owner.pub, ...adminSigninFields(owner.priv, chal.body?.challengeId ?? '') },
         });
         const first = await call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
         assert(first.status === 200 && !!first.sessionId, `the hand-off token opens one session (${show(first)})`);
         const replayed = await call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
         assert(replayed.status === 401 && replayed.body?.replay === true && !replayed.sessionId, `replaying it opens none (${show(replayed)})`);
         const reSolved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-            body: { challengeId: chal.body?.challengeId, memberPubkey: owner.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), owner.priv).toString('hex') },
+            body: { challengeId: chal.body?.challengeId, memberPubkey: owner.pub, ...adminSigninFields(owner.priv, chal.body?.challengeId ?? '') },
         });
         assert(!reSolved.body?.handshakeToken, `and the signed challenge cannot be answered twice for a new token (${show(reSolved)})`);
         // A session whose owner was demoted: the role change bumps the member's session epoch, so that session is ended.

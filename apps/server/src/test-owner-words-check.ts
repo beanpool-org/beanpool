@@ -34,7 +34,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -53,7 +53,6 @@ function keypair(): Identity {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey, pubObj: publicKey };
 }
-const signText = (who: Identity, text: string) => crypto.sign(null, Buffer.from(text), who.priv).toString('base64');
 
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
@@ -95,7 +94,7 @@ async function admin(method: 'GET' | 'POST', p: string, headers: Record<string, 
 async function keySession(who: Identity): Promise<string> {
     const chal = await admin('POST', '/api/local/admin/auth/challenge', {});
     const v = await admin('POST', '/api/local/admin/auth/verify-challenge', {}, {
-        challengeId: chal.body.challengeId, memberPubkey: who.pub, signature: signText(who, chal.body.challenge),
+        challengeId: chal.body.challengeId, memberPubkey: who.pub, ...adminSigninFields(who.priv, chal.body.challengeId, undefined, 'base64'),
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: v.body.handshakeToken }),

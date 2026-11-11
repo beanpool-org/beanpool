@@ -59,7 +59,7 @@ import {
     recordWebVisit, pruneWebVisits, getWebVisits, isWebAppPageLoad, utcDay, VISIT_RETENTION_DAYS,
     webVisitMemoryForTests, webVisitTagForTests, forgetWebVisitDayForTests,
 } from './engine/web-visits.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -126,8 +126,8 @@ function addMember(pk: string, callsign: string, invitedBy: string): void {
 /** Key sign-in as the app does it: challenge, signature, handshake token, session. */
 function keySession(kp: ReturnType<typeof makeKeypair>): string | undefined {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pk, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pk, signature, signedFor });
     if (!solved.ok) return undefined;
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     return ex.ok ? ex.sessionId : undefined;

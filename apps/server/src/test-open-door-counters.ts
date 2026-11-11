@@ -35,7 +35,7 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -90,8 +90,8 @@ function addMember(pk: string, callsign: string, invitedBy: string): void {
 }
 function keySession(k: Key): string | undefined {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), k.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: k.pk, signature });
+    const { signature, signedFor } = adminSigninFields(k.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: k.pk, signature, signedFor });
     if (!solved.ok) return undefined;
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     return ex.ok ? ex.sessionId : undefined;

@@ -49,7 +49,7 @@ import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -141,8 +141,8 @@ function offlineTicket(inviter: Id): string {
 /** The owner's own key opening Settings, as the app's Manage button does: challenge, signature, session. */
 async function keySession(id: Id): Promise<{ session: string | null; role: unknown; why: string }> {
     const chal = await call(null, 'POST', '/api/local/admin/auth/challenge', {});
-    const signature = crypto.sign(null, Buffer.from(String(chal.body?.challenge), 'utf-8'), id.priv).toString('hex');
-    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, String(chal.body?.challengeId));
+    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (verified.status !== 200) return { session: null, role: null, why: show(verified) };
     const ex = await call(null, 'POST', '/api/local/admin/auth/exchange', { token: verified.body?.handshakeToken });
     // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).

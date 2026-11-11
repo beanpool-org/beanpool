@@ -57,6 +57,7 @@ import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
 import { createAdminRoutes } from './routes/admin.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -103,8 +104,8 @@ function addMember(pubkey: string, callsign: string, invitedBy: string) {
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. */
 function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);

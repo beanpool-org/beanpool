@@ -32,7 +32,7 @@ import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, v
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -92,7 +92,7 @@ async function requestLink(signer: Identity, claimedPubkey = signer.pub, totpCod
     return postJson('/api/local/admin/auth/verify-challenge', {
         challengeId: chal.body.challengeId,
         memberPubkey: claimedPubkey,
-        signature: signText(signer, chal.body.challenge),
+        ...adminSigninFields(signer.priv, chal.body.challengeId, undefined, 'base64'),
         ...(totpCode ? { totpCode } : {}),
     });
 }
@@ -321,7 +321,7 @@ async function main() {
 
         // Sanity: the direct API agrees about the wrong-key case (no HTTP in between).
         const c = createAdminChallenge();
-        const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(member, c.challenge) });
+        const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, ...adminSigninFields(member.priv, c.challengeId, undefined, 'base64') });
         assert(direct.ok === false && !direct.handshakeToken, 'verifyAndSolveChallenge refuses a signature from another key');
     }
 

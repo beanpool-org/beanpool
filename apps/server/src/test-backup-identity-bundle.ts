@@ -47,6 +47,7 @@ import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { createSnapshot } from './services/snapshot-scheduler.js';
 import { makeRecoveryCode } from './services/takeover-envelope.js';
 import type { RouteDeps } from './routes/types.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -190,9 +191,9 @@ async function runSuite() {
     const totpSecret = generateTotpSecret();
     const keySession = (kp: ReturnType<typeof makeKeypair>): string => {
         const chal = createAdminChallenge();
-        const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
+        const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
         const solved = verifyAndSolveChallenge({
-            challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature,
+            challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor,
         });
         if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
         const ex = consumeHandshakeToken(solved.handshakeToken!);

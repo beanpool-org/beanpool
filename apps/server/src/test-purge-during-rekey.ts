@@ -39,7 +39,7 @@ import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 // No host but this machine.
 const realFetch = globalThis.fetch;
@@ -71,8 +71,8 @@ type Keypair = ReturnType<typeof makeKeypair>;
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. */
 function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);

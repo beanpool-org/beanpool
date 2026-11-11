@@ -69,6 +69,7 @@ import { admitAgentPhoto, agentCreatesToday, agentPhotosPerDay, agentPhotosToday
 import { pinnedHostResolver, type HostResolver } from './engine/pulse-resolver.js';
 import { __usePhotoFetchResolverForTests, PHOTO_UPLOAD_KEEP_MS, sweepUploadedPhotos, uploadedPhotosWaiting } from './agent/owner-photos.js';
 import { enterpriseRef } from './agent/owner-posts.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let PORT = 0;
@@ -123,7 +124,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),

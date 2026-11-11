@@ -28,6 +28,7 @@ import { updateLocalConfig, hashPassword, setBreakGlassMode } from './config/loc
 import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { resetAdminAuthTarpit, TOTP_SETUP_REQUIRED_CODE, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import { validateAdminSession } from './admin-key-auth.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 
@@ -75,7 +76,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
 }

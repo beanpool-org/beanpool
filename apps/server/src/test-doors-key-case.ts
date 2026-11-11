@@ -68,7 +68,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, settingsSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -553,7 +553,7 @@ async function main(): Promise<void> {
         const pairing = async () => (await call('POST', null, '/api/local/admin/auth/pairing', {})).body as { pairingId: string; shortCode: string };
         const decline = (p: { pairingId: string; shortCode: string }, memberPubkey: string) => call('POST', null, `/api/local/admin/auth/pairing/${p.pairingId}/decline`, {
             memberPubkey,
-            signature: crypto.sign(null, Buffer.from(`beanpool-settings-signin:v1:decline:${p.pairingId}:${p.shortCode}`), bob.priv).toString('base64'),
+            ...settingsSigninFields(bob.priv, 'decline', p.pairingId, p.shortCode),
         });
         const asStray = await decline(await pairing(), bobCaps);
         const asBob = await decline(await pairing(), bob.pk);

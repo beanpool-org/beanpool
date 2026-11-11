@@ -38,6 +38,7 @@ import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCod
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { SOURCE_FREE_FAILURES } from './password-brake.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -86,9 +87,9 @@ function makeKeypair() {
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. No 2FA code: that is the password's (D2). */
 function keySession(kp: ReturnType<typeof makeKeypair>): { sessionId?: string; error?: string } {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
     const solved = verifyAndSolveChallenge({
-        challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature,
+        challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor,
     });
     if (!solved.ok) return { error: solved.error };
     const ex = consumeHandshakeToken(solved.handshakeToken!);

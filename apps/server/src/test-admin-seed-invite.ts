@@ -24,7 +24,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -64,9 +64,9 @@ function makeKeypair() {
 /** Signs the node's challenge with the member's key, as the app does, and returns the verify-challenge response. */
 async function solveChallenge(kp: ReturnType<typeof makeKeypair>): Promise<{ status: number; body: any }> {
     const chal = await postJson('/api/local/admin/auth/challenge', {});
-    const signature = crypto.sign(null, Buffer.from(chal.body.challenge, 'utf-8'), kp.privateKey).toString('hex');
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.body.challengeId);
     return postJson('/api/local/admin/auth/verify-challenge', {
-        challengeId: chal.body.challengeId, memberPubkey: kp.pubKeyHex, signature,
+        challengeId: chal.body.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor,
     });
 }
 

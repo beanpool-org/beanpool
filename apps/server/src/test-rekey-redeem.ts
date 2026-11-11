@@ -54,6 +54,7 @@ import { setNodeRole } from './config/node-role.js';
 import { REKEY_OWN_KEY, REKEY_DECLINED_PHONE } from './engine/member-wizards.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { registerVisitor } from './engine/members.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 const HOST = 'mullum.test';
 const OTHER_HOST = 'bellingen.test';
@@ -90,8 +91,8 @@ const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(
 /** `phone`: the phone's Manage hand-off, just now (an owner's fresh proof, admin-auth.ts requireFreshProof). */
 function keySession(kp: Keypair, phone = false): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);

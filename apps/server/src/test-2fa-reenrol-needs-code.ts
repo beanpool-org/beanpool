@@ -32,6 +32,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt, sourceClosedUntil } from './password-brake.js';
 import { limiterKeyForIp } from './client-ip.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -75,8 +76,8 @@ function makeKeypair() {
 }
 function keySession(kp: ReturnType<typeof makeKeypair>): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(solved.error);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(ex.error);

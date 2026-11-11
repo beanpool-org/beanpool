@@ -26,6 +26,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -81,7 +82,7 @@ async function keySession(who: Identity): Promise<{ sid: string; role: string }>
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
         challengeId: chal.body?.challengeId,
         memberPubkey: who.pub,
-        signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), who.priv).toString('base64'),
+        ...adminSigninFields(who.priv, chal.body?.challengeId ?? '', undefined, 'base64'),
     });
     const ex = await call('POST', '/api/local/admin/auth/exchange', { token: solved.body?.handshakeToken });
     const sid = (ex.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1];

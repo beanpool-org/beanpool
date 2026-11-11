@@ -174,7 +174,7 @@ async function main(): Promise<void> {
     const front = await call(owen, 'GET', '/api/knowledge/front');
     const read = await call(owen, 'GET', '/api/marketplace/posts?type=knowledge');
     assert(front.status === 200 && front.body?.total === 0 && read.status === 200 && !read.text.includes(PAGE.title), `1. not in Learn, not in a read naming the type (${show(front)})`);
-    const told = pushes('knowledge.suggested');
+    const told = pushes('community.knowledge');
     const toldTo = told.map((p) => p.recipient).sort();
     assert(toldTo.length === 2 && toldTo.join() === [owen.pk, ada.pk].sort().join(), `1. one push to each owner and admin, none to a moderator or member (${toldTo.length})`);
     assert(told.every((p) => p.body === `Mel suggested local knowledge: "${PAGE.title}". Check it in Learn.` && JSON.parse(p.data).screen === 'learn-check' && JSON.parse(p.data).draftId === d1),
@@ -287,7 +287,7 @@ async function main(): Promise<void> {
     const gusNotice = notices(gus.pk);
     assert(gusNotice.length === 1 && gusNotice[0].title === 'Your local knowledge is in' && gusNotice[0].body === '"Gus on the creek" is now in Learn. Thank you.'
         && !/Owen|owner|admin/.test(JSON.stringify(gusNotice[0])) && !gusNotice[0].data.includes(owen.pk), `6. Gus's kept notice names the page and nobody who answered (${JSON.stringify(gusNotice)})`);
-    const gusPush = pushes('knowledge.answered');
+    const gusPush = pushes('community.knowledge-answer');
     assert(gusPush.length === 1 && gusPush[0].recipient === gus.pk && JSON.parse(gusPush[0].data).postId === post?.id && JSON.parse(gusPush[0].data).noticeId
         && !gusPush[0].data.includes(owen.pk), `6. and a push naming its kept copy (${JSON.stringify(gusPush[0])})`);
     const gusMine = await mine(gus);
@@ -369,7 +369,7 @@ async function main(): Promise<void> {
     assert(ticked.status === 200 && aRow?.author_pubkey === owen.pk && aRow?.created_via === 'assistant-draft:grant-1' && ticked.body?.post?.knowledge?.gathered === true,
         `11. the page is the approver's, marked assistant-draft:, read as gathered (${show(ticked)})`);
     assert(getMemberPhotoUsageForTests(owen.pk).entryCount === 1, "11. the approver's own photo is charged to them");
-    assert(notices(ada.pk).length === 0 && pushes('knowledge.answered').length === 0, '11. nobody gets a notice for an assistant\'s draft');
+    assert(notices(ada.pk).length === 0 && pushes('community.knowledge-answer').length === 0, '11. nobody gets a notice for an assistant\'s draft');
     const m11 = (await suggest(mel, { title: 'Photos stay the member\'s' })).body?.draft?.id as string;
     const addPhotos = await approve(owen, m11, { photos: [TEST_PHOTO] });
     assert(addPhotos.status === 400 && addPhotos.body?.code === 'bad_photos', `11. a member's suggestion keeps its own photos (${show(addPhotos)})`);

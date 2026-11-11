@@ -35,9 +35,9 @@
  *
  * ## Who is told
  *
- * Owners and admins: one push per member's suggestion (`knowledge.suggested`; its details name who and what). None for an
+ * Owners and admins: one push per member's suggestion (`community.knowledge`; its details name who and what). None for an
  * assistant's draft: the admin asked for it. The member: at the answer, a kept notice (engine/kept-notices.ts) and a push
- * (`knowledge.answered`): the page's title, the reason's label and the admin's own words, never who answered. Nothing about
+ * (`community.knowledge-answer`): the page's title, the reason's label and the admin's own words, never who answered. Nothing about
  * a suggestion goes to a socket, and no log line holds its words.
  *
  * Every write here refuses on a standby (assertPlainTablesWritable); none is a ledger write.

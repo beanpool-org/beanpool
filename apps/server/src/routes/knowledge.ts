@@ -216,7 +216,7 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         const name = getMember(sender)?.callsign || '';
         try {
             dispatchPushNotification(to, sender, tr(KNOWLEDGE_DRAFT_WORDS.suggestedTitle), tr(KNOWLEDGE_DRAFT_WORDS.suggestedBody, { name, title: draft.title }),
-                { screen: 'learn-check', draftId: draft.id }, 'marketplace', 'knowledge.suggested');
+                { screen: 'learn-check', draftId: draft.id }, 'marketplace', 'community.knowledge');
         } catch { /* the bell's count says so all the same */ }
     };
 
@@ -225,7 +225,7 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         if (!a.notice) return;
         try {
             dispatchPushNotification([a.member], 'SYSTEM', a.notice.title, a.notice.body, { screen: 'learn-mine', draftId: a.draftId, ...landing },
-                'marketplace', 'knowledge.answered', false, keptNoticeDetails([{ to: a.member, id: a.notice.id }]));
+                'marketplace', 'community.knowledge-answer', false, keptNoticeDetails([{ to: a.member, id: a.notice.id }]));
         } catch { /* it is kept */ }
     };
 

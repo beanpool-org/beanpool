@@ -52,6 +52,7 @@ export * from './first-trade-words.js';
 export * from './need-answer-words.js';
 export * from './listing-price.js';
 export * from './post-type-lines.js';
+export * from './knowledge.js';
 export * from './invite-ask.js';
 export * from './invite-and-share.js';
 export * from './invite-share-text.js';

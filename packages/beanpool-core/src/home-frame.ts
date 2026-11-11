@@ -151,6 +151,13 @@ export interface HomeCardType {
      * the node to build. A chat card with no chat picked is drawn as "Pick a chat" and never asked. Absent: always.
      */
     asksWith?(settings: Record<string, unknown>): boolean;
+    /**
+     * A card that arrives on a Home its member already arranged (DESIGN-local-knowledge-amend-fable.md §3.6, Marty's pick 2,
+     * 11 Nov 2026): drawn once, after the member's own cards, while their saved list neither holds it nor carries the stamp
+     * `new:<id>` in `dismissed`; Remove, a move or "Keep on Home" writes the stamp in the member's own next save, and nothing
+     * is written by itself. The mark only: the rule that reads it is slice K7's, with the `learn` card. No card has it yet.
+     */
+    arrives?: true;
 }
 
 /** The distances a saved search can be bounded to, in km. */

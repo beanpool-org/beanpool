@@ -458,7 +458,7 @@ async function main() {
         const byOutsider = await signedLookup(b.pairingId, outsider, via(b.ip));
         assert(byOutsider.status === 200 && !('fromAddress' in byOutsider.body), 'nor one signed by a key that is no member here');
         const byOwner = await signedLookup(b.pairingId, owner, via(b.ip));
-        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16) } });
+        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16), 'X-Signed-For': 'localhost' } });
         assert(byOwner.status === 200 && 'fromAddress' in byOwner.body && forged.status === 200 && !('fromAddress' in forged.body),
             'nor one that names an owner\'s key without the owner\'s signature');
 

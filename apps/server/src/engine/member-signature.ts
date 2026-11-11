@@ -5,9 +5,9 @@
  *
  * The order (design §4.2, 2026-09-27):
  *   1. the key's spelling (engine/member-key.ts);
- *   2. freshness, then the nonce's length (1 to MAX_NONCE_LENGTH characters, else 400: AUTH-03);
- *   3. a request that names no host (the old shape, from an app before request binding) is refused as too old, 426
- *      app_too_old, and nothing in it is checked (oldShapeRefusal, CUT4);
+ *   2. a request that names no host (the old shape, from an app before request binding) is refused as too old, 426
+ *      app_too_old, and nothing else in it is checked: not its freshness, nonce or signature (oldShapeRefusal, CUT4);
+ *   3. freshness, then the nonce's length (1 to MAX_NONCE_LENGTH characters, else 400: AUTH-03);
  *   4. the signature, over the format-2 bytes of the host the request names (X-Signed-For, or `for=` with `v=2` on a
  *      socket), and that host is one of this community's (engine/own-addresses.ts), or 421 wrong_community;
  *   5. (gone in 1.4.0: the old format was verified and counted here until the cutover);

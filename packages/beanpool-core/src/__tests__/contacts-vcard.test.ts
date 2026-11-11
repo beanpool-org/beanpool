@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Buffer } from 'buffer';
-import { CONTACTS_FILE_WORDS, CONTACTS_READ_MAX, readContactsFile, vcardCards, writeContactsVcard } from '../contacts-vcard.js';
+import { CONTACTS_FILE_WORDS, CONTACTS_READ_MAX, VCARD_LINE_MAX, readContactsFile, vcardCards, writeContactsVcard } from '../contacts-vcard.js';
 
 // Contacts files (DESIGN-private-contacts-fable.md §3.4, §7, §11 "vCard fixtures"): each ends in the right contacts or the
 // right sentence.
@@ -183,6 +183,40 @@ describe('a file made to hurt, and files that aren’t contacts', () => {
         expect(c.note).toHaveLength(300);
         expect(c.phones).toHaveLength(5);
         expect(c.emails).toHaveLength(3);
+    });
+
+    it('a quoted-printable value past the line limit is skipped alone: its card keeps its other fields, and every card after it is read', () => {
+        // Android writes a non-ASCII note in UTF-8 quoted-printable, soft-broken every 72 characters (8 characters of 张 here).
+        const encoded = '=E5=BC=A0'.repeat(8000);
+        expect(encoded.length).toBeGreaterThan(VCARD_LINE_MAX);
+        const softBroken = (encoded.match(/.{1,72}/g) ?? []).map((part, i, all) => (i < all.length - 1 ? `${part}=` : part));
+        const huge = ['BEGIN:VCARD', 'VERSION:2.1', 'FN:Long Note', 'TEL;CELL:0400 999 999', 'NOTE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:' + softBroken[0], ...softBroken.slice(1), 'END:VCARD'];
+        const after = (n: number) => {
+            const out: string[] = [];
+            for (let i = 0; i < n; i++) out.push('BEGIN:VCARD', 'VERSION:2.1', `FN:After ${i}`, `TEL;CELL:0400 ${String(i).padStart(6, '0')}`, 'END:VCARD');
+            return out;
+        };
+        const longNote = { name: 'Long Note', phones: ['0400 999 999'], emails: [], note: '' };
+
+        // In the middle of a file: card 3 of 303.
+        const middle = names(crlf([...after(2).map((l) => l.replace('After', 'Before')), ...huge, ...after(300)]));
+        expect(middle.candidates).toHaveLength(303);
+        expect(middle.candidates[2]).toEqual(longNote);
+        expect(middle.candidates[302]).toEqual({ name: 'After 299', phones: ['0400 000299'], emails: [], note: '' });
+        expect(middle.cutOff).toBe(false);
+
+        // The first card: the file is still a contacts file, with all three cards in it.
+        const first = names(crlf([...huge, ...after(2)]));
+        expect(first.candidates.map((c) => c.name)).toEqual(['Long Note', 'After 0', 'After 1']);
+        expect(first.candidates[0]).toEqual(longNote);
+        expect(first.cutOff).toBe(false);
+
+        // A note just under the limit is still read whole, so the guard starts only past it.
+        const fits = '=E5=BC=A0'.repeat(7000);
+        const fitsLines = (fits.match(/.{1,72}/g) ?? []).map((part, i, all) => (i < all.length - 1 ? `${part}=` : part));
+        const read = names(crlf(['BEGIN:VCARD', 'VERSION:2.1', 'FN:Fits', 'NOTE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:' + fitsLines[0], ...fitsLines.slice(1), 'END:VCARD', ...after(1)]));
+        expect(read.candidates.map((c) => c.name)).toEqual(['Fits', 'After 0']);
+        expect(read.candidates[0].note.length).toBeGreaterThan(0);
     });
 
     it('cards come one at a time, so an app can read a big file in slices', () => {

@@ -198,6 +198,11 @@ export function* vcardCards(text: string): Generator<VcardStep, void, undefined>
         return parseLine(line);
     };
 
+    // A line gathered past VCARD_LINE_MAX is never read (finish() skips it), so it stops growing and keeps its length.
+    // Its last character still follows the line run on: `=` when that line ends in a quoted-printable soft break, so
+    // the next one runs on too, and a space otherwise, so the card's END:VCARD and every card after it are read.
+    const pastLimit = (gathered: string, line: string): string => gathered.slice(0, -1) + (line.endsWith('=') ? '=' : ' ');
+
     const take = function* (line: string): Generator<VcardStep, void, undefined> {
         const p = finish(line);
         if (!p) return;
@@ -234,13 +239,13 @@ export function* vcardCards(text: string): Generator<VcardStep, void, undefined>
         if (pending !== null) {
             // A quoted-printable soft break first: the next line runs on as it is, a leading space included (it is text).
             if (pending.endsWith('=') && /QUOTED-PRINTABLE/i.test(pending.slice(0, Math.max(0, pending.indexOf(':'))))) {
-                if (pending.length <= VCARD_LINE_MAX) pending = pending.slice(0, -1) + line;
+                pending = pending.length <= VCARD_LINE_MAX ? pending.slice(0, -1) + line : pastLimit(pending, line);
                 if (end >= len) break;
                 continue;
             }
             // A folded line: the space or tab that folds it goes.
             if (line.startsWith(' ') || line.startsWith('\t')) {
-                if (pending.length <= VCARD_LINE_MAX) pending += line.slice(1);
+                pending = pending.length <= VCARD_LINE_MAX ? pending + line.slice(1) : pastLimit(pending, line);
                 if (end >= len) break;
                 continue;
             }

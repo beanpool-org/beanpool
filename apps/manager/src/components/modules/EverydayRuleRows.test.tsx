@@ -112,6 +112,26 @@ describe('EverydayRuleRows — the rules that moved to where they are used', () 
         expect(sent[0].changes).toEqual({ autoMute: true });
     });
 
+    it('Keep members\' locked contact lists: a rule the server applies, switched off alone with what it deletes said first', async () => {
+        const sent = mockApi(shapeOf({ contacts: on(true) }));
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="rules" title="Rules the server applies" />);
+        expect(await screen.findByTestId('shape-row-contacts')).toHaveTextContent("Keep members' locked contact lists");
+        expect(screen.getByTestId('shape-val-contacts')).toHaveTextContent('On');
+        fireEvent.click(screen.getByTestId('shape-expand-contacts'));
+        fireEvent.click(screen.getByRole('checkbox', { name: /Keep members' locked contact lists/ }));
+        expect(screen.getByTestId('shape-consequence')).toHaveTextContent(/deletes the locked copies it keeps now/);
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].changes).toEqual({ contacts: false });
+    });
+
+    it('a server from before private contacts sends no contacts setting: no such row', async () => {
+        mockApi(shapeOf());
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="rules" title="Rules the server applies" />);
+        expect(await screen.findByTestId('shape-row-autoMute')).toBeInTheDocument();
+        expect(screen.queryByTestId('shape-row-contacts')).toBeNull();
+    });
+
     it('Node Identity: the directory switches, visitors and the private preview, read-only where the server holds them', async () => {
         mockApi(shapeOf());
         render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="found" title="Being found" />);

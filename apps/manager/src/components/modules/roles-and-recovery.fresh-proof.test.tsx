@@ -11,7 +11,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * roleChangeProof) ask an owner's fresh proof. Each viewer × the server's refusal → the box or the sentence; the code
  * travels in `code` (POST) or X-Fresh-Proof (the DELETE, which has no body).
  */
-const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', credential: 'pw' };
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to replace the recovery code', totpRequired: true };
 const WRONG = { error: 'Invalid 2FA code', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };

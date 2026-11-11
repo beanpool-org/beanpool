@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
-import { getTfaSessionToken } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import { ADVICE_MAX, adviseOwners, type Shape } from '../../lib/community-shape';
 
@@ -54,7 +53,7 @@ export function AdviseTheOwners({
         setSending(true);
         setError(null);
         try {
-            const res = await adviseOwners(activeNode.url, nodeCredential(activeNode), setting, text, getTfaSessionToken(activeNode.id));
+            const res = await adviseOwners(activeNode.url, nodeCredential(activeNode), setting, text);
             onSent(res.shape);
             close();
         } catch (err: unknown) {

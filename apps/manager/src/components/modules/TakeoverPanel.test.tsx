@@ -4,7 +4,7 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { TakeoverPanel, type TakeoverPreview, type TakeoverProgressData } from './TakeoverPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'standby-1', name: 'Standby', url: 'https://standby.example.org', adminPassword: 'standby-own-pw' };
+const node: NodeProfile = { id: 'standby-1', name: 'Standby', url: 'https://standby.example.org', credential: 'standby-own-pw' };
 
 const MISSING = ['Decisions and their votes', 'enterprise pledges and keeper changes', 'invites', "members' notification settings"];
 const STEPS = ['opened', 'undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'role', 'pull-config', 'restart', 'audit', 'announcement', 'reseal', 'tunnel', 'done'];

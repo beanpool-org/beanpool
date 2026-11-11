@@ -22,8 +22,7 @@ import {
  */
 
 export interface BurstCredentials {
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
 }
 
 function when(iso: string): string {
@@ -51,7 +50,7 @@ export interface BurstPanelProps extends BurstCredentials {
     onChanged?: () => void;
 }
 
-export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken, onClose, onChanged }: BurstPanelProps) {
+export function BurstPanel({ nodeUrl, anchor, canRemove, credential, onClose, onChanged }: BurstPanelProps) {
     const [burst, setBurst] = useState<Burst | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -69,7 +68,7 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
         setLoading(true);
         setError(null);
         try {
-            const b = await fetchBurst(nodeUrl, anchor, adminPassword, tfaToken);
+            const b = await fetchBurst(nodeUrl, anchor, credential);
             setBurst(b);
             setTicked(new Set([b.account, ...b.others].filter(startsTicked).map(a => a.publicKey)));
         } catch (e: unknown) {
@@ -78,7 +77,7 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
         } finally {
             setLoading(false);
         }
-    }, [nodeUrl, anchor, adminPassword, tfaToken]);
+    }, [nodeUrl, anchor, credential]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -101,10 +100,10 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
         const members = chosen.map(a => a.publicKey);
         try {
             if (kind === 'hide') {
-                const r = await hideBurstPosts(nodeUrl, anchor, members, established.length > 0, adminPassword, tfaToken);
+                const r = await hideBurstPosts(nodeUrl, anchor, members, established.length > 0, credential);
                 setDone(`Hid ${posts(r.action.posts)} of ${accounts(r.action.accounts)}. You can undo it from the list at the top.`);
             } else {
-                const r = await removeBurstAccounts(nodeUrl, anchor, members, established.length > 0, adminPassword, tfaToken);
+                const r = await removeBurstAccounts(nodeUrl, anchor, members, established.length > 0, credential);
                 setDone(`Removed ${accounts(r.removed)}.${r.failed.length ? ` ${accounts(r.failed.length)} could not be removed: ${r.failed[0].error}` : ''}`);
             }
             setConfirming(null);
@@ -269,7 +268,7 @@ export interface BurstDigestCardProps extends BurstCredentials {
  * One line per recent burst big enough to notice, and one per action taken lately, with the undo for a hide. Nothing at
  * all on a node with no open door, or with nothing to say.
  */
-export function BurstDigestCard({ nodeUrl, adminPassword, tfaToken, onOpen, reloadKey = 0, onAvailability }: BurstDigestCardProps) {
+export function BurstDigestCard({ nodeUrl, credential, onOpen, reloadKey = 0, onAvailability }: BurstDigestCardProps) {
     const [digest, setDigest] = useState<BurstDigest | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
@@ -277,14 +276,14 @@ export function BurstDigestCard({ nodeUrl, adminPassword, tfaToken, onOpen, relo
 
     const load = useCallback(async () => {
         try {
-            const d = await fetchBurstDigest(nodeUrl, adminPassword, tfaToken);
+            const d = await fetchBurstDigest(nodeUrl, credential);
             setDigest(d);
             setError(null);
             onAvailability?.(d !== null);
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : 'Could not load the accounts that joined together');
         }
-    }, [nodeUrl, adminPassword, tfaToken, onAvailability]);
+    }, [nodeUrl, credential, onAvailability]);
 
     useEffect(() => { void load(); }, [load, reloadKey]);
 
@@ -292,7 +291,7 @@ export function BurstDigestCard({ nodeUrl, adminPassword, tfaToken, onOpen, relo
         setBusy(id);
         setError(null);
         try {
-            const r = await undoBurstHide(nodeUrl, id, adminPassword, tfaToken);
+            const r = await undoBurstHide(nodeUrl, id, credential);
             setNote(`${posts(r.restored)} back.${r.keptHidden ? ` ${r.keptHidden === 1 ? '1 post stays' : `${r.keptHidden} posts stay`} hidden, because reports would hide ${r.keptHidden === 1 ? 'it' : 'them'} now.` : ''}`);
             await load();
         } catch (e: unknown) {

@@ -97,7 +97,7 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
 
     it('suspend, password viewer: the code re-sent once beside the reason', async () => {
         const sent = mockNode(`/users/${owner}/suspend`, [[401, CODE_ASK], [200, { success: true, decision: { id: 'd1', closesAt: '2026-10-23T00:00:00.000Z' } }]]);
-        render(<MemberDetailModal member={member} isFrozen={false} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE} adminPassword="pw" />);
+        render(<MemberDetailModal member={member} isFrozen={false} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE} credential="pw" />);
         fireEvent.click(screen.getByText('⏸️ Suspend'));
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'took the treasury keys' } });
         fireEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
@@ -135,7 +135,7 @@ describe('Offboard an owner (S4a)', () => {
         const sent = mockNode(`/members/${owner}/offboard`, [[401, CODE_ASK], [200, { success: true, memberPubkey: owner, callsign: 'anna', resolution: 'prune_zero_balance', balanceSettled: 0 }]],
             { [`/members/${owner}/offboard/preview`]: PREVIEW });
         const onSuccess = vi.fn();
-        render(<OffboardMemberWizard member={{ publicKey: owner, callsign: 'anna' }} nodeUrl={NODE} adminPassword="pw" onSuccess={onSuccess} onClose={() => {}} />);
+        render(<OffboardMemberWizard member={{ publicKey: owner, callsign: 'anna' }} nodeUrl={NODE} credential="pw" onSuccess={onSuccess} onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: /Confirm & Prune Member/ }));
         await enterCode('offboard-proof', '777777');
         await waitFor(() => expect(onSuccess).toHaveBeenCalled());

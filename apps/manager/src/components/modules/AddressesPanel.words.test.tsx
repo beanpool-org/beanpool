@@ -16,7 +16,7 @@ vi.mock('../../lib/fresh-proof', async () => {
     return { ...actual, t, tn, timeAgo };
 });
 
-const node: NodeProfile = { id: 'n1', name: 'Byron', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Byron', url: 'http://localhost:8080', credential: 'pw' };
 const checkedAt = '2026-11-02T05:02:00.000Z';
 const report = {
     primaryAddress: 'byron.beanpool.org', named: true, unconfirmed: [], heldBack: [],

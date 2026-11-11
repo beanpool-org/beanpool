@@ -6,7 +6,7 @@ import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import type { OffboxStatus, OffboxDestinationStatus } from '../../lib/node-client';
 
-const node: NodeProfile = { id: 'node-1', name: 'Node', url: 'https://node.example.com', adminPassword: 'pw-owner' };
+const node: NodeProfile = { id: 'node-1', name: 'Node', url: 'https://node.example.com', credential: 'pw-owner' };
 
 function dest(over: Partial<OffboxDestinationStatus>): OffboxDestinationStatus {
     return {

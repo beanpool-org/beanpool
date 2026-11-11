@@ -24,7 +24,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
         setTestStatus(null);
         try {
             const cleanUrl = normalizeNodeUrl(url);
-            const data = await fetchDiagnostics(cleanUrl, nodeCredential({ automationToken: token.trim() || undefined, adminPassword: node.adminPassword }));
+            const data = await fetchDiagnostics(cleanUrl, nodeCredential({ automationToken: token.trim() || undefined }));
             setTestStatus(`✅ Connection OK! Status: ${data.status.toUpperCase()} (${data.communityName || 'BeanPool Node'})`);
         } catch (e: unknown) {
             const errMessage = e instanceof Error ? e.message : String(e);

@@ -10,7 +10,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * the server a standby copies from (server backup.ts replication-config/save) ask an owner's fresh proof. Each of the
  * three viewers × the server's refusal → the code box, the "Manage again" sentence or the "from your phone" sentence.
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', credential: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to add or change a mirror link', totpRequired: true };
 const WRONG = { error: 'That 2FA code was already used. Wait for the next one from your authenticator app.', totpRequired: true };

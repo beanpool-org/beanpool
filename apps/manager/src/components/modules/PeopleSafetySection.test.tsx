@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-libra
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
-import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-client';
+import { setKeySessionCsrfToken } from '../../lib/node-client';
 
 // The everyday rules card reads the community's shape on mount (its own tests: EverydayRuleRows.test.tsx); this file counts other calls.
 vi.mock('./EverydayRuleRows', () => ({ EverydayRuleRows: () => null }));
@@ -24,7 +24,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-password',
+    credential: 'admin-password',
 };
 
 const realServerReports: any[] = [
@@ -448,7 +448,7 @@ describe('PeopleSafetySection Component', () => {
     it('tells the posts screen who is looking: the password, or the signed-in key and its role', () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
         renderModeration([]);
-        expect(JSON.parse(screen.getByTestId('post-moderation-panel').getAttribute('data-viewer') ?? 'null')).toEqual({ kind: 'password' });
+        expect(JSON.parse(screen.getByTestId('post-moderation-panel').getAttribute('data-viewer') ?? 'null')).toEqual({ kind: 'token' });
         cleanup();
         const viewer = { kind: 'key' as const, memberPubkey: 'm'.repeat(64), role: 'moderator' as const };
         renderModeration([], vi.fn(), { rolesViewer: viewer });
@@ -692,7 +692,7 @@ describe('People & Safety: Onboarding Funnel', () => {
         id: 'local-node',
         name: 'Local Sovereign Node',
         url: window.location.origin,
-        adminPassword: 'break-glass-pass',
+        credential: 'break-glass-pass',
         isPrimary: true,
     };
 
@@ -762,9 +762,9 @@ describe('People & Safety: Onboarding Funnel', () => {
         const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => FUNNEL });
         vi.stubGlobal('fetch', fetchMock);
 
-        // An owner or admin signed in from the app: App.tsx leaves adminPassword undefined, and the httpOnly
+        // An owner or admin signed in from the app: App.tsx leaves credential undefined, and the httpOnly
         // admin_session cookie authenticates the request by itself.
-        await act(async () => { renderPeople({ ...singleNode, adminPassword: undefined }); });
+        await act(async () => { renderPeople({ ...singleNode, credential: undefined }); });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Onboarding Funnel$/ })); });
 
         await waitFor(() => expect(funnelCalls(fetchMock).length).toBe(1));

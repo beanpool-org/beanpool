@@ -10,7 +10,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * public-address.ts requireFreshProof). The server's three refusals → the code box (password viewer), the "Manage again"
  * sentence (a stale phone hand-off) or the "from your phone" sentence (a computer's key session).
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', credential: 'pw' };
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to take this community offline', totpRequired: true };

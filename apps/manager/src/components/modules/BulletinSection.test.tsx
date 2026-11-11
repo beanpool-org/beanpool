@@ -11,7 +11,7 @@ describe('BulletinSection', () => {
         id: 'node-1',
         name: 'Alpha Node',
         url: 'https://alpha.beanpool.org',
-        adminPassword: 'secretpassword',
+        credential: 'secretpassword',
     };
 
     const mockOnRefresh = vi.fn();

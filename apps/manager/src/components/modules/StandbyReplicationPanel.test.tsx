@@ -10,7 +10,7 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         id: 'node-standby-1',
         name: 'Standby Replica Node',
         url: 'https://standby.example.com',
-        adminPassword: 'test-admin-secret',
+        credential: 'test-admin-secret',
     };
 
     beforeEach(() => {

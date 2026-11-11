@@ -10,7 +10,7 @@ import * as nodeClient from '../../lib/node-client';
  * a raise goes through in one request, a lowering opens the box (or the sentence) and the SAME schedule is re-sent once
  * with the code.
  */
-const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', credential: 'pw' };
 const NOW = { enabled: true, intervalHours: 24, keep: 7 };
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to keep fewer snapshots, or make them cover less time', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };

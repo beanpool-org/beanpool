@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     isAutomationToken,
-    passwordField,
     isAuthFailure,
     nodeReadLimits,
     PASSWORD_NEEDS_2FA_HINT,
@@ -13,8 +12,6 @@ import {
     resolveNodeApiUrl,
     buildAdminHeaders,
     isTotpRequired,
-    getTfaSessionToken,
-    setTfaSessionToken,
     clearAllTfaSessionTokens,
     loginToNode,
     fetchNodeTreasuries,
@@ -1176,7 +1173,7 @@ describe('registrar claim helpers send admin password header', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('approveRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and adminPassword are provided', async () => {
+    it('approveRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and credential are provided', async () => {
         const { approveRegistrarClaim } = await import('./node-client');
         await approveRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
         const [url, init] = lastCall();
@@ -1185,7 +1182,7 @@ describe('registrar claim helpers send admin password header', () => {
         expect(JSON.parse((init as any).body)).toEqual({ password: 'secret123' });
     });
 
-    it('revokeRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and adminPassword are provided', async () => {
+    it('revokeRegistrarClaim sends X-Admin-Password and body password when nodeUrl, name, and credential are provided', async () => {
         const { revokeRegistrarClaim } = await import('./node-client');
         await revokeRegistrarClaim('https://node.example.com', 'mycommunity', 'secret123');
         const [url, init] = lastCall();

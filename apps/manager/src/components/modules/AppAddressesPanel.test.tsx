@@ -16,7 +16,7 @@ vi.mock('../../lib/node-client', async () => {
     };
 });
 
-const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://community.example.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://community.example.org', credential: 'pw' };
 const report = (over: Partial<nodeClient.AppAddressesReport> = {}): nodeClient.AppAddressesReport => ({
     addresses: [], unconfirmed: [],
     unboundSignaturesUntil: '2026-12-15', unboundSignaturesAccepted: true, ...over,

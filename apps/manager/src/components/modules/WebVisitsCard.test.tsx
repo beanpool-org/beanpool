@@ -11,7 +11,7 @@ vi.mock('../../lib/node-client', async () => {
     return { ...actual, fetchWebVisits: vi.fn() };
 });
 
-const node: NodeProfile = { id: 'node-1', name: 'Node Alpha', url: 'https://alpha.beanpool.org', adminPassword: 'pw-alpha' };
+const node: NodeProfile = { id: 'node-1', name: 'Node Alpha', url: 'https://alpha.beanpool.org', credential: 'pw-alpha' };
 
 /** 30 days ending 2026-09-29, oldest first, as the node sends them. */
 function series(visitsOf: (i: number) => number, uniquesOf: (i: number) => number = (i) => Math.ceil(visitsOf(i) / 2)): WebVisitDay[] {

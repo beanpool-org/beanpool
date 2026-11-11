@@ -70,7 +70,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
     it('password viewer: Make a re-key code opens the box; a wrong code stays; a new code re-sends issue-code once with `code`', async () => {
         const sent = mockNode({ issue: [[401, CODE_ASK], [401, WRONG], [200, ISSUED]] });
-        render(<RekeyMemberWizard member={member} nodeUrl={NODE} adminPassword="pw" onClose={() => {}} />);
+        render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         await tickAndMake();
         expect(await screen.findByText(/to re-key an owner or admin/)).toBeInTheDocument();
         fireEvent.change(screen.getByTestId('rekey-proof-input'), { target: { value: '111111' } });
@@ -88,7 +88,7 @@ describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
 
     it('password viewer: Bind their phone opens the box; the code goes as X-Fresh-Proof, the body keeps the re-key code and the number', async () => {
         const sent = mockNode({ pendingFromStart: true, complete: [[401, CODE_ASK], [200, BOUND]] });
-        render(<RekeyMemberWizard member={member} nodeUrl={NODE} adminPassword="pw" onClose={() => {}} />);
+        render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         await typeNumberAndBind('47');
         expect(await screen.findByTestId('rekey-proof-code')).toBeInTheDocument();
         // Refused before the number was looked at: no try counted, and the number is still there for the same press.
@@ -105,7 +105,7 @@ describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
 
     it('password viewer, Paste a key instead: the same box; the pasted key and the re-key code stay in the body', async () => {
         const sent = mockNode({ pendingFromStart: true, complete: [[401, CODE_ASK], [200, BOUND]] });
-        render(<RekeyMemberWizard member={member} nodeUrl={NODE} adminPassword="pw" onClose={() => {}} />);
+        render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Paste a key instead' }));
         fireEvent.change(screen.getByPlaceholderText(/64 hex characters/), { target: { value: phone } });
         fireEvent.click(screen.getByRole('button', { name: /Complete Re-Keying/ }));

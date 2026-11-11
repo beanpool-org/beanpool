@@ -9,7 +9,7 @@ const sampleNode = {
     id: 'node-1',
     name: 'Primary Node',
     url: 'https://primary.beanpool.org',
-    adminPassword: 'pass123',
+    credential: 'pass123',
     status: 'online' as const,
 };
 

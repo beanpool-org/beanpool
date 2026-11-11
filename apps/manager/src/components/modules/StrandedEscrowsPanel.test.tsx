@@ -8,7 +8,7 @@ const node: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-secret-password',
+    credential: 'admin-secret-password',
 };
 
 // Every figure as the node sends it: whole hundredths of a Bean, in `*_c` fields (server engine/escrow-write-off.ts).
@@ -89,7 +89,7 @@ describe('StrandedEscrowsPanel', () => {
 
         fireEvent.click(submit);
         await waitFor(() => expect(writeOff).toHaveBeenCalledWith(
-            node.url, list.escrows[1].escrowId, REASON, true, node.adminPassword, undefined,
+            node.url, list.escrows[1].escrowId, REASON, true, node.credential, undefined,
         ));
         expect(await screen.findByText('Wrote off 5 Beans from the Commons for trade 96656bea. The Commons now reads −16.68 Beans.')).toBeInTheDocument();
         expect(onWrittenOff).toHaveBeenCalled();
@@ -143,7 +143,7 @@ describe('StrandedEscrowsPanel', () => {
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         await waitFor(() => expect(writeOff).toHaveBeenCalledWith(
-            node.url, list.escrows[1].escrowId, REASON, true, node.adminPassword, undefined,
+            node.url, list.escrows[1].escrowId, REASON, true, node.credential, undefined,
         ));
     });
 
@@ -175,7 +175,7 @@ describe('StrandedEscrowsPanel', () => {
         expect(submit).toBeEnabled();
         fireEvent.click(submit);
         await waitFor(() => expect(writeOff).toHaveBeenLastCalledWith(
-            node.url, list.escrows[1].escrowId, REASON, true, node.adminPassword, undefined,
+            node.url, list.escrows[1].escrowId, REASON, true, node.credential, undefined,
         ));
         expect(writeOff).toHaveBeenCalledTimes(2);
     });

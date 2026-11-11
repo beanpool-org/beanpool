@@ -8,7 +8,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * The panel itself, through the real node client: each viewer × the refusal → the box or the sentence; a grant carries
  * the code in its body, a removal (a DELETE, no body) as X-Fresh-Proof; nothing is re-sent without a new code.
  */
-const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', credential: 'pw' };
 const ALICE = 'a1'.repeat(32);
 const BOB = 'b2'.repeat(32);
 const CAROL = 'c3'.repeat(32);
@@ -77,7 +77,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('NodeRolesPanel: the fresh proof (S4a)', () => {
     it('password viewer, grant: the box; a wrong code stays; a new code re-sends the same grant once with `code`', async () => {
         const sent = mockNode([[401, CODE_ASK], [401, WRONG], [200, { success: true }]]);
-        await render_({ kind: 'password' });
+        await render_({ kind: 'token' });
         await pressGrantCarolAdmin();
         expect(await screen.findByText(/to change who is an owner or admin/)).toBeInTheDocument();
         await enterCode('111111');
@@ -93,7 +93,7 @@ describe('NodeRolesPanel: the fresh proof (S4a)', () => {
 
     it('password viewer, remove: the box; the code travels as X-Fresh-Proof on the same DELETE', async () => {
         const sent = mockNode([[401, CODE_ASK], [200, { success: true }]]);
-        await render_({ kind: 'password' });
+        await render_({ kind: 'token' });
         await pressRemoveBob();
         await enterCode('333333');
         expect(await screen.findByText('bob is no longer an admin.')).toBeInTheDocument();

@@ -18,7 +18,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
-import { buildAdminHeaders, getTfaSessionToken, passwordField, resolveNodeApiUrl } from '../../lib/node-client';
+import { buildAdminHeaders, resolveNodeApiUrl } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -72,8 +72,8 @@ export function dayBounds(now: number = Date.now()): { min: string; max: string 
 
 type Message = { text: string; type: 'success' | 'error' };
 
-export function ListingPromisePanel({ activeNode, viewer = { kind: 'password' } }: { activeNode: NodeProfile; viewer?: RolesViewer }) {
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+export function ListingPromisePanel({ activeNode, viewer = { kind: 'token' } }: { activeNode: NodeProfile; viewer?: RolesViewer }) {
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const [load, setLoad] = useState<'loading' | 'loaded' | 'failed'>('loading');
     const [promise, setPromise] = useState<PromiseStatus | null>(null);
     const [reports, setReports] = useState(false);
@@ -93,7 +93,7 @@ export function ListingPromisePanel({ activeNode, viewer = { kind: 'password' } 
         (async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/promise'), {
-                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(nodeCredential(activeNode)),
                     cache: 'no-store',
                 });
                 const read = res.ok ? readPromise(await res.json().catch(() => null)) : ({ ok: false } as const);
@@ -115,14 +115,14 @@ export function ListingPromisePanel({ activeNode, viewer = { kind: 'password' } 
         try {
             // The day only when it changed: the node refuses a day already past, and one kept unchanged must not be re-sent.
             const body = {
-                ...passwordField(nodeCredential(activeNode)),
+                
                 reports,
                 notice,
                 ...(closingOn !== (promise.closingOn ?? '') ? { closingOn: closingOn || null } : {}),
             };
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/promise'), {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
                 body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));

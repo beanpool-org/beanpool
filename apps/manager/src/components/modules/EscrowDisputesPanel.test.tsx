@@ -8,7 +8,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-secret-password',
+    credential: 'admin-secret-password',
 };
 
 const mockDisputes: nodeClient.EscrowDisputeItem[] = [
@@ -457,7 +457,7 @@ describe('EscrowDisputesPanel Component', () => {
         expect(fetchSpy).toHaveBeenCalledWith(
             mockProfile.url,
             7,
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined,
             expect.objectContaining({ limit: 50, offset: 50 })
         );

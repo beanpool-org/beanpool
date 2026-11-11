@@ -11,7 +11,6 @@ import type { RolesViewer } from './NodeRolesPanel';
 
 interface DecisionsAdminPanelProps {
     activeNode: NodeProfile;
-    tfaToken?: string;
     /** Who is looking: owner level alone is offered an owner's decision (the node refuses anyone else). */
     viewer?: RolesViewer;
 }
@@ -143,8 +142,8 @@ function OwnerDecisionControl({ d, isOwner, onDecide }: { d: AdminDecisionItem; 
  * reply taken down when it harms someone else, the same way. A pause's vote too few members can vote on can be decided by an
  * owner, with the fresh proof and a reason members read (removal by vote S6).
  */
-export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'password' } }: DecisionsAdminPanelProps) {
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+export function DecisionsAdminPanel({ activeNode, viewer = { kind: 'token' } }: DecisionsAdminPanelProps) {
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const [decisions, setDecisions] = useState<AdminDecisionItem[]>([]);
     const [decisionsOn, setDecisionsOn] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -177,10 +176,10 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
         setError(null);
         try {
             const [list, on, past] = await Promise.all([
-                fetchAdminDecisions(activeNode.url, nodeCredential(activeNode), tfaToken),
+                fetchAdminDecisions(activeNode.url, nodeCredential(activeNode)),
                 fetchNodeDecisionsOn(activeNode.url),
                 // A node from before has none; one that can't say keeps the open list showing.
-                fetchPastRemovalVotes(activeNode.url, nodeCredential(activeNode), tfaToken).catch(() => [] as AdminDecisionItem[]),
+                fetchPastRemovalVotes(activeNode.url, nodeCredential(activeNode)).catch(() => [] as AdminDecisionItem[]),
             ]);
             setDecisions(list);
             setDecisionsOn(on);
@@ -223,7 +222,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
         setHiding(true);
         setHideError(null);
         try {
-            await hideDecisionCase(activeNode.url, hideTarget.id, hideTrimmed, nodeCredential(activeNode), tfaToken);
+            await hideDecisionCase(activeNode.url, hideTarget.id, hideTrimmed, nodeCredential(activeNode));
             setHideTarget(null);
             setHideReason('');
             await load();
@@ -248,7 +247,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
         setTakingDown(true);
         setTakeDownError(null);
         try {
-            await takeDownDecisionReply(activeNode.url, takeDownTarget.id, takeDownTrimmed, nodeCredential(activeNode), tfaToken);
+            await takeDownDecisionReply(activeNode.url, takeDownTarget.id, takeDownTrimmed, nodeCredential(activeNode));
             setTakeDownTarget(null);
             setTakeDownReason('');
             await load();
@@ -274,7 +273,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
         setDeciding(true);
         setDecideError(null);
         try {
-            await ownerDecideRemoval(activeNode.url, decideTarget.id, decideTrimmed, nodeCredential(activeNode), tfaToken, code);
+            await ownerDecideRemoval(activeNode.url, decideTarget.id, decideTrimmed, nodeCredential(activeNode), code);
             proof.close();
             setDecideTarget(null);
             setDecideReason('');
@@ -292,7 +291,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
         setHalting(true);
         setHaltError(null);
         try {
-            await haltDecision(activeNode.url, haltTarget.id, trimmed, nodeCredential(activeNode), tfaToken);
+            await haltDecision(activeNode.url, haltTarget.id, trimmed, nodeCredential(activeNode));
             setHaltTarget(null);
             setReason('');
             await load();

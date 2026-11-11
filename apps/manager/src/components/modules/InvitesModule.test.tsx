@@ -23,7 +23,7 @@ describe('InvitesModule', () => {
         id: 'node-1',
         name: 'Test Node',
         url: 'https://test-node.beanpool.org',
-        adminPassword: 'secretpassword',
+        credential: 'secretpassword',
     };
 
     beforeEach(() => {
@@ -298,7 +298,7 @@ describe('InvitesModule', () => {
     describe('Voucher Presets on Invites & QR (V5)', () => {
         const OWNER_KEY: any = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
         const ADMIN_KEY: any = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
-        const PASSWORD_VIEWER: any = { kind: 'password' };
+        const PASSWORD_VIEWER: any = { kind: 'token' };
 
         it('does NOT render presets under password session', () => {
             render(<InvitesModule activeNode={mockNode} viewer={PASSWORD_VIEWER} />);

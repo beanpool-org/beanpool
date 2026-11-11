@@ -18,7 +18,7 @@ import { CORE_SETTINGS, typedWordFor, type Shape, type ShapeSettings } from '../
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
-const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', adminPassword: 'pw' };
+const NODE: NodeProfile = { id: 'n1', name: 'Mullum', url: 'https://mullum.test', credential: 'pw' };
 const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
 const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
 
@@ -144,7 +144,7 @@ describe('Core settings — locked: Unlock to change', () => {
             { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
             { ok: true, status: 200, body: { shape: after, told: 'members' } },
         ]);
-        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
         await screen.findByText('🧭');
         fireEvent.click(within(screen.getByTestId('shape-row-decisions')).getByRole('button', { name: 'Unlock to change' }));
         fireEvent.click(screen.getByRole('checkbox', { name: /Community votes active/ }));
@@ -277,7 +277,7 @@ describe('Core settings — locked: Unlock to change', () => {
             { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
             { ok: true, status: 200, body: { shape, told: 'members' } },
         ]);
-        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
         await screen.findByText('🧭');
 
         fireEvent.click(within(screen.getByTestId('shape-row-voucherBudget')).getByRole('button', { name: 'Unlock to change' }));
@@ -302,7 +302,7 @@ describe('Core settings — locked: Unlock to change', () => {
             { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
             { ok: true, status: 200, body: { shape, told: 'members' } },
         ]);
-        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
         await screen.findByText('🧭');
 
         fireEvent.click(within(screen.getByTestId('shape-row-memberGift')).getByRole('button', { name: 'Unlock to change' }));

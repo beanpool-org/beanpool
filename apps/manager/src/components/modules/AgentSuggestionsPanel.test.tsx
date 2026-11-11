@@ -107,7 +107,7 @@ describe('AgentSuggestionsPanel', () => {
 
     it('the password session is told where Approve is (the member\'s own key); a closed report says why there is no Approve', async () => {
         fakeNode({ items: [card({ mine: false, approve: null })] });
-        const { unmount } = render(<AgentSuggestionsPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        const { unmount } = render(<AgentSuggestionsPanel activeNode={node} viewer={{ kind: 'token' }} />);
         await screen.findByTestId('agent-suggestion');
         expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
         expect(screen.getByTestId('agent-approve-hint').textContent).toMatch(/Manage in the app, signed in with their own key/);

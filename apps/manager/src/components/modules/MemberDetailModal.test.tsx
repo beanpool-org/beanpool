@@ -357,7 +357,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onPruneBranch={vi.fn()}
                 nodeUrl="https://node.example"
-                adminPassword="pw"
+                credential="pw"
                 tfaToken="tfa"
                 onClose={vi.fn()}
             />
@@ -443,7 +443,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
                 onSuspensionChanged={onChanged}
             />
         );
@@ -476,7 +476,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
             />
         );
         await userEvent.click(screen.getByText('⏸️ Suspend'));
@@ -502,7 +502,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
                 onSuspensionChanged={vi.fn()}
             />
         );
@@ -524,7 +524,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
             />
         );
         await userEvent.click(screen.getByText('Lift suspension'));
@@ -551,7 +551,7 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
                 nodeUrl="https://test-node.local"
-                adminPassword="pw"
+                credential="pw"
                 onPrune={vi.fn()}
                 {...extra}
             />

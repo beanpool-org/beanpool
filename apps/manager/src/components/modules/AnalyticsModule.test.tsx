@@ -10,13 +10,13 @@ describe('AnalyticsModule Component', () => {
             id: 'node-1',
             name: 'Primary Node',
             url: 'http://localhost:8080',
-            adminPassword: 'pass1',
+            credential: 'pass1',
         },
         {
             id: 'node-2',
             name: 'Secondary Node',
             url: 'http://localhost:8081',
-            adminPassword: 'pass2',
+            credential: 'pass2',
         },
     ];
 

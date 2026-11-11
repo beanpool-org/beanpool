@@ -3,7 +3,7 @@
  * Reads GET /api/local/admin/community-shape (slice S1) and writes POST /api/local/admin/community-shape (slice S2).
  */
 import { CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, PROTOCOL_CONSTANTS, isHundredths, juryRuleFor } from '@beanpool/core';
-import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from './node-client';
+import { buildAdminHeaders, resolveNodeApiUrl } from './node-client';
 import { t, proofField, throwIfFreshProof } from './fresh-proof';
 import { beansFigure, beansInputText, parseBeans, typedHundredths } from './beans';
 
@@ -333,11 +333,10 @@ export function readShapeKnownFloor(shape: unknown, before: KnownFloorSettings):
 export async function fetchCommunityShape(
     nodeUrl: string,
     credential?: string,
-    tfaToken?: string,
 ): Promise<Shape> {
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/community-shape');
     const res = await fetch(url, {
-        headers: buildAdminHeaders(credential, tfaToken),
+        headers: buildAdminHeaders(credential),
         credentials: 'same-origin',
     });
     if (!res.ok) {
@@ -356,7 +355,6 @@ export async function updateCommunityShape(
     credential: string | undefined,
     changes: Record<string, unknown>,
     note?: string,
-    tfaToken?: string,
     code?: string,
 ): Promise<{ shape: Shape; told: 'members' | 'nobody' }> {
     const keys = Object.keys(changes);
@@ -366,10 +364,10 @@ export async function updateCommunityShape(
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/community-shape');
     const res = await fetch(url, {
         method: 'POST',
-        headers: buildAdminHeaders(credential, tfaToken),
+        headers: buildAdminHeaders(credential),
         credentials: 'same-origin',
         body: JSON.stringify({
-            ...passwordField(credential),
+            
             changes,
             ...(note && note.trim() ? { note: note.trim() } : {}),
             ...proofField(code),
@@ -402,14 +400,13 @@ export async function confirmCoreSettings(
     nodeUrl: string,
     credential: string | undefined,
     changes: Record<string, unknown>,
-    tfaToken?: string,
 ): Promise<{ shape: Shape; told: 'members' | 'nobody' }> {
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/community-shape');
     const res = await fetch(url, {
         method: 'POST',
-        headers: buildAdminHeaders(credential, tfaToken),
+        headers: buildAdminHeaders(credential),
         credentials: 'same-origin',
-        body: JSON.stringify({ ...passwordField(credential), changes, lock: true }),
+        body: JSON.stringify({ changes, lock: true }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw shapeError(res.status, body);
@@ -430,14 +427,13 @@ export async function adviseOwners(
     credential: string | undefined,
     setting: string,
     advice: string,
-    tfaToken?: string,
 ): Promise<{ shape: Shape; told: 'owners' }> {
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/community-shape/advice');
     const res = await fetch(url, {
         method: 'POST',
-        headers: buildAdminHeaders(credential, tfaToken),
+        headers: buildAdminHeaders(credential),
         credentials: 'same-origin',
-        body: JSON.stringify({ ...passwordField(credential), setting, advice: advice.trim() }),
+        body: JSON.stringify({ setting, advice: advice.trim() }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw shapeError(res.status, body);
@@ -452,14 +448,13 @@ export async function saveCommunityPlace(
     nodeUrl: string,
     credential: string | undefined,
     place: { lat: number; lng: number },
-    tfaToken?: string,
 ): Promise<void> {
     const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node/config');
     const res = await fetch(url, {
         method: 'POST',
-        headers: buildAdminHeaders(credential, tfaToken),
+        headers: buildAdminHeaders(credential),
         credentials: 'same-origin',
-        body: JSON.stringify({ ...passwordField(credential), serviceRadius: { lat: place.lat, lng: place.lng, radiusKm: 0 } }),
+        body: JSON.stringify({ serviceRadius: { lat: place.lat, lng: place.lng, radiusKm: 0 } }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));

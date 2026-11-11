@@ -9,7 +9,7 @@ vi.mock('../../lib/node-client', async () => {
     return { ...actual, getOwnerWordsChecks: vi.fn(), getTfaSessionToken: vi.fn(() => undefined) };
 });
 
-const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://test.beanpool.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://test.beanpool.org', credential: 'pw' };
 const NOW = Date.UTC(2026, 8, 20);
 const DAY = 24 * 3600_000;
 

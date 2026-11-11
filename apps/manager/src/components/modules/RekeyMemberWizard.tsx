@@ -56,8 +56,7 @@ export interface RekeyMemberWizardProps {
         avatarUrl?: string;
     };
     nodeUrl: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     onSuccess?: (newPubkey: string) => void;
     onClose: () => void;
 }
@@ -65,8 +64,7 @@ export interface RekeyMemberWizardProps {
 export function RekeyMemberWizard({
     member,
     nodeUrl,
-    adminPassword,
-    tfaToken,
+    credential,
     onSuccess,
     onClose,
 }: RekeyMemberWizardProps) {
@@ -167,14 +165,14 @@ export function RekeyMemberWizard({
     const checkExisting = useCallback(async (isMounted: () => boolean = () => true) => {
         setStatusReadFailed(false);
         try {
-            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, credential);
             if (!isMounted()) return;
             if (status) applyStatus(status);
             setStatusChecked(true);
         } catch {
             if (isMounted()) setStatusReadFailed(true);
         }
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
+    }, [nodeUrl, member.publicKey, credential, applyStatus]);
 
     useEffect(() => {
         let mounted = true;
@@ -198,7 +196,7 @@ export function RekeyMemberWizard({
         let live = true;
         const id = setInterval(async () => {
             try {
-                const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+                const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, credential);
                 if (!live || cancellingHere.current) return;
                 const pending = status.pendingRequest;
                 const moved = status.history?.[0];
@@ -226,7 +224,7 @@ export function RekeyMemberWizard({
             live = false;
             clearInterval(id);
         };
-    }, [step, issuedCode, expiresAt, nodeUrl, member.publicKey, adminPassword, tfaToken, historyLength]);
+    }, [step, issuedCode, expiresAt, nodeUrl, member.publicKey, credential, historyLength]);
 
     /** A code made or cancelled here starts clean: nothing of the code before it shows (#1783 review D2). */
     const forgetCodeState = () => {
@@ -242,7 +240,7 @@ export function RekeyMemberWizard({
         setRereading(true);
         setError(null);
         try {
-            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, credential);
             applyStatus(status);
             if (status.pendingRequest?.codeNeedsStepUp) {
                 setError("Still waiting: press Manage in the BeanPool app again (it asks for your phone's lock), then try again.");
@@ -260,7 +258,7 @@ export function RekeyMemberWizard({
         setError(null);
         setNotice(null);
         try {
-            const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken, ...(code ? [code] : []));
+            const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, credential, code);
             proof.close();
             forgetCodeState();
             setIssuedCode(res.code);
@@ -281,7 +279,7 @@ export function RekeyMemberWizard({
         setCancelling(true);
         setError(null);
         try {
-            const res = await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            const res = await cancelRekeyCodeApi(nodeUrl, member.publicKey, credential);
             proof.close();
             forgetCodeState();
             setIssuedCode(null);
@@ -319,7 +317,7 @@ export function RekeyMemberWizard({
         setCompleting(true);
         setError(null);
         try {
-            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, adminPassword, tfaToken, ...(code ? [code] : []));
+            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, credential, code);
             proof.close();
             setSignInCopiesRemoved(res.signInCopiesRemoved ?? 0);
             setNewPubkey(res.newPubkey);
@@ -359,7 +357,7 @@ export function RekeyMemberWizard({
         setCompleting(true);
         setError(null);
         try {
-            const res = await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken, ...(code ? [code] : []));
+            const res = await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, credential, code);
             proof.close();
             setSignInCopiesRemoved(res?.signInCopiesRemoved ?? 0);
             setNewPubkey(clean);
@@ -380,7 +378,7 @@ export function RekeyMemberWizard({
         setDeclining(key);
         setError(null);
         try {
-            await declineRekeyProposalApi(nodeUrl, member.publicKey, key, adminPassword, tfaToken);
+            await declineRekeyProposalApi(nodeUrl, member.publicKey, key, credential);
             setProposals((list) => list.filter((p) => p.newPubkey !== key));
         } catch (err: any) {
             setError(err?.message || 'Failed to decline that phone');

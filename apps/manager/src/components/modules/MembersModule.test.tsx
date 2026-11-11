@@ -233,7 +233,7 @@ describe('MembersModule seed offer', () => {
                     nodeDataLoading={false}
                     onRefresh={vi.fn()}
                     activeNodeUrl="https://node.example.com"
-                    adminPassword="admin-pw"
+                    credential="admin-pw"
                 />
             );
         });
@@ -280,7 +280,7 @@ describe('MembersModule seed offer', () => {
                     nodeDataLoading={false}
                     onRefresh={vi.fn()}
                     activeNodeUrl="https://node.example.com"
-                    adminPassword="admin-pw"
+                    credential="admin-pw"
                 />
             );
         });
@@ -301,7 +301,7 @@ describe('MembersModule seed offer', () => {
                     nodeDataLoading={false}
                     onRefresh={vi.fn()}
                     activeNodeUrl="https://node.example.com"
-                    adminPassword="admin-pw"
+                    credential="admin-pw"
                 />
             );
         });
@@ -320,7 +320,7 @@ describe('MembersModule seed offer', () => {
                     nodeDataLoading={false}
                     onRefresh={vi.fn()}
                     activeNodeUrl="https://node.example.com"
-                    adminPassword="admin-pw"
+                    credential="admin-pw"
                 />
             );
         });

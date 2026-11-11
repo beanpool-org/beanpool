@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
@@ -9,9 +9,9 @@ import { useInPageConfirm } from '../common/InPageConfirm';
 
 /**
  * "Automation tokens" (node sign-in design step 7, D8; the server is apps/server routes/automation-tokens.ts). An owner makes
- * a token so a script or the fleet manager can use this node's Settings without the password. It never does an owner-only
+ * a token so a script or the fleet manager can use this node's Settings. It never does an owner-only
  * change. Owners only: the card is not drawn for anyone else (the node refuses them as well). Only an owner's KEY session
- * makes one (the node answers token_needs_key to the password): a password session sees the list and Revoke, and in place
+ * makes one (the node answers token_needs_key to a token): a token session sees the list and Revoke, and in place
  * of the form one line saying where to make one.
  *
  * The token is shown ONCE. It lives in this component's state and nowhere else (never localStorage, sessionStorage, a log
@@ -60,10 +60,10 @@ function scopeLabel(scope: string): string {
     return SCOPES.find((s) => s.value === scope)?.label.split(':')[0] ?? scope;
 }
 
-export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' } }: AutomationTokensPanelProps) {
+export function AutomationTokensPanel({ activeNode, viewer = { kind: 'token' } }: AutomationTokensPanelProps) {
     // Removing or replacing data, keys or roles is confirmed in the page, never with window.confirm() (owner-delete S4b).
     const [ask, confirmation] = useInPageConfirm();
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const canMake = viewer.kind === 'key' && viewer.role === 'owner';
 
     const [tokens, setTokens] = useState<AutomationTokenRecord[] | null>(null);
@@ -79,7 +79,7 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
     const tokenRef = useRef<HTMLParagraphElement | null>(null);
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 
@@ -213,8 +213,8 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
                     <span className="min-w-0 break-words">Automation tokens</span>
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                    A token lets a script or the fleet manager use this node&rsquo;s Settings without the password. It is shown once. It never makes
-                    owner-only changes: roles, password, 2FA, tokens, break-glass, the public address, restore.
+                    A token lets a script or the fleet manager use this node&rsquo;s Settings. It is shown once. It never makes
+                    owner-only changes: roles, tokens, break-glass, the public address, restore.
                 </p>
             </div>
 
@@ -248,7 +248,7 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
                 </div>
             ) : !canMake ? (
                 <p className="text-xs text-nature-400 m-0 break-words" data-testid="automation-token-needs-key">
-                    {t('Tokens are made with an owner’s key from the phone, never the password: open BeanPool on your phone, press Manage, then make the token there.')}
+                    {t('Tokens are made with an owner’s key from the phone: open BeanPool on your phone, press Manage, then make the token there.')}
                 </p>
             ) : (
                 <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3">

@@ -8,7 +8,7 @@ const mockActiveNode: NodeProfile = {
     id: 'local-node',
     name: 'Mullumbimby Node',
     url: 'http://localhost:8080',
-    adminPassword: 'test-password',
+    credential: 'test-password',
 };
 
 describe('PublicAddressPanel Component', () => {

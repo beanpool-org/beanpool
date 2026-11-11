@@ -9,7 +9,7 @@ const node: NodeProfile = {
     id: 'local-node',
     name: 'Mullumbimby Node',
     url: 'http://localhost:8080',
-    adminPassword: 'test-password',
+    credential: 'test-password',
 };
 
 const NEW_TOKEN = 'bp_abc123_SECRETSECRETSECRETSECRET';
@@ -167,7 +167,7 @@ describe('AutomationTokensPanel', () => {
     it('a password session sees no "Make a token" form, only why, and still lists and revokes', async () => {
         const calls = fakeNode({ tokens: [row] });
         const confirmSpy = vi.spyOn(window, 'confirm');
-        render(<AutomationTokensPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        render(<AutomationTokensPanel activeNode={node} viewer={{ kind: 'token' }} />);
         expect(await screen.findAllByTestId('automation-token-row')).toHaveLength(1);
         expect(screen.queryByRole('button', { name: 'Make token' })).not.toBeInTheDocument();
         expect(screen.queryByLabelText('Name')).not.toBeInTheDocument();

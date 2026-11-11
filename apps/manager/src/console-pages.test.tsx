@@ -295,8 +295,8 @@ describe("a failed Load more's words belong to that read", () => {
         vi.stubGlobal('fetch', fetchMock);
         localStorage.setItem('bp_fleet_active_tab', 'members');
         localStorage.setItem('bp_fleet_profiles', JSON.stringify([
-            { id: 'local-node', name: 'Node 0', url: 'https://localhost:8443', adminPassword: 'pw' },
-            { id: 'node-1', name: 'Node 1', url: 'https://other.example.org', adminPassword: 'pw' },
+            { id: 'local-node', name: 'Node 0', url: 'https://localhost:8443', credential: 'pw' },
+            { id: 'node-1', name: 'Node 1', url: 'https://other.example.org', credential: 'pw' },
         ]));
         await act(async () => {
             render(<App isFleetMode={true} />);

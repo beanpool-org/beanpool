@@ -89,7 +89,7 @@ describe('SignOutEverywhere (Settings, a key session)', () => {
 });
 
 describe('Owners & admins offers it only to a key session', () => {
-    const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', adminPassword: 'pw' };
+    const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', credential: 'pw' };
     const renderPanel = async (viewer: RolesViewer, onSignedOutEverywhere?: () => void) => {
         await act(async () => {
             render(<NodeRolesPanel activeNode={node} members={[]} viewer={viewer} onSignedOutEverywhere={onSignedOutEverywhere} />);
@@ -97,7 +97,7 @@ describe('Owners & admins offers it only to a key session', () => {
     };
 
     it('the password (and every fleet profile, which Settings shows as the password) never sees it', async () => {
-        await renderPanel({ kind: 'password' }, vi.fn());
+        await renderPanel({ kind: 'token' }, vi.fn());
         expect(screen.queryByRole('button', { name: 'Sign out everywhere' })).toBeNull();
     });
 

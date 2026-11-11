@@ -10,7 +10,7 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         id: 'node-primary-1',
         name: 'Primary Node',
         url: 'https://primary.example.com',
-        adminPassword: 'test-admin-secret',
+        credential: 'test-admin-secret',
     };
 
     beforeEach(() => {

@@ -16,7 +16,7 @@ import type { NodeProfile } from '../../lib/profiles';
  * sessions only) and the password retired (C4, Manage within 90 s). Each viewer × the refusal → the box or the sentence;
  * the code is re-sent once with the same request; nothing is re-sent without one.
  */
-const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend', url: 'https://riverbend.example.org', credential: 'pw' };
 const CODE_ASK = (what: string) => ({ error: `Enter a current code from your authenticator app (or a backup code) to ${what}`, totpRequired: true });
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
@@ -141,7 +141,7 @@ describe('Break-glass code made (S4a, C7)', () => {
 describe('Automation token made and the password retired: key sessions only (S4a, C10, C4)', () => {
     it('token, computer viewer: the from-your-phone sentence; one request; no token shown', async () => {
         const sent = mockNode('/api/local/admin/automation-tokens', [[403, PHONE]]);
-        render(<AutomationTokensPanel activeNode={{ ...node, adminPassword: undefined }} viewer={OWNER_KEY} />);
+        render(<AutomationTokensPanel activeNode={{ ...node, credential: undefined }} viewer={OWNER_KEY} />);
         fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Dash' } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Make token' })); });
         expect(await screen.findByTestId('token-proof-phone')).toHaveTextContent('Do this from your phone');
@@ -152,7 +152,7 @@ describe('Automation token made and the password retired: key sessions only (S4a
     it('retire, phone viewer with a stale hand-off: the Manage-again sentence; one request; still not retired', async () => {
         const state = { passwordRetired: false, owners: 2, hasBreakGlassCode: true };
         const sent = mockNode('/auth/retire-password', [[403, STEP_UP]], { '/auth/password-retirement': state });
-        render(<RetirePasswordPanel activeNode={{ ...node, adminPassword: undefined }} viewer={OWNER_KEY} />);
+        render(<RetirePasswordPanel activeNode={{ ...node, credential: undefined }} viewer={OWNER_KEY} />);
         const confirmBox = await screen.findByLabelText('Type RETIRE to confirm');
         fireEvent.change(confirmBox, { target: { value: 'RETIRE' } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retire the admin password' })); });

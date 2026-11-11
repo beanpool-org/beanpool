@@ -20,13 +20,13 @@ describe('OnboardingModule', () => {
             id: 'node-1',
             name: 'Node Alpha',
             url: 'https://alpha.beanpool.org',
-            adminPassword: 'secretpassword1',
+            credential: 'secretpassword1',
         },
         {
             id: 'node-2',
             name: 'Node Beta',
             url: 'https://beta.beanpool.org',
-            adminPassword: 'secretpassword2',
+            credential: 'secretpassword2',
         },
     ];
 

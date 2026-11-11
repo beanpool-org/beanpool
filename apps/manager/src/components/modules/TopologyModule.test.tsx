@@ -31,7 +31,7 @@ describe('TopologyModule Component', () => {
         id: 'node-1',
         name: 'Local Sovereign Node',
         url: 'http://localhost:3001',
-        adminPassword: 'admin',
+        credential: 'admin',
     };
 
     beforeEach(() => {
@@ -165,7 +165,7 @@ describe('TopologyModule Component', () => {
             expect(mockApproveRegistrarClaim).toHaveBeenCalledWith(
                 mockNode.url,
                 'testdomain',
-                mockNode.adminPassword,
+                mockNode.credential,
                 undefined
             );
         });
@@ -208,7 +208,7 @@ describe('TopologyModule Component', () => {
         await waitFor(() => {
             expect(mockCreateNodeSnapshot).toHaveBeenCalledWith(
                 mockNode.url,
-                mockNode.adminPassword,
+                mockNode.credential,
                 undefined
             );
         });
@@ -219,7 +219,7 @@ describe('TopologyModule Component', () => {
             id: 'node-remote',
             name: 'Remote Sovereign Node',
             url: 'https://test.beanpool.org',
-            adminPassword: 'secretpassword',
+            credential: 'secretpassword',
         };
         mockFetchNodeSnapshots.mockResolvedValueOnce([
             {

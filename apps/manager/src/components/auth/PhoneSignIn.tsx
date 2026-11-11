@@ -35,11 +35,9 @@ type State =
 
 interface PhoneSignInProps {
     onSignedIn: (session: KeySession, csrfToken: string) => void;
-    /** Offers "Use the password instead"; left out on a node whose password is retired. */
-    onUsePassword?: () => void;
 }
 
-export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
+export function PhoneSignIn({ onSignedIn }: PhoneSignInProps) {
     const [state, setState] = useState<State>({ kind: 'starting' });
     const [now, setNow] = useState(() => Date.now());
     const renewals = useRef(0);
@@ -261,15 +259,6 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
                     >
                         New code
                     </button>
-                    {onUsePassword && (
-                        <button
-                            type="button"
-                            onClick={onUsePassword}
-                            className="flex-1 min-w-[8rem] min-h-[48px] px-4 rounded-xl border border-nature-700 text-nature-200 hover:text-white font-semibold text-sm"
-                        >
-                            Use the password
-                        </button>
-                    )}
                 </div>
             )}
         </section>

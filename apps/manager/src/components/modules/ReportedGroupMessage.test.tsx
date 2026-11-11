@@ -34,7 +34,7 @@ afterEach(() => {
 describe('ReportedGroupMessage', () => {
     it('opens the reported message through the report, with the admin credentials', async () => {
         const fetchMock = serve({ ...base, words: { state: 'verified', text: 'Rude words' }, photo: null });
-        render(<ReportedGroupMessage nodeUrl="https://node.example" reportId="r 1" adminPassword="pw" />);
+        render(<ReportedGroupMessage nodeUrl="https://node.example" reportId="r 1" credential="pw" />);
         await screen.findByText('Rude words');
         const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
         // Through the manager's node address (resolveNodeApiUrl), to the report's own route.

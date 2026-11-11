@@ -3,9 +3,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import {
     getReplicationAccess,
     generateReplicationToken,
-    setReplicationTokenMode,
     clearReplicationToken,
-    getTfaSessionToken,
     type ReplicationAccessData,
     type ReplicationAccessEvent,
 } from '../../lib/node-client';
@@ -58,17 +56,14 @@ export function ReplicationAccessPanel({
     const [showClearConfirm, setShowClearConfirm] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [clearing, setClearing] = useState(false);
-    const [updatingMode, setUpdatingMode] = useState(false);
 
     const loadData = useCallback(async () => {
         if (initialData && !activeNode?.url) return;
         setLoading(true);
         try {
-            const tfa = getTfaSessionToken(activeNode.id);
             const data = await getReplicationAccess(
                 activeNode.url,
-                nodeCredential(activeNode),
-                tfa
+                nodeCredential(activeNode)
             );
             setAccessData(data);
         } catch (err: unknown) {
@@ -90,11 +85,9 @@ export function ReplicationAccessPanel({
         setGenerating(true);
         setStatusMsg(null);
         try {
-            const tfa = getTfaSessionToken(activeNode.id);
             const res = await generateReplicationToken(
                 activeNode.url,
-                nodeCredential(activeNode),
-                tfa
+                nodeCredential(activeNode)
             );
             if (res.token) {
                 setRevealedToken(res.token);
@@ -124,11 +117,9 @@ export function ReplicationAccessPanel({
         setClearing(true);
         setStatusMsg(null);
         try {
-            const tfa = getTfaSessionToken(activeNode.id);
             await clearReplicationToken(
                 activeNode.url,
-                nodeCredential(activeNode),
-                tfa
+                nodeCredential(activeNode)
             );
             setShowClearConfirm(false);
             setRevealedToken(null);
@@ -136,8 +127,6 @@ export function ReplicationAccessPanel({
                 text: 'Replication token cleared. Standbys cannot copy until you make a new token and paste it into each one.',
                 isError: false,
             });
-            // Token-only mode is left as it was: clearing the token no longer lets the
-            // admin password back in.
             setAccessData((prev) => ({
                 ...prev,
                 hasToken: false,
@@ -150,47 +139,6 @@ export function ReplicationAccessPanel({
             });
         } finally {
             setClearing(false);
-        }
-    };
-
-    const handleToggleTokenOnly = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const nextTokenOnly = e.target.checked;
-        if (nextTokenOnly && !accessData?.hasToken) {
-            setStatusMsg({
-                text: 'Generate a replication token before enabling token-only mode.',
-                isError: true,
-            });
-            return;
-        }
-
-        setUpdatingMode(true);
-        setStatusMsg(null);
-        try {
-            const tfa = getTfaSessionToken(activeNode.id);
-            await setReplicationTokenMode(
-                activeNode.url,
-                nextTokenOnly,
-                nodeCredential(activeNode),
-                tfa
-            );
-            setAccessData((prev) => ({
-                ...prev,
-                tokenOnly: nextTokenOnly,
-            }));
-            setStatusMsg({
-                text: nextTokenOnly
-                    ? 'Token-only enforced — admin-password pulls now rejected.'
-                    : 'Admin-password fallback re-enabled.',
-                isError: false,
-            });
-            onRefreshDiag?.();
-        } catch (err: unknown) {
-            setStatusMsg({
-                text: err instanceof Error ? err.message : String(err),
-                isError: true,
-            });
-        } finally {
-            setUpdatingMode(false);
         }
     };
 
@@ -224,27 +172,9 @@ export function ReplicationAccessPanel({
     }, [showGenConfirm, showClearConfirm, generating, clearing]);
 
     const hasToken = Boolean(accessData?.hasToken);
-    const tokenOnly = Boolean(accessData?.tokenOnly);
 
-    // Compute token state display text safely
-    const tokenStateText = hasToken
-        ? tokenOnly
-            ? 'set · token-only enforced'
-            : 'set · admin-password fallback active'
-        : tokenOnly
-            // Token-only with no token (a new install, or a cleared token): the admin
-            // password is refused too, so no standby can copy.
-            ? 'not set · nothing can copy until you make a token'
-            : 'not set · standbys copy with the admin password';
-
-    // Older installs still let a standby copy with the admin password. Not flipped
-    // automatically (it would stop such a standby); say what to do instead. Same text as
-    // node Settings (static/settings.js loadReplicationAccess).
-    const tokenOnlyNotice = tokenOnly
-        ? null
-        : accessData?.lastPullAuth === 'admin-pw'
-            ? '⚠️ A standby last copied with the admin password, so it keeps that password in plain text on its disk. Make a token here, paste it into that standby under Live Backup Server, then tick "Require token".'
-            : 'Standbys can still copy with the admin password. Once every standby uses a token, tick "Require token".';
+    // A standby copies with the replication token and nothing else: with none, nothing can copy.
+    const tokenStateText = hasToken ? 'set' : 'not set · nothing can copy until you make a token';
 
     // Compute last pull text safely. The node sends times as epoch milliseconds, and an address only for 7 days: after
     // that it sends null (server services/address-retention.ts).
@@ -290,9 +220,8 @@ export function ReplicationAccessPanel({
                     </h3>
                     <p className="text-xs text-nature-400 m-0 mt-1 max-w-2xl leading-relaxed">
                         The snapshot-pull endpoint serves this node&apos;s <strong>entire ledger</strong>.
-                        Authenticate backups with a dedicated <strong>replication token</strong> — a scoped,
-                        read-only credential separate from the admin password, so the admin password can rotate
-                        without breaking replication and a leaked admin password cannot be used to siphon the database.
+                        A standby copies with a dedicated <strong>replication token</strong> — a scoped,
+                        read-only credential that opens nothing else on this server.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -343,7 +272,7 @@ export function ReplicationAccessPanel({
                         <strong
                             id="rep-token-state"
                             className={`font-semibold ml-1 ${
-                                hasToken ? 'text-emerald-400' : tokenOnly ? 'text-red-400' : 'text-amber-400'
+                                hasToken ? 'text-emerald-400' : 'text-red-400'
                             }`}
                         >
                             {tokenStateText}
@@ -371,33 +300,6 @@ export function ReplicationAccessPanel({
                         </button>
                     </div>
                 </div>
-
-                {/* Require Token Toggle */}
-                <label className="flex items-start sm:items-center gap-3 text-xs text-nature-200 cursor-pointer pt-2 border-t border-nature-800/60 min-h-[44px]">
-                    <input
-                        type="checkbox"
-                        id="rep-token-only"
-                        checked={tokenOnly}
-                        onChange={handleToggleTokenOnly}
-                        disabled={updatingMode}
-                        className="mt-0.5 sm:mt-0 w-4 h-4 rounded text-nature-600 focus:ring-nature-500 cursor-pointer disabled:opacity-50"
-                    />
-                    <span className="leading-snug">
-                        Require token — reject admin-password pulls{' '}
-                        <span className="text-nature-400 font-normal">
-                            (enable only after the token is set on every backup)
-                        </span>
-                    </span>
-                </label>
-
-                {accessData && tokenOnlyNotice && (
-                    <div
-                        id="rep-token-only-notice"
-                        className="p-3 rounded-xl bg-amber-950/30 border border-amber-800/60 text-xs text-amber-300 leading-relaxed"
-                    >
-                        {tokenOnlyNotice}
-                    </div>
-                )}
 
                 {/* Newly Generated Token Reveal Box */}
                 {revealedToken && (
@@ -616,7 +518,7 @@ export function ReplicationAccessPanel({
                             </button>
                         </div>
                         <p className="text-xs text-nature-300 leading-relaxed m-0">
-                            Removing the token stops every standby that copies with it. With token-only mode on, nothing can copy until you make a new token; with it off, only a standby using the admin password still can.
+                            Removing the token stops every standby that copies with it. Nothing can copy until you make a new token.
                         </p>
                         <div className="flex items-center justify-end gap-3 pt-2">
                             <button

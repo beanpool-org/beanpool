@@ -9,13 +9,13 @@ describe('TelemetryModule', () => {
             id: 'node-1',
             name: 'Primary Node',
             url: 'http://localhost:8080',
-            adminPassword: 'secret1',
+            credential: 'secret1',
         },
         {
             id: 'node-2',
             name: 'Secondary Node',
             url: 'http://localhost:8081',
-            adminPassword: 'secret2',
+            credential: 'secret2',
         },
     ];
 
@@ -111,7 +111,7 @@ describe('TelemetryModule', () => {
     });
 
     it('a token profile\'s 401 says to make a new token from the phone, never to set a password', () => {
-        const tokenProfiles: NodeProfile[] = [mockProfiles[0], { ...mockProfiles[1], adminPassword: undefined, automationToken: `bp_${'c3'.repeat(6)}_${'0d'.repeat(32)}` }];
+        const tokenProfiles: NodeProfile[] = [mockProfiles[0], { ...mockProfiles[1], credential: undefined, automationToken: `bp_${'c3'.repeat(6)}_${'0d'.repeat(32)}` }];
         const diags = { ...mockFleetDiags, 'node-2': { diag: null, loading: false, error: 'HTTP 401: Invalid, revoked or expired automation token' } };
         render(<TelemetryModule profiles={tokenProfiles} activeProfileId="node-1" fleetDiags={diags} {...mockHandlers} />);
         // Condensed grid, then the expanded cards.

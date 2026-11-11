@@ -14,7 +14,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Fresh Sovereign Node',
     url: 'https://mullum.local',
-    adminPassword: 'admin-password',
+    credential: 'admin-password',
 };
 
 const mockDiag = {
@@ -157,7 +157,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         expect(nodeClient.createNodeTreasury).toHaveBeenCalled();
         expect(nodeClient.assignTreasuryKeeper).toHaveBeenCalledWith(
-            mockProfile.url, 'treasury_pk_first', 'owner_pk_1', mockProfile.adminPassword, undefined
+            mockProfile.url, 'treasury_pk_first', 'owner_pk_1', mockProfile.credential, undefined
         );
         expect(nodeClient.seedTreasuryOffer).toHaveBeenCalled();
 
@@ -497,7 +497,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         await pickOfferPhoto();
         await click(screen.getByRole('button', { name: /Next: The Commons/i }));
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
-            mockProfile.url, expect.any(Object), mockProfile.adminPassword, 'tfa-fresh'
+            mockProfile.url, expect.any(Object), mockProfile.credential, 'tfa-fresh'
         );
         expect(screen.getByTestId('wizard-step-2')).toHaveTextContent('✓');
     });
@@ -601,7 +601,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
             expect.objectContaining({ workingCapitalCeiling_c: 25000 }),
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-wizard-token'
         );
         expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0][1]).not.toHaveProperty('workingCapitalCeiling');
@@ -609,7 +609,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             mockProfile.url,
             'treasury_pk_first',
             'owner_pk_1',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-wizard-token'
         );
         // The food preset's 15 Beans, as the node takes a price: `price_c`, whole hundredths, never the old `credits`.
@@ -617,7 +617,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
             mockProfile.url,
             'treasury_pk_first',
             expect.objectContaining({ photos: [PICKED_PHOTO], price_c: 1500 }),
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-wizard-token'
         );
         expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).not.toHaveProperty('credits');
@@ -627,7 +627,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
 
         expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
             mockProfile.url,
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'trusted',
             'tfa-wizard-token'
         );

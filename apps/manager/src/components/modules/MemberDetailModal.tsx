@@ -64,8 +64,7 @@ interface MemberDetailModalProps {
     onPrune?: (pubkey: string, code?: string) => void | Promise<void>;
     onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     nodeUrl?: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     currentAdminPubkey?: string;
     hasKeyAuth?: boolean;
     onRekeySuccess?: (newPubkey: string) => void;
@@ -95,8 +94,7 @@ export function MemberDetailModal({
     onPrune,
     onPruneBranch,
     nodeUrl,
-    adminPassword,
-    tfaToken,
+    credential,
     currentAdminPubkey,
     hasKeyAuth,
     onRekeySuccess,
@@ -151,7 +149,7 @@ export function MemberDetailModal({
         let live = true;
         Promise.all([
             fetchNodeDecisionsOn(nodeUrl),
-            fetchAdminDecisions(nodeUrl, adminPassword, tfaToken).catch(() => []),
+            fetchAdminDecisions(nodeUrl, credential).catch(() => []),
         ]).then(([votesOn, decisions]) => {
             if (!live) return;
             const inGrace = decisions.find((d) => d.effect === 'remove_member' && d.status === 'execution_pending_grace' && d.subject === pubkey);
@@ -160,16 +158,16 @@ export function MemberDetailModal({
             setDoors({ votesOn, settlesRemoval: !!inGrace, decidedByOwner: !!inGrace?.ownerDecisionCarriedAt, pausedRole });
         });
         return () => { live = false; };
-    }, [nodeUrl, pubkey, adminPassword, tfaToken]);
+    }, [nodeUrl, pubkey, credential]);
     useEffect(() => {
         setBroughtBackHere(null);
         if (!nodeUrl || !pubkey) return;
         let live = true;
-        fetchRekeyStatusApi(nodeUrl, pubkey, adminPassword, tfaToken)
+        fetchRekeyStatusApi(nodeUrl, pubkey, credential)
             .then((s) => { if (live) setBroughtBackHere(typeof s?.communityCopy?.kept === 'boolean' ? s.communityCopy.kept : null); })
             .catch(() => { /* the line stays away; the wizard reads it again */ });
         return () => { live = false; };
-    }, [nodeUrl, pubkey, adminPassword, tfaToken, showBringBack]);
+    }, [nodeUrl, pubkey, credential, showBringBack]);
     // A row stored under another spelling of a key is no member's account (the server's isMemberKeySpelling): Prune tidies it
     // away wherever the community votes, as the node itself tells an operator to.
     const strayRow = !!pubkey && !/^[0-9a-f]{64}$/.test(pubkey);
@@ -179,7 +177,7 @@ export function MemberDetailModal({
 
     const handlePrune = async (code?: string) => {
         try {
-            await onPrune?.(pubkey, ...(code ? [code] : []));
+            await onPrune?.(pubkey, code);
             pruneProof.close();
         } catch (e) {
             pruneProof.checkError(e, (c) => handlePrune(c), code);
@@ -191,7 +189,7 @@ export function MemberDetailModal({
         setSuspendBusy(true);
         setSuspendError(null);
         try {
-            const res = await emergencySuspendMember(nodeUrl, pubkey, suspendReasonTrimmed, adminPassword, tfaToken, ...(code ? [code] : []));
+            const res = await emergencySuspendMember(nodeUrl, pubkey, suspendReasonTrimmed, credential, code);
             suspendProof.close();
             const closes = res.decision?.closesAt ? new Date(res.decision.closesAt).toLocaleDateString() : 'in 7 days';
             setLocalStatus('disabled');
@@ -221,7 +219,7 @@ export function MemberDetailModal({
         setSuspendBusy(true);
         setSuspendError(null);
         try {
-            await liftMemberSuspension(nodeUrl, pubkey, adminPassword, tfaToken);
+            await liftMemberSuspension(nodeUrl, pubkey, credential);
             setLocalStatus('active');
             setSuspendDone('Suspension lifted. Any open vote about it has closed.');
             onSuspensionChanged?.();
@@ -340,7 +338,7 @@ export function MemberDetailModal({
         setRoleError(null);
         setRoleSuccess(null);
         try {
-            await onGrantNodeRole(pubkey, targetRole, ...(code ? [code] : []));
+            await onGrantNodeRole(pubkey, targetRole, code);
             roleProof.close();
             setLocalRole(targetRole);
             setRoleSuccess(`Granted ${targetRole} role successfully`);
@@ -363,7 +361,7 @@ export function MemberDetailModal({
         setRoleError(null);
         setRoleSuccess(null);
         try {
-            await onRevokeNodeRole(pubkey, role, ...(code ? [code] : []));
+            await onRevokeNodeRole(pubkey, role, code);
             roleProof.close();
             setLocalRole(null);
             setRoleSuccess(`Revoked ${role} role successfully`);
@@ -654,16 +652,14 @@ export function MemberDetailModal({
                                 nodeUrl={nodeUrl}
                                 pubkey={pubkey}
                                 displayName={displayName}
-                                adminPassword={adminPassword}
-                                tfaToken={tfaToken}
+                                credential={credential}
                                 onChanged={onKnownFloorChanged}
                             />
                             <MemberVoucherPanel
                                 nodeUrl={nodeUrl}
                                 pubkey={pubkey}
                                 displayName={displayName}
-                                adminPassword={adminPassword}
-                                tfaToken={tfaToken}
+                                credential={credential}
                             />
                         </>
                     )}
@@ -885,9 +881,9 @@ export function MemberDetailModal({
             {showPruneBranch && (
                 <PruneBranchModal
                     rootMember={member as any}
-                    loadFigures={(pk) => fetchBranchPruneFigures(nodeUrl || (typeof window !== 'undefined' ? window.location.origin : ''), pk, adminPassword, tfaToken)}
+                    loadFigures={(pk) => fetchBranchPruneFigures(nodeUrl || (typeof window !== 'undefined' ? window.location.origin : ''), pk, credential)}
                     onConfirm={async (pk, code) => {
-                        await onPruneBranch?.(pk, ...(code ? [code] : []));
+                        await onPruneBranch?.(pk, code);
                         onClose();
                     }}
                     onClose={() => setShowPruneBranch(false)}
@@ -898,8 +894,7 @@ export function MemberDetailModal({
                 <BringBackMemberWizard
                     member={{ publicKey: pubkey, callsign: member?.callsign ? String(member.callsign) : displayName }}
                     nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
-                    adminPassword={adminPassword}
-                    tfaToken={tfaToken}
+                    credential={credential}
                     onRekeyInstead={() => { setShowBringBack(false); setShowRekeyWizard(true); }}
                     onClose={() => setShowBringBack(false)}
                 />
@@ -914,8 +909,7 @@ export function MemberDetailModal({
                         avatarUrl: member?.avatarUrl ? String(member.avatarUrl) : undefined,
                     }}
                     nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
-                    adminPassword={adminPassword}
-                    tfaToken={tfaToken}
+                    credential={credential}
                     onSuccess={(newPk) => {
                         onRekeySuccess?.(newPk);
                     }}
@@ -932,8 +926,7 @@ export function MemberDetailModal({
                         avatarUrl: member?.avatarUrl ? String(member.avatarUrl) : undefined,
                     }}
                     nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
-                    adminPassword={adminPassword}
-                    tfaToken={tfaToken}
+                    credential={credential}
                     hasKeyAuth={hasKeyAuth}
                     currentAdminPubkey={currentAdminPubkey}
                     onSuccess={() => {

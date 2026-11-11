@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LightsOutCard, hallHref } from './LightsOutCard';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'hall-node', name: 'Hall', url: 'http://localhost:8080', adminPassword: '' };
+const node: NodeProfile = { id: 'hall-node', name: 'Hall', url: 'http://localhost:8080', credential: '' };
 const OWNER_KEY = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' } as const;
 const ADMIN_KEY = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' } as const;
 
@@ -48,7 +48,7 @@ describe('LightsOutCard', () => {
 
     it('asks the fresh proof when the server does, and re-sends with the code', async () => {
         const calls = fakeNode(off(), [{ status: 401, body: { error: 'Invalid 2FA code', totpRequired: true } }]);
-        render(<LightsOutCard activeNode={node} viewer={{ kind: 'password' }} />);
+        render(<LightsOutCard activeNode={node} viewer={{ kind: 'token' }} />);
         fireEvent.click(await screen.findByTestId('lights-out-switch'));
         const field = await screen.findByLabelText('Current code');
         fireEvent.change(field, { target: { value: '123456' } });

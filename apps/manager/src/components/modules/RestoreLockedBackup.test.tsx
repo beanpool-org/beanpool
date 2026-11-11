@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { RestoreLockedBackup } from './RestoreLockedBackup';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'fresh', name: 'Fresh', url: 'https://fresh.example.org', adminPassword: 'fresh-pw' };
+const node: NodeProfile = { id: 'fresh', name: 'Fresh', url: 'https://fresh.example.org', credential: 'fresh-pw' };
 const file = new File([new Uint8Array([1, 2, 3])], 'beanpool-backup.bpsealed');
 const BACKUP = { envelopeId: 'e'.repeat(32), createdAt: '2026-09-19T10:00:00.000Z', opensWith: '@anna, recovery code #1' };
 const PHONE = {

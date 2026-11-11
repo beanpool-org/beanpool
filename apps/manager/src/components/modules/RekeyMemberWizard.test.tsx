@@ -364,7 +364,7 @@ it('opening the wizard makes no code: it only reads the status (queue item 22)',
             success: true, cancelled: true, oldPubkey: mockMember.publicKey, callsign: 'alice', status: 'active',
         });
         const issueSpy = vi.spyOn(nodeClient, 'issueRekeyCodeApi');
-        render(<RekeyMemberWizard member={mockMember} nodeUrl="http://localhost:3000" adminPassword="pw" tfaToken="t" onClose={() => {}} />);
+        render(<RekeyMemberWizard member={mockMember} nodeUrl="http://localhost:3000" credential="pw" tfaToken="t" onClose={() => {}} />);
 
         await waitFor(() => expect(screen.getByText('RK-WAIT-0001')).toBeDefined());
         expect(screen.getByText(/5 h 12 min left/)).toBeDefined();

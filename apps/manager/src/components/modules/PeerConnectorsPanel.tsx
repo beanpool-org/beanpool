@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 import { proofField, t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
@@ -71,7 +70,7 @@ export function PeerConnectorsPanel({
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/connectors');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
             });
             if (res.ok) {
                 const data = await res.json().catch(() => []);
@@ -126,11 +125,11 @@ export function PeerConnectorsPanel({
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     address,
                     trustLevel: newTrustLevel,
                     callsign: newCallsign.trim() || undefined,
@@ -152,11 +151,11 @@ export function PeerConnectorsPanel({
                 await fetch(connUrl, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode)),
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        ...passwordField(nodeCredential(activeNode)),
+                        
                         address,
                     }),
                 }).catch(() => null);
@@ -186,11 +185,11 @@ export function PeerConnectorsPanel({
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     address,
                 }),
             });
@@ -223,11 +222,11 @@ export function PeerConnectorsPanel({
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     address,
                     ...proofField(code),
                 }),
@@ -268,11 +267,11 @@ export function PeerConnectorsPanel({
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     address,
                     trustLevel: connector.trustLevel || 'peer',
                     callsign: connector.callsign || undefined,
@@ -329,11 +328,11 @@ export function PeerConnectorsPanel({
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     address,
                     ...proofField(code),
                 }),

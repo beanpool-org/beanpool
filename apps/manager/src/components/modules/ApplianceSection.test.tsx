@@ -13,7 +13,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-password',
+    credential: 'admin-password',
 };
 
 const mockDiag: DiagnosticsResponse = {
@@ -218,7 +218,7 @@ describe('ApplianceSection Component', () => {
         expect(nodeClient.updateNodeSnapshotSchedule).toHaveBeenCalledWith(
             mockProfile.url,
             realSchedule,
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
         view.unmount();
@@ -347,7 +347,7 @@ describe('ApplianceSection Component', () => {
         expect(nodeClient.verifyNodeBackup).toHaveBeenCalledWith(
             mockProfile.url,
             undefined,
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
         expect(screen.getByText(/Database verified, no corruption \(PRAGMA integrity_check: ok\)/i)).toBeInTheDocument();
@@ -406,7 +406,7 @@ describe('ApplianceSection Component', () => {
 
     it('the password names the owner; an admin is told only an owner has a code', async () => {
         const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-0000-1111-2222-3333' });
-        await act(async () => { renderAccess({ kind: 'password' }); });
+        await act(async () => { renderAccess({ kind: 'token' }); });
         fireEvent.change(screen.getByLabelText(/Owner's member key/i), { target: { value: 'p'.repeat(64) } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Make a break-glass code/i })); });
         const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'));
@@ -469,7 +469,7 @@ describe('ApplianceSection Component', () => {
             expect.stringContaining('/api/admin/check-update'),
             expect.objectContaining({
                 method: 'POST',
-                body: JSON.stringify({ password: mockProfile.adminPassword }),
+                body: JSON.stringify({ password: mockProfile.credential }),
             })
         );
     });
@@ -521,7 +521,7 @@ describe('ApplianceSection Component', () => {
         expect(updateCall).toBeDefined();
         const payload = JSON.parse(updateCall[1].body);
         expect(payload).toEqual({
-            password: mockProfile.adminPassword,
+            password: mockProfile.credential,
             callsign: mockDiag.callsign,
             communityName: mockDiag.communityName,
             contactEmail: '',
@@ -535,7 +535,7 @@ describe('ApplianceSection Component', () => {
             expect.objectContaining({
                 method: 'POST',
                 body: JSON.stringify({
-                    password: mockProfile.adminPassword,
+                    password: mockProfile.credential,
                     directoryPushIntervalHours: 12,
                     serviceRadius: null,
                     // The card's town or area (front doors S15), saved with the area: none typed clears it.
@@ -581,7 +581,7 @@ describe('ApplianceSection Component', () => {
             expect.objectContaining({
                 method: 'POST',
                 body: JSON.stringify({
-                    password: mockProfile.adminPassword,
+                    password: mockProfile.credential,
                     address: 'wss://peer.example.org:8443',
                 }),
             })
@@ -630,7 +630,7 @@ describe('ApplianceSection Component', () => {
             expect.stringContaining('/api/local/admin/restore'),
             expect.objectContaining({
                 method: 'POST',
-                headers: { 'X-Admin-Password': mockProfile.adminPassword },
+                headers: { 'X-Admin-Password': mockProfile.credential },
                 body: dummyFile,
             })
         );
@@ -1049,7 +1049,7 @@ describe('ApplianceSection Component', () => {
         const [, init] = disableCalls()[0];
         expect(JSON.parse(init.body)).toEqual({ code: '123456' });
         expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-session-abc');
-        expect(init.headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
+        expect(init.headers['X-Admin-Password']).toBe(mockProfile.credential);
         expect(screen.getByText('2FA was not turned off: Invalid 2FA code')).toBeInTheDocument();
         // Still on: the badge did not change.
         expect(screen.getByText('Enabled')).toBeInTheDocument();
@@ -1246,7 +1246,7 @@ describe('ApplianceSection Component', () => {
             id: 'node-2',
             name: 'Second Node',
             url: 'https://node-2.local',
-            adminPassword: 'node-2-password',
+            credential: 'node-2-password',
         };
 
         const { rerender } = render(
@@ -1533,7 +1533,7 @@ describe('ApplianceSection Component', () => {
 
         expect(nodeClient.fetchStorageCleanPreview).toHaveBeenCalledWith(
             mockProfile.url,
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
 
@@ -1551,7 +1551,7 @@ describe('ApplianceSection Component', () => {
 
         expect(nodeClient.cleanStorageAndCompressLogs).toHaveBeenCalledWith(
             mockProfile.url,
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
         expect(screen.getByText(/Cleanup Complete!/i)).toBeInTheDocument();

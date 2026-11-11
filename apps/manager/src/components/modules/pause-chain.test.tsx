@@ -40,8 +40,8 @@ function mockNode(answers: Array<[number, unknown]>) {
     return sent;
 }
 
-function pressSuspend(reason: string, adminPassword?: string) {
-    render(<MemberDetailModal member={member} isFrozen={false} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE} adminPassword={adminPassword} />);
+function pressSuspend(reason: string, credential?: string) {
+    render(<MemberDetailModal member={member} isFrozen={false} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE} credential={credential} />);
     fireEvent.click(screen.getByText('⏸️ Suspend'));
     fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: reason } });
     fireEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
@@ -117,7 +117,7 @@ describe('Alerts: the owners\' line about pauses (removal S4)', () => {
                 acknowledge: true,
             }),
         })));
-        render(<AlertsPanel activeNode={{ id: 'node-1', name: 'Node', url: NODE, adminPassword: 'pw' }} />);
+        render(<AlertsPanel activeNode={{ id: 'node-1', name: 'Node', url: NODE, credential: 'pw' }} />);
         expect((await screen.findAllByText(new RegExp(line.replace(/\./g, '\\.')))).length).toBeGreaterThan(0);
         expect(screen.queryByText(/dave/i)).toBeNull();
     });

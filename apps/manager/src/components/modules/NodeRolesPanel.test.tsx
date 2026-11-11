@@ -22,7 +22,7 @@ const fetchRoles = vi.mocked(fetchNodeRoles);
 const grant = vi.mocked(grantNodeRoleApi);
 const revoke = vi.mocked(revokeNodeRoleApi);
 
-const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'local-node', name: 'Test', url: 'https://node.test', credential: 'pw' };
 
 const ALICE = 'a1'.repeat(32);
 const BOB = 'b2'.repeat(32);
@@ -39,7 +39,7 @@ const bobAdmin = { member_pubkey: BOB, role: 'admin' as const, granted_at: '2026
 // Appointed by the OWNER on purpose: an admin may still remove this one (Marty, 2026-09-20).
 const carolModerator = { member_pubkey: CAROL, role: 'moderator' as const, granted_at: '2026-09-17T10:00:00.000Z', granted_by: ALICE, callsign: 'carol' };
 
-async function renderPanel(viewer: RolesViewer = { kind: 'password' }, onChanged = vi.fn()) {
+async function renderPanel(viewer: RolesViewer = { kind: 'token' }, onChanged = vi.fn()) {
     await act(async () => {
         render(<NodeRolesPanel activeNode={node} members={members} viewer={viewer} onChanged={onChanged} />);
     });
@@ -64,7 +64,7 @@ describe('NodeRolesPanel', () => {
     it('displays loading state indicator while initial role fetch is in flight', async () => {
         let resolveFetch: (val: any) => void = () => {};
         fetchRoles.mockImplementationOnce(() => new Promise((resolve) => { resolveFetch = resolve; }));
-        render(<NodeRolesPanel activeNode={node} members={members} viewer={{ kind: 'password' }} />);
+        render(<NodeRolesPanel activeNode={node} members={members} viewer={{ kind: 'token' }} />);
         expect(screen.getByTestId('roles-loading')).toBeInTheDocument();
         expect(screen.getByText('Loading current roles…')).toBeInTheDocument();
         await act(async () => { resolveFetch([aliceOwner]); });
@@ -421,7 +421,7 @@ describe('NodeRolesPanel search: every match is reachable (found on test, 2026-0
 
     async function renderDamos() {
         await act(async () => {
-            render(<NodeRolesPanel activeNode={node} members={[...members, ...damos]} viewer={{ kind: 'password' }} />);
+            render(<NodeRolesPanel activeNode={node} members={[...members, ...damos]} viewer={{ kind: 'token' }} />);
         });
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'damo' } });
         return within(screen.getByRole('list', { name: 'Matching members' }));
@@ -480,7 +480,7 @@ describe('NodeRolesPanel search: every match is reachable (found on test, 2026-0
             .toEqual(['dadaee fan', 'Zed']);
 
         await act(async () => {
-            render(<NodeRolesPanel activeNode={node} members={[...members, ...keyed]} viewer={{ kind: 'password' }} />);
+            render(<NodeRolesPanel activeNode={node} members={[...members, ...keyed]} viewer={{ kind: 'token' }} />);
         });
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'dadaee' } });
         expect(suggestion('Zed')).toBeInTheDocument();

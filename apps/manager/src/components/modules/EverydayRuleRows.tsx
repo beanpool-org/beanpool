@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
-import { getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { t } from '../../lib/fresh-proof';
 import {
@@ -53,7 +52,7 @@ function pauseTarget(shape: Shape, paused: boolean): 'paused' | 'members' | 'adm
 }
 
 export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: EverydayRuleRowsProps) {
-    const isOwner = viewer?.kind === 'password' || viewer?.role === 'owner';
+    const isOwner = viewer?.kind === 'token' || viewer?.role === 'owner';
     const [shape, setShape] = useState<Shape | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [open, setOpen] = useState<string | null>(null);
@@ -67,7 +66,7 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
     const load = async () => {
         setLoadError(null);
         try {
-            const data = await fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const data = await fetchCommunityShape(activeNode.url, nodeCredential(activeNode));
             // An answer that is not a shape (an older node, an error body) is a failed load, never a crash.
             if (!data?.settings || !Array.isArray(data.log)) throw new Error(t('Could not load these rules.'));
             setShape(data);
@@ -150,7 +149,7 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
         setSaving(true);
         setRowError(null);
         try {
-            const res = await updateCommunityShape(activeNode.url, nodeCredential(activeNode), { [settingKey]: value }, note, getTfaSessionToken(activeNode.id));
+            const res = await updateCommunityShape(activeNode.url, nodeCredential(activeNode), { [settingKey]: value }, note);
             setShape(res.shape);
             setOpen(null);
             setDraft(null);

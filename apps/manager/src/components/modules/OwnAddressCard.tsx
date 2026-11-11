@@ -21,7 +21,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
-    getTfaSessionToken, getTlsStatus, removeAppAddress, setOwnAddress,
+    getTlsStatus, removeAppAddress, setOwnAddress,
     type TlsIdentifierStatus, type TlsStatus,
 } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
@@ -78,7 +78,7 @@ export function OwnAddressCard({ activeNode, enabled, onChanged, refreshSignal =
         setLoading(true);
         try {
             // Null: the node offers no such answer (an admin's 403), so the card is not drawn.
-            setStatus(await getTlsStatus(activeNode.url, credential, getTfaSessionToken(activeNode.id)));
+            setStatus(await getTlsStatus(activeNode.url, credential));
             setLoadError(null);
         } catch (e) {
             // Anything else keeps what was last read, with Refresh, and says so.
@@ -100,7 +100,7 @@ export function OwnAddressCard({ activeNode, enabled, onChanged, refreshSignal =
         setMessage(null);
         try {
             const input = id.kind === 'ip' ? { ip: id.identifier } : { domain: id.identifier };
-            const got = await setOwnAddress(activeNode.url, input, credential, getTfaSessionToken(activeNode.id), code);
+            const got = await setOwnAddress(activeNode.url, input, credential, code);
             proof.close();
             setMessage({ type: 'info', text: t('{address} is being tried again now. Refresh in a minute to see how it went.', { address: got.address }) });
             await load();
@@ -129,7 +129,7 @@ export function OwnAddressCard({ activeNode, enabled, onChanged, refreshSignal =
         setBusy(address);
         setMessage(null);
         try {
-            await removeAppAddress(activeNode.url, address, credential, getTfaSessionToken(activeNode.id), code);
+            await removeAppAddress(activeNode.url, address, credential, code);
             proof.close();
             setMessage({ type: 'success', text: t('{address} removed.', { address }) });
             await load();

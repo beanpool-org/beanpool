@@ -11,7 +11,7 @@ import type { TlsStatus } from '../../lib/node-client';
  * HTTPS S4: Settings → Public Address → "Your own address" (OwnAddressCard), and removing an app address with an owner's
  * fresh proof (server app-addresses/remove requireFreshProof). The node is a fetch stub; nothing here reaches a node.
  */
-const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'n1', name: 'Cairns', url: 'http://localhost:8080', credential: 'pw' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to remove 203.0.113.5', totpRequired: true };
 

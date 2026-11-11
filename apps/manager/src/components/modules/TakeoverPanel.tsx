@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 import { isHundredths } from '@beanpool/core';
 import { beansFigure, beansText } from '../../lib/beans';
 
@@ -16,7 +15,7 @@ import { beansFigure, beansText } from '../../lib/beans';
  * Two confirms: a plain explanation of what happens and what will be missing, then the code, then what the keys hold
  * (same PeerId, owners, links, web address, whether the main server still answers) and "Take over now". The server
  * then runs a journaled promotion and restarts. This screen follows it with the progress token the confirm returned
- * (the standby's own admin password stops working part-way), and says "restarting" while the server does not answer
+ * (the standby's own sign-ins end part-way, as the main server's owners are installed), and says "restarting" while the server does not answer
  * rather than claiming anything. On a server that has taken over, it shows the result and the used-code notice.
  */
 
@@ -197,7 +196,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const adminHeaders = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 
@@ -207,7 +206,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             : adminHeaders();
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/progress'), {
-                method: 'POST', headers, body: JSON.stringify({ ...(progressToken ? {} : passwordField(nodeCredential(activeNode))) }),
+                method: 'POST', headers, body: JSON.stringify({}),
             });
             if (!res.ok) {
                 // With a progress token, a refusal means the server that answers is not the one that started it.
@@ -244,12 +243,12 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         if (busy) return;
         if (stage === 'preview') {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/cancel'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({}),
             }).catch(() => {});
         }
         if (phone) {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/unlock/cancel'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ sessionId: phone.sessionId }),
             }).catch(() => {});
         }
         setStage('closed');
@@ -266,7 +265,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         setError(null);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/start'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), serverUrl: activeNode.url }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ serverUrl: activeNode.url }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.qr === 'string') {
@@ -290,7 +289,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         const tick = async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/wait'), {
-                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
+                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ sessionId: phone.sessionId }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
@@ -325,7 +324,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         setError(null);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/open'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), code }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ code }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.preview) {
@@ -349,7 +348,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/confirm'), {
                 method: 'POST', headers: adminHeaders(),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: preview.sessionId, confirm: true }),
+                body: JSON.stringify({ sessionId: preview.sessionId, confirm: true }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.progressToken === 'string') {
@@ -537,9 +536,9 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 <p className="m-0">Do this only if the main server is really gone. This server then becomes the main server:</p>
                                 <ul className="m-0 pl-5 space-y-1">
                                     <li>it opens the main server&apos;s locked keys with your printed recovery code, or with any one owner&apos;s phone;</li>
-                                    <li>it takes the main server&apos;s identity, owners and admins, links with other communities, admin password and web address;</li>
+                                    <li>it takes the main server&apos;s identity, owners and admins, links with other communities and web address;</li>
                                     <li>it stops copying, restarts, checks the ledger adds up, and posts a notice for members;</li>
-                                    <li>after it, sign in with the community&apos;s admin password or an owner&apos;s key: this standby&apos;s own password stops working.</li>
+                                    <li>after it, sign in to Settings with an owner&apos;s phone.</li>
                                 </ul>
                                 <p className="m-0 font-bold text-white">What it will not have (a standby does not copy these):</p>
                                 <ul className="m-0 pl-5 space-y-1" id="takeover-missing">

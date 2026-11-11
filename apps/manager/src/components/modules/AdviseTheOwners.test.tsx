@@ -23,7 +23,7 @@ const mockNode: NodeProfile = {
     id: 'node-1',
     name: 'Primary Node',
     url: 'https://primary.example.com',
-    adminPassword: 'test-password',
+    credential: 'test-password',
 };
 
 const mockUpdatedShape = {

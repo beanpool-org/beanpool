@@ -51,21 +51,21 @@ describe('profiles management', () => {
     // replication token is held in memory for the page's lifetime and never written there.
     it('never writes a profile password or replication token to localStorage, and drops ones an older build stored', () => {
         store['bp_fleet_profiles'] = JSON.stringify([
-            { id: 'local-node', name: 'Local', url: 'http://localhost:3000', adminPassword: 'old-stored-pw', replicationToken: 'old-stored-token' },
+            { id: 'local-node', name: 'Local', url: 'http://localhost:3000', credential: 'old-stored-pw', replicationToken: 'old-stored-token' },
         ]);
         const loaded = loadNodeProfiles();
-        expect(loaded[0].adminPassword).toBeUndefined();
+        expect(loaded[0].credential).toBeUndefined();
         expect(loaded[0].replicationToken).toBeUndefined();
         expect(store['bp_fleet_profiles']).not.toContain('old-stored-pw');
         expect(store['bp_fleet_profiles']).not.toContain('old-stored-token');
 
-        const added = addNodeProfile({ name: 'Fleet Node', url: 'https://fleet.beanpool.org', adminPassword: 'typed-pw' });
+        const added = addNodeProfile({ name: 'Fleet Node', url: 'https://fleet.beanpool.org', credential: 'typed-pw' });
         const updated = updateNodeProfile(added.id, { replicationToken: 'typed-token' });
-        expect(updated.find(p => p.id === added.id)).toMatchObject({ adminPassword: 'typed-pw', replicationToken: 'typed-token' });
+        expect(updated.find(p => p.id === added.id)).toMatchObject({ credential: 'typed-pw', replicationToken: 'typed-token' });
         expect(store['bp_fleet_profiles']).not.toContain('typed-pw');
         expect(store['bp_fleet_profiles']).not.toContain('typed-token');
         // Still there for this page, until it reloads.
-        expect(loadNodeProfiles().find(p => p.id === added.id)).toMatchObject({ adminPassword: 'typed-pw', replicationToken: 'typed-token' });
+        expect(loadNodeProfiles().find(p => p.id === added.id)).toMatchObject({ credential: 'typed-pw', replicationToken: 'typed-token' });
         saveNodeProfiles(loadNodeProfiles());
         expect(store['bp_fleet_profiles']).not.toContain('typed-pw');
         removeNodeProfile(added.id);

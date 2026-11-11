@@ -9,7 +9,7 @@ import type { TakeoverStatus } from '../../lib/node-client';
 const FAKE_CODE = 'BPRC-3  FAKE-C0DE-0000-1111-2222-3333-4444';
 const FAKE_GROUP = 'C0DE';
 
-const node: NodeProfile = { id: 'n1', name: 'Riverbend node', url: 'https://riverbend.example.org', adminPassword: 'pw-fixture' };
+const node: NodeProfile = { id: 'n1', name: 'Riverbend node', url: 'https://riverbend.example.org', credential: 'pw-fixture' };
 
 const SEALED: TakeoverStatus = {
     state: 'sealed',
@@ -211,7 +211,7 @@ describe('TakeoverLockPanel — who sees the code actions', () => {
         expect(await screen.findByRole('button', { name: 'Replace it' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Check a code' })).toBeInTheDocument();
         unmount();
-        render(<TakeoverLockPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        render(<TakeoverLockPanel activeNode={node} viewer={{ kind: 'token' }} />);
         expect(await screen.findByRole('button', { name: 'Replace it' })).toBeInTheDocument();
     });
 });
@@ -296,7 +296,7 @@ describe('TakeoverLockPanel — the code, once', () => {
         const { rerender } = render(<TakeoverLockPanel activeNode={node} communityName="Riverbend Commons" />);
         fireEvent.click(await screen.findByRole('button', { name: 'Make a recovery code' }));
         await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith(makeRoute))).toBe(true));
-        const other: NodeProfile = { id: 'n2', name: 'Hilltop node', url: 'https://hilltop.example.org', adminPassword: 'pw-fixture-2' };
+        const other: NodeProfile = { id: 'n2', name: 'Hilltop node', url: 'https://hilltop.example.org', credential: 'pw-fixture-2' };
         rerender(<TakeoverLockPanel activeNode={other} communityName="Hilltop" />);
         release();
         await waitFor(() => expect(screen.getByRole('button', { name: 'Make a recovery code' })).toBeEnabled());

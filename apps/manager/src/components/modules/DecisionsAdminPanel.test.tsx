@@ -5,7 +5,7 @@ import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
 
-const node: NodeProfile = { id: 'test-node', name: 'Test Node', url: 'https://test-node.local', adminPassword: 'pw' };
+const node: NodeProfile = { id: 'test-node', name: 'Test Node', url: 'https://test-node.local', credential: 'pw' };
 
 const keepVote: nodeClient.AdminDecisionItem = {
     id: 'dec-keep-1',
@@ -356,7 +356,7 @@ describe('DecisionsAdminPanel', () => {
         const asOwner = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }} />);
         expect(await screen.findByRole('button', { name: 'Decide as owner' })).toBeInTheDocument();
         asOwner.unmount();
-        render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'token' }} />);
         expect(await screen.findByRole('button', { name: 'Decide as owner' })).toBeInTheDocument();
     });
 

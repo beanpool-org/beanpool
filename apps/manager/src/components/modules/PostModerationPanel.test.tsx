@@ -10,7 +10,7 @@ describe('PostModerationPanel Component (Bucket 2 Item 2)', () => {
         id: 'node-test-1',
         name: 'Mullum Node',
         url: 'https://mullum.example.com',
-        adminPassword: 'test-admin-secret',
+        credential: 'test-admin-secret',
     };
 
     const mockPosts: PostModerationItem[] = [

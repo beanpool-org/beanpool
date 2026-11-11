@@ -560,7 +560,7 @@ describe('App Component', () => {
                 id: 'local-node',
                 name: 'Local Sovereign Node',
                 url: 'http://localhost',
-                adminPassword: 'stale-password-from-storage',
+                credential: 'stale-password-from-storage',
                 replicationToken: 'stale-replication-token',
             }]));
 

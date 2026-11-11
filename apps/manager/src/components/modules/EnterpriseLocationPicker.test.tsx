@@ -44,7 +44,7 @@ const mockActiveNode: NodeProfile = {
     id: 'test-node-1',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'secret-admin-password',
+    credential: 'secret-admin-password',
 };
 
 const mockTreasuryWithCoords: NodeTreasury = {

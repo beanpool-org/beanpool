@@ -31,7 +31,7 @@ const NODE: NodeProfile = {
     id: 'node-test-1',
     name: 'Test Node',
     url: 'https://node.example.org',
-    adminPassword: 'secret-admin-pass',
+    credential: 'secret-admin-pass',
 };
 
 function makeShape(over: { core?: Shape['core']; settings?: Partial<ShapeSettings>; kind?: 'local' | 'global' } = {}): Shape {

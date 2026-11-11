@@ -13,7 +13,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-password',
+    credential: 'admin-password',
 };
 
 const mockTreasuries: nodeClient.NodeTreasury[] = [
@@ -154,7 +154,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_bob',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
     });
@@ -238,7 +238,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             { lat: -28.55, lng: 153.501 },
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
     });
@@ -280,7 +280,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.clearEnterpriseLocation).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_1234567890',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
     });
@@ -362,7 +362,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_alice',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
     });
@@ -605,7 +605,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_custom_keeper',
             'nostr_pubkey_keeper_999',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined
         );
     });
@@ -697,7 +697,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
             expect.objectContaining({ name: 'Community Bakery' }),
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-sess-economy'
         );
 
@@ -730,7 +730,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.createNodeTreasury).toHaveBeenCalledWith(
             mockProfile.url,
             expect.objectContaining({ name: 'Community Bakery', workingCapitalCeiling_c: 20050 }),
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined,
         );
         expect(vi.mocked(nodeClient.createNodeTreasury).mock.calls[0][1]).not.toHaveProperty('workingCapitalCeiling');
@@ -755,7 +755,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             expect.objectContaining({ title: 'Half dozen eggs', price_c: 1250 }),
-            mockProfile.adminPassword,
+            mockProfile.credential,
             undefined,
         );
     });
@@ -799,7 +799,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             expect.objectContaining({ title: 'Organic Veggie Box', photos: [PICKED_PHOTO], price_c: 1500 }),
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-sess-economy'
         );
         expect(vi.mocked(nodeClient.seedTreasuryOffer).mock.calls[0][2]).not.toHaveProperty('credits');
@@ -858,7 +858,7 @@ describe('EconomySection Component', () => {
         expect(nodeClient.fetchTreasuryKeepers).toHaveBeenCalledWith(
             mockProfile.url,
             'treasury_pk_1234567890',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-prop-xyz'
         );
 
@@ -876,7 +876,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_bob',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-prop-xyz'
         );
 
@@ -891,7 +891,7 @@ describe('EconomySection Component', () => {
             mockProfile.url,
             'treasury_pk_1234567890',
             'member_pk_alice',
-            mockProfile.adminPassword,
+            mockProfile.credential,
             'tfa-prop-xyz'
         );
     });
@@ -1374,7 +1374,7 @@ describe('EconomySection Component', () => {
             expect(fetchKeepersSpy).toHaveBeenCalledWith(
                 mockProfile.url,
                 'treasury_missing_keepers_prop',
-                mockProfile.adminPassword,
+                mockProfile.credential,
                 undefined
             );
         });

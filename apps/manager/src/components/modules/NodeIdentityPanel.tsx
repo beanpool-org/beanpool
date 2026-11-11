@@ -3,11 +3,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics, fetchNodePrivatePreview } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, fetchDiagnostics, fetchNodePrivatePreview } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { areaRingLeafletStyle, createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 import { nodeCredential } from '../../lib/profiles';
-import { passwordField } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 
 export interface NodeIdentityPanelProps {
@@ -124,7 +123,7 @@ export function NodeIdentityPanel({
                 // which Save would then write back as the community's pin.
                 const configUrl = resolveNodeApiUrl(activeNode.url, '/api/node/config');
                 const configRes = await fetch(configUrl, {
-                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    headers: buildAdminHeaders(nodeCredential(activeNode)),
                     credentials: 'same-origin',
                 }).catch(() => null);
                 if (configRes && configRes.ok && mounted) {
@@ -175,7 +174,7 @@ export function NodeIdentityPanel({
         // holds up nothing else. Each is text, or null for none stored; anything else, or no answer, is not the node's.
         const loadContacts = async () => {
             try {
-                const admin = await fetchDiagnostics(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                const admin = await fetchDiagnostics(activeNode.url, nodeCredential(activeNode));
                 const text = (v: unknown) => (typeof v === 'string' ? v : v === null ? '' : undefined);
                 const name = text(admin.communityName);
                 const email = text(admin.contactEmail);
@@ -372,8 +371,8 @@ export function NodeIdentityPanel({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/push');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
+                body: JSON.stringify({}),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
@@ -408,7 +407,7 @@ export function NodeIdentityPanel({
         try {
             // 1. Save identity info (/api/local/update-identity)
             const identityPayload: Record<string, unknown> = {
-                ...passwordField(nodeCredential(activeNode)),
+                
                 callsign: callsign.trim(),
                 ...(nameLoaded || communityName.trim() ? { communityName: communityName.trim() } : {}),
                 // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
@@ -422,7 +421,7 @@ export function NodeIdentityPanel({
             const identityUrl = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
             const identityRes = await fetch(identityUrl, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
                 body: JSON.stringify(identityPayload),
             });
 
@@ -430,9 +429,9 @@ export function NodeIdentityPanel({
             const configUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/node/config');
             const configRes = await fetch(configUrl, {
                 method: 'POST',
-                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode)),
                 body: JSON.stringify({
-                    ...passwordField(nodeCredential(activeNode)),
+                    
                     // Only settings the node gave:
                     ...(directory === 'loaded' && directoryPushIntervalHours !== 0
                         ? { directoryPushIntervalHours }
@@ -457,9 +456,7 @@ export function NodeIdentityPanel({
                 const failingRes = !identityRes.ok ? identityRes : configRes;
                 const errData = await failingRes.json().catch(() => ({}));
                 setSaveStatus({
-                    text: errData.totpRequired
-                        ? '2FA session expired. Please re-authenticate.'
-                        : (errData.error || 'Save failed'),
+                    text: errData.error || 'Save failed',
                     isError: true,
                 });
             }

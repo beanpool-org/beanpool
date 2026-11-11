@@ -4,7 +4,6 @@ import {
     fetchStrandedEscrows,
     writeOffStrandedEscrow,
     StrandedEscrowWriteOffError,
-    getTfaSessionToken,
     type StrandedEscrowItem,
     type StrandedEscrowsResponse,
 } from '../../lib/node-client';
@@ -26,7 +25,7 @@ interface StrandedEscrowsPanelProps {
     activeNode: NodeProfile;
     /** The latest audit result. A new one reloads the list. */
     refreshKey: unknown;
-    /** Owner level: an owner's key or the password. Anyone else sees the list without the action. */
+    /** Owner level: an owner's key. Anyone else sees the list without the action. */
     canWriteOff: boolean;
     isStandby: boolean;
     /** Called after a write-off, to run the audit again. */
@@ -53,7 +52,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
 
     const load = useCallback(async () => {
         try {
-            setData(await fetchStrandedEscrows(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
+            setData(await fetchStrandedEscrows(activeNode.url, nodeCredential(activeNode)));
             setLoadError(null);
         } catch (e: unknown) {
             setLoadError(e instanceof Error ? e.message : 'Could not load the stranded escrows');
@@ -78,7 +77,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
         try {
             const res = await writeOffStrandedEscrow(
                 activeNode.url, escrow.escrowId, reason.trim(), confirmDeficit,
-                nodeCredential(activeNode), getTfaSessionToken(activeNode.id),
+                nodeCredential(activeNode),
             );
             setDone(`Wrote off ${beans(res.amount_c)} from the Commons for trade ${res.tradeId.slice(0, 8)}. The Commons now reads ${beans(res.commonsAfter_c)}.`);
             open(null);

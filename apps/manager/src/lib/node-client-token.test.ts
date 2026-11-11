@@ -61,8 +61,8 @@ describe('a token profile sends the token as a bearer only', () => {
     });
 
     it('nodeCredential: the token wins over a password; never both', () => {
-        expect(nodeCredential({ automationToken: TOKEN, adminPassword: PASSWORD })).toBe(TOKEN);
-        expect(nodeCredential({ adminPassword: PASSWORD })).toBe(PASSWORD);
+        expect(nodeCredential({ automationToken: TOKEN, credential: PASSWORD })).toBe(TOKEN);
+        expect(nodeCredential({ credential: PASSWORD })).toBe(PASSWORD);
         expect(nodeCredential(undefined)).toBeUndefined();
     });
 
@@ -157,7 +157,7 @@ describe('no component puts a credential in a body by hand', () => {
             .flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
         const offenders = walk(root)
             .filter(f => /\.(ts|tsx)$/.test(f) && !/\.test\./.test(f))
-            .filter(f => /password:\s*(activeNode|adminPassword|pwd|node\.|p\.|profile\.)/.test(fs.readFileSync(f, 'utf8')));
+            .filter(f => /password:\s*(activeNode|credential|pwd|node\.|p\.|profile\.)/.test(fs.readFileSync(f, 'utf8')));
         expect(offenders).toEqual([]);
     });
 });

@@ -2,13 +2,13 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NodeIdentityPanel, DIRECTORY_HELD_BACK_LINES } from './NodeIdentityPanel';
 import type { NodeProfile } from '../../lib/profiles';
-import { setTfaSessionToken, type DiagnosticsResponse } from '../../lib/node-client';
+import { type DiagnosticsResponse } from '../../lib/node-client';
 
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'test-admin-password',
+    credential: 'test-admin-password',
 };
 
 const mockDiag: DiagnosticsResponse = {
@@ -449,7 +449,7 @@ describe('NodeIdentityPanel Component', () => {
             expect.stringContaining('/api/local/admin/directory/push'),
             expect.objectContaining({
                 method: 'POST',
-                body: JSON.stringify({ password: mockProfile.adminPassword }),
+                body: JSON.stringify({ password: mockProfile.credential }),
             })
         );
 
@@ -508,7 +508,7 @@ describe('NodeIdentityPanel Component', () => {
             );
             expect(updateCall).toBeDefined();
             expect(updateCall[1].headers['X-Admin-2FA-Session']).toBe('tfa-identity-token');
-            expect(updateCall[1].headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
+            expect(updateCall[1].headers['X-Admin-Password']).toBe(mockProfile.credential);
         } finally {
             setTfaSessionToken(mockProfile.id, undefined);
         }
@@ -570,7 +570,7 @@ describe('NodeIdentityPanel Component', () => {
         );
         expect(updateCall).toBeDefined();
         expect(JSON.parse(updateCall[1].body)).toEqual({
-            password: mockProfile.adminPassword,
+            password: mockProfile.credential,
             callsign: 'mullum-prime',
             lat: -28.55,
             lng: 153.5,
@@ -585,7 +585,7 @@ describe('NodeIdentityPanel Component', () => {
             expect.objectContaining({
                 method: 'POST',
                 body: JSON.stringify({
-                    password: mockProfile.adminPassword,
+                    password: mockProfile.credential,
                     directoryPushIntervalHours: 24,
                     serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 50 },
                     // The town or area a stranger's card names (front doors S15): none typed, none sent as a name.
@@ -611,7 +611,7 @@ describe('NodeIdentityPanel Component', () => {
             if (url.includes('/api/node/config') && !url.includes('/admin/')) {
                 const headers = (init?.headers ?? {}) as Record<string, string>;
                 configReads.push(headers);
-                const admin = headers['X-Admin-Password'] === mockProfile.adminPassword;
+                const admin = headers['X-Admin-Password'] === mockProfile.credential;
                 return Promise.resolve({
                     ok: true,
                     json: () => Promise.resolve({
@@ -628,7 +628,7 @@ describe('NodeIdentityPanel Component', () => {
             render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
         });
         await waitFor(() => expect(configReads).toHaveLength(1));
-        expect(configReads[0]['X-Admin-Password']).toBe(mockProfile.adminPassword);
+        expect(configReads[0]['X-Admin-Password']).toBe(mockProfile.credential);
 
         await act(async () => {
             fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
@@ -700,7 +700,7 @@ describe('NodeIdentityPanel Component', () => {
         expect(updateCall).toBeDefined();
         const payload = JSON.parse(updateCall[1].body);
         expect(payload).toEqual({
-            password: mockProfile.adminPassword,
+            password: mockProfile.credential,
             callsign: 'unlocated',
             communityName: 'Unlocated Node',
             contactEmail: '',
@@ -1133,7 +1133,7 @@ describe('NodeIdentityPanel Component', () => {
             expect(emailInput).not.toBeDisabled();
             expect(phoneInput).not.toBeDisabled();
             const adminCall = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes('/api/local/admin/diagnostics'));
-            expect(adminCall![1].headers['X-Admin-Password']).toBe(mockProfile.adminPassword);
+            expect(adminCall![1].headers['X-Admin-Password']).toBe(mockProfile.credential);
 
             await saveNow();
             const body = identityBody(fetchMock);

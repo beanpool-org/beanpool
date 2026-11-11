@@ -99,8 +99,7 @@ interface MembersModuleProps {
     nodeData: NodeDataPayload | null;
     nodeDataLoading: boolean;
     activeNodeUrl?: string;
-    adminPassword?: string;
-    tfaToken?: string;
+    credential?: string;
     onRefresh: () => void;
     onFreezeUser?: (pubkey: string, freeze: boolean) => Promise<void>;
     /** `code`: an owner's fresh proof, when removing an owner asks it (server ownerRemovalProof). */
@@ -224,8 +223,7 @@ export function MembersModule({
     nodeData,
     nodeDataLoading,
     activeNodeUrl,
-    adminPassword,
-    tfaToken,
+    credential,
     onRefresh,
     onFreezeUser,
     onPruneUser,
@@ -272,9 +270,9 @@ export function MembersModule({
         let mounted = true;
         setKnownFloorMarks({});
         if (!activeNodeUrl) return;
-        void fetchKnownFloorMarks(activeNodeUrl, adminPassword, tfaToken).then((marks) => { if (mounted) setKnownFloorMarks(marks); });
+        void fetchKnownFloorMarks(activeNodeUrl, credential).then((marks) => { if (mounted) setKnownFloorMarks(marks); });
         return () => { mounted = false; };
-    }, [activeNodeUrl, adminPassword, tfaToken]);
+    }, [activeNodeUrl, credential]);
     const onKnownFloorChanged = React.useCallback((pk: string, exception: KnownFloorException | null) => {
         setKnownFloorMarks((prev) => {
             const next = { ...prev };
@@ -286,10 +284,10 @@ export function MembersModule({
     const reloadTreasuries = React.useCallback(async () => {
         if (!activeNodeUrl) return;
         try {
-            const list = await fetchNodeTreasuries(activeNodeUrl, adminPassword, tfaToken);
+            const list = await fetchNodeTreasuries(activeNodeUrl, credential);
             setTreasuries(list);
         } catch {}
-    }, [activeNodeUrl, adminPassword, tfaToken]);
+    }, [activeNodeUrl, credential]);
 
     React.useEffect(() => {
         reloadTreasuries();
@@ -298,7 +296,7 @@ export function MembersModule({
     const handlePruneMember = async (pubkey: string, code?: string) => {
         if (!onPruneUser) return;
         try {
-            await onPruneUser(pubkey, ...(code ? [code] : []));
+            await onPruneUser(pubkey, code);
             onRefresh();
             setSelectedMember(null);
         } catch (e: unknown) {
@@ -424,7 +422,7 @@ export function MembersModule({
             // The credit line as typed, in Beans, to whole hundredths: the node takes `creditLine_c` (none typed: 0).
             const line = newTreasuryCredit.trim() ? parseBeans(newTreasuryCredit) : { ok: true as const, value: 0 };
             if (!line.ok) throw new Error(`Deficit credit line: ${beansRefusalText(line.refusal)}`);
-            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine_c: line.value }, adminPassword, tfaToken);
+            await createNodeTreasury(activeNodeUrl, { name: newTreasuryName.trim(), avatar: avatarSvg, creditLine_c: line.value }, credential);
             setShowCreateTreasuryModal(false);
             setNewTreasuryName('');
             reloadTreasuries();
@@ -452,7 +450,7 @@ export function MembersModule({
                 photos: offerPhotos,
                 description: offerDescription.trim(),
                 repeatable: true
-            }, adminPassword, tfaToken);
+            }, credential);
             setOfferTreasury(null);
             setOfferTitle('');
             setOfferDescription('');
@@ -959,7 +957,7 @@ export function MembersModule({
                     onClose={() => setActiveThreat(null)}
                     onDismiss={handleDismissThreat}
                     onDismissReport={activeNodeUrl ? async (threat) => {
-                        await dismissNodeReport(activeNodeUrl, String(threat.id), adminPassword, tfaToken);
+                        await dismissNodeReport(activeNodeUrl, String(threat.id), credential);
                         onRefresh();
                     } : undefined}
                     onFreezePubkeys={handleFreezePubkeys}
@@ -998,8 +996,7 @@ export function MembersModule({
                     ownerCount={ownerCount}
                     members={members}
                     nodeUrl={activeNodeUrl}
-                    adminPassword={adminPassword}
-                    tfaToken={tfaToken}
+                    credential={credential}
                     onRekeySuccess={() => {
                         // Refresh data in background without unmounting modal while user reviews confirmation
                         onRefresh?.();

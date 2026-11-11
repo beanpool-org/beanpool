@@ -12,7 +12,7 @@ interface GatewayModuleProps {
     onChangeGateway: (updated: GatewayConfig) => void;
     /** Rejects with FreshProofRequiredError when the node asks an owner's fresh proof (the box opens here). */
     onSaveGateway: (code?: string) => void | Promise<void>;
-    onAuthenticate?: (password: string) => void;
+    onAuthenticate?: (token: string) => void;
 }
 
 export function GatewayModule({
@@ -29,7 +29,7 @@ export function GatewayModule({
     const proof = useFreshProof();
     const save = async (code?: string) => {
         try {
-            await onSaveGateway(...(code ? [code] : []));
+            await onSaveGateway(code);
             proof.close();
         } catch (e) {
             // Anything but the proof was already said by the caller.
@@ -68,9 +68,9 @@ export function GatewayModule({
                         🔑
                     </div>
                     <div>
-                        <h3 className="text-base font-bold text-white m-0">Node Admin Authentication Required</h3>
+                        <h3 className="text-base font-bold text-white m-0">Node Access Required</h3>
                         <p className="text-nature-400 text-xs m-0 mt-0.5">
-                            Enter target node Admin Password to unlock Gateway Self-Protection settings.
+                            Enter an owner's automation token for this node to unlock Gateway Self-Protection settings.
                         </p>
                     </div>
                 </div>
@@ -88,14 +88,14 @@ export function GatewayModule({
                         className="space-y-4"
                     >
                         <div>
-                            <label className="block text-nature-300 font-semibold mb-1.5">Node Admin Password</label>
+                            <label className="block text-nature-300 font-semibold mb-1.5">Owner automation token</label>
                             <div className="relative">
                                 <input
                                     type={showAdminInput ? 'text' : 'password'}
                                     autoComplete="off"
                                     value={adminInput}
                                     onChange={(e) => setAdminInput(e.target.value)}
-                                    placeholder="Enter node admin password (e.g. admin)"
+                                    placeholder="bp_…"
                                     required
                                     className="w-full bg-nature-950 border border-nature-800 pl-3.5 pr-10 py-2.5 rounded-xl text-white font-mono focus:outline-none focus:border-terra-500 shadow-inner"
                                 />
@@ -103,7 +103,7 @@ export function GatewayModule({
                                     type="button"
                                     onClick={() => setShowAdminInput(!showAdminInput)}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-nature-400 hover:text-white transition-colors text-sm"
-                                    title={showAdminInput ? 'Hide password' : 'Show password'}
+                                    title={showAdminInput ? 'Hide token' : 'Show token'}
                                 >
                                     {showAdminInput ? '🙈' : '👁️'}
                                 </button>

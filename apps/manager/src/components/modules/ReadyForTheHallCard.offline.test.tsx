@@ -25,7 +25,7 @@ const diag: DiagnosticsResponse = {
 };
 
 /** The laptop itself, as the browser reaches it in the hall: the page's own origin. */
-const laptop = (): NodeProfile => ({ id: 'hall', name: 'Hall laptop', url: window.location.origin, adminPassword: 'pw' });
+const laptop = (): NodeProfile => ({ id: 'hall', name: 'Hall laptop', url: window.location.origin, credential: 'pw' });
 
 const answers: Record<string, unknown> = {
     '/api/local/admin/takeover/status': {

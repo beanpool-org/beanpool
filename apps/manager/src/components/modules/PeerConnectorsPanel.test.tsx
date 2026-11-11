@@ -9,7 +9,7 @@ const mockActiveNode: NodeProfile = {
     id: 'local-node',
     name: 'Mullumbimby Node',
     url: 'http://localhost:8080',
-    adminPassword: 'test-password',
+    credential: 'test-password',
 };
 
 describe('PeerConnectorsPanel Component', () => {
@@ -197,7 +197,7 @@ describe('PeerConnectorsPanel Component', () => {
                 expect(connectHeaders).toHaveLength(1);
             });
             expect(connectHeaders[0]['X-Admin-2FA-Session']).toBe('tfa-peer-token');
-            expect(connectHeaders[0]['X-Admin-Password']).toBe(mockActiveNode.adminPassword);
+            expect(connectHeaders[0]['X-Admin-Password']).toBe(mockActiveNode.credential);
         } finally {
             setTfaSessionToken(mockActiveNode.id, undefined);
         }

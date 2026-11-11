@@ -24,7 +24,7 @@ const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
     url: 'https://test-node.local',
-    adminPassword: 'admin-password',
+    credential: 'admin-password',
 };
 
 const stale = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `old_${i}`, createdAt: '2020-01-01T00:00:00Z', title: `Old ${i}` }));

@@ -36,7 +36,7 @@ const posts = (f: ReturnType<typeof vi.fn>) => f.mock.calls
     .map(([url, init]) => ({ url: String(url), body: JSON.parse(String((init as RequestInit).body)) }));
 
 function renderPanel(onChanged = vi.fn()) {
-    render(<MemberKnownFloorPanel nodeUrl={NODE} pubkey={KIM} displayName="Kim" adminPassword="pw" onChanged={onChanged} />);
+    render(<MemberKnownFloorPanel nodeUrl={NODE} pubkey={KIM} displayName="Kim" credential="pw" onChanged={onChanged} />);
     return onChanged;
 }
 

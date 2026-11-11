@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { word } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { proofField, t } from '../../lib/fresh-proof';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import type { RolesViewer } from './NodeRolesPanel';
@@ -74,9 +74,9 @@ function when(iso: string | null): string {
     return Number.isFinite(d.getTime()) ? d.toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : iso;
 }
 
-export function LightsOutCard({ activeNode, viewer = { kind: 'password' } }: LightsOutCardProps) {
+export function LightsOutCard({ activeNode, viewer = { kind: 'token' } }: LightsOutCardProps) {
     const W = LIGHTS_OUT_WORDS;
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const [state, setState] = useState<LightsOutState | null>(null);
     const [address, setAddress] = useState('');
     const [busy, setBusy] = useState(false);
@@ -84,7 +84,7 @@ export function LightsOutCard({ activeNode, viewer = { kind: 'password' } }: Lig
     const proof = useFreshProof();
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 

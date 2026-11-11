@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
-import { getTfaSessionToken } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import {
     type Shape,
@@ -159,8 +158,8 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
         setError(null);
         try {
             // The place first (Marty, 31 Oct: mandatory for a local community), through the route Node Identity uses.
-            if (placeNeeded && place) await saveCommunityPlace(activeNode.url, nodeCredential(activeNode), place, getTfaSessionToken(activeNode.id));
-            const res = await confirmCoreSettings(activeNode.url, nodeCredential(activeNode), changesFrom(shape, draft), getTfaSessionToken(activeNode.id));
+            if (placeNeeded && place) await saveCommunityPlace(activeNode.url, nodeCredential(activeNode), place);
+            const res = await confirmCoreSettings(activeNode.url, nodeCredential(activeNode), changesFrom(shape, draft));
             onLocked(res.shape, res.told);
         } catch (err: any) {
             setError(err?.message || t('Could not confirm. Nothing was locked.'));

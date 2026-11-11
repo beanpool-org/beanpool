@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RestorePointsPanel, type RestorePointInfo } from './RestorePointsPanel';
 import type { NodeProfile } from '../../lib/profiles';
 
-const node: NodeProfile = { id: 'home', name: 'Home', url: 'https://home.example.org', adminPassword: 'home-pw' };
+const node: NodeProfile = { id: 'home', name: 'Home', url: 'https://home.example.org', credential: 'home-pw' };
 const POINTS: RestorePointInfo[] = [
     { name: '2026-10-16T02-30-00.123Z-before-restore', why: 'restore', takenAt: '2026-10-16T02:30:00.123Z', bytes: 3 * 1024 * 1024,
         keptAtLeastUntil: '2026-10-23T02:30:00.123Z', keptAtMostUntil: '2026-11-15T02:30:00.123Z' },

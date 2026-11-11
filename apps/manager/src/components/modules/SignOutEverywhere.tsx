@@ -6,7 +6,7 @@ import { signOutEverywhere } from '../../lib/node-client';
  * Settings session of theirs, on every computer and phone, and retires a break-glass code made from one of them (#1531).
  * Automation tokens are not sign-ins and keep working (#1563 review): the words send an owner to that card to revoke any
  * token they didn't make. Asks first; on success this browser is signed out too
- * (onSignedOut shows the sign-in screen). Never offered to the password or a fleet profile: they have no key of their own.
+ * (onSignedOut shows the sign-in screen). Never offered to a fleet profile: it has no key of its own.
  *
  * Operator manual text: packages/beanpool-guide/operators/setup/access-and-security.md — keep the two in step.
  */

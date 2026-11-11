@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, passwordField } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { rollBackDoneWords } from '../../lib/restore-words';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -9,9 +9,8 @@ import type { RolesViewer } from './NodeRolesPanel';
  * Restore points (design case 18 §3.3): the server keeps one before every restore and every roll-back, under
  * data/restore-points, and no route deletes one or changes how long it is kept (the newest 5, none younger than 7 days
  * pruned, none older than 30 kept). This card lists them, read-only (when, why, size, kept until), and offers
- * Roll back, which the server takes from an owner with a fresh proof, every time (a current authenticator code on the
- * password path; Manage pressed within 90 seconds on the phone). The server answers anyone else 403, so the card draws
- * nothing for an admin.
+ * Roll back, which the server takes from an owner with a fresh proof, every time (Manage pressed within 90 seconds on
+ * the phone). The server answers anyone else 403, so the card draws nothing for an admin.
  */
 
 export interface RestorePointInfo {
@@ -46,18 +45,17 @@ const WHY: Record<RestorePointInfo['why'], string> = {
 
 const BTN = 'min-h-[48px] px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50';
 
-export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }: { activeNode: NodeProfile; viewer?: RolesViewer }) {
-    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+export function RestorePointsPanel({ activeNode, viewer = { kind: 'token' } }: { activeNode: NodeProfile; viewer?: RolesViewer }) {
+    const isOwner = viewer.kind === 'token' || viewer.role === 'owner';
     const [points, setPoints] = useState<RestorePointInfo[] | null>(null);
     const [listMessage, setListMessage] = useState('');
     const [chosen, setChosen] = useState<RestorePointInfo | null>(null);
-    const [code, setCode] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
 
     const headers = useCallback(
-        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        () => buildAdminHeaders(nodeCredential(activeNode)),
         [nodeCredential(activeNode), activeNode.id],
     );
 
@@ -88,7 +86,6 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
     // A different node: nothing of the last one's step stays.
     useEffect(() => {
         setChosen(null);
-        setCode('');
         setError(null);
         setDone(null);
     }, [activeNode.id]);
@@ -97,7 +94,6 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
 
     const open = (p: RestorePointInfo) => {
         setChosen(p);
-        setCode('');
         setError(null);
         setDone(null);
     };
@@ -108,8 +104,7 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
         setBusy(true);
         setError(null);
         try {
-            const body: Record<string, unknown> = { ...passwordField(nodeCredential(activeNode)), name: chosen.name };
-            if (code.trim()) body.code = code.trim();
+            const body: Record<string, unknown> = { name: chosen.name };
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore-points/roll-back'), {
                 method: 'POST', headers: headers(), credentials: 'same-origin', body: JSON.stringify(body),
             });
@@ -117,9 +112,8 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
             if (res.ok) {
                 setDone(rollBackDoneWords(data, when(chosen.takenAt)));
                 setChosen(null);
-                setCode('');
             } else {
-                // The server's own words: "Enter a current code…", "Press Manage on your phone again…", "Do this from
+                // The server's own words: "Press Manage on your phone again…", "Do this from
                 // your phone…", or why the point could not be used. Nothing was changed.
                 setError(typeof data.error === 'string' ? data.error : `The server answered HTTP ${res.status}.`);
             }
@@ -168,28 +162,14 @@ export function RestorePointsPanel({ activeNode, viewer = { kind: 'password' } }
                                         the server's keys and settings. A restore point of the server as it is now is taken first, so this
                                         can be undone the same way. The server restarts after; sign in again.
                                     </p>
-                                    {/* TODO(S4a): switch this field to S4a's shared fresh-proof component (its brief, item 1: the code
-                                        field for a password viewer, "press Manage again" / "from your phone" for a key viewer). Until
-                                        then: the code field for a password viewer, and the server's own words for every refusal.
-                                        A computer's key session still sees Roll back (the server answers 403 phone_required): hiding
+                                    {/* A computer's key session still sees Roll back (the server answers 403 phone_required): hiding
                                         it behind "Do this from your phone" (design §5) needs /api/local/admin/auth/session to say
                                         phone hand-off or computer, which it does not yet (PR #2029 review, N3). */}
-                                    {viewer.kind === 'password' ? (
-                                        <>
-                                            <label htmlFor={`roll-back-code-${p.name}`} className="block text-nature-200">
-                                                A current code from your authenticator app (or a backup code):
-                                            </label>
-                                            <input id={`roll-back-code-${p.name}`} type="text" inputMode="numeric" autoComplete="one-time-code" value={code}
-                                                onChange={(e) => setCode(e.target.value)} spellCheck={false}
-                                                className="w-full min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white font-mono" />
-                                        </>
-                                    ) : (
-                                        <p className="m-0 text-nature-200">From your phone: press Manage again, then roll back within 90 seconds.</p>
-                                    )}
+                                    <p className="m-0 text-nature-200">From your phone: press Manage again, then roll back within 90 seconds.</p>
                                     {error && <div role="alert" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-200">{error}</div>}
                                     {/* Stacked on a phone: side by side, at 320 px and 130 % text a word breaks inside a button. */}
                                     <div className="flex flex-col sm:flex-row gap-2">
-                                        <button type="submit" disabled={busy || (viewer.kind === 'password' && !code.trim())}
+                                        <button type="submit" disabled={busy}
                                             className={`${BTN} w-full sm:flex-1 bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
                                             {busy ? 'Rolling back…' : 'Roll back'}
                                         </button>

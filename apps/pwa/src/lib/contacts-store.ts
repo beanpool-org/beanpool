@@ -376,10 +376,11 @@ async function pull(me: ContactsKeys, s: number): Promise<void> {
     if (answer.kind !== 'ok' || !theirs?.ok) {
         // No copy came back: the community was out of reach, or a 200 isn't this member's copy (a captive portal's page,
         // something in front of the community), as a save's bare 200 is in push(). A change it hasn't got is tried again
-        // later, and said so. A list this community keeps none of stays device-only: nothing is tried, so nothing says
-        // "will try again".
+        // later, and said so. That is the footer's own test: a row kept at another community counts too (the web app was
+        // pointed elsewhere, so `kept` is the number THAT community keeps). A list this community keeps none of stays
+        // device-only, and one it holds in full stays here: nothing is tried, so nothing says "will try again".
         const held = await readHeld(key, s);
-        if (held && whereOf(held, address) !== 'device-only' && held.seq !== held.kept) { say({ where: 'retry' }); scheduleSave(me, s, RETRY_MS); }
+        if (held && whereOf(held, address) === 'soon') { say({ where: 'retry' }); scheduleSave(me, s, RETRY_MS); }
         return;
     }
     const wire: ContactsCopyWire = { header: String(answer.body.header), signature: String(answer.body.signature), nonce: String(answer.body.nonce), sealed: String(answer.body.sealed) };

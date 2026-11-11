@@ -6,6 +6,8 @@ import { memoryIndexedDB } from './memory-indexeddb';
 import { importIdentity, wipeIdentity } from './identity';
 import { beginAccountEpoch, endAccountEpoch, resetAccountEpochForTest } from './account-epoch';
 import { clearAccountStorage } from './device-prefs';
+import { setNodeApiUrl } from './api';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 import { openContactsList } from './contacts-lock';
 import {
     CONTACTS_SAVE_WAIT_MS, changeContacts, clearContactsStore, contactsSignOutCheck, contactsSnapshot, openContacts,
@@ -91,6 +93,8 @@ beforeEach(async () => {
     down = false;
     blank = false;
     holdGet = null;
+    setNodeApiUrl(null);
+    resetNodeVersionGateForTests();
     // A test that signed the account out leaves this page's account epoch ended: each test starts as a page loaded now.
     resetAccountEpochForTest();
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => community(url, init)));
@@ -112,6 +116,8 @@ const signedAs = (s: Seen) => `${s.method} signed as ${s.headers['X-Public-Key']
 const heldSeq = (idb: ReturnType<typeof memoryIndexedDB>) => (idb.peek('beanpool-contacts', 'copies', me.publicKey.toLowerCase()) as { seq?: number } | undefined)?.seq;
 
 afterEach(() => {
+    setNodeApiUrl(null);
+    resetNodeVersionGateForTests();
     resetContactsStoreForTest();
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -277,6 +283,43 @@ describe('the web contacts store', () => {
         // While the portal answered, the footer said it would try again (not "within 15 minutes"), and sign-out warned.
         expect(said).toBe('retry');
         expect(signOut).toBe('unsaved');
+        expect(contactsSnapshot().where).toBe('here');
+        expect(await contactsSignOutCheck(me.publicKey)).toBe('saved');
+    });
+
+    it.each([
+        ['does not arrive', 'down'],
+        ['gets a captive portal\'s 200 page', 'blank'],
+    ] as const)('a list kept at another community, when the first read there %s: the footer says it will try again, and the new community gets the list five minutes later', async (_what, how) => {
+        await openContacts(me);
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Ash')) }));
+        expect(await saveContactsNow(me)).toBe('here');
+        expect(listOnCommunity().contacts).toHaveLength(1);
+
+        // The web app is pointed at another community (Settings' address, or a delete at a detached community that keeps the
+        // key). It has no copy. The row still names the old address, with `kept` equal to `seq`: the number the OLD community keeps.
+        kept = null;
+        setNodeApiUrl('https://other.example');
+        // Settings' address check has heard that community's version (it runs 1.4.0), so only the contacts calls are seen here.
+        hearNodeVersionForTests('https://other.example');
+        resetContactsStoreForTest();
+        if (how === 'down') down = true; else blank = true;
+        seen = [];
+        await openContacts(me);
+        const said = contactsSnapshot().where;
+        const signOut = await contactsSignOutCheck(me.publicKey);
+        expect(said).toBe('retry');
+        expect(signOut).toBe('unsaved');
+
+        // Back online: five minutes on, one save goes to the new community, and it holds the list.
+        down = false;
+        blank = false;
+        await vi.advanceTimersByTimeAsync(4 * 60_000);
+        expect(seen.map((s) => s.method)).toEqual(['GET']);
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+        expect(seen.map((s) => s.method)).toEqual(['GET', 'PUT']);
+        expect(seen.every((s) => s.url.startsWith('https://other.example/'))).toBe(true);
+        expect(listOnCommunity().contacts.map((c) => c.name)).toEqual(['Ash Person 0 Walker']);
         expect(contactsSnapshot().where).toBe('here');
         expect(await contactsSignOutCheck(me.publicKey)).toBe('saved');
     });

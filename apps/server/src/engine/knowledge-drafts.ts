@@ -78,11 +78,11 @@ type BroadcastFn = (event: any, recipients?: string[], opts?: { listingParties?:
 
 export const DRAFT_WORDS = {
     publishInstead: word('You’re an owner or admin here, so your own page goes into Learn at once: publish it instead.'),
-    notWaiting: word('This suggestion isn’t waiting any more. It may have been taken back.'),
+    notWaiting: word('This suggestion isn’t waiting any more: it was answered or taken back.'),
     alreadyAnswered: word('This one was already answered.'),
     writerPaused: word('This member’s account is paused, so it can’t be added now.'),
     tickSources: word('Tick “I opened the sources and they say this.” first.'),
-    membersPhotos: word('A member’s suggestion keeps its own photos.'),
+    membersPhotos: word('A member’s suggestion keeps its own photos: you can leave one out, not add one.'),
 } as const;
 
 interface DraftRow {
@@ -292,6 +292,19 @@ function waitingDraft(id: unknown): DraftRow {
     return r;
 }
 
+/**
+ * A member's photos at approval: all of theirs, or, when "Edit first" sends `photos`, the ones it sends back, each one of
+ * theirs exactly as read (GET /api/knowledge/drafts/:id), in the order sent. Never a photo that isn't theirs.
+ */
+function keptPhotos(draftId: string, sent: unknown): string[] {
+    const own = draftPhotoData(draftId);
+    if (sent === undefined || sent === null) return own;
+    if (!Array.isArray(sent) || sent.some((p) => typeof p !== 'string' || !own.includes(p))) {
+        throw new KnowledgeRefusal(400, 'bad_photos', DRAFT_WORDS.membersPhotos);
+    }
+    return [...new Set(sent as string[])];
+}
+
 /** The page's fields at approval: each one the request sends ("Edit first"), the suggestion's own for the rest. */
 function approvedFields(r: DraftRow, raw: KnowledgeInput): KnowledgeInput {
     const pick = (sent: unknown, own: unknown) => (sent !== undefined ? sent : own);
@@ -339,8 +352,9 @@ export interface KnowledgeAnswer {
 
 /**
  * "Approve" (§5.5): makes the page through publishKnowledge, with any edits the request sends; a member's suggestion with
- * the member as its writer and their photos (charged once, when sent), an assistant's with the approver as its writer,
- * marked `assistant-draft:<grant id>`, and their own photos if they add some. Checked is stamped. In one transaction with
+ * the member as its writer and their photos (charged once, when sent; "Edit first" may leave some out by sending back the
+ * ones kept, never add one), an assistant's with the approver as its writer, marked `assistant-draft:<grant id>`, and their
+ * own photos if they add some. Checked is stamped. A fix (slice K5) is never approved here as a new page. In one transaction with
  * the suggestion's answer and its photos' delete, so two owners at once make one page: the second reads "This one was
  * already answered." A member whose account is paused or gone: "This member's account is paused, so it can't be added now."
  */
@@ -355,11 +369,12 @@ export function approveKnowledgeDraft(
     assertChecker(checker);
     return db.transaction(() => {
         const r = waitingDraft(id);
+        // A fix changes the page it names, and K5 brings that path: until then none is made, and none is answered as new.
+        if (r.kind !== 'new') throw new KnowledgeRefusal(409, 'not_yet', 'A fix to a page is answered by a later version of this server.');
         const grant = assistantGrantOf(r.via);
         if (grant !== null && raw.checkedSources !== true) throw new KnowledgeRefusal(400, 'sources_not_checked', DRAFT_WORDS.tickSources);
-        if (grant === null && raw.photos !== undefined && raw.photos !== null) throw new KnowledgeRefusal(400, 'bad_photos', DRAFT_WORDS.membersPhotos);
         if (grant === null && !inStanding(r.member_pubkey)) throw new KnowledgeRefusal(409, 'writer_paused', DRAFT_WORDS.writerPaused);
-        const post = publishKnowledge(broadcast, checker, { ...approvedFields(r, raw), photos: grant === null ? draftPhotoData(r.id) : raw.photos }, {
+        const post = publishKnowledge(broadcast, checker, { ...approvedFields(r, raw), photos: grant === null ? keptPhotos(r.id, raw.photos) : raw.photos }, {
             writer: grant === null ? r.member_pubkey : checker,
             ...(grant === null ? { photosPaidFor: true } : { createdVia: `assistant-draft:${grant}` }),
             now,
@@ -369,7 +384,10 @@ export function approveKnowledgeDraft(
         if (answered !== 1) throw new Error('a suggestion was answered twice');
         deletePlainRows('knowledge_draft_photos', 'draft_id = ?', r.id);
         const notice = keepAnswer(r, { outcome: 'approved', title: post.title }, { outcome: 'approved', postId: post.id }, now);
-        logger.info('ADMIN', 'Local knowledge approved', { draft: r.id, post: post.id, by: checker.slice(0, 16), ...(grant !== null ? { assistant: grant } : {}) });
+        logger.info('ADMIN', 'Local knowledge approved', {
+            draft: r.id, post: post.id, by: checker.slice(0, 16), byName: nameOf(checker),
+            ...(grant !== null ? { assistant: grant, assistantName: r.assistant_name ?? '' } : {}),
+        });
         return { post, member: r.member_pubkey, draftId: r.id, notice };
     })();
 }
@@ -390,11 +408,12 @@ export function declineKnowledgeDraft(checker: string, id: unknown, reason: unkn
     }
     return db.transaction((): KnowledgeAnswer => {
         const r = waitingDraft(id);
+        if (r.kind !== 'new') throw new KnowledgeRefusal(409, 'not_yet', 'A fix to a page is answered by a later version of this server.');
         db.prepare(`UPDATE knowledge_drafts SET state = 'declined', answered_at = ?, answered_by = ?, reason = ?, reason_words = ?
                     WHERE id = ? AND state = 'waiting'`).run(iso(now), checker, reason, said || null, r.id);
         deletePlainRows('knowledge_draft_photos', 'draft_id = ?', r.id);
         const notice = keepAnswer(r, { outcome: 'declined', title: r.title, reason, words: said }, { outcome: 'declined', reason }, now);
-        logger.info('ADMIN', 'Local knowledge not added', { draft: r.id, by: checker.slice(0, 16), reason });
+        logger.info('ADMIN', 'Local knowledge not added', { draft: r.id, by: checker.slice(0, 16), byName: nameOf(checker), reason });
         return { member: r.member_pubkey, draftId: r.id, notice };
     })();
 }

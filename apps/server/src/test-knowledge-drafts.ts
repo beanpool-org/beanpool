@@ -303,6 +303,24 @@ async function main(): Promise<void> {
     assert(edited.status === 200 && editedRow?.title === 'Mel second, tidied' && editedRow?.category === 'good-to-know' && editedRow?.knowledge_sources === null
         && editedRow?.description === PAGE.body && editedRow?.author_pubkey === mel.pk, `7. the page holds the admin's edits, the rest the member's (${show(edited)})`);
 
+    const withPhoto = (await suggest(mel, { title: 'Mel with a photo', photos: [TEST_PHOTO] })).body?.draft?.id as string;
+    const foreign = await approve(owen, withPhoto, { photos: ['data:image/png;base64,iVBORw0KGgo='] });
+    assert(foreign.status === 400 && foreign.body?.code === 'bad_photos' && draftRow(withPhoto)?.state === 'waiting', `7. a photo that isn't the member's: 400 (${show(foreign)})`);
+    const dropped = await approve(owen, withPhoto, { photos: [] });
+    assert(dropped.status === 200 && (db.prepare('SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?').get(dropped.body?.post?.id) as { n: number }).n === 0
+        && photoRows(withPhoto) === 0, `7. "Edit first" may leave the member's photo out (${show(dropped)})`);
+    const fixId = crypto.randomUUID();
+    db.prepare(`INSERT INTO knowledge_drafts (id, kind, post_id, member_pubkey, via, title, body, topic, note, state, created_at)
+                VALUES (?, 'fix', ?, ?, 'app', 'A fix', 'Closed on Mondays now.', 'local-services', 'Closed on Mondays', 'waiting', ?)`)
+        .run(fixId, dropped.body?.post?.id, gus.pk, new Date().toISOString());
+    const pagesBeforeFix = knowledgePosts();
+    const fixYes = await approve(owen, fixId);
+    const fixNo = await no(owen, fixId);
+    assert(fixYes.status === 409 && fixYes.body?.code === 'not_yet' && fixNo.status === 409 && fixNo.body?.code === 'not_yet' && draftRow(fixId)?.state === 'waiting'
+        && knowledgePosts() === pagesBeforeFix,
+        `7. a fix (slice K5) is never answered as a new page here (${show(fixYes)})`);
+    db.prepare('DELETE FROM knowledge_drafts WHERE id = ?').run(fixId);
+
     // ── 8. Two answers at once ──────────────────────────────────────────────────────────────────
     console.log('── 8. two answers at once ──');
     clear();

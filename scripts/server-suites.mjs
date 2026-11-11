@@ -592,6 +592,7 @@ export const SUITES = [
     'test-credit-gift',
     'test-invite-asks',
     'test-names-copy',
+    'test-contact-copies',
     'test-balance-rule-boot',
     'test-escrow-disputes',
     'test-lendable-offers',

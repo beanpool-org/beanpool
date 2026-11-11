@@ -9,14 +9,16 @@
  *   DELETE /api/contacts/copy   → { deleted }: the signer's copy removed, with a tombstone
  *
  * Refusals, before anything is read or written: unsigned 401; a key that isn't an active member's here (a visitor, a
- * guest, a stranger, a suspended or removed member) 403 `not_member`; where the owners switched the community's copies
- * off, GET and PUT 404 `contacts_off` (a DELETE still removes the member's own); a standby's writes 409 `standby`
+ * guest, a stranger, a suspended or removed member) 403 `not_a_member`, the member gates' own code (engine/members.ts);
+ * where the owners switched the community's copies off, GET and PUT 404 `contacts_off` (a DELETE still removes the
+ * member's own); a standby's writes 409 `standby`
  * (routes/standby-ledger-gate.ts, and the engine's assertPlainTablesWritable), while a standby still answers a GET from
  * the copy it keeps. The body is capped at 1 MiB before it is read (https-server.ts ROUTE_BODY_LIMITS).
  */
 import Router from '@koa/router';
 import { word } from '@beanpool/core';
 import { getMember, isVisitorKey } from '../state-engine.js';
+import { NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { STANDBY_CODE } from '../config/node-role.js';
 import { ContactCopyError, deleteContactCopy, readContactCopyOf, saveContactCopy } from '../engine/contact-copies.js';
 
@@ -35,7 +37,7 @@ function member(ctx: any): string | null {
     const key = actor.toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(key)) { answer(ctx, 400, 'The key that signed this request must be 64 hexadecimal characters.', 'bad_key'); return null; }
     const m = getMember(key);
-    if (!m || m.status !== 'active' || isVisitorKey(key)) { answer(ctx, 403, NOT_MEMBER, 'not_member'); return null; }
+    if (!m || m.status !== 'active' || isVisitorKey(key)) { answer(ctx, 403, NOT_MEMBER, NOT_A_MEMBER_CODE); return null; }
     return key;
 }
 

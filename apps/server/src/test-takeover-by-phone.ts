@@ -45,9 +45,8 @@ import { fixtureWords } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Main-Server-Pw-907!';
-const PW_STANDBY = 'Standby-Own-Pw-318!';
-const PW_FRESH = 'Fresh-Server-Pw-771!';
+/** What an older install's admin password looked like, the community's: no credential now (7). */
+const OLD_PW_MAIN = 'Main-Server-Pw-907!';
 const TUNNEL_TOKEN = 'eyJ0dW5uZWwiOiJwaG9uZXRvd24ifQ.' + crypto.randomBytes(12).toString('hex');
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -198,8 +197,8 @@ async function main(): Promise<void> {
         console.log('\n— 2. "Take over with an owner\'s phone" on the standby —');
         const noAuth = await post(standby.base, '/api/local/admin/takeover/phone/start', {});
         assert(noAuth.status === 401, `without the standby's admin sign-in → 401 (${noAuth.status})`);
-        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
-        // standby makes (takeover-test-harness.ts owner-session).
+        // The take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session): the
+        // node has no admin password.
         const standbyOwner: Record<string, string> = await standby.send('owner-session');
         const started = await post(standby.base, '/api/local/admin/takeover/phone/start', { serverUrl: standby.base }, standbyOwner);
         assert(started.status === 200 && started.body.qr.startsWith('beanpool-unlock:v1?') && started.body.link.startsWith('beanpool://unlock-keys?'),
@@ -407,9 +406,10 @@ async function main(): Promise<void> {
         let fresh = await spawnNode(SCRIPT, dirs.fresh, { NODE_ROLE: 'primary' });
         nodes.push(fresh);
         assert(fresh.ready.peerId !== mainPeerId, 'a fresh server, with its own PeerId');
-        // Step 7c: the operator restores with the fresh server's password and a code (2FA on), not the password alone.
+        // The operator restores as the fresh server's own owner (as one who claimed it), with their key session.
+        const freshOwner: Record<string, string> = await fresh.send('owner-session');
         const upload = async (headers: Record<string, string>) => fetch(fresh.base + '/api/local/admin/restore', {
-            method: 'POST', headers: { 'Content-Type': 'application/octet-stream', ...(await fresh.send('password-and-code', { password: PW_FRESH })), ...headers }, body: backupBytes,
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream', ...freshOwner, ...headers }, body: backupBytes,
         }).then(async (r) => ({ status: r.status, body: await r.json() as any }));
         const inspect = await upload({});
         assert(inspect.status === 400 && inspect.body.ownerPhoneCanOpen === true && /owner's phone/.test(inspect.body.error),
@@ -424,8 +424,8 @@ async function main(): Promise<void> {
         const restored = await send(annaRestore.qr, annaRestore.request);
         assert(restored.status === 200 && restored.body.success && restored.body.purpose === 'restore',
             `@Anna's phone (native raw seed) opens it and the server restores (${restored.status} ${JSON.stringify(restored.body)})`);
-        const ownPwNow = await post(fresh.base, '/api/local/admin/restore/phone/wait', { sessionId: kept.body.phone.sessionId }, pw(PW_FRESH));
-        assert(ownPwNow.status !== 200, `a password sign-in cannot follow it: the database is closed for the restart (${ownPwNow.status})`);
+        const ownSessionNow = await post(fresh.base, '/api/local/admin/restore/phone/wait', { sessionId: kept.body.phone.sessionId }, freshOwner);
+        assert(ownSessionNow.status !== 200, `the fresh server's own sign-in cannot follow it: the database is closed for the restart (${ownSessionNow.status})`);
         const waitRestore = await post(fresh.base, '/api/local/admin/restore/phone/wait', { sessionId: kept.body.phone.sessionId },
             { 'X-Unlock-Follow': kept.body.phone.followToken });
         assert(waitRestore.body.state === 'restored' && waitRestore.body.unlockedBy === '@Anna' && waitRestore.body.result.restoredKeys === true,
@@ -440,14 +440,15 @@ async function main(): Promise<void> {
         assert(fresh.ready.peerId === mainPeerId, `after its restart it is the community's server: the same PeerId (${fresh.ready.peerId})`);
         assert((restoredState.roles as any[]).some((r) => r.member_pubkey === setup.anna && r.role === 'owner') && restoredState.keySignIn.solved,
             "@Anna is its owner and her key signs in");
-        // Step 7c: with 2FA off the community's password alone is refused as needing 2FA, not as a wrong one; with a code it works.
-        const communityPwAlone = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
-        assert(communityPwAlone.status === 403 && communityPwAlone.body?.code === 'password_needs_2fa',
-            `the community's admin password alone is refused as needing 2FA (${communityPwAlone.status} ${communityPwAlone.body?.code})`);
-        const communityPw = await post(fresh.base, '/api/local/admin/takeover/progress', {}, await fresh.send('password-and-code', { password: PW_MAIN }));
-        assert(communityPw.status === 200, "the community's admin password works on it");
-        const freshPw = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(PW_FRESH));
-        assert(freshPw.status === 401, "and the fresh server's own no longer does: why the screen follows the restore with its token");
+        // No admin password comes with a restore (the node has none): the community's old one opens nothing; its owner's key
+        // session does.
+        const communityPwAlone = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(OLD_PW_MAIN));
+        assert(communityPwAlone.status === 401 && communityPwAlone.body?.notSignedIn === true,
+            `the community's old admin password opens nothing on it (${communityPwAlone.status} ${JSON.stringify(communityPwAlone.body)?.slice(0, 120)})`);
+        const communityOwner = await post(fresh.base, '/api/local/admin/takeover/progress', {}, await fresh.send('owner-session', { owner: setup.anna }));
+        assert(communityOwner.status === 200, "the community's owner's key session works on it");
+        const freshOwnerNow = await post(fresh.base, '/api/local/admin/takeover/progress', {}, freshOwner);
+        assert(freshOwnerNow.status === 401, "and the fresh server's own sign-in no longer does: why the screen follows the restore with its token");
         const restoredKey = path.join(dirs.fresh, SEAL_KEY);
         assert(fs.readFileSync(restoredKey).equals(mainSealKey) && (fs.statSync(restoredKey).mode & 0o777) === 0o600,
             "S2: the sealed backup brought the community's recovery-seal key, byte for byte, 0600");

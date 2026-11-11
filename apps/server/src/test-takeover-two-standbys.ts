@@ -38,9 +38,8 @@ import { spawnNode, post, copyDir, runNodeChild, type NodeProc } from './takeove
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Main-Server-Pw-404!';
-const PW_A = 'Standby-A-Pw-731!';
-const PW_B = 'Standby-B-Pw-862!';
+/** What an older install's admin password looked like: no credential now. */
+const OLD_PW = 'Main-Server-Pw-404!';
 const EPOCH_PATH = '/api/node/identity-epoch';
 
 async function child(): Promise<void> {
@@ -132,8 +131,8 @@ async function webAddress(): Promise<{ url: string; leadTo: (base: string | null
     };
 }
 
-// Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the node
-// makes (takeover-test-harness.ts owner-session).
+// The take-over goes under an owner's key session the node makes (takeover-test-harness.ts owner-session): the node has no
+// admin password.
 async function openKeys(node: NodeProc, code: string): Promise<{ status: number; body: any }> {
     return post(node.base, '/api/local/admin/takeover/open', { code }, await node.send('owner-session'));
 }
@@ -254,13 +253,12 @@ async function main(): Promise<void> {
         assert(bWrite.status === 503 && bWrite.body.readOnly === true && bWrite.body.conflict === true
             && /^Another server took over this community with the same keys on .+, before this server did \(.+\)\. This server is now read-only\./.test(bWrite.body.error),
         `B' refuses a member's write, saying why (${bWrite.status} ${bWrite.body.error})`);
-        // After a take-over, Settings answers the community's admin password (the main server's), not the standby's own.
-        // Step 7c: with 2FA off that password alone opens no admin route (refused as needing 2FA, not as a wrong one); with
-        // 2FA on, it and a code do.
-        const bPwAlone = await post(b2.base, '/api/local/admin/takeover/progress', {}, { 'X-Admin-Password': PW_MAIN });
-        assert(bPwAlone.status === 403 && bPwAlone.body?.code === 'password_needs_2fa',
-            `the community's admin password alone is refused as needing 2FA (${bPwAlone.status} ${bPwAlone.body?.code})`);
-        const bProg = await post(b2.base, '/api/local/admin/takeover/progress', {}, await b2.send('password-and-code', { password: PW_MAIN }));
+        // A take-over brings no admin password with it (the node has none): an old one opens nothing on B'; an owner's key
+        // session reads Settings there.
+        const bPwAlone = await post(b2.base, '/api/local/admin/takeover/progress', {}, { 'X-Admin-Password': OLD_PW });
+        assert(bPwAlone.status === 401 && bPwAlone.body?.notSignedIn === true,
+            `an old admin password opens nothing on B' (${bPwAlone.status} ${JSON.stringify(bPwAlone.body)?.slice(0, 120)})`);
+        const bProg = await post(b2.base, '/api/local/admin/takeover/progress', {}, await b2.send('owner-session'));
         assert(bProg.status === 200 && bProg.body.replaced?.conflict === true && /before this server did/.test(bProg.body.replaced.message),
             `Settings on B' (its admin control plane stays open) says so (${bProg.body.replaced?.message})`);
         assert(/\[Split-brain\] 🛑 Another server took over this community with the same keys/.test(b2.output()), "and so does B''s log");

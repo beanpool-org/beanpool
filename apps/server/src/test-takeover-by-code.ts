@@ -13,7 +13,7 @@
  *     standby copies the envelope sealed without it.
  *  2. The main server is killed.
  *  3. On the standby: a typo and a code of the wrong number are answered at once and cost nothing; six wrong codes
- *     brake the source even though every request carries the standby's admin password; the seventh, the RIGHT
+ *     brake the source even though every request carries an owner's key session; the seventh, the RIGHT
  *     code, is refused while braked; after the wait it opens.
  *  4. The preview: the main server's PeerId, the owner, the admin, the link, the web address, the tunnel token
  *     from the OLDER envelope, "the main server does not answer", and what will be missing. A community with a name
@@ -21,7 +21,8 @@
  *  5. Confirm → the journaled promotion → the process restarts itself → started again (NODE_ROLE=backup still in its
  *     environment, as a redeploy with the standby's old .env would be).
  *  6. After: the SAME PeerId; the roles; @Anna's key sign-in works; the link with the other community is back and
- *     the mirror pin gone; the community's admin password works and the standby's own does not; the conservation
+ *     the mirror pin gone; no admin password opens anything (the node has none: neither the standby's own old one
+ *     nor the community's), and the community's owner's key session does; the conservation
  *     audit ran exactly once across every start; the tunnel token is back; the keys are re-sealed on this server
  *     to @Anna and the code; the used-code notice shows; the held envelopes and the opened keys are gone.
  *  7. A third server, pinned to the main server's PeerId, copies from the promoted standby: it accepts the sync
@@ -56,9 +57,9 @@ import { fixtureWords, GOOGLE_SUB } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Main-Server-Pw-907!';
-const PW_STANDBY = 'Standby-Own-Pw-318!';
-const PW_THIRD = 'Third-Server-Pw-552!';
+/** What an older install's admin passwords looked like, the community's and the standby's own: no credential now (6). */
+const OLD_PW_MAIN = 'Main-Server-Pw-907!';
+const OLD_PW_STANDBY = 'Standby-Own-Pw-318!';
 const TUNNEL_TOKEN = 'eyJ0dW5uZWwiOiJ0ZXN0dG93biJ9.' + crypto.randomBytes(12).toString('hex');
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -251,12 +252,12 @@ async function main(): Promise<void> {
 
         // ── 3. Codes: typos, the wrong number, the brake ──
         console.log('\n— 3. typing the code —');
-        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
-        // standby makes (takeover-test-harness.ts owner-session).
+        // The take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session): the
+        // node has no admin password.
         const standbyOwner: Record<string, string> = await standby.send('owner-session');
         const open = (code: string) => post(standby.base, '/api/local/admin/takeover/open', { code }, standbyOwner);
         const noAuth = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code });
-        assert(noAuth.status === 401, `no admin password → 401 (${noAuth.status})`);
+        assert(noAuth.status === 401, `no credential → 401 (${noAuth.status})`);
         const typo = await open(setup.code.slice(0, -1) + (setup.code.endsWith('A') ? 'B' : 'A'));
         assert(typo.status === 400 && typo.body.typo === true, `a typo is caught by the check characters at once (${typo.status} ${typo.body.error})`);
         const nine = (await core.createRecoveryCode(9)).code;
@@ -271,7 +272,7 @@ async function main(): Promise<void> {
         assert(wrongCodes.every((s) => s === 403), `six wrong codes (well formed, #1) are each refused 403 (${wrongCodes.join(',')})`);
         const braked = await open(setup.code);
         assert(braked.status === 429 && braked.body.passwordBackoff === true && braked.body.retryAfter >= 1,
-            `the seventh try, with the RIGHT code, is braked (429, retry after ${braked.body.retryAfter}s) although each request carried the standby's admin password`);
+            `the seventh try, with the RIGHT code, is braked (429, retry after ${braked.body.retryAfter}s) although each request carried an owner's key session`);
         await sleep(braked.body.retryAfter * 1000 + 300);
 
         // ── 4. The preview ──
@@ -324,15 +325,15 @@ async function main(): Promise<void> {
         const prog = await post(standby.base, '/api/local/admin/takeover/progress', {}, { 'X-Takeover-Progress': progressToken });
         assert(prog.status === 200 && prog.body.state === 'complete' && prog.body.steps.every((s: any) => s.done),
             `the progress token follows the take-over across the restart: complete, every step done (${prog.body.state})`);
-        const ownPw = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_STANDBY));
-        assert(ownPw.status === 401, "the standby's own admin password no longer works");
-        // Step 7c: with 2FA off the community's password alone opens no admin route (refused as needing 2FA, not as a
-        // wrong password); with 2FA on, it and a code read the progress.
-        const communityPwAlone = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
-        assert(communityPwAlone.status === 403 && communityPwAlone.body?.code === 'password_needs_2fa',
-            `the community's admin password alone is refused as needing 2FA (${communityPwAlone.status} ${communityPwAlone.body?.code})`);
-        const communityPw = await post(standby.base, '/api/local/admin/takeover/progress', {}, await standby.send('password-and-code', { password: PW_MAIN }));
-        assert(communityPw.status === 200 && communityPw.body.authorisedBy === 'recovery code #1', "the community's admin password does");
+        // No admin password comes with a take-over (the node has none): neither the standby's own old one nor the
+        // community's opens anything; the community's owner, @Anna, reads the progress with her key session.
+        const ownPw = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(OLD_PW_STANDBY));
+        assert(ownPw.status === 401, "the standby's own old admin password does not work");
+        const communityPwAlone = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(OLD_PW_MAIN));
+        assert(communityPwAlone.status === 401 && communityPwAlone.body?.notSignedIn === true,
+            `nor does the community's old admin password: no credential (${communityPwAlone.status} ${JSON.stringify(communityPwAlone.body)?.slice(0, 120)})`);
+        const asAnna = await post(standby.base, '/api/local/admin/takeover/progress', {}, await standby.send('owner-session', { owner: setup.anna }));
+        assert(asAnna.status === 200 && asAnna.body.authorisedBy === 'recovery code #1', "the community's owner's key session does");
 
         const after = await standby.send('inspect', { ownerSeedHex });
         const roles = after.roles as { member_pubkey: string; role: string }[];
@@ -400,7 +401,7 @@ async function main(): Promise<void> {
         // ── 7. A third server trusts the promoted one ──
         console.log('\n— 7. a third server, pinned to the old main server\'s PeerId —');
         const token2 = await post(standby.base, '/api/local/admin/replication-token/generate', {}, await standby.send('owner-session'));
-        assert(token2.status === 200 && token2.body.token, 'the promoted server makes a replication token (the community\'s password)');
+        assert(token2.status === 200 && token2.body.token, 'the promoted server makes a replication token (an owner\'s key session)');
         const third = await spawnNode(SCRIPT, dirs.third, { NODE_ROLE: 'backup' });
         nodes.push(third);
         await third.send('setup-standby', { primaryUrl: standby.base, replicationToken: token2.body.token, primaryPeerId: mainPeerId });

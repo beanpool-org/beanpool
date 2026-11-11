@@ -4,14 +4,15 @@
  * Design: scratch/overnight/design/sealed-keys.md §2.1, §2.6, §4, §9 and the slice 2 row of §10.
  *
  *  1. No owner and no code → no envelope on disk, and every status says why, in words.
- *  2. Granting an owner seals; the owner opens it and finds the node key, community key, admin hash and roles.
+ *  2. Granting an owner seals; the owner opens it and finds the node key, community key and roles, and no admin hash: the
+ *     node has no admin password, and an older install's leftover hash in local-config.json is never sealed.
  *  3. Grant, revoke, disable and prune each yield a NEW envelopeId and the right recipient set, through the
  *     chokepoint's debounced check alone (the periodic check is parked for these).
  *  4. A removed owner cannot open the NEW envelope.
  *  5. A raw-SQL `DELETE FROM node_roles` (no chokepoint) is caught by the periodic consistency check.
  *  6. The recovery code is returned once, is absent from disk, config and logs (grepped in the data dir and the
  *     captured console), opens the envelope, and a rotation locks the old code out of the new envelope.
- *  7. Check-code: true, false, typo (400, before the brake), and the password brake.
+ *  7. Check-code: true, false, typo (400, before the brake), and the brake on wrong guesses (password-brake.ts).
  *  8. The replication token gets the sealed envelope with an ETag, a 304 on If-None-Match, and never a plaintext
  *     field; it cannot reach the status or code routes; a public-address change re-seals.
  *  9. Owner-only: an admin's key session cannot make or check a code.
@@ -75,15 +76,16 @@ async function main() {
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
     const svc = await import('./services/takeover-envelope.js');
     const core = await import('@beanpool/core');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
 
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const adminPass = 'TakeoverEnvelope-Secret-123!';
+    // An older install's admin password hash and salt, as its local-config.json may still hold them: nothing reads them,
+    // and no envelope seals them (2, 8, 10).
+    const oldPass = 'TakeoverEnvelope-Secret-123!';
     const salt = crypto.randomBytes(16).toString('hex');
-    const adminHash = crypto.scryptSync(adminPass, salt, 64).toString('hex');
-    updateLocalConfig({ adminHash, salt });
+    const adminHash = crypto.scryptSync(oldPass, salt, 64).toString('hex');
+    updateLocalConfig({ adminHash, salt } as any);
     const repToken = 'rep-token-takeover-777';
     setReplicationToken(repToken);
 
@@ -109,11 +111,19 @@ async function main() {
         await layer.stack[layer.stack.length - 1](ctx, async () => {});
         return { status: ctx.status, body: ctx.body, headers: out };
     }
-    // Sign-in step 7c: with 2FA off the password alone opens no admin route, so the suite runs with 2FA on and sends the
-    // password with a fresh code (lower-case names: call() reads them so). Not an owner credential: section 1 has no owner.
-    const tfa = turnOn2faForTests(adminPass);
-    const admin = (): Record<string, string> => ({ 'x-admin-password': adminPass, 'x-admin-totp': tfa.code() });
-    const passwordOnly = { 'x-admin-password': adminPass };
+    /**
+     * A key session for `w`, as a key sign-in opens one (lower-case header: call() reads it so). phone: the session the
+     * phone's Manage hand-off opens, just now (its 15-minute idle limit), which an owner's fresh proof takes; not a computer's.
+     */
+    const keySession = (w: Who, phone = false): Record<string, string> => {
+        const chal = createAdminChallenge();
+        const signature = Buffer.from(ed25519.sign(Buffer.from(chal.challenge, 'utf-8'), w.seed)).toString('hex');
+        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: w.pub, signature });
+        if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
+        const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
+        if (!ex.ok) throw new Error('handshake failed: ' + ex.error);
+        return { 'x-admin-session': ex.sessionId! };
+    };
 
     const stored = () => {
         const p = path.join(dataDir!, svc.TAKEOVER_ENVELOPE_FILE);
@@ -132,6 +142,12 @@ async function main() {
         db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(w.pub);
     }
 
+    // Nobody signs in with a password: with no owner yet, section 1 reads the status as an admin, Ada (an admin is never a
+    // recipient, 3).
+    const ada = member('Ada');
+    addMember(ada);
+    grantNodeRole(ada.pub, 'admin', 'SYSTEM');
+
     // ── 1. Nobody to seal to ──
     console.log('\n— 1. no owner, no code —');
     // The periodic check is parked (an hour) until section 5, so every re-seal before then is a chokepoint's.
@@ -139,7 +155,7 @@ async function main() {
     assert(boot.state === 'no-recipients', `1. boot with no owner and no code reports no-recipients (got ${boot.state})`);
     assert(/no owner and no recovery code/.test(boot.message), `1. …and says why in words: "${boot.message}"`);
     assert(stored() === null, '1. no envelope file on disk');
-    const st1 = await call('POST', '/api/local/admin/takeover/status', { headers: admin() });
+    const st1 = await call('POST', '/api/local/admin/takeover/status', { headers: keySession(ada) });
     assert(st1.status === 200 && st1.body.state === 'no-recipients' && st1.body.envelopeId === null, '1. the status route says the same');
     const tok1 = await call('GET', '/api/local/admin/takeover-envelope', { headers: { 'x-replication-token': repToken } });
     assert(tok1.status === 404 && tok1.body.state === 'no-recipients' && /nobody to lock/.test(tok1.body.error), `1. the token gets 404 with the reason (got ${tok1.status})`);
@@ -165,7 +181,8 @@ async function main() {
         "2. …and data/recovery-seal.key, byte for byte (S2: the key that opens members' sign-in recovery copies)");
     assert(stored().carriesRecoverySealKey === true && !JSON.stringify(stored()).replace(stored().envelope, '').includes(sealKeyBytes.toString('base64')),
         '2. the file on disk records that it carries it, and holds the key only inside the sealed bytes');
-    assert(bundle.localConfig.adminHash === adminHash && bundle.localConfig.salt === salt, '2. …and the admin hash and salt');
+    assert(!('adminHash' in bundle.localConfig) && !('salt' in bundle.localConfig) && !JSON.stringify(bundle).includes(adminHash) && !JSON.stringify(bundle).includes(salt),
+        "2. …and no admin hash or salt: the node has none, and an older install's leftover is never sealed"); 
     assert(bundle.nodeRoles.some((r: any) => r.member_pubkey === anna.pub && r.role === 'owner'), '2. …and the node_roles rows');
     assert(!('replicationTokenHash' in bundle.localConfig) && !JSON.stringify(bundle).includes(getLocalConfig().replicationTokenHash!), '2. …and not the replication token hash');
     const genesis = JSON.parse(fs.readFileSync(path.join(dataDir!, 'genesis.json'), 'utf-8'));
@@ -249,12 +266,12 @@ async function main() {
     (process.stderr as any).write = (c: any, ...r: any[]) => { captured.push(String(c)); return true; };
     let made: any;
     try {
-        made = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin() });
+        made = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: keySession(anna) });
     } finally {
         Object.assign(console, { log: orig.log, warn: orig.warn, error: orig.error, info: orig.info });
         (process.stdout as any).write = orig.write; (process.stderr as any).write = orig.ewrite;
     }
-    assert(made.status === 200 && typeof made.body.code === 'string' && made.body.codeId === 1, `6. an owner (password) makes code #1 (got ${made.status})`);
+    assert(made.status === 200 && typeof made.body.code === 'string' && made.body.codeId === 1, `6. an owner (her key session) makes code #1 (got ${made.status})`);
     assert(made.headers['cache-control'] === 'no-store', '6. the response is no-store');
     const code1: string = made.body.code;
     assert(/^BPRC-1 {2}([0-9A-Z]{4}-){6}[0-9A-Z]{4}$/.test(code1), '6. it is a printed-form code');
@@ -290,9 +307,10 @@ async function main() {
     assert(!needles.some((n) => logText.includes(n)), '6. the system log does not hold it');
     assert(captured.length > 0 && !needles.some((n) => captured.join('\n').includes(n)), `6. nothing written to the console while making it holds it (${captured.length} lines captured)`);
 
-    const dup = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin() });
+    const dup = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: keySession(anna) });
     assert(dup.status === 409 && dup.body.needsReplace === true && !('code' in dup.body), '6. making another without replace: true is refused, 409');
-    const rotated = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin(), body: { replace: true } });
+    // Replacing it asks the owner's fresh proof (9): the phone's Manage, just pressed.
+    const rotated = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: keySession(anna, true), body: { replace: true } });
     assert(rotated.status === 200 && rotated.body.codeId === 2 && rotated.body.replacedCodeId === 1, '6. replace: true makes code #2');
     const code2: string = rotated.body.code;
     assert(!!(await opens(envelopeBytes(), { type: 'code', code: code2 })), '6. code #2 opens the new envelope');
@@ -300,39 +318,29 @@ async function main() {
     assert(ownersIn(headerNow()).length === 1 && headerNow().recipients.filter((r: any) => r.type === 'code').length === 1, '6. sealed to one owner and one code only');
 
     // ── 7. Check the code ──
-    // phone: the session the phone's Manage hand-off opens (its 15-minute idle limit), not a computer's.
-    const keySession = (w: Who, phone = false): string => {
-        const chal = createAdminChallenge();
-        const signature = Buffer.from(ed25519.sign(Buffer.from(chal.challenge, 'utf-8'), w.seed)).toString('hex');
-        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: w.pub, signature });
-        if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
-        const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
-        if (!ex.ok) throw new Error('handshake failed: ' + ex.error);
-        return ex.sessionId!;
-    };
     console.log('\n— 7. check-code —');
     resetPasswordBrake();
-    const c1 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: code2 } });
+    const annaSession = keySession(anna);
+    const c1 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: code2 } });
     assert(c1.status === 200 && c1.body.matches === true && c1.body.codeId === 2, '7. the current code → true');
-    const c2 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: code1 } });
+    const c2 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: code1 } });
     assert(c2.status === 200 && c2.body.matches === false, '7. the replaced code → false');
     const other = (await core.createRecoveryCode(2)).code; // right number, different code: runs scrypt
-    const c3 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: other } });
+    const c3 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: other } });
     assert(c3.status === 200 && c3.body.matches === false, '7. a well-formed wrong code → false');
     const chars = code2.split('');
     const i = chars.length - 3;
     chars[i] = chars[i] === 'A' ? 'B' : 'A';
-    const c4 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: chars.join('') } });
+    const c4 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: chars.join('') } });
     assert(c4.status === 400 && c4.body.typo === true, '7. a typo is a 400 with typo: true');
     // The brake: SOURCE_FREE_FAILURES (5) wrong guesses are free, the next closes this source for a while. Under an
-    // owner's key session (under the password, each right password clears the source's record, as it always has).
+    // owner's key session.
     resetPasswordBrake();
-    const annaSession = keySession(anna);
     for (let k = 0; k < 6; k++) {
-        const r = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: { 'x-admin-session': annaSession }, body: { code: other }, keepBrake: true });
+        const r = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: other }, keepBrake: true });
         if (r.status !== 200 || r.body.matches !== false) throw new Error(`wrong-code check ${k} answered ${r.status}`);
     }
-    const braked = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: { 'x-admin-session': annaSession }, body: { code: code2 }, keepBrake: true });
+    const braked = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: annaSession, body: { code: code2 }, keepBrake: true });
     assert(braked.status === 429 && braked.body.passwordBackoff === true, `7. after 6 wrong codes the source is braked, even for the right one (got ${braked.status})`);
     resetPasswordBrake();
 
@@ -369,8 +377,8 @@ async function main() {
     assert(tBad.status === 401, '8. a wrong token → 401');
     const tNone = await call('GET', '/api/local/admin/takeover-envelope');
     assert(tNone.status === 401, '8. no credentials → 401');
-    const tAdmin = await call('GET', '/api/local/admin/takeover-envelope', { headers: admin() });
-    assert(tAdmin.status === 200 && Buffer.isBuffer(tAdmin.body), '8. the admin password gets it too');
+    const tAdmin = await call('GET', '/api/local/admin/takeover-envelope', { headers: keySession(anna) });
+    assert(tAdmin.status === 200 && Buffer.isBuffer(tAdmin.body), "8. an owner's key session gets it too");
     for (const [m, p, b] of [
         ['POST', '/api/local/admin/takeover/status', {}],
         ['POST', '/api/local/admin/takeover/recovery-code', { replace: true }],
@@ -385,43 +393,20 @@ async function main() {
     // ── 9. Owner-only code routes ──
     console.log('\n— 9. owner only —');
     const moSession = keySession(mo);
-    const moMake = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: { 'x-admin-session': moSession }, body: { replace: true } });
+    const moMake = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: moSession, body: { replace: true } });
     assert(moMake.status === 403 && !moMake.body?.code, `9. an admin's key session cannot make a code (got ${moMake.status})`);
-    const moCheck = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: { 'x-admin-session': moSession }, body: { code: code2 } });
+    const moCheck = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: moSession, body: { code: code2 } });
     assert(moCheck.status === 403, '9. …nor check one');
-    const moStatus = await call('POST', '/api/local/admin/takeover/status', { headers: { 'x-admin-session': moSession } });
+    const moStatus = await call('POST', '/api/local/admin/takeover/status', { headers: moSession });
     assert(moStatus.status === 200 && moStatus.body.state === 'sealed', '9. an admin may read the status');
     // Replacing the code asks the owner's fresh proof (design case 18, A11): a computer's session is sent to the phone; the
     // phone's Manage, just pressed, replaces it.
-    const annaComputer = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: { 'x-admin-session': keySession(anna) }, body: { replace: true } });
+    const annaComputer = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: keySession(anna), body: { replace: true } });
     assert(annaComputer.status === 403 && annaComputer.body?.code === 'phone_required' && !annaComputer.body?.codeId,
         `9. an owner's computer session is sent to the phone to replace the code (got ${annaComputer.status})`);
-    const annaMake = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: { 'x-admin-session': keySession(anna, true) }, body: { replace: true } });
+    const annaMake = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: keySession(anna, true), body: { replace: true } });
     assert(annaMake.status === 200 && annaMake.body.codeId === 3, "9. an owner's key session from the phone, just unlocked, makes code #3");
     assert(JSON.stringify(annaMake.body.status).indexOf(annaMake.body.code) === -1, '9. the status in that response does not repeat the code');
-    // With 2FA on, the password alone reaches none of the admin routes here (checkAdminAuth); the token is unaffected.
-    const { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } = await import('./totp.js');
-    const totpSecret = generateTotpSecret();
-    updateLocalConfig({ totpEnabled: true, totpSecret });
-    forgetUsedTotpCodesForTests(); // the suite's own 2FA used a code this step; the kept step (AUTH-07) is not per secret
-    await svc.flushTakeoverChecks(); // the 2FA secret is in the bundle: this re-seals
-    for (const p of ['/api/local/admin/takeover/status', '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check']) {
-        const r = await call('POST', p, { headers: passwordOnly, body: { replace: true, code: 'x' } });
-        assert(r.status === 401 && r.body?.totpRequired === true, `9. 2FA on: the password alone is refused on ${p}`);
-    }
-    const with2fa = await call('POST', '/api/local/admin/takeover/status', { headers: { ...passwordOnly, 'x-admin-totp': generateTotpCode(totpSecret) } });
-    assert(with2fa.status === 200 && with2fa.body.state === 'sealed', '9. 2FA on: password + code reads the status');
-    const opened2fa = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
-    assert(opened2fa.localConfig.totpEnabled === true && opened2fa.localConfig.totpSecret === totpSecret, '9. turning 2FA on re-sealed with the 2FA secret inside');
-    const tok2fa = await call('GET', '/api/local/admin/takeover-envelope', { headers: { 'x-replication-token': repToken } });
-    assert(tok2fa.status === 200 && !Buffer.from(tok2fa.body).toString('latin1').includes(totpSecret), '9. 2FA on: the token still gets the envelope, and not the 2FA secret');
-    updateLocalConfig({ totpEnabled: false, totpSecret: null });
-    // Sign-in step 7c: with 2FA off the password alone is refused too (403 password_needs_2fa).
-    for (const p of ['/api/local/admin/takeover/status', '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check']) {
-        const r = await call('POST', p, { headers: passwordOnly, body: { replace: true, code: 'x' } });
-        assert(r.status === 403 && r.body?.code === 'password_needs_2fa', `9. 2FA off: the password alone is refused on ${p} (got ${r.status})`);
-    }
-    updateLocalConfig({ totpEnabled: true, totpSecret: tfa.secret }); // the suite's 2FA again, for the password calls below
 
     // ── 10. The owner header route, over real HTTPS ──
     console.log('\n— 10. owner header fetch (real HTTPS) —');
@@ -489,7 +474,7 @@ async function main() {
     console.log('\n— 13. standby —');
     const recordBefore = JSON.stringify((getLocalConfig() as any).recoveryCode);
     await svc.startTakeoverEnvelopeService({ standby: true, checkIntervalMs: 3_600_000 });
-    const onStandby = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin(), body: { replace: true } });
+    const onStandby = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: keySession(anna, true), body: { replace: true } });
     assert(onStandby.status === 409 && onStandby.body.standby === true && !onStandby.body.code, `13. making a code on a standby → 409, no code (got ${onStandby.status})`);
     assert(/main server/.test(onStandby.body.error || ''), `13. …and says where to make it: "${onStandby.body.error}"`);
     assert(JSON.stringify((getLocalConfig() as any).recoveryCode) === recordBefore, '13. …and the stored record is unchanged');
@@ -499,7 +484,7 @@ async function main() {
     console.log('\n— 14. the recovery-seal key —');
     const keyNeedles = [sealKeyBytes.toString('base64'), sealKeyBytes.toString('hex'), sealKeyBytes.toString('base64url')];
     const noKeyIn = (text: string) => !keyNeedles.some((n) => text.includes(n));
-    const st14 = await call('POST', '/api/local/admin/takeover/status', { headers: admin() });
+    const st14 = await call('POST', '/api/local/admin/takeover/status', { headers: keySession(anna) });
     assert(st14.status === 200 && st14.body.recoverySealKey?.carried === true
         && st14.body.recoverySealKey.message === "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them.",
         `14. the status says the envelope carries the key, in words (${JSON.stringify(st14.body.recoverySealKey)})`);
@@ -511,7 +496,7 @@ async function main() {
     const openedGone = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
     assert(gone.state === 'sealed' && stored().envelopeId !== withKey && openedGone.files['recovery-seal.key'] === null && stored().carriesRecoverySealKey === false,
         '14. the key file gone: the envelope is re-sealed without it');
-    const stGone = await call('POST', '/api/local/admin/takeover/status', { headers: admin() });
+    const stGone = await call('POST', '/api/local/admin/takeover/status', { headers: keySession(anna) });
     assert(stGone.body.recoverySealKey?.carried === false && /do not carry the key .*this server.s data\/recovery-seal\.key is missing or is not a key\./.test(stGone.body.recoverySealKey.message)
         && /12 words still work/.test(stGone.body.recoverySealKey.message),
         `14. …and the status says so, and what it means (${stGone.body.recoverySealKey?.message})`);

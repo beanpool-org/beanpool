@@ -3,7 +3,7 @@
  * scratch/global-node/DESIGN-standby-takeover-gaps-opus.md; config/community-settings.ts).
  *
  * Every node is its own process with its own data dir (takeover-test-harness.ts) serving its real HTTPS server; the admin
- * acts through it with the password. The standby pulls through its real puller (services/backup-puller.ts `pullNow`) from
+ * acts through it with an owner's key session. The standby pulls through its real puller (services/backup-puller.ts `pullNow`) from
  * the main server's real backup routes, through a door here that can serve the next copy it asks for from a payload the
  * main server signed; it takes over through the real routes and restarts itself. Nothing leaves this machine: the
  * directory the promoted server publishes to is a door here too.
@@ -25,12 +25,12 @@
  *     a main server, and its ledger audit holds the ledger to M's baseline; installed once: a later change on S2 stays.
  *     Before that, an install whose write of local-config.json fails (a full disk) stops with nothing of it applied or
  *     marked installed, so that first boot installs it.
- *  5. A record signed by M that names settings of one server (the admin password, the replication token and main
- *     server, the role, the identity epoch, the web address, the importer's format, an avatar key, a profile switch, an
+ *  5. A record signed by M that names settings of one server (an old admin password's hash and two-factor secret, the
+ *     replication token and main server, the role, the identity epoch, the web address, the importer's format, an avatar key, a profile switch, an
  *     admin IP allowlist) and a value the standby can't take: kept without any of them, and S's own settings unchanged.
  *  6. M is killed; S takes over with the recovery code. The preview no longer says the settings will be missing. After
  *     the restart every community setting is M's (the one with a value it couldn't take is S's own), and no setting of
- *     one server came from the record: the admin password is the community's, from the keys; the replication token,
+ *     one server came from the record: no admin password came from it or the keys (the node has none); the replication token,
  *     pull interval, avatar key and importer format are S's; the main server and its token are gone; the identity epoch
  *     is the bundle's plus one; the admin IP allowlist is S's own.
  *  7. The promotion audit ran on M's baseline: "the ledger adds up" (before, S's own baseline: "does NOT add up").
@@ -61,10 +61,6 @@ delete process.env.NODE_PROFILE;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed certificates
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Settings-Main-Pw-5520!';
-const PW_STANDBY = 'Settings-Standby-Pw-118!';
-const PW_STANDBY2 = 'Settings-Standby2-Pw-406!';
-const PW_STANDBY3 = 'Settings-Standby3-Pw-731!';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -224,12 +220,6 @@ async function child(): Promise<void> {
             const { armedSnapshotInterval } = await import('./services/snapshot-scheduler.js');
             return armedSnapshotInterval();
         },
-        /** Whether a password is this server's admin password now. */
-        'admin-password-is': async (a: { password: string }) => {
-            const { getLocalConfig, verifyPassword } = await import('./config/local-config.js');
-            const c = getLocalConfig();
-            return !!(c.adminHash && c.salt && verifyPassword(a.password, c.adminHash, c.salt));
-        },
         /** An old bug's drift, as a raw write, for the admin to accept as the audit baseline. `amount`: whole hundredths. */
         drift: async (a: { publicKey: string; amount: number }) => {
             const { db } = await import('./db/db.js');
@@ -321,7 +311,7 @@ interface Answer { status: number; body: any }
 
 /**
  * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
- * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ * The node has no admin password: `admin` is an owner's key session the node makes.
  */
 async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
@@ -444,7 +434,7 @@ async function main(): Promise<void> {
     const closers: (() => Promise<void>)[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string, extra: Record<string, string> = {}) => ({
+    const env = (role: string, extra: Record<string, string> = {}) => ({
         NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000', ...extra,
     });
     const gwen = newId('Gwen');
@@ -460,12 +450,12 @@ async function main(): Promise<void> {
         const quiet = await directoryRegistry();
         closers.push(quiet.close);
         const asMain = { DIRECTORY_REGISTRY_URL: quiet.url };
-        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary', asMain));
+        const main = await spawnNode(SCRIPT, dir('main'), env('primary', asMain));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        // Step 7c: the password alone opens no admin route with 2FA off: M's Settings calls go under an owner's key session
-        // M makes (takeover-test-harness.ts owner-session).
+        // M's Settings calls go under an owner's key session M makes (takeover-test-harness.ts owner-session), as an owner
+        // signs in.
         const mOwner: Record<string, string> = await main.send('owner-session');
         const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: mOwner, body });
         for (const who of [ann, bo]) {
@@ -513,7 +503,7 @@ async function main(): Promise<void> {
         console.log('\n— 2. a standby with settings of its own takes its first copy —');
         fs.mkdirSync(dir('standby'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        let standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         const door = await mainServerDoor(main.base);
         closers.push(door.close);
@@ -610,7 +600,7 @@ async function main(): Promise<void> {
         console.log('\n— 4. a standby promoted by hand installs the settings at its first boot as a main server —');
         fs.mkdirSync(dir('standby2'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby2'), 'genesis.json'));
-        let standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'backup'));
+        let standby2 = await spawnNode(SCRIPT, dir('standby2'), env('backup'));
         nodes.push(standby2);
         await standby2.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         await standby2.send('set-own', {
@@ -627,7 +617,7 @@ async function main(): Promise<void> {
             `an install whose write of local-config.json fails (a full disk) stops: not marked installed, nothing of it applied (${j({ threw: failed.threw, installedAt: failed.kept?.installedAt, applied: first(differing(s2Own, communitySettings(failed))) })})`);
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
-        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary', asMain));
+        standby2 = await spawnNode(SCRIPT, dir('standby2'), env('primary', asMain));
         nodes.push(standby2);
         require_(standby2.ready.role === 'primary', `S2 starts as a main server, with no take-over (${standby2.ready.role})`);
         let s2: Settings = await standby2.send('settings');
@@ -646,7 +636,7 @@ async function main(): Promise<void> {
         await standby2.send('set-local', { patch: { communityName: 'Renamed After Promotion' } });
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
-        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary', asMain));
+        standby2 = await spawnNode(SCRIPT, dir('standby2'), env('primary', asMain));
         nodes.push(standby2);
         s2 = await standby2.send('settings');
         assert(s2.localConfig.communityName === 'Renamed After Promotion',
@@ -687,7 +677,7 @@ async function main(): Promise<void> {
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby3'), 'genesis.json'));
         // Booted as index.ts boots: the take-over resumed, then the snapshot scheduler armed for the role. Its
         // take-over is killed the moment the step before community-settings is recorded, as a power cut would.
-        const s3Env = env(PW_STANDBY3, 'backup', { BEANPOOL_TEST_SNAPSHOT_SCHEDULER: '1', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'open-door' });
+        const s3Env = env('backup', { BEANPOOL_TEST_SNAPSHOT_SCHEDULER: '1', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'open-door' });
         let standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
         nodes.push(standby3);
         await standby3.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
@@ -721,7 +711,7 @@ async function main(): Promise<void> {
         const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup', { DIRECTORY_REGISTRY_URL: registry.url }));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup', { DIRECTORY_REGISTRY_URL: registry.url }));
         nodes.push(standby);
         require_(standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId && standby.ready.auditRan === true,
             `promoted: the main server's PeerId, and its audit ran (${j({ role: standby.ready.role, audit: standby.ready.auditRan })})`);
@@ -740,7 +730,7 @@ async function main(): Promise<void> {
         const after = perServer(sAfter);
         const own = perServer(sBefore);
         const oneServer = [
-            ['the admin password is the community\'s, from the keys', (await standby.send('admin-password-is', { password: PW_MAIN })) === true && after.adminHash !== 'f'.repeat(128)],
+            ['no admin password came from the record or the keys: the node has none', !after.adminHash && !after.salt],
             ['the replication token for standbys of its own is S\'s', after.replicationTokenHash === own.replicationTokenHash],
             ['its pull interval is S\'s', after.backupPullSeconds === own.backupPullSeconds],
             ['it copies from nobody: the main server and its token are gone', after.backupPrimaryUrl === null && after.backupReplicationToken === null],
@@ -751,7 +741,7 @@ async function main(): Promise<void> {
             ['the seal record is not the record\'s', after.sealCleared !== 'evil'],
             ['no profile switch came from the record', after.profileBeans === null],
             ['the admin IP allowlist is S\'s own', j(after.allowlist) === j(['198.51.100.9'])],
-            ['two-factor is the community\'s (off), not the record\'s', !after.totpEnabled],
+            ['no two-factor setting came from the record', !after.totpEnabled],
         ] as const;
         const wrong = oneServer.filter(([, ok]) => !ok).map(([what]) => what);
         assert(wrong.length === 0, `no setting of one server came from the record (wrong: ${wrong.join('; ') || 'none'}; ${j(after).slice(0, 240)})`);

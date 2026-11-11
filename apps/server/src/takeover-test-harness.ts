@@ -2,7 +2,7 @@
  * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
- * genesis, admin password, a take-over stopped after `role` decided, database, the take-over resume at boot (which may
+ * genesis, a take-over stopped after `role` decided, database, the take-over resume at boot (which may
  * finish steps and run the audit), the snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1),
  * libp2p (on port 0), the envelope service in the node's role, the take-over's after-boot steps; then the real
  * backup and take-over routes over HTTP with the real admin auth. A take-over's restart is the real
@@ -406,8 +406,8 @@ export const recoverySealCommands: Record<string, (args: any) => Promise<unknown
  * process, once per start.
  */
 /**
- * Step 7c: with the node's 2FA off the admin password alone opens no admin route. An owner's credentials, made inside the
- * node's process (admin-auth-test-harness.ts) and answered as headers for the orchestrator to send. Every node answers
+ * The node has no admin password: an owner signs in with their key. An owner's credentials, made inside the node's
+ * process (admin-auth-test-harness.ts) and answered as headers for the orchestrator to send. Every node answers
  * them (runNodeChild); a suite's own command of the same name wins.
  *   - owner-token { scope?, owner? }: an automation token (it lives in local-config.json, so it outlives a restart); no
  *     token makes an owner-only change.

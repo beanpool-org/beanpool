@@ -73,8 +73,8 @@ export interface Answer { status: number; body: any }
 
 /**
  * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
- * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes
- * (takeover-test-harness.ts owner-session).
+ * The node has no admin password: `admin` is an owner's key session the node makes (takeover-test-harness.ts
+ * owner-session).
  */
 export async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});

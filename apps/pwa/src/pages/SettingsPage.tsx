@@ -67,6 +67,7 @@ import { Sentence } from '../components/Sentence';
 import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 import { WEB_COPY_CLEARS_LINE, anotherCopyMade, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
+import { ContactsSignOutNote } from '../components/ContactsSignOutNote';
 
 const PURGE_CONFIRM_WORD = 'DELETE';
 const BEANPOOL_DOMAIN = 'beanpool.org';
@@ -1412,6 +1413,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             ? t('Are you sure you want to remove your account from this device? Ensure you have written down your 12-word recovery phrase if you plan to sign in again later.')
                                             : t('Are you sure you want to remove your account from this device? {noWords} {waysBack}', { noWords: noWordsHere(), waysBack: waysBackWithoutWords(signInRecovery) })}
                                     </p>
+                                    {/* Signing out takes this browser's contacts copy: said first when the community lacks the latest. */}
+                                    <ContactsSignOutNote identity={identity} />
                                     <div className="flex gap-3 pt-2">
                                         <button
                                             onClick={() => setDeletionMode('options')}

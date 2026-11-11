@@ -26,6 +26,7 @@ import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 import { InvitedByCard } from '../components/InvitedByCard';
 import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
+import { AddToContacts } from '../components/AddToContacts';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -433,6 +434,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             </div>
                         )
                     )}
+                    {/* The member's private contacts (DESIGN-private-contacts-fable.md §3.7): a text link under Message / Add friend. */}
+                    {!isSelf && !isBlocked && profile?.callsign && <AddToContacts identity={identity} pubkey={pubkey} callsign={profile.callsign} />}
 
                     {profile?.bio && (
                         <div className="mt-4 text-sm text-nature-600 dark:text-nature-300 italic text-center max-w-sm">

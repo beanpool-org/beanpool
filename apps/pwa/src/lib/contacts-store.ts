@@ -25,7 +25,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import {
-    emptyContactsList, mergeContactsLists, readContactsCopy, writeContactsList, type ContactsCopyWire, type ContactsList,
+    emptyContactsList, mergeContactsLists, readContactsCopy, writeContactsList, writeContactsVcard, type ContactsCopyWire, type ContactsList,
 } from '@beanpool/core';
 import { nodeAddress, signedFetch } from './api';
 import { lockContactsList, openContactsList, type ContactsKeys } from './contacts-lock';
@@ -385,6 +385,33 @@ export async function contactsSignOutCheck(publicKey: string): Promise<'none' | 
     const address = nodeAddress();
     if (held.at === address && held.refused) return 'device-only';
     return held.at === address && held.kept === held.seq ? 'saved' : 'unsaved';
+}
+
+/** The list as this browser keeps it, opened, without asking the community; null with none (or a newer app's). */
+export async function heldContactsList(me: ContactsKeys): Promise<ContactsList | null> {
+    try {
+        const held = await readHeld(me.publicKey.toLowerCase());
+        return held ? openHeld(held, me).list : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A community's name as the screens say it: its host (this web app's community by default). */
+export function contactsHost(address: string = nodeAddress()): string {
+    try { return new URL(address).host; } catch { return address; }
+}
+
+/** The list saved by the browser as a contacts file (design §3.9): not locked, which the screen said first. */
+export function saveContactsFile(list: ContactsList): void {
+    const url = URL.createObjectURL(new Blob([writeContactsVcard(list.contacts)], { type: 'text/vcard' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'contacts.vcf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 /** The "Your contacts are back" line has been seen. */

@@ -1126,7 +1126,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function handleStartReply(msg: ApiMessage) {
-        // A line from before 1.4.0 is never answered or quoted (OLDCHAT).
+        // A line from before 1.4.0 is never answered or quoted (conversion code, log row OLDCHAT, remove in 1.5.0).
         if (isOldLine(msg)) return;
         if (editingMessage) {
             setEditingMessage(null);
@@ -1138,7 +1138,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function handleStartEdit(msg: ApiMessage) {
-        // Nor edited (OLDCHAT).
+        // Nor edited (conversion code, log row OLDCHAT, remove in 1.5.0).
         if (isOldLine(msg)) return;
         setEditingMessage(msg);
         setReplyToMessage(null);
@@ -1155,7 +1155,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function handleToggleReaction(messageId: string, emoji: string) {
         if (!activeConv) return;
-        // Nor reacted to (OLDCHAT).
+        // Nor reacted to (conversion code, log row OLDCHAT, remove in 1.5.0).
         if (isOldLine(messages.find((m) => m.id === messageId))) return;
         // Optimistic update
         setMessages(prev => prev.map(m => {
@@ -3211,7 +3211,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            // An old line's reactions are shown as they were; no new one (OLDCHAT).
+                                            // An old line's reactions show as they were, no new one (conversion code, log row OLDCHAT, remove in 1.5.0).
                                             if (oldLine) return;
                                             setActiveEmojiPickerId(activeEmojiPickerId === msg.id ? null : msg.id);
                                         }}

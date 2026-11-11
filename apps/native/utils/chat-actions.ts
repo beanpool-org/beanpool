@@ -105,8 +105,8 @@ export interface ChatMessage {
     quoteFrom?: DmQuoteFrom;
     /**
      * A DM line from before 1.4.0 opened as it was then (e2e-crypto dmLineIsOld): read-only, under the one label above its
-     * run (buildChatListItems). Never answered, quoted, edited, reacted to or deleted (conversion code, log row OLDCHAT,
-     * remove in 1.5.0).
+     * run (buildChatListItems). Never answered, quoted, edited, reacted to or deleted.
+     * conversion code, log row OLDCHAT, remove in 1.5.0
      */
     oldLine?: boolean;
 }
@@ -271,7 +271,7 @@ export function isEditClosed(m: ChatMessage, viewer: ChatViewer): boolean {
 
 /**
  * Delete for everyone: the author, any time, no window — but not a system line, a tombstone, an in-flight send or a line
- * from before 1.4.0 (read-only, as the web shows it: OLDCHAT).
+ * from before 1.4.0 (read-only, as the web shows it; conversion code, log row OLDCHAT, remove in 1.5.0).
  */
 export function canDeleteMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
@@ -429,7 +429,7 @@ export function chatListIndexOf(items: readonly ChatListItem[], id: string): num
  * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give. In a group
  * chat (`kind`), two or more removed lines in a row of one kind are drawn as one (ChatRemovedRun); a day pill breaks a run.
  * Above each run of DM lines from before 1.4.0 (`oldLine`) goes one label, above the run's first day pill (core
- * dmOldLineRunStarts, as the web draws it; a system line neither starts a run nor ends one: OLDCHAT, remove in 1.5.0).
+ * dmOldLineRunStarts, as the web draws it; a system line neither starts a run nor ends one; conversion code, log row OLDCHAT, remove in 1.5.0).
  */
 export function buildChatListItems(messages: ChatMessage[], now: Date = new Date(), kind?: ChatKind): ChatListItem[] {
     const items: ChatListItem[] = [];

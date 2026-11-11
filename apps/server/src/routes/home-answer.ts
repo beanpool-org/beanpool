@@ -73,7 +73,7 @@ import {
     NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
-    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN,
+    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -97,6 +97,7 @@ import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
 import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
 import { inviteAskCount } from '../engine/invite-asks.js';
+import { knowledgeDraftCount } from '../engine/knowledge-drafts.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -202,7 +203,9 @@ export const HOME_INTERESTS_PREF_KEY = 'interests';
 
 // ── what the answer holds ────────────────────────────────────────────────────────────────────────────────────────────
 
-export type NeedsKind = 'admin' | 'knock' | 'ask' | 'deal' | 'bill' | 'vote' | 'invite' | 'message' | 'group';
+export type NeedsKind = 'admin' | 'knock' | 'ask' | 'learn' | 'deal' | 'bill' | 'vote' | 'invite' | 'message' | 'group';
+/** The English the answer's lines are written in (each app writes its own from the same facts). */
+const ENGLISH = wordsFor('en');
 /** Where a tap lands: the same targets the header's "needs you" icons use (apps/native utils/needs-you.ts). */
 export type NeedsTarget =
     | { to: 'admin'; section: AdminSettingsSection }
@@ -225,7 +228,9 @@ export type NeedsTarget =
     /** People → Invites, where requests to join are listed and answered (front doors S1): only to an app that says it opens it (lands=people). */
     | { to: 'people' }
     /** One bill waiting on the member (engine/bills.ts): only to an app that says it opens a bill (lands=bills). */
-    | { to: 'bill'; id: string };
+    | { to: 'bill'; id: string }
+    /** Learn's To check, where owners and admins answer members' suggestions (engine/knowledge-drafts.ts): only to an app that opens it (lands=learn). */
+    | { to: 'learn-check' };
 /** One line of "Needs you", the shape apps/native utils/needs-you.ts builds. `closesAt` on a vote, so an app words it in the member's own time. */
 export interface NeedsItem { kind: NeedsKind; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
@@ -436,8 +441,8 @@ export interface HomeReader {
  * one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N1): an app that does not say it draws
  * that line is not given a First steps card kept up for it alone.
  */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need' | 'bills';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need', 'bills']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need' | 'bills' | 'learn';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need', 'bills', 'learn']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -670,6 +675,14 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
                 target: { to: 'people' },
             });
         }
+    }
+
+    // Members' suggestions of Local knowledge to check (engine/knowledge-drafts.ts; design §5.1): owners and admins, a count and
+    // no name, for an app that opens To check in Learn (lands=learn). Never in the admin line above, whose tap opens Settings,
+    // which can't answer one; 0 where Learn is off.
+    const toCheck = active && c.lands.has('learn') && (role === 'owner' || role === 'admin') ? knowledgeDraftCount() : 0;
+    if (toCheck > 0) {
+        items.push({ kind: 'learn', count: toCheck, accent: true, label: knowledgeToCheckLine(toCheck, ENGLISH), target: { to: 'learn-check' } });
     }
 
     // H0b: the signer's own trades, where escrow is on. A short standing deal has its own live line, below, not this one.

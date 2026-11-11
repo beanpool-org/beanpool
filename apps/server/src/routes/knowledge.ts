@@ -18,22 +18,40 @@
  *   POST /api/knowledge/posts/:id/outdated           { note? } → { post }
  * A page that isn't showing is 404 `not_found`.
  *
+ * The waiting list (slice K3; engine/knowledge-drafts.ts). A member:
+ *   POST /api/knowledge/drafts                       { title, body, topic, place?, sources?, lang?, photos? } → 201 { draft }
+ *        (409 `publish_instead` for an owner or admin; 429 `too_many_waiting`, `sent_enough_today`; a mute, a new account's
+ *        limits and the photo budget as for posting)
+ *   GET  /api/knowledge/drafts/mine                  → { waiting: [draft], answered: [draft] }   (a paused member reads too)
+ *   POST /api/knowledge/drafts/:id/withdraw          → { ok: true } | 404 `not_found`             (paused or not)
+ * An owner or admin; anyone else 403 `admins_only`:
+ *   GET  /api/knowledge/drafts?limit&offset          → { drafts: [row], total, limit, offset }  (the longest waiting first)
+ *   GET  /api/knowledge/drafts/:id                   → { draft }  (whole, its photos as data URLs) | 404 `not_found`
+ *   POST /api/knowledge/drafts/:id/approve           { title?, body?, topic?, place?, sources?, lang?, checkedSources?, photos? }
+ *        → { post } | 404 `not_found` | 409 `already_answered`, `writer_paused` | 400 `sources_not_checked` (an assistant's)
+ *   POST /api/knowledge/drafts/:id/no                { reason, words? } → { ok: true } | 404 | 409 `already_answered`
+ *
  * All 404 `feature_off` where the `knowledge` switch is off (routes/profile-feature-gate.ts): the global community. A standby
  * refuses a write, 503 `standby`, and reads from its copy. Whoever passes the signature middleware here holds the key: no
  * route in this file reads `checkAdminAuth`, so neither an automation token nor a Settings session reaches one.
  */
 import Router from '@koa/router';
-import { adminDeletePost, broadcast, getNodeRole, isNodeMember, assertMemberActive } from '../state-engine.js';
+import { adminDeletePost, broadcast, dispatchPushNotification, getMember, getNodeRole, isNodeMember, assertMemberActive } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { memberErrorText } from './member-error-text.js';
 import { routePhotosRefusal, photoRefusalText } from '../engine/avatar.js';
 import { POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
 import { assertMayPost } from '../engine/probation.js';
 import {
-    KnowledgeRefusal, assertMayTakeDownKnowledge, clearKnowledgeOutdated, confirmKnowledge, editKnowledge, knowledgeFront,
+    KNOWLEDGE_WORDS, KnowledgeRefusal, assertMayTakeDownKnowledge, checksKnowledge, clearKnowledgeOutdated, confirmKnowledge, editKnowledge, knowledgeFront,
     knowledgeSearch, knowledgeTopicPage, markKnowledgeOutdated, publishKnowledge,
 } from '../engine/knowledge.js';
-import { KNOWLEDGE_LIMITS, isKnowledgeTopic, word, wordsFor } from '@beanpool/core';
+import {
+    DRAFT_WORDS, approveKnowledgeDraft, declineKnowledgeDraft, knowledgeCheckers, knowledgeDraftWhole, knowledgeDraftsToCheck,
+    myKnowledgeDrafts, suggestKnowledge, withdrawKnowledgeDraft, type KnowledgeAnswer,
+} from '../engine/knowledge-drafts.js';
+import { keptNoticeDetails } from '../engine/kept-notices.js';
+import { KNOWLEDGE_DRAFT_WORDS, KNOWLEDGE_LIMITS, isKnowledgeTopic, word, wordsFor, type KnowledgeDraftMine } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
 // A refusal with a value in it, in English as a template wrote it, its sentence marked for the way out to find again in the
@@ -41,6 +59,8 @@ import type { RouteDeps } from './types.js';
 const { t: tr } = wordsFor('en');
 
 const ONLY_MEMBERS = word('Only a member of this community can read Learn.');
+const DEFAULT_LIST_LIMIT = 20;
+const MAX_LIST_LIMIT = 50;
 const PAUSED = word('Your account here is paused for now, so you can’t change Local knowledge.');
 const STANDBY = word('This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.');
 
@@ -179,6 +199,112 @@ export function createKnowledgeRoutes(deps: RouteDeps): Router {
         if (!key) return;
         try {
             ctx.body = { post: clearKnowledgeOutdated(send, key, ctx.params.id) };
+        } catch (e) {
+            refused(ctx, e);
+        }
+    });
+
+    // ── The waiting list (slice K3) ────────────────────────────────────────────────────────────
+
+    /**
+     * One push per member's suggestion to each owner and admin (§5.6 as amended): the lock screen's fixed words, and in its
+     * details who and what, landing on To check. None for an assistant's draft: the admin asked for it.
+     */
+    const tellCheckers = (sender: string, draft: KnowledgeDraftMine): void => {
+        const to = knowledgeCheckers().filter((pk) => pk !== sender);
+        if (to.length === 0) return;
+        const name = getMember(sender)?.callsign || '';
+        try {
+            dispatchPushNotification(to, sender, tr(KNOWLEDGE_DRAFT_WORDS.suggestedTitle), tr(KNOWLEDGE_DRAFT_WORDS.suggestedBody, { name, title: draft.title }),
+                { screen: 'learn-check', draftId: draft.id }, 'marketplace', 'knowledge.suggested');
+        } catch { /* the bell's count says so all the same */ }
+    };
+
+    /** The member whose suggestion was answered: their kept notice's words, as a push that names its kept copy. */
+    const tellSender = (a: KnowledgeAnswer, landing: Record<string, unknown>): void => {
+        if (!a.notice) return;
+        try {
+            dispatchPushNotification([a.member], 'SYSTEM', a.notice.title, a.notice.body, { screen: 'learn-mine', draftId: a.draftId, ...landing },
+                'marketplace', 'knowledge.answered', false, keptNoticeDetails([{ to: a.member, id: a.notice.id }]));
+        } catch { /* it is kept */ }
+    };
+
+    /** An owner's or admin's key for a read, or null once the refusal is written. */
+    const checker = (ctx: any): string | null => {
+        const key = member(ctx);
+        if (!key) return null;
+        if (!checksKnowledge(key)) { answer(ctx, 403, KNOWLEDGE_WORDS.adminsOnly, 'admins_only'); return null; }
+        return key;
+    };
+
+    router.post('/api/knowledge/drafts', async (ctx) => {
+        const key = writer(ctx);
+        if (!key) return;
+        try {
+            const draft = suggestKnowledge(key, ((ctx as any).requestBody || {}) as Record<string, unknown>);
+            tellCheckers(key, draft);
+            ctx.status = 201;
+            ctx.body = { draft };
+        } catch (e) {
+            refused(ctx, e);
+        }
+    });
+
+    // Before /:id, which would take "mine" for an id.
+    router.get('/api/knowledge/drafts/mine', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const key = member(ctx);
+        if (!key) return;
+        ctx.body = myKnowledgeDrafts(key);
+    });
+
+    router.post('/api/knowledge/drafts/:id/withdraw', async (ctx) => {
+        // Paused or not, a suggestion is theirs to take back.
+        const key = member(ctx);
+        if (!key) return;
+        if (getNodeRole() !== 'primary') return answer(ctx, 503, STANDBY, 'standby');
+        if (!withdrawKnowledgeDraft(key, ctx.params.id)) return answer(ctx, 404, DRAFT_WORDS.notWaiting, 'not_found');
+        ctx.body = { ok: true };
+    });
+
+    router.get('/api/knowledge/drafts', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const key = checker(ctx);
+        if (!key) return;
+        const limit = wholeQuery(ctx.query.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
+        const offset = wholeQuery(ctx.query.offset, 0, 1_000_000);
+        if (limit === null || limit < 1 || offset === null) return answer(ctx, 400, `limit is 1 to ${MAX_LIST_LIMIT}, and offset a whole number.`, 'bad_request');
+        ctx.body = { ...knowledgeDraftsToCheck(limit, offset), limit, offset };
+    });
+
+    router.get('/api/knowledge/drafts/:id', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const key = checker(ctx);
+        if (!key) return;
+        const draft = knowledgeDraftWhole(ctx.params.id);
+        if (!draft) return answer(ctx, 404, DRAFT_WORDS.notWaiting, 'not_found');
+        ctx.body = { draft };
+    });
+
+    router.post('/api/knowledge/drafts/:id/approve', async (ctx) => {
+        const key = writer(ctx);
+        if (!key) return;
+        try {
+            const a = approveKnowledgeDraft(send, key, ctx.params.id, ((ctx as any).requestBody || {}) as Record<string, unknown>);
+            tellSender(a, { postId: a.post.id });
+            ctx.body = { post: a.post };
+        } catch (e) {
+            refused(ctx, e);
+        }
+    });
+
+    router.post('/api/knowledge/drafts/:id/no', async (ctx) => {
+        const key = writer(ctx);
+        if (!key) return;
+        const { reason, words } = ((ctx as any).requestBody || {}) as { reason?: unknown; words?: unknown };
+        try {
+            tellSender(declineKnowledgeDraft(key, ctx.params.id, reason, words), {});
+            ctx.body = { ok: true };
         } catch (e) {
             refused(ctx, e);
         }

@@ -166,6 +166,7 @@ import { createShopRoutes } from './routes/shops.js';
 import { createBillRoutes } from './routes/bills.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startTidyingInviteAsks } from './engine/invite-asks.js';
+import { startTidyingKnowledgeDrafts } from './engine/knowledge-drafts.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -1593,6 +1594,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
     startTidyingKnocks();
     startTidyingInviteAsks();
+    // Local knowledge's answered and taken-back suggestions, 30 days after (engine/knowledge-drafts.ts).
+    startTidyingKnowledgeDrafts();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.

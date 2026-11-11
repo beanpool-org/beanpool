@@ -146,7 +146,8 @@ function assertMemberActive(publicKey: string): void {
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
 }
 
-function assertProfileComplete(publicKey: string): void {
+/** A name, and a face where the community asks for one, before a member posts: a suggestion for Learn too (engine/knowledge-drafts.ts). */
+export function assertProfileComplete(publicKey: string): void {
     const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
     // An avatar the node serves (@beanpool/core avatarRefOf): never this node's own /api/avatar/ URL sent back, which
@@ -578,6 +579,8 @@ export function createPost(
          * (DESIGN-local-knowledge-fable.md §2.2). Required with `type: 'knowledge'` and refused with any other type.
          */
         knowledge?: KnowledgeColumns;
+        /** The photos were charged to their sender's photo budget already: a Local knowledge suggestion's, at its approval. */
+        photosPaidFor?: boolean;
     },
 ): MarketplacePost | null {
     if ((type === 'knowledge') !== !!options?.knowledge) throw new Error(KNOWLEDGE_ONLY_BY_PUBLISH);
@@ -587,7 +590,9 @@ export function createPost(
         return null;
     }
     assertProfileComplete(authorPublicKey);
-    assertNotOnHoliday(authorPublicKey);
+    // Holiday pauses trade, and a page of Local knowledge is none (the review of #3063): an owner on holiday still publishes one,
+    // and a member's suggestion is still approved while they are away (engine/knowledge-drafts.ts).
+    if (type !== 'knowledge') assertNotOnHoliday(authorPublicKey);
     assertEnterpriseCanPost(authorPublicKey);
     // A post's id, when the caller sends one (the phone app makes its own, a UUID, so a post made offline keeps it), is
     // text that names no money: no account, member, escrow, project, deal or settlement (db.ts idNamesMoney). Nothing turns
@@ -827,7 +832,8 @@ export function createPost(
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos. A keeper's listing for
     // their enterprise charges the keeper who sent the photos, as its edit and its logo do, never the enterprise.
-    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey);
+    // A suggestion's photos, approved as a page's, were charged to their sender when sent (photosPaidFor): never twice.
+    const photoColumns = storedPhotoColumns(finalId, (photos || []).slice(0, 5), options?.createdBy ?? authorPublicKey, options?.photosPaidFor ? 0 : undefined);
 
     db.transaction(() => {
         // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin

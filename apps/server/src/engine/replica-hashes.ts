@@ -199,7 +199,15 @@ export interface TableHashes {
  * Beans): after a takeover from such a copy the bills out are gone and their senders send them again; a paid one's ledger
  * row is copied with the ledger whatever the importer.
  */
-export const TABLE_HASHES_VERSION = 33;
+/**
+ * 34: Local knowledge's waiting list (engine/knowledge-drafts.ts, DESIGN-local-knowledge-fable.md §4.1, slice K3): three new
+ * plain tables, knowledge_drafts, knowledge_draft_photos and knowledge_helped. Raised for the same reason as 8: a standby
+ * updated before its main server hashes three more tables. REPLICA_FORMAT stays: each side's import writes only the tables
+ * its own database has. What an older importer drops is the suggestions still waiting (and their photos, and "This
+ * helped" taps, K5): after a take-over from such a copy their members see none waiting and send them again; a page
+ * already approved is a post, copied whatever the importer.
+ */
+export const TABLE_HASHES_VERSION = 34;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

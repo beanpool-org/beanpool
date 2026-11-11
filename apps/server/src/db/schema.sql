@@ -3018,6 +3018,68 @@ CREATE TABLE IF NOT EXISTS invite_asks (
 );
 CREATE INDEX IF NOT EXISTS idx_invite_asks_asker ON invite_asks (asker_pubkey);
 
+-- Local knowledge's waiting list (DESIGN-local-knowledge-fable.md §2.2, §4.1; slice K3, engine/knowledge-drafts.ts): what
+-- waits for an owner's or admin's approval is never a post. A member's suggestion, an assistant's draft (K6) and a fix to a
+-- page showing (K5) wait here; only approval makes or changes the `posts` row (engine/knowledge.ts publishKnowledge). New
+-- tables, empty on every node until a member suggests a page: nothing here is read from or written to an older row. All
+-- three are plain tables (engine/replication-manifest.ts), so a waiting suggestion survives a take-over; every delete goes
+-- with a tombstone.
+-- One suggestion. `via`: 'app', or 'assistant:<grant id>' for an owner's or admin's assistant (whose `member_pubkey` is
+-- the owner or admin it acts for). A taken-back one keeps no words, only that it was sent (the day's limit counts it). An
+-- answered or taken-back one is deleted 30 days later; a waiting one stays (its member holds at most 3).
+CREATE TABLE IF NOT EXISTS knowledge_drafts (
+    id             TEXT PRIMARY KEY,
+    kind           TEXT NOT NULL CHECK (kind IN ('new', 'fix')),
+    -- A fix's page (K5); NULL for a new one.
+    post_id        TEXT,
+    member_pubkey  TEXT NOT NULL,
+    via            TEXT NOT NULL,
+    assistant_name TEXT,
+    title          TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    topic          TEXT NOT NULL,
+    place          TEXT,
+    -- JSON list of { url, label }, at most 5, as a page's knowledge_sources.
+    sources        TEXT,
+    lang           TEXT,
+    about          TEXT,
+    note           TEXT,
+    state          TEXT NOT NULL CHECK (state IN ('waiting', 'approved', 'declined', 'withdrawn')),
+    answered_at    TEXT,
+    -- Who answered: never sent to the member.
+    answered_by    TEXT,
+    reason         TEXT,
+    reason_words   TEXT,
+    result_post_id TEXT,
+    created_at     TEXT NOT NULL,
+    -- The replication watermark (a plain table): db.ts stamps every write.
+    updated_at     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_member ON knowledge_drafts (member_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_knowledge_drafts_state ON knowledge_drafts (state, created_at);
+-- A suggestion's photos, the sender's own, at most 3: kept in the row as a data URL with its metadata stripped, never in the
+-- image store and never under posts/, so the copy a standby holds carries them whole. Charged to the sender's photo budget
+-- when sent; deleted when it is answered or taken back. Approval stores them as the page's own (posts' photos), not charged
+-- again.
+CREATE TABLE IF NOT EXISTS knowledge_draft_photos (
+    draft_id   TEXT NOT NULL,
+    order_num  INTEGER NOT NULL,
+    photo_data TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    updated_at TEXT,
+    PRIMARY KEY (draft_id, order_num)
+);
+-- "This helped" (slice K5): one row per member per page; `counted` is stamped at the tap and never worked out again.
+CREATE TABLE IF NOT EXISTS knowledge_helped (
+    post_id       TEXT NOT NULL,
+    member_pubkey TEXT NOT NULL,
+    counted       INTEGER NOT NULL CHECK (counted IN (0, 1)),
+    at            TEXT NOT NULL,
+    updated_at    TEXT,
+    PRIMARY KEY (post_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_helped_member ON knowledge_helped (member_pubkey);
+
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its
 -- conversation_participants rows mirror the ACTIVE group_members (convenor, member, observer) and feed the Talk

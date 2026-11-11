@@ -182,13 +182,14 @@ function ring(broadcast: BroadcastFn, postId: string, at: string): void {
  * Makes a knowledge post. Slice K1: an owner's or admin's own, which publishes at once (§2.4); K3's approval calls it with
  * the member as `writer` and the approving owner or admin as `checker`. `photos`: the writer's own, optional, at most 3,
  * as a listing's are sent (data URLs), through createPost's photo rules. Counts against the writer's posts a day
- * (engine/writer-bounds.ts), as every post does.
+ * (engine/writer-bounds.ts), as every post does. `photosPaidFor`: the photos were charged to their sender's photo budget
+ * when the suggestion was sent (engine/knowledge-drafts.ts), so storing them as the page's charges nobody again.
  */
 export function publishKnowledge(
     broadcast: BroadcastFn,
     checker: string,
     raw: KnowledgeInput & { photos?: unknown },
-    opts: { writer?: string; createdVia?: string; now?: number } = {},
+    opts: { writer?: string; createdVia?: string; now?: number; photosPaidFor?: boolean } = {},
 ): MarketplacePost {
     assertChecker(checker);
     assertNotMuted(checker);
@@ -204,6 +205,7 @@ export function publishKnowledge(
         knowledge: { sources: k.sources.length > 0 ? JSON.stringify(k.sources) : null, place: k.place, lang: k.lang, checkedAt: at, keywords: knowledgeKeywords(k) },
         beforeWrite: () => assertMayPostToday(writer),
         ...(opts.createdVia ? { createdVia: opts.createdVia } : {}),
+        ...(opts.photosPaidFor ? { photosPaidFor: true } : {}),
     });
     if (!post) throw new KnowledgeRefusal(400, 'not_member', word('Failed — author must be a registered member'));
     return post;

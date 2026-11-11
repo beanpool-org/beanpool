@@ -8,8 +8,9 @@
  *      routes). The QR carries the node URL, the id and the short code — never the secret.
  *   2. The owner scans it in the app, compares the short code, passes the phone's own unlock, and posts an
  *      approval signed with their member key over `0xFF ‖ beanpool-settings-signin/2\n<host>\napprove\n<id>\n<code>`
- *      (@beanpool/core settingsSigninText; <host> the address the phone reached this node at, sent as `signedFor`),
- *      or, from an app before request binding and only until the switch, `beanpool-settings-signin:v1:approve:<id>:<code>`.
+ *      (@beanpool/core settingsSigninText; <host> the address the phone reached this node at, sent as `signedFor`).
+ *      An app from before request binding signed `beanpool-settings-signin:v1:approve:<id>:<code>` and names no host:
+ *      answered 426 app_too_old without checking it (CUT4, engine/member-signature.ts oldShapeRefusal).
  *      The node runs the same signer checks as the app's one-time link (authorizeKeySigner: active member,
  *      owner, admin or moderator in node_roles, signature; since step 5 no server 2FA code) and mints the same 60-second
  *      handshake token — but keeps it here, bound to the pairing. It is never sent to the phone or the page.
@@ -101,10 +102,6 @@ const waiters = new Map<string, Set<() => void>>();
 const createBuckets = new Map<string, { count: number; resetAt: number }>();
 
 const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest();
-
-export function pairingMessage(action: 'approve' | 'decline', pairingId: string, shortCode: string): string {
-    return `beanpool-settings-signin:v1:${action}:${pairingId}:${shortCode}`;
-}
 
 export const isPairingId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f]{64}$/.test(id);
 
@@ -279,9 +276,10 @@ function who(pubkey: string): string {
 
 /**
  * The phone's signature over this pairing's approval or decline (request binding, engine/member-signature.ts): the
- * format-2 text naming the host the phone reached this node at (`signedFor`), which must be this community's, or the old
- * v1 text until the switch. A pairing shown by community A and approved there is never an approval at B: a hostile A
- * could otherwise show a QR carrying B's pairing id and its own address, and sign in to B's Settings as the member.
+ * format-2 text naming the host the phone reached this node at (`signedFor`), which must be this community's; one
+ * without it is an app from before request binding, answered 426 app_too_old (CUT4). A pairing shown by community A and
+ * approved there is never an approval at B: a hostile A could otherwise show a QR carrying B's pairing id and its own
+ * address, and sign in to B's Settings as the member.
  */
 function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubkey: string, signature: string, signedFor: unknown) {
     return verifyStatementSignature({
@@ -289,7 +287,7 @@ function pairingSignature(p: Pairing, action: 'approve' | 'decline', memberPubke
         pubKeyHex: memberPubkey,
         boundText: (host) => settingsSigninText(host, action, p.id, p.shortCode),
         signedFor,
-        oldTexts: [pairingMessage(action, p.id, p.shortCode)],
+        oldShapeTooOld: true,
     });
 }
 

@@ -1352,7 +1352,7 @@ function redeemSignature(ctx: any, publicKey: string): ReturnType<typeof verifyM
     const nonce = ctx.get('X-Nonce');
     if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return null;
     // The one verifier (engine/member-signature.ts), in the middleware's window: signed for this community (a redeem
-    // signed at another is refused 421 here), or in the old format until the switch (426 after it).
+    // signed at another is refused 421 here); one in the old format, bound to none, is refused 426 unchecked (CUT4).
     const signedForHeader = ctx.headers?.[SIGNED_FOR_HEADER.toLowerCase()];
     return verifyMemberSignature({
         pubKeyHex: signer, signature, timestamp, nonce, method: ctx.method, path: ctx.path, body: ctx.rawBody ?? '',
@@ -1374,7 +1374,7 @@ const REDEEM_UNSIGNED_ERROR = word('This join must be signed by the key it regis
  * have signed their redeems since the first public release (native utils/db.ts redeemInvite; the web join passes its new
  * key), so no app in the stores sends one unsigned. Answered before the code or ticket is looked at, so it stays unused.
  * Not signed by that key at all: 401 `redeem_unsigned`. Signed by it and refused: the verifier's own answer, as for any
- * signed request (a stale clock, a bad signature, 421 for another community, 426 for the old format after the switch).
+ * signed request (a stale clock, a bad signature, 421 for another community, 426 for the old format: CUT4).
  * Returns false, with the answer set, when refused.
  */
 function requireRedeemSignature(ctx: any, joiner: string): boolean {
@@ -1754,7 +1754,6 @@ router.post('/api/member/re-enroll', async (ctx) => {
         pubKeyHex: cleanNew,
         boundText: (host) => reEnrollText(host, cleanCode),
         signedFor: body.signedFor,
-        oldTexts: [],
     });
     if (!proof.ok) {
         const bound = proof.status === 421 || proof.status === 426;
@@ -2202,7 +2201,6 @@ router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
         pubKeyHex: key,
         boundText: (host) => pushLeaveText(host, key, token, leftAt),
         signedFor,
-        oldTexts: [],
     });
     if (!proof.ok) {
         // Another community's statement (421) may still be this one's under a name it doesn't know yet: kept by the phone.

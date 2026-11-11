@@ -19,7 +19,7 @@ vi.mock('../../lib/fresh-proof', async () => {
 const node: NodeProfile = { id: 'n1', name: 'Byron', url: 'http://localhost:8080', adminPassword: 'pw' };
 const checkedAt = '2026-11-02T05:02:00.000Z';
 const report = {
-    primaryAddress: 'byron.beanpool.org', named: true, unconfirmed: [], heldBack: [], oldApps: { today: 0, busiestDay: 0 },
+    primaryAddress: 'byron.beanpool.org', named: true, unconfirmed: [], heldBack: [],
     unboundSignaturesUntil: null, unboundSignaturesAccepted: false,
     addresses: [
         { address: 'byron.beanpool.org', source: 'public-address', today: 14, busiestDay: 28 },

@@ -127,7 +127,6 @@ const mockReport = {
     ],
     unconfirmed: [],
     heldBack: [],
-    oldApps: { today: 0, busiestDay: 0 },
     unboundSignaturesUntil: null,
     unboundSignaturesAccepted: false,
 };

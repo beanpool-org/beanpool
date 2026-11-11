@@ -6,10 +6,11 @@
  * The order (design §4.2, 2026-09-27):
  *   1. the key's spelling (engine/member-key.ts);
  *   2. freshness, then the nonce's length (1 to MAX_NONCE_LENGTH characters, else 400: AUTH-03);
- *   3. the signature, over the format-2 bytes when the request names a host (X-Signed-For, or `for=` with `v=2` on a
- *      socket), over the old bytes when it names none;
- *   4. format 2: the host is one of this community's (engine/own-addresses.ts), or 421 wrong_community;
- *   5. the old format: accepted and counted until the switch, 426 app_too_old after it;
+ *   3. a request that names no host (the old shape, from an app before request binding) is refused as too old, 426
+ *      app_too_old, and nothing in it is checked (oldShapeRefusal, CUT4);
+ *   4. the signature, over the format-2 bytes of the host the request names (X-Signed-For, or `for=` with `v=2` on a
+ *      socket), and that host is one of this community's (engine/own-addresses.ts), or 421 wrong_community;
+ *   5. (gone in 1.4.0: the old format was verified and counted here until the cutover);
  *   6. THEN the nonce is spent. Before this the signature middleware spent it first, so a forged request could burn a
  *      real one; and a request refused here for naming another community leaves its nonce unspent. A new nonce is
  *      spent from its signer's region: a key that acts here (isNodeMember or isLiveVisitor) from the rows', by its key,
@@ -18,14 +19,14 @@
  *      the newer accounts' line or its region's ceiling (NonceStore) it is refused as busy, 503 store_full; a spent one
  *      is still a replay, never busy.
  *
- * The switch is {@link UNBOUND_SIGNATURES_UNTIL}, overridable per node by env ACCEPT_UNBOUND_SIGNATURES_UNTIL. It is a
- * date, not a version, so a stranger's node that never touches its config closes on its own.
+ * One date is left, {@link UNCONFIGURED_HOSTS_UNTIL}: until it, a node that knows none of its names accepts a format-2
+ * signature for any host (audienceRefusal). It is a date, not a version, so a stranger's node that never touches its
+ * config closes on its own.
  */
 
 import crypto from 'node:crypto';
 import {
-    adminSigninText, bytesOfSignedText, inviteTicketText, reEnrollText, settingsSigninText, signedRequestBytes,
-    signedRequestText, unboundRequestText, word,
+    adminSigninText, inviteTicketText, reEnrollText, settingsSigninText, signedRequestBytes, signedRequestText, word,
 } from '@beanpool/core';
 import { isLiveVisitor, isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -38,54 +39,36 @@ import {
 } from './nonce-pressure.js';
 import { isEstablishedMember } from './probation.js';
 
-// ─── The switch ─────────────────────────────────────────────────────────────────────────────
+// ─── A node that knows none of its names ────────────────────────────────────────────────────
 
 /**
- * The first day (UTC) on which this server refuses a member signature in the old format, bound to no community.
+ * The first day (UTC) on which a node that knows none of its names (engine/own-addresses.ts `unconfigured`: no
+ * BEANPOOL_ADDRESSES, no registrar name, nothing confirmed in Settings) refuses a signature for a host it doesn't know.
+ * Until then it accepts any host, logs and counts it, and Settings offers the owner the addresses apps reached it at
+ * (decision 3a, 2026-09-27). Every community of ours knows its names, so this decides nothing on them.
  *
- * Marty's card replay-old-apps (2026-09-27): "On launch day". Launch day has no date yet, so until the launch release
- * this is a day clearly after any launch, and it must never come before the new apps (request binding PRs 2 and 3) are
- * in the stores. On launch day our own communities set ACCEPT_UNBOUND_SIGNATURES_UNTIL to that day, and the launch
- * release sets this constant to it, so every other community closes on its own. Until then old apps keep working, and
- * a hostile community's operator could still replay their requests elsewhere or have an old app's Manage button sign
- * one: harmless while every community is ours.
+ * Until the cutover (1.4.0) this day was also when old-format signatures stopped, and env
+ * ACCEPT_UNBOUND_SIGNATURES_UNTIL could move it. The old format is refused outright now (oldShapeRefusal), so the env
+ * went with it, and this is the date's one job.
  */
-export const UNBOUND_SIGNATURES_UNTIL = '2027-06-30';
+export const UNCONFIGURED_HOSTS_UNTIL = '2027-06-30';
+const UNCONFIGURED_HOSTS_CUTOFF = Date.parse(`${UNCONFIGURED_HOSTS_UNTIL}T00:00:00Z`);
 
 let clock: () => number = () => Date.now();
 
-/** Tests: the clock the switch is decided by. Freshness and nonces keep the real clock. */
+/** Tests: the clock UNCONFIGURED_HOSTS_UNTIL and the counting days are decided by. Freshness and nonces keep the real clock. */
 export function setSignatureSwitchClockForTests(now: (() => number) | null): void {
     clock = now ?? (() => Date.now());
 }
 
-let warnedBadEnv = '';
-
-/** When the old format stops being accepted here (ms), or 'never' when this node refuses it already. */
-export function unboundSignaturesCutoff(): number | 'refused' {
-    const raw = String(process.env.ACCEPT_UNBOUND_SIGNATURES_UNTIL ?? '').trim();
-    if (raw.toLowerCase() === 'never') return 'refused';
-    if (raw) {
-        const t = Date.parse(raw);
-        if (Number.isFinite(t)) return t;
-        if (warnedBadEnv !== raw) {
-            warnedBadEnv = raw;
-            logger.warn('AUTH', `ACCEPT_UNBOUND_SIGNATURES_UNTIL=${JSON.stringify(raw)} is neither a date nor "never"; using ${UNBOUND_SIGNATURES_UNTIL}`);
-        }
-    }
-    return Date.parse(`${UNBOUND_SIGNATURES_UNTIL}T00:00:00Z`);
+/** Whether a node that knows none of its names still accepts a signature for a host it doesn't know. */
+export function unconfiguredHostsAccepted(now = clock()): boolean {
+    return now < UNCONFIGURED_HOSTS_CUTOFF;
 }
 
-/** Whether a signature bound to no community (an old app's) is still accepted here now. */
-export function unboundSignaturesAccepted(now = clock()): boolean {
-    const cutoff = unboundSignaturesCutoff();
-    return cutoff !== 'refused' && now < cutoff;
-}
-
-/** The switch as Settings and `/api/community/info` show it: the ISO day, or null when the old format is refused. */
-export function unboundSignaturesUntilDay(): string | null {
-    const cutoff = unboundSignaturesCutoff();
-    return cutoff === 'refused' ? null : new Date(cutoff).toISOString().slice(0, 10);
+/** UNCONFIGURED_HOSTS_UNTIL as Settings and `/api/community/info` show it while it is ahead, else null. */
+export function unconfiguredHostsUntilDay(now = clock()): string | null {
+    return unconfiguredHostsAccepted(now) ? UNCONFIGURED_HOSTS_UNTIL : null;
 }
 
 export const APP_TOO_OLD_CODE = 'app_too_old';
@@ -568,7 +551,7 @@ export interface SignedRequestParts {
     method: string;
     path: string;
     body: string;
-    /** The host the request says it was signed for (X-Signed-For, or `for=` with `v=2`), or null for the old format. */
+    /** The host the request says it was signed for (X-Signed-For, or `for=` with `v=2`), or null: the old shape (CUT4). */
     signedFor: string | null;
 }
 
@@ -587,8 +570,8 @@ export type MemberSignatureVerdict =
         ok: true;
         /** The signer in the member table's one spelling. */
         signer: string;
-        format: 1 | 2;
-        audience: string | null;
+        /** The host it was signed for: one of this community's (or any, on a node that knows none of its names). */
+        audience: string;
         /** The text signed: what a transfer stores as `auth_payload`. */
         text: string;
     }
@@ -676,7 +659,7 @@ function ed25519Verify(bytes: Uint8Array, signature: string, pubKeyHex: string, 
 export function audienceRefusal(host: string, signer: string | null, now = clock()): SignatureRefusal | null {
     const standing = audienceStanding(host);
     if (standing === 'own') return null;
-    if (standing === 'unconfigured' && unboundSignaturesAccepted(now)) {
+    if (standing === 'unconfigured' && unconfiguredHostsAccepted(now)) {
         noteUnconfirmedAudience(host, signer);
         return null;
     }
@@ -709,24 +692,29 @@ function noteLostAudience(host: string, signer: string | null): void {
     } catch { /* nor does a re-check */ }
 }
 
-/** Null while the old format is accepted, the refusal once the switch has passed. */
-export function unboundRefusal(now = clock()): SignatureRefusal | null {
-    return unboundSignaturesAccepted(now) ? null : { ok: false, status: 426, error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE };
+/**
+ * conversion code, log row CUT4, remove in the release after Play shows no device below 1.2.56 for 30 days.
+ *
+ * A signature in the old shape, bound to no community (an app from before request binding, 27 Sep 2026): refused as too
+ * old, 426 app_too_old, without checking anything in it, so the app shows its "Update required". Nothing here verifies
+ * the old shape any more (the cutover, 1.4.0). When the row expires, a request without X-Signed-For is simply unsigned
+ * or malformed, and this answer goes.
+ */
+export function oldShapeRefusal(): SignatureRefusal {
+    return { ok: false, status: 426, error: APP_TOO_OLD_ERROR, code: APP_TOO_OLD_CODE };
 }
 
 /**
- * Count an accepted signature for Settings: by the host it named, or as an old app's. Only a member's app counts
- * (isNodeMember): a key with no row here costs nothing to make, so strangers' keys could otherwise fill the list of
- * addresses offered to the owner, or raise "N members are on an old app", the number an owner reads to decide whether
- * to move the switch date (4113046943). `member`: isNodeMember already read for this request, when it was.
+ * Count an accepted signature for Settings, by the host it named. Only a member's app counts (isNodeMember): a key with
+ * no row here costs nothing to make, so strangers' keys could otherwise fill the list of addresses offered to the owner
+ * (4113046943). `member`: isNodeMember already read for this request, when it was.
  */
-export function countAcceptedSignature(signer: string, audience: string | null, member?: boolean): void {
+export function countAcceptedSignature(signer: string, audience: string, member?: boolean): void {
     try {
         if (!(member ?? isNodeMember(db, signer))) return;
     } catch {
         return; // a count never refuses a request
     }
-    if (audience === null) return void countSignature('old_app', '', signer);
     if (audienceStanding(audience) === 'own') return void countSignature('own', audience, signer);
     countUnconfirmed(audience, signer);
 }
@@ -744,11 +732,15 @@ function standingHere(signer: string): { member: boolean; acts: boolean } {
     }
 }
 
-/** Verify a signed request (or `/ws` connect token) in either format, in the order above. */
+/** Verify a signed request (or `/ws` connect token), in the order above. */
 export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOptions): MemberSignatureVerdict {
     const now = opts.now ?? Date.now();
     const signer = provenKeySpelling(parts.pubKeyHex);
     if (!signer) return { ok: false, status: 400, error: BAD_SIGNER_KEY_ERROR, code: BAD_KEY_CODE };
+    // CUT4: a request that names no community is from an app before request binding: refused as too old, unchecked. Its
+    // nonce is never looked at, so nothing is spent.
+    if (parts.signedFor === null) return oldShapeRefusal();
+    const audience = parts.signedFor;
 
     const ts = Number(parts.timestamp);
     if (!parts.timestamp || !Number.isFinite(ts) || Math.abs(now - ts) > (opts.freshnessMs ?? SIGNATURE_FRESHNESS_MS)) {
@@ -759,15 +751,14 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
         return { ok: false, status: 400, error: `The request nonce must be 1 to ${MAX_NONCE_LENGTH} characters`, code: BAD_NONCE_CODE };
     }
 
-    const fields ={ method: parts.method, path: parts.path, timestamp: parts.timestamp, nonce: parts.nonce, body: parts.body };
-    const bound = parts.signedFor !== null;
-    const text = bound ? signedRequestText({ host: parts.signedFor as string, ...fields }) : unboundRequestText(fields);
-    if (!ed25519Verify(bytesOfSignedText(text), parts.signature, signer, 'base64')) {
+    const text = signedRequestText({
+        host: audience, method: parts.method, path: parts.path, timestamp: parts.timestamp, nonce: parts.nonce, body: parts.body,
+    });
+    if (!ed25519Verify(signedRequestBytes(text), parts.signature, signer, 'base64')) {
         return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     }
 
-    const audience = bound ? (parts.signedFor as string) : null;
-    const refusal = audience !== null ? audienceRefusal(audience, signer) : unboundRefusal();
+    const refusal = audienceRefusal(audience, signer);
     if (refusal) return refusal;
 
     let member: boolean | undefined;
@@ -790,46 +781,42 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
         }
     }
     countAcceptedSignature(signer, audience, member);
-    return { ok: true, signer, format: bound ? 2 : 1, audience, text };
+    return { ok: true, signer, audience, text };
 }
 
 /**
- * A member-made signature over one of the fixed statements (Settings sign-in, pairing, re-enrolment), in either form:
- * the format-2 text naming one of this community's hosts, or the old text until the switch. A format-2 statement MUST
- * carry the host it names (the body's `signedFor`): only that host's text is checked, and it must be one of this
- * community's. With no `signedFor` the signature is read as the old form, so a format-2 signature sent without it is
- * refused (403). `oldTexts` are the statement's old forms, tried only while the old format is accepted.
+ * A member-made signature over one of the fixed statements (Settings sign-in, pairing, re-enrolment): the format-2 text
+ * naming one of this community's hosts. The statement MUST carry the host it names (the body's `signedFor`): only that
+ * host's text is checked, and it must be one of this community's. Without `signedFor` it is refused: 403, or 426
+ * app_too_old, unchecked, where apps from before request binding signed an old form of it (`oldShapeTooOld`, CUT4).
  */
 export function verifyStatementSignature(params: {
     signature: string;
     pubKeyHex: string;
     boundText: (host: string) => string;
-    /** The host the statement names (the body's `signedFor`), or nothing for the old form. */
+    /** The host the statement names (the body's `signedFor`). */
     signedFor?: unknown;
-    oldTexts: string[];
-}): { ok: true; format: 1 | 2; audience: string | null } | SignatureRefusal {
+    /**
+     * conversion code, log row CUT4, remove in the release after Play shows no device below 1.2.56 for 30 days:
+     * true for the statements old apps signed in an old form (the Manage button's sign-in, a pairing's approval), so one
+     * sent without `signedFor` there tells the app to update instead of reading as a bad signature.
+     */
+    oldShapeTooOld?: boolean;
+}): { ok: true; audience: string } | SignatureRefusal {
     const { signature, pubKeyHex } = params;
     const signer = provenKeySpelling(pubKeyHex);
     if (!signer) return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
-    if (params.signedFor !== undefined && params.signedFor !== null) {
-        const host = String(params.signedFor);
-        if (!host || !ed25519Verify(signedRequestBytes(params.boundText(host)), signature, signer, 'base64-or-hex')) {
-            return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
-        }
-        const refused = audienceRefusal(host, signer);
-        if (refused) return refused;
-        countAcceptedSignature(signer, host);
-        return { ok: true, format: 2, audience: host };
+    if (params.signedFor === undefined || params.signedFor === null) {
+        return params.oldShapeTooOld ? oldShapeRefusal() : { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     }
-    for (const old of params.oldTexts) {
-        if (ed25519Verify(Buffer.from(old, 'utf-8'), signature, signer, 'base64-or-hex')) {
-            const refused = unboundRefusal();
-            if (refused) return refused;
-            countAcceptedSignature(signer, null);
-            return { ok: true, format: 1, audience: null };
-        }
+    const host = String(params.signedFor);
+    if (!host || !ed25519Verify(signedRequestBytes(params.boundText(host)), signature, signer, 'base64-or-hex')) {
+        return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
     }
-    return { ok: false, status: 403, error: 'Invalid cryptographic signature' };
+    const refused = audienceRefusal(host, signer);
+    if (refused) return refused;
+    countAcceptedSignature(signer, host);
+    return { ok: true, audience: host };
 }
 
 /** The format-2 statements, as the verifiers above build them (the app builds the same in @beanpool/core). */
@@ -839,9 +826,9 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
 
 /**
  * How many members' apps signed here, per day (UTC): for each of this community's addresses (`own`), for each address
- * a node with no configured names was reached at (`unconfirmed`, offered to the owner: engine/address-offers.ts), in
- * the old format (`old_app`, "N members are on an old app"), and for each of this community's LOST names (`lost`: the
- * apps refused there, "n apps tried today"). Members' keys only (countAcceptedSignature), so a
+ * a node with no configured names was reached at (`unconfirmed`, offered to the owner: engine/address-offers.ts), and
+ * for each of this community's LOST names (`lost`: the apps refused there, "n apps tried today"). Old-format signatures
+ * (`old_app`) are not counted since the cutover: they are refused (CUT4); the table's CHECK still names the kind. Members' keys only (countAcceptedSignature), so a
  * stranger's keys move none of them. Counts only, no key is stored: the day's distinct keys are held in memory as
  * salted hashes. A request never writes to the database: the counts are written when Settings reads them and every 15
  * minutes (flushSignatureCounts), each as the most this process has seen that day. After a restart a day's count
@@ -862,7 +849,7 @@ export { adminSigninText, settingsSigninText, reEnrollText, inviteTicketText };
  *     when its app first signed for the address that day: an admin made later counts from the next day it signs for
  *     it, and one removed still counts for the rest of the week.
  */
-export type SignatureKind = 'own' | 'unconfirmed' | 'old_app' | 'lost';
+export type SignatureKind = 'own' | 'unconfirmed' | 'lost';
 
 /**
  * Bounds on what one day can hold in memory: addresses per kind (past which only an owner's or admin's app adds an
@@ -1037,7 +1024,7 @@ function noteUnconfirmedAudience(host: string, _signer: string | null): void {
     if (loggedUnconfirmed.has(host) || loggedUnconfirmed.size > 200) return;
     loggedUnconfirmed.add(host);
     logger.warn('AUTH', `An app signed for "${host}", and this community has no address configured, so it was accepted. `
-        + `Confirm it in Settings (or set BEANPOOL_ADDRESSES) before ${unboundSignaturesUntilDay() ?? 'now'}: after that, a host this community doesn't know is refused.`);
+        + `Confirm it in Settings (or set BEANPOOL_ADDRESSES) before ${unconfiguredHostsUntilDay() ?? 'now'}: after that, a host this community doesn't know is refused.`);
 }
 
 export interface AudienceUsage {
@@ -1124,11 +1111,12 @@ export const TICKET_TOO_OLD_ERROR = word('This invite was made by an old version
 
 /**
  * Whether an offline ticket may be used here (the engine's verifyOfflineTicket asks, once the inviter's signature has
- * checked out): one naming another community's host never; one naming none (made by an app from before binding) only
- * until the switch.
+ * checked out): one naming another community's host never; one naming none (made by an app from before binding) never
+ * either, answered as too old (conversion code, log row CUT4, remove in the release after Play shows no device
+ * below 1.2.56 for 30 days).
  */
 export function ticketBinding(t: { format: 1 | 2; audience: string | null; inviter: string }): { reason: 'wrong_community' | 'app_too_old'; error: string } | null {
-    const refused = t.format === 2 ? audienceRefusal(String(t.audience ?? ''), t.inviter) : unboundRefusal();
+    const refused = t.format === 2 ? audienceRefusal(String(t.audience ?? ''), t.inviter) : oldShapeRefusal();
     if (!refused) return null;
     return refused.status === 421
         ? { reason: 'wrong_community', error: TICKET_WRONG_COMMUNITY_ERROR }

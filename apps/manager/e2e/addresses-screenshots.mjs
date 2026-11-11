@@ -95,7 +95,7 @@ try {
     for (const view of VIEWS) {
         const report = reportFor(STATES[7]);
         const withHeld = (orig) => ({
-            ...report(orig), named: false, unboundSignaturesAccepted: true, unboundSignaturesUntil: '2026-12-15', formerApps: { today: 2, busiestDay: 4 }, oldApps: { today: 1, busiestDay: 3 },
+            ...report(orig), named: false, unboundSignaturesAccepted: true, unboundSignaturesUntil: '2026-12-15', formerApps: { today: 2, busiestDay: 4 },
             unconfirmed: [{ address: 'community.example.org', today: 2, busiestDay: 4, ownerOrAdmin: true }],
             heldBack: [
                 { address: 'other-community.beanpool.org', today: 3, busiestDay: 3, ownerOrAdmin: false, reason: 'another-community' },

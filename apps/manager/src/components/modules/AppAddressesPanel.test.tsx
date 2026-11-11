@@ -18,7 +18,7 @@ vi.mock('../../lib/node-client', async () => {
 
 const node: NodeProfile = { id: 'n1', name: 'Test', url: 'https://community.example.org', adminPassword: 'pw' };
 const report = (over: Partial<nodeClient.AppAddressesReport> = {}): nodeClient.AppAddressesReport => ({
-    addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 },
+    addresses: [], unconfirmed: [],
     unboundSignaturesUntil: '2026-12-15', unboundSignaturesAccepted: true, ...over,
 });
 
@@ -32,14 +32,13 @@ const addressRow = (address: string) => screen.findByTestId(`address-row-${addre
 describe('AppAddressesPanel (Settings → Network)', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('lists each address with where it comes from and how many apps used it, and the old-app count', async () => {
+    it('lists each address with where it comes from and how many apps used it, and that old apps are refused', async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
             addresses: [
                 { address: 'mullum.beanpool.org', source: 'public-address', today: 12, busiestDay: 30 },
                 { address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 },
                 { address: 'oldname.beanpool.org', source: 'registrar', former: true, today: 2, busiestDay: 2 },
             ],
-            oldApps: { today: 3, busiestDay: 5 },
         }));
         renderScreen();
         const rows = await screen.findAllByTestId(/^address-row-/);
@@ -56,7 +55,8 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(within(rows[2]).queryByRole('button', { name: /^Remove/ })).toBeNull();
         expect(within(rows[0]).queryByRole('button', { name: /^(Remove|Release)/ })).toBeNull();
         expect(within(rows[1]).getByRole('button', { name: 'Remove community.example.org' })).toBeInTheDocument();
-        expect(screen.getByTestId('old-apps').textContent).toMatch(/^3 apps too old to name this community reached it today \(most in one day this week: 5\)\. From .*2026 this community refuses apps that old/);
+        // Refused on every day since the cutover (1.4.0), whatever the node's date for addresses it doesn't know.
+        expect(screen.getByTestId('old-apps').textContent).toBe('Apps too old to name this community are refused here. Members using one see a message asking them to update BeanPool.');
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
         expect(nodeClient.getAppAddresses).toHaveBeenCalledWith('https://community.example.org', 'pw', undefined);
     });
@@ -330,7 +330,7 @@ describe('AppAddressesPanel (Settings → Network)', () => {
         expect(screen.queryByTestId('app-address-offer')).toBeNull();
     });
 
-    it('after the switch: old apps are refused, in plain words', async () => {
+    it('after the date for unknown addresses: old apps are refused, in the same plain words', async () => {
         vi.mocked(nodeClient.getAppAddresses).mockResolvedValue(report({
             addresses: [{ address: 'a.example', source: 'env', today: 0, busiestDay: 0 }], unboundSignaturesUntil: null, unboundSignaturesAccepted: false,
         }));

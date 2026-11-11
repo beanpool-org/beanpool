@@ -164,7 +164,7 @@ export const PROMPTS: PromptDef[] = [
         name: 'safety-settings-check',
         description: "This server's safety switches against the operator guide's defaults.",
         arguments: [],
-        body: () => "Check safety_settings against the operator guide's defaults: two-factor sign-in on, at least two owners, backups leaving "
+        body: () => "Check safety_settings against the operator guide's defaults: at least two owners, backups leaving "
             + 'the server, a recovery code set, an alerts channel set, read auth on, auto-hide and auto-mute on. For each one that is off, '
             + 'give one Settings link.',
     },

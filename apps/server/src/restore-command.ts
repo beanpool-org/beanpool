@@ -4,8 +4,7 @@
  *   beanpool restore [--code-file F] [--accept-signer <PeerId>] [--with-keys] FILE.bpsealed
  *   beanpool restore --unlocked FILE.tar.gz
  *
- * For when Settings cannot do it: the interface is gone (a hostile restore can bring back another admin password and
- * other owners), a backup was locked by this community's previous server (a key loss), a backup is of another
+ * For when Settings cannot do it: the interface is gone (a hostile restore can bring back other owners), a backup was locked by this community's previous server (a key loss), a backup is of another
  * community and people have already joined this one, or an old file was never locked. Whoever runs it holds the data
  * folder already, which is a stronger position than any session: it hands over nothing the shell did not have.
  *
@@ -60,7 +59,7 @@ A restore point of this server is kept first; \`beanpool restore-point\` rolls b
 
   --code-file F          read the recovery code from file F (otherwise it is asked for; never on the command line)
   --accept-signer <id>   restore a backup of this community locked by another machine: the database only
-  --with-keys            with --accept-signer: bring back that file's keys, password and 2FA too (asks you to type yes)
+  --with-keys            with --accept-signer: bring back that file's keys and recovery-code record too (asks you to type yes)
   --unlocked             an old backup that is not locked (.tar.gz): database and photos only, never keys`;
 
 export const RESTORE_EXIT = { done: 0, refused: 1, usage: 2 } as const;
@@ -292,7 +291,7 @@ function tellResult(io: ShellIo, body: Record<string, any>, keysExpected: boolea
     // The server's own words (restoreFromTar names each file it wrote): not capped (#2017 confirmation 2, N12).
     if (keys.length) io.out(`Its keys came back: ${keys.map((k) => shown(k, null)).join(', ')}.`);
     else if (keysExpected) io.out('The file carried no keys: this server keeps its own.');
-    else io.out('The database only: this server keeps its own keys, password and 2FA.');
+    else io.out('The database only: this server keeps its own keys and recovery-code record.');
     io.out(body.complete ? 'Every photo and attachment the database names is here.' : shown(body.warning || 'Some photos or attachments may be missing.', null));
     if (body.recoverySeal?.message) io.out(shown(body.recoverySeal.message, null));
     if (body.openDoor?.message) io.out(shown(body.openDoor.message, null));
@@ -387,7 +386,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         for (const l of thisServer()) io.out(l);
         io.out('');
         io.out('This file is not locked: anyone who has a copy can read every member\'s data in it. It brings back the database and '
-            + 'photos only, never keys, the admin password or 2FA. Everything on this server since the backup was made goes; a '
+            + 'photos only, never keys or the recovery-code record. Everything on this server since the backup was made goes; a '
             + 'restore point of this server is kept first.');
         const typed = await io.ask('Type UNLOCKED to restore it: ');
         if ((typed ?? '').trim() !== 'UNLOCKED') return refuse('You did not type UNLOCKED.');
@@ -440,7 +439,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
     let applyKeys: boolean;
     let askYes: string | null = null;
     const replaces = 'its node key, community key, genesis.json and connectors.json, the key that opens members\' sign-in '
-        + 'recovery copies, the open door\'s key, and the admin password, 2FA and recovery-code record; and its owners come '
+        + 'recovery copies, the open door\'s key, and the recovery-code record; and its owners come '
         + 'with its database';
     if (otherCommunity) {
         applyKeys = true;
@@ -462,7 +461,7 @@ export async function runRestore(args: string[], io: ShellIo, dir = dataDir()): 
         }
         applyKeys = parsed.withKeys;
         if (applyKeys) askYes = `Locked by another machine, which you accepted. With --with-keys this file replaces this server's keys: ${replaces}.`;
-        else io.out('Locked by another machine, which you accepted: the database and photos only. This server keeps its own keys, password and 2FA.');
+        else io.out('Locked by another machine, which you accepted: the database and photos only. This server keeps its own keys and recovery-code record.');
     } else {
         applyKeys = true;
         askYes = 'This server cannot read its own community record or node key, so nothing here vouches for this file. '

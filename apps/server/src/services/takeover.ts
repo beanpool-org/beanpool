@@ -1,7 +1,7 @@
 /**
  * Take over as the main server, on a standby, with the printed recovery code (sealed-keys.md §5.3, §5.4, §5.5;
  * slice 5) or an owner's phone (§5.2; slice 6, services/owner-unlock.ts). The standby keeps the community's identity: the same node key (so the same PeerId), its owners and
- * admins, its links with other communities, its admin password and two-factor sign-in, and its web address.
+ * admins, its links with other communities, its recovery code record, and its web address.
  *
  * ## Two steps, then a journal
  *
@@ -178,7 +178,7 @@ export const WHAT_WILL_BE_MISSING: readonly string[] = [
 
 /** What the people running the community do afterwards. Shown with the result. */
 export const AFTER_A_TAKEOVER: readonly string[] = [
-    "Sign in to this server's Settings with the community's admin password or an owner's key. This standby's own admin password no longer works.",
+    "Sign in to this server's Settings with an owner's phone (Sign in with your phone). There is no admin password.",
     'Make a new recovery code: the one you typed is now spent.',
     "If the community's Settings answered only certain internet addresses (the admin IP allowlist, under Gateway & Peers), set it again here: a take-over keeps this server's own allowlist, not the main server's.",
     "Don't start the old main server again. It has the same identity as this one and would compete with it.",
@@ -192,7 +192,7 @@ export const TAKEOVER_STEPS = [
     ['opened', 'Opened the locked keys'],
     ['undo-copy', "Kept a copy of this standby's own keys and settings"],
     ['identity-files', "Wrote the community's node key, genesis and links with other communities"],
-    ['admin-settings', "Installed the community's admin password and two-factor sign-in"],
+    ['admin-settings', "Installed the community's recovery code record"],
     ['roles', "Brought back the community's owners and admins"],
     ['public-address', "Brought back the community's web address"],
     ['profile', "Kept the community's node profile and its switches"],

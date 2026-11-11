@@ -423,10 +423,10 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
                 // come from somewhere — but ONLY if the node has no owner at all. A community Decision
                 // that suspends the sole owner parks their role, which used to read as zero owners and
                 // let any admin key session make itself owner (#1006). `isOwner` above is already true
-                // for 'owner:password', so the operator's password remains the way out of this: the
+                // for 'owner:password'; the way out of this is `beanpool recover` on the server, so the
                 // node is never stranded.
                 if (nodeHasOwner()) {
-                    const err: any = new Error("This node has an owner (currently suspended). Ask the community, or use the node's admin password.");
+                    const err: any = new Error("This node has an owner (currently suspended). Ask the community, or ask the server's operator to run beanpool recover on the server.");
                     err.status = 403;
                     throw err;
                 }

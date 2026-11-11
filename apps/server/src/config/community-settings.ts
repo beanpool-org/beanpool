@@ -18,7 +18,7 @@
  * - The `node_config` row's object: the service area and the town or area its card names, the four directory switches and
  *   how often the directory is told.
  *
- * Never: the admin password and two-factor (the take-over bundle brings those), the replication token, a standby's
+ * Never: the recovery code record (the take-over bundle brings it), the replication token, a standby's
  * main server and its pull settings, TLS, the node key, the identity epoch, the role. Every field is named here, and
  * engine/replication-manifest.ts classifies each one the same way (test-replication-manifest.ts checks both agree).
  *

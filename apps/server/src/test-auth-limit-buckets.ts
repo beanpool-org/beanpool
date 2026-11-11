@@ -1,9 +1,10 @@
 /**
  * The auth limiter's buckets, one per route (auth-rate-limit.ts; the privacy review's S8, 2026-10-14), through the
  * real middleware, from one address: a hall's Wi-Fi or a carrier's NAT. Pairing, the names (the name check and the
- * recovery lookup, which share one bucket: both say whether a name is here) and the password check each keep their own
- * 15 a minute per address; none spends another's. The password check still shares one bucket with every other route
- * that takes the admin password, so a guesser gets no more than before.
+ * recovery lookup, which share one bucket: both say whether a name is here) and the admin routes' bucket each keep their
+ * own 15 a minute per address; none spends another's. The admin routes that call this limiter (the first invite, the
+ * identity update, the connectors and the rest: auth-rate-limit.ts) still share their one bucket, so across them a
+ * guesser gets no more than before. (The password check that was here went with the admin password, 11 Nov 2026.)
  *
  * Before this, one bucket served them all: after 15 pairing calls the name check answered 429 to everyone behind
  * the address (fail-first on origin/main 1b85fb83: the checks marked FAIL-FIRST below fail there).
@@ -37,10 +38,12 @@ const pairInit = async () => {
 };
 const nameCheck = async (name: string) => (await fetch(`${BASE}/api/members/callsign-available/${name}`)).status;
 const lookup = async (name: string) => (await fetch(`${BASE}/api/recovery/lookup/${name}`)).status;
-const passwordCheck = async () => (await fetch(`${BASE}/api/local/verify-password`, {
+/** The first invite (POST /api/admin/seed-invite), on the admin routes' bucket: with no credential, 401 once it is read. */
+const adminRoute = async () => (await fetch(`${BASE}/api/admin/seed-invite`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
 })).status;
-const changePassword = async () => (await fetch(`${BASE}/api/local/change-password`, {
+/** Another route on the same bucket: the identity update (POST /api/local/update-identity). */
+const otherAdminRoute = async () => (await fetch(`${BASE}/api/local/update-identity`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
 })).status;
 
@@ -68,8 +71,8 @@ async function main() {
     assert(afterPairs === 200, `FAIL-FIRST: after ${N} pairings, the name check still answers (${afterPairs}; was 429)`);
     const lookupAfterPairs = await lookup('hallnewcomer');
     assert(lookupAfterPairs === 200, `FAIL-FIRST: and the recovery lookup (${lookupAfterPairs}; was 429)`);
-    const passwordAfterPairs = await passwordCheck();
-    assert(passwordAfterPairs === 400, `FAIL-FIRST: and the password check reads the request (${passwordAfterPairs}: 400 no password; was 429)`);
+    const adminAfterPairs = await adminRoute();
+    assert(adminAfterPairs === 401, `FAIL-FIRST: and an admin route reads the request (${adminAfterPairs}: 401 no credential; was 429)`);
 
     // ── 2. Each bucket still meets its own limit at its own number ──
     console.log('\n── 2. each bucket keeps its own 15 a minute ──');
@@ -80,18 +83,18 @@ async function main() {
     assert(names.every(s => s === 200) && namesFull.join(',') === '429,429',
         `the name check and the recovery lookup: ${N} in the minute between them, then 429 for both (${[...names, ...namesFull].join(',')})`);
     resetGatewayRateLimit();
-    const passwords = await statuses(N - 1, () => passwordCheck());
-    assert(passwords.every(s => s === 400) && await passwordCheck() === 429,
-        `the password check: ${N} in the minute, then 429 (${passwords.join(',')})`);
-    const change = await changePassword();
-    assert(change === 429, `no looser than before: change-password shares the password check's bucket, so it is spent too (${change})`);
+    const admins = await statuses(N - 1, () => adminRoute());
+    assert(admins.every(s => s === 401) && await adminRoute() === 429,
+        `the admin routes' bucket: ${N} in the minute, then 429 (${admins.join(',')})`);
+    const other = await otherAdminRoute();
+    assert(other === 429, `no looser than before: the identity update shares that bucket, so it is spent too (${other})`);
 
     // ── 3. The minute ends (the limiter's own clock: its sweep, two minutes on) ──
     console.log('\n── 3. the windows reopen ──');
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
-    const reopened = [await pairInit(), await nameCheck('Again'), await lookup('again'), await passwordCheck()];
-    assert(reopened.join(',') === '200,200,200,400', `a minute on, every bucket answers again (${reopened.join(',')})`);
+    const reopened = [await pairInit(), await nameCheck('Again'), await lookup('again'), await adminRoute()];
+    assert(reopened.join(',') === '200,200,200,401', `a minute on, every bucket answers again (${reopened.join(',')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

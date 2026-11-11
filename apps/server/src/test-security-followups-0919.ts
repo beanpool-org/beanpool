@@ -194,12 +194,13 @@ async function run() {
     const removeOwner = { id: removalInGraceFromBefore(owner, doomedOwner, 'Remove DoomedOwner') };
     const accelPlainOwner = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`, { actor: plainAdmin });
     assert(accelPlainOwner.status === 403 && statusOf(doomedOwner) === 'disabled', 'nor on removing an owner');
-    // Cutting short an owner's removal removes an owner: the owner's fresh proof (#1984 confirmation N-1). The password with
-    // the node's 2FA off has none to give, so it is refused (fail closed); the phone's Manage, pressed just now, is one.
-    const accelPassword = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`);
-    assert(accelPassword.status === 403 && accelPassword.body?.code === 'fresh_proof_needs_2fa' && statusOf(doomedOwner) === 'disabled'
+    // Cutting short an owner's removal removes an owner: the owner's fresh proof (#1984 confirmation N-1). An owner's
+    // computer session has none to give (phone_required); the phone's Manage, pressed just now, is one.
+    const accelNoProof = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`,
+        { actor: owner, state: { isKeySession: true, phoneHandoff: false, keySessionCreatedAt: Date.now() } });
+    assert(accelNoProof.status === 403 && accelNoProof.body?.code === 'phone_required' && statusOf(doomedOwner) === 'disabled'
         && getDecision(removeOwner.id)!.status === 'execution_pending_grace',
-        `the password (owner level) without a fresh proof cannot: still in grace (got ${accelPassword.status} ${JSON.stringify(accelPassword.body)})`);
+        `an owner without a fresh proof (a computer's session) cannot: still in grace (got ${accelNoProof.status} ${JSON.stringify(accelNoProof.body)})`);
     const accelFresh = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`,
         { actor: owner, state: { isKeySession: true, phoneHandoff: true, keySessionCreatedAt: Date.now() } });
     assert(accelFresh.status === 200 && statusOf(doomedOwner) === 'pruned', `an owner with a fresh proof (Manage just now) can (got ${accelFresh.status} ${JSON.stringify(accelFresh.body)})`);
@@ -367,11 +368,12 @@ async function run() {
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key IN (?, ?)').run(root, sibling, owner);
     const otherOwners = (db.prepare("SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey WHERE nr.role = 'owner' AND m.status = 'active' AND nr.member_pubkey != ?").all(owner) as any[]);
     assert(otherOwners.length === 0, 'setup: Owner is the only active owner');
-    // A branch with an owner in it asks the owner's fresh proof first (#1984 confirmation N-1): the password with the node's
-    // 2FA off has none (fail closed). With the phone's Manage just now, the engine's sole-owner rule answers.
+    // A branch with an owner in it asks the owner's fresh proof first (#1984 confirmation N-1): a computer's session has none
+    // (phone_required). With the phone's Manage just now, the engine's sole-owner rule answers.
     const freshPhone = () => ({ isKeySession: true, phoneHandoff: true, keySessionCreatedAt: Date.now() });
-    const pruneNoProof = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`);
-    assert(pruneNoProof.status === 403 && pruneNoProof.body?.code === 'fresh_proof_needs_2fa' && [root, sibling, owner].every(pk => statusOf(pk) === 'active'),
+    const pruneNoProof = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`,
+        { state: { isKeySession: true, phoneHandoff: false, keySessionCreatedAt: Date.now() } });
+    assert(pruneNoProof.status === 403 && pruneNoProof.body?.code === 'phone_required' && [root, sibling, owner].every(pk => statusOf(pk) === 'active'),
         `without a fresh proof a branch with an owner in it is refused, nobody pruned (got ${pruneNoProof.status} ${JSON.stringify(pruneNoProof.body)})`);
     const pruneSole = await callRouter(admin, 'POST', `/api/local/admin/branches/${root}/prune`, { state: freshPhone() });
     assert(pruneSole.status === 400 && /only owner/.test(pruneSole.body?.error || ''), `a branch holding the only owner is refused (got ${pruneSole.status} ${JSON.stringify(pruneSole.body)})`);

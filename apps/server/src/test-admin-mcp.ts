@@ -112,7 +112,7 @@ function adminRoutes(): Array<[string, string]> {
         const src = fs.readFileSync(f, 'utf8');
         for (const m of src.matchAll(re)) {
             const p = m[2];
-            if (!(p.startsWith('/api/local/admin') || p.startsWith('/api/admin') || p === '/api/local/change-password')) continue;
+            if (!(p.startsWith('/api/local/admin') || p.startsWith('/api/admin'))) continue;
             out.set(`${m[1].toUpperCase()} ${p}`, [m[1].toUpperCase(), p]);
         }
     }
@@ -428,11 +428,11 @@ async function main(): Promise<void> {
         const signed = await call('GET', '/api/node-admin/queue', { headers: bearer(AGENT) });
         assert(signed.status === 401 || signed.status === 403, `a member route that takes a signature ignores the token (${show(signed)})`);
         const asOther: Record<string, Record<string, string>> = {
-            'a session header': { 'X-Admin-Session': AGENT }, 'a session cookie': { Cookie: `admin_session=${AGENT}` }, 'the admin password': { 'X-Admin-Password': AGENT },
+            'a session header': { 'X-Admin-Session': AGENT }, 'a session cookie': { Cookie: `admin_session=${AGENT}` }, 'the old admin-password header': { 'X-Admin-Password': AGENT },
         };
         const otherWays = await Promise.all(Object.entries(asOther).map(async ([way, h]) => [way, await call('GET', '/api/local/admin/reports', { headers: h })] as const));
         resetAdminAuthTarpit();
-        assert(otherWays.every(([, r]) => r.status === 401), `the agent token sent as a session header, a session cookie or the admin password is 401 (${otherWays.map(([w, r]) => `${w} ${r.status}`).join(', ')})`);
+        assert(otherWays.every(([, r]) => r.status === 401), `the agent token sent as a session header, a session cookie or in the old admin-password header is 401 (${otherWays.map(([w, r]) => `${w} ${r.status}`).join(', ')})`);
 
         console.log('── 5b. Nothing but an agent token reaches /mcp ──');
         const init = rpc('initialize', 1, { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'raw', version: '1' } });

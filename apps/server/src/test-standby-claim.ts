@@ -254,8 +254,9 @@ async function main(): Promise<void> {
     info = await request(o, 'GET', '/api/local/claim');
     await o.stop();
     assert(!o.output().includes(STANDBY_SAYS) && !o.output().includes(NO_OWNER_YET), 'R3. its next start says nothing of a claim: it has an owner');
-    // The answer has no `password` field: the node has no admin password (Marty, 11 Nov 2026).
-    assert(info.status === 200 && JSON.stringify(info.json) === JSON.stringify({ unclaimed: false }),
+    // `password: false`: the node has no admin password (Marty, 11 Nov 2026), and the manager's sign-in draws a password
+    // form for any other answer.
+    assert(info.status === 200 && JSON.stringify(info.json) === JSON.stringify({ unclaimed: false, password: false }),
         `R4. and GET answers as a server with an owner: unclaimed false, no standby flag (${info.status} ${JSON.stringify(info.json)})`);
     const owned = await beanpool(dirO, ['claim', '--no-name'], { NODE_ROLE: 'backup' });
     assert(owned.code === 1 && owned.out.includes('This community already has an owner') && owned.out.includes('beanpool recover --key'),

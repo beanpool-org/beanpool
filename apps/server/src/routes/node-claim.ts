@@ -59,12 +59,15 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
     router.get('/api/local/claim', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         const config = getLocalConfig();
+        // `password: false` in every answer: the node has no admin password. The manager's Settings sign-in draws its
+        // password form, or the unclaimed card's password fold, for any other answer (apps/manager/src/lib/node-claim.ts
+        // fetchClaimState), so it is sent until that reader goes. The phone reads none of it.
         if (getNodeRole() === 'backup' && !nodeHasOwner()) {
-            ctx.body = { unclaimed: false, standby: true };
+            ctx.body = { unclaimed: false, standby: true, password: false };
             return;
         }
         if (nodeHasOwner()) {
-            ctx.body = { unclaimed: false };
+            ctx.body = { unclaimed: false, password: false };
             return;
         }
         const pending = pendingClaim(config);
@@ -76,6 +79,7 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
             codeId: pending ? pending.id : null,
             salt: pending ? pending.salt : null,
             communityName: config.communityName || config.callsign || null,
+            password: false,
         };
     });
 

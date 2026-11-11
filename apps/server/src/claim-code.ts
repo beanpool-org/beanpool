@@ -21,8 +21,9 @@
  * no node-wide cap for anyone to hold: a right proof is never braked. A wrong one makes its source wait 10 s
  * (BREAK_GLASS_WHILE_BRAKED_MS), which only sheds load: each guess costs the guesser an scrypt, against 64 random bits.
  *
- * Never blocks the boot: anything that fails here is logged, and the node starts without a claim code (`beanpool claim`
- * or `beanpool recover` on the server still adds an owner, recover-cli.ts).
+ * Never blocks the boot: anything that fails here is logged, and the node starts without a claim code. The next start
+ * tries again; until then nobody can claim it (`beanpool claim` needs a waiting code too), and only `beanpool recover
+ * --key` on the server can make an owner, of someone who has already joined (recover-cli.ts).
  *
  * A standby has no claim. It holds no owner of its own: its owners are its main server's, and only a take-over brings
  * them (engine/replication-manifest.ts node_roles, the take-over's `roles` step). So it makes no code, deletes one an
@@ -229,9 +230,13 @@ export function initClaimCode(): void {
         console.log('   The first phone to claim the community with it becomes its owner, and the code is burned.');
         console.log('');
     } catch (e) {
+        // `beanpool claim`, with --key or without, needs a waiting code (claim-command.ts), so the way in is the next start's
+        // code. `beanpool recover --key` only promotes someone who has joined (recover-cli.ts).
         const shell = dataDir() === '/data' ? 'docker compose exec beanpool-node ' : '';
-        console.warn(`⚠️  No claim code this start: ${(e as Error)?.message || e}. The node starts anyway; add its first owner on this server with `
-            + `${shell}beanpool claim --key <public key> --callsign <name>, or ${shell}beanpool recover --key <member> for someone already a member.`);
+        console.warn(`⚠️  No claim code this start: ${(e as Error)?.message || e}. The node starts anyway, but nobody can claim it yet. `
+            + `Fix that (the data folder must be writable, with free space) and restart the node: the next start makes a claim code, `
+            + `which ${shell}beanpool claim then shows. If the community already has members, `
+            + `${shell}beanpool recover --key <member public key | @callsign> makes one of them its owner now.`);
     }
 }
 

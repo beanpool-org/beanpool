@@ -10,12 +10,13 @@
  *      retirement, break-glass mode and its status, the server 2FA's routes and the copy routes' token-only switch.
  *   2. The old password signs nobody in: in X-Admin-Password (with a 2FA code too), in a body `password`, or in
  *      X-Break-Glass-Code, an admin route answers 401 notSignedIn, the logs ticket included; /settings opens (no
- *      break-glass page), and /api/local/status and /api/local/claim say nothing about a password.
+ *      break-glass page), /api/local/status says nothing about a password, and /api/local/claim says `password: false`.
  *   3. Key sign-in still works: challenge, signature, exchange, then the cookie reads the admin routes, takes a CSRF
  *      token for a change and gets a logs ticket.
  *   4. An owner's break-glass code still enrols a key, on the enrol routes only and only from X-Break-Glass-Code or
  *      `breakGlassCode`: the same code is no credential anywhere else, nor in `password`; a wrong one is 401.
- *   5. A standby's copy routes take the replication token only: the old password, or an owner's session, is 401.
+ *   5. A standby's copy routes take the replication token only: the old password, or an owner's session, is 401. The
+ *      replication answers say `tokenOnly: true`, with a token or without, whatever the config's old switch says.
  *   6. The fleet's backup pull needs an owner's automation token: the harvester refuses to run without one, and the
  *      node's backup route refuses the old password and opens to the token.
  *   7. The leftover keys are not converted or deleted by code (that is the operator's hand step), and a backup file's
@@ -100,11 +101,12 @@ async function main(): Promise<void> {
     seedMember(newcomer, 'Nell');
     grantNodeRole(owner.pub, 'owner', 'SYSTEM');
 
-    // What an older install left in local-config.json: a password's hash and salt, a server 2FA, break-glass mode on.
+    // What an older install left in local-config.json: a password's hash and salt, a server 2FA, break-glass mode on, and
+    // the copy routes' token-only switch never ticked.
     const { hash, salt } = hashPassword(OLD_PW);
     const leftovers = {
         adminHash: hash, salt, totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', totpBackupCodesHashes: [],
-        breakGlassMode: true, passwordRetired: null, backupAdminPassword: OLD_PW,
+        breakGlassMode: true, passwordRetired: null, backupAdminPassword: OLD_PW, replicationTokenOnly: false,
     };
     saveLocalConfig({ ...getLocalConfig(), ...leftovers } as any);
 
@@ -153,9 +155,11 @@ async function main(): Promise<void> {
         const status = await call('GET', '/api/local/status');
         assert(status.status === 200 && !('isLocked' in (status.body || {})) && !('passwordRetired' in (status.body || {})),
             `/api/local/status says nothing about a password (${status.text.slice(0, 120)})`);
+        // The hash left in local-config.json makes no difference: the claim check answers password: false, so the manager's
+        // sign-in draws no password form (it draws one for any other answer).
         const claim = await call('GET', '/api/local/claim');
-        assert(claim.status === 200 && !('password' in (claim.body || {})) && !('passwordRetired' in (claim.body || {})),
-            `/api/local/claim says nothing about a password (${claim.text.slice(0, 120)})`);
+        assert(claim.status === 200 && claim.body?.password === false && !('passwordRetired' in (claim.body || {})),
+            `/api/local/claim says this server has no admin password, whatever the config still holds (${claim.text.slice(0, 120)})`);
 
         // ── 3. Key sign-in still works ───────────────────────────────────────────────────────────
         console.log('\n── 3. key sign-in ──');
@@ -197,8 +201,23 @@ async function main(): Promise<void> {
         assert(pwCopy.status === 401 && pwCopy.body?.error === 'Replication token required', `the old password → 401 (${show(pwCopy)})`);
         const sessionCopy = await call('GET', copy, { headers: asCookie(signedIn.sessionId) });
         assert(sessionCopy.status === 401, `an owner's session → 401: a copy is the standby's (${show(sessionCopy)})`);
+        // What Settings' Replication Access panel reads: token-only, always, whatever the config's old switch says (false
+        // here). Without it the panel says the admin password still copies.
+        const owned = asCookie(signedIn.sessionId, csrf.body?.csrfToken);
+        const statusNone = await call('POST', '/api/local/admin/replication-token/status', { body: {}, headers: owned });
+        assert(statusNone.status === 200 && statusNone.body?.tokenOnly === true && statusNone.body?.hasToken === false,
+            `with no token, replication-token/status says tokenOnly: true (${show(statusNone)})`);
+        const accessNone = await call('POST', '/api/local/admin/replication-access', { body: {}, headers: owned });
+        assert(accessNone.status === 200 && accessNone.body?.tokenOnly === true && accessNone.body?.hasToken === false,
+            `… and so does replication-access (${show(accessNone)})`);
         const repToken = generateReplicationToken();
         setReplicationToken(repToken);
+        const statusSet = await call('POST', '/api/local/admin/replication-token/status', { body: {}, headers: owned });
+        assert(statusSet.status === 200 && statusSet.body?.tokenOnly === true && statusSet.body?.hasToken === true,
+            `with a token, replication-token/status still says tokenOnly: true (${show(statusSet)})`);
+        const accessByToken = await call('POST', '/api/local/admin/replication-access', { body: {}, headers: { 'X-Replication-Token': repToken } });
+        assert(accessByToken.status === 200 && accessByToken.body?.tokenOnly === true && accessByToken.body?.hasToken === true,
+            `… and so does replication-access, asked with the standby's token (${show(accessByToken)})`);
         // Past the gate the route answers for itself: this suite starts no p2p node, so it has no signing identity and the
         // snapshot says so (503). What is pinned is the gate: the token opens it, nothing else does.
         const tokenCopy = await call('GET', copy, { headers: { 'X-Replication-Token': repToken } });

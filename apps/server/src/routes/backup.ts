@@ -1122,11 +1122,14 @@ function pairingAddress(requestOrigin: string): string {
 // (read-only replication only) and independently rotatable. Stored hashed; the plaintext is shown to the operator
 // exactly once.
 // Its holder copies the whole ledger, so making, changing or removing it is an owner's.
+// `tokenOnly` is always true: the copy routes take the replication token and nothing else (replicationAuth). Settings'
+// Replication Access panel reads a missing one as "the admin password still copies", so it is sent until that reader goes.
 router.post('/api/local/admin/replication-token/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const config = getLocalConfig();
     ctx.body = {
         hasToken: hasReplicationToken(),
+        tokenOnly: true,
         createdAt: config.replicationTokenCreatedAt || null,
     };
 });
@@ -1166,6 +1169,8 @@ router.post('/api/local/admin/replication-access', async (ctx) => {
     if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
     ctx.body = {
         ...getReplicationAccessLog(),
+        // Always true, as replication-token/status says.
+        tokenOnly: true,
         hasToken: hasReplicationToken(),
         // Which standby last fetched which take-over envelope.
         envelopeHolders: getEnvelopeHolders(),

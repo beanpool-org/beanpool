@@ -11,21 +11,23 @@
  *   A. First start: data/claim-code.txt, 0600, holding claim-xxxx-xxxx-xxxx-xxxx; the code is in no line of the output;
  *      GET says unclaimed with the code's id and the salt, and no scrypt parameters. local-config.json holds K, which is
  *      what the core helper derives from the code and the salt. The node has no admin password (Marty, 11 Nov 2026): no
- *      first-admin-password.txt, and no password signs in.
+ *      first-admin-password.txt, no password signs in, and GET says `password: false` (the manager's sign-in draws a
+ *      password form for any other answer).
  *   B. Refusals, none of which claims: a proof from a wrong code; a signature for another code id; a signature for
  *      another host (the node knows none of its names); key A's signature sent as key B; a code id that is not the
  *      waiting one; a proof made for another host, code id or key; a claim made for host A relayed to the node as host B.
  *   C. The brake: a second wrong proof from the same source within 10 s is 429.
  *   D. The right proof, from that braked source: 200 (a right proof is never braked); the key is a member once and the
  *      owner; the file is gone; K is deleted at the burn; the answer carries no secret. The same request again: 200,
- *      still one member. Another key: 409. Still no password signs in, and GET says nothing of one.
+ *      still one member. Another key: 409. Still no password signs in, and GET says so (password: false, not retired).
  *   E. A restart after the claim: no file, no new code, GET says claimed.
  *   F. A new code after the file was lost: a statement for the old code id is refused.
- *   G. The claim file cannot be written: the node starts anyway, with no code, and the log says why.
+ *   G. The claim file cannot be written: the node starts anyway, with no code, and the log says why and what works with
+ *      no code: fix it and restart, as `beanpool claim` needs a waiting code. Fixed, the next start makes one.
  *   H. A flood of wrong proofs from many sources never delays a right proof: it answers 200 at once. Their SECURITY lines
  *      stop at the node-wide budget, with one "and M more" line a minute; the claim's own line is always written.
  *   I. An old admin password makes no first invite (401, no credential), and the claim then makes the owner; with an
- *      owner, the next start has no file and no waiting code, and GET says claimed, and nothing of a password.
+ *      owner, the next start has no file and no waiting code, and GET says claimed, with password: false.
  *   J. Two keys with the right proof at once: one owner, the other 409.
  *   K. No request this suite sent carried the code.
  *   L. A stranger sharing the installer's address: 350 requests (GETs and wrong proofs) meet no per-address limiter, only
@@ -277,6 +279,8 @@ async function main(): Promise<void> {
     // No scrypt parameters: the phone uses CLAIM_SCRYPT hard-coded, and a phishing server writes this answer itself.
     assert(/^[0-9a-f]{64}$/.test(info.json.salt || '') && !('scrypt' in info.json),
         `A7. and the salt, which is public, and no scrypt parameters (${JSON.stringify(Object.keys(info.json))})`);
+    assert(info.json.password === false && !('passwordRetired' in info.json),
+        `A7b. and password: false, so the manager draws no admin-password fold under the claim (${JSON.stringify(info.json)})`);
     const codeId: string = info.json.codeId;
     const salt: string = info.json.salt;
     const config = JSON.parse(fs.readFileSync(path.join(dirA, 'local-config.json'), 'utf-8'));
@@ -343,8 +347,8 @@ async function main(): Promise<void> {
     assert(r.status === 409 && r.json.code === 'claim_already_claimed', `D6. another key with the right proof: 409 (${r.status} ${r.json.code})`);
     const get2 = await claimInfo(a);
     assert(get2.unclaimed === false && get2.salt === undefined, `D7. GET says claimed, with no salt (${JSON.stringify(get2)})`);
-    assert(!('password' in get2) && !('passwordRetired' in get2),
-        `D7b. and nothing of an admin password: Settings shows the phone sign-in, no password form (${JSON.stringify(get2)})`);
+    assert(get2.password === false && !('passwordRetired' in get2),
+        `D7b. and that this server has no admin password, not retired: Settings shows the phone sign-in, no password form (${JSON.stringify(get2)})`);
     assert(!(await signsIn(a, password)), 'D8. still no password signs in');
     await a.stop();
     const facts = dbFacts(dirA, alice.pub);
@@ -388,12 +392,24 @@ async function main(): Promise<void> {
     console.log('\nG. The claim file cannot be written');
     const dirG = path.join(root, 'g');
     fs.mkdirSync(path.join(dirG, FILE_NAME, 'in-the-way'), { recursive: true });
-    const g = await boot(dirG, env);
+    let g = await boot(dirG, env);
     const getG = await request(g, 'GET', '/api/local/claim', undefined, { Host: HOST });
     assert(getG.status === 200 && getG.json.unclaimed === true && getG.json.codeId === null, `G1. the node serves, with no code (${JSON.stringify(getG.json)})`);
-    assert(/No claim code this start/.test(g.output()), 'G2. the log says why');
-    assert(/beanpool claim --key <public key> --callsign <name>/.test(g.output()) && /beanpool recover --key <member>/.test(g.output())
-        && !/admin password/i.test(g.output()), 'G2. and how to add the first owner on the server, never an admin password');
+    const warned = g.output().split('\n').find((l) => l.includes('No claim code this start')) ?? '';
+    assert(warned.includes(path.join(dirG, FILE_NAME)), `G2. the log says why, naming the file (${warned.slice(0, 160)})`);
+    // `beanpool claim` needs a waiting code, with --key or without (claim-command.ts), so the way in is the next start's.
+    assert(/Fix that \(the data folder must be writable, with free space\) and restart the node: the next start makes a claim code, which beanpool claim then shows\./.test(warned)
+        && !/beanpool claim --key/.test(warned), `G2b. and to fix it and restart, never a \`beanpool claim --key\` with no code to use (${warned.slice(-330)})`);
+    assert(/If the community already has members, beanpool recover --key <member public key \| @callsign> makes one of them its owner now\./.test(warned),
+        'G2c. and `beanpool recover --key` only for a community that already has members');
+    assert(!/admin password/i.test(g.output()), 'G2d. never an admin password');
+    await g.stop();
+    fs.rmSync(path.join(dirG, FILE_NAME), { recursive: true, force: true });
+    g = await boot(dirG, env);
+    const fixedG = await request(g, 'GET', '/api/local/claim', undefined, { Host: HOST });
+    const madeG = fs.statSync(path.join(dirG, FILE_NAME), { throwIfNoEntry: false })?.isFile() === true;
+    if (madeG) codes.push(readCode(dirG));
+    assert(madeG && /^[0-9a-f]{8}$/.test(fixedG.json?.codeId || ''), `G3. fixed, the next start makes a claim code, as the log said (${JSON.stringify(fixedG.json)})`);
     await g.stop();
 
     console.log('\nH. A flood of wrong proofs never delays a right one');
@@ -511,7 +527,7 @@ async function main(): Promise<void> {
     assert(!fs.existsSync(path.join(dirI, FILE_NAME)), 'I4. with an owner, the next start has no claim file');
     assert(!pendingIn(dirI), 'I5. and no waiting code');
     const claimedI = await claimInfo(iNode);
-    assert(claimedI.unclaimed === false && !('password' in claimedI), `I6. GET says claimed, and nothing of an admin password (${JSON.stringify(claimedI)})`);
+    assert(claimedI.unclaimed === false && claimedI.password === false, `I6. GET says claimed, and that this server has no admin password (${JSON.stringify(claimedI)})`);
     await iNode.stop();
 
     console.log('\nJ. Two keys at once');

@@ -44,6 +44,7 @@ import { getProfileSwitches } from './config/node-profile.js';
 import { readCommunitySettings, parseCommunitySettings, keepMainServerCommunitySettings, installCommunitySettings, keptCommunitySettings } from './config/community-settings.js';
 import { db } from './db/db.js';
 import { setMemberPhoto, confirmationDialOn, memberKnownGrant, CONFIRMATION_DIAL_KEY } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -100,7 +101,8 @@ async function call(method: string, id: Id | null, urlPath: string, body?: unkno
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

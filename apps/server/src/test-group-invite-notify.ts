@@ -36,6 +36,7 @@ import { db } from './db/db.js';
 import { addBlocks } from './engine/member-blocks.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here, so every push is measured without leaving this machine; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -99,7 +100,8 @@ async function signedFetch(method: 'GET' | 'POST' | 'DELETE', path: string, body
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

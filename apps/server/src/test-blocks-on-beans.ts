@@ -34,6 +34,7 @@ import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeove
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -181,14 +182,15 @@ function newId(name: string): Id {
 }
 
 interface Res { status: number; body: any; text: string }
-/** A member's signed request to a node's real HTTPS server (the format before request binding, which every node still takes). */
+/** A member's signed request to a node's real HTTPS server (format 2, through signed-request-test-helper.ts). */
 async function signedCall(base: string, method: 'GET' | 'POST', route: string, id: Id, body?: unknown): Promise<Res> {
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -206,8 +208,8 @@ type Sock = { ws: WebSocket; events: any[] };
 function socket(base: string, id: Id): Promise<Sock> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    const url = `${base.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    const url = `${base.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const s: Sock = { ws, events: [] };

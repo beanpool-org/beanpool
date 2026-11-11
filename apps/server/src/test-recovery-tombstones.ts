@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
 import { fixtureWords } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -109,7 +110,8 @@ async function child(): Promise<void> {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Public-Key': pkOf(a.seedHex),
-                    'X-Signature': crypto.sign(null, Buffer.from(`${a.method}\n${a.path}\n${ts}\n${nonce}\n${bodyString}`), priv).toString('base64'),
+                    'X-Signature': signRequest(priv, { method: a.method, path: a.path, timestamp: ts, nonce, body: bodyString }),
+                    [SIGNED_FOR_HEADER]: signedForHost(),
                     'X-Timestamp': String(ts),
                     'X-Nonce': nonce,
                 },

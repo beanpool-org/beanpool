@@ -45,6 +45,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { addChannel, clearUnprovenOauthBadges, deleteChannel } from './engine/creator-channels.js';
 import { setPlatformRequestForTests, channelIdentityFromRow, matchIdentity, type PlatformRequest } from './engine/platform-identity.js';
 import { resetPulseOAuthRelayLimits } from './routes/channels.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Everything the SERVER prints, so the suite can prove no token or identity reaches a log line. The
 // suite's own lines go straight to the real streams and are not captured: they quote responses.
@@ -94,7 +95,8 @@ async function call(method: string, id: Id | null, urlPath: string, body?: unkno
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

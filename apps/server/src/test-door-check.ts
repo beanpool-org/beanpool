@@ -43,6 +43,7 @@ import {
     PROBE_FORCED_EVERY_MS, PROBE_STANDS_MS, SITEVERIFY_URL, TOKEN_LIFE_MS, _resetDoorCheckForTests, doorCheckPassed, forgetDoorCheckPass, siteverifyUp, verifyDoorCheck,
 } from './services/door-check.js';
 import { solveOffLoop } from './door-work-test-solver.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -114,7 +115,8 @@ async function post(id: Id, path: string, body: unknown, ip: string): Promise<Re
         method: 'POST',
         headers: {
             'CF-Connecting-IP': ip, 'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         },
         body: raw,
     });

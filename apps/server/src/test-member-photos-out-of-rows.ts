@@ -32,6 +32,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const HERE = fileURLToPath(import.meta.url);
 
@@ -161,7 +162,7 @@ async function startServer(dataDir: string, heapMb: number): Promise<Server> {
     };
 }
 
-/** A member's signed GET or POST, as the apps send one (the older request format, which every node still takes). */
+/** A member's signed GET or POST, as the apps send one (format 2, through signed-request-test-helper.ts). */
 async function call(base: string, method: 'GET' | 'POST', route: string, key: Key | null, body?: unknown): Promise<{ status: number; text: string; headers: Headers; bytes: Buffer }> {
     const raw = body === undefined ? '' : JSON.stringify(body);
     const headers: Record<string, string> = raw ? { 'Content-Type': 'application/json' } : {};
@@ -171,7 +172,8 @@ async function call(base: string, method: 'GET' | 'POST', route: string, key: Ke
         const priv = crypto.createPrivateKey({ key: Buffer.from(key.priv, 'base64'), format: 'der', type: 'pkcs8' });
         Object.assign(headers, {
             'X-Public-Key': key.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), priv).toString('base64'),
+            'X-Signature': signRequest(priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts), 'X-Nonce': nonce,
         });
     }

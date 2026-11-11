@@ -24,6 +24,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createGroup, joinGroup } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -51,9 +52,10 @@ async function send(method: string, path: string, body: unknown, signer?: Identi
     if (signer) {
         const ts = String(Date.now());
         const nonce = crypto.randomUUID();
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = ts;
         headers['X-Nonce'] = nonce;
     }
@@ -110,13 +112,14 @@ async function main() {
         const bodyString = JSON.stringify({ role: 'observer' });
         const ts = String(Date.now());
         const nonce = crypto.randomUUID();
-        const canonical = `PATCH\n${rolePath}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method: 'PATCH', path: rolePath, timestamp: ts, nonce, body: bodyString };
         const res = await fetch(`${BASE}${rolePath}`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Public-Key': convenor.pub,
-                'X-Signature': crypto.sign(null, Buffer.from(canonical), convenor.priv).toString('base64'),
+                'X-Signature': signRequest(convenor.priv, canonical),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': ts,
                 'X-Nonce': nonce,
             },
@@ -168,7 +171,8 @@ async function main() {
         const headers = {
             'Content-Type': 'application/json',
             'X-Public-Key': convenor.pub,
-            'X-Signature': crypto.sign(null, Buffer.from(`PATCH\n${rolePath}\n${ts}\n${replayNonce}\n${bodyString}`), convenor.priv).toString('base64'),
+            'X-Signature': signRequest(convenor.priv, { method: 'PATCH', path: rolePath, timestamp: ts, nonce: replayNonce, body: bodyString }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': ts,
             'X-Nonce': replayNonce,
         };

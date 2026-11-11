@@ -59,6 +59,7 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MODE = `[${MODE_NAME}]`;
 let BASE = '';
@@ -82,10 +83,11 @@ function newId(): Id {
 function signedHeaders(method: string, p: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

@@ -65,6 +65,7 @@ import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { buildInviteTicket } from '@beanpool/core';
 import WebSocket from 'ws';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -130,7 +131,8 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
         const ts = Date.now();
         const nonce = hex(16);
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -147,8 +149,8 @@ function socket(id: Id | null): Promise<Sock> {
     if (id) {
         const ts = Date.now();
         const nonce = hex(16);
-        const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-        url += `?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+        const sig = signSocket(id.priv, ts, nonce);
+        url += `?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     }
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });

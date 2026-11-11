@@ -29,6 +29,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
 import { db } from './db/db.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -54,8 +55,8 @@ function seedMember(pk: string, callsign: string) {
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    return `pubkey=${id.pub}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    return `pubkey=${id.pub}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 function open(url: string): Promise<{ ws: WebSocket; raw: string[] }> {
@@ -111,7 +112,8 @@ async function main() {
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': payer.pub,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n/api/ledger/transfer\n${ts}\n${nonce}\n${bodyString}`), payer.priv).toString('base64'),
+            'X-Signature': signRequest(payer.priv, { method: 'POST', path: '/api/ledger/transfer', timestamp: ts, nonce, body: bodyString }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

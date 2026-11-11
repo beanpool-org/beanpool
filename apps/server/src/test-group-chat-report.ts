@@ -58,6 +58,7 @@ import { attachmentKey, getImageStore, readObject } from './storage/image-store.
 import { freshGroupEpoch } from './group-test-payload.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { AGENT_TOOLS, type AgentGrant } from './agent/tools.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -101,7 +102,8 @@ async function call(method: 'GET' | 'POST', signer: Id | null, p: string, body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

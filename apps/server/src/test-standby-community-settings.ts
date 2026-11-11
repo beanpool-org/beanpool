@@ -55,6 +55,7 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, serveCommands, inspectNode, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -330,7 +331,8 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

@@ -32,6 +32,7 @@ import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, v
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -63,7 +64,8 @@ async function signedGet(path: string, signer?: Identity): Promise<{ status: num
         const nonce = crypto.randomBytes(16).toString('hex');
         const signPath = path.split('?')[0];
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = signText(signer, `GET\n${signPath}\n${ts}\n${nonce}\n`);
+        headers['X-Signature'] = signRequest(signer.priv, { method: 'GET', path: signPath, timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -152,7 +154,8 @@ async function main() {
         const nonce = crypto.randomBytes(16).toString('hex');
         const twice: Record<string, string> = {
             Accept: 'application/json', 'X-Public-Key': owner.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': signText(owner, `GET\n/api/node-admin/me\n${ts}\n${nonce}\n`),
+            'X-Signature': signRequest(owner.priv, { method: 'GET', path: '/api/node-admin/me', timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         };
         const first = await fetch(`${BASE}/api/node-admin/me`, { headers: twice });
         const firstBody = await first.json().catch(() => null) as any;
@@ -846,7 +849,8 @@ async function main() {
             const nonce = crypto.randomBytes(16).toString('hex');
             return postJson('/api/member/re-enroll', JSON.parse(bodyString), {
                 'X-Public-Key': nk.pub,
-                'X-Signature': signText(nk, `POST\n/api/member/re-enroll\n${ts}\n${nonce}\n${bodyString}`),
+                'X-Signature': signRequest(nk.priv, { method: 'POST', path: '/api/member/re-enroll', timestamp: ts, nonce, body: bodyString }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             });
@@ -952,7 +956,8 @@ async function main() {
             const nonce = crypto.randomBytes(16).toString('hex');
             return postJson('/api/member/re-enroll', JSON.parse(bodyString), {
                 'X-Public-Key': nk.pub,
-                'X-Signature': signText(nk, `POST\n/api/member/re-enroll\n${ts}\n${nonce}\n${bodyString}`),
+                'X-Signature': signRequest(nk.priv, { method: 'POST', path: '/api/member/re-enroll', timestamp: ts, nonce, body: bodyString }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             });

@@ -61,6 +61,7 @@ import {
 } from './engine/post-fields.js';
 import { guestPost, setMemberPhoto, withoutTradeParty } from '@beanpool/engine';
 import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, STARTER_OFFERS, pricingItemFor } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here, so who is told what is read from the notices this server keeps; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -122,7 +123,8 @@ async function signed(urlPath: string, id: Id, body: unknown) {
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${urlPath}\n${ts}\n${nonce}\n${raw}`), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, { method: 'POST', path: urlPath, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -138,7 +140,8 @@ async function signedGet(urlPath: string, id: Id) {
     const res = await fetch(`${BASE}${urlPath}`, {
         headers: {
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, { method: 'GET', path: urlPath.split('?')[0], timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

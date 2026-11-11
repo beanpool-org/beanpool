@@ -16,6 +16,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { __test_isPrivateSource } from './dns-shim.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -47,10 +48,10 @@ async function main() {
     const path = '/api/ledger/transfer';
     const body = JSON.stringify({ from: 'someoneElsePubkeyNotMe', to: 'x', amount: 1 });
     const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${body}`), privateKey).toString('base64');
+    const sig = signRequest(privateKey, { method: 'POST', path, timestamp: ts, nonce, body });
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Public-Key': pubHex, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
+        headers: { 'Content-Type': 'application/json', 'X-Public-Key': pubHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
         body,
     });
     const err = (await res.json())?.error ?? '';
@@ -68,8 +69,8 @@ async function main() {
                 VALUES (?, 'hardening-reader', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(pubHex);
     const signedGet = (p: string) => {
         const t = Date.now(), n = crypto.randomBytes(16).toString('hex');
-        const s = crypto.sign(null, Buffer.from(`GET\n${p.split('?')[0]}\n${t}\n${n}\n`), privateKey).toString('base64');
-        return fetch(`${BASE}${p}`, { headers: { 'X-Public-Key': pubHex, 'X-Signature': s, 'X-Timestamp': String(t), 'X-Nonce': n } });
+        const s = signRequest(privateKey, { method: 'GET', path: p.split('?')[0], timestamp: t, nonce: n });
+        return fetch(`${BASE}${p}`, { headers: { 'X-Public-Key': pubHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': s, 'X-Timestamp': String(t), 'X-Nonce': n } });
     };
     const r = await signedGet(`/api/ledger/transactions?publicKey=${pubHex}&limit=-1`);
     const rows = await r.json();

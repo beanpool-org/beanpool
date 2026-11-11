@@ -31,6 +31,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { addBlocks, removeBlock } from './engine/member-blocks.js';
 import { getPosts } from './state-engine.js';
 import { searchTermsFor } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -54,11 +55,12 @@ function makeMember(callsign: string): Id {
 async function signedGet(path: string, id: Id, extra: Record<string, string> = {}): Promise<{ status: number; body: any; etag: string | null }> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+    const canonical = { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce };
     const res = await fetch(`${BASE}${path}`, {
         headers: {
             'X-Public-Key': id.pubKeyHex,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
             ...extra,

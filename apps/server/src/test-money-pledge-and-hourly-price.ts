@@ -29,6 +29,7 @@ import {
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Loaded so that this suite runs to the end on a tree without the boot step (it fails there, with a count, rather than
 // stopping at the import). The refusals are matched by their words for the same reason.
@@ -114,13 +115,14 @@ async function signedFetch(method: 'POST', path: string, id: Id, body: unknown) 
     const bodyString = JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
     const res = await fetch(`${BASE}${path}`, {
         method,
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

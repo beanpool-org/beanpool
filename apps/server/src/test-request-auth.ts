@@ -24,6 +24,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { MAX_NONCE_LENGTH, requestNonces } from './engine/member-signature.js';
 import WebSocket from 'ws';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -58,9 +59,9 @@ async function signedFetch(path: string, body: any, opts: Opts = {}): Promise<{ 
             const ts = opts.ts ?? Date.now();
             const nonce = opts.nonce ?? crypto.randomBytes(16).toString('hex');
             const signedBody = opts.tamperBody ? JSON.stringify({ ...body, tampered: true }) : bodyString;
-            const canonical = `POST\n${opts.signPath ?? path}\n${ts}\n${nonce}\n${signedBody}`;
             headers['X-Public-Key'] = pubKeyHex;
-            headers['X-Signature'] = sign(canonical);
+            headers['X-Signature'] = signRequest(privateKey, { method: 'POST', path: opts.signPath ?? path, timestamp: ts, nonce, body: signedBody });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }
@@ -162,8 +163,8 @@ async function main() {
     // The /ws connect token goes through the same verifier: a 129-character nonce is refused (401), a 32-hex one opens.
     const wsOpen = (nonce: string) => new Promise<boolean>((resolve) => {
         const ts = Date.now();
-        const sig = sign(`WS\n/ws\n${ts}\n${nonce}\n`);
-        const ws = new WebSocket(`${BASE.replace('https', 'wss')}/ws?pubkey=${pubKeyHex}&ts=${ts}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(sig)}`,
+        const sig = signSocket(privateKey, ts, nonce);
+        const ws = new WebSocket(`${BASE.replace('https', 'wss')}/ws?pubkey=${pubKeyHex}&ts=${ts}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(sig)}&${socketBinding()}`,
             { rejectUnauthorized: false });
         ws.on('open', () => { ws.close(); resolve(true); });
         ws.on('error', () => resolve(false));

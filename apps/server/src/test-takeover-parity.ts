@@ -53,6 +53,7 @@ import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, faceUrlsIn, listingPhotoUrlsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
 } from './takeover-parity-compare.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -318,7 +319,7 @@ function newId(name: string): Id {
 interface Answer { status: number; body: any }
 
 /**
- * A call to a node's real HTTPS server: signed by `as` (the format before request binding, which every node still takes;
+ * A call to a node's real HTTPS server: signed by `as` (format 2, through signed-request-test-helper.ts;
  * the signature covers the path, never the query), with the admin password in `admin`, or neither.
  */
 async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
@@ -329,7 +330,8 @@ async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', ro
         const nonce = crypto.randomBytes(16).toString('hex');
         const signedPath = route.split('?')[0];
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${signedPath}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: signedPath, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

@@ -29,6 +29,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import https from 'node:https';
 import { gunzipSync } from 'node:zlib';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let run = 0, passed = 0;
@@ -51,9 +52,10 @@ function ask(path: string, id: Id | null, headers: Record<string, string> = {}, 
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce };
         h['X-Public-Key'] = id.pubKeyHex;
-        h['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        h['X-Signature'] = signRequest(id.privateKey, canonical);
+        h[SIGNED_FOR_HEADER] = signedForHost();
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }

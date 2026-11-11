@@ -57,6 +57,7 @@ import { setNodeRole } from './config/node-role.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { feeOf, periodEnd, periodStart, standingAuthorisationText, standingGraceEndsAt, type StandingPeriodUnit } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 
 let run = 0, passed = 0;
@@ -101,7 +102,8 @@ async function call(id: Id, method: 'GET' | 'POST', path: string, body?: Record<
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

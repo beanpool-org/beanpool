@@ -43,6 +43,7 @@ import { REQUEST_LIMIT, requestLimitOf, requestReportsReach, wordingOf } from '.
 import { independentCircles } from './engine/auto-moderation.js';
 import { standbyRefuses } from './routes/standby-ledger-gate.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 let run = 0, passed = 0;
@@ -91,7 +92,8 @@ async function call(method: 'GET' | 'POST', signer: Id | null, p: string, body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

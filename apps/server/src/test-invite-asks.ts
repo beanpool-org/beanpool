@@ -42,6 +42,7 @@ import { _forgetAskTimesForTests, tidyInviteAsks } from './engine/invite-asks.js
 import { getAdminQueue } from './engine/admin-queue.js';
 import { issueAutomationToken } from './automation-tokens.js';
 import { ownerAdminLimit } from './engine/owner-admin-limit.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const ADMIN_PW = 'Invite-Asks-Admin-Pw-71!';
@@ -75,7 +76,8 @@ async function call(id: Id | null, method: 'GET' | 'POST', urlPath: string, body
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         h['X-Public-Key'] = id.pk;
-        h['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        h['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        h[SIGNED_FOR_HEADER] = signedForHost();
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }

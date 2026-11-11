@@ -39,6 +39,7 @@ import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // No host but this machine.
 const realFetch = globalThis.fetch;
@@ -116,12 +117,12 @@ async function runTests() {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         const bodyStr = JSON.stringify(body);
-        const signature = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyStr}`), kp.privateKey).toString('base64');
+        const signature = signRequest(kp.privateKey, { method: 'POST', path, timestamp: ts, nonce, body: bodyStr });
         const res = await fetch(`${base}${path}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Public-Key': kp.pubKeyHex, 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
+                'X-Public-Key': kp.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
             },
             body: bodyStr,
         });

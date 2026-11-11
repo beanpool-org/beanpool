@@ -29,6 +29,7 @@ process.env.NODE_PROFILE = 'global';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -43,8 +44,8 @@ function keypair(): Id {
 }
 function signedHeaders(id: Id, method: string, path: string, body = ''): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 
 async function main() {

@@ -25,6 +25,7 @@ import { TEST_PHOTOS } from './post-test-helper.js';
 import crypto from 'node:crypto';
 import { setMemberPhoto, NEARBY_SET_ONLINE_EVENTS } from '@beanpool/engine';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 /** The phone's own rule, run on the node's answer (as test-takeover-keeps-listing-times does with posts-replace). */
 const PHONE_RULE = new URL('../../native/utils/posts-nearby.ts', import.meta.url).href;
@@ -45,10 +46,11 @@ async function signed(method: 'GET' | 'POST', path: string, body: unknown, id: I
     const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts), 'X-Nonce': nonce,
     };
     if (method === 'POST') headers['Content-Type'] = 'application/json';

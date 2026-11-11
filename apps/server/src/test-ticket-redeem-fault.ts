@@ -24,6 +24,7 @@ import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -57,9 +58,10 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

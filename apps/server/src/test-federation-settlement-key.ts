@@ -65,6 +65,7 @@ import { getSettlement } from './federation-settlement-state.js';
 import { rotateDailyPulse } from './daily-pulse.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--settlement-key-child';
@@ -99,7 +100,8 @@ async function callAt(base: string, method: 'GET' | 'POST', id: Id | null, urlPa
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

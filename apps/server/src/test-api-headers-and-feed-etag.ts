@@ -39,6 +39,7 @@ import { db } from './db/db.js';
 import { recordActivity, pruneOldActivity } from './db/activity-feed-db.js';
 import { startHttpsServer } from './https-server.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -79,12 +80,13 @@ async function main(): Promise<void> {
     const memberFetch = (path: string, extra: Record<string, string> = {}) => {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        const canonical = { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce };
         return fetch(`${BASE}${path}`, {
             headers: {
                 ...extra,
                 'X-Public-Key': authorPk,
-                'X-Signature': crypto.sign(null, Buffer.from(canonical), authorPriv).toString('base64'),
+                'X-Signature': signRequest(authorPriv, canonical),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             },

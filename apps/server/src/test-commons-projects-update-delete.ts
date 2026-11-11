@@ -22,6 +22,7 @@ import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -55,10 +56,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

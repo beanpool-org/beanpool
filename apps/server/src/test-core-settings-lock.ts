@@ -29,6 +29,7 @@
  */
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -116,7 +117,8 @@ async function main(): Promise<void> {
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             headers['X-Public-Key'] = id.pk;
-            headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+            headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }

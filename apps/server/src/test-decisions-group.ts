@@ -36,6 +36,7 @@ import { db } from './db/db.js';
 import { GROUP_NOT_ON_ROLL, GROUP_OBSERVER_NO_VOTE, GROUP_CLOSED_VOID, GROUP_ALREADY_VOTED, GROUP_CLOSED_LINE, executeDecision } from './decisions-engine.js';
 import { setChatMute } from './engine/chat-mutes.js';
 import { PUSH_NOTICE_KINDS } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here, so the group push is measured without leaving this machine; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -87,9 +88,10 @@ async function signedFetch(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: st
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

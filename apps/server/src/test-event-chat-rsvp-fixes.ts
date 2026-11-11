@@ -18,6 +18,7 @@ process.env.DISABLE_UPDATE_CHECK = 'true';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 const fails: string[] = [];
@@ -35,8 +36,8 @@ function newId(): Id {
 }
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
-    return { 'X-Public-Key': id.pk, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
+    return { 'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 let beforeCall: () => void = () => {};
 async function req(method: string, p: string, id?: Id, body?: any): Promise<{ status: number; body: any }> {

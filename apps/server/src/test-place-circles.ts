@@ -33,6 +33,7 @@ import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { CIRCLE_WORDS_FIXED, setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -114,7 +115,8 @@ async function call(method: 'GET' | 'POST' | 'DELETE', id: Id | null, urlPath: s
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -537,7 +539,8 @@ async function patch(id: Id, urlPath: string, body: unknown): Promise<number> {
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`PATCH\n${urlPath}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'PATCH', path: urlPath, timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
     return (await localFetch(`${BASE}${urlPath}`, { method: 'PATCH', headers, body: raw })).status;
 }

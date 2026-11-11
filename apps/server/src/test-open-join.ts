@@ -63,6 +63,7 @@ import { openShareRow } from './engine/recovery-shares.js';
 import { isNodeWrapped } from './services/recovery-seal-key.js';
 import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -139,7 +140,8 @@ async function call(id: Id | null, path: string, body: unknown): Promise<{ statu
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

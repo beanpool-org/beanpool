@@ -27,6 +27,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { ledger } from './engine/ledger.js';
 import { db, createCrowdfundProject } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -100,9 +101,9 @@ async function send(method: string, path: string, body: unknown, signer?: Identi
     if (signer) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, { method, path, timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

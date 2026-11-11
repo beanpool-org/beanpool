@@ -29,6 +29,7 @@
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Shape, ShapeLock, ShapeSetting } from './config/community-shape.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 // The flags the server reads at import, set before anything is imported (every import below is dynamic).
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -53,6 +54,8 @@ type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any; headers: Headers };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 200)}`;
 const DAY = 86_400_000;
+// The probation state below gives the node this name; with no address it takes any host. Every request is signed for it.
+setSignedForHost('riverside.beanpool.org');
 /**
  * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths: exact for
  * every figure here, each being whole Beans. The known floor's keys keep their names (`knownFloor`, the shape's
@@ -142,7 +145,8 @@ async function main(): Promise<void> {
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             headers['X-Public-Key'] = id.pk;
-            headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+            headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }

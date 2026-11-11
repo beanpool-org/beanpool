@@ -64,6 +64,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -115,10 +116,11 @@ type Id = { pk: string; privateKey: crypto.KeyObject; callsign: string };
 function signedHeaders(method: string, route: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: route.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

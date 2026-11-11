@@ -51,6 +51,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false'; // https-server.ts's rule: unset means ON
 
@@ -87,7 +88,8 @@ async function call(method: 'GET' | 'POST', path: string, as?: Id, body?: unknow
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(as.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

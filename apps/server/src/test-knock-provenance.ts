@@ -30,6 +30,7 @@ delete process.env.PUBLIC_ADDRESS_NAME;
 delete process.env.PUBLIC_ADDRESS_AUTO;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const DAY = 86_400_000;
@@ -56,7 +57,8 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

@@ -42,6 +42,7 @@ for (const name of ['WS_MAX_SOCKETS', 'WS_MAX_STRANGER_SOCKETS', 'WS_MAX_SOCKETS
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -59,14 +60,14 @@ function keypair(): Id {
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 function signedHeaders(id: Id, method: string, path: string, body = ''): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 
 /** What cloudflared forwards for a client at `ip`. */

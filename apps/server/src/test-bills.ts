@@ -25,7 +25,7 @@
  * 13. A re-key moves both sides.
  * 14. A closed account's bills end.
  * 15. The Home answer: one line per bill waiting, known amber, a stranger's calm; none to an app that doesn't open a bill.
- * 16. What a bill may be about: the sender's own listing, or the standing deal between the two.
+ * 16. What a bill may be about: the sender's own listing, or the standing deal between the two; never a Local knowledge page.
  *
  * The deciding review of 6bc2ece9 (#3066), one section a finding:
  * 17. A hold follows the person, both ways: a member held by reports sends no bill for an enterprise they keep, and the bill
@@ -508,6 +508,11 @@ async function main(): Promise<void> {
     assert(mine.status === 200 && mine.body?.bill?.postId === uma.jam.id && mine.body.bill.postTitle === "Uma's jam" && notMine.status === 400 && notMine.body?.code === 'bill_about'
         && noStanding.status === 400 && noStanding.body?.code === 'bill_about',
         `about the sender's own listing only, or the standing deal between them (${mine.status}, ${notMine.status}, ${noStanding.status})`);
+    // A Local knowledge page is never money's (DESIGN-local-knowledge-fable §2.3), even its own writer's (sync review of aed41aa2).
+    const page = await post(owner, '/api/knowledge/posts', { title: 'How recycling works at the tip', body: 'Glass in the green bins, paper in the blue.', topic: 'local-services' });
+    const aboutPage = await bill(owner, kim, 25, 'The recycling guide', { postId: page.body?.post?.id });
+    assert(page.status === 201 && page.body?.post?.type === 'knowledge' && aboutPage.status === 400 && aboutPage.body?.code === 'bill_about' && !billRow(aboutPage.id),
+        `a bill is never about a Local knowledge page, even its writer's own: 400 bill_about, nothing written (${page.status}, ${show(aboutPage)})`);
     const badId = await post(rob, '/api/bills', { id: 'x', to: kim.pk, amount_c: hc(2), whatFor: 'Short id' });
     assert(badId.status === 400 && badId.body?.code === 'bill_id' && /8 to 128 letters/.test(badId.body?.error ?? ''), `a bill's id is the app's own, in its shape (${show(badId)})`);
     const badWhat = await bill(rob, kim, 2, 'ab');

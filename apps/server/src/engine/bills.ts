@@ -342,7 +342,8 @@ export function sendBill(hooks: BillHooks, signer: string, body: BillSend, now: 
     const postId = typeof body.postId === 'string' && body.postId ? body.postId : null;
     if (body.postId !== undefined && body.postId !== null && body.postId !== '' && !postId) throw refuse(400, 'bill_about', billLines.notYourListing());
     if (postId) {
-        const author = (db.prepare('SELECT author_pubkey FROM posts WHERE id = ? AND shown_from_host IS NULL').get(postId) as { author_pubkey: string } | undefined)?.author_pubkey;
+        // A Local knowledge page is never money's (DESIGN-local-knowledge-fable §2.3), as money-limits-gate's listing() reads.
+        const author = (db.prepare("SELECT author_pubkey FROM posts WHERE id = ? AND shown_from_host IS NULL AND type != 'knowledge'").get(postId) as { author_pubkey: string } | undefined)?.author_pubkey;
         if (author !== biller) throw refuse(400, 'bill_about', billLines.notYourListing());
     }
     const standingId = typeof body.standingId === 'string' && body.standingId ? body.standingId : null;

@@ -72,6 +72,8 @@ vi.mock('../db', () => ({
     fetchGroupDetails: vi.fn(async () => ({ group: node.group, members: node.members })),
     joinGroupApi: vi.fn(), leaveGroupApi: vi.fn(), approveGroupMemberApi: vi.fn(), setGroupMemberRoleApi: vi.fn(),
     handOverGroupLeadApi: vi.fn(), updateGroupApi: vi.fn(),
+    // "Invited, not joined yet" (GroupInvitedList): the node says nothing here, so the section is not drawn.
+    fetchGroupInvitations: vi.fn(async () => null), withdrawGroupInvitationApi: vi.fn(),
 }));
 
 import { GroupDecisions } from '../../components/EnterpriseDecisions';

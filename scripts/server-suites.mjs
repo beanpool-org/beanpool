@@ -611,6 +611,7 @@ export const SUITES = [
     'test-groups-isolation',
     'test-group-invite-notify',
     'test-group-invites-engine',
+    'test-group-invited-list',
     'test-groups-routes',
     'test-groups-invite-only-hidden',
     'test-group-existence-leaks',

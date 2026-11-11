@@ -437,6 +437,39 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.ok(isGroupMember(db, group.id, 'bob_pub'));
     });
 
+    it('the member who made an invitation may withdraw it; no other member may, and a member who did not make it cannot', () => {
+        const group = createGroup(db, { name: 'Secret Circle', joinPolicy: 'invite_only', createdBy: 'alice_pub' });
+        // Bob is made a convenor, invites Carol, and is made a member again: the invitation he made stands.
+        inviteGroupMember(db, group.id, 'alice_pub', 'bob_pub', 'convenor');
+        joinGroup(db, group.id, 'bob_pub');
+        inviteGroupMember(db, group.id, 'bob_pub', 'carol_pub', 'member');
+        inviteGroupMember(db, group.id, 'alice_pub', 'dave_pub', 'member');
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'member');
+        assert.ok(!isGroupConvenor(db, group.id, 'bob_pub'));
+        assert.strictEqual(getGroupMember(db, group.id, 'carol_pub')?.invitedBy, 'bob_pub');
+
+        // A member who did not make Dave's invitation cannot withdraw it (and Bob cannot withdraw Alice's).
+        assert.throws(() => removeGroupMember(db, group.id, 'bob_pub', 'dave_pub'), /Only a group convenor can remove members/);
+        assert.strictEqual(getGroupMember(db, group.id, 'dave_pub')?.status, 'invited');
+        // Nor does making an invitation let a member remove anyone who has joined.
+        assert.throws(() => removeGroupMember(db, group.id, 'bob_pub', 'alice_pub'), /Only a group convenor can remove members/);
+
+        // He can withdraw his own: the row goes, as a convenor's withdrawal does.
+        assert.strictEqual(removeGroupMember(db, group.id, 'bob_pub', 'carol_pub'), true);
+        assert.strictEqual(getGroupMember(db, group.id, 'carol_pub'), null);
+        // A convenor still withdraws anyone's.
+        assert.strictEqual(removeGroupMember(db, group.id, 'alice_pub', 'dave_pub'), true);
+        assert.strictEqual(getGroupMember(db, group.id, 'dave_pub'), null);
+        // Once Carol has joined it is no longer an invitation: its maker cannot remove her.
+        inviteGroupMember(db, group.id, 'alice_pub', 'carol_pub', 'member');
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'convenor');
+        inviteGroupMember(db, group.id, 'bob_pub', 'dave_pub', 'member');
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'member');
+        joinGroup(db, group.id, 'dave_pub');
+        assert.throws(() => removeGroupMember(db, group.id, 'bob_pub', 'dave_pub'), /Only a group convenor can remove members/);
+        assert.ok(isGroupMember(db, group.id, 'dave_pub'));
+    });
+
     it('does not advertise invite_only groups to people outside them', () => {
         const secret = createGroup(db, { name: 'Secret Circle', joinPolicy: 'invite_only', createdBy: 'alice_pub' });
         const open = createGroup(db, { name: 'Garden Crew', joinPolicy: 'open', createdBy: 'alice_pub' });

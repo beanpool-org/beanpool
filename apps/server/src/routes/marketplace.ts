@@ -16,7 +16,7 @@ import {
     closePoll, votePoll, rsvpEvent, letInEvent, isReportRateLimited,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
-    stopStandingDeal, extendStandingDeal,
+    stopStandingDeal, extendStandingDeal, lowerStandingPeriod, answerStandingAsk, withdrawStandingAsk,
 } from '../state-engine.js';
 import { STANDING_AUTH_CODE, type StandingStart } from '../engine/standing-deals.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
@@ -1526,7 +1526,12 @@ function standingFromBody(ctx: any, standing: any): StandingStart | undefined {
 }
 
 /** A standing deal's own refusals: their status and code with their words (engine/standing-deals.ts, engine/escrow.ts). */
-const STANDING_CODES = new Set([STANDING_AUTH_CODE, 'standing_keeper', 'standing_gone', 'standing_payer_only']);
+const STANDING_CODES = new Set([
+    STANDING_AUTH_CODE, 'standing_keeper', 'standing_gone', 'standing_payer_only',
+    // A short week's refusals (DESIGN-getting-paid-fable §3.1): each says why in the member's words.
+    'standing_payee_only', 'standing_change_body', 'standing_change_taken', 'standing_lower_moved', 'standing_lower_amount', 'standing_ask_open',
+    'standing_ask_limit', 'standing_ask_gone',
+]);
 function respondStandingRefusal(ctx: any, err: any): boolean {
     if (!STANDING_CODES.has(err?.code)) return false;
     ctx.status = typeof err.status === 'number' ? err.status : 400;
@@ -1719,6 +1724,14 @@ async function standingStep(ctx: any, step: (id: string, actor: string, body: an
 router.post('/api/marketplace/standing/:id/stop', (ctx) => standingStep(ctx, (id, actor) => stopStandingDeal(id, actor)));
 router.post('/api/marketplace/standing/:id/extend', (ctx) => standingStep(ctx, (id, actor, body) =>
     extendStandingDeal(id, actor, standingFromBody(ctx, body.standing ?? body) ?? { authorisation: { payload: '', signature: '' } })));
+// A short week (DESIGN-getting-paid-fable §3.1): the payee lowers one period alone, or the payer asks to pay less (the side
+// is the signer's); the payee answers an ask, yes or no; the payer takes it back. The change's id is the app's UUID.
+router.post('/api/marketplace/standing/:id/lower', (ctx) => standingStep(ctx, (id, actor, body) =>
+    lowerStandingPeriod(id, actor, { id: body.id, periodNo: body.periodNo, beans_c: body.beans_c })));
+router.post('/api/marketplace/standing/:id/lower/:changeId/answer', (ctx) => standingStep(ctx, (id, actor, body) =>
+    answerStandingAsk(id, String(ctx.params.changeId), actor, body.yes)));
+router.post('/api/marketplace/standing/:id/lower/:changeId/withdraw', (ctx) => standingStep(ctx, (id, actor) =>
+    withdrawStandingAsk(id, String(ctx.params.changeId), actor)));
 
 router.post('/api/marketplace/transactions/cancel', async (ctx) => {
     try {

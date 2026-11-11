@@ -173,7 +173,14 @@ export interface TableHashes {
  * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
  * copy never crosses the change.
  */
-export const TABLE_HASHES_VERSION = 29;
+/**
+ * 30: a new table, standing_period_changes (a standing deal's period lowered, an ask and its answer, DESIGN-getting-paid-
+ * fable.md slice L1). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
+ * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is a
+ * lowering: after a take-over from such a copy a lowered period is paid at the price its payer signed, never more, and the
+ * two can lower it again.
+ */
+export const TABLE_HASHES_VERSION = 30;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

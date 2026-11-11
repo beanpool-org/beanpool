@@ -94,6 +94,8 @@ import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from
 import {
     tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
     extendStandingDeal as extendStandingDealEngine, hasShortStandingDeal, payShortStandingDealsOf, type StandingStart, type StandingHooks,
+    lowerStandingPeriod as lowerStandingPeriodEngine, answerStandingAsk as answerStandingAskEngine, withdrawStandingAsk as withdrawStandingAskEngine,
+    type StandingLowerBody,
 } from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
@@ -6858,6 +6860,33 @@ export function stopStandingDeal(id: string, actor: string): Record<string, unkn
 export function extendStandingDeal(id: string, actor: string, standing: StandingStart): Record<string, unknown> {
     assertLedgerWritable();
     return extendStandingDealEngine(getEscrowCb(), id, actor, standing);
+}
+
+/**
+ * The node's own primitives for a short week's steps, which may pay a short period at once (engine/standing-deals.ts
+ * payNowIfShort), as the after-commit hook's: a suite's wrap and pinned clock apply to them too (setStandingHookForTests).
+ */
+function standingStepHooks(): StandingHooks {
+    const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+    return standingHookWrap ? standingHookWrap(hooks) : hooks;
+}
+const standingStepNow = (): number => (standingHookNow ? standingHookNow() : Date.now());
+
+// A short week (engine/standing-deals.ts; DESIGN-getting-paid-fable §3): a period lowered or an ask to, its answer and its
+// take-back. Each writes what a period costs, so each refuses on a standby first; a lowering or a yes in the grace pays.
+export function lowerStandingPeriod(id: string, actor: string, body: StandingLowerBody): Record<string, unknown> {
+    assertLedgerWritable();
+    return lowerStandingPeriodEngine(standingStepHooks(), id, actor, body, standingStepNow());
+}
+
+export function answerStandingAsk(id: string, changeId: string, actor: string, yes: unknown): Record<string, unknown> {
+    assertLedgerWritable();
+    return answerStandingAskEngine(standingStepHooks(), id, changeId, actor, yes, standingStepNow());
+}
+
+export function withdrawStandingAsk(id: string, changeId: string, actor: string): Record<string, unknown> {
+    assertLedgerWritable();
+    return withdrawStandingAskEngine(standingStepHooks(), id, changeId, actor);
 }
 
 export type { EscrowDisputeAction };

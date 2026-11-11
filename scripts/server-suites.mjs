@@ -551,6 +551,7 @@ export const SUITES = [
     'test-pledge-deadline-http',
     'test-unfunded-pledges-return',
     'test-standing-deals',
+    'test-standing-lower',
     'test-enterprise-text',
     'test-event-chat',
     'test-event-chat-rsvp-fixes',

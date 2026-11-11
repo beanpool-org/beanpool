@@ -565,6 +565,7 @@ export const standingLines = {
         : t("You've asked about this week three times, which is the most.")),
     askGone: () => t('That ask has already been answered, taken back or closed.'),
     changeIdTaken: () => t('That change is already made with other details. Close it and try again.'),
+    changeUnread: () => t("That change can't be read. Close it and try again."),
     payeeOnly: () => t('Only the one who is paid can do this.'),
 };
 

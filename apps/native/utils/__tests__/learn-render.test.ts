@@ -515,6 +515,18 @@ describe("the Market's one line", () => {
         await act(async () => { vi.advanceTimersByTime(300); await Promise.resolve(); await Promise.resolve(); });
         expect(getKnowledgePosts).toHaveBeenCalledTimes(1);
     });
+
+    it('counts again when a sync or a pushed take-down changes the copy under words already typed (review of #3070)', async () => {
+        withPages();
+        await line('tip');
+        expect(q('market-learn-line')!.textContent).toBe('📖 In Learn: 2 for "tip" ›');
+        h.pages = h.pages.filter((p) => p.title !== 'Tip jar');
+        await act(async () => { (h.listeners.sync_data_updated || []).forEach((fn) => fn()); await Promise.resolve(); await Promise.resolve(); });
+        expect(q('market-learn-line')!.textContent).toBe('📖 In Learn: 1 for "tip" ›');
+        h.pages = [];
+        await act(async () => { (h.listeners.sync_data_updated || []).forEach((fn) => fn()); await Promise.resolve(); await Promise.resolve(); });
+        expect(q('market-learn-line')).toBeNull();
+    });
 });
 
 describe('the post route’s hook: which page a route names', () => {

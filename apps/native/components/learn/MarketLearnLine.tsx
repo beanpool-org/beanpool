@@ -7,7 +7,7 @@
  * can't be read, a community with Learn off (or only previewed), and no match all draw nothing: never an error.
  */
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { DeviceEventEmitter, Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 import { t } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
@@ -31,14 +31,17 @@ export function MarketLearnLine({ words }: { words: string }) {
     useEffect(() => {
         if (mode !== 'live' || !typed) { setCount(0); return; }
         let cancelled = false;
-        const timer = setTimeout(() => {
+        const read = () => {
             // Inside a promise, so a copy that cannot be read at all (a call that throws before it returns) is no page either.
             Promise.resolve()
                 .then(() => getKnowledgePosts())
                 .then((pages) => { if (!cancelled) setCount(learnSearch(pages, typed).total); })
                 .catch(() => { if (!cancelled) setCount(0); });
-        }, MARKET_LEARN_LINE_DELAY_MS);
-        return () => { cancelled = true; clearTimeout(timer); };
+        };
+        const timer = setTimeout(read, MARKET_LEARN_LINE_DELAY_MS);
+        // A sync or a pushed change (a take-down) changes the copy under words already typed: count again (review of #3070).
+        const sub = DeviceEventEmitter.addListener('sync_data_updated', read);
+        return () => { cancelled = true; clearTimeout(timer); sub.remove(); };
     }, [mode, typed]);
 
     if (mode !== 'live' || !typed || count < 1) return null;

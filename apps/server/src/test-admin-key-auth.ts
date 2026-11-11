@@ -133,9 +133,9 @@ async function main() {
     // What an older install's admin password looked like: no credential on this node (checked in 7, 8 and 12.13).
     const testPassword = 'SuperSecretAdminPassword123!';
     /** An owner's phone hand-off session, just unlocked: the fresh proof an owner's role changes ask (requireFreshProof). */
-    const phoneSessionOf = (k: { pub: string; sign: (m: string) => string }): string => {
+    const phoneSessionOf = (k: { pub: string; priv: Uint8Array }): string => {
         const chal = createAdminChallenge();
-        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: k.pub, signature: k.sign(chal.challenge) });
+        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.challengeId) });
         const opened = consumeHandshakeToken(solved.handshakeToken!, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
         return opened.sessionId!;
     };

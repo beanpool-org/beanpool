@@ -138,10 +138,10 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(within(screen.getByTestId('shape-row-decisions')).getByRole('button', { name: 'Unlock to change' })).toBeInTheDocument();
     });
 
-    it('Unlock opens the row; a token viewer shown the code box is asked a code, and the save carries it', async () => {
+    it('Unlock opens the row; a stale unlock is told to press Manage again, and the same save goes through on the next press', async () => {
         const after = locked();
         const { sent } = mockApi(locked(), [
-            { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
+            { ok: false, status: 403, body: { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' } },
             { ok: true, status: 200, body: { shape: after, told: 'members' } },
         ]);
         render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
@@ -150,18 +150,19 @@ describe('Core settings — locked: Unlock to change', () => {
         fireEvent.click(screen.getByRole('checkbox', { name: /Community votes active/ }));
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        // The first save carries no code; the server asks, and the box opens.
-        const input = await screen.findByTestId('fresh-proof-input');
+        // The first save carries no code; the server asks the Manage unlock again, and the box says so: no field to type in.
+        expect(await screen.findByTestId('fresh-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('fresh-proof-input')).toBeNull();
         expect(sent[0].body.code).toBeUndefined();
         expect(sent[0].body.changes).toEqual({ decisions: false });
-        fireEvent.change(input, { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
+        // After pressing Manage on the phone, the same Save is pressed again: the same change, still no code.
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
         expect(sent).toHaveLength(2);
         expect(sent[1].body.changes).toEqual({ decisions: false });
-        expect(sent[1].body.code).toBe('123456');
+        expect(sent[1].body.code).toBeUndefined();
         // The group is locked again at once: the next row still says Unlock to change.
-        expect(screen.queryByTestId('fresh-proof-input')).toBeNull();
+        expect(screen.queryByTestId('fresh-proof-step-up')).toBeNull();
         expect(within(screen.getByTestId('shape-row-beans')).getByRole('button', { name: 'Unlock to change' })).toBeInTheDocument();
     });
 
@@ -266,7 +267,7 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(log.textContent).not.toContain('voucherBudget');
     });
 
-    it('Core settings’ two numbers go through the lock: fresh proof when locked (V5)', async () => {
+    it('Core settings’ two numbers go through the lock: the Manage unlock again when locked (V5)', async () => {
         const shape = locked();
         // Whole hundredths, as the shape reads both (engine/vouchers.ts voucherBudgetFromRow, memberGiftFromRow).
         shape.settings.voucherBudget = { value: 100000, configured: 100000, source: 'default', lock: null };
@@ -274,7 +275,7 @@ describe('Core settings — locked: Unlock to change', () => {
 
         // Test voucherBudget
         const { sent } = mockApi(shape, [
-            { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
+            { ok: false, status: 403, body: { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' } },
             { ok: true, status: 200, body: { shape, told: 'members' } },
         ]);
         render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
@@ -285,21 +286,20 @@ describe('Core settings — locked: Unlock to change', () => {
         fireEvent.change(inputBudget, { target: { value: '1500' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        const input = await screen.findByTestId('fresh-proof-input');
+        await screen.findByTestId('fresh-proof-step-up');
         expect(sent[0].body.code).toBeUndefined();
         expect(sent[0].body.changes).toEqual({ voucherBudget: 150000 });
-        fireEvent.change(input, { target: { value: '123456' } });
-        fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
         expect(sent).toHaveLength(2);
         expect(sent[1].body.changes).toEqual({ voucherBudget: 150000 });
-        expect(sent[1].body.code).toBe('123456');
+        expect(sent[1].body.code).toBeUndefined();
 
         cleanup();
 
         // Test memberGift
         const { sent: sentGift } = mockApi(shape, [
-            { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
+            { ok: false, status: 403, body: { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' } },
             { ok: true, status: 200, body: { shape, told: 'members' } },
         ]);
         render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'token' }} />);
@@ -313,15 +313,14 @@ describe('Core settings — locked: Unlock to change', () => {
         fireEvent.change(inputGift, { target: { value: '50' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-        const input2 = await screen.findByTestId('fresh-proof-input');
+        await screen.findByTestId('fresh-proof-step-up');
         expect(sentGift[0].body.code).toBeUndefined();
         expect(sentGift[0].body.changes).toEqual({ memberGift: 5000 });
-        fireEvent.change(input2, { target: { value: '654321' } });
-        fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
         expect(sentGift).toHaveLength(2);
         expect(sentGift[1].body.changes).toEqual({ memberGift: 5000 });
-        expect(sentGift[1].body.code).toBe('654321');
+        expect(sentGift[1].body.code).toBeUndefined();
     });
 });
 

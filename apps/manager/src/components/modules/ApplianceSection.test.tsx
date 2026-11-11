@@ -878,6 +878,47 @@ describe('ApplianceSection Component', () => {
         expect(urls.filter(u => /\/2fa\/|change-password|retire-password|password-retirement/.test(u))).toEqual([]);
     });
 
+    // The Break-Glass card says what the server does with a code (admin-auth.ts: the enrol routes only; admin-key-auth.ts
+    // enrolAdminOwnerKey: every member is told, the node's log keeps it), in plain words, with no spec badge or quoted spec.
+    it('the Break-Glass card says in plain words what a code does and what is recorded when one is used, and carries no spec badge', async () => {
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('{}', { status: 200 }));
+        await act(async () => {
+            render(
+                <div style={{ width: 320, fontSize: '130%' }}>
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="access"
+                        rolesViewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }}
+                    />
+                </div>
+            );
+        });
+        expect(await screen.findByText('Break-Glass Emergency Recovery')).toBeInTheDocument();
+        expect(screen.getByTestId('break-glass-what')).toHaveTextContent('A break-glass code does one thing, it enrols a new key, and it opens nothing else in Settings.');
+        expect(screen.getByTestId('break-glass-audit')).toHaveTextContent("When one is used, every member gets a notice that a new admin key was authorised and for whom, and the node's log records it.");
+        // The spec badge and the quoted specification paragraph are gone.
+        expect(screen.queryByText(/Phase 3/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Specification/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Audit Trail Safeguard/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/exactly one thing/i)).not.toBeInTheDocument();
+        expect(document.querySelector('blockquote')).toBeNull();
+        // The button to make a code is still there for an owner's own key.
+        expect(screen.getByRole('button', { name: 'Make a break-glass code' })).toBeInTheDocument();
+    });
+
     it('surfaces error cleanly when update check returns HTTP error', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('/api/admin/check-update')) {

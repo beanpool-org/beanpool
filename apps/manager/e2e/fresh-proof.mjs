@@ -6,7 +6,8 @@
  *  1. At the press (opus-2028 B1): Claim, connector add, the re-key wizard and offboard put the box far from the button
  *     pressed. Right after the press, with NO scrolling by this script, the whole box is on screen (its top, when it is
  *     taller than the screen), the point at the centre of what shows is inside the box (not under a modal), and focus is
- *     in it. 320 @130% and 1280, for the phone's stale hand-off (the sentence) and the typed code (the field, the old authenticator ask, still wired).
+ *     in it. 320 @130% and 1280, for the phone's stale hand-off and a computer's key session (the two sentences the server
+ *     asks: it asks no typed code).
  *     Connector Remove and "Replace it" (the recovery code) close a confirm modal around the refusal, with the node
  *     answering at once: going back past the modal's history entry must not scroll the page back to where it stood when
  *     the modal opened (opus-2028 confirm B1). Once no modal is open (closed from the page, or by Back), the page's
@@ -15,10 +16,8 @@
  *     Android Custom Tab brought back to the front does). The re-key wizard is still open and still ticked, offboard is
  *     still open, the gateway still holds the owner's edit, and the same press then goes through with what was entered.
  *     A link that signs the page in as ANOTHER key closes the wizard and the code it shows (opus-2028 confirm N1).
- *  3. A spent code is never offered again (opus-2028 B4): after an accepted code, the next box on the same screen opens
- *     empty with Confirm off; Cancel empties it too.
- *  4. Member detail's Grant Admin (opus-2028 B2): the box opens in the member's screen and the code re-sends the grant.
- *  5. "Save Gateway Config" keeps its words inside its button at 320 @130% (opus-2028 N1).
+ *  3. Member detail's Grant Admin (opus-2028 B2): the box opens in the member's screen (flow 1 above).
+ *  4. "Save Gateway Config" keeps its words inside its button at 320 @130% (opus-2028 N1).
  *
  *   node e2e/fresh-proof.mjs
  *
@@ -29,7 +28,7 @@ import { startServer, launch, openSettings, selectSubTab, settle, CSP_VIOLATIONS
 import { VOTES_OFF } from './fixtures.mjs';
 
 const STALE = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
-const ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to do this', totpRequired: true };
+const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const failures = [];
 let checks = 0;
 
@@ -116,11 +115,11 @@ const FLOWS = [
         press: async (page) => { await press(page, /^Replace it$/); await settle(page); await press(page, /^Make a new code$/, topOverlay(page)); } },
 ];
 const SIZES = [{ width: 320, textScale: 1.3, label: '320 @130%' }, { width: 1280, textScale: 1, label: '1280' }];
-const KINDS = [{ kind: 'step-up', status: 403, json: STALE }, { kind: 'code', status: 401, json: ASK }];
+const KINDS = [{ kind: 'step-up', status: 403, json: STALE }, { kind: 'phone', status: 403, json: PHONE }];
 
 /** Where the box is right after the press, with no scrolling: on screen (whole, when it fits), on top, focused. */
 function atPress(testId) {
-    const el = document.querySelector(`[data-testid="${testId}-step-up"], [data-testid="${testId}-code"]`);
+    const el = document.querySelector(`[data-testid="${testId}-step-up"], [data-testid="${testId}-phone"]`);
     if (!el) return { found: false };
     const r = el.getBoundingClientRect();
     const vh = window.innerHeight, vw = window.innerWidth;
@@ -133,7 +132,7 @@ function atPress(testId) {
     return { found: true, top: Math.round(r.top), bottom: Math.round(r.bottom), vh, hitInside, focusInside: el.contains(document.activeElement) };
 }
 
-/** Answer the flow's request with the refusal (the code kind: refuse the first, let the re-send through). */
+/** Answer the flow's request with the refusal. */
 async function refuse(page, flow, k, sent) {
     await page.route(/\/(api|proxy)\//, async (route) => {
         const req = route.request();
@@ -142,7 +141,6 @@ async function refuse(page, flow, k, sent) {
         let body = null;
         try { body = JSON.parse(req.postData() || 'null'); } catch { body = null; }
         sent.push({ body, proof: req.headers()['x-fresh-proof'] ?? null });
-        if (k.kind === 'code' && sent.length > 1) return route.fallback();
         await route.fulfill({ status: k.status, contentType: 'application/json', body: JSON.stringify(k.json) });
     });
 }
@@ -181,13 +179,10 @@ try {
             check(shown && m.hitInside && m.focusInside, `${at}: whole on screen at the press, on top, focused`, JSON.stringify(m));
             const restore = await page.evaluate(() => ({ modals: document.querySelectorAll('[data-bp-modal]').length, mode: window.history.scrollRestoration }));
             if (!restore.modals) check(restore.mode === 'auto', `${at}: with no modal open, the page's scroll restores as usual again`, JSON.stringify(restore));
-            if (k.kind === 'code') {
-                await page.locator(`[data-testid="${flow.testId}-input"]`).fill('123456');
-                await page.locator(`[data-testid="${flow.testId}-confirm"]`).click();
-                await settle(page);
-                const codes = sent.map((s) => s.body?.code ?? s.proof ?? null);
-                check(codes.length === 2 && codes[0] === null && codes[1] === '123456', `${at}: the same request re-sent once, with the code`, JSON.stringify(codes));
-            }
+            // Nothing is typed in the box and nothing is sent again by it: the one request went, with no code.
+            check(await page.locator(`[data-testid="${flow.testId}-input"]`).count() === 0, `${at}: no field to type a code in`);
+            const codes = sent.map((s) => s.body?.code ?? s.proof ?? null);
+            check(codes.length === 1 && codes[0] === null, `${at}: one request, with no code`, JSON.stringify(codes));
             check(errors.length === 0, `${at}: no page errors`, errors.join('; '));
         } catch (e) {
             check(false, at, String(e).split('\n')[0]);
@@ -323,56 +318,7 @@ try {
         await context.close();
     }
 
-    console.log('3. A spent code is never offered again (opus-2028 B4)');
-    {
-        const { context, page } = await openSettings(browser, origin, { width: 1280, screen: { tab: 'people', sub: 'roles' } });
-        const proofs = [];
-        await page.route(/\/api\/local\/admin\/node-roles\/[^/]+\/[^/]+$/, (route) => {
-            if (route.request().method() !== 'DELETE') return route.fallback();
-            const proof = route.request().headers()['x-fresh-proof'] ?? null;
-            proofs.push(proof);
-            return proof ? route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' })
-                : route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify(ASK) });
-        });
-        const removeAdmin = async () => {
-            await press(page, /Remove .*'s admin role/);
-            await press(page, 'Yes, remove admin');
-            await page.locator('[data-testid="roles-proof-input"]').waitFor({ state: 'visible', timeout: 8000 });
-        };
-        try {
-            await removeAdmin();
-            await page.locator('[data-testid="roles-proof-input"]').fill('654321');
-            await page.locator('[data-testid="roles-proof-confirm"]').click();
-            await settle(page);
-            await removeAdmin();
-            const value = await page.locator('[data-testid="roles-proof-input"]').inputValue();
-            const enabled = await page.locator('[data-testid="roles-proof-confirm"]').isEnabled();
-            check(value === '' && !enabled, 'Owners & admins: the second box opens empty, Confirm off', JSON.stringify({ value, enabled }));
-            check(proofs.filter((p) => p === '654321').length === 1, 'Owners & admins: the accepted code was sent once', JSON.stringify(proofs));
-        } catch (e) {
-            check(false, 'Owners & admins, two removals', String(e).split('\n')[0]);
-        }
-        await context.close();
-    }
-    {
-        const { context, page } = await openSettings(browser, origin, { width: 1280, screen: { tab: 'appliance', sub: 'gateway' } });
-        await page.route(/\/api\/local\/admin\/gateway$/, (route) => (route.request().method() !== 'POST' ? route.fallback()
-            : route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify(ASK) })));
-        try {
-            await press(page, /Save Gateway Config/);
-            await page.locator('[data-testid="gateway-proof-input"]').fill('111222');
-            await page.locator('[data-testid="gateway-proof-cancel"]').click();
-            await press(page, /Save Gateway Config/);
-            await page.locator('[data-testid="gateway-proof-input"]').waitFor({ state: 'visible', timeout: 8000 });
-            const value = await page.locator('[data-testid="gateway-proof-input"]').inputValue();
-            check(value === '', 'gateway: after Cancel the box reopens empty', JSON.stringify(value));
-        } catch (e) {
-            check(false, 'gateway, Cancel then Save', String(e).split('\n')[0]);
-        }
-        await context.close();
-    }
-
-    console.log('4. "Save Gateway Config" inside its button at 320 @130% (opus-2028 N1)');
+    console.log('3. "Save Gateway Config" inside its button at 320 @130% (opus-2028 N1)');
     {
         const { context, page } = await openSettings(browser, origin, { width: 320, textScale: 1.3, screen: { tab: 'appliance', sub: 'gateway' } });
         try {

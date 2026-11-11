@@ -46,7 +46,8 @@ export function visitorsDisplay(val: 'nothing' | 'listings' | 'open'): string {
 
 export function logActorDisplay(entry: ShapeLogLine): { name: string; role?: string } {
     if (entry.actor === 'owner:password' || entry.actor === 'password') {
-        return { name: t('the owner (password)') };
+        // History: a change logged before nodes dropped the admin password still says so.
+        return { name: t('the owner (old admin password)') };
     }
     if (entry.actorCallsign) {
         return { name: `@${entry.actorCallsign}`, role: entry.actorRole ?? undefined };

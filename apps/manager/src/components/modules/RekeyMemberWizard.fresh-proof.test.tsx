@@ -5,15 +5,15 @@ import { RekeyMemberWizard, REKEY_PROPOSALS_POLL_MS } from './RekeyMemberWizard'
 /**
  * Owner-delete S4a: making or using an owner's or admin's re-key code asks an owner's fresh proof (server rekeyProof,
  * #1984 confirmation R1): `code` in issue-code's body, the X-Fresh-Proof header to complete (its body's `code` is the
- * re-key code). Each viewer × the refusal → the box or the sentence, and the wizard keeps what was ticked, made and typed,
- * so the owner's second Manage press on the phone (S2-S4-must-include) is followed by the same press here.
+ * re-key code). Each viewer × the refusal → the sentence, and the wizard keeps what was ticked, made and typed, so the
+ * owner's second Manage press on the phone (S2-S4-must-include) is followed by the same press here. The server asks no
+ * typed code: an old answer that carries one opens no box.
  */
 const NODE = 'https://riverbend.example.org';
 const member = { publicKey: 'a'.repeat(64), callsign: 'anna', status: 'active' };
 const phone = 'c'.repeat(64);
 const RK = 'RK-AB12-CD34';
-const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to re-key an owner or admin', totpRequired: true };
-const WRONG = { error: 'Invalid 2FA code', totpRequired: true };
+const OLD_CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to re-key an owner or admin', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const ISSUED = { success: true, code: RK, oldPubkey: member.publicKey, callsign: 'anna', expiresAt: new Date(Date.now() + 3600000).toISOString(), operator: 'b'.repeat(64) };
@@ -68,54 +68,48 @@ beforeEach(() => { vi.restoreAllMocks(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('RekeyMemberWizard: the fresh proof (S4a)', () => {
-    it('token viewer: Make a re-key code opens the box; a wrong code stays; a new code re-sends issue-code once with `code`', async () => {
-        const sent = mockNode({ issue: [[401, CODE_ASK], [401, WRONG], [200, ISSUED]] });
+    it('Make a re-key code, answered with the old typed-code ask: no box; one issue-code request with no code; the checklist stays ticked', async () => {
+        const sent = mockNode({ issue: [[401, OLD_CODE_ASK], [200, ISSUED]] });
         render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         await tickAndMake();
-        expect(await screen.findByText(/to re-key an owner or admin/)).toBeInTheDocument();
-        fireEvent.change(screen.getByTestId('rekey-proof-input'), { target: { value: '111111' } });
-        fireEvent.click(screen.getByTestId('rekey-proof-confirm'));
-        await waitFor(() => expect(screen.getByTestId('rekey-proof-error')).toHaveTextContent('Invalid 2FA code'));
-        // The same code is never sent twice: Confirm waits for a different one.
-        expect(screen.getByTestId('rekey-proof-confirm')).toBeDisabled();
-        fireEvent.change(screen.getByTestId('rekey-proof-input'), { target: { value: '222222' } });
-        fireEvent.click(screen.getByTestId('rekey-proof-confirm'));
-        expect(await screen.findByText(RK)).toBeInTheDocument();
+        await waitFor(() => expect(sent.issue).toHaveLength(1));
+        await new Promise((r) => setTimeout(r, 20));
         expect(screen.queryByTestId('rekey-proof-code')).not.toBeInTheDocument();
-        expect(sent.issue.map((s) => s.body.code)).toEqual([undefined, '111111', '222222']);
+        expect(screen.queryByTestId('rekey-proof-input')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('rekey-proof-step-up')).not.toBeInTheDocument();
+        expect(screen.queryByText(RK)).not.toBeInTheDocument();
+        expect(screen.getAllByRole('checkbox').every((cb) => (cb as HTMLInputElement).checked)).toBe(true);
+        expect(sent.issue.map((s) => s.body.code)).toEqual([undefined]);
         expect(sent.issue.every((s) => s.headers['X-Fresh-Proof'] === undefined)).toBe(true);
     });
 
-    it('token viewer: Bind their phone opens the box; the code goes as X-Fresh-Proof, the body keeps the re-key code and the number', async () => {
-        const sent = mockNode({ pendingFromStart: true, complete: [[401, CODE_ASK], [200, BOUND]] });
+    it('Bind their phone, answered with the old typed-code ask: no box; the node\'s own sentence in the banner and no wrong try counted; no X-Fresh-Proof', async () => {
+        const sent = mockNode({ pendingFromStart: true, complete: [[401, OLD_CODE_ASK], [200, BOUND]] });
         render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         await typeNumberAndBind('47');
-        expect(await screen.findByTestId('rekey-proof-code')).toBeInTheDocument();
-        // Refused before the number was looked at: no try counted, and the number is still there for the same press.
-        expect(screen.getByLabelText('The number on their phone')).toHaveValue('47');
+        await waitFor(() => expect(sent.complete).toHaveLength(1));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('rekey-proof-code')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('rekey-proof-input')).not.toBeInTheDocument();
+        // An ordinary refusal now: the node's own sentence in the banner, and no try counted onto it.
+        expect(await screen.findByText((_, el) => el?.tagName === 'DIV' && el.textContent?.trim() === `⚠️ ${OLD_CODE_ASK.error}`)).toBeDefined();
         expect(screen.getByTestId('rekey-type-number').textContent).not.toMatch(/Wrong so far/);
-        fireEvent.change(screen.getByTestId('rekey-proof-input'), { target: { value: '333333' } });
-        fireEvent.click(screen.getByTestId('rekey-proof-confirm'));
-        expect(await screen.findByText('Re-Keying Complete!')).toBeInTheDocument();
-        expect(sent.complete).toHaveLength(2);
         expect(sent.complete[0].headers['X-Fresh-Proof']).toBeUndefined();
-        expect(sent.complete[1].headers['X-Fresh-Proof']).toBe('333333');
-        expect(sent.complete.map((s) => s.body)).toEqual([{ code: RK, match: '47' }, { code: RK, match: '47' }]);
+        expect(sent.complete.map((s) => s.body)).toEqual([{ code: RK, match: '47' }]);
     });
 
-    it('token viewer, Paste a key instead: the same box; the pasted key and the re-key code stay in the body', async () => {
-        const sent = mockNode({ pendingFromStart: true, complete: [[401, CODE_ASK], [200, BOUND]] });
+    it('Paste a key instead, answered with the old typed-code ask: no box; the pasted key and the re-key code stay in the body; no X-Fresh-Proof', async () => {
+        const sent = mockNode({ pendingFromStart: true, complete: [[401, OLD_CODE_ASK], [200, BOUND]] });
         render(<RekeyMemberWizard member={member} nodeUrl={NODE} credential="pw" onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Paste a key instead' }));
         fireEvent.change(screen.getByPlaceholderText(/64 hex characters/), { target: { value: phone } });
         fireEvent.click(screen.getByRole('button', { name: /Complete Re-Keying/ }));
-        fireEvent.change(await screen.findByTestId('rekey-proof-input'), { target: { value: '444444' } });
-        fireEvent.click(screen.getByTestId('rekey-proof-confirm'));
-        expect(await screen.findByText('Re-Keying Complete!')).toBeInTheDocument();
-        expect(sent.complete.map((s) => [s.body, s.headers['X-Fresh-Proof']])).toEqual([
-            [{ code: RK, newPubkey: phone }, undefined],
-            [{ code: RK, newPubkey: phone }, '444444'],
-        ]);
+        await waitFor(() => expect(sent.complete).toHaveLength(1));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('rekey-proof-code')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('rekey-proof-input')).not.toBeInTheDocument();
+        expect(screen.queryByText('Re-Keying Complete!')).not.toBeInTheDocument();
+        expect(sent.complete.map((s) => [s.body, s.headers['X-Fresh-Proof']])).toEqual([[{ code: RK, newPubkey: phone }, undefined]]);
     });
 
     it('phone viewer, end to end across two Manage presses: each stale press is said, the wizard keeps its state, the next press goes through', async () => {

@@ -8,13 +8,12 @@ import { pruneInviteBranch, pruneNodeUser } from '../../lib/node-client';
 
 /**
  * Owner-delete S4a: removing or suspending an owner asks an owner's fresh proof each time (server ownerRemovalProof;
- * #1984 confirmation N-1): prune, branch prune, emergency suspend and offboard. Each viewer × the refusal → the box or
- * the sentence on the screen where the press was; the code travels in the body's `code`; nothing is re-sent without one.
+ * #1984 confirmation N-1): prune, branch prune, emergency suspend and offboard. Each viewer × the refusal → the sentence
+ * on the screen where the press was; nothing is re-sent until the button is pressed again, and no request carries a code
+ * (the server asks none).
  */
 const NODE = 'https://riverbend.example.org';
 const owner = 'a'.repeat(64);
-const CODE_ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to remove or suspend an owner', totpRequired: true };
-const WRONG = { error: 'Invalid 2FA code', totpRequired: true };
 const STEP_UP = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const PHONE = { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true };
 const PREVIEW = {
@@ -41,11 +40,6 @@ function mockNode(route: string, answers: Array<[number, unknown]>, extra: Recor
     return sent;
 }
 
-async function enterCode(testId: string, code: string) {
-    fireEvent.change(await screen.findByTestId(`${testId}-input`), { target: { value: code } });
-    fireEvent.click(screen.getByTestId(`${testId}-confirm`));
-}
-
 beforeEach(() => { vi.restoreAllMocks(); });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -59,15 +53,14 @@ describe('Prune branch with an owner in it (S4a)', () => {
         fireEvent.click(screen.getByRole('button', { name: /Prune Entire Branch/i }));
     };
 
-    it('token viewer: the box; a wrong code stays; a new code re-sends the same prune once with `code`', async () => {
-        const sent = mockNode(`/branches/${owner}/prune`, [[401, CODE_ASK], [401, WRONG], [200, { success: true }]]);
+    it('a stale unlock: the Manage-again sentence (no code field); the next press sends the same prune once more, with no code', async () => {
+        const sent = mockNode(`/branches/${owner}/prune`, [[403, STEP_UP], [200, { success: true }]]);
         await press();
-        await enterCode('prune-branch-proof', '111111');
-        await waitFor(() => expect(screen.getByTestId('prune-branch-proof-error')).toHaveTextContent('Invalid 2FA code'));
-        expect(screen.getByTestId('prune-branch-proof-confirm')).toBeDisabled();
-        await enterCode('prune-branch-proof', '222222');
-        await waitFor(() => expect(sent).toHaveLength(3));
-        expect(sent.map((s) => s.body.code)).toEqual([undefined, '111111', '222222']);
+        expect(await screen.findByTestId('prune-branch-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('prune-branch-proof-input')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: /Prune Entire Branch/i }));
+        await waitFor(() => expect(sent).toHaveLength(2));
+        expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]);
         // The refusal is not shown as a failure of its own.
         expect(screen.queryByText(/❌/)).toBeNull();
     });
@@ -95,21 +88,23 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
         expect(screen.queryByText(/Suspended\./)).toBeNull();
     });
 
-    it('suspend, token viewer: the code re-sent once beside the reason', async () => {
-        const sent = mockNode(`/users/${owner}/suspend`, [[401, CODE_ASK], [200, { success: true, decision: { id: 'd1', closesAt: '2026-10-23T00:00:00.000Z' } }]]);
+    it('suspend with a stale unlock: the Manage-again sentence; the next press sends the same reason once more, with no code', async () => {
+        const sent = mockNode(`/users/${owner}/suspend`, [[403, STEP_UP], [200, { success: true, decision: { id: 'd1', closesAt: '2026-10-23T00:00:00.000Z' } }]]);
         render(<MemberDetailModal member={member} isFrozen={false} onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl={NODE} credential="pw" />);
         fireEvent.click(screen.getByText('⏸️ Suspend'));
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'took the treasury keys' } });
         fireEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
-        await enterCode('suspend-proof', '123456');
+        expect(await screen.findByTestId('suspend-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('suspend-proof-input')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
         expect(await screen.findByText(/Members now vote on keeping it until/)).toBeInTheDocument();
-        expect(sent.map((s) => [s.body.reason, s.body.code])).toEqual([['took the treasury keys', undefined], ['took the treasury keys', '123456']]);
+        expect(sent.map((s) => [s.body.reason, s.body.code])).toEqual([['took the treasury keys', undefined], ['took the treasury keys', undefined]]);
     });
 
-    it('prune account through the members list: the box opens in the member\'s screen, not an alert; the code re-sends the prune', async () => {
+    it('prune account through the members list: the box opens in the member\'s screen, not an alert; the next press sends the prune again, with no code', async () => {
         const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
         // Prune Account is offered where the node's community votes are switched off (removal by vote S3).
-        const sent = mockNode(`/users/${owner}/prune`, [[401, CODE_ASK], [200, { success: true }]], { '/api/community/info': { features: { decisions: false } } });
+        const sent = mockNode(`/users/${owner}/prune`, [[403, STEP_UP], [200, { success: true }]], { '/api/community/info': { features: { decisions: false } } });
         const onRefresh = vi.fn();
         render(
             <MembersModule
@@ -123,23 +118,31 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
         fireEvent.click(await screen.findByText('Anna Owner'));
         fireEvent.click(await screen.findByRole('button', { name: /Prune Account/ }));
         fireEvent.click(screen.getByRole('button', { name: /Yes, Prune Account/ }));
-        await enterCode('prune-proof', '654321');
+        expect(await screen.findByTestId('prune-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('prune-proof-input')).toBeNull();
+        expect(onRefresh).not.toHaveBeenCalled();
+        // The confirmation closed as it was pressed: ask for the prune again, and confirm again.
+        fireEvent.click(await screen.findByRole('button', { name: /Prune Account/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Yes, Prune Account/ }));
         await waitFor(() => expect(onRefresh).toHaveBeenCalled());
-        expect(sent.map((s) => s.body.code)).toEqual([undefined, '654321']);
+        expect(sent.map((s) => s.body.code)).toEqual([undefined, undefined]);
         expect(alert).not.toHaveBeenCalled();
     });
 });
 
 describe('Offboard an owner (S4a)', () => {
-    it('token viewer: the box; the code re-sent once with the same resolution', async () => {
-        const sent = mockNode(`/members/${owner}/offboard`, [[401, CODE_ASK], [200, { success: true, memberPubkey: owner, callsign: 'anna', resolution: 'prune_zero_balance', balanceSettled: 0 }]],
+    it('a stale unlock: the Manage-again sentence (no code field); the next press sends the same resolution once more, with no code', async () => {
+        const sent = mockNode(`/members/${owner}/offboard`, [[403, STEP_UP], [200, { success: true, memberPubkey: owner, callsign: 'anna', resolution: 'prune_zero_balance', balanceSettled: 0 }]],
             { [`/members/${owner}/offboard/preview`]: PREVIEW });
         const onSuccess = vi.fn();
         render(<OffboardMemberWizard member={{ publicKey: owner, callsign: 'anna' }} nodeUrl={NODE} credential="pw" onSuccess={onSuccess} onClose={() => {}} />);
         fireEvent.click(await screen.findByRole('button', { name: /Confirm & Prune Member/ }));
-        await enterCode('offboard-proof', '777777');
+        expect(await screen.findByTestId('offboard-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
+        expect(screen.queryByTestId('offboard-proof-input')).toBeNull();
+        expect(onSuccess).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: /Confirm & Prune Member/ }));
         await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-        expect(sent.map((s) => [s.body.resolution, s.body.code])).toEqual([['prune_zero_balance', undefined], ['prune_zero_balance', '777777']]);
+        expect(sent.map((s) => [s.body.resolution, s.body.code])).toEqual([['prune_zero_balance', undefined], ['prune_zero_balance', undefined]]);
     });
 
     it('phone viewer, hand-off stale: the Manage-again sentence; nothing re-sent', async () => {

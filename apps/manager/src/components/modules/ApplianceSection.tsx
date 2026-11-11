@@ -1292,26 +1292,15 @@ export function ApplianceSection({
                                     Attributable recovery mechanism when member keys or paired devices are lost
                                 </p>
                             </div>
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">
-                                Phase 3 Specification
-                            </span>
                         </div>
 
+                        {/* What the server does with a code (admin-auth.ts: the two enrol routes only; admin-key-auth.ts enrolAdminOwnerKey: every member is told, the log records it). */}
                         <div className="p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-3 text-xs">
-                            <blockquote className="border-l-2 border-terra-500 pl-3 my-0 text-nature-300 italic">
-                                &ldquo;The break-glass credential can do exactly one thing: enrol a new admin key. It cannot
-                                dismiss a report, change a setting, touch a balance, or moderate anything. It authorises a
-                                new device key and the session ends. The admin then signs in with that key, and everything
-                                from that point is attributable.&rdquo;
-                            </blockquote>
-
-                            <p className="text-nature-400 m-0 leading-relaxed">
-                                <strong className="text-white">Audit Trail Safeguard:</strong> Using break-glass is rate-limited
-                                and automatically writes a loud, permanent public entry to the system audit feed:
-                                <br />
-                                <span className="font-mono text-bp-ink-terra text-[11px] block mt-1">
-                                    &ldquo;Break-glass recovery used to authorise a new admin key for @callsign.&rdquo;
-                                </span>
+                            <p className="text-nature-300 m-0 leading-relaxed" data-testid="break-glass-what">
+                                {t('A break-glass code does one thing, it enrols a new key, and it opens nothing else in Settings.')}
+                            </p>
+                            <p className="text-nature-400 m-0 leading-relaxed" data-testid="break-glass-audit">
+                                {t("When one is used, every member gets a notice that a new admin key was authorised and for whom, and the node's log records it.")}
                             </p>
                         </div>
 

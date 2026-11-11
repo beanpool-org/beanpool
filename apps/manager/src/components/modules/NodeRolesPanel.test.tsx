@@ -78,7 +78,7 @@ describe('NodeRolesPanel', () => {
         expect(within(aliceRow).getByText('alice')).toBeInTheDocument();
         expect(within(aliceRow).getByText(/Owner/)).toBeInTheDocument();
         expect(within(aliceRow).getByText(`${ALICE.slice(0, 8)}…${ALICE.slice(-6)}`)).toBeInTheDocument();
-        expect(aliceRow.textContent).toMatch(/added by the admin password on/);
+        expect(aliceRow.textContent).toMatch(/added by the old admin password on/);
 
         const bobRow = screen.getByTestId(`role-row-${BOB}`);
         expect(within(bobRow).getByText(/Admin/)).toBeInTheDocument();

@@ -196,7 +196,8 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
 
     const grantedByText = (grantedBy: string | null): string => {
         if (!grantedBy) return 'unknown';
-        if (grantedBy === 'owner:password') return 'the admin password';
+        // History: a grant made before nodes dropped the admin password still says so.
+        if (grantedBy === 'owner:password') return 'the old admin password';
         if (grantedBy === 'break-glass:enrolment') return 'a break-glass code';
         if (grantedBy === 'SYSTEM') return 'the node itself';
         return grantedBy === myKey ? 'you' : nameOf(grantedBy);

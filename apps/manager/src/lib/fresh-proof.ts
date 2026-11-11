@@ -10,22 +10,16 @@ export const { t, tn, timeAgo } = wordsFor('en');
  *   the phone's Manage hand-off 403 step_up_required once the unlock is older than 90 seconds;
  *   a computer's key session    403 phone_required: it has no unlock of its own;
  *   an automation token         403 token_not_allowed (token-guard.ts).
- * This module reads that answer; FreshProofBox (components/common) shows it. The typed-code kind below is the old
- * authenticator-code ask, which the server no longer makes (it reads no `code`); it goes in the next slice, with the
- * `code` argument the helpers still carry.
+ * This module reads that answer; FreshProofBox (components/common) shows it. The server never asks for a typed code
+ * (no `totpRequired` answer exists), so there is no typed-code kind: an answer that carries one is read as any other
+ * refusal, in the node's own words. The `code` argument the helpers still carry goes in the next slice.
  */
 export type FreshProofRefusal =
-    | { kind: 'code'; error: string }
     | { kind: 'step-up'; error: string }
     | { kind: 'phone'; error: string };
 
 export const FRESH_PROOF_WORDS = {
-    codeLabel: word('Current code'),
-    confirm: word('Confirm'),
     cancel: word('Cancel'),
-    checking: word('Checking…'),
-    codeAsk: word('This change asks for a current code each time. Enter the code your authenticator app shows now.'),
-    codeAgain: word('Type the new code your authenticator app shows, then press Confirm.'),
     stepUp: word('Press Manage on your phone again, then make this change within 90 seconds.'),
     phone: word('Do this from your phone: open BeanPool, press Manage, then make this change there.'),
 } satisfies Record<string, WordKey>;
@@ -35,7 +29,6 @@ export function freshProofRefusal(status: number, body: unknown): FreshProofRefu
     if (!body || typeof body !== 'object') return null;
     const b = body as Record<string, unknown>;
     const error = typeof b.error === 'string' ? b.error : '';
-    if (status === 401 && b.totpRequired === true) return { kind: 'code', error };
     if (status === 403 && (b.code === 'phone_required' || b.phoneRequired === true)) return { kind: 'phone', error };
     if (status === 403 && b.code === 'step_up_required') return { kind: 'step-up', error };
     return null;
@@ -75,7 +68,7 @@ export function throwIfFreshProof(status: number, body: unknown): void {
     throw new FreshProofRequiredError(refusal, status, code);
 }
 
-const REFUSAL_KINDS: ReadonlyArray<FreshProofRefusal['kind']> = ['code', 'step-up', 'phone'];
+const REFUSAL_KINDS: ReadonlyArray<FreshProofRefusal['kind']> = ['step-up', 'phone'];
 
 /**
  * The fresh-proof refusal a thrown error carries: a FreshProofRequiredError's, or a helper's own error class that holds

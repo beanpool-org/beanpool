@@ -27,6 +27,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bytesOfSignedText } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -171,9 +172,10 @@ async function main() {
         assert(ok.status === 200 && ok.body.wordsCheckedAt === ts, `an owner's statement → 200, dated by the signed timestamp (got ${ok.status} ${ok.body?.wordsCheckedAt})`);
         const row = db.prepare('SELECT * FROM owner_words_checks WHERE member_pubkey = ?').get(anna.pub) as any;
         assert(!!row && Number(row.checked_at) === ts, 'stored against the signer, with that date');
-        const reverifies = crypto.verify(null, Buffer.from(row.signed_payload), anna.pubObj, Buffer.from(row.signature, 'base64'));
+        // The stored text is the format-2 request as signed (its bytes are 0xFF and the text: bytesOfSignedText).
+        const reverifies = crypto.verify(null, Buffer.from(bytesOfSignedText(row.signed_payload)), anna.pubObj, Buffer.from(row.signature, 'base64'));
         assert(reverifies, 'the stored record re-verifies against the owner\'s key');
-        assert(row.signed_payload.endsWith(JSON.stringify(STATEMENT)) && row.signed_payload.startsWith(`POST\n${WC}\n${ts}\n`), 'the record is the fact and the date, nothing else');
+        assert(row.signed_payload.endsWith(JSON.stringify(STATEMENT)) && row.signed_payload.startsWith(`beanpool-request/2\n${signedForHost()}\nPOST\n${WC}\n${ts}\n`), 'the record is the fact and the date, nothing else');
         const cols = (db.prepare('PRAGMA table_info(owner_words_checks)').all() as any[]).map((c) => c.name).sort();
         assert(JSON.stringify(cols) === JSON.stringify(['checked_at', 'member_pubkey', 'signature', 'signed_payload']), `the table holds only those columns (${cols.join(', ')})`);
 
@@ -285,7 +287,7 @@ async function main() {
             `@wcBen's last report is about another lock, and says it did not open (${JSON.stringify(byName.wcBen.lockOpen)})`);
         assert(!JSON.stringify(list.body).includes('signature') && !JSON.stringify(list.body).includes('signed_payload'), 'the list carries the date only');
         const row = db.prepare('SELECT signature, signed_payload FROM owner_lock_opens WHERE member_pubkey = ?').get(anna.pub) as any;
-        assert(crypto.verify(null, Buffer.from(row.signed_payload), anna.pubObj, Buffer.from(row.signature, 'base64')),
+        assert(crypto.verify(null, Buffer.from(bytesOfSignedText(row.signed_payload)), anna.pubObj, Buffer.from(row.signature, 'base64')),
             "the stored report re-verifies against the owner's key");
     }
 

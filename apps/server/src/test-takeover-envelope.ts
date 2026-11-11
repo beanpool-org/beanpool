@@ -37,7 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -339,6 +339,7 @@ async function main() {
 
     // ── 8. The token ──
     console.log('\n— 8. the replication token —');
+    setSignedForHost('anna-town.beanpool.org'); // the node takes this as its name from here on, so requests are signed for it
     updateNodeConfig({ publicAddress: { name: 'anna-town', mode: 'tunnel', hostname: 'anna-town.beanpool.org', status: 'live', tunnelToken: 'TUNNEL-SECRET-abc123' } } as any);
     await sleep(150);
     const sPa = stored();

@@ -13,7 +13,7 @@ import {
     MESSAGE_EDIT_WINDOW_MS, DELETED_BY_AUTHOR_TEXT, REMOVED_BY_CONVENOR_TEXT, REMOVED_BY_HOST_TEXT,
     REMOVED_BY_KEEPER_TEXT, NOT_AVAILABLE_YET,
     buildChatListItems, canDeleteMessage, canEditMessage, canReactToMessage, canRemoveMessage, canReportMessage,
-    canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
+    canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator, isEditClosed, isOldLinesLabel,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
     shouldFollowNewMessages, shouldShowChatLoadError, showsAuthorName, threadMessageDisplayText, tombstoneText,
     type ChatMessage, type ChatViewer, type MessageActions,
@@ -362,6 +362,41 @@ describe('the rows an inverted list draws', () => {
     it('keeps a message with an unreadable timestamp, without a pill for it', () => {
         const items = buildChatListItems([msg({ id: 'x', rawTimestamp: 'not-a-date' })], now);
         expect(items.map(i => i.id)).toEqual(['x']);
+    });
+
+    // Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0).
+    it('puts one label above each run of lines from before 1.4.0, above the run\'s first day pill; a notice neither starts nor ends a run', () => {
+        const old = (id: string, at: string) => msg({ id, rawTimestamp: at, oldLine: true });
+        const notice = msg({ id: 'n', type: 'system', senderId: 'SYSTEM', rawTimestamp: '2026-09-22T09:30:00Z' });
+        const items = buildChatListItems([old('o1', '2026-09-22T09:00:00Z'), notice, old('o2', '2026-09-22T10:00:00Z'), c], now);
+        const day22 = 'day-' + new Date('2026-09-22T09:00:00Z').toDateString();
+        const day23 = 'day-' + new Date('2026-09-23T09:00:00Z').toDateString();
+        // Reversed for the inverted list: the label is drawn at the top of its run, above the day pill.
+        expect(items.map(i => i.id)).toEqual(['c', day23, 'o2', 'n', 'o1', day22, 'old-lines-o1']);
+        const label = items.find(isOldLinesLabel);
+        expect(label?.label).toBe('Older messages from before 12 November 2026. They were sent before BeanPool signed every message.');
+        // A new line between two old ones ends the run: the next old line starts another, with its own label.
+        const two = buildChatListItems([old('o1', '2026-09-22T09:00:00Z'), b, old('o3', '2026-09-22T11:00:00Z')], now);
+        expect(two.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o3', 'old-lines-o1']);
+        expect(buildChatListItems([a, b, c], now).some(isOldLinesLabel)).toBe(false);
+    });
+});
+
+describe('a line from before 1.4.0 (old chat, OLDCHAT): read-only', () => {
+    const old = (over: Partial<ChatMessage> = {}) => msg({ oldLine: true, rawTimestamp: new Date(NOW - 60_000).toISOString(), ...over });
+    it('mine: no Reply, React, Edit (even inside the window) or Delete; Copy stays', () => {
+        const a = messageActions(old(), viewer());
+        expect(a).toEqual({ reply: false, react: false, edit: false, delete: false, remove: false, copy: true });
+        expect(isEditClosed(old(), viewer())).toBe(false);
+        expect(hasAnyAction(a)).toBe(true);
+    });
+    it('theirs: no Reply or React; Copy and Report stay', () => {
+        const a = messageActions(old({ senderId: THEM }), viewer({ reportsLines: true }));
+        expect(a).toEqual({ reply: false, react: false, edit: false, delete: false, remove: false, report: true, copy: true });
+    });
+    it('the same line, not old, keeps every action', () => {
+        const a = messageActions(msg({ senderId: ME }), viewer());
+        expect([a.reply, a.react, a.edit, a.delete]).toEqual([true, true, true, true]);
     });
 });
 

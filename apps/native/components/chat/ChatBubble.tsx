@@ -199,6 +199,20 @@ export function ChatRemovedRunLine({ run, styles }: { run: ChatRemovedRun; style
     );
 }
 
+/**
+ * The one label above a run of DM lines from before 1.4.0, in the middle of the chat as the day pill is, its words free
+ * to wrap at 320dp with 1.3× text (conversion code, log row OLDCHAT, remove in 1.5.0).
+ */
+export function ChatOldLinesLabel({ label, styles }: { label: string; styles: ChatStyles }) {
+    return (
+        <View testID="dm-old-lines-label" accessibilityRole="text" style={styles.daySeparatorRow}>
+            <View style={[styles.daySeparatorPill, { maxWidth: '90%', paddingVertical: 6 }]}>
+                <Text style={[styles.daySeparatorText, { textAlign: 'center', fontSize: 12 }]}>{label}</Text>
+            </View>
+        </View>
+    );
+}
+
 /** The WhatsApp-style day pill between two calendar days. */
 export function ChatDaySeparator({ label, styles }: { label: string; styles: ChatStyles }) {
     return (

@@ -112,7 +112,7 @@ import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LIN
 import { dmKeyChangeCopy } from '../dm-key-change';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
-import { dmQuoteFor } from '../chat-actions';
+import { dmQuoteFor, buildChatListItems, isOldLinesLabel, messageActions, type ChatMessage } from '../chat-actions';
 import { chatPreviewWords } from '../chat-line-words';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
@@ -145,6 +145,9 @@ afterAll(() => {
 const ANCHOR = 'https://mullum.beanpool.org';
 /** What the phone shows in place of a line that doesn't open: never the words, never as anyone's. */
 const NOT_VERIFIED = "🔒 This message couldn't be verified, so it isn't shown.";
+const OLD_LINES_LABEL = 'Older messages from before 12 November 2026. They were sent before BeanPool signed every message.';
+/** The 1.4.0 deploy (core DM_OLD_LINE_CUTOFF): an old-format line dated here or later is hidden. */
+const CUTOVER = '2026-11-11T19:16:00.000Z';
 
 interface Person { name: string; publicKey: string; privateKey: string }
 function person(name: string): Person {
@@ -572,15 +575,94 @@ describe('a line its named sender didn\'t sign, or of an older format (format 4)
         }
     });
 
-    it('a line of an older format, 2 or 3, doesn\'t open: format 4 is the only one read', async () => {
+    // Dated from the 1.4.0 cutover on (old chat, OLDCHAT: a line from before it is shown read-only, below).
+    it('a line of an older format, 2 or 3, dated from the 1.4.0 cutover on, doesn\'t open: format 4 is the only one read', async () => {
         await phoneOf(ana);
         await says(ana, dm, "I'm here");
-        const two = olderFormatLine(2, ana, ben, 'see you at 6');
-        const three = olderFormatLine(3, ana, ben, 'see you at 7');
+        const two = Object.assign(olderFormatLine(2, ana, ben, 'see you at 6'), { timestamp: CUTOVER });
+        const three = Object.assign(olderFormatLine(3, ana, ben, 'see you at 7'), { timestamp: '2026-11-12T08:00:00.000Z' });
         await phoneOf(ben);
         for (const l of [two, three]) expect(await drawn(dm, l.id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
         expect(await preview(ben, dm)).toBe('🔒 Encrypted message');
         expect(JSON.stringify(await getMessages(dm.id))).not.toMatch(/see you at [67]/);
+        expect(buildChatListItems(await getMessages(dm.id) as ChatMessage[]).some(isOldLinesLabel)).toBe(false);
+    });
+});
+
+// Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0; Marty, 12 Nov 2026): a line from before 1.4.0
+// (this suite's clock runs from 1 Oct) opens as it did then, the same as on the web (MessagesPage.dm-lines.test.tsx).
+describe('old chat: a line from before 1.4.0', () => {
+    const viewerOf = (who: Person) => ({ kind: 'dm' as const, myPubkey: who.publicKey, canPost: true, reportsLines: true, now: Date.parse('2026-11-11T19:17:00.000Z') });
+    const itemOf = async (id: string) => (await getMessages(dm.id)).find((m: any) => m.id === id) as ChatMessage;
+
+    it('format 2 and 3 open in their authors\' bubbles on both phones, under one label above the run, and in the preview', async () => {
+        const two = olderFormatLine(2, ben, ana, 'see you at 6');
+        const three = olderFormatLine(3, ana, ben, 'ok, 6 it is');
+        for (const who of [ana, ben]) {
+            await phoneOf(who);
+            expect(await drawn(dm, two.id)).toEqual({ text: 'see you at 6', note: null, unattributed: false });
+            expect(await drawn(dm, three.id)).toEqual({ text: 'ok, 6 it is', note: null, unattributed: false });
+            expect((await itemOf(two.id)).oldLine).toBe(true);
+            // Talk's list shows the newest line's words, as written (never run through BeanPool's own sentences).
+            expect(await preview(who, dm)).toBe('ok, 6 it is');
+        }
+        const messages = await getMessages(dm.id) as ChatMessage[];
+        // Inverted: the label is drawn above (after, in the reversed list) the run's first line and its day pill.
+        const items = buildChatListItems(messages, new Date('2026-11-12T09:00:00.000Z'));
+        const labels = items.filter(isOldLinesLabel);
+        expect(labels.map((l) => l.label)).toEqual([OLD_LINES_LABEL]);
+        const at = (id: string) => items.findIndex((i) => i.id === id);
+        expect(at(labels[0].id)).toBeGreaterThan(at(two.id));
+        expect(at(labels[0].id)).toBeGreaterThan(at(three.id));
+    });
+
+    it('read-only: no Reply (so no quote), React, Edit or Delete on an old line; Copy stays, and Report on the other person\'s', async () => {
+        await phoneOf(ana);
+        // A line in format 4, sent first (as the suite's other threads start), keeps every action.
+        const fresh = await says(ana, dm, 'A new line of mine');
+        const bens = olderFormatLine(2, ben, ana, 'see you at 6');
+        // Ana's own, two minutes before "now" by the node's clock: inside the edit window, still never edited.
+        const mine = Object.assign(olderFormatLine(3, ana, ben, 'ok, 6 it is'), { timestamp: '2026-11-11T19:15:00.000Z' });
+        await syncMessages(ana.publicKey);
+        for (const id of [bens.id, mine.id]) {
+            const item = await itemOf(id);
+            expect(item.oldLine).toBe(true);
+            const a = messageActions(item, viewerOf(ana));
+            expect({ reply: a.reply, react: a.react, edit: a.edit, delete: a.delete, editClosed: !!a.editClosed, copy: !!a.copy })
+                .toEqual({ reply: false, react: false, edit: false, delete: false, editClosed: false, copy: true });
+        }
+        expect(messageActions(await itemOf(bens.id), viewerOf(ana)).report).toBe(true);
+        const a = messageActions(await itemOf(fresh.id), viewerOf(ana));
+        expect([a.reply, a.react, a.delete]).toEqual([true, true, true]);
+    });
+
+    it('forged time: a format-4 line its named sender didn\'t sign, dated before the cutover, is never old', async () => {
+        const forged = rowInNameOf(ben, ana, 'I owe Ben 500 Beans');
+        expect(Date.parse(forged.timestamp)).toBeLessThan(Date.parse(CUTOVER));
+        await phoneOf(ben);
+        expect(await drawn(dm, forged.id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
+        expect((await itemOf(forged.id)).oldLine).toBe(false);
+        expect(buildChatListItems(await getMessages(dm.id) as ChatMessage[]).some(isOldLinesLabel)).toBe(false);
+    });
+
+    it('forged time: an old-format line sealed after a line from after the cutover, dated before it, is hidden', async () => {
+        await phoneOf(ana);
+        const newer = await says(ana, dm, 'After the cutover');
+        newer.timestamp = '2026-11-12T08:00:00.000Z';
+        // Ben seals a format-3 line in his own name (he holds the key), written after Ana's new line; the node dates it in November.
+        const id = randomUUID();
+        const nonce = new Uint8Array(randomBytes(24));
+        const after = Buffer.from(newer.id, 'utf8');
+        const ct = xchacha20poly1305(deriveDmKey({ myEdPrivHex: ben.privateKey, peerEdPubHex: ana.publicKey, conversationId: dm.id }), nonce,
+            new Uint8Array(Buffer.from(JSON.stringify(['beanpool-dm-line/3', dm.id, ben.publicKey, id, 'body']))))
+            .encrypt(new Uint8Array([3, after.length, ...after, ...Buffer.from('Ana agreed to pay 500 Beans', 'utf8')]));
+        node.lines.push({ id, conversationId: dm.id, authorPubkey: ben.publicKey, type: 'text', systemType: null, metadata: null, timestamp: '2026-11-02T09:00:00.000Z',
+            editedAt: null, ciphertext: Buffer.from(ct).toString('base64'), nonce: DM_NONCE_PREFIX + Buffer.from(nonce).toString('base64') });
+        for (const who of [ana, ben]) {
+            await phoneOf(who);
+            expect(await drawn(dm, id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
+            expect(JSON.stringify(await getMessages(dm.id))).not.toMatch(/500 Beans/);
+        }
     });
 });
 

@@ -25,8 +25,8 @@ import React, { useCallback } from 'react';
 import { FlatList, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
-import { isAtBottom, isDaySeparator, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
-import { ChatDaySeparator, ChatRemovedRunLine } from './ChatBubble';
+import { isAtBottom, isDaySeparator, isOldLinesLabel, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
+import { ChatDaySeparator, ChatOldLinesLabel, ChatRemovedRunLine } from './ChatBubble';
 import { ChatFoldProvider } from './ChatFold';
 import type { ChatStyles } from './styles';
 
@@ -89,6 +89,7 @@ export function ChatMessageList({
     const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
         if (isDaySeparator(item)) return <ChatDaySeparator label={item.label} styles={styles} />;
         if (isRemovedRun(item)) return <ChatRemovedRunLine run={item} styles={styles} />;
+        if (isOldLinesLabel(item)) return <ChatOldLinesLabel label={item.label} styles={styles} />;
         return renderMessage(item);
     }, [renderMessage, styles]);
 

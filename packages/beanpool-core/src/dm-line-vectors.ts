@@ -125,7 +125,7 @@ export const DM_REFUSED_LINES: DmRefusedLine[] = [
     },
 ];
 
-// ─── Old chat (conversion code, log row OLDCHAT, remove in 1.5.0) ───────────────────────────────────────────────────
+// ─── Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026) ───────────────────────────────────────────────────
 /**
  * Lines as the 1.2.36 apps sealed them, frozen (sealed once by `git show v1.2.36:packages/beanpool-core/src/dm-crypto.ts`'s
  * sealDmLine and encryptDmFormat2, each nonce the first 24 bytes of SHA-256("beanpool old-chat vector: nonce <n>")), with

@@ -589,7 +589,7 @@ describe('a line its named sender didn\'t sign, or of an older format (format 4)
     });
 });
 
-// Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0; Marty, 12 Nov 2026): a line from before 1.4.0
+// Old chat, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 12 Nov 2026): a line from before 1.4.0
 // (this suite's clock runs from 1 Oct) opens as it did then, the same as on the web (MessagesPage.dm-lines.test.tsx).
 describe('old chat: a line from before 1.4.0', () => {
     const viewerOf = (who: Person) => ({ kind: 'dm' as const, myPubkey: who.publicKey, canPost: true, reportsLines: true, now: Date.parse('2026-11-11T19:17:00.000Z') });

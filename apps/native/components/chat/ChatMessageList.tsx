@@ -89,7 +89,7 @@ export function ChatMessageList({
     const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
         if (isDaySeparator(item)) return <ChatDaySeparator label={item.label} styles={styles} />;
         if (isRemovedRun(item)) return <ChatRemovedRunLine run={item} styles={styles} />;
-        // The label above DM lines from before 1.4.0: conversion code, log row OLDCHAT, remove in 1.5.0.
+        // The label above DM lines from before 1.4.0: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
         if (isOldLinesLabel(item)) return <ChatOldLinesLabel label={item.label} styles={styles} />;
         return renderMessage(item);
     }, [renderMessage, styles]);

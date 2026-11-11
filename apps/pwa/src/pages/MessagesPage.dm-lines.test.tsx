@@ -216,7 +216,7 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
         expect(screen.getByText("I'm here").parentElement!.querySelector('[data-testid="dm-line-note"]')).toBeNull();
     });
 
-    // Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0; Marty, 12 Nov 2026).
+    // Old chat, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 12 Nov 2026).
     describe('old chat: a line from before 1.4.0', () => {
         const dated = (m: ApiMessage, timestamp: string): ApiMessage => ({ ...m, timestamp });
         /** A format-3 line as a 1.3.x app sealed it, written after `after` (the id of the newest line its sender had). */

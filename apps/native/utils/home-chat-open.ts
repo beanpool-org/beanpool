@@ -32,7 +32,7 @@ const sealedOf = (lines: readonly HomeChatLine[]) => lines.filter((l): l is Home
 async function openDm(pick: HomeChatSettings, lines: readonly HomeChatLine[], deps: HomeChatOpenDeps): Promise<OpenedChat> {
     const out = new Map<string, OpenedChatLine>();
     const sealed = sealedOf(lines);
-    // With the node's time for each line, so one from before 1.4.0 opens as old, as on the web (conversion code, log row OLDCHAT, remove in 1.5.0).
+    // With the node's time for each line, so one from before 1.4.0 opens as old, as on the web (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
     const views = sealed.length ? await deps.judgeDm(pick.conversationId, sealed.map(l => ({ id: l.id, author: l.author, type: l.type, at: l.at, sealed: l.sealed }))).catch(() => null) : null;
     for (const l of lines) {
         if (l.type === 'removed' || l.type === 'system' || l.author === 'SYSTEM') continue;

@@ -364,7 +364,7 @@ describe('the rows an inverted list draws', () => {
         expect(items.map(i => i.id)).toEqual(['x']);
     });
 
-    // Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0).
+    // Old chat, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
     it('puts one label above each run of lines from before 1.4.0, above the run\'s first day pill; a notice neither starts nor ends a run', () => {
         const old = (id: string, at: string) => msg({ id, rawTimestamp: at, oldLine: true });
         const notice = msg({ id: 'n', type: 'system', senderId: 'SYSTEM', rawTimestamp: '2026-09-22T09:30:00Z' });

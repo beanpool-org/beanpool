@@ -1326,7 +1326,7 @@ export async function getConversations(myPubkey: string) {
             } else {
                 displayMsg = dmLineShownText(lastView);
                 // Only a line that opened (format 4, signed by its author, or a line from before 1.4.0 opened as it was then)
-                // holds their words; a deleted line's text is fixed. (The old line: conversion code, log row OLDCHAT, remove in 1.5.0.)
+                // holds their words; a deleted line's text is fixed. (The old line: conversion code, log row OLDCHAT, remove after 12 Dec 2026.)
                 fromApp = lastView.format === null && !dmLineIsOld(lastView);
             }
         } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
@@ -6774,7 +6774,7 @@ export async function judgeHomeChatDmLines(
     try { ctx = await getDmKeyContext(conversationId, 'open'); } catch { ctx = null; }
     if (!ctx) return null;
     return checkDmThread(
-        // The node's time for each line: a line from before 1.4.0 opens as old, as the web's card opens it (conversion code, log row OLDCHAT, remove in 1.5.0).
+        // The node's time for each line: a line from before 1.4.0 opens as old, as the web's card opens it (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
         lines.map(l => ({ id: l.id, authorPubkey: l.author, ciphertext: l.sealed.ciphertext, nonce: l.sealed.nonce, type: l.type, metadata: l.sealed.metadata, timestamp: l.at ?? null })),
         ctx, conversationId, ctx.formerPeers,
     );
@@ -6857,7 +6857,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // that doesn't open is never shown as anyone's words; a row in a member's name that isn't an encrypted line never is
     // either, nor one its named sender didn't sign; one the node moved or reordered is marked; the admin page's message
     // is shown as the community admins'. Only the node's own notices are left to the system formatting below.
-    // The node's time for each line goes in too: a line from before 1.4.0 opens as old, read-only (conversion code, log row OLDCHAT, remove in 1.5.0).
+    // The node's time for each line goes in too: a line from before 1.4.0 opens as old, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
     const lineViews = isDm
         ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata, timestamp: r.timestamp })), dmCtx, conversationId, dmCtx?.formerPeers)
         : null;
@@ -6942,7 +6942,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             integrityNote,
             // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
             unattributed,
-            // A DM line from before 1.4.0, opened as it was then: read-only, under the one label (conversion code, log row OLDCHAT, remove in 1.5.0).
+            // A DM line from before 1.4.0, opened as it was then: read-only, under the one label (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
             oldLine: dmLineIsOld(view),
             // A DM line that opens only under the key offered in the pinned one's place: its text is the not-verified line,
             // never its words; the screen draws "Sent from the new key. Shown after you continue." in its slot.

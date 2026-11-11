@@ -25,7 +25,7 @@ import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
-// Old chat, read-only: conversion code, log row OLDCHAT, remove in 1.5.0 (core, as the thread check that marks the lines).
+// Old chat, read-only: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the thread check that marks the lines).
 import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_WORDS } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
@@ -621,7 +621,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         return found;
     }, [shownMessages, lineViews, activeConv, identity, isDmThread]);
-    // Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): a DM line from before 1.4.0 the thread check opened (core
+    // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a DM line from before 1.4.0 the thread check opened (core
     // dmLineIsOld) is read-only, never answered, quoted, edited or reacted to; one label goes above each run of them, in the
     // order the thread is drawn (core dmOldLineRunStarts), as the phone's list does.
     const isOldLine = (m: ApiMessage | null | undefined): boolean => !!m && dmLineIsOld(lineViews?.get(m.id));
@@ -1126,7 +1126,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function handleStartReply(msg: ApiMessage) {
-        // A line from before 1.4.0 is never answered or quoted (conversion code, log row OLDCHAT, remove in 1.5.0).
+        // A line from before 1.4.0 is never answered or quoted (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
         if (isOldLine(msg)) return;
         if (editingMessage) {
             setEditingMessage(null);
@@ -1138,7 +1138,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function handleStartEdit(msg: ApiMessage) {
-        // Nor edited (conversion code, log row OLDCHAT, remove in 1.5.0).
+        // Nor edited (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
         if (isOldLine(msg)) return;
         setEditingMessage(msg);
         setReplyToMessage(null);
@@ -1155,7 +1155,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function handleToggleReaction(messageId: string, emoji: string) {
         if (!activeConv) return;
-        // Nor reacted to (conversion code, log row OLDCHAT, remove in 1.5.0).
+        // Nor reacted to (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
         if (isOldLine(messages.find((m) => m.id === messageId))) return;
         // Optimistic update
         setMessages(prev => prev.map(m => {
@@ -2568,7 +2568,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {t('No messages in this chat match.')}
                         </p>
                     )}
-                    {/* Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): one label above each run of lines from
+                    {/* Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): one label above each run of lines from
                         before 1.4.0 (core dmOldLineRunStarts), in the middle of the chat, as the app's own words. */}
                     {searchedMessages.map((msg, index) => <Fragment key={msg.id}>{oldLineLabelAbove.has(msg.id) && (
                         <div data-testid="dm-old-lines-label" role="note" style={{ alignSelf: 'center', margin: '0.75rem 0 0.25rem', maxWidth: '90%' }}>
@@ -2740,7 +2740,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         } catch {}
 
                         const isTombstone = msg.type === 'removed' || metaObj?.removed === true;
-                        // From before 1.4.0 (conversion code, log row OLDCHAT, remove in 1.5.0): read-only. Copy and Report stay.
+                        // From before 1.4.0 (conversion code, log row OLDCHAT, remove after 12 Dec 2026): read-only. Copy and Report stay.
                         const oldLine = isOldLine(msg);
                         const isConvenor = isGroupChat && !!openGroup?.answer?.isConvenor;
                         const isTextEditable = isMe && !isTombstone && !oldLine && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
@@ -3211,7 +3211,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            // An old line's reactions show as they were, no new one (conversion code, log row OLDCHAT, remove in 1.5.0).
+                                            // An old line's reactions show as they were, no new one (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
                                             if (oldLine) return;
                                             setActiveEmojiPickerId(activeEmojiPickerId === msg.id ? null : msg.id);
                                         }}

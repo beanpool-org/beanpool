@@ -36,7 +36,7 @@
  * never the row's words), and the message the admin page sends (metadata DM_FROM_ADMINS_KEY), shown marked as from the
  * community's admins and readable by the server.
  *
- * Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0; the block "Old chat" at the end of this file):
+ * Old chat, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026; the block "Old chat" at the end of this file):
  * a line from before 1.4.0 is shown again, its words opened as they were then, marked old (DmLineView.old) and under one
  * label in both apps, never answered, quoted, edited or reacted to.
  *
@@ -549,7 +549,7 @@ export interface DmLineView {
     mark: DmLineMark;
     /**
      * A line from before 1.4.0 whose words opened as they did then, in its named author's bubble, shown read-only under
-     * DM_OLD_LINES_WORDS.label (dmLineIsOld; conversion code, log row OLDCHAT, remove in 1.5.0). Absent on every other line.
+     * DM_OLD_LINES_WORDS.label (dmLineIsOld; conversion code, log row OLDCHAT, remove after 12 Dec 2026). Absent on every other line.
      */
     old?: true;
 }
@@ -585,8 +585,9 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
     const former = keys ? formerPeers.filter((k) => !!k && k !== keys.peerEdPubHex) : [];
     const position = new Map<string, number>();
     lines.forEach((l, i) => { if (!position.has(l.id)) position.set(l.id, i); });
-    // Old chat: conversion code, log row OLDCHAT, remove in 1.5.0.
+    // Old chat: conversion code, log row OLDCHAT, remove after 12 Dec 2026. `oldSealings`: each shown old line's nonce.
     const oldCaches = new Map<string, KeyCache>();
+    const oldSealings = new Set<string>();
 
     lines.forEach((l, i) => {
         if (views.has(l.id)) return;
@@ -626,11 +627,15 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
             }
         }
         if (!opened) {
-            // Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): a line from before 1.4.0, opened as it was then,
+            // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a line from before 1.4.0, opened as it was then,
             // unless the line it says it was written after is newer than the cutover (then it was written after it too).
             const old = keys && myPubHex ? openOldLineOfThread(l, keys, conversationId, myPubHex, former, oldCaches) : null;
             const afterAt = old?.after ? position.get(old.after) : undefined;
-            if (old && (afterAt === undefined || dmLineHasOldShape(lines[afterAt]))) {
+            // One sealing, one line: a later line with a shown old line's nonce is a copy the node stored again (format 2
+            // binds no message id, so a copy opens), hidden; the line shown first holds the words.
+            const sealing = old ? bytesToHex(nonceBytes(l.nonce as string)) : '';
+            if (old && !oldSealings.has(sealing) && (afterAt === undefined || dmLineHasOldShape(lines[afterAt]))) {
+                oldSealings.add(sealing);
                 const oldMark: DmLineMark = old.moved ? 'moved' : afterAt !== undefined && afterAt > i ? 'out-of-order' : null;
                 views.set(l.id, { text: old.text, format: null, after: old.after, mark: oldMark, old: true });
                 return;
@@ -731,7 +736,7 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
 }
 
 // ─── Old chat, read-only ─────────────────────────────────────────────────────────────────────────────────────────────
-// conversion code, log row OLDCHAT, remove in 1.5.0
+// conversion code, log row OLDCHAT, remove after 12 Dec 2026
 //
 // Marty, 12 Nov 2026, after the 1.4.0 live run: bring back members' chat from before 1.4.0, the same on the phone and the
 // web, read-only. Nothing was deleted at the cutover: every line is still on every node, in the formats 1.2.x and 1.3.x
@@ -748,7 +753,10 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
 // write (it holds no key) and the apps no longer send. Only the other person, who shares the key, could seal one in format
 // 3 naming you, and only a node that took it in for them could store it: format 3's own hole (no signature), the reason
 // format 4 came, which the label says. One check catches a careless one: a line whose sealed "after" names a line newer
-// than the cutover was written after it, so it is hidden as a forgery.
+// than the cutover was written after it, so it is hidden as a forgery. Format 2 binds only the conversation, so the node
+// could store one again under another id: a later line with a shown old line's nonce is hidden as that copy. It could also
+// name the other of the two as a format-2 line's author, which 1.2.36 marked on each such line ("can't confirm who wrote
+// it", a mark 1.4.0 removed); here the run's one label says no old line was signed.
 //
 // Shown: a sealed line that opens, in its named author's bubble (with the mark a moved or reordered line had before), under
 // DM_OLD_LINES_WORDS.label once above its run (dmOldLineRunStarts); neither app answers, quotes, edits or reacts to one

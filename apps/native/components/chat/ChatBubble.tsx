@@ -201,7 +201,7 @@ export function ChatRemovedRunLine({ run, styles }: { run: ChatRemovedRun; style
 
 /**
  * The one label above a run of DM lines from before 1.4.0, in the middle of the chat as the day pill is, its words free
- * to wrap at 320dp with 1.3× text (conversion code, log row OLDCHAT, remove in 1.5.0).
+ * to wrap at 320dp with 1.3× text (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
 export function ChatOldLinesLabel({ label, styles }: { label: string; styles: ChatStyles }) {
     return (

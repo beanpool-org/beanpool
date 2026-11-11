@@ -1,4 +1,4 @@
-// Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0; Marty, 12 Nov 2026): a direct message from before
+// Old chat, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 12 Nov 2026): a direct message from before
 // 1.4.0 opens again as it did then, read-only, under one label; anything newer without a valid signature stays hidden.
 import { describe, it, expect } from 'vitest';
 import { Buffer } from 'buffer';
@@ -124,6 +124,22 @@ describe('anything newer without a valid signature stays hidden exactly as today
     it('an old line under another message id, or with its reply pointed elsewhere, does not open (format 3 binds them)', () => {
         expect(viewOf([row(DM_OLD_LINES.anaFormat3, BEFORE, { id: 'a9000000-0000-4000-8000-0000000000a9' })])?.mark).toBe('not-verified');
         expect(viewOf([row(DM_OLD_LINES.benFormat3Reply, BEFORE, { metadata: JSON.stringify({ replyToId: 'a9000000-0000-4000-8000-0000000000a9' }) })])?.mark).toBe('not-verified');
+    });
+
+    it('forged copy: a format-2 line the node stores again under another id is hidden; only the first one shows', () => {
+        // Format 2 binds no message id, so a copy opens; it is a line the node wrote, dated before the cutover. The same
+        // 24-byte nonce is what shows it is one sealing: only the line shown first holds the words.
+        const original = row(DM_OLD_LINES.benFormat2, '2026-09-20T10:00:00.000Z');
+        const copy = row(DM_OLD_LINES.benFormat2, BEFORE, { id: 'b9000000-0000-4000-8000-0000000000b9' });
+        const views = checkDmThread([original, copy], anaKeys, CONV);
+        expect(views.get(original.id)).toEqual(expect.objectContaining({ text: DM_OLD_LINES.benFormat2.text, old: true }));
+        expect(views.get(copy.id)).toEqual({ text: null, format: null, after: null, mark: 'not-verified' });
+        // Placed before the original, the copy is the one shown and the original is hidden: the words show once, as a line
+        // the node moved would.
+        const earlier = checkDmThread([{ ...copy, timestamp: '2026-09-01T10:00:00.000Z' }, original], anaKeys, CONV);
+        expect([earlier.get(copy.id)?.old, earlier.get(original.id)?.mark]).toEqual([true, 'not-verified']);
+        // Alone in a thread it opens, as in 1.2.36: the run's label says no old line was signed.
+        expect(viewOf([copy])?.old).toBe(true);
     });
 
     it('no keys (the other person not known yet): nothing opens, old or new', () => {

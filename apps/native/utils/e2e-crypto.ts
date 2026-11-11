@@ -39,7 +39,7 @@ export {
     DM_LINE_DELETED_TEXT,
     DM_FROM_ADMINS_KEY,
     DmLineNotVerifiedError,
-    // Old chat, read-only: conversion code, log row OLDCHAT, remove in 1.5.0.
+    // Old chat, read-only: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
     dmLineIsOld,
     dmOldLineRunStarts,
     DM_OLD_LINES_WORDS,

@@ -106,7 +106,7 @@ export interface ChatMessage {
     /**
      * A DM line from before 1.4.0 opened as it was then (e2e-crypto dmLineIsOld): read-only, under the one label above its
      * run (buildChatListItems). Never answered, quoted, edited, reacted to or deleted.
-     * conversion code, log row OLDCHAT, remove in 1.5.0
+     * conversion code, log row OLDCHAT, remove after 12 Dec 2026
      */
     oldLine?: boolean;
 }
@@ -271,7 +271,7 @@ export function isEditClosed(m: ChatMessage, viewer: ChatViewer): boolean {
 
 /**
  * Delete for everyone: the author, any time, no window — but not a system line, a tombstone, an in-flight send or a line
- * from before 1.4.0 (read-only, as the web shows it; conversion code, log row OLDCHAT, remove in 1.5.0).
+ * from before 1.4.0 (read-only, as the web shows it; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
 export function canDeleteMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
@@ -380,7 +380,7 @@ export interface ChatRemovedRun {
 
 /**
  * The one label above a run of DM lines from before 1.4.0 (core DM_OLD_LINES_WORDS.label), keyed by the run's first line
- * (conversion code, log row OLDCHAT, remove in 1.5.0).
+ * (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
 export interface ChatOldLinesLabel {
     id: string;
@@ -429,7 +429,7 @@ export function chatListIndexOf(items: readonly ChatListItem[], id: string): num
  * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give. In a group
  * chat (`kind`), two or more removed lines in a row of one kind are drawn as one (ChatRemovedRun); a day pill breaks a run.
  * Above each run of DM lines from before 1.4.0 (`oldLine`) goes one label, above the run's first day pill (core
- * dmOldLineRunStarts, as the web draws it; a system line neither starts a run nor ends one; conversion code, log row OLDCHAT, remove in 1.5.0).
+ * dmOldLineRunStarts, as the web draws it; a system line neither starts a run nor ends one; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
 export function buildChatListItems(messages: ChatMessage[], now: Date = new Date(), kind?: ChatKind): ChatListItem[] {
     const items: ChatListItem[] = [];

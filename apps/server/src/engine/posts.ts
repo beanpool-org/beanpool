@@ -485,9 +485,25 @@ function assertActivePollRoom(authorPublicKey: string, ownersLimit: number | nul
     }
 }
 
+/**
+ * A knowledge post's own columns, as engine/knowledge.ts publishKnowledge hands them to createPost: checked and cleaned
+ * there. `sources` is the stored JSON list, or null for none.
+ */
+export interface KnowledgeColumns {
+    sources: string | null;
+    place: string | null;
+    lang: string | null;
+    checkedAt: string;
+    /** Its place and topic words, added to its search words (engine/knowledge.ts knowledgeKeywords). */
+    keywords: string;
+}
+
+/** createPost asked for a knowledge post by anything but publishKnowledge, or given its columns for another type. */
+export const KNOWLEDGE_ONLY_BY_PUBLISH = 'Local knowledge is added in Learn, never as a listing';
+
 export function createPost(
     broadcast: BroadcastFn,
-    type: 'offer' | 'need' | 'poll' | 'event',
+    type: 'offer' | 'need' | 'poll' | 'event' | 'knowledge',
     category: string,
     title: string,
     description: string,
@@ -557,8 +573,14 @@ export function createPost(
          * (agent/owner-posts.ts). Kept in `posts.created_via` for moderators and the audit; never on a card.
          */
         createdVia?: string;
+        /**
+         * A knowledge post's own columns: given by engine/knowledge.ts publishKnowledge, the only code that makes one
+         * (DESIGN-local-knowledge-fable.md §2.2). Required with `type: 'knowledge'` and refused with any other type.
+         */
+        knowledge?: KnowledgeColumns;
     },
 ): MarketplacePost | null {
+    if ((type === 'knowledge') !== !!options?.knowledge) throw new Error(KNOWLEDGE_ONLY_BY_PUBLISH);
     const now = Date.now();
     assertMemberActive(authorPublicKey);
     if (!getMember(db, authorPublicKey)) {
@@ -769,6 +791,19 @@ export function createPost(
         repeatable = false;
         cashAlsoNeeded = false;
         options = { ...options, reach: 'local', reachPeers: null };
+    } else if (type === 'knowledge') {
+        // Local knowledge (DESIGN-local-knowledge-fable.md §2.2): a page for everyone here, never a listing. No price, no
+        // deal, no reach past this community, and no place but in words (§2.6): not even its author's area, so no map, no
+        // member's set and no distance ever meets one. A photo is the writer's own and optional (§2.5).
+        if (audienceScope !== 'public') throw new Error(KNOWLEDGE_ONLY_BY_PUBLISH);
+        if (photos && photos.length > 0) validatePostPhotos(photos);
+        price_c = 0;
+        priceType = 'fixed';
+        repeatable = false;
+        lat = undefined;
+        lng = undefined;
+        cashAlsoNeeded = false;
+        options = { ...options, reach: 'local', reachPeers: null };
     } else {
         if (!options?.allowNoPhoto && (!photos || !Array.isArray(photos) || photos.length === 0)) {
             throw new Error(word('Add a photo first'));
@@ -776,7 +811,7 @@ export function createPost(
         validatePostPhotos(photos);
     }
 
-    if (type !== 'event' && (lat == null || lng == null)) ({ lat, lng } = placelessListingArea(authorPublicKey) ?? { lat, lng });
+    if (type !== 'event' && type !== 'knowledge' && (lat == null || lng == null)) ({ lat, lng } = placelessListingArea(authorPublicKey) ?? { lat, lng });
 
     // Offer first keeps a community's credit pool healthy; where Beans are off there is no credit to protect, so a newcomer's
     // first post may be a Need (M2/B4, 14 Oct).
@@ -788,7 +823,7 @@ export function createPost(
     // Held to the library here too, for a caller that comes past state-engine's createPost (post-fields.ts).
     const tags = options?.tags === undefined ? [] : assertPostTags(options.tags);
     const freeTags = options?.freeTags === undefined ? [] : assertFreeTags(options.freeTags);
-    const searchKeywords = postSearchKeywords(title, description, category, tags, freeTags);
+    const searchKeywords = postSearchKeywords(title, description, category, tags, freeTags) + (options?.knowledge?.keywords ? ` ${options.knowledge.keywords}` : '');
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos. A keeper's listing for
     // their enterprise charges the keeper who sent the photos, as its edit and its logo do, never the enterprise.
@@ -829,8 +864,9 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions,
+            knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, price_c, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -856,6 +892,10 @@ export function createPost(
             options?.shownCopy?.postId ?? null,
             options?.shownCopy?.price ?? null,
             options?.shownCopy?.takesQuestions ? 1 : null,
+            options?.knowledge?.sources ?? null,
+            options?.knowledge?.place ?? null,
+            options?.knowledge?.lang ?? null,
+            options?.knowledge?.checkedAt ?? null,
         );
 
         if (photoColumns.length > 0) {
@@ -876,7 +916,7 @@ export function createPost(
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
     bumpPostsVersion();
-    const post = getPosts(db, { id: finalId, viewerPubkey: authorPublicKey, includeVoters: true })[0]!;
+    const post = getPosts(db, { id: finalId, viewerPubkey: authorPublicKey, includeVoters: true, withKnowledge: type === 'knowledge' })[0]!;
 
     let recipients: string[] | undefined;
     if (audienceScope === 'group') {
@@ -886,12 +926,15 @@ export function createPost(
         recipients = Array.from(new Set([authorPublicKey, options?.targetPubkey, options?.assignedTo].filter(Boolean) as string[]));
     }
 
-    broadcast({ type: 'new_post', post: publicBroadcastPost(post) }, recipients);
+    // Local knowledge rings the doorbell only (@beanpool/core live-updates.ts applies Offers and Needs alone): its words go to
+    // no socket, so an app built before it holds nothing of one, and an app that knows it reads it by its own sync.
+    broadcast({ type: 'new_post', post: type === 'knowledge' ? knowledgeDoorbell(post) : publicBroadcastPost(post) }, recipients);
 
     // Activity feed isolation (docs/the-commons.md §9, Item 10)
     // Only public posts are recorded to the public activity feed
     // Nor a member's copy: the feed names who posted, and a copy names nobody (engine/event-copy.ts).
-    if (audienceScope === 'public' && !options?.shownCopy) {
+    // Nor Local knowledge: an app built before it would draw "X posted …" and open a page the node won't give it (§2.3).
+    if (audienceScope === 'public' && !options?.shownCopy && type !== 'knowledge') {
         try {
             recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, price_c });
         } catch (e) {
@@ -899,6 +942,15 @@ export function createPost(
         }
     }
     return forActor(post, authorPublicKey);
+}
+
+/**
+ * What a socket hears of a knowledge post (DESIGN-local-knowledge-fable.md §2.3): its id, its type and when it changed, no
+ * words. @beanpool/core livePostChange applies Offers and Needs alone, so every app reads it as a doorbell and runs its own
+ * sync, which asks for knowledge only if the app knows it.
+ */
+export function knowledgeDoorbell(post: { id: string; updatedAt?: string; createdAt: string }): { id: string; type: 'knowledge'; audienceScope: 'public'; updatedAt: string } {
+    return { id: post.id, type: 'knowledge', audienceScope: 'public', updatedAt: post.updatedAt ?? post.createdAt };
 }
 
 /**
@@ -2223,8 +2275,9 @@ export function votePoll(
  * ended, is false.
  */
 export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
-    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
-    if (!postRow) return false;
+    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to, type FROM posts WHERE id = ?").get(postId) as any;
+    // Local knowledge is never paused (engine/knowledge.ts): only an owner or admin changes a page, and Learn has no pause.
+    if (!postRow || postRow.type === 'knowledge') return false;
     const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
     if (!mutator) return false;
     const effectiveAuthor = mutator.authorPublicKey;
@@ -2256,7 +2309,8 @@ export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKe
 
 export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
     const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to, type, status FROM posts WHERE id = ?").get(postId) as any;
-    if (!postRow) return false;
+    // Nor resumed, so no hand-made request puts back one taken off the board (pausePost).
+    if (!postRow || postRow.type === 'knowledge') return false;
     const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
     if (!mutator) return false;
     const effectiveAuthor = mutator.authorPublicKey;

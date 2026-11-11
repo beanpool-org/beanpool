@@ -29,6 +29,8 @@ vi.mock('../lib/api', () => ({
     // The quiet-lead vote reads the group's succession on open (2026-09-23). These groups are healthy — the lead
     // is not eligible and no vote was ever held — so the panel draws nothing and the roster below is unchanged.
     // GroupSuccessionPanel.test.tsx is where the panel itself is covered.
+    // "Invited, not joined yet" (GroupInvitedList): the node says nothing here, so the section is not drawn.
+    getGroupInvitations: vi.fn(async () => null),
     getGroupSuccession: vi.fn().mockResolvedValue({
         silence: {
             convenorPubkey: null, convenorCallsign: null, lastActiveAt: null, daysInactive: 0,

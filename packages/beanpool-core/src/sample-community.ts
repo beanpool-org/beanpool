@@ -187,6 +187,20 @@ export interface SampleInvite {
     usedDaysAgo?: number;
 }
 
+/**
+ * One page of Local knowledge (knowledge.ts), as Learn's row and page draw it: no source (a sample carries no link), no
+ * writer's name, nothing a screen could open outside the preview. `topic` is a KNOWLEDGE_TOPICS id.
+ */
+export interface SampleKnowledge {
+    id: string;
+    title: WordKey;
+    body: WordKey;
+    topic: 'emergencies' | 'local-services' | 'getting-around';
+    place: WordKey | null;
+    helped: number;
+    checkedDaysAgo: number;
+}
+
 export interface SampleTreeMember {
     id: string;
     who: WordKey;
@@ -235,6 +249,8 @@ export interface SampleCommunity {
     invites: readonly SampleInvite[];
     /** Who came in through whom: the member, and the two they brought in. */
     inviteTree: SampleTreeMember;
+    /** Three pages of Local knowledge, one per topic, for Learn's preview on the global community (amended §2.9). */
+    knowledge: readonly SampleKnowledge[];
     /** The Commons pool, in Beans. */
     pool: number;
 }
@@ -388,6 +404,35 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
         ],
     },
     pool: 640,
+    knowledge: [
+        {
+            id: 'sample-know-flood',
+            title: word('Who to call when the creek floods the road'),
+            body: word('Call the council roads line first, and emergency services if anyone is in danger; the low bridge goes under first.'),
+            topic: 'emergencies',
+            place: word('The low bridge by the creek'),
+            helped: 14,
+            checkedDaysAgo: 20,
+        },
+        {
+            id: 'sample-know-tip',
+            title: word('How recycling works at the tip'),
+            body: word('Bring glass, cans and paper sorted into their own boxes; green waste is free on the first weekend of the month, and paint and batteries go in the shed by the gate.'),
+            topic: 'local-services',
+            place: word('The tip on the quarry road'),
+            helped: 9,
+            checkedDaysAgo: 45,
+        },
+        {
+            id: 'sample-know-bus',
+            title: word('Getting to town without a car'),
+            body: word('The valley bus leaves the shop at 8 and at 1 on weekdays and comes back at 12 and at 5; neighbours going to town often offer a lift.'),
+            topic: 'getting-around',
+            place: null,
+            helped: 6,
+            checkedDaysAgo: 70,
+        },
+    ],
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;

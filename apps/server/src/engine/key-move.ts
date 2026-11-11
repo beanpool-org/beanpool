@@ -194,6 +194,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('groups', 'circle_starter');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
+    // A declined invitation (engine/group-invitations.ts): the person who declined, and the member who made the invitation,
+    // whose "Declined" line it is.
+    move('group_invite_declines', 'invitee_pubkey');
+    move('group_invite_declines', 'invited_by');
     // A group chat's wraps for the old key stay (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct):
     // only the old key's seed opens them, so the member's phone can bring the history back with their old 12 words
     // (GET …/keys/former). The old key has no group_members row now, so it is never listed or topped up; the member
@@ -240,6 +244,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('standing_deals', 'payer_pubkey');
     move('standing_deals', 'payee_pubkey');
     move('standing_deals', 'stopped_by');
+    // A period lowered, an ask and its answer (DESIGN-getting-paid-fable.md §5): who made and who answered each.
+    move('standing_period_changes', 'asked_by');
+    move('standing_period_changes', 'answered_by');
 
     // (t) settlements
     move('settlements', 'buyer_pubkey');

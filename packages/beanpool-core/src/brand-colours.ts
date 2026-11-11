@@ -180,6 +180,11 @@ export const BRAND_COLOURS = {
         poll: { tint: themed('#fae8ff', '#4a044e'), ink: themed('#86198f', '#f0abfc') },
         quiet: { tint: themed(NATURE_100, NATURE_800), ink: themed(NATURE_700, NATURE_300) },
         info: { tint: themed('#dbeafe', '#172554'), ink: themed('#1e40af', '#93c5fd') },
+        /**
+         * Learn and Local knowledge (DESIGN-local-knowledge-fable.md §3.1: a teal role, AA in both themes, never a literal):
+         * the topic chip, "LOCAL KNOWLEDGE" on a page, the 📖 tile. The `card.teal` pair, so it is not an Offer's emerald.
+         */
+        learn: { tint: themed('#ccfbf1', '#042f2e'), ink: themed('#115e59', '#5eead4') },
     },
     /**
      * A trade's lines in a direct message: Beans held in trust, released to the provider, cancelled. Light is the web's
@@ -253,6 +258,8 @@ export const BRAND_COLOURS = {
         terra: themed(TERRA_700, TERRA_400),
         /** The event violet as words and outlines: when, the answer's outline and words, "You're hosting". The `tile.event` inks. */
         event: themed(VIOLET_800, VIOLET_300),
+        /** Learn's teal as words and icons: "See all ›", "In Learn: …" (DESIGN-local-knowledge-fable.md §3.1). The `chip.learn` ink. */
+        learn: themed('#115e59', '#5eead4'),
         /**
          * The onboarding blue as words, outlines, rings and progress (the web's --link pair). Web only: see WEB_ONLY_INKS.
          */

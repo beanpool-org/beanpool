@@ -107,6 +107,8 @@ matches the file.
 | `chip.quiet.ink` | `#526052` | `#c0ccc0` |
 | `chip.info.tint` | `#dbeafe` | `#172554` |
 | `chip.info.ink` | `#1e40af` | `#93c5fd` |
+| `chip.learn.tint` | `#ccfbf1` | `#042f2e` |
+| `chip.learn.ink` | `#115e59` | `#5eead4` |
 | `deal.held.tint` | `#d1fae5` | `#022c22` |
 | `deal.held.ink` | `#065f46` | `#6ee7b7` |
 | `deal.held.border` | `#10b981` | `#34d399` |
@@ -193,6 +195,7 @@ matches the file.
 | `ink.accent` | `#5b6b5b` | `#c0ccc0` |
 | `ink.terra` | `#a3472e` | `#e5967f` |
 | `ink.event` | `#5b21b6` | `#c4b5fd` |
+| `ink.learn` | `#115e59` | `#5eead4` |
 | `ink.info` | `#2563eb` | `#93c5fd` |
 | `map.ring` | `#92400e` | `#d4a24e` |
 
@@ -215,6 +218,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `chip.poll` | the Market's POLL chip: the `card.plum` pair, so a poll and an event (`tile.event`, violet) are two hues (card style box, Marty 4 Nov 2026) | 7.08 | 8.41 |
 | `chip.quiet` | the grey chip that carries no news: RECURRING, a category, a group's lock, "Closes in {n}d", Closed (amber keeps meaning money or caution) | 5.85 | 5.25 |
 | `chip.info` | the blue 👤 YOU chip: the `tile.services` pair | 7.15 | 8.15 |
+| `chip.learn` | Learn and Local knowledge: the topic chip, "LOCAL KNOWLEDGE", the 📖 tile: the `card.teal` pair (DESIGN-local-knowledge-fable.md §3.1) | 6.73 | 9.78 |
 | `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
 | `tile.<cat>` | category tiles: listings, events, Pulse; sticker outline and word in ink on tint | 6.31 – 12.08 | 6.31 – 11.19 |
 | `card.<hue>` | card caption bands: caption words, "Tune" and "…" in ink on tint | 5.0 – 8.1 | 6.3 – 11.2 |
@@ -225,6 +229,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `ink.accent` | the sage accent as words and icons | 4.94 | 6.45 |
 | `ink.terra` | terracotta as words: the manager's links, labels, hovered titles | 5.22 | 4.60 |
 | `ink.event` | the event violet as words and outlines: when, the answer's outline and words, "You're hosting" (the `tile.event` inks) | 7.82 | 5.81 |
+| `ink.learn` | Learn's teal as words and icons: "See all ›", "In Learn: …" (the `chip.learn` ink) | 6.60 | 7.25 |
 | `ink.info` | the onboarding blue as words, outlines, rings, progress (web only, judged on the web's grounds: `WEB_ONLY_INKS`) | 4.71 | 5.95 |
 | `map.ring` | a community's area on a map, a thin dashed line and never words: judged at 3:1 on the map's own grounds (`MAP_GROUNDS`), and read with the map's theme, not the app's (`areaRingColour`); the web and the manager only have OSM's light map, so they draw the light one in both themes | 4.18 | 3.65 |
 

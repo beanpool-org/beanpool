@@ -388,7 +388,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const readerMayReadListings = !deps.enforceReadAuth || (!!ctx.state?.actor && passesReadGate(ctx.state.actor));
         const posts = readerMayReadListings ? db.prepare(
             // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
-            "SELECT id, type, category, title, description, price_c, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
+            "SELECT id, type, category, title, description, price_c, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type NOT IN ('event', 'knowledge') AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
         ).all(treasury) as any[] : [];
         // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;

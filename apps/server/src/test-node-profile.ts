@@ -101,7 +101,7 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // with the test that proves it. Members' locked contact lists (DESIGN-private-contacts-fable.md C1): kept on every profile
 // while the owners' switch is on, as it is by default (test-contact-copies).
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, askedPush: true, contacts: true, door: 'members' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, askedPush: true, knowledge: true, contacts: true, door: 'members' },
     global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, contacts: true, door: 'open' },
 };
 
@@ -169,6 +169,8 @@ async function main() {
         'message requests: a stranger\'s first message waits to be accepted on the lobby only; a local community\'s arrive as before (test-dm-requests)');
     assert(local.shareOutside === true && global.shareOutside === false,
         'sharing a post outside: on for a local community, off on the lobby, whose listings a visitor reads already (test-peek-ticket)');
+    assert(local.knowledge === true && global.knowledge === false,
+        'Local knowledge (Learn): on for a local community, off on the lobby, which is not a place (test-knowledge-publish, test-knowledge-reads)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 

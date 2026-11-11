@@ -198,6 +198,14 @@ export interface ProfileSwitches {
      *  community"), which stops every link at once. Off (the global community): its listings are a visitor's read
      *  already, so a plain link shows them. Never on in a private preview, which shows visitors nothing. */
     shareOutside: boolean;
+    /** Local knowledge, read in Learn (scratch/fable-design/DESIGN-local-knowledge-fable.md §2.9, Marty's picks, 11 Nov 2026):
+     *  members' pages about this place, each approved by an owner or admin (engine/knowledge.ts). On (a local community):
+     *  every /api/knowledge route answers, and a member's read of the posts may name the type. Off (the global community,
+     *  which is not a place and whose moderators can't know a town's facts): every /api/knowledge route is 404 `feature_off`
+     *  (routes/profile-feature-gate.ts), and no read of the posts gives one, asked or not; the apps preview Learn from
+     *  Example Valley where `showcase` is on. Set by the server's kind in this build (KIND_ONLY_SWITCHES); the owners'
+     *  override under How this community works comes with the Settings slice. */
+    knowledge: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -236,6 +244,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         retention: false,
         dmRequests: false,
         shareOutside: true,
+        knowledge: true,
     },
     global: {
         openJoin: true,
@@ -285,6 +294,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         dmRequests: true,
         // Its listings are a visitor's read already (guestListingsOnly): a plain link to one shows it to anyone.
         shareOutside: false,
+        // Not a place (Marty, 11 Nov 2026): Local knowledge lives in a local community; global previews it (showcase).
+        knowledge: false,
     },
 };
 
@@ -378,6 +389,9 @@ export interface NodeFeatures {
      *  so on the What are you into? card and show its switch (`notify_asked`) in Settings → Notifications only here: a
      *  server from before it sends no such push and refuses the key. */
     askedPush?: true;
+    /** Present, and true, only where `knowledge` is on: the apps show Learn, and its routes answer (/api/knowledge/*). Absent
+     *  (the global community, or a server from before it): no Learn, which @beanpool/core knowledgeFeatureMode reads as off. */
+    knowledge?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -640,6 +654,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.dmRequests ? { dmRequests: true as const } : {}),
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
+        ...(s.knowledge ? { knowledge: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
     // post go outside: the preview shows visitors nothing.

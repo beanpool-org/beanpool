@@ -41,6 +41,8 @@ vi.mock('../lib/api', () => ({
     inviteGroupMember: vi.fn(),
     joinGroup: vi.fn(), removeGroupMember: vi.fn(), approveGroupMember: vi.fn(), setGroupMemberRole: vi.fn(),
     handOverGroupLead: vi.fn(), updateGroup: vi.fn(),
+    // "Invited, not joined yet" (GroupInvitedList): the node says nothing here, so the section is not drawn.
+    getGroupInvitations: vi.fn(async () => null),
     getGroupSuccession: vi.fn().mockResolvedValue({
         silence: { convenorPubkey: null, convenorCallsign: null, lastActiveAt: null, daysInactive: 0, isSilent: false, isEligible: false, electorate: 'convenors' },
         proposals: [], canPropose: false,

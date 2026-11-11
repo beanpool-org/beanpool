@@ -1119,6 +1119,15 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.shown_from_post_id != null ? { shownFromPostId: row.shown_from_post_id } : {}),
         ...(row.shown_price != null ? { shownPrice: row.shown_price } : {}),
         ...(row.shown_takes_questions === 1 ? { shownTakesQuestions: 1 } : {}),
+        // A knowledge post's own columns, as the main server holds them (apps/server engine/sync.ts postKnowledge): every one
+        // of them, verbatim, on a knowledge post only.
+        ...(row.type === 'knowledge' ? {
+            knowledgeColumns: {
+                sources: row.knowledge_sources ?? null, place: row.knowledge_place ?? null, lang: row.knowledge_lang ?? null,
+                checkedAt: row.knowledge_checked_at ?? null, outdatedAt: row.knowledge_outdated_at ?? null,
+                outdatedNote: row.knowledge_outdated_note ?? null, helped: Number(row.knowledge_helped) || 0,
+            },
+        } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

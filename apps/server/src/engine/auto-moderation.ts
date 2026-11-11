@@ -138,7 +138,7 @@ function weekPoints(joinedAt: string | null | undefined, now: number): number {
 function keptPostPoints(pubkey: string, countingPost: string | null): number {
     return (db.prepare(
         `SELECT COUNT(*) AS c FROM (SELECT 1 FROM posts
-           WHERE author_pubkey = ? AND origin_node IS NULL AND removed_by_moderator_at IS NULL
+           WHERE author_pubkey = ? AND origin_node IS NULL AND removed_by_moderator_at IS NULL AND type != 'knowledge'
              AND (hidden_by_reports_at IS NULL OR id IS ?) LIMIT ?)`
     ).get(pubkey, countingPost, STANDING.maxKeptPosts) as { c: number }).c;
 }
@@ -176,7 +176,7 @@ export function standingParts(pubkey: string, now: number = Date.now(), opts: { 
     if (!row) return { weeks: 0, keptPosts: 0, dealPartners: 0, total: 0 };
     const keptPosts = opts.hiddenCountsAsKept
         ? (db.prepare(`SELECT COUNT(*) AS c FROM (SELECT 1 FROM posts
-              WHERE author_pubkey = ? AND origin_node IS NULL AND removed_by_moderator_at IS NULL LIMIT ?)`)
+              WHERE author_pubkey = ? AND origin_node IS NULL AND removed_by_moderator_at IS NULL AND type != 'knowledge' LIMIT ?)`)
             .get(pubkey, STANDING.maxKeptPosts) as { c: number }).c
         : keptPostPoints(pubkey, null);
     const weeks = weekPoints(row.joined_at, now), dealPartners = tradePartnerPoints(pubkey);

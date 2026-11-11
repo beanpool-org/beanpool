@@ -31,6 +31,7 @@ import { PlaceCircleCard } from './PlaceCircleCard';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPickerSheet } from './AvatarPickerSheet';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
+import { GroupInvitedList } from './GroupInvitedList';
 import { GroupDecisions } from './EnterpriseDecisions';
 import { Sentence } from './Sentence';
 import { buildRosterView, rosterHeading } from '../utils/group-roster';
@@ -89,6 +90,8 @@ export function GroupDetailModal({
     const [actionLoading, setActionLoading] = useState(false);
     const [members, setMembers] = useState<GroupMemberItem[]>([]);
     const [rosterRefused, setRosterRefused] = useState(false);
+    // Counts the times the roster was read, so "Invited, not joined yet" reads again with it (a join moves a person out of it).
+    const [rosterReads, setRosterReads] = useState(0);
     const [groupData, setGroupData] = useState<GroupItem | null>(group);
     const [showPolicyPicker, setShowPolicyPicker] = useState(false);
     const [pickingPicture, setPickingPicture] = useState(false);
@@ -104,6 +107,7 @@ export function GroupDetailModal({
                 // No roster this time (the node busy, or offline): keep the one on screen.
                 if (data.members) setMembers(data.members);
                 setRosterRefused(data.rosterRefused === true);
+                setRosterReads(n => n + 1);
             }
         } catch (e) {
             console.warn('[GroupDetail] Failed to load:', e);
@@ -1000,6 +1004,16 @@ export function GroupDetailModal({
                                     </View>
                                 );
                             })
+                        )}
+
+                        {/* Under the members: who is invited and has not joined, as this member may see it (the node decides). */}
+                        {isMember && !rosterRefused && !closed && (
+                            <GroupInvitedList
+                                groupId={groupData.id}
+                                myPubkey={myPubkey}
+                                reloadKey={rosterReads}
+                                onChanged={() => { if (onMembershipChanged) onMembershipChanged(); }}
+                            />
                         )}
 
                         <View style={styles.actionArea}>

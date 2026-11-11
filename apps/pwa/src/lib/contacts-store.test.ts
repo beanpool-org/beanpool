@@ -287,9 +287,10 @@ describe('the web contacts store', () => {
         expect(contactsSnapshot().where).toBe('soon');
         seen = [];
 
-        // Ana signs out in another tab (this tab hears the account's epoch end), and Bob signs in there.
-        endAccountEpoch('signed-out');
+        // Ana signs out in another tab, as Settings does (her key goes, then the account's epoch ends, which this tab
+        // hears), and Bob signs in there.
         await wipeIdentity();
+        endAccountEpoch('signed-out');
         await importIdentity(bob);
 
         // Ana's old tab adds someone, and an hour passes.
@@ -369,8 +370,8 @@ describe('the web contacts store', () => {
         const get = holdNextGet();
         const opened = openContacts(me);
         await get.asked;
-        await clearAccountStorage();
         await wipeIdentity();
+        await clearAccountStorage();
         await importIdentity(bob);
         beginAccountEpoch();
         seen = [];

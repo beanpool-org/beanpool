@@ -2275,8 +2275,9 @@ export function votePoll(
  * ended, is false.
  */
 export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
-    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to FROM posts WHERE id = ?").get(postId) as any;
-    if (!postRow) return false;
+    const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to, type FROM posts WHERE id = ?").get(postId) as any;
+    // Local knowledge is never paused (engine/knowledge.ts): only an owner or admin changes a page, and Learn has no pause.
+    if (!postRow || postRow.type === 'knowledge') return false;
     const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
     if (!mutator) return false;
     const effectiveAuthor = mutator.authorPublicKey;
@@ -2308,7 +2309,8 @@ export function pausePost(broadcast: BroadcastFn, postId: string, authorPublicKe
 
 export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicKey: string, actorPubkey?: string, keeps?: (enterprisePubkey: string) => boolean): boolean {
     const postRow = db.prepare("SELECT author_pubkey, audience_scope, origin_node, target_group_id, target_pubkey, assigned_to, type, status FROM posts WHERE id = ?").get(postId) as any;
-    if (!postRow) return false;
+    // Nor resumed, so no hand-made request puts back one taken off the board (pausePost).
+    if (!postRow || postRow.type === 'knowledge') return false;
     const mutator = resolvePostMutator(postRow, authorPublicKey, actorPubkey, keeps);
     if (!mutator) return false;
     const effectiveAuthor = mutator.authorPublicKey;

@@ -1289,7 +1289,7 @@ export function ApplianceSection({
                                     <span>Break-Glass Emergency Recovery</span>
                                 </h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Attributable recovery mechanism when member keys or paired devices are lost
+                                    A way back in if an owner loses their phone.
                                 </p>
                             </div>
                         </div>

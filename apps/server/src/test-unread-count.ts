@@ -179,8 +179,10 @@ async function main(): Promise<void> {
     const answer = await unreadOf(ann);
     const after = Date.now();
     const asOf = Date.parse(answer.body?.asOf);
-    assert(JSON.stringify(Object.keys(answer.body ?? {}).sort()) === JSON.stringify(['alerts', 'asOf', 'requests', 'unread']),
-        `four fields and no others (${show(answer)})`);
+    // `contacts` is the number of the member's locked contacts list kept here (contacts design §4.4), null while they keep none.
+    assert(JSON.stringify(Object.keys(answer.body ?? {}).sort()) === JSON.stringify(['alerts', 'asOf', 'contacts', 'requests', 'unread']),
+        `five fields and no others (${show(answer)})`);
+    assert(answer.body?.contacts === null, `Ann keeps no contacts list here, so contacts is null (${show(answer)})`);
     assert(Number.isFinite(asOf) && new Date(asOf).toISOString() === answer.body?.asOf && asOf >= before - 1 && asOf <= after + 1,
         `asOf is the moment of the count, in ISO 8601 (${answer.body?.asOf})`);
     assert(answer.headers.get('cache-control') === 'private, no-store', `private and never stored (${answer.headers.get('cache-control')})`);

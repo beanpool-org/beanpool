@@ -511,8 +511,9 @@ async function main(): Promise<void> {
         // Version 29: money in whole hundredths: every money column INTEGER and named *_c, members without legacy_credit_floor.
         // Version 30: a new table, standing_period_changes (a standing deal's period lowered, getting-paid L1).
         // Version 31: posts with seven knowledge_* columns (Local knowledge, slice K1), copied with the row; no new table.
-        assert(snap?.tableHashes?.v === 31 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
-            'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 32: a new table, contact_copies (each member's locked contacts list, private contacts C1).
+        assert(snap?.tableHashes?.v === 32 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
+            'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests', 'contact_copies'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

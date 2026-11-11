@@ -595,6 +595,7 @@ export const SUITES = [
     'test-knowledge-publish',
     'test-knowledge-reads',
     'test-names-copy',
+    'test-contact-copies',
     'test-balance-rule-boot',
     'test-escrow-disputes',
     'test-lendable-offers',

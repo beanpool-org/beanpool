@@ -170,6 +170,7 @@ import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createNamesListRoutes } from './routes/names-list.js';
+import { createContactsRoutes } from './routes/contacts.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
 import { createNodeClaimRoutes } from './routes/node-claim.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
@@ -2058,6 +2059,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createNamesListRoutes(deps),
+        // A member's locked contacts list (engine/contact-copies.ts).
+        createContactsRoutes(),
         createSettingsSigninRoutes(deps),
         createNodeClaimRoutes(deps),
         createRecoveryCollectRoutes(deps),
@@ -2243,6 +2246,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     [/^\/api\/web-push$/, 4 * 1024],
     // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).
     [/^\/api\/names\/copy$/, 1.5 * 1024 * 1024],
+    // A member's locked contacts list: at most 512 KiB padded and its tag, base64 (about 700 KB), and a short header
+    // (engine/contact-copies.ts), so a body past 1 MiB is no copy and is refused unread.
+    [/^\/api\/contacts\/copy$/, 1024 * 1024],
     // A claim is a key, a callsign, a code id, a host, a proof and a signature: under 1 KiB. No limiter runs before it
     // (isClaimRoute), so it reads no more than this.
     [/^\/api\/local\/claim$/, 4 * 1024],

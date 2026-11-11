@@ -394,7 +394,7 @@ export interface SearchCard { q: string; kind: HomeSearchSettings['kind']; categ
 export interface HomeAnswer {
     generatedAt: string;
     profile: NodeProfile;
-    features: NodeFeatures & { door: Door };
+    features: NodeFeatures & { contacts: boolean; door: Door };
     /**
      * Who decides a removal (config/features-for.ts removalDeciderFor), to a reader who reads as a member: beside `features`,
      * never in them, as GET /api/community/me says it. "How this community works" draws it (slice J3).

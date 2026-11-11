@@ -557,6 +557,8 @@ export interface SyncCommunitySettings {
         removal_decider?: string | null;
         /** The core settings confirmed and locked, `{ at, by }` as JSON text, or null for never (apps/server config/core-settings.ts). */
         core_settings_lock?: string | null;
+        /** Whether members' locked contact lists are kept: `off`, or null for on, the default (apps/server config/contact-copies.ts). */
+        contact_copies?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

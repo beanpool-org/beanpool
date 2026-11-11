@@ -69,6 +69,7 @@ export function logSettingName(setting: string): string {
         voucherBudget: t('Budget per voucher'),
         memberGift: t('Members giving part of their credit line'),
         dmRequests: t('First message from someone new'),
+        contacts: t("Keep members' locked contact lists"),
         shareOutside: t('Members may share listings outside the community'),
         decisions: t('Community votes (Decisions)'),
         listed: t('Listed in the BeanPool directory'),

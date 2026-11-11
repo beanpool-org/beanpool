@@ -186,7 +186,13 @@ export interface TableHashes {
  * importer drops is a knowledge post's sources, place, language, checked date, mark and count, and after a take-over from
  * such a copy the page still shows its title and words, "Checked" reading the day it was made.
  */
-export const TABLE_HASHES_VERSION = 31;
+/**
+ * 32: a new table, contact_copies (each member's locked contacts list, DESIGN-private-contacts-fable.md slice C1). Raised for
+ * the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: what an older
+ * importer drops is a locked copy no server can open, and after a take-over from such a copy the member's phone, which keeps
+ * the list itself, sees no copy there and brings it level again in its rounds (contacts design §4.4, §4.5).
+ */
+export const TABLE_HASHES_VERSION = 32;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

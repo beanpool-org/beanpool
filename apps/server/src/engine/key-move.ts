@@ -364,6 +364,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
     if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);
     else deletePlainRows('names_copies', 'owner_pubkey = ?', oldKey);
+    // The old key's locked contacts list (engine/contact-copies.ts): locked under the old key, so the new one can't open it;
+    // it goes, never moves, as the names copy does. (Contacts slice C6 keeps it a year for the old words instead, §6.2.)
+    if (keepStamps) db.prepare('DELETE FROM contact_copies WHERE owner_pubkey = ?').run(oldKey);
+    else deletePlainRows('contact_copies', 'owner_pubkey = ?', oldKey);
 }
 
 /**

@@ -26,7 +26,7 @@ import {
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 // Old chat, read-only: conversion code, log row OLDCHAT, remove in 1.5.0 (core, as the thread check that marks the lines).
-import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_LABEL } from '@beanpool/core';
+import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_WORDS } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
 import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
@@ -2544,7 +2544,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', padding: '0.4rem 0.8rem',
                                 fontSize: '0.8rem', fontWeight: 500, textAlign: 'center', whiteSpace: 'normal',
                             }}>
-                                {t(DM_OLD_LINES_LABEL)}
+                                {t(DM_OLD_LINES_WORDS.label)}
                             </div>
                         </div>
                     )}{((): ReactNode => {

@@ -5,7 +5,7 @@ import { Buffer } from 'buffer';
 import {
     checkDmThread, dmLineIsOld, dmLineIsUnattributed, dmLineHasOldShape, dmLineSentBeforeCutover, dmLineShownText, dmOldLineRunStarts,
     dmQuoteFrom, openDmLine, openDmOldLine, sealDmLine, isDmLineForm,
-    DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, DM_OLD_LINE_CUTOFF, DM_OLD_LINES_LABEL, type DmThreadLine, type DmKeys,
+    DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, DM_OLD_LINE_CUTOFF, DM_OLD_LINES_WORDS, type DmThreadLine, type DmKeys,
 } from '../dm-crypto.js';
 import { DM_OLD_LINES, DM_OLD_LINE_TIMES, DM_REFUSED_LINES, DM_VECTOR_CONVERSATION as CONV, DM_VECTOR_PEOPLE as P } from '../dm-line-vectors.js';
 import { t } from '../words.js';
@@ -173,7 +173,7 @@ describe('the cutover time, read the same on every engine', () => {
 
 describe('the label and its runs', () => {
     it('is one sentence of the words layer, in English as Marty wrote it', () => {
-        expect(t(DM_OLD_LINES_LABEL)).toBe('Older messages from before 12 November 2026. They were sent before BeanPool signed every message.');
+        expect(t(DM_OLD_LINES_WORDS.label)).toBe('Older messages from before 12 November 2026. They were sent before BeanPool signed every message.');
     });
     it('goes above each run of old lines once; a passed-over line neither starts nor ends a run', () => {
         expect(dmOldLineRunStarts([])).toEqual([]);

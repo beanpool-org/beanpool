@@ -129,7 +129,7 @@ export const DM_REFUSED_LINES: DmRefusedLine[] = [
 /**
  * Lines as the 1.2.36 apps sealed them, frozen (sealed once by `git show v1.2.36:packages/beanpool-core/src/dm-crypto.ts`'s
  * sealDmLine and encryptDmFormat2, each nonce the first 24 bytes of SHA-256("beanpool old-chat vector: nonce <n>")), with
- * the time the node dates each: what core's checkDmThread shows read-only under DM_OLD_LINES_LABEL, in both apps' tests.
+ * the time the node dates each: what core's checkDmThread shows read-only under DM_OLD_LINES_WORDS.label, in both apps' tests.
  * `DM_REFUSED_LINES[0]` (a 1.3.x line with its signature beside it) is old too.
  */
 export const DM_OLD_LINE_TIMES = {

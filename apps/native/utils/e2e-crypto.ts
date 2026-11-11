@@ -42,7 +42,7 @@ export {
     // Old chat, read-only: conversion code, log row OLDCHAT, remove in 1.5.0.
     dmLineIsOld,
     dmOldLineRunStarts,
-    DM_OLD_LINES_LABEL,
+    DM_OLD_LINES_WORDS,
     type DmKeyContext as DMKeyContext,
     type DmLineView,
     type DmQuoteFrom,

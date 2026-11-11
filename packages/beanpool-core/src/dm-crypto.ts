@@ -549,7 +549,7 @@ export interface DmLineView {
     mark: DmLineMark;
     /**
      * A line from before 1.4.0 whose words opened as they did then, in its named author's bubble, shown read-only under
-     * DM_OLD_LINES_LABEL (dmLineIsOld; conversion code, log row OLDCHAT, remove in 1.5.0). Absent on every other line.
+     * DM_OLD_LINES_WORDS.label (dmLineIsOld; conversion code, log row OLDCHAT, remove in 1.5.0). Absent on every other line.
      */
     old?: true;
 }
@@ -751,7 +751,7 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
 // than the cutover was written after it, so it is hidden as a forgery.
 //
 // Shown: a sealed line that opens, in its named author's bubble (with the mark a moved or reordered line had before), under
-// DM_OLD_LINES_LABEL once above its run (dmOldLineRunStarts); neither app answers, quotes, edits or reacts to one
+// DM_OLD_LINES_WORDS.label once above its run (dmOldLineRunStarts); neither app answers, quotes, edits or reacts to one
 // (dmLineIsOld). A photo stays locked.
 //
 // NOT shown: a readable row (plaintext-v1, 00000) stays the hidden line it is today, whatever its time. The node holds no
@@ -763,8 +763,10 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
 export const DM_OLD_LINE_CUTOFF = '2026-11-11T19:16:00.000Z';
 const DM_OLD_LINE_CUTOFF_MS = Date.UTC(2026, 10, 11, 19, 16, 0, 0);
 
-/** The one label above a run of old lines, in both apps (t() it where it is shown). */
-export const DM_OLD_LINES_LABEL = word('Older messages from before 12 November 2026. They were sent before BeanPool signed every message.');
+/** The one label above a run of old lines, in both apps: t(DM_OLD_LINES_WORDS.label) where it is shown. */
+export const DM_OLD_LINES_WORDS = {
+    label: word('Older messages from before 12 November 2026. They were sent before BeanPool signed every message.'),
+} as const;
 
 /** The first word of format 3's associated data, as 1.2.x and 1.3.x apps sealed it. */
 const DM_OLD_FORMAT3_AAD_TAG = 'beanpool-dm-line/3';
@@ -802,13 +804,13 @@ export function dmLineHasOldShape(l: { ciphertext?: unknown; nonce?: unknown; ti
     return !!l && !isDmLineForm(l.ciphertext, l.nonce) && dmLineSentBeforeCutover(l.timestamp);
 }
 
-/** True for a line shown old: read-only, under DM_OLD_LINES_LABEL; never answered, quoted, edited or reacted to. */
+/** True for a line shown old: read-only, under DM_OLD_LINES_WORDS.label; never answered, quoted, edited or reacted to. */
 export function dmLineIsOld(view: DmLineView | undefined | null): boolean {
     return view?.old === true;
 }
 
 /**
- * Where DM_OLD_LINES_LABEL goes: once above each run of old lines, in the order a thread is shown (oldest first). `old`
+ * Where DM_OLD_LINES_WORDS.label goes: once above each run of old lines, in the order a thread is shown (oldest first). `old`
  * says of each line whether it is old (dmLineIsOld), or null for a line a run passes over (the node's own notice, a day's
  * label): such a line neither starts a run nor ends one. Returns, line by line, whether the label goes above it.
  */

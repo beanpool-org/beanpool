@@ -9,7 +9,7 @@
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
 import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type ChatAbout, type RemovedLineKind, type WordKey } from '@beanpool/core';
-import { dmQuoteLabel, dmOldLineRunStarts, DM_OLD_LINES_LABEL, type DmQuoteFrom } from './e2e-crypto';
+import { dmQuoteLabel, dmOldLineRunStarts, DM_OLD_LINES_WORDS, type DmQuoteFrom } from './e2e-crypto';
 import { chatLineWords } from './chat-line-words';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
@@ -379,7 +379,7 @@ export interface ChatRemovedRun {
 }
 
 /**
- * The one label above a run of DM lines from before 1.4.0 (core DM_OLD_LINES_LABEL), keyed by the run's first line
+ * The one label above a run of DM lines from before 1.4.0 (core DM_OLD_LINES_WORDS.label), keyed by the run's first line
  * (conversion code, log row OLDCHAT, remove in 1.5.0).
  */
 export interface ChatOldLinesLabel {
@@ -436,7 +436,7 @@ export function buildChatListItems(messages: ChatMessage[], now: Date = new Date
     let lastDay: string | null = null;
     const oldRunStarts = dmOldLineRunStarts(messages.map((m) => (isSystemLine(m) ? null : !!m.oldLine)));
     for (const [i, m] of messages.entries()) {
-        if (oldRunStarts[i]) items.push({ id: `old-lines-${m.id}`, type: 'old-lines-label', label: t(DM_OLD_LINES_LABEL) });
+        if (oldRunStarts[i]) items.push({ id: `old-lines-${m.id}`, type: 'old-lines-label', label: t(DM_OLD_LINES_WORDS.label) });
         const d = m.rawTimestamp ? new Date(m.rawTimestamp) : null;
         if (d && !isNaN(d.getTime())) {
             const dayKey = d.toDateString();

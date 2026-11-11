@@ -419,9 +419,11 @@ const GUEST_NODES_STORE_KEY = 'beanpool_guest_nodes';
 export async function contactsCommunities(storage: Pick<ContactsKv, 'getItem'>): Promise<{ anchor: string | null; kept: string[] }> {
     const { readKeptCommunities, sameCommunity } = await import('./push-pins');
     const { anchor, kept } = await readKeptCommunities(storage);
+    // A read that fails throws (no pass); only a record that reads but doesn't parse counts as none, as nodes.ts reads it.
+    const raw = await storage.getItem(GUEST_NODES_STORE_KEY);
     let marks: unknown;
     try {
-        marks = JSON.parse((await storage.getItem(GUEST_NODES_STORE_KEY)) ?? '[]');
+        marks = JSON.parse(raw ?? '[]');
     } catch {
         marks = [];
     }

@@ -52,7 +52,10 @@ describe('the phone keeps the list locked, in a file per account', () => {
         const deps = fakeDeps();
         await changeContacts(me, add(dee()), deps);
         const text = deps.files.get(me.publicKey)!;
-        for (const s of ['Dee', 'Walker', '0412', '345 678', 'dee@example.org', 'Seedlings']) expect(text).not.toContain(s);
+        // Whole values, and the number's digits alone. A short piece ("Dee", "0412") turns up by chance in ~22 KB of base64 and
+        // hex about one run in twelve (2 of 25 measured), which failed this check for nothing; a readable name or number still
+        // holds every value here.
+        for (const s of ['Dee Walker', 'Walker', '0412 345 678', '0412345678', '345 678', 'dee@example.org', 'Seedlings']) expect(text).not.toContain(s);
         // The web app keeps the same key as PKCS8 (DESIGN §1.1): the phone's file opens there, which is the vectors' promise.
         const web = { publicKey: me.publicKey, privateKey: bytesToHex(toEd25519Pkcs8(me.seed)) };
         const opened = openContactsCopy(JSON.parse(text), web);

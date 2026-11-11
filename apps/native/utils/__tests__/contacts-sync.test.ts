@@ -13,8 +13,8 @@ import {
 } from '@beanpool/core';
 import { contactsSyncStoreKey, loadContacts, readSyncState, type ContactsAccount } from '../contacts-store';
 import {
-    CONTACTS_COPY_PATH, checkContactsHere, contactsHeard, contactsKeptAt, decide, editContacts, phoneSyncDeps, resetContactsCheckForTests,
-    syncContacts, type ContactsNet, type ContactsSyncDeps,
+    CONTACTS_COPY_PATH, checkContactsHere, contactsCommunities, contactsHeard, contactsKeptAt, decide, editContacts, phoneSyncDeps,
+    resetContactsCheckForTests, syncContacts, type ContactsNet, type ContactsSyncDeps,
 } from '../contacts-sync';
 import { PUSH_ALERTS_OFF_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
@@ -526,6 +526,25 @@ describe('the communities a pass visits: the member\'s own, never a guest\'s loo
         expect(global.copies.get(me.publicKey)?.seq).toBe(1);
         // Mutation: phoneSyncDeps's communities as readKeptCommunities alone → Global hears the member's key each pass;
         // as push-registrations' communitiesForAlerts → the guest look in use is still asked, and Castlemaine keeps no copy.
+    });
+
+    it('guest marks that can\'t be read stop the pass: a failed read is never taken as "no looks"', async () => {
+        const me = person();
+        const global = new FakeCommunity();
+        const p = phone({ [GLOBAL]: global }, GLOBAL);
+        const kv = {
+            getItem: async (k: string) => {
+                if (k === 'beanpool_guest_nodes') throw new Error('storage failed');
+                return k === 'beanpool_anchor_url' ? GLOBAL : null;
+            },
+            setItem: p.deps.kv.setItem,
+        };
+        await expect(contactsCommunities(kv)).rejects.toThrow('storage failed');
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        p.clock.now += WAIT;
+        await checkContactsHere(me, { ...p.deps, communities: phoneSyncDeps({ disk: p.deps.disk, kv }).communities });
+        expect(p.requests).toEqual([]);
+        // Mutation: read the marks inside the parse's try → the failure reads as "no looks", and Global is asked.
     });
 });
 

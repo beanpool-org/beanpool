@@ -61,8 +61,10 @@ function account(): Account {
     return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: seed.toString('hex') };
 }
 
-/** How a community answers: its counts, a refusal, no connection, or nothing until the phone gives up. */
-/** `contacts`, when given, is the number of the member's locked contacts copy kept there (apps/server routes/contacts.ts). */
+/**
+ * How a community answers: its counts, a refusal, no connection, or nothing until the phone gives up. `contacts`, when
+ * given, is the number of the member's locked contacts copy kept there (apps/server routes/contacts.ts).
+ */
 type Answer = { unread: number; requests?: number; alerts?: unknown; contacts?: unknown } | { status: number; body?: unknown } | 'down' | 'never';
 interface Asked { community: string; path: string; signed: boolean; method: string; headers: Record<string, string>; body: unknown }
 

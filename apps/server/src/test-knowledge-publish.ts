@@ -40,7 +40,7 @@ import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { issueAutomationToken } from './automation-tokens.js';
-import { createPost, KNOWLEDGE_ONLY_BY_PUBLISH } from './engine/posts.js';
+import { createPost, knowledgeDoorbell, KNOWLEDGE_ONLY_BY_PUBLISH } from './engine/posts.js';
 import { TEST_PHOTO } from './post-test-helper.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -169,6 +169,11 @@ async function main(): Promise<void> {
     assert(ada1.status === 201 && (db.prepare('SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?').get(ada1.body?.post?.id) as { n: number }).n === 1,
         `2. Ada, an admin, publishes with a photo of her own (${show(ada1)})`);
     const k2 = ada1.body?.post?.id as string;
+    const photoUrl = ada1.body?.post?.photos?.[0] as string | undefined;
+    const photo = photoUrl ? await call(mel, 'GET', photoUrl.replace(/^https?:\/\/[^/]+/, '')) : null;
+    assert(!!photoUrl && photo?.status === 200, `2. a member opens the page's photo, as any listing's (${photoUrl} → ${photo?.status})`);
+    assert(JSON.stringify(Object.keys(knowledgeDoorbell(ada1.body.post)).sort()) === JSON.stringify(['audienceScope', 'id', 'type', 'updatedAt']),
+        '8. a socket hears its id, type and time, never its words (the doorbell)');
     assert(rowOf(k2).knowledge_place === null && rowOf(k2).knowledge_sources === null, '2. no place and no source are none');
     const activity = db.prepare("SELECT COUNT(*) AS n FROM activity_feed WHERE event_type = 'post_created' AND json_extract(metadata, '$.postId') IN (?, ?)").get(k1, k2) as { n: number };
     assert(activity.n === 0, '8. no "posted" line in the activity feed for either');

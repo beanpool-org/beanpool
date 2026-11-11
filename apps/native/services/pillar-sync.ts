@@ -17,7 +17,7 @@ import { BeanPoolMerkleTree, LIVE_POST_TYPES, isHundredths, t, type LivePostChan
 import { applyDelta, communityCachesRenamed, copyForRead, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
 import { absentAfter, cardsToDrop, isMembersOnDemandRefusal, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
-import { EVENT_TYPES_QUERY } from '../utils/events';
+import { EVENT_TYPES_QUERY, SYNC_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
 import { isMembersOnlyAnswer, noteAfterPreview, noteRefusal, refusalOf, type Refusal } from '../utils/members-only-listings';
@@ -809,7 +809,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         };
         try {
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
-            // is what keeps builds that predate events from ever caching one.
+            // is what keeps builds that predate events from ever caching one. This read names Local knowledge too
+            // (SYNC_TYPES_QUERY): its pages are kept in their own table, never in `posts` (utils/db.ts writeKnowledgePost).
             // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key. By area,
             // `setOnce=1`: the node names the member's set on the read's last page only (utils/posts-nearby.ts nearbyPageOf),
             // and with `setHash` not at all while the set this phone holds is still the set; with `setDiff=1` beside it, as what
@@ -817,7 +818,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             const nearbyQuery = () => `limit=200&sync=true&nearby=1&setOnce=1${nearbyHeld ? `&setHash=${encodeURIComponent(nearbyHeld.hash)}&setDiff=1` : ''}`;
             // `tag`: this phone's own If-None-Match (a by-area delta's first page), where the platform cache knows no URL it
             // never asked; the platform passes its 304 through as one.
-            const pullPosts = (cursor: string, after: string | null = null, tag: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
+            const pullPosts = (cursor: string, after: string | null = null, tag: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${SYNC_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json', ...(tag ? { 'If-None-Match': tag } : {}) },
                 signal: timeouts.signal(30000)

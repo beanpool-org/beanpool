@@ -25,6 +25,15 @@ export type EventState = 'scheduled' | 'updated' | 'cancelled';
 export const POST_TYPES_WITH_EVENTS = 'offer,need,poll,event';
 export const EVENT_TYPES_QUERY = `types=${POST_TYPES_WITH_EVENTS}`;
 
+/**
+ * What the SYNC asks for: the Market's kinds and Local knowledge, which is opt-in the same way and stricter (the node leaves a
+ * page out of every read that doesn't name it, by id included: DESIGN-local-knowledge-fable.md §2.3). Only the sync names it.
+ * The Market's own reads stay on EVENT_TYPES_QUERY and never ask for a page: the pages go to `knowledge_posts` (utils/db.ts
+ * writeKnowledgePost), not to `posts`, which the Market and the map read. A node older than Learn drops a word it doesn't know;
+ * one with the switch off sends none.
+ */
+export const SYNC_TYPES_QUERY = `${EVENT_TYPES_QUERY},knowledge`;
+
 export const EVENT_DEFAULT_DURATION_MS = 2 * 60 * 60 * 1000;
 export const EVENT_TITLE_MAX = 140;
 export const EVENT_PLACE_NAME_MAX = 80;

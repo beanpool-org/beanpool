@@ -65,6 +65,7 @@ import { openLookDoor } from '../../utils/look-door';
 import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import { MarketCircleLine } from '../../components/MarketCircleLine';
+import { MarketLearnLine } from '../../components/learn/MarketLearnLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, type WordKey } from '@beanpool/core';
@@ -1461,6 +1462,9 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
+            {/* Learn's one line (Local knowledge, DESIGN-local-knowledge-fable.md amended §3.9): while words are typed and Learn
+                has a match. It is a door to Learn, never a listing: no knowledge is among the Market's rows, counts or pills. */}
+            <MarketLearnLine words={searchQuery} />
             {/* Looking around with no account (slice S12, utils/look-around.ts): nothing is kept until Join. */}
             {lookingAround && (
                 <View style={{ marginHorizontal: 16 }}>

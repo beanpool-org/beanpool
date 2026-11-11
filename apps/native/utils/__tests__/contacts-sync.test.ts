@@ -294,6 +294,52 @@ describe('a dishonest community', () => {
     });
 });
 
+describe('refusals end', () => {
+    it('a community that switched lists back on keeps the copy again, and the footer no longer names it as keeping none', async () => {
+        const byron = new FakeCommunity();
+        byron.off = true;
+        const me = person();
+        const p = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        let { onPhone, state } = await loadContacts(me, p.deps);
+        expect(contactsKeptAt(state, onPhone, [BYRON])).toMatchObject({ at: [], off: [BYRON] });
+        byron.off = false;
+        p.clock.now += 25 * 60 * 60 * 1000;
+        await syncContacts(me, p.deps);
+        ({ onPhone, state } = await loadContacts(me, p.deps));
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        expect(contactsKeptAt(state, onPhone, [BYRON])).toMatchObject({ at: [BYRON], off: [] });
+        // Mutation: keep the refusal once Byron answers → the footer says Byron both keeps the list and keeps none.
+    });
+
+    it('a copy too big to merge with the phone\'s rests a day, and isn\'t fetched each pass', async () => {
+        const byron = new FakeCommunity();
+        const me = person();
+        // About 300 KiB of contacts on each phone: each locks alone, the two together are past the 512 KiB cap.
+        const big = (tag: string) => Array.from({ length: 220 }, (_, i) => ({
+            ...person1(`${tag} ${i}`, Array.from({ length: 5 }, (_, k) => `+61 4${String(i).padStart(3, '0')} ${k}${'0'.repeat(28)}`),
+                Array.from({ length: 3 }, (_, k) => `${tag.toLowerCase()}${i}.${k}.${'x'.repeat(180)}@example.org`)),
+            note: `${tag} ${'n'.repeat(290)}`,
+        }));
+        const other = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => big('Bee').reduce((acc, c) => putContact(acc, c), l), other.deps);
+        other.clock.now += WAIT;
+        await syncContacts(me, other.deps);
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+        const p = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => big('Ant').reduce((acc, c) => putContact(acc, c), l), p.deps);
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        await syncContacts(me, p.deps);
+        expect(p.requests.filter((r) => r.method === 'GET' && r.path === CONTACTS_COPY_PATH)).toHaveLength(1);
+        expect((await loadContacts(me, p.deps)).state.refused[BYRON]?.code).toBe('too_big');
+        expect((await names(me, p.deps)).length).toBe(220);
+        // Mutation: let takeInCopy's throw end the pass → Byron's copy is downloaded and merged again on every pass.
+    });
+});
+
 describe('what leaves the phone (design §11: the recording node)', () => {
     it('no request\'s URL, body or header holds any name, number, email or note, signed by the phone\'s real request code', async () => {
         vi.useRealTimers();

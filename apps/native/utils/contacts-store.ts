@@ -64,9 +64,10 @@ export type ContactsOnPhone =
 
 /**
  * Why a community isn't asked again for a while: it keeps no lists, its server is full, too many saves this hour, it holds a
- * list a newer app wrote, the account isn't a member there, or it handed back a copy that doesn't open with the member's key.
+ * list a newer app wrote, the account isn't a member there, it handed back a copy that doesn't open with the member's key,
+ * or its copy and the phone's together are more than one copy can hold (the member removes people; the screen says so).
  */
-export type ContactsRefusal = 'contacts_off' | 'node_full' | 'too_many_saves' | 'newer' | 'not_a_member' | 'unopened';
+export type ContactsRefusal = 'contacts_off' | 'node_full' | 'too_many_saves' | 'newer' | 'not_a_member' | 'unopened' | 'too_big';
 
 /** What the phone knows of the account's copies (design §4.5), kept beside the file. */
 export interface ContactsSyncState {
@@ -105,7 +106,7 @@ export function emptySyncState(): ContactsSyncState {
 
 const isSeq = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 1;
 const isMs = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
-const REFUSALS: readonly ContactsRefusal[] = ['contacts_off', 'node_full', 'too_many_saves', 'newer', 'not_a_member', 'unopened'];
+const REFUSALS: readonly ContactsRefusal[] = ['contacts_off', 'node_full', 'too_many_saves', 'newer', 'not_a_member', 'unopened', 'too_big'];
 
 /** A record as stored, never trusted: what doesn't read is left out (the worst of it is one more look at a community). */
 export function readSyncState(raw: string | null): ContactsSyncState {
@@ -348,6 +349,7 @@ export function takeInCopy(account: ContactsAccount, community: string, raw: unk
             return { kind: 'merged', changed: false, seq, back: null };
         }
         s.merged[community] = seq;
+        delete s.refused[community];
         const mine = onPhone.kind === 'list' ? onPhone.list : emptyContactsList();
         const both = mergeContactsLists(mine, theirs.list);
         const fileSeq = onPhone.kind === 'list' ? onPhone.seq : 0;

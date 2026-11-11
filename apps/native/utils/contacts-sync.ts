@@ -23,7 +23,7 @@
  * (`node_full`), that took too many saves this hour, or that handed back a copy that doesn't open, is left alone for a
  * while; one that keeps no lists is named in the Contacts screen's footer ({@link contactsKeptAt}).
  */
-import type { ContactsList } from '@beanpool/core';
+import { ContactsCryptoError, type ContactsList } from '@beanpool/core';
 import { onAccountOnPhone } from './account-on-phone';
 import {
     changeContacts, contactsRecordChanged, inTurn, loadContacts, phoneContactsDeps, readOnPhone, readStateFor, takeInCopy, writeState,
@@ -36,7 +36,9 @@ const UNREAD_PATH = '/api/me/unread';
 export const CONTACTS_REQUEST_MS = 15_000;
 const HOUR = 60 * 60 * 1000;
 /** How long each refusal leaves a community alone. */
-const REFUSAL_WAIT: Record<ContactsRefusal, number> = { contacts_off: 24 * HOUR, node_full: 24 * HOUR, too_many_saves: HOUR, newer: 24 * HOUR, not_a_member: HOUR, unopened: 24 * HOUR };
+const REFUSAL_WAIT: Record<ContactsRefusal, number> = {
+    contacts_off: 24 * HOUR, node_full: 24 * HOUR, too_many_saves: HOUR, newer: 24 * HOUR, not_a_member: HOUR, unopened: 24 * HOUR, too_big: 24 * HOUR,
+};
 /** The most steps one community takes in a pass: ask, fetch, save, and once more after a 409. */
 const STEPS_MAX = 5;
 
@@ -111,13 +113,19 @@ async function step(account: ContactsAccount, community: string, what: ContactsS
         const answer = await deps.net.call(community, account, 'GET', CONTACTS_COPY_PATH);
         if (!answer) return false;
         if (answer.status === 200) {
-            const took = await takeInCopy(account, community, answer.body, deps);
-            return took.kind === 'merged';
+            try {
+                return (await takeInCopy(account, community, answer.body, deps)).kind === 'merged';
+            } catch (e) {
+                // Its copy and the phone's together can't be locked as one: rest a day rather than fetch it each pass.
+                if (!(e instanceof ContactsCryptoError)) throw e;
+                return note(account, deps, (s) => refuse(s, community, 'too_big', now));
+            }
         }
         return note(account, deps, (s) => {
             if (answer.status === 404 && codeOf(answer.body) === 'no_copy') {
                 s.heard[community] = null;
                 delete s.merged[community];
+                delete s.refused[community];
                 return true;
             }
             return refuse(s, community, refusalOf(answer.status, answer.body), now);
@@ -134,6 +142,7 @@ async function step(account: ContactsAccount, community: string, what: ContactsS
             const seq = contacts === null ? null : seqOf(contacts);
             if (contacts !== null && seq === null) return false;
             s.heard[community] = seq;
+            delete s.refused[community];
             return true;
         });
     }
@@ -154,6 +163,7 @@ async function step(account: ContactsAccount, community: string, what: ContactsS
         if (answer.status === 200 && seqOf(answer.body) === sending.seq) {
             s.heard[community] = sending.seq;
             s.merged[community] = sending.seq;
+            delete s.refused[community];
             s.savedAt = now;
             if (s.fileSeq === sending.seq) s.dueAt = null;
             return true;
@@ -191,7 +201,7 @@ async function note(account: ContactsAccount, deps: ContactsSyncDeps, edit: (s: 
     });
 }
 
-/** `community` brought level, one step at a time (at most {@link STEPS_MAX}). Never throws. */
+/** `community` brought level, one step at a time (at most {@link STEPS_MAX}). Throws what the disk throws. */
 async function level(account: ContactsAccount, community: string, deps: ContactsSyncDeps): Promise<void> {
     for (let i = 0; i < STEPS_MAX; i++) {
         const { onPhone, state } = await loadContacts(account, deps);
@@ -304,6 +314,8 @@ export function resetContactsCheckForTests(): void {
 }
 
 let timer: { at: ReturnType<typeof setTimeout>; for: string } | null = null;
+/** The account the phone last said it holds (account-on-phone.ts), once it has said one. */
+let onPhoneNow: string | null | undefined;
 
 function stopTimer(): void {
     if (timer) clearTimeout(timer.at);
@@ -313,7 +325,8 @@ function stopTimer(): void {
 // A save set for an account that has since left the phone never goes: its pass would be signed with a key the phone no
 // longer holds, to the communities of the account that replaced it.
 onAccountOnPhone((publicKey) => {
-    if (timer && timer.for !== (publicKey ?? '').toLowerCase()) stopTimer();
+    onPhoneNow = (publicKey ?? '').toLowerCase() || null;
+    if (timer && timer.for !== onPhoneNow) stopTimer();
 });
 
 /**
@@ -328,11 +341,14 @@ export async function savePassWhenDue(account: ContactsAccount | null, deps: Con
         if (state.dueAt === null) return;
         const wait = Math.max(0, state.dueAt - (deps.now ?? Date.now)());
         stopTimer();
+        const key = account.publicKey.toLowerCase();
+        // The account went while its record was read: nothing is set for it.
+        if (onPhoneNow !== undefined && onPhoneNow !== key) return;
         const at = setTimeout(() => {
             timer = null;
-            void syncContacts(account, deps);
+            if (onPhoneNow === undefined || onPhoneNow === key) void syncContacts(account, deps);
         }, wait + 1000);
-        timer = { at, for: account.publicKey.toLowerCase() };
+        timer = { at, for: key };
     } catch (e) {
         console.warn('[Contacts] The save could not be set for later', e);
     }

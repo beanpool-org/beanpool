@@ -232,14 +232,15 @@ export function* vcardCards(text: string): Generator<VcardStep, void, undefined>
         }
 
         if (pending !== null) {
-            if (line.startsWith(' ') || line.startsWith('\t')) {
-                if (pending.length <= VCARD_LINE_MAX) pending += line.slice(1);
+            // A quoted-printable soft break first: the next line runs on as it is, a leading space included (it is text).
+            if (pending.endsWith('=') && /QUOTED-PRINTABLE/i.test(pending.slice(0, Math.max(0, pending.indexOf(':'))))) {
+                if (pending.length <= VCARD_LINE_MAX) pending = pending.slice(0, -1) + line;
                 if (end >= len) break;
                 continue;
             }
-            // A quoted-printable soft break: the next line runs on, as it is.
-            if (pending.endsWith('=') && /QUOTED-PRINTABLE/i.test(pending.slice(0, Math.max(0, pending.indexOf(':'))))) {
-                if (pending.length <= VCARD_LINE_MAX) pending = pending.slice(0, -1) + line;
+            // A folded line: the space or tab that folds it goes.
+            if (line.startsWith(' ') || line.startsWith('\t')) {
+                if (pending.length <= VCARD_LINE_MAX) pending += line.slice(1);
                 if (end >= len) break;
                 continue;
             }

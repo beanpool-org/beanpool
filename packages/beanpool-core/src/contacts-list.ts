@@ -41,8 +41,6 @@ export const CONTACTS_LIMITS = {
     noteChars: 300,
     links: 5,
     callsignChars: 64,
-    addressChars: 500,
-    inviteCodeChars: 64,
 } as const;
 
 /** How long a removal's marker is kept: a year (design §4.5). */

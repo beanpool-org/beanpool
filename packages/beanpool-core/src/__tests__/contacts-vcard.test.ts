@@ -118,6 +118,11 @@ describe('reading the files phones and Google make', () => {
         expect(JSON.stringify(r.candidates)).not.toMatch(/9j|AAQ/);
     });
 
+    it('a quoted-printable soft break runs on into the next line as it is, even one starting with a space', () => {
+        const file = crlf(['BEGIN:VCARD', 'VERSION:2.1', 'FN:Lee', 'NOTE;ENCODING=QUOTED-PRINTABLE:Back=', ' gate, Saturday=', '=0Aearly', 'END:VCARD']);
+        expect(names(file).candidates[0].note).toBe('Back gate, Saturday\nearly');
+    });
+
     it('an iPhone 3.0 file with a photo: grouped properties, escapes undone, a company only when there is no name', () => {
         expect(names(IPHONE_30).candidates).toEqual([
             { name: 'Sam Jones', phones: ['+61 400 000 001', '(02) 6600 0001'], emails: ['sam@example.org'], note: 'Met at the market, Saturday\nBrings seedlings' },

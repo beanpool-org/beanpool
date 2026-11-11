@@ -183,7 +183,7 @@ interface CopyClear { alsoDrop: string }
  * Another community's copy open now (getDb's own swap: an address written with no closeDB) is left at once: handed to no
  * one from here, and closed under the sync lock on its own (leaveCopy), so a write in flight on it finishes first. The open
  * takes no lock and waits for no close: a writer holding the lock as it asks (applyDelta, the deal and review writers, the
- * ratings reads) waits on this open, which waited in turn for that lock until the app was killed (review of #3053, db.ts:161).
+ * ratings reads) waits on this open, and an open that waited for that lock would wait for good (review of #3053, db.ts:161).
  */
 function openCopy(file: string, url: string | null, clear: CopyClear | null): Promise<SQLite.SQLiteDatabase> {
     if (db) {
@@ -292,7 +292,6 @@ async function untilNoOpenOnItsWay(): Promise<void> {
  * caller holds). The caller holds the sync lock (closeDB, whileCopyMoves, clearDB).
  */
 async function closeOpenCopy() {
-    for (const copy of [...copiesLeft]) await closeLeftCopy(copy);
     if (db) {
         const oldDb = db;
         db = null;
@@ -303,6 +302,7 @@ async function closeOpenCopy() {
             console.warn('[DB] closeDB warning:', e);
         }
     }
+    for (const copy of [...copiesLeft]) await closeLeftCopy(copy);
 }
 
 /**

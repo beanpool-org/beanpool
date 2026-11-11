@@ -68,6 +68,7 @@ vi.mock('expo-sqlite', async () => {
                 sql.exec(q);
             };
             return {
+                databasePath: name,
                 execAsync: exec,
                 getFirstAsync: (q: string, p?: unknown) => read(q, p, false),
                 getAllAsync: (q: string, p?: unknown) => read(q, p, true),
@@ -466,6 +467,7 @@ describe('a writer holding the sync lock that asks for the copy during a swap ge
         const [w, s] = await Promise.all([within(writer), within(screen)]);
         console.log(`${row}: writer ${w}, screen ${s}; connections open ${JSON.stringify(stillOpen())}`);
         expect({ writer: w, screen: s }).toEqual({ writer: 'answered', screen: 'answered' });
+        expect((await screen).databasePath).toBe(fileOf(Y));
         expect(await (await screen).getFirstAsync('SELECT COUNT(*) AS n FROM posts')).toEqual({ n: 0 });
         await vi.waitFor(() => expect(stillOpen()).toEqual([fileOf(Y)]));
     }
@@ -506,6 +508,7 @@ describe('a writer holding the sync lock that asks for the copy during a swap ge
         // Y's copy is made while the writer still holds the lock: its open never waits for the lock.
         const screen = d.getDb();
         expect(await within(screen)).toBe('answered');
+        expect((await screen).databasePath).toBe(fileOf(Y));
         expect(stillOpen()).toEqual([fileOf(X), fileOf(Y)]);
         reading.release();
         expect(await within(writer)).toBe('answered');
@@ -546,21 +549,24 @@ describe('a writer holding the sync lock that asks for the copy during a swap ge
 
     describe.each(TAKERS)('$name', ({ name, run, answer }) => {
         it("overtaken: a screen's ask reads the new address just before the taker's own and starts the swap: both answer", async () => {
-            let screen: ReturnType<Db['getDb']> | null = null;
-            whileTheRequestIsOut(answer, () => { h.beforeAnchorRead = () => { screen = d.getDb(); }; });
+            const asked: { screen?: ReturnType<Db['getDb']> } = {};
+            whileTheRequestIsOut(answer, () => { h.beforeAnchorRead = () => { asked.screen = d.getDb(); }; });
             const t = await within(run(d));
-            const s = screen ? await within(screen, 1000) : 'never asked';
+            const s = asked.screen ? await within(asked.screen, 1000) : 'never asked';
             console.log(`${name} overtaken: taker ${t}, screen ${s}; connections open ${JSON.stringify(stillOpen())}`);
             expect({ taker: t, screen: s }).toEqual({ taker: 'answered', screen: 'answered' });
+            expect((await asked.screen)?.databasePath).toBe(fileOf(Y));
             await vi.waitFor(() => expect(stillOpen()).toEqual([fileOf(Y)]));
         }, 10_000);
 
         it("its own: the taker's ask is the first to see the new address, and a screen asks after it: both answer", async () => {
             whileTheRequestIsOut(answer, () => {});
             const t = await within(run(d));
-            const s = await within(d.getDb(), 1000);
+            const screen = d.getDb();
+            const s = await within(screen, 1000);
             console.log(`${name} its own: taker ${t}, screen ${s}; connections open ${JSON.stringify(stillOpen())}`);
             expect({ taker: t, screen: s }).toEqual({ taker: 'answered', screen: 'answered' });
+            expect((await screen).databasePath).toBe(fileOf(Y));
             await vi.waitFor(() => expect(stillOpen()).toEqual([fileOf(Y)]));
         }, 10_000);
     });

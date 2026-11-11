@@ -50,7 +50,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { db } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { feeOf, periodEnd, periodStart, standingAuthorisationText, standingGraceEndsAt, type StandingPeriodUnit } from '@beanpool/core';
+import { STANDING_CHANGE_STATES, feeOf, periodEnd, periodStart, standingAuthorisationText, standingGraceEndsAt, type StandingPeriodUnit } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 
@@ -185,6 +185,12 @@ async function main(): Promise<void> {
     const currentRow = async (who: Id, id: string) => ((await call(who, 'GET', `/api/marketplace/transactions?publicKey=${who.pk}`)).body as any[])?.find(t => t.standingId === id && t.standingPhase);
     /** Ends a section's standing deal, so a later section's tick far ahead pays nothing on it. */
     const finish = (id: string, payer: Id) => { try { se.stopStandingDeal(id, payer.pk); } catch { /* already ended */ } };
+
+    // The node's table takes exactly the states core names (schema.sql standing_period_changes, @beanpool/core).
+    const ddl = String((db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'standing_period_changes'`).get() as { sql: string } | undefined)?.sql ?? '');
+    const checked = /state IN \(([^)]*)\)/.exec(ddl)?.[1]?.split(',').map(x => x.trim().replace(/'/g, '')) ?? [];
+    assert(checked.length === STANDING_CHANGE_STATES.length && STANDING_CHANGE_STATES.every(st => checked.includes(st)),
+        `standing_period_changes takes exactly core's states (${checked.join(', ')})`);
 
     // ── 1. The provider lowers next week ───────────────────────────────────────────────────────────────────────────────
     console.log('── 1. The provider lowers next week to 100 ──');
@@ -506,10 +512,16 @@ async function main(): Promise<void> {
     const r3 = await call(gus, 'GET', `/api/marketplace/transactions?publicKey=${gus.pk}`);
     const c3 = (r3.body as any[]).find(t => t.standingId === bench.id && t.standingPhase);
     assert(r3.etag !== r2.etag && c3?.standingDueBeans_c === hc(120) && c3?.standingAsk === null, `yes: the week due costs 120 (${c3?.standingDueBeans_c})`);
-    const older = (r3.body as any[]).find(t => t.standingId === bench.id && !t.standingPhase);
-    assert(older === undefined || (older.standingAsksLeft === undefined && older.standingDueBeans_c === undefined), 'an older period carries none of it');
-    finish(bench.id, gus);
     tick(bench.end(1) + 60_000);
+    const r4 = await call(gus, 'GET', `/api/marketplace/transactions?publicKey=${gus.pk}`);
+    const c4 = (r4.body as any[]).find(t => t.standingId === bench.id && t.standingPhase);
+    const older = (r4.body as any[]).find(t => t.standingId === bench.id && t.periodNo === 1);
+    assert(c4?.periodNo === 2 && c4?.amount_c === hc(120) && c4?.standingDueBeans_c === undefined && c4?.standingAsksLeft === 3,
+        `week 2 paid at 120: the current row says so, and week 3 is at the price with 3 asks left (${JSON.stringify(c4)?.slice(0, 200)})`);
+    assert(!!older && older.standingPhase === undefined && older.standingAsk === undefined && older.standingAsksLeft === undefined && older.standingDueBeans_c === undefined,
+        `an older period's row carries none of it (${JSON.stringify(older)?.slice(0, 160)})`);
+    finish(bench.id, gus);
+    tick(bench.end(2) + 60_000);
     assertConserved('after the read');
 
     // ── 12. A standby; a re-key ───────────────────────────────────────────────────────────────────────────────────────

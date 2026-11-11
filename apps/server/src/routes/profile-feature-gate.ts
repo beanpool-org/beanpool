@@ -82,6 +82,12 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         needs: ['directoryMirror'],
         paths: [/^\/api\/global(\/|$)/],
     },
+    // Local knowledge, read in Learn (routes/knowledge.ts): every route, reads included. Off on the global community, which
+    // previews Learn from the sample community instead. The posts read leaves it out there whatever is asked (marketplace.ts).
+    {
+        needs: ['knowledge'],
+        paths: [/^\/api\/knowledge(\/|$)/],
+    },
     // "Ask to join" (G6, routes/knocks.ts): the applicant's knock and status, and the members' list and answers. Off on
     // the global node, and wherever the operator opted out. Not the operator's count (/api/local/admin/knocks), which
     // Settings shows beside the switch that turns them back on. A knock is answered with an invite, so where invites

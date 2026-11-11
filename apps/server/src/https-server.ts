@@ -158,6 +158,7 @@ import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
 import { createWebPushRoutes } from './routes/web-push.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
+import { createKnowledgeRoutes } from './routes/knowledge.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { createToolRoutes } from './routes/tools.js';
@@ -2048,6 +2049,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createKnockRoutes(deps),
         createWebPushRoutes(deps),
         createInviteAskRoutes(deps),
+        createKnowledgeRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
         createToolRoutes(deps),

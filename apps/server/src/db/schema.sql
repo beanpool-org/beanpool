@@ -388,6 +388,18 @@ CREATE TABLE IF NOT EXISTS posts (
     shown_price TEXT,
     -- 1 while the member takes questions about this Offer or Need (engine/event-copy.ts). Anything else: nobody is named.
     shown_takes_questions INTEGER,
+    -- Local knowledge (type 'knowledge'; scratch/fable-design/DESIGN-local-knowledge-fable.md §4.1; apps/server
+    -- engine/knowledge.ts, the only writer): its sources (a JSON list of at most 5 {url, label}), its place in words (≤ 80;
+    -- a knowledge post has no lat/lng ever), its writer's app language, when an owner or admin last confirmed it, when it
+    -- was marked "may be out of date" and why (≤ 140), and how many members it helped. Empty on every other row, and
+    -- `knowledge_helped` 0. No trigger, index or default here calls a connection function, so an older image boots on this file.
+    knowledge_sources TEXT,
+    knowledge_place TEXT,
+    knowledge_lang TEXT,
+    knowledge_checked_at TEXT,
+    knowledge_outdated_at TEXT,
+    knowledge_outdated_note TEXT,
+    knowledge_helped INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

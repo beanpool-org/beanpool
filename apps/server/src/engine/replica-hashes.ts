@@ -173,7 +173,13 @@ export interface TableHashes {
  * legacy_credit_floor. Raised because every hashed money column changed name and type; REPLICA_FORMAT is 15 with it, so a
  * copy never crosses the change.
  */
-export const TABLE_HASHES_VERSION = 29;
+/**
+ * 30: posts gains seven knowledge_* columns (Local knowledge, DESIGN-local-knowledge-fable.md §4.1, slice K1). Raised for the
+ * same reason as 8. REPLICA_FORMAT stays: each side's import writes only the columns its own table has; what an older
+ * importer drops is a knowledge post's sources, place, language, checked date, mark and count, and after a take-over from
+ * such a copy the page still shows its title and words, "Checked" reading the day it was made.
+ */
+export const TABLE_HASHES_VERSION = 30;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

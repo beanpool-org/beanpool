@@ -341,7 +341,16 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     ctx.body = { data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
 });
 
-const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
+const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event', 'knowledge'] as const;
+
+/**
+ * The kinds of post this route makes (DESIGN-local-knowledge-fable.md §1 row 4). Any other word is a 400: a made-up type
+ * made a post every app drew as a Need, outside the "Offer first" rule. Local knowledge is made only through Learn
+ * (routes/knowledge.ts, engine/knowledge.ts publishKnowledge).
+ */
+const CREATABLE_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
+const isCreatablePostType = (t: unknown): t is (typeof CREATABLE_POST_TYPES)[number] =>
+    typeof t === 'string' && (CREATABLE_POST_TYPES as readonly string[]).includes(t);
 
 /**
  * On a sync read paged by key (`paged=1`, then `pageAfter=<key>`), the key the next page starts below, while this one
@@ -562,6 +571,12 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
+    // Local knowledge is OPT-IN as events are, and stricter (DESIGN-local-knowledge-fable.md §2.3): every read leaves it out,
+    // by id and by ids included, unless it names the type (`types=…,knowledge` or `type=knowledge`), and then only for a
+    // member of this node where the `knowledge` switch is on. A visitor's read gets none in v1; neither does the global
+    // community, which has none. An app built before it asks for none, so it never meets one (engine PostFilter.withKnowledge).
+    const asksKnowledge = type === 'knowledge' || !!types?.includes('knowledge');
+    const withKnowledge = asksKnowledge && switches.knowledge && includeVoters && !!reader;
     // Where anyone can join in a minute (`openMembership`, the global node), a member is someone who spent a minute, so
     // each listing's place reaches them to its neighbourhood (about 1.1 km across both ways) inside the query, distance and order
     // too, all but their own and the events they may read in full (engine PostFilter.neighbourhood, exactPlacesFor;
@@ -624,7 +639,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
         && !assignedTo && nodesOwnRadius && (audienceScope === undefined || audienceScope === 'public') && ctx.query.online === undefined;
     const pinsNow = pinsFirst ? livePinIds(db) : [];
     const pinsPart = pinsNow.length > 0 ? `:pins-${pinsNow.join(',')}` : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}${pinsPart}`;
+    // A read that asks for Local knowledge says whether it got it: the owners' switch changes the answer and no post.
+    const knowledgePart = asksKnowledge ? `:know-${withKnowledge ? 1 : 0}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${keeperPart}${exactPart}${directoryPart}${pinsPart}${knowledgePart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -688,6 +705,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         id, ids, type, types, excludeEvents, category, query: q, tags, free, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
         neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId, asKeeper: asKeeper || undefined,
+        withKnowledge: withKnowledge || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
@@ -799,6 +817,11 @@ router.post('/api/marketplace/posts', async (ctx) => {
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
+        return;
+    }
+    if (!isCreatablePostType(type)) {
+        ctx.status = 400;
+        ctx.body = { error: 'type is offer, need, poll or event. Local knowledge is added in Learn (POST /api/knowledge/posts).', code: 'unknown_type' };
         return;
     }
     if (!assertActorEntitled(ctx, authorPublicKey)) return;

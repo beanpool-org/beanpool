@@ -1282,6 +1282,18 @@ function postFreeTags(rp: any): [string] {
 }
 
 /** A member's copy from their own community (engine/event-copy.ts), plain assignment: none said is none. */
+/**
+ * A knowledge post's seven columns (posts.knowledge_*, DESIGN-local-knowledge-fable.md §4.1), as the main server holds them:
+ * plain assignment, so a mark cleared there is cleared here. Any other post, or a main server older than them, carries none,
+ * and the row's are empty (`knowledge_helped` 0).
+ */
+function postKnowledge(rp: any): [string | null, string | null, string | null, string | null, string | null, string | null, number] {
+    const k = rp.type === 'knowledge' && rp.knowledgeColumns && typeof rp.knowledgeColumns === 'object' ? rp.knowledgeColumns : {};
+    const text = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+    const helped = Number.isInteger(k.helped) && k.helped >= 0 ? k.helped as number : 0;
+    return [text(k.sources), text(k.place), text(k.lang), text(k.checkedAt), text(k.outdatedAt), text(k.outdatedNote), helped];
+}
+
 function postShownFrom(rp: any): [string | null, string | null, string | null, 1 | null] {
     return [
         typeof rp.shownFromHost === 'string' ? rp.shownFromHost : null,
@@ -2082,8 +2094,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions,
+                                knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at, knowledge_outdated_at, knowledge_outdated_note, knowledge_helped)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2132,6 +2145,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postTags(rp),
                         ...postFreeTags(rp),
                         ...postShownFrom(rp),
+                        ...postKnowledge(rp),
                     );
                     newPosts++;
                 } else {
@@ -2198,6 +2212,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         shown_from_post_id = ?,
                         shown_price = ?,
                         shown_takes_questions = ?,
+                        knowledge_sources = ?,
+                        knowledge_place = ?,
+                        knowledge_lang = ?,
+                        knowledge_checked_at = ?,
+                        knowledge_outdated_at = ?,
+                        knowledge_outdated_note = ?,
+                        knowledge_helped = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2239,6 +2260,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postTags(rp),
                         ...postFreeTags(rp),
                         ...postShownFrom(rp),
+                        ...postKnowledge(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

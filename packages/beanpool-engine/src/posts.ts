@@ -17,6 +17,8 @@ import {
     tagSearchWords,
     type PostReach,
     type AudienceScope,
+    type KnowledgeFields,
+    type KnowledgeSource,
     word
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
@@ -85,7 +87,8 @@ export interface EventNextDate {
 
 export interface MarketplacePost {
     id: string;
-    type: 'offer' | 'need' | 'poll' | 'event';
+    /** `knowledge`: Local knowledge (@beanpool/core knowledge.ts), read only by a filter that says `withKnowledge`. */
+    type: 'offer' | 'need' | 'poll' | 'event' | 'knowledge';
     category: string;
     title: string;
     description: string;
@@ -140,6 +143,8 @@ export interface MarketplacePost {
      * the enterprise that wrote it, getPosts); never to another reader, a visitor or a broadcast (publicBroadcastPost).
      */
     createdVia?: string;
+    /** A knowledge post's own fields (@beanpool/core KnowledgeFields; DESIGN-local-knowledge-fable.md §4.1). Absent on every other type. */
+    knowledge?: KnowledgeFields;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -278,6 +283,14 @@ export interface MarketplacePost {
     /** The server's search words for it, synonyms included (generateSearchKeywords). Carried by the replication export only. */
     searchKeywords?: string;
     /**
+     * A knowledge post's seven columns as stored (`sources` is the stored JSON), for a standby to write verbatim (apps/server
+     * engine/sync.ts postKnowledge). Carried by the replication export only; a reader gets `knowledge`.
+     */
+    knowledgeColumns?: {
+        sources: string | null; place: string | null; lang: string | null; checkedAt: string | null;
+        outdatedAt: string | null; outdatedNote: string | null; helped: number;
+    };
+    /**
      * Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5): ids such as `food.fruit.lemon`, at most
      * five. Public with the listing, as its category is. Absent when it has none, so an untagged listing reads as before.
      */
@@ -378,6 +391,13 @@ export interface PostFilter {
      * `type=event`, so an app built before events never receives one (docs/events-on-the-map.md §2.6).
      */
     excludeEvents?: boolean;
+    /**
+     * Read Local knowledge too (`type = 'knowledge'`, @beanpool/core knowledge.ts). Without it every read leaves it out, by id
+     * and by sync included, so an app built before it never meets one (DESIGN-local-knowledge-fable.md §2.3): the list route
+     * sets it only for a member's read that names the type (`types=…,knowledge` or `type=knowledge`) where the node's
+     * `knowledge` switch is on, and the node's own knowledge code (apps/server engine/knowledge.ts) for its own reads.
+     */
+    withKnowledge?: boolean;
     /**
      * Online events only (DESIGN-event-times §9): events with no pin, which a read near a point never meets. Home's "Coming
      * up" and a member's set on a node that syncs by area add them wherever the reader is (director amendment 2).
@@ -821,6 +841,37 @@ export function generateSearchKeywords(title: string, description: string, categ
     return [...expanded].join(' ');
 }
 
+/** A stored list of sources (posts.knowledge_sources, JSON), read tolerantly: anything odd is no source. */
+function knowledgeSourcesOf(raw: unknown): KnowledgeSource[] {
+    if (typeof raw !== 'string' || raw === '') return [];
+    try {
+        const list = JSON.parse(raw);
+        return Array.isArray(list)
+            ? list.filter((x) => x && typeof x.url === 'string').map((x) => ({ url: x.url as string, label: typeof x.label === 'string' ? x.label : '' }))
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * A knowledge post's own fields as the reader gets them (DESIGN-local-knowledge-fable.md §4.1). `gathered`: its row was made
+ * from an owner's or admin's assistant's draft (`created_via` 'assistant-draft:<grant id>'), which a reader sees as words
+ * only, never the grant. `checkedAt` falls back to when it was made.
+ */
+export function knowledgeFieldsOf(row: any): KnowledgeFields {
+    return {
+        sources: knowledgeSourcesOf(row.knowledge_sources),
+        place: row.knowledge_place || null,
+        lang: row.knowledge_lang || null,
+        checkedAt: row.knowledge_checked_at || row.created_at,
+        outdatedAt: row.knowledge_outdated_at || null,
+        outdatedNote: row.knowledge_outdated_at ? (row.knowledge_outdated_note || null) : null,
+        helped: Number(row.knowledge_helped) || 0,
+        gathered: typeof row.created_via === 'string' && row.created_via.startsWith('assistant-draft:'),
+    };
+}
+
 /**
  * A post row as the reader gets it. `forGuest`: a visitor's read (PostFilter.guest), whose copy guestPost makes with a
  * neutral value for the author's standing and face, so neither is worked out here: they stand as guestPost leaves them.
@@ -901,6 +952,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
         ...(row.type === 'poll' ? { pollOpenVote: row.poll_open_vote === 1 } : {}),
+        ...(row.type === 'knowledge' ? { knowledge: knowledgeFieldsOf(row) } : {}),
         audienceScope: (row.audience_scope ?? 'public') as AudienceScope,
         targetGroupId: row.target_group_id || undefined,
         targetGroupName: row.target_group_name || undefined,
@@ -1041,7 +1093,7 @@ const isUnnamedCopy = (r: { shown_from_host?: string | null; shown_takes_questio
  * @beanpool/core pinLive's rule on the row, plus the author's standing, which a phone reads as the status a sync gives such a
  * listing. Stricter than the listing's own rule: a post taken up, or a closed poll, stays on the board and holds no pin.
  */
-export const PIN_ON_BOARD_SQL = `p.active = 1 AND p.status = 'active'
+export const PIN_ON_BOARD_SQL = `p.active = 1 AND p.status = 'active' AND p.type != 'knowledge'
     AND (p.audience_scope IS NULL OR p.audience_scope = 'public')
     AND p.hidden_by_reports_at IS NULL AND p.removed_by_moderator_at IS NULL AND p.origin_node IS NULL
     AND NOT (p.type = 'event' AND (COALESCE(p.event_state, '') = 'cancelled' OR COALESCE(p.event_end_at, p.event_start_at, '~') <= ?))
@@ -1458,6 +1510,8 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     includeHidden: () => true,
     includeVoters: () => true,
     excludeEvents: () => true,
+    // Local knowledge has no place, so no circle meets it either way.
+    withKnowledge: () => true,
     type: f => f.type === 'all' || f.type === 'offer' || f.type === 'need',
     types: f => f.types!.includes('offer') || f.types!.includes('need'),
     category: f => f.category === 'all',
@@ -2190,6 +2244,9 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    // Outside the board's own block above, so a read by id, by ids, a sync, a delta, a member's set, a photo heal and the pins
+    // all leave it out too (PostFilter.withKnowledge).
+    if (!filter?.withKnowledge) { where += " AND p.type != 'knowledge'"; }
     if (filter?.eventOnline) { where += " AND p.type = 'event' AND p.event_online = 1"; }
     if (filter?.upcomingUntil) {
         // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
@@ -2755,7 +2812,9 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
     resentAt: 'drop',
     // The replication export's only: no read sends it.
-    searchKeywords: 'drop',
+    searchKeywords: 'drop', knowledgeColumns: 'drop',
+    // Local knowledge never reaches a visitor in v1 (DESIGN-local-knowledge-fable.md §2.3); a read that met one sends none.
+    knowledge: 'drop',
 };
 
 /**
@@ -2790,7 +2849,8 @@ export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
 }
 
 export function getActivePostCount(db: Db): number {
-    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL").get() as any;
+    // Local knowledge is no listing (DESIGN-local-knowledge-fable.md §1 row 24): a community seeded with 100 pages has 12 Offers.
+    const row = db.prepare("SELECT COUNT(*) as c FROM posts WHERE active = 1 AND status = 'active' AND type != 'knowledge' AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL").get() as any;
     return row?.c || 0;
 }
 

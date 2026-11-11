@@ -103,6 +103,8 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
           AND p.active = 1
           AND p.origin_node IS NULL
           AND p.reach != 'local'
+          -- Local knowledge is always reach 'local'; named too, so it never federates whatever a row says (§1 row 25).
+          AND p.type != 'knowledge'
           AND (p.audience_scope IS NULL OR p.audience_scope = 'public')
           AND p.hidden_by_reports_at IS NULL
         ORDER BY p.created_at DESC

@@ -188,7 +188,7 @@ async function main() {
         remember: noteRestoredCopy,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
-    // (it asks whether there is an owner). Never throws: the admin password works as before either way.
+    // (it asks whether there is an owner). Never throws: without a code, `beanpool claim` or `beanpool recover` on the server still adds an owner.
     initClaimCode();
 
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else

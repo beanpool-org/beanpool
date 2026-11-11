@@ -109,11 +109,9 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
         }
     });
 
-    // One backup, to save and restore with the Restore wizard. GET so a browser can stream it; the credentials in a
-    // header (X-Admin-Password or a key session), never the query string.
+    // One backup, to save and restore with the Restore wizard. GET so a browser can stream it; an owner's key session
+    // (cookie or header) or backups token in a header, never the query string.
     router.get('/api/local/admin/offbox-backups/download', async (ctx) => {
-        const headerPassword = ctx.request.header['x-admin-password'];
-        if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
         if (!(await ownerOnly(ctx))) return;
         // A GET, but the whole community: from the phone it asks for its unlock again, like /backup (requirePhoneStepUp).
         if (!requirePhoneStepUp(ctx)) return;

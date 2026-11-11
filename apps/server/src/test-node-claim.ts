@@ -392,6 +392,8 @@ async function main(): Promise<void> {
     const getG = await request(g, 'GET', '/api/local/claim', undefined, { Host: HOST });
     assert(getG.status === 200 && getG.json.unclaimed === true && getG.json.codeId === null, `G1. the node serves, with no code (${JSON.stringify(getG.json)})`);
     assert(/No claim code this start/.test(g.output()), 'G2. the log says why');
+    assert(/beanpool claim --key <public key> --callsign <name>/.test(g.output()) && /beanpool recover --key <member>/.test(g.output())
+        && !/admin password/i.test(g.output()), 'G2. and how to add the first owner on the server, never an admin password');
     await g.stop();
 
     console.log('\nH. A flood of wrong proofs never delays a right one');

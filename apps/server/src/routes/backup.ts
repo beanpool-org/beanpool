@@ -934,7 +934,7 @@ router.post('/api/local/admin/backup', async (ctx) => {
 // ======================== BACKUP TAB ========================
 // Read-only enrollment bundle for standing up a NEW backup server that joins
 // THIS node's community. The operator runs `scripts/setup-backup.mjs` on the
-// would-be backup machine; it GETs this with the X-Admin-Password header,
+// would-be backup machine; it GETs this with an owner's credential (a key session or an automation token),
 // writes genesis.json into the backup's data dir, and configures the backup to
 // pull from this primary. Returns ONLY public material the backup needs to
 // recognize this primary's identity — no key (a standby never needed
@@ -942,8 +942,6 @@ router.post('/api/local/admin/backup', async (ctx) => {
 
 
 router.get('/api/local/admin/backup-enroll', async (ctx) => {
-    const headerPassword = ctx.request.header['x-admin-password'];
-    if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -1216,12 +1214,9 @@ router.post('/api/local/admin/snapshots/create', async (ctx) => {
 // MANUAL_SNAPSHOTS_KEPT manual ones, never against `keep`. A scheduled one goes only past the owner's `keep` (owner-only,
 // never under MIN_SNAPSHOTS_KEPT, snapshots/config below) or at the 14-day age limit (services/snapshot-scheduler.ts).
 
-// Download via GET so the browser can stream it; auth via the X-Admin-Password
-// header (the name is in the query string, never the password). Locked like /backup when there is a code, and an
-// owner's like /backup.
+// Download via GET so the browser can stream it; an owner's key session (cookie or header) or backups token in a header
+// (the name is in the query string, never a credential). Locked like /backup when there is a code, and an owner's like /backup.
 router.get('/api/local/admin/snapshots/download', async (ctx) => {
-    const headerPassword = ctx.request.header['x-admin-password'];
-    if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
     if (!(await ownerOnly(ctx, DOWNLOAD_OWNER_ONLY))) return;
     // A GET, but the whole community: from the phone it asks for its unlock again, like /backup (requirePhoneStepUp).
     if (!requirePhoneStepUp(ctx)) return;
@@ -1713,13 +1708,8 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
 // The archive then goes through the hostile-archive checks (SRV-9a) before a byte is extracted, and a restore point of
 // this server is kept before anything is replaced (services/restore-points.ts).
 // A sealed backup that carries the take-over bundle also brings back the node key, community key, genesis,
-// connectors and the community's admin/2FA credentials, so the server comes back as itself.
+// connectors and the recovery code's record, so the server comes back as itself.
 router.post('/api/local/admin/restore', async (ctx) => {
-    // Handle auth via custom header for binary uploads to prevent password exposure in query string
-    const headerPassword = ctx.request.header['x-admin-password'];
-    if (headerPassword) {
-        (ctx as any).requestBody = { password: headerPassword };
-    }
     // An owner's only: the file replaces the whole database, node_roles with it (Fable's backups review, HIGH). Refused
     // before a byte of the upload is read.
     if (!(await ownerOnlyOrBusy(ctx, RESTORE_OWNER_ONLY))) return;

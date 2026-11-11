@@ -25,7 +25,7 @@ import Router from '@koa/router';
 import serve from 'koa-static';
 import { attachTlsListener, getCaCertPem, httpsCertOptions, servesCaCertificateFor } from './services/tls.js';
 import {
-    getLocalConfig, saveLocalConfig, hashPassword, verifyPassword, verifyPasswordAsync,
+    getLocalConfig, saveLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     updateBackupCadence,
     generateReplicationToken, setReplicationToken, clearReplicationToken, hasReplicationToken, verifyReplicationToken,
@@ -903,7 +903,7 @@ function isApiOrWsPath(requestPath: string): boolean {
 }
 
 /**
- * The admin surface: the Settings pages and every route the admin password or an admin session opens. The admin IP
+ * The admin surface: the Settings pages and every route an admin session or an owner's token opens. The admin IP
  * allowlist guards exactly these, and a listed CORS origin gets no credentials on them (Fable's web review, L6).
  * Matched ignoring case and after normalising, so no spelling of a path is treated more loosely than another.
  */
@@ -923,10 +923,8 @@ export function isAdminSurfacePath(requestPath: string): boolean {
         p.startsWith('/.well-known/oauth-') ||
         p === '/api/admin' ||
         p.startsWith('/api/admin/') ||
-        p === '/api/local/verify-password' ||
         p === '/api/local/dashboard' ||
         p === '/api/local/update-identity' ||
-        p === '/api/local/change-password' ||
         p === '/api/local/reset' ||
         p === '/api/local/connectors' ||
         p.startsWith('/api/local/connectors/') ||
@@ -2093,18 +2091,6 @@ export async function startHttpsServer(port: number): Promise<number> {
 
     // Mount federation routes
     mountFederationRoutes(router);
-
-    // 2FA session token injection middleware
-    // When checkAdminAuth validates a TOTP code, it issues a session token on
-    // ctx.state.tfaSessionToken. This middleware picks it up and delivers it
-    // via an X-Admin-2FA-Session response header, keeping the JSON body clean
-    // and avoiding accidental persistence into client state/configs.
-    app.use(async (ctx, next) => {
-        await next();
-        if (ctx.state?.tfaSessionToken) {
-            ctx.set('X-Admin-2FA-Session', ctx.state.tfaSessionToken);
-        }
-    });
 
     // The Android APK, its page and the web app's link to it, only to a request straight off the local network; anyone else
     // goes on as for a path that isn't there (routes/android.ts says why this is not a route of the router).

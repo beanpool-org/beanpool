@@ -4,8 +4,7 @@
  * A boot that finds no owner (nodeHasOwner) and no usable claim code makes one: `claim-` and 16 hex digits in four
  * groups, 64 random bits. It writes the code to data/claim-code.txt (0600, readable by the server's user only) and keeps
  * only K = scrypt(sha256(code), salt), the salt, a short public id and when it was made in local-config.json (`claim`).
- * Never in the log, for the reason the first admin password is not (config/local-config.ts): in Docker stdout is the
- * container log.
+ * Never in the log: in Docker stdout is the container log.
  *
  * A phone key claims the node with it (routes/node-claim.ts), claim v2: the code never crosses the wire. The phone
  * derives the same K from the code and the public salt (@beanpool/core claimKeyFromCode, the parameters in
@@ -14,17 +13,16 @@
  * registerMemberInternal) and the owner (grantNodeRole, granted by `claim:<id>`). Then the code is burned, K and the
  * salt are deleted, and the file is deleted. The claim's answer carries no secret: a relaying server reads it.
  *
- * Additive for now: the admin password works exactly as before. A password-made first invite does NOT make an owner on a
- * fresh node (the SYSTEM rows already count as members, routes/community.ts), so the claim stays open until someone
- * holds an owner role, by this claim or by a grant.
+ * The node has no admin password (Marty, 11 Nov 2026): the claim stays open until someone holds an owner role, by this
+ * claim, by a grant, or by `beanpool recover` on the server.
  *
  * K is a secret: whoever holds it can claim while the node is unclaimed. It sits in the same 0600 data folder as the
  * code's file and stays out of backups and staging copies (local-config.ts). Checking a proof costs one HMAC, so there is
  * no node-wide cap for anyone to hold: a right proof is never braked. A wrong one makes its source wait 10 s
  * (BREAK_GLASS_WHILE_BRAKED_MS), which only sheds load: each guess costs the guesser an scrypt, against 64 random bits.
  *
- * Never blocks the boot: anything that fails here is logged, and the node starts without a claim code (the password
- * still works).
+ * Never blocks the boot: anything that fails here is logged, and the node starts without a claim code (`beanpool claim`
+ * or `beanpool recover` on the server still adds an owner, recover-cli.ts).
  *
  * A standby has no claim. It holds no owner of its own: its owners are its main server's, and only a take-over brings
  * them (engine/replication-manifest.ts node_roles, the take-over's `roles` step). So it makes no code, deletes one an
@@ -231,7 +229,9 @@ export function initClaimCode(): void {
         console.log('   The first phone to claim the community with it becomes its owner, and the code is burned.');
         console.log('');
     } catch (e) {
-        console.warn(`⚠️  No claim code this start: ${(e as Error)?.message || e}. The node starts anyway; the admin password works as before.`);
+        const shell = dataDir() === '/data' ? 'docker compose exec beanpool-node ' : '';
+        console.warn(`⚠️  No claim code this start: ${(e as Error)?.message || e}. The node starts anyway; add its first owner on this server with `
+            + `${shell}beanpool claim --key <public key> --callsign <name>, or ${shell}beanpool recover --key <member> for someone already a member.`);
     }
 }
 

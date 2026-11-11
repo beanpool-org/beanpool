@@ -490,10 +490,12 @@ export type ReportedBill = Pick<BillRow, 'what_for' | 'amount_c'>;
  * The words the owners' queue reads for a report filed on bills (state-engine.ts getReports): the reporter's reason, then
  * what each bill was for and how much. Read, never kept: the report keeps its reporter's reason alone, and everything that
  * marks, sorts or alerts on a report reads that, so a bill's words, which its sender wrote, never make a report child
- * safety (the deciding review of #3066, finding 2).
+ * safety (the deciding review of #3066, finding 2). At most 500 characters, as a report's reason is (submitReport), the
+ * reporter's words giving way, so a reader that keeps the first 500 (agent/suggestions-route.ts) still reads the bills.
  */
 export function billReportReason(reason: string, bills: readonly ReportedBill[]): string {
-    return `${reason}${bills.map((b) => ` · Bill: "${b.what_for}", ${formatHundredths(b.amount_c, 'en')} Beans`).join('')}`;
+    const tail = bills.map((b) => ` · Bill: "${b.what_for}", ${formatHundredths(b.amount_c, 'en')} Beans`).join('');
+    return `${reason.slice(0, Math.max(0, 500 - tail.length))}${tail}`;
 }
 
 /** The bills each of `reportIds` was filed on (bills.report_id), oldest first: a payer's second bill joins their report on file. */

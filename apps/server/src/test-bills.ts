@@ -602,6 +602,16 @@ async function main(): Promise<void> {
     const repD = await fileAs(peg, swimD.id, 'Child safety');
     assert(repD.status === 200 && repD.body?.report?.id === idC && storedReason(idC) === 'Child safety' && queued(idC)?.childSafety === true && childTold() === child18 + 1,
         `Peg picks Child safety on her other bill from Sly: her report becomes child safety, marked, and told at once (kept ${JSON.stringify(storedReason(idC))}; ${childTold() - child18} told)`);
+    // However long the reporter's words, a reader that keeps a report's first 500 characters (the assistant's suggestions,
+    // agent/suggestions-route.ts) still reads the bill whole: the reporter's words give way, as they did when it was kept.
+    const ulf = makeMember('Ulf', 0);
+    const ray = makeMember('Ray', 50);
+    const longBill = await bill(ulf, ray, 15, 'Garden water');
+    const longRep = await fileAs(ray, longBill.id, `Other: ${'a very long story '.repeat(40)}`);
+    const longRead = queued(longRep.body?.report?.id)?.reason ?? '';
+    assert(longRep.status === 200 && storedReason(longRep.body?.report?.id)?.length === 500 && longRead.length === 500
+        && longRead.startsWith('Other: a very long story') && longRead.endsWith(' · Bill: "Garden water", 15 Beans'),
+        `a 500-character reason: the queue reads 500 characters, the bill whole at the end (${longRead.length}; …${longRead.slice(-40)})`);
     assertConserved("a report's kind");
 
     // ── 19. A withdrawn bill still counts (the deciding review of 6bc2ece9, finding 3) ─────────────────────────────────────

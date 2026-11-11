@@ -817,7 +817,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             await loadConversations();
             if (activeConv) await loadMessages(activeConv.id);
         } catch (e: any) {
-            alert(e?.message || t('Failed to release credits.'));
+            alert(e?.message || t('Could not release the Beans.'));
         } finally {
             setActionLoading(false);
         }
@@ -2424,7 +2424,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {tn(pendingTx.amount_c / 100, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans', { n: formatHundredths(pendingTx.amount_c) })}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
+                                        {isBuyer ? t('Release the Beans once you receive your items.') : t('Waiting for the buyer to release the Beans.')}
                                     </div>
                                 </div>
                                 {isBuyer ? (
@@ -2443,7 +2443,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 cursor: 'pointer'
                                             }}
                                         >
-                                            {actionLoading ? '…' : t('✅ Release Credits')}
+                                            {actionLoading ? '…' : t('✅ Release Beans')}
                                         </button>
                                         {activePendingMoves.cancelHold && <button
                                             onClick={() => handleCancelCredits(pendingTx.id)}
@@ -3873,7 +3873,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             // Action Required. Beans of mine held in trust to release, or a request on my listing to answer.
                             const dealsToAct = convPeer ? (dealsNeedingMeByPeer.get(convPeer) ?? []) : [];
                             const dealsToActWords = dealsToAct.every(tx => dealStep(tx, identity.publicKey).state === 'to-release')
-                                ? tn(dealsToAct.length, 'Release Credits ({n})', 'Release Credits ({n})')
+                                ? tn(dealsToAct.length, 'Release Beans ({n})', 'Release Beans ({n})')
                                 : tn(dealsToAct.length, 'Action Required ({n})', 'Action Required ({n})');
 
                             return (

@@ -26,7 +26,11 @@ export interface CardActionsAt {
     scrollY: number;
 }
 
-/** Whether the button steps aside now: the card's actions, where the feed has moved them, overlap its band. */
+/**
+ * Whether the button steps aside now: the card's actions, where the feed has moved them, overlap its band.
+ * `windowHeight` is where the screen the button floats in ends, in window coordinates, the same ones the actions are
+ * measured in (Home measures its own root view; the window's height is only the fallback before that first measure).
+ */
 export function fabStepsAside(actions: CardActionsAt | null, scrollY: number, windowHeight: number): boolean {
     if (!actions) return false;
     const moved = scrollY - actions.scrollY;
@@ -39,4 +43,23 @@ export function fabStepsAside(actions: CardActionsAt | null, scrollY: number, wi
 export function fabStepsAsideAny(actions: Iterable<CardActionsAt | null>, scrollY: number, windowHeight: number): boolean {
     for (const at of actions) if (fabStepsAside(at, scrollY, windowHeight)) return true;
     return false;
+}
+
+/** What every list under the button keeps free at its end at least (dp): the room the lists had before it followed the text size. */
+export const FAB_CLEARANCE_MIN_DP = 110;
+/** The button's own padding, top and bottom, and the "+" in it (fontSize 20, a line about 1.2 times that): its height is these, scaled. */
+const FAB_PADDING_DP = 28;
+const FAB_PLUS_DP = 20 * 1.2;
+/** Clear air between the last content and the top of the button. */
+const FAB_AIR_DP = 20;
+
+/**
+ * Room to keep under the last card (a list's bottom padding) so that, scrolled to its end, nothing rests under the
+ * button. The button grows with the system text size (its "+" and its words scale, its padding does not), so a fixed
+ * 100-110dp is enough at 1.3x and not at 2x: the bottom edge, its height at this scale, and a little air above.
+ */
+export function fabClearanceDp(fontScale: number): number {
+    const scale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : 1;
+    const height = FAB_PADDING_DP + FAB_PLUS_DP * scale;
+    return Math.max(FAB_CLEARANCE_MIN_DP, Math.ceil(FAB_BOTTOM_DP + height + FAB_AIR_DP));
 }

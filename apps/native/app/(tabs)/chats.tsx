@@ -485,7 +485,7 @@ export default function ChatsScreen() {
 
 
     const getActionLabel = (deal: any) => {
-        if (deal.action === 'release') return t('🔓 Release Credits');
+        if (deal.action === 'release') return t('🔓 Release Beans');
         if (deal.action === 'answer') return t('Waiting on you: answer');
         if (deal.action === 'review') return t('⭐ Leave Review');
         return t('⚡ Action Required');
@@ -533,7 +533,7 @@ export default function ChatsScreen() {
         // (the web's chip, word for word): all Beans to release says so, anything with a request to answer says Action Required.
         if (item.actionableCount > 0) {
             if (item.answerCount === 0) {
-                actionText = tn(item.actionableCount, 'Release Credits ({n})', 'Release Credits ({n})');
+                actionText = tn(item.actionableCount, 'Release Beans ({n})', 'Release Beans ({n})');
                 actionIcon = 'lock-open-outline';
             } else {
                 actionText = tn(item.actionableCount, 'Action Required ({n})', 'Action Required ({n})');
@@ -748,7 +748,7 @@ export default function ChatsScreen() {
                         source={require('../../assets/images/bean.png')}
                         style={{ width: 14, height: 14, resizeMode: 'contain' }}
                     />
-                    <Text style={[styles.chipText, sortBy === 'credits_desc' && styles.chipTextActive]}>{t('Credits: High')}</Text>
+                    <Text style={[styles.chipText, sortBy === 'credits_desc' && styles.chipTextActive]}>{t('Beans: High')}</Text>
                 </Pressable>
                 <Pressable
                     accessibilityRole="button"
@@ -760,7 +760,7 @@ export default function ChatsScreen() {
                         source={require('../../assets/images/bean.png')}
                         style={{ width: 14, height: 14, resizeMode: 'contain' }}
                     />
-                    <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>{t('Credits: Low')}</Text>
+                    <Text style={[styles.chipText, sortBy === 'credits_asc' && styles.chipTextActive]}>{t('Beans: Low')}</Text>
                 </Pressable>
                 </>
                 )}

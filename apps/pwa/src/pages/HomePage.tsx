@@ -34,19 +34,13 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import {
-    HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
-    restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel,
-    type TipsRecord,
-    ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings,
-    type CardHue,
-    SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
-    communityShapeSummary, type CommunityShapeFeatures,
-    starterSheet, type PricingGuideItem, type StarterRow,
-} from '@beanpool/core';
+import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord, restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel, type TipsRecord, ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings, type CardHue, SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings, capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word, communityShapeSummary, type CommunityShapeFeatures, starterSheet, type PricingGuideItem, type StarterRow, formatHundredths } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { KNOCK_MESSAGES, cancelKnock, communityOrigin, forgetKnock, markYesSeen, readKnockStatus, rememberedKnocks, yesMark, yesSeenMarks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { useKnockStatuses } from '../lib/use-knock-statuses';
+import { YesJoin } from '../components/YesJoin';
+import { forgetHandedOver, handedOverHere } from '../lib/handoff';
+import { isPhoneBrowser } from '../lib/global-entry';
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
@@ -70,10 +64,10 @@ import {
     type HomeFind,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
-    listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackHeight, type PackableCard,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews,
+    listOf, moveCard, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, removeCard, removedLine,
+    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
 import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
@@ -89,10 +83,11 @@ import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
-import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, shapeFeaturesOf } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, freePriceWords, shapeFeaturesOf } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
+import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
@@ -152,15 +147,12 @@ const HOME_WORDS = {
     offline: word("Couldn't reach your community; showing what we had."),
     failed: word("Couldn't reach your community. Your other tabs still work."),
     signedOut: word('You signed out of this browser in another tab. Reload this page to carry on.'),
-    notOnNode: word("This community's server doesn't have Home yet. The Market and the other tabs work as before."),
     tipsDone: word('That was the last tip. Add a card brings them back.'),
 };
 export const HOME_OFFLINE = HOME_WORDS.offline;
 export const HOME_FAILED = HOME_WORDS.failed;
 /** The member signed out in another tab: this page shows and keeps nothing of theirs any more. */
 export const HOME_SIGNED_OUT = HOME_WORDS.signedOut;
-/** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
-export const HOME_NOT_ON_NODE = HOME_WORDS.notOnNode;
 /** Said politely once a card is hidden: where it went, and how it comes back. */
 /** Said politely when Done on the last tip takes the Tips card away. */
 export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
@@ -171,7 +163,7 @@ export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
 const LIB_LINES = {
     skyNoPlace: SKY_NO_PLACE_LINE, fewerCards: FEWER_CARDS_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
     typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN, startCard: START_CARD_WORDS,
-    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW, notOnAccount: NOT_ON_ACCOUNT_LINE,
+    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
 } as const;
 /** Core's FIND_TOWN_SEARCH_WORDS as the town search draws them, in the member's language (made where drawn). */
 const findTownWords = (): AddressSearchWords => ({
@@ -183,14 +175,12 @@ const findTownWords = (): AddressSearchWords => ({
     pickLabel: FIND_TOWN_SEARCH_WORDS.pickLabel,
 });
 
+/** A request the community has said yes to (the card says so in the polite region above the waiting cards). */
+const yesOf = (st: KnockStatusResult | null | undefined): boolean => !!st?.ok && st.value.status === 'approved';
+
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
 const fewerKey = (pk: string) => `beanpool_home_fewer_seen_${pk}`;
-/** A raw account layout's date (an empty version-1 one's too): the mark an edit made on the newcomer's list carries. */
-const rawDate = (raw: unknown): string => {
-    const at = raw && typeof raw === 'object' ? (raw as { updatedAt?: unknown }).updatedAt : undefined;
-    return typeof at === 'string' && at.length <= 40 ? at : '';
-};
 /** The Tips card's record (@beanpool/core home-tips.ts), per account in this browser, never on the account. */
 export const tipsKey = (pk: string) => `beanpool_home_tips_${pk}`;
 
@@ -301,11 +291,8 @@ const coarse = (n: number) => Math.round(n * 10) / 10;
  * as it always has, a fraction's too ("1,234.5"); every other language writes the digits alone with its own decimal sign
  * (formatCount: "1.500" reads as 1.5 in pt and es).
  */
-function priceWords(credits: number): string {
-    const r = Math.round(credits * 100) / 100;
-    const [whole, fraction] = String(r).split('.');
-    const n = currentLanguage() === 'en' && fraction !== undefined ? `${formatCount(Number(whole))}.${fraction}` : formatCount(r);
-    return tn(r, '{n} Beans', '{n} Beans', { n });
+function priceWords(price_c: number): string {
+    return tn(price_c / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(price_c) });
 }
 
 export interface HomeVisitor {
@@ -379,7 +366,7 @@ function MarketListingItem({
     const copy = eventCopyOf(item);
     const price = copy ? copyPriceLine(copy)
         : !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
-        : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
+        : typeof item.price_c === 'number' ? (freePriceWords(item.price_c, item.type) ?? priceWords(item.price_c)) : null;
     const km = distanceText(item.distanceKm);
     const kind = item.type === 'need' ? 'NEED' : 'OFFER';
     const label = [
@@ -775,10 +762,10 @@ function EnterpriseBody({
     const titleLine = `${e.name} · ${lifecycleWord}`;
     const requests = e.requests ? tn(e.requests, '{n} request to approve', '{n} requests to approve') : null;
     const keeperText = typeof e.keepers === 'number' ? tn(e.keepers, '{n} keeper', '{n} keepers') : null;
-    const balanceText = typeof e.balance === 'number' && keeperText
-        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance), keepers: keeperText })
-        : typeof e.balance === 'number'
-            ? t('Balance {balance}', { balance: beansAmount(e.balance) })
+    const balanceText = typeof e.balance_c === 'number' && keeperText
+        ? t('Balance {balance} · {keepers}', { balance: beansAmount(e.balance_c), keepers: keeperText })
+        : typeof e.balance_c === 'number'
+            ? t('Balance {balance}', { balance: beansAmount(e.balance_c) })
             : keeperText;
     const monthText = e.month ? monthSummaryLine(e.month) : null;
     const latestText = e.latest ? enterpriseLatestLine(e.latest) : null;
@@ -1062,7 +1049,7 @@ function BeansBody({
 }) {
     const lines = beansLines(b);
     const month = b.month ? monthSummaryLine(b.month) : null;
-    const isNewcomer = !b.activated && Math.round(b.balance * 100) / 100 === 0;
+    const isNewcomer = !b.activated && b.balance_c === 0;
     const tierBadge = !isNewcomer && b.tier ? tierWords(b.tier) : null;
     const note = isNewcomer ? lines.note : null;
     const fullLine = [lines.line, month].filter(Boolean).join('. ');
@@ -1108,7 +1095,7 @@ function CommunityBody({
     const shapeSummary = isVisitor ? null : communityShapeSummary(features);
     const isGlobal = profile === 'global';
     const hasDetailedStats = !isGlobal
-        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
+        ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot_c === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
         : typeof cm.listings === 'number';
 
     const globalTiles = [
@@ -1121,7 +1108,7 @@ function CommunityBody({
         { figure: formatCount(cm.members), label: tn(cm.members, 'member', 'members') },
         ...(typeof cm.joined7d === 'number' ? [{ figure: formatCount(cm.joined7d), label: t('joined this week') }] : []),
         ...(typeof cm.tradesThisMonth === 'number' ? [{ figure: formatCount(cm.tradesThisMonth), label: t('trades this month') }] : []),
-        ...(typeof cm.commonsPot === 'number' ? [{ figure: beansAmount(cm.commonsPot), label: t('Commons pot') }] : []),
+        ...(typeof cm.commonsPot_c === 'number' ? [{ figure: beansAmount(cm.commonsPot_c), label: t('Commons pot') }] : []),
         ...(typeof cm.listings === 'number' ? [{ figure: formatCount(cm.listings), label: tn(cm.listings, 'listing', 'listings') }] : []),
         ...(typeof cm.eventsSoon === 'number' ? [{ figure: formatCount(cm.eventsSoon), label: tn(cm.eventsSoon, 'event coming up', 'events coming up') }] : []),
     ];
@@ -1142,7 +1129,7 @@ function CommunityBody({
 
     const localLine2 = [
         typeof cm.tradesThisMonth === 'number' ? tn(cm.tradesThisMonth, '{n} trade this month', '{n} trades this month') : null,
-        typeof cm.commonsPot === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot) }) : null,
+        typeof cm.commonsPot_c === 'number' ? t('Commons pot {amount}', { amount: beansAmount(cm.commonsPot_c) }) : null,
     ].filter(Boolean).join(' · ');
 
     const localLine3 = [
@@ -1221,7 +1208,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
     // Which failure, not its words: the words are written at render, so a language switch translates them (#1947 review
     // N2). A refusal the node wrote (401/403) is kept as the node wrote it.
-    const [failure, setFailure] = useState<'notOnNode' | 'failed' | { message: string } | null>(null);
+    const [failure, setFailure] = useState<'failed' | { message: string } | null>(null);
     const [live, setLive] = useState('');
     // The interests the page holds after a tap (saved in the background); null: the answer's.
     const [interests, setInterests] = useState<string[] | null>(null);
@@ -1256,8 +1243,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
     // A chat card picked again takes a new id in the same place (home-layout changeCardSettings): its settings' close finds it by that.
     const settingsMovedTo = useRef<{ from: string; to: string } | null>(null);
-    // The node refused the version-2 layout (a node from before the frame): Arrange says the cards stay here (§2.3).
-    const [notOnAccount, setNotOnAccount] = useState(false);
     const [fewerOpen, setFewerOpen] = useState(false);
     const [point, setPoint] = useState<HomePoint | null>(() => marketPoint());
     const [pointProblem, setPointProblem] = useState<string | null>(null);
@@ -1275,9 +1260,15 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     useEffect(() => {
         if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
     }, [publicKey]);
+    /*
+     * Joined here by a handoff from the page that held the account (global yes Y1, DESIGN-global-yes-join-fable.md §2.2): on
+     * a phone's browser this first Home offers the "Use the phone app" card at once (the guide's own advice), and once: the
+     * mark is read here and goes, and later Homes follow the usual rule. Read in the state's start, taken in an effect.
+     */
+    const [handedOverOnPhone] = useState(() => !!publicKey && handedOverHere(publicKey) && isPhoneBrowser());
+    useEffect(() => { if (publicKey && handedOverHere(publicKey)) forgetHandedOver(); }, [publicKey]);
 
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
-    const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     /** Every cancel still out (by URL): two waiting cards are normal, and each one's button is its own. */
     const [cancellingKnocks, setCancellingKnocks] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
@@ -1288,6 +1279,26 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
      * cancelled, and the card is not drawn.
      */
     const [cancelledKnocks, setCancelledKnocks] = useState<ReadonlySet<string>>(() => new Set());
+    /**
+     * A yes from another community (DESIGN-global-yes-join-fable.md, slice Y1). `seenYes`: the yeses whose banner was tapped
+     * (kept in this browser); `bannerThisVisit`: the ones tapped in this visit, whose banner stays until the visit ends, so
+     * the handoff it started keeps its words in sight. `joinedKnocks`: joined in this visit, or the community says the key is
+     * a member there now (`member: true`): "You joined {name}." in place of the yes, and the request is forgotten here.
+     */
+    const [seenYes, setSeenYes] = useState<ReadonlySet<string>>(() => (publicKey ? yesSeenMarks(publicKey) : new Set()));
+    const [bannerThisVisit, setBannerThisVisit] = useState<ReadonlySet<string>>(() => new Set());
+    const [joinedKnocks, setJoinedKnocks] = useState<ReadonlySet<string>>(() => new Set());
+    useEffect(() => { setSeenYes(publicKey ? yesSeenMarks(publicKey) : new Set()); }, [publicKey]);
+    const seeYes = (k: RememberedKnock, invite: string) => {
+        if (!publicKey) return;
+        markYesSeen(publicKey, yesMark(k.url, invite));
+        setSeenYes(yesSeenMarks(publicKey));
+    };
+    const tapYesBanner = (k: RememberedKnock, invite: string) => {
+        setBannerThisVisit(was => new Set(was).add(k.url));
+        seeYes(k, invite);
+    };
+    const joinedHere = (k: RememberedKnock) => setJoinedKnocks(was => new Set(was).add(k.url));
 
     useEffect(() => {
         if (!publicKey) {
@@ -1314,16 +1325,41 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     };
 
     const knockKey = knocks.map(k => k.url).join(' ');
+    // What each community says now, kept fresh while Home is on screen (lib/use-knock-statuses.ts): a yes shows itself with no
+    // reload (Damo, 9 Nov 2026). A request cancelled in this visit is not asked again; its card stays with the cancelled line.
+    const [knockStatuses, setKnockStatuses] = useKnockStatuses(knocks.filter(k => !cancelledKnocks.has(k.url)), identity);
+
+    // The banner (Marty, 9 Nov): each yes not yet tapped, above everything else on Home, until its Join is tapped. Drawn in
+    // Home's one loaded page only: a second place (the loading page) would mount it twice, and a handoff started from the
+    // first would be cut off when Home's answer came. Built after the answers it reads (`knockStatuses`, above): a yes that
+    // comes in while Home is open brings its banner with it.
+    const yesBanners = identity ? knocks.flatMap((k) => {
+        const st = knockStatuses[k.url];
+        if (!st?.ok || st.value.status !== 'approved' || st.value.member || cancelledKnocks.has(k.url)) return [];
+        const invite = st.value.invite;
+        if (seenYes.has(yesMark(k.url, invite)) && !bannerThisVisit.has(k.url)) return [];
+        const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        return [(
+            <section key={k.url} data-testid={`home-yes-banner-${k.url}`} aria-label={t('🎉 {name} said yes.', { name })}
+                className="mb-3 p-4 rounded-2xl border-2 border-bp-commit-fill bg-white dark:bg-nature-900 shadow-sm">
+                <p dir="auto" className="m-0 mb-2 text-lg font-bold leading-tight text-text-primary break-words">{t('🎉 {name} said yes.', { name })}</p>
+                <YesJoin knock={k} name={name} identity={identity} testId="home-yes-banner"
+                    onTapped={() => tapYesBanner(k, invite)} onJoined={() => joinedHere(k)} />
+            </section>
+        )];
+    }) : [];
+
+    // A yes the key has used (the community says it is a member there now): nothing waits on it, so it is forgotten here.
     useEffect(() => {
-        if (!identity || !knocks.length) return;
-        let alive = true;
-        knocks.forEach(k => {
-            readKnockStatus(k.url, identity).then(r => {
-                if (alive) setKnockStatuses(was => ({ ...was, [k.url]: r }));
-            });
-        });
-        return () => { alive = false; };
-    }, [knockKey, identity?.publicKey]);
+        if (!publicKey) return;
+        for (const k of knocks) {
+            const st = knockStatuses[k.url];
+            if (st?.ok && st.value.status === 'approved' && st.value.member) {
+                void forgetKnock(publicKey, k.url);
+                setJoinedKnocks(was => (was.has(k.url) ? was : new Set(was).add(k.url)));
+            }
+        }
+    }, [knockStatuses, knocks, publicKey]);
 
     const handleCancelKnock = async (k: RememberedKnock) => {
         if (!identity) return;
@@ -1404,15 +1440,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     // This browser's own copy of the layout (the account's once read, or the member's edit); null while it has none.
     const layoutRef = useRef<HomeLayoutV2 | null>(null);
     const drawnRef = useRef<HomeLayoutV2 | null>(null);
-    // Set while this browser's copy is an edit made on the newcomer's list drawn for an unknown account list: that list's
-    // date (lib/home-layout.ts pickLayout). Such an edit is never sent by itself: a read decides (review of #1699, finding 2).
-    const overRef = useRef<string | undefined>(undefined);
-    // While marked: the edits this browser sent (each its date and its list's print). A version-2 answer that is one of them
-    // is this browser's own save, not the account's real list (lib/home-layout.ts ownMarkedSave; review of #1701
-    // confirmation, finding 2; review of #1715, finding 1).
-    const overSentRef = useRef<MarkSent[]>([]);
-    // The node refused this browser's version-2 layout on this landing: it is sent again at the next landing, never in a loop.
-    const refusedLanding = useRef(false);
     // The one extra read a landing makes for cards the answer wasn't built for (review of #1697, note a: bounded).
     const extraRead = useRef(false);
     // After an add: the new card, whose "…" takes focus once it is drawn; `read`: the add's read of Home has answered, so a
@@ -1482,17 +1509,15 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const keep = useCallback((a: HomeAnswer, l: HomeLayoutV2 | null, epoch: number) => {
         void writeCachedHome(cacheKey, {
             answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current,
-            ...(overRef.current !== undefined ? { localOnlyOver: overRef.current, localOnlySent: overSentRef.current } : {}), savedAt: Date.now(),
+            savedAt: Date.now(),
         }, epoch);
     }, [cacheKey]);
 
     const draw = (l: HomeLayoutV2 | null) => { drawnRef.current = l; setLayout(l); };
 
     /*
-     * Save the layout on the account, as the phone does (apps/native/app/(tabs)/index.tsx pushLayout). A 400 from a node
-     * whose Home answer is version 1 (or has none) is a node from before the card frame: the cards stay in this browser,
-     * Arrange says so, and they are sent again at the next landing, never in a loop (CARD-FRAME §2.3). Any other refusal:
-     * the account's copy stands and this one is never sent again by itself. A success clears both.
+     * Save the layout on the account, as the phone does (apps/native/app/(tabs)/index.tsx pushLayout). A refusal: the
+     * account's copy stands and this one is never sent again by itself. A success clears it.
      */
     const saveLayout = useCallback((next: HomeLayoutV2): Promise<void> => {
         // Signed out or cleared, here or in another tab: nothing more is sent as that account.
@@ -1500,7 +1525,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         if (!publicKey || epoch === null) return Promise.resolve();
         const seq = ++layoutSeq.current;
         savingLayout.current += 1;
-        if (overRef.current !== undefined) overSentRef.current = rememberMarkSent(overSentRef.current, next);
         return saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
             .then((r) => {
@@ -1510,12 +1534,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // finding 2). Otherwise this answer marked it saved and it waited, unsent, for some later read.
                 const waiting = unsavedRef.current && layoutRef.current && layoutRef.current !== next ? layoutRef.current : null;
                 unsavedRef.current = false;
-                refusedLanding.current = false;
-                // On the account now: the list is the member's, no longer an edit on an unknown one (the phone's
-                // clearPhoneOnly; review of #1701, finding 1: the next edit was otherwise thrown away unsent).
-                overRef.current = undefined;
-                overSentRef.current = [];
-                setNotOnAccount(false);
                 // What the node kept: this layout, or a newer one saved from another device (a phone's, another tab's).
                 const kept = readLayout(r['home.layout']);
                 if (kept && (kept.updatedAt ?? '') > (next.updatedAt ?? '')) {
@@ -1540,14 +1558,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // Not a refusal (no connection, a timeout, too many): kept in this browser, sent again after the next read.
                 if (typeof code !== 'number' || code < 400 || code >= 500 || code === 408 || code === 429) return;
                 const answered = answerRef.current?.layout;
-                if (code === 400 && (!answered || layoutV1Of(answered))) {
-                    refusedLanding.current = true;
-                    setNotOnAccount(true);
-                    return;
-                }
                 unsavedRef.current = false;
-                overRef.current = undefined;
-                overSentRef.current = [];
                 const account = readLayout(answered);
                 layoutRef.current = account;
                 draw(account);
@@ -1588,7 +1599,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             if (read?.notModified && answerRef.current) {
                 recordHomeAnswer(answerRef.current, publicKey);
                 builtForRef.current = sent ?? builtFor(answerRef.current);
-                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0 && !refusedLanding.current) void saveLayout(layoutRef.current);
+                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0) void saveLayout(layoutRef.current);
                 // The account's interests are the ones in the copy drawn: a change made here that never reached them is
                 // sent again while they are unchanged since (lib/home-interests.ts).
                 const me = answerRef.current.me;
@@ -1606,36 +1617,14 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             if (!a || typeof a !== 'object' || !a.cards || typeof a.cards !== 'object' || Array.isArray(a.cards)) throw new Error('not a Home answer');
             recordHomeAnswer(a, publicKey);
             etagRef.current = read && !read.notModified ? read.etag : null;
-            // Which list stands (lib/home-layout.ts pickLayout): the account's or this browser's, by date, with the standby tie
-            // and the empty version-1 "unknown" rule. A visitor keeps no layout.
+            // Which list stands (lib/home-layout.ts pickLayout): the account's or this browser's, by date. A visitor keeps no layout.
             const account = readLayout(a.layout);
-            const v1 = layoutV1Of(a.layout);
             const local = layoutRef.current;
             const member = !!a.me && !a.welcome;
-            if (member && overRef.current !== undefined && ownMarkedSave(account, v1, overSentRef.current)) {
-                // This browser's own marked save, read back (the read overtook the save's answer): the account's list is
-                // known and is this browser's, so the mark goes and the dates decide (a newer edit made since wins).
-                overRef.current = undefined;
-                overSentRef.current = [];
-            }
-            const pick = member ? pickLayout(account, local, v1, overRef.current) : { layout: null, push: false };
-            if (member && account && !v1) {
-                // A version-2 answer: this node keeps the new shape, so nothing waits on it any more.
-                // After a refusal the landing's one extra read may already be spent: a standby's empty version-1 list is built without
-                // the starter set's cards that version 1 never had ("Asked near you"), and asking for them took it. The account's
-                // real list is a new list to read the cards of, so it gets its own one (cold-start N2).
-                if (refusedLanding.current) extraRead.current = false;
-                refusedLanding.current = false;
-                setNotOnAccount(false);
-                // The account's real list is back: it stands, and the edit made on the unknown one goes, unsent.
-                if (overRef.current !== undefined && !pick.push) { overRef.current = undefined; overSentRef.current = []; }
-            }
-            // The newcomer's list drawn for an unknown account list is not this browser's copy: nothing of it is sent.
-            const unknown = member && !local && !!v1?.empty;
+            const pick = member ? pickLayout(account, local) : { layout: null, push: false };
             unsavedRef.current = !!pick.layout && pick.layout === local && (pick.push || unsavedRef.current);
-            layoutRef.current = unknown ? null : pick.layout;
-            const fewerFrom = v1?.empty && !local ? null : account;
-            if (member && publicKey && fewerCardsNews(fewerFrom, local, a.me, Date.now()) && !readFlag(fewerKey(publicKey))) {
+            layoutRef.current = pick.layout;
+            if (member && publicKey && fewerCardsNews(account, local, a.me, Date.now()) && !readFlag(fewerKey(publicKey))) {
                 writeFlag(fewerKey(publicKey));
                 setFewerOpen(true);
             }
@@ -1654,9 +1643,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             setStatus('ready');
             setFailure(null);
             keep(a, layoutRef.current, epoch);
-            // This browser's list, newer than the account's (an edit made offline, or one whose save failed), is sent; one the
-            // node refused as a shape it doesn't know yet only at the next landing.
-            const saving = unsavedRef.current && layoutRef.current && !refusedLanding.current && savingLayout.current === 0
+            // This browser's list, newer than the account's (an edit made offline, or one whose save failed), is sent.
+            const saving = unsavedRef.current && layoutRef.current && savingLayout.current === 0
                 ? saveLayout(layoutRef.current) : null;
             // The list drawn asks for cards this answer wasn't built for (a first landing here, or another device's edit), or
             // has Home's point go otherwise (a saved search closer than the list it was read by): one more read for them,
@@ -1672,13 +1660,16 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         } catch (e) {
             if (!mounted.current || !holds(epoch)) return;
             const standing = standingFromRefusal(e);
-            if (standing) {
+            // The web app is pointed at a server not known to run 1.4.0 (lib/node-version-gate.ts): the gate's own line, which
+            // says what it is, and nothing drawn from before. Never "couldn't reach" or "showing what we had".
+            const refused = standing ? standing.sentence : isNodeTooOldError(e) ? e.message : null;
+            if (refused) {
                 answerRef.current = null;
                 setAnswer(null);
                 statusRef.current = 'failed';
                 setStatus('failed');
-                setFailure({ message: standing.sentence });
-                setLive(standing.sentence);
+                setFailure({ message: refused });
+                setLive(refused);
             } else if (answerRef.current) {
                 statusRef.current = 'offline';
                 setStatus('offline');
@@ -1687,9 +1678,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 statusRef.current = 'failed';
                 setStatus('failed');
                 const code = (e as { status?: number } | null)?.status;
-                // 404: a server from before Home (lib/api.ts isRouteMissing).
                 const said = (e as Error | null)?.message;
-                setFailure(code === 404 ? 'notOnNode' : (code === 401 || code === 403) && said ? { message: said } : 'failed');
+                setFailure((code === 401 || code === 403) && said ? { message: said } : 'failed');
             }
         } finally {
             inFlight.current = false;
@@ -1718,9 +1708,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         etagRef.current = null;
         layoutRef.current = null;
         drawnRef.current = null;
-        overRef.current = undefined;
-        overSentRef.current = [];
-        refusedLanding.current = false;
         extraRead.current = false;
         builtForRef.current = null;
         setAnswer(null);
@@ -1751,12 +1738,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 builtForRef.current = cached.asked ?? null;
                 etagRef.current = cached.etag;
                 layoutRef.current = cached.layout;
-                overRef.current = cached.localOnlyOver;
-                overSentRef.current = cached.localOnlySent ?? [];
                 unsavedRef.current = cached.layoutUnsaved;
                 setAnswer(cached.answer);
                 const ans = cached.answer;
-                draw(ans.me && !ans.welcome ? pickLayout(readLayout(ans.layout), cached.layout, layoutV1Of(ans.layout), cached.localOnlyOver).layout : null);
+                draw(ans.me && !ans.welcome ? pickLayout(readLayout(ans.layout), cached.layout).layout : null);
             }
         }).finally(() => {
             if (!cancelled) void fetchHomeRef.current('landing');
@@ -1774,8 +1759,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         etagRef.current = null;
         layoutRef.current = null;
         drawnRef.current = null;
-        overRef.current = undefined;
-        overSentRef.current = [];
         builtForRef.current = null;
         unsavedRef.current = false;
         setAnswer(null);
@@ -1784,7 +1767,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         setArranging(false);
         setPickerOpen(false);
         setSettingsFor(null);
-        setNotOnAccount(false);
         // Said in the same render as her Home goes, never a moment of "Loading" between.
         if (end === 'signed-out' && publicKey) {
             statusRef.current = 'signed-out';
@@ -2243,23 +2225,11 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const before = shownLayout(answered, drawnRef.current, { tourOver: tourOverRef.current });
         const next = make(before);
         if (!next) return false;
-        if (overRef.current === undefined && !layoutRef.current && layoutV1Of(answered.layout)?.empty) {
-            // Made while the account's list is unknown: this browser's only, until the account's real list answers.
-            overRef.current = rawDate(answered.layout);
-            overSentRef.current = [];
-        }
         unsavedRef.current = true;
         layoutRef.current = next;
         draw(next);
         keep(answered, next, epoch);
-        if (overRef.current !== undefined) {
-            // Never sent by itself, as the account's real list may be back (the primary after a standby): a read decides,
-            // and sends the edit only if it still stands (review of #1699 confirmation, finding 1).
-            void fetchHomeRef.current('layout').then(opts.afterRead);
-            return true;
-        }
-        // Refused on this landing as a shape the node doesn't know yet: kept here, sent at the next landing.
-        const saving = refusedLanding.current ? Promise.resolve() : saveLayout(next);
+        const saving = saveLayout(next);
         // An add, a card's settings, Reset, or a card the answer wasn't built for: read Home again once the save is
         // answered (the node builds an instance from the settings it keeps). A move or a remove reads nothing.
         const pins = askPins(answered);
@@ -2399,7 +2369,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     ) : status === 'failed' ? (
                         <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
                             <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
-                                {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
+                                {failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
                             </p>
                             <button type="button" onClick={() => void fetchHome('retry')}
                                 className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
@@ -2543,7 +2513,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 // group shows as invited.
                 case 'invite': return onNavigate('group', target.id);
                 case 'invites': return onNavigate('projects');
-                case 'people': return onNavigate('people-invites');
+                // The line "N people asked to join" is a notice (Invites says so if they are answered by now); "N asked for an
+                // invite", which lands here too, is not.
+                case 'people': return item.kind === 'knock' ? onNavigate('people-invites', 'asked') : onNavigate('people-invites');
                 case 'shop': return onNavigate('shop', (target as any).id);
                 case 'shop-mine': return onNavigate('shop-mine');
                 default: return undefined;
@@ -2666,6 +2638,10 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 const circle = circleNow?.id === f.circle?.id ? circleNow ?? f.circle : f.circle;
                 const helping = helped || !!f.watches?.some(w => w.wouldHelp);
                 const demandLine = findOffersStart(f) && !circle ? circleDemandLine(f.demand) : null;
+                // The community a remembered request went to, and the name to call it by: the yes region above the waiting
+                // cards and the waiting cards below say the same name.
+                const knockCommunity = (k: RememberedKnock) => f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
+                const knockName = (k: RememberedKnock) => k.name ?? knockCommunity(k)?.name ?? k.url.replace(/^https:\/\//, '');
                 return (
                     <HomeCard key={id} {...common}>
                         {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
@@ -2688,23 +2664,55 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 </Fragment>
                             );
                         })}
+                        {/* Always on the card, polite: a yes put into it is read out to a screen reader (a region added with its
+                            words in it is not always announced), and so is what becomes of it. A yes is a real Join
+                            (DESIGN-global-yes-join-fable.md §2.1-2.2, slice Y1): Join brings the account to the community's page
+                            in this browser (components/YesJoin.tsx), to that page only; when the tap can't work, slice Y0's two
+                            routes in its words: its page, where the 12 words bring the account and the yes is Join, or the phone
+                            app. A yes the key has used (the community says `member: true`), or joined in this visit, says so
+                            here, with its page. Each yes is drawn here once, and not in the waiting cards below. */}
+                        <div role="status" aria-live="polite" data-testid="home-find-yes-live">
+                            {knocks.filter(k => !cancelledKnocks.has(k.url) && yesOf(knockStatuses[k.url])).map(k => {
+                                const yes = knockStatuses[k.url];
+                                if (!yes?.ok || yes.value.status !== 'approved') return null; // the filter's yesOf, narrowed for the type
+                                const yesName = knockName(k);
+                                // Joined (here, or the community says the key is a member there now): said so, with its page. The
+                                // region it sits in speaks for it.
+                                if (yes.value.member || joinedKnocks.has(k.url)) {
+                                    return (
+                                        <div key={k.url} data-testid={`home-find-joined-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                            <p dir="auto" className="m-0 font-semibold text-sm text-text-primary break-words">{t('You joined {name}.', { name: yesName })}</p>
+                                            <div className="mt-2">
+                                                <a href={`${k.url}/app`} target="_blank" rel="noopener noreferrer" className="flex w-full min-h-[48px] px-4 py-2 items-center justify-center rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white no-underline text-center break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                                    {t('Open {name}', { name: yesName })}
+                                                </a>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                const invite = yes.value.invite;
+                                return (
+                                    <div key={k.url} data-testid={`home-find-invited-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                        <p dir="auto" className="m-0 mb-2 font-semibold text-sm text-text-primary break-words">{t('🎉 {name} said yes.', { name: yesName })}</p>
+                                        {identity && (
+                                            <YesJoin knock={k} name={yesName} identity={identity} testId="home-find-invited"
+                                                onTapped={() => seeYes(k, invite)} onJoined={() => joinedHere(k)} />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                         {knocks.map(k => {
-                            const comm = f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
-                            const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                            const comm = knockCommunity(k);
+                            const name = knockName(k);
                             const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                             const st = knockStatuses[k.url];
                             const answersLine = communityAnswersLine(comm?.answers);
                             const isCancelling = cancellingKnocks.has(k.url);
                             const cancelled = cancelledKnocks.has(k.url);
 
-                            if (!cancelled && st?.ok && st.value.status === 'approved') {
-                                const approved = cardKnockLines([k], knockStatuses)[0];
-                                return (
-                                    <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
-                                        {'🎉 ' + (approved?.text ?? '')}
-                                    </p>
-                                );
-                            }
+                            // A yes is drawn in the region above, not here.
+                            if (!cancelled && yesOf(st)) return null;
 
                             // What the community now says (the phone's knockCardState): only a pending request arrived and can be
                             // taken back. An answer that could not be read is said as it is, with no Cancel. Nothing open there
@@ -3332,6 +3340,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
             <div className="mx-auto" style={{ maxWidth: gridWidth(cols) }}>
                 {reveal && <style>{HOME_CARD_IN_STYLE}</style>}
                 <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
+                {yesBanners}
                 {status === 'offline' && (
                     <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
                 )}
@@ -3357,12 +3366,12 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     const p = a.me?.probation;
                     const weekEnds = a.me?.joinedAt ? Date.parse(a.me.joinedAt) + 7 * 86_400_000 : null;
                     const keptPosts = Math.max(Number(p?.keptPosts) || 0, a.me?.firstOffer || a.cards?.steps?.firstPost ? 1 : 0);
-                    const due = publicKey && !visitor && !phoneAppDismissed && usePhoneAppCardDue({
+                    const due = publicKey && !visitor && !phoneAppDismissed && (handedOverOnPhone || usePhoneAppCardDue({
                         dismissed: phoneAppDismissed,
                         keptPosts,
                         weekOverAt: Number.isFinite(weekEnds) ? weekEnds : null,
                         now,
-                    });
+                    }));
                     return due ? (
                         <UsePhoneAppCard
                             publicKey={publicKey}
@@ -3383,9 +3392,6 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             {t('Done')}
                         </button>
                     </div>
-                )}
-                {inArrange && notOnAccount && (
-                    <p data-testid="home-arrange-not-on-account" className="m-0 mb-3 text-sm text-text-primary break-words">{t(LIB_LINES.notOnAccount)}</p>
                 )}
                 {/* The cards (D1): columns 320–576 px wide, packed shortest column first in the saved order (slice L1).
                     When packed: 4 px row tracks, 0 row gap, with cards positioned by gridColumn/gridRow and self-aligned.

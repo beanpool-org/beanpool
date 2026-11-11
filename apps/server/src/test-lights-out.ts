@@ -11,11 +11,10 @@
  *      /api/ledger/transfer stays 301; a proxy header, a public Host, a public source or a dot segment: 301; the socket
  *      the same;
  *   2. the switch: unsigned 401; a member, an admin, a stale owner signature, the owner's old-format (unbound) signature
- *      (426), an automation token, an assistant's token, a computer's session, an admin's session, the password with 2FA
- *      off, the password without a current code, a standby: refused, nothing changed. The owner signed for the
- *      community's NAME over plain http at the number: on (request binding unchanged); signed for the NUMBER on this named
- *      node: 421. The phone's Manage session and the password with a current code: on/off through Settings' route. "On"
- *      twice is "on";
+ *      (426), an automation token, an assistant's token, a computer's session, an admin's session, an admin password (the
+ *      node has none), a standby: refused, nothing changed. The owner signed for the community's NAME over plain http at
+ *      the number: on (request binding unchanged); signed for the NUMBER on this named node: 421. The phone's Manage
+ *      session: on/off through Settings' route. "On" twice is "on";
  *   3. ON: the hall Wi-Fi is served (a page, a write, the socket); the Internet, a tunnel-shaped request and a proxy's are
  *      still redirected; loopback always; /hall shows the lines and the door link, and "Get the Android app" (H3) only with
  *      an APK held and HIDE_APK_LINK unset, in the reader's language, leading to the APK page; health + info carry
@@ -31,13 +30,13 @@
  *      Settings; every write route the node serves counts but the ones NOT_HALL_WRITES names;
  *   6. the switch is in no copy: a sealed backup's node_config.json and its take-over bundle, a snapshot, the redacted
  *      config; the manifest says per-server; the stager leaves it out;
- *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line; a request
+ *   7. `beanpool lights-out`: the node looks every 2 s or less (the one constant the boot uses), takes the request and answers
+ *      with nothing else waiting (timed on a 250 ms look, so a loaded runner cannot fail it); the log keeps a SECURITY line; a request
  *      file 60 s old, with no time, or dated ahead is dropped and the switch is unchanged;
  *   8. the no-mothership pattern: a second node (the real index.ts, its own process and data folder) restores section 6's
  *      sealed file with `beanpool restore` and starts on it: its health and info read lightsOut off, its local-config.json
  *      holds none, and the boot keeps it as a restored copy.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-lights-out.ts
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -54,8 +53,8 @@ process.env.BEANPOOL_DATA_DIR = dataDir;
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP']) delete process.env[k];
 const OWN = 'beans.example.org';
 process.env.BEANPOOL_ADDRESSES = OWN;
-const PASSWORD = 'Lights-Out-Suite-Pw-5521!';
-process.env.ADMIN_PASSWORD ??= PASSWORD;
+/** What an older install's admin password looked like: the node has none now, so it is no credential. */
+const OLD_ADMIN_PASSWORD = 'Lights-Out-Suite-Pw-5521!';
 // The APK on the node (H3, services/apk-mirror.ts): the image's folder, empty until section 3 puts one there.
 const apkImageDir = `${dataDir}-image-apk`;
 process.env.APK_IMAGE_DIR = apkImageDir;
@@ -66,7 +65,7 @@ function check(name: string, ok: boolean, detail = '') {
     if (ok) { passed++; console.log(`  ✅ ${name}`); } else { failed++; console.log(`  ❌ ${name}${detail ? ` — ${detail}` : ''}`); }
 }
 
-const { initAdminPassword, getLocalConfig, updateLocalConfig, redactLocalConfig } = await import('./config/local-config.js');
+const { getLocalConfig, updateLocalConfig, redactLocalConfig } = await import('./config/local-config.js');
 const tlsMod = await import('./services/tls.js');
 const se = await import('./state-engine.js');
 const { db } = await import('./db/db.js');
@@ -87,7 +86,6 @@ const { APK_SIGNING_CERT_SHA256 } = await import('./services/apk-release.js');
 const { wordsIn } = await import('./member-words.js');
 const { escapeHtml } = await import('./routes/community-card.js');
 
-initAdminPassword();
 await tlsMod.initTls();
 se.initStateEngine();
 // The community's genesis and the node's key: the identity statement is signed with the key, and a backup is locked only
@@ -173,7 +171,7 @@ function member(callsign: string, role?: 'owner' | 'admin'): Id {
     const pk = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     if (role) se.grantNodeRole(pk, role, 'SYSTEM');
     return { pk, seed, callsign };
 }
@@ -262,7 +260,8 @@ console.log('\n2. Who may flip it');
     const forNumber = await phoneSwitch(owner, { on: true }, { signFor: ADDRESS });
     check('signed for the number on this named node → 421 (binding unchanged)', forNumber.status === 421 && !isOn(), `${forNumber.status} ${forNumber.body.slice(0, 100)}`);
     // The old format (1) names no community: one an owner sent to another community could be replayed here (design §2.3).
-    // Refused as break-glass refuses it (AUTH-01), the middleware having accepted it until UNBOUND_SIGNATURES_UNTIL.
+    // Refused, 426 app_too_old, by the signature middleware before any route, as every old-format request is since the
+    // cutover (1.4.0, CUT4): break-glass (AUTH-01) the same. Never cached.
     {
         const body = JSON.stringify({ on: true });
         const ts = String(Date.now());
@@ -270,7 +269,8 @@ console.log('\n2. Who may flip it');
         const text = core.unboundRequestText({ method: 'POST', path: '/api/node/owner/lights-out', timestamp: ts, nonce, body });
         const sig = Buffer.from(ed25519.sign(new TextEncoder().encode(text), owner.seed)).toString('base64');
         const old = await send(LAN, 'POST', '/api/node/owner/lights-out', HALL, { 'X-Public-Key': owner.pk, 'X-Timestamp': ts, 'X-Nonce': nonce, 'X-Signature': sig }, body);
-        check('the owner\'s old-format (unbound, format 1) request → 426 app_too_old, nothing changed', old.status === 426 && old.json?.code === 'app_too_old' && !isOn(),
+        check('the owner\'s old-format (unbound, format 1) request → 426 app_too_old, saying the app is too old, never cached, nothing changed',
+            old.status === 426 && old.json?.code === 'app_too_old' && /too old/.test(old.json?.error ?? '') && (old.headers['cache-control'] ?? '').includes('no-store') && !isOn(),
             `${old.status} ${old.body.slice(0, 120)}`);
     }
     const badBody = await phoneSwitch(owner, { on: 'yes' });
@@ -284,8 +284,8 @@ console.log('\n2. Who may flip it');
     check('a computer\'s session → 403 phone_required', computer.status === 403 && computer.json?.code === 'phone_required' && !isOn(), `${computer.status} ${computer.body.slice(0, 100)}`);
     const adminPhone = await settingsSwitch(harness.ownerPhoneSessionHeaders(admin.pk), { on: true });
     check('an admin\'s phone session → 403', adminPhone.status === 403 && !isOn(), String(adminPhone.status));
-    const pwNo2fa = await settingsSwitch({ 'X-Admin-Password': PASSWORD }, { on: true });
-    check('the password with the node\'s 2FA off → refused (fails closed)', (pwNo2fa.status === 401 || pwNo2fa.status === 403) && !isOn(), `${pwNo2fa.status} ${pwNo2fa.body.slice(0, 100)}`);
+    const oldPassword = await settingsSwitch({ 'X-Admin-Password': OLD_ADMIN_PASSWORD }, { on: true });
+    check('an admin password (the node has none) → 401 notSignedIn', oldPassword.status === 401 && oldPassword.json?.notSignedIn === true && !isOn(), `${oldPassword.status} ${oldPassword.body.slice(0, 100)}`);
 
     setNodeRole('backup');
     const standby = await phoneSwitch(owner, { on: true });
@@ -302,20 +302,11 @@ console.log('\n2. Who may flip it');
     const badAddr = await phoneSwitch(owner, { on: true, address: 'https://evil.example.com' });
     check('a hall address that is not a local number → 400', badAddr.status === 400, String(badAddr.status));
 
-    // Off and on through Settings: the phone's Manage session, and the password with a current code.
+    // Off and on through Settings: the phone's Manage session.
     const off = await settingsSwitch(harness.ownerPhoneSessionHeaders(owner.pk), { on: false });
     check('Settings, the phone\'s Manage session → off', off.status === 200 && !isOn(), `${off.status} ${off.body.slice(0, 120)}`);
-    const twofa = harness.turnOn2faForTests(PASSWORD);
-    // The fresh proof on the password path: a current code, once. The same code a second time is refused.
-    const once = twofa.code();
-    const pwOn = await settingsSwitch({ 'X-Admin-Password': PASSWORD, 'X-Admin-TOTP': once }, { on: true, address: ADDRESS, code: once });
-    check('the password with a current authenticator code → on', pwOn.status === 200 && isOn(), `${pwOn.status} ${pwOn.body.slice(0, 120)}`);
-    await phoneSwitch(owner, { on: false });
-    const reused = await settingsSwitch({ 'X-Admin-Password': PASSWORD, 'X-Admin-TOTP': once }, { on: true, address: ADDRESS, code: once });
-    check('the same code again → refused, nothing changed', (reused.status === 401 || reused.status === 403) && !isOn(), `${reused.status} ${reused.body.slice(0, 120)}`);
-    const pwOn2 = await settingsSwitch(twofa.headers(), { on: true, address: ADDRESS, code: twofa.code() });
-    check('… and a new current code → on', pwOn2.status === 200 && isOn(), `${pwOn2.status} ${pwOn2.body.slice(0, 120)}`);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null });
+    const settingsOn = await settingsSwitch(harness.ownerPhoneSessionHeaders(owner.pk), { on: true, address: ADDRESS });
+    check('… and → on', settingsOn.status === 200 && isOn(), `${settingsOn.status} ${settingsOn.body.slice(0, 120)}`);
 }
 
 // ── 3. ON ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -578,8 +569,7 @@ const copyMadeOn = { file: '', code: '', epoch: 0, madeAt: '' };
     const leftOut = /const CREDENTIALS_LEFT_OUT = \[([\s\S]*?)\];/.exec(stagerSrc)?.[1] ?? '';
     check('the stager\'s copy leaves both out', leftOut.includes("'lightsOut'") && leftOut.includes("'restoredCopy'"));
 
-    const { makeRecoveryCode, BUNDLED_LOCAL_CONFIG_FIELDS } = await import('./services/takeover-envelope.js');
-    check('the take-over bundle\'s field list has neither', !(BUNDLED_LOCAL_CONFIG_FIELDS as readonly string[]).includes('lightsOut') && !(BUNDLED_LOCAL_CONFIG_FIELDS as readonly string[]).includes('restoredCopy'));
+    const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const code = await makeRecoveryCode();
     const { createSealedBackup, openSealedFileTo, readBundleFrom } = await import('./services/sealed-backup.js');
     const work = fs.mkdtempSync(path.join(dataDir, 'copies-'));
@@ -595,6 +585,7 @@ const copyMadeOn = { file: '', code: '', epoch: 0, madeAt: '' };
     const nodeConfig = JSON.parse(fs.readFileSync(path.join(unpacked, 'node_config.json'), 'utf8'));
     check('a sealed backup\'s node_config.json: no lightsOut, no restoredCopy', !('lightsOut' in nodeConfig) && !('restoredCopy' in nodeConfig) && 'identityEpoch' in nodeConfig);
     const bundle = readBundleFrom(unpacked, header) as any;
+    check('the take-over bundle carries no local-config field at all, so neither', !!bundle && JSON.stringify(bundle.localConfig) === '{}', JSON.stringify(bundle?.localConfig));
     check('its take-over bundle: no lightsOut anywhere', !!bundle && !JSON.stringify(bundle).includes('lightsOut') && !JSON.stringify(bundle).includes('restoredCopy'));
     Object.assign(copyMadeOn, { file: sealedFile, code: code.code, epoch: Number(bundle?.identityEpoch) || 0, madeAt: String(header.createdAt) });
     const { createSnapshot, resolveSnapshotPath } = await import('./services/snapshot-scheduler.js');
@@ -609,13 +600,29 @@ console.log('\n7. beanpool lights-out');
     const lines: string[] = [];
     const realSecurity = logger.security.bind(logger);
     (logger as any).security = (area: any, message: string) => { lines.push(`${area} ${message}`); return realSecurity(area, message); };
-    lo.startLightsOutRequestWatch(dataDir, 2000);
+    // The node's real cadence is one constant (services/lights-out.ts LIGHTS_OUT_WATCH_MS = 2 s) and the boot (index.ts) calls
+    // the watch without overriding it; that is checked exactly, below. The timed run below uses a short look instead, because
+    // this process starts the watch and writes the request in the same turn of the loop: the request always waits one whole
+    // look, the worst case, so at 2 s the run is ~2.04 s on an idle Mac (the same with a heavy suite beside it), only 0.56 s
+    // under the old 2.6 s bound; a shared CI runner went over it twice (2,778 ms on main 18c5a8bf, 9 Nov; 8 Nov before).
+    // With a short look the bound below leaves a loaded runner seconds, and still goes red for a fixed wait added to the path.
+    const WATCH_MS = 250;
+    // Expected: one look (<= 250 ms) + the command's 200 ms poll + ~30 ms of the node's work = ~0.41 s measured on an idle Mac.
+    // The bound is 2 s: 1.6 s over for a late timer or a slow disk (CI's red was 0.74 s over an idle Mac), while a 2 s wait
+    // added anywhere in the path (the command's poll at 2 s, say: 2,013 ms) goes red.
+    const TAKEN_WITHIN_MS = 2000;
+    lo.startLightsOutRequestWatch(dataDir, WATCH_MS);
     const out: string[] = [];
     const io = { out: (l: string) => out.push(l), err: (l: string) => out.push(`ERR ${l}`) };
+    const bootSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'index.ts'), 'utf8');
+    check('the node looks for a lights-out request every 2 s or less, and the boot does not override it',
+        lo.LIGHTS_OUT_WATCH_MS > 0 && lo.LIGHTS_OUT_WATCH_MS <= 2000 && /\bstartLightsOutRequestWatch\(\);/.test(bootSrc),
+        `${lo.LIGHTS_OUT_WATCH_MS} ms`);
     const t0 = Date.now();
     const offCode = await runLightsOut(['off'], io);
     const took = Date.now() - t0;
-    check('`beanpool lights-out off` → 0, taken within ~2 s', offCode === 0 && took <= 2600 && !isOn(), `${offCode} in ${took} ms: ${out.join(' | ')}`);
+    check(`\`beanpool lights-out off\` → 0, off, and nothing else waits: within ${TAKEN_WITHIN_MS} ms (a ${WATCH_MS} ms look, the command's 200 ms poll)`,
+        offCode === 0 && took <= TAKEN_WITHIN_MS && !isOn(), `${offCode} in ${took} ms: ${out.join(' | ')}`);
     check('the log keeps a SECURITY line naming the shell', lines.some((l) => /\[LightsOut\] Lights-out OFF by the server's shell/.test(l)), lines.join(' | '));
     out.length = 0;
     const onCode = await runLightsOut(['on', '--address', ADDRESS], io);

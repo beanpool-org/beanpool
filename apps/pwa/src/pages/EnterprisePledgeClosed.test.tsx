@@ -32,15 +32,16 @@ const member: BeanPoolIdentity = {
     createdAt: '2026-09-17T00:00:00.000Z',
 };
 
-const well = (status: string, currentAmount: number) => ({
+/** A project of 20 Beans' goal that has raised `currentAmount_c` whole hundredths. */
+const well = (status: string, currentAmount_c: number) => ({
     publicKey: 'enterprise-well-pubkey',
     name: 'Village Well',
     purpose: 'Clean water',
     avatar: null,
-    balance: currentAmount,
-    creditLine: 0,
-    goalAmount: 20,
-    currentAmount,
+    balance_c: currentAmount_c,
+    creditLine_c: 0,
+    goalAmount_c: 2000,
+    currentAmount_c,
     lifecycle: 'bounded',
     status,
     paused: false,
@@ -50,14 +51,14 @@ const well = (status: string, currentAmount: number) => ({
 });
 
 const ledger = {
-    enterprise: { publicKey: 'enterprise-well-pubkey', name: 'Village Well', status: 'active', balance: 0 },
+    enterprise: { publicKey: 'enterprise-well-pubkey', name: 'Village Well', status: 'active', balance_c: 0 },
     period: { since: null, until: null },
     summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 0, endingBalance: 0, transactionCount: 0 },
     entries: [],
 };
 
-async function openWell(status: string, currentAmount: number) {
-    vi.spyOn(api, 'getTreasury').mockResolvedValue(well(status, currentAmount) as any);
+async function openWell(status: string, currentAmount_c: number) {
+    vi.spyOn(api, 'getTreasury').mockResolvedValue(well(status, currentAmount_c) as any);
     render(<TreasuryDetailPage identity={member} isMember={true} pubkey="enterprise-well-pubkey" onBack={() => {}} />);
     await screen.findByRole('heading', { level: 1, name: 'Village Well' });
 }
@@ -65,13 +66,13 @@ async function openWell(status: string, currentAmount: number) {
 describe('The pledge box on an enterprise that is not taking pledges', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: [] } as any);
         vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(ledger as any);
         vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: {}, messages: [], readOnly: false } as any);
     });
 
     it('a funded enterprise says it has reached its goal, with no box to pledge in', async () => {
-        await openWell('funded', 20);
+        await openWell('funded', 2000);
         expect(screen.getByText('This project has reached its goal, so it isn’t taking more pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Amount (🫘)')).not.toBeInTheDocument();
@@ -79,25 +80,25 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
     });
 
     it('a funded enterprise whose raised figure reads short of the goal is still not taking pledges: the node goes by its status', async () => {
-        await openWell('funded', 15);
+        await openWell('funded', 1500);
         expect(screen.getByText('This project has reached its goal, so it isn’t taking more pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
     });
 
     it('an enterprise winding up, or closed, says so, with no box', async () => {
-        await openWell('winding_up', 5);
+        await openWell('winding_up', 500);
         expect(screen.getByText('This project is winding up, so it isn’t taking pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
     });
 
     it('a closed enterprise says it has closed, with no box', async () => {
-        await openWell('completed', 5);
+        await openWell('completed', 500);
         expect(screen.getByText('This project has closed, so it isn’t taking pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
     });
 
     it('an active enterprise still has its pledge box, and no such sentence', async () => {
-        await openWell('active', 5);
+        await openWell('active', 500);
         expect(screen.getByText('Back this initiative')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Pledge Beans/ })).toBeInTheDocument();
         expect(screen.queryByText(/isn’t taking/)).not.toBeInTheDocument();
@@ -105,7 +106,7 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
 
     it('an enterprise whose deadline has passed says its deadline has passed, with no box to pledge in', async () => {
         const expiredWell = {
-            ...well('active', 5),
+            ...well('active', 500),
             deadlineAt: new Date(Date.now() - 2 * 86400000).toISOString(),
         };
         vi.spyOn(api, 'getTreasury').mockResolvedValue(expiredWell as any);
@@ -124,7 +125,7 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
         ['25 hours after: "Expired", and the sentence', 25, 'Expired', false],
     ] as const)('%s', async (_when, hoursAgo, badge, open) => {
         vi.spyOn(api, 'getTreasury').mockResolvedValue({
-            ...well('active', 5),
+            ...well('active', 500),
             deadlineAt: new Date(Date.now() - hoursAgo * 3600 * 1000).toISOString(),
         } as any);
         render(<TreasuryDetailPage identity={member} isMember={true} pubkey="enterprise-well-pubkey" onBack={() => {}} />);
@@ -146,14 +147,14 @@ describe('The project page says when the Beans go back if the goal is not reache
         vi.restoreAllMocks();
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(NOW);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, keeperOf: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, keeperOf: [] } as any);
         vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue(ledger as any);
         vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({ conversation: {}, messages: [], readOnly: false } as any);
     });
     afterEach(() => { vi.useRealTimers(); });
 
     async function openProject(over: Record<string, unknown>) {
-        vi.spyOn(api, 'getTreasury').mockResolvedValue({ ...well('active', 5), ...over } as any);
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({ ...well('active', 500), ...over } as any);
         render(<TreasuryDetailPage identity={member} isMember={true} pubkey="enterprise-well-pubkey" onBack={() => {}} />);
         await screen.findByRole('heading', { level: 1, name: 'Village Well' });
     }
@@ -172,13 +173,13 @@ describe('The project page says when the Beans go back if the goal is not reache
     });
 
     it('once the node has returned them: they went back, and nothing reads as still held', async () => {
-        await openProject({ deadlineAt: '2026-11-10T10:00:00.000Z', currentAmount: 0, balance: 0, pledgesReturnedAt: '2026-11-17T10:00:30.000Z' });
+        await openProject({ deadlineAt: '2026-11-10T10:00:00.000Z', currentAmount_c: 0, balance_c: 0, pledgesReturnedAt: '2026-11-17T10:00:30.000Z' });
         expect(screen.getByTestId('pledge-return-line').textContent).toBe('The goal wasn’t reached by 10 Nov 2026, so everyone’s Beans went back on 17 Nov 2026.');
         expect(screen.queryByText(/Pledges are held securely/)).not.toBeInTheDocument();
     });
 
     it('a project that reached its goal, or has no end date, says nothing of it', async () => {
-        await openProject({ status: 'funded', currentAmount: 20, deadlineAt: '2026-11-30T10:00:00.000Z' });
+        await openProject({ status: 'funded', currentAmount_c: 2000, deadlineAt: '2026-11-30T10:00:00.000Z' });
         expect(screen.queryByTestId('pledge-return-line')).not.toBeInTheDocument();
     });
 

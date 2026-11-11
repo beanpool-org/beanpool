@@ -11,6 +11,7 @@
 import assert from 'node:assert';
 import { initStateEngine, runLedgerAudit } from './state-engine.js';
 import { db } from './db/db.js';
+import { hundredthsAsDecimalText } from '@beanpool/core';
 
 console.log('Running #129 ledger conservation audit startup test...');
 
@@ -26,7 +27,7 @@ console.log(`  A. Baseline established at: ${result1.baseline.toFixed(4)}`);
 
 // B. Simulate drift: insert a phantom account balance that wasn't part of a transaction
 // (This mirrors what happened on the 'review' node — a direct balance write)
-db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('phantom_test_account', 100, 0)`).run();
+db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('phantom_test_account', 100, 0)`).run();
 const result2 = runLedgerAudit();
 // Baseline is 0 from step A; sum is now 100; drift = 100
 assert.strictEqual(result2.ok, false, 'B. Drift of 100 must be detected as not ok');
@@ -55,8 +56,8 @@ console.log('  C. Startup banner correctly printed for drifted node');
 const currentResult = runLedgerAudit();
 const newBaseline = currentResult.sumBalances;
 const sanitizedReason = 'test rebaseline — simulating acknowledged drift for test purposes';
-const note = `[${new Date().toISOString()}] rebaselined at ${newBaseline.toFixed(4)} (drift was ${currentResult.drift.toFixed(4)}): ${sanitizedReason}`;
-const normalizedBaseline = (Math.round(newBaseline * 10000) / 10000).toString();
+const note = `[${new Date().toISOString()}] rebaselined at ${hundredthsAsDecimalText(newBaseline)} Beans (drift was ${hundredthsAsDecimalText(currentResult.drift)}): ${sanitizedReason}`;
+const normalizedBaseline = String(newBaseline);
 db.transaction(() => {
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(normalizedBaseline);
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_rebaseline_note', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(note);

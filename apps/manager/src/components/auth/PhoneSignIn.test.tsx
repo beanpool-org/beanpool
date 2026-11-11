@@ -130,10 +130,10 @@ describe('PhoneSignIn — the QR card', () => {
         expect(calls.filter(c => c === 'POST /api/local/admin/auth/pairing')).toHaveLength(2);
     });
 
-    it('explains a node without phone sign-in (an older node)', async () => {
-        vi.stubGlobal('fetch', vi.fn(async () => json(404, { error: 'Not Found' })));
+    it('says the node did not answer when the pairing is refused', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json(404, {})));
         render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
-        expect(await screen.findByRole('alert')).toHaveTextContent(/doesn't offer phone sign-in yet/);
+        expect(await screen.findByRole('alert')).toHaveTextContent(/did not answer \(404\)/);
     });
 
     it('"New code" abandons the waiting poll and asks for a fresh pairing', async () => {

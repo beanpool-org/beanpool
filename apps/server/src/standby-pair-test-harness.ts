@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { privateKeyFromProtobuf, publicKeyToProtobuf } from '@libp2p/crypto/keys';
 import { spawnNode, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 export const PW_MAIN = 'Paged-Copies-Main-Pw-7719!';
 export const PW_STANDBY = 'Paged-Copies-Standby-Pw-3304!';
@@ -73,8 +74,8 @@ export interface Answer { status: number; body: any }
 
 /**
  * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
- * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes
- * (takeover-test-harness.ts owner-session).
+ * The node has no admin password: `admin` is an owner's key session the node makes (takeover-test-harness.ts
+ * owner-session).
  */
 export async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
@@ -83,7 +84,8 @@ export async function api(base: string, method: 'GET' | 'POST', route: string, o
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -289,14 +291,14 @@ export function newPair(script: string): Pair {
         script, root, dir: (n: string) => path.join(root, n), nodes: [], started: Date.now(),
         replicationToken: crypto.randomBytes(32).toString('hex'),
         envM: {
-            ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', NODE_ENV: 'test',
+            NODE_ROLE: 'primary', NODE_ENV: 'test',
             // M keeps a copy no page was asked of for two minutes, as in production (SYNC_COPY_IDLE_MS): scaled to 3 s, a
             // stager's start or a page's import under load took longer, and M closed the copy under S. A copy a standby left
             // open is closed by the step that left it (closeLeftCopy).
             SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
         },
         envS: {
-            ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+            NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
             MAX_IMPORT_ROWS_PER_CATEGORY: String(CAP), BACKUP_RESYNC_RETRY_MS: String(RETRY_MS), BACKUP_PAGE_GAP_MS: '0',
         },
         gwen, ann, bo, cy, dee,
@@ -323,12 +325,13 @@ export async function startMain(pair: Pair): Promise<{ main: NodeProc; m: string
     };
     built('Gwen sets a profile photo', await As(gwen, '/api/profile/update', { avatar: TINY_PNG }));
     for (const who of [ann, bo, cy, dee]) await join(who);
-    const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
-        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG],
+    // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
+    const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
+        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG],
     })).post;
     built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
-    await offer(gwen, 'Sourdough', 4);
-    const honey = await offer(ann, 'Honey', 20);
+    await offer(gwen, 'Sourdough', 400);
+    const honey = await offer(ann, 'Honey', 2000);
     const tx = built('Gwen asks for the honey', await As(gwen, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: gwen.pk })).transaction;
     built('Ann approves: the Beans are held', await As(ann, '/api/marketplace/transactions/approve', { transactionId: tx.id, authorPublicKey: ann.pk }));
     built('Gwen confirms: the Beans are released', await As(gwen, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: gwen.pk }));

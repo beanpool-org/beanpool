@@ -13,25 +13,30 @@
  *     A point whose tar lost a file point.json lists (a torn unpack), one with no tar, one with no point.json: each 500
  *     in words, no file moved, the database still open. M2: none of those bodies holds a path; the log has the error.
  *  4. H2, a database without the core tables: checkRestoreDatabase refuses an empty database, a dummy table, members(x INT),
- *     a members view, and accounts without balance, in words; a real backup's database passes; a point this server took
+ *     a members view, and accounts without their key column, in words; accounts without a money column are not refused
+ *     for it (the boot's hundredths step makes balance_c and drops old money); a real backup's database passes; a point this server took
  *     passes against a live database that has no schema (ownPoint), which the plain check refuses over triggers.
  *     Through the route on a fresh server: the empty, dummy and members(x INT) files sealed by a pinned key → 400 "is not a
  *     BeanPool database", nothing changed; a real backup then restores 200. (Before: 200 for all three.)
- *     Review of #2050 B1: a database made from v1.2.18's schema.sql (__fixtures__, no node_roles table) with one member passes
- *     the core-table check. (Before: "is not a BeanPool database (no node_roles table)".)
+ *     conversion-s0: a database made from v1.2.18's schema.sql (__fixtures__, no node_roles table) is refused, 400 "is not a
+ *     BeanPool database (no node_roles table)", the file untouched, by the check and through the route: nothing at boot makes
+ *     its owner any more. (Before, #3026 at 12813f01: it passed, and the node booted on it with no owner.)
  *  5. H2 note, the shell's roll-back (rollBackTo, as `beanpool restore-point roll-back` runs it) onto a live members(x INT)
  *     database: it rolls back, and the owner is back. (Before: refused, "made by a newer version of BeanPool".)
  *  6. M1, boot: .restore-tmp, .restore-candidate, the upload, the opened file and a phone's file past its window are
  *     removed by secureDataDirAtBoot; a phone's file inside its window and other files stay.
  *  7. Review of #2050 B2, the restart window: once an owner's phone has finished a restore and the database is closed, a
- *     key session's restore and roll-back (their auth reads node_roles) and a password session's restore are each 409 in
- *     words. (Before: the key sessions' were a bare 500, which made check 3 red about one run in two.)
- *  8. Review of #2050 N1, the backups the live nodes made: a database from v1.2.15 … v1.2.18's schema.sql (the same bytes;
- *     no node_roles, the recovery_requests_touch_updated_at trigger keeper recovery removed) passes the check with that
- *     trigger dropped; one with a trigger on a table this version no longer has passes with it dropped. Through
- *     `beanpool restore --unlocked` on a stopped node it restores (exit 0), the trigger is not in the file, a point is kept,
- *     and the node then boots on it with its founder as owner. A trigger this version does not know on members, under a
- *     new name or under the old trigger's name, is refused and nothing changes. (Before: every one refused.)
+ *     key session's restore and roll-back (their auth reads node_roles) are each 409 in words. (Before: the key sessions'
+ *     were a bare 500, which made check 3 red about one run in two. A password session's restore was 409 too, until the
+ *     node had no admin password.)
+ *  8. Review of #2050 N1, the backups the live nodes made. A node that ran v1.2.15 … v1.2.18 and was then updated holds
+ *     that release's schema.sql (the same bytes) with node_roles added (its founder the owner) and still the
+ *     recovery_requests_touch_updated_at trigger keeper recovery removed: its database passes the check with that trigger
+ *     dropped; one with a trigger on a table this version no longer has passes with it dropped. Through `beanpool restore
+ *     --unlocked` on a stopped node it restores (exit 0), the trigger is not in the file, a point is kept, and the node then
+ *     boots on it with its founder still the owner. A trigger this version does not know on members, under a new name or
+ *     under the old trigger's name, is refused and nothing changes. (Before: every one refused.) conversion-s0: a backup
+ *     made by v1.2.18 itself (no node_roles) is refused by `beanpool restore` in words, exit 1, nothing changed, no point.
  *  9. Review of #2050 N2 + N3: the 500s of a snapshot, an integrity check and a backup download, and a restore's 200
  *     whose image store did not go back, say what happened in words; the raw error, path and all, is in the log only.
  *
@@ -72,7 +77,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const sha = (b: Buffer | Uint8Array) => crypto.createHash('sha256').update(b).digest('hex');
-const PW = 'Restore-Verified-Pw-5517!';
 const PHOTO_KEY = 'posts/p-fresh/0-aabbccdd.jpg';
 const BUSY = 'A restore or roll-back is already running on this server; wait for it and the restart.';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -220,7 +224,6 @@ async function child(): Promise<void> {
     const { initStateEngine, seedGenesisMember } = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const keyAuth = await import('./admin-key-auth.js');
     const { initTls } = await import('./services/tls.js');
     const httpsServer = await import('./https-server.js');
@@ -230,14 +233,13 @@ async function child(): Promise<void> {
     initStateEngine();
     const fresh = scenario !== 'rb';
     if (fresh) {
-        // A fresh server (install, claim): its own community, key, password and 2FA, one owner, one photo.
+        // A fresh server (install, claim): its own community, key and settings (local-config.json), one owner, one photo.
         const { ensureGenesis } = await import('./genesis.js');
         const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-        const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
         await ensureGenesis();
         fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-        const { hash, salt } = hashPassword(PW);
-        updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
+        updateLocalConfig({ callsign: 'FreshServer' });
         // The owner here is the backups' owner too, so the phone that opens the file is an owner of this server.
         seedGenesisMember(process.env.TEST_OWNER!, 'FreshOwner');
         const photo = crypto.randomBytes(1800);
@@ -248,7 +250,6 @@ async function child(): Promise<void> {
             .run('p-fresh', PHOTO_KEY, sha(photo), photo.length);
         db.pragma('foreign_keys = ON');
     }
-    const tfa = turnOn2faForTests(PW);
     await initTls();
     const port = await httpsServer.startHttpsServer(0);
     const base = `https://localhost:${port}`;
@@ -285,6 +286,8 @@ async function child(): Promise<void> {
         complete: r.json?.complete, restoreRunning: r.json?.restoreRunning, serverFiles: r.json?.serverFiles, movedAside: r.json?.movedAside,
     });
     const dbOpen = () => { try { db.prepare('SELECT 1').get(); return true; } catch { return false; } };
+    // The owner's computer session (key sign-in): an owner's request on the backup routes.
+    const asOwner = (): Record<string, string> => ({ 'x-admin-session': session() });
     // Sessions are made before a race: a restore that wins closes the database the next one would be made in.
     const restoreBy = (bytes: Uint8Array, sid = session()) => call('POST', '/api/local/admin/restore', { 'x-admin-session': sid, 'X-Recovery-Code': code }, undefined, bytes);
 
@@ -334,10 +337,7 @@ async function child(): Promise<void> {
         const point = fs.readdirSync(path.join(dataDir, 'restore-points')).find((n) => n.endsWith('-before-restore')) ?? 'none';
         const byKey = await restoreBy(file(process.env.TEST_ONE!), k1);
         const rollBack = await call('POST', '/api/local/admin/restore-points/roll-back', { 'x-admin-session': k2 }, { name: point });
-        let pw: Record<string, string> = {};
-        try { pw = tfa.headers(); } catch { /* the database is closed: the request goes with none */ }
-        const byPassword = await call('POST', '/api/local/admin/restore', { ...pw, 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
-        Object.assign(out, { finished: brief(finished), dbOpen: dbOpen(), byKey: brief(byKey), rollBack: brief(rollBack), byPassword: brief(byPassword) });
+        Object.assign(out, { finished: brief(finished), dbOpen: dbOpen(), byKey: brief(byKey), rollBack: brief(rollBack) });
         await sleep(6500);
         Object.assign(out, { restarts, state: await dirState(dataDir) });
         done();
@@ -348,22 +348,22 @@ async function child(): Promise<void> {
         const snapshots = path.join(dataDir, 'snapshots');
         fs.mkdirSync(snapshots, { recursive: true });
         fs.writeFileSync(path.join(snapshots, 'snapshot-2026-01-01T00-00-00.db'), 'not a database, though named as a snapshot');
-        const verify = await call('POST', '/api/local/admin/backup/verify', tfa.headers(), { name: 'snapshot-2026-01-01T00-00-00.db' });
+        const verify = await call('POST', '/api/local/admin/backup/verify', asOwner(), { name: 'snapshot-2026-01-01T00-00-00.db' });
         fs.rmSync(snapshots, { recursive: true, force: true });
         fs.writeFileSync(snapshots, 'a file where the snapshots folder goes');
-        const snapshot = await call('POST', '/api/local/admin/snapshots/create', tfa.headers(), {});
+        const snapshot = await call('POST', '/api/local/admin/snapshots/create', asOwner(), {});
         fs.rmSync(snapshots, { force: true });
         // The folder of a photo the database names is a file in the store: the backup cannot look for the photo (ENOTDIR,
         // where a photo that is simply gone makes a short backup).
         const photoDir = path.dirname(path.join(dataDir, 'images', PHOTO_KEY));
         fs.renameSync(photoDir, photoDir + '.aside');
         fs.writeFileSync(photoDir, 'a file where a folder of photos goes');
-        const backup = await call('POST', '/api/local/admin/backup', tfa.headers(), {});
+        const backup = await call('POST', '/api/local/admin/backup', asOwner(), {});
         fs.rmSync(photoDir);
         fs.renameSync(photoDir + '.aside', photoDir);
         // The backup's photos are under posts/p-main/, which is a file in this store: they cannot be put back.
         fs.writeFileSync(path.join(dataDir, 'images', 'posts', 'p-main'), 'a file where a folder of photos goes');
-        const restored = await call('POST', '/api/local/admin/restore', { ...tfa.headers(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
+        const restored = await call('POST', '/api/local/admin/restore', { ...asOwner(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
         Object.assign(out, {
             verify: brief(verify), snapshot: brief(snapshot), backup: brief(backup),
             restored: { ...brief(restored), warning: restored.json?.warning, imagesError: restored.json?.images?.error },
@@ -374,7 +374,7 @@ async function child(): Promise<void> {
     if (scenario === 'h2') {
         // Files sealed by a pinned key whose state.db is no community's: refused in words, nothing changed.
         const rows: Record<string, unknown> = {};
-        for (const k of ['EMPTY', 'DUMMY', 'WRONG']) {
+        for (const k of ['EMPTY', 'DUMMY', 'WRONG', 'OLD']) {
             const before = await dirState(dataDir);
             const r = await restoreBy(file(process.env[`TEST_${k}`]!));
             const after = await dirState(dataDir);
@@ -387,7 +387,7 @@ async function child(): Promise<void> {
     }
 
     if (scenario === 'prep') {
-        const r = await call('POST', '/api/local/admin/restore', { ...tfa.headers(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
+        const r = await call('POST', '/api/local/admin/restore', { ...asOwner(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
         Object.assign(out, { r: brief(r), state: await dirState(dataDir) });
         done();
     }
@@ -468,8 +468,7 @@ async function main(): Promise<void> {
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
-    const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { getLocalConfig } = await import('./config/local-config.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const { createSealedBackup } = await import('./services/sealed-backup.js');
     const { checkRestoreDatabase } = await import('./services/restore-checks.js');
@@ -481,9 +480,6 @@ async function main(): Promise<void> {
     await ensureGenesis();
     const key = await generateKeyPair('Ed25519');
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(key));
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
-    turnOn2faForTests(PW);
     const ownerSeed = crypto.randomBytes(32);
     const ownerSeedHex = Buffer.from(core.toEd25519Pkcs8(ownerSeed)).toString('hex');
     const owner = Buffer.from(ed25519.getPublicKey(ownerSeed)).toString('hex');
@@ -492,7 +488,7 @@ async function main(): Promise<void> {
         const pk = crypto.randomBytes(32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, 'TEST')`)
             .run(pk, callsign, new Date().toISOString(), owner);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     };
     join('MarkerOne');
     db.pragma('foreign_keys = OFF');
@@ -560,10 +556,41 @@ async function main(): Promise<void> {
         d.close();
         return f;
     };
+    // A database a kept node holds at the cutover (__fixtures__/schema-v1.2.36.sql at user_version 4: what the 1.4.0 gate
+    // opens), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that release's
+    // recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after.
+    const KEPT_SCHEMA = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'schema-v1.2.36.sql'), 'utf8');
+    const OLD_RECOVERY_REQUESTS = [
+        OLD_SCHEMA.match(/CREATE TABLE IF NOT EXISTS recovery_requests \([\s\S]*?\n\);/)?.[0] ?? '',
+        OLD_SCHEMA.match(/CREATE TRIGGER IF NOT EXISTS recovery_requests_touch_updated_at[\s\S]*?END;/)?.[0] ?? '',
+    ];
+    assert(OLD_RECOVERY_REQUESTS.every((s) => s.length > 0), "setup: v1.2.18's recovery_requests and its touch trigger");
+    const keptNodeDb = (extra: string[] = []) => {
+        const f = path.join(fs.mkdtempSync(path.join(work, 'kept-')), 'state.db');
+        const d = new Database(f);
+        d.exec(KEPT_SCHEMA);
+        for (const s of OLD_RECOVERY_REQUESTS) d.exec(s);
+        const at = new Date().toISOString();
+        d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES ('genesis', 'Genesis', ?)`).run(at);
+        for (const [pk, callsign] of [['f0'.repeat(32), 'OldFounder'], ['cd'.repeat(32), 'OldMember']]) {
+            d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by) VALUES (?, ?, ?, ?)`)
+                .run(pk, callsign, at, callsign === 'OldFounder' ? 'genesis' : 'f0'.repeat(32));
+            d.prepare(`INSERT INTO accounts (public_key, balance) VALUES (?, 0)`).run(pk);
+        }
+        for (const s of extra) d.exec(s);
+        d.pragma('user_version = 4');
+        d.close();
+        return f;
+    };
+    // Its founder the owner (`extra` for keptNodeDb or oldReleaseDb): node_roles as this version's schema.sql makes it.
+    const nodeRolesDdl = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'db', 'schema.sql'), 'utf8')
+        .match(/CREATE TABLE IF NOT EXISTS node_roles \([\s\S]*?\n\);/)?.[0];
+    assert(!!nodeRolesDdl, 'setup: node_roles as schema.sql makes it');
+    const UPDATED = [nodeRolesDdl ?? '', `INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES ('${'f0'.repeat(32)}', 'owner', 'genesis')`];
     const env = {
         TEST_CODE: recovery.code, TEST_OWNER: owner, TEST_OWNER_SEED: ownerSeedHex, TEST_ONE: one, TEST_TWO: two,
         TEST_EMPTY: await sealBare('empty.bpsealed', emptyDb), TEST_DUMMY: await sealBare('dummy.bpsealed', dummyDb),
-        TEST_WRONG: await sealBare('wrong.bpsealed', wrongDb),
+        TEST_WRONG: await sealBare('wrong.bpsealed', wrongDb), TEST_OLD: await sealBare('old.bpsealed', oldReleaseDb()),
     };
 
     try {
@@ -636,26 +663,44 @@ async function main(): Promise<void> {
                 const dir = fs.mkdtempSync(path.join(work, 'cand-'));
                 const cand = path.join(dir, 'state.db');
                 fs.copyFileSync(f, cand);
-                try { return { ok: true, ...checkRestoreDatabase(cand, live, opts) }; } catch (e: any) { return { ok: false, status: e?.httpStatus, error: String(e?.message) }; }
+                const bytes = sha(fs.readFileSync(cand));
+                const untouched = () => sha(fs.readFileSync(cand)) === bytes;
+                try { return { ok: true, ...checkRestoreDatabase(cand, live, opts), untouched: untouched() }; } catch (e: any) { return { ok: false, status: e?.httpStatus, error: String(e?.message), untouched: untouched() }; }
             };
             const words = (why: string) => `This backup's state.db is not a BeanPool database (${why}). Nothing was changed.`;
             const viewDb = made('view.db', ['CREATE TABLE m (public_key TEXT, callsign TEXT)', 'CREATE VIEW members AS SELECT * FROM m']);
-            const noBalance = made('no-balance.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
-                'CREATE TABLE node_roles (member_pubkey TEXT)', 'CREATE TABLE node_config (key TEXT)']);
+            // Whole hundredths (restore-checks.ts CORE_TABLES): an accounts table needs its key column; its money column is the
+            // boot's to make (db/hundredths-step.ts makes balance_c on an older shape and drops old money), so a backup without
+            // one is not refused for it. Under float Beans a missing `balance` column was refused here.
+            const noAccountKey = made('no-account-key.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (balance_c INTEGER)',
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
+            // Stamped, so the gate opens it (db/schema-gate.ts): what is checked here is the core tables alone.
+            const noMoneyColumn = made('no-money-column.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+                "INSERT INTO node_config (key, value) VALUES ('schema_release', '1.4.0')", 'PRAGMA user_version = 5']);
+            // The same with a node_config no release made (no value column): the gate answers, refusing; it does not throw.
+            const oddConfig = made('odd-config.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
+                'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)', 'PRAGMA user_version = 5']);
+            const odd = check(oddConfig);
+            assert(!odd.ok && (odd as any).status === 400 && /^This backup's state\.db was last started by a BeanPool older than 1\.2\.36\./.test((odd as any).error ?? ''),
+                `4. user_version 5 with a node_config no release made: refused 400 in the gate's words, not a 500 (${JSON.stringify(odd).slice(0, 200)})`);
             for (const [label, f, why] of [
                 ['an empty database', emptyDb, 'no members table'], ['a dummy table', dummyDb, 'no members table'],
                 ['members(x INT)', wrongDb, 'its members table has no public_key column'], ['a members view', viewDb, 'no members table'],
-                ['accounts without balance', noBalance, 'its accounts table has no balance column'],
+                ['accounts without their key column', noAccountKey, 'its accounts table has no public_key column'],
             ] as const) {
                 const r = check(f);
                 assert(!r.ok && (r as any).status === 400 && (r as any).error === words(why), `4. ${label}: refused 400 in words (${JSON.stringify(r)})`);
             }
+            const noMoney = check(noMoneyColumn);
+            assert(noMoney.ok === true && noMoney.untouched === true,
+                `4. accounts without a money column: not refused for it, the boot makes balance_c (${JSON.stringify(noMoney)})`);
             const real = check(realCopy);
             assert(real.ok === true, `4. a real backup's database passes (${JSON.stringify(real)})`);
-            // B1: node_roles came with 2026-09-14's schema; the boot makes it and seeds the owner when it is missing.
+            // conversion-s0: node_roles came with 2026-09-14's schema, and nothing at boot makes an owner from older data.
             const old = check(oldReleaseDb());
-            assert(old.ok === true || !/is not a BeanPool database/.test((old as any).error ?? ''),
-                `4. a database from v1.2.18's schema.sql with one member (no node_roles) passes the core-table check (${JSON.stringify(old).slice(0, 200)})`);
+            assert(!old.ok && (old as any).status === 400 && (old as any).error === words('no node_roles table') && old.untouched === true,
+                `4. a database from v1.2.18's schema.sql (no node_roles): refused 400 in words, the file untouched (${JSON.stringify(old).slice(0, 200)})`);
             // A point this server took, against a live database with no schema: its triggers are its own.
             const brokenLive = new Database(wrongDb, { readonly: true });
             const plain = check(realCopy, brokenLive);
@@ -666,7 +711,8 @@ async function main(): Promise<void> {
             assert(own.ok === true, `4. as this server's own point it passes (${JSON.stringify(own)})`);
 
             const r = runChild('h2', newDir(), env);
-            for (const [k, why] of [['EMPTY', 'no members table'], ['DUMMY', 'no members table'], ['WRONG', 'its members table has no public_key column']] as const) {
+            for (const [k, why] of [['EMPTY', 'no members table'], ['DUMMY', 'no members table'], ['WRONG', 'its members table has no public_key column'],
+                ['OLD', 'no node_roles table']] as const) {
                 const row = r.rows?.[k];
                 assert(row?.answer?.status === 400 && row?.answer?.error === 'Restore failed: ' + words(why),
                     `4. the ${k.toLowerCase()} file through the route: 400 in words (${JSON.stringify(row?.answer)})`);
@@ -706,14 +752,14 @@ async function main(): Promise<void> {
             const r = runChild('window', newDir(), env);
             assert(r.finished?.status === 200 && r.dbOpen === false,
                 `7. setup: an owner's phone finished a restore, and the database is closed for the restart (${JSON.stringify(r.finished)}, open ${r.dbOpen})`);
-            for (const [label, x] of [["a key session's restore", r.byKey], ["a key session's roll-back", r.rollBack], ["a password session's restore", r.byPassword]] as const) {
+            for (const [label, x] of [["a key session's restore", r.byKey], ["a key session's roll-back", r.rollBack]] as const) {
                 assert(x?.status === 409 && x?.error === BUSY && x?.restoreRunning === true, `7. in that window, ${label}: 409 in words (${JSON.stringify(x)})`);
             }
             assert(r.restarts === 1 && r.state?.points?.length === 1, `7. one restart, one restore point (${r.restarts}, ${JSON.stringify(r.state?.points)})`);
         }
 
         // ── 8. N1: the backups the live nodes made ──
-        console.log('\n── 8. N1: a backup from v1.2.15 … v1.2.18 restores; a trigger this version does not know is still refused ──');
+        console.log('\n── 8. N1: a backup of a kept node that started on v1.2.15 … v1.2.18 restores; a trigger this version does not know, a backup with no node_roles, and one from before 1.2.36, are refused ──');
         {
             const RETIRED = 'recovery_requests_touch_updated_at';
             const triggersIn = (f: string): string[] => {
@@ -741,15 +787,31 @@ async function main(): Promise<void> {
             };
             const stoppedNode = () => { const d = newDir(); runChild('stopped', d, env); return d; };
 
-            const oldDb = oldReleaseDb();
-            assert(triggersIn(oldDb).includes(RETIRED), `8. setup: the old release's database carries ${RETIRED}`);
+            const oldDb = keptNodeDb(UPDATED);
+            assert(triggersIn(oldDb).includes(RETIRED), `8. setup: the updated node's database carries ${RETIRED}`);
             const a = direct(oldDb);
             assert(a.ok === true && !(a as any).left.includes(RETIRED),
                 `8. it passes the check, with ${RETIRED} dropped from the file (${JSON.stringify(a).slice(0, 300)})`);
-            const gone = direct(oldReleaseDb(['CREATE TABLE old_thing (x INT, at TEXT)',
+            const gone = direct(keptNodeDb([...UPDATED, 'CREATE TABLE old_thing (x INT, at TEXT)',
                 `CREATE TRIGGER old_thing_touch AFTER UPDATE ON old_thing BEGIN UPDATE old_thing SET at = 'now' WHERE rowid = NEW.rowid; END`]));
             assert(gone.ok === true && !(gone as any).left.includes('old_thing_touch'),
                 `8. a trigger on a table this version does not have passes, dropped from the file (${JSON.stringify(gone).slice(0, 300)})`);
+            // A backup last started before 1.2.36, node_roles and all: the gate would refuse it at the next start
+            // (db/schema-gate.ts), so the restore refuses it first, in the gate's words, and the file is left as it was.
+            const OLDER = "This backup's state.db was last started by a BeanPool older than 1.2.36. BeanPool 1.4.0 opens databases from 1.2.36 on. "
+                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.36, then start this version again. Nothing was changed.';
+            const older = oldReleaseDb(UPDATED);
+            const olderBytes = fs.readFileSync(older).toString('base64');
+            const tooOld = direct(older);
+            assert(!tooOld.ok && (tooOld as any).status === 400 && (tooOld as any).error === OLDER && fs.readFileSync(older).toString('base64') === olderBytes,
+                `8. a v1.2.18 backup with node_roles: refused 400 in the gate's words, the file untouched (${JSON.stringify(tooOld).slice(0, 260)})`);
+            {
+                const node = stoppedNode();
+                const before = JSON.stringify(await dirState(node));
+                const s = shell(node, ['restore', '--unlocked', tarOf(older)], 'UNLOCKED\n');
+                assert(s.code === 1 && s.out.includes(OLDER) && JSON.stringify(await dirState(node)) === before,
+                    `8. beanpool restore --unlocked of it: refused in those words, exit 1, nothing changed (exit ${s.code}: ${s.out.trim().slice(-260)})`);
+            }
 
             const dir = stoppedNode();
             const r = shell(dir, ['restore', '--unlocked', tarOf(oldDb)], 'UNLOCKED\n');
@@ -761,14 +823,24 @@ async function main(): Promise<void> {
                 `8. …${RETIRED} is not in the restored file, a restore point was kept, nothing left over (${JSON.stringify(after.points)} ${JSON.stringify(after.leftovers)})`);
             const booted = runChild('booted', dir, env);
             assert(JSON.stringify(booted.owners) === '["OldFounder"]' && booted.callsigns?.includes('OldMember') && !booted.triggers?.includes(RETIRED),
-                `8. …and the node boots on it, its founder the owner (owners ${JSON.stringify(booted.owners)}, ${booted.triggers?.length} triggers)`);
+                `8. …and the node boots on it, its founder still the owner (owners ${JSON.stringify(booted.owners)}, ${booted.triggers?.length} triggers)`);
+
+            // conversion-s0: a backup made by v1.2.18 itself has no node_roles, and nothing at boot would make its owner.
+            const bare = stoppedNode();
+            const bareBefore = JSON.stringify(await dirState(bare));
+            const refused = shell(bare, ['restore', '--unlocked', tarOf(oldReleaseDb())], 'UNLOCKED\n');
+            const bareAfter = await dirState(bare);
+            assert(refused.code === 1
+                && refused.out.includes("Nothing was restored: This backup's state.db is not a BeanPool database (no node_roles table). Nothing was changed.")
+                && JSON.stringify(bareAfter) === bareBefore && bareAfter.points.length === 0 && bareAfter.leftovers.length === 0,
+                `8. beanpool restore --unlocked of a v1.2.18 backup (no node_roles): refused in words, exit 1, nothing changed, no restore point (exit ${refused.code}: ${refused.out.trim().slice(-220)})`);
 
             for (const [label, extra, named] of [
-                ['a new trigger on members', ['CREATE TRIGGER members_bonus AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END'], 'members_bonus'],
+                ['a new trigger on members', ['CREATE TRIGGER members_bonus AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END'], 'members_bonus'],
                 [`a trigger on members named ${RETIRED}`, [`DROP TRIGGER ${RETIRED}`,
-                    `CREATE TRIGGER ${RETIRED} AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END`], RETIRED],
+                    `CREATE TRIGGER ${RETIRED} AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END`], RETIRED],
             ] as const) {
-                const crafted = oldReleaseDb([...extra]);
+                const crafted = keptNodeDb([...UPDATED, ...extra]);
                 const d = direct(crafted);
                 assert(!d.ok && (d as any).status === 400 && String((d as any).error).includes(`trigger "${named}"`), `8. ${label}: the check refuses it (${String((d as any).error).slice(0, 160)})`);
                 const node = stoppedNode();

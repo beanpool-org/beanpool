@@ -23,19 +23,18 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ShopCategoriesPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { ledger } from './engine/ledger.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -61,7 +60,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor)
                 VALUES (?, ?, ?, ?, 'TEST', 'active', 0)`).run(id.pk, name, WEEK_AGO(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 
@@ -76,7 +75,8 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -96,7 +96,6 @@ const MULLUM = { lat: -28.55, lng: 153.50 };
 
 async function main(): Promise<void> {
     console.log('\n=== Shops pick a Market category ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -169,7 +168,7 @@ async function main(): Promise<void> {
     console.log('\n── 4. a shop\'s new listings start in its category ──');
     const annShop: string = both.body?.shop?.id ?? '';
     const post = (who: Id, title: string, extra: Record<string, unknown>) => call('POST', who, '/api/marketplace/posts', {
-        type: 'offer', title, description: `${title}, in good order`, credits: 0, authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra,
+        type: 'offer', title, description: `${title}, in good order`, price_c: 0, authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra,
     });
     const inShop = await post(ann, 'Tomato seedlings', { shopId: annShop });
     assert(inShop.status === 200 && inShop.body?.post?.shopId === annShop && inShop.body.post.category === 'garden',
@@ -180,10 +179,10 @@ async function main(): Promise<void> {
     assert(outside.status === 200 && outside.body?.post?.category === 'other' && !outside.body.post.shopId, `one outside a shop is as before (${show(outside)})`);
 
     const fixitShop: string = entOld.body?.shop?.id ?? '';
-    const entOffer = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'Phone screen swap', credits: 0, shopId: fixitShop, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
+    const entOffer = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'Phone screen swap', price_c: 0, shopId: fixitShop, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     assert(entOffer.status === 200 && entOffer.body?.post?.shopId === fixitShop && entOffer.body.post.category === 'services',
         `an enterprise's Offer put in its shop with no category starts in the shop's (${show(entOffer)})`);
-    const entNeither = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'No category, no shop', credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
+    const entNeither = await call('POST', bo, `/api/treasury/${fixit}/offer`, { title: 'No category, no shop', price_c: 0, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     assert(entNeither.status === 400, `one with neither a category nor a shop is still refused (${show(entNeither)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

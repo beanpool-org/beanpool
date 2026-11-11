@@ -92,7 +92,7 @@ async function child(): Promise<void> {
             for (const m of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                             VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'seed')`).run(m.pk, m.callsign, a.genesis);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
             }
             setReplicationToken(a.replicationToken);
             const made = await makeRecoveryCode();
@@ -277,7 +277,7 @@ async function main(): Promise<void> {
     const held: { kill: () => Promise<void> }[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const gwen = member('Gwen');
     const [ann, bo, cy] = ['Ann', 'Bo', 'Cy'].map(member);
     const phone = { annPhone: newToken(), annTablet: newToken(), annOld: newToken(), bo: newToken(), boLeft: newToken(), cy: newToken(), gwen: newToken() };

@@ -6,7 +6,7 @@ import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getMemberProfile, getFriends, addFriendApi, type MemberProfile, type BalanceInfo } from '../lib/api';
 import { ARCHETYPES } from '@beanpool/core';
-import { blockUser, unblockUser, isUserBlocked, getBlocklistFullNote } from '../lib/blocklist';
+import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -33,7 +33,6 @@ vi.mock('../lib/blocklist', () => ({
     blockUser: vi.fn(),
     unblockUser: vi.fn(),
     onBlocklistUpdated: vi.fn(() => () => {}),
-    getBlocklistFullNote: vi.fn(() => null),
 }));
 
 const mockIdentity: BeanPoolIdentity = {
@@ -56,9 +55,9 @@ const mockProfile: MemberProfile = {
 } as any;
 
 const mockBalance: BalanceInfo = {
-    balance: 100,
-    floor: -500,
-    commonsBalance: 0,
+    balance_c: 10000,
+    floor_c: -50000,
+    commonsBalance_c: 0,
     callsign: 'Alice',
     tier: 'contributor' as any,
 };
@@ -67,7 +66,7 @@ const mockTreasuryDetail: any = {
     publicKey: 'treasury-pubkey-123',
     name: 'Community Bakery',
     description: 'Fresh bread for all',
-    balance: 500,
+    balance_c: 50000,
     avatar: null,
     created_at: '2026-09-01T00:00:00.000Z',
     signers: [
@@ -298,16 +297,7 @@ describe('PublicProfilePage: a block or an unblock the community did not take is
         vi.mocked(isUserBlocked).mockReturnValue(false);
     });
 
-    it('while blocks wait in this browser because the list is full, it says so where they block', async () => {
-        const FULL = 'Your block list is full, so 2 blocks are kept in this browser only. Unblock someone to make room for them.';
-        vi.mocked(getBlocklistFullNote).mockReturnValue(FULL);
-        renderProfile();
-        await screen.findByRole('button', { name: 'Block user Bob' });
-        expect(screen.getByRole('status')).toHaveTextContent(FULL);
-        vi.mocked(getBlocklistFullNote).mockReturnValue(null);
-    });
-
-    it('with room on the list, nothing is said about it', async () => {
+    it('says nothing about a block list that is full: the community keeps the whole list', async () => {
         renderProfile();
         await screen.findByRole('button', { name: 'Block user Bob' });
         expect(screen.queryByText(/Your block list is full/)).toBeNull();

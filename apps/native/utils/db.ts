@@ -6,7 +6,7 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders,
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus, type EventZone } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
-    sealDmLine, signDmLine, DM_LINE_SIG_KEY, dmLineDisclosureFor, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    sealDmLine, dmLineDisclosureFor, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
@@ -37,6 +37,10 @@ import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
+import { hundredthsAsDecimalText, isHundredths } from '@beanpool/core';
+import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
+import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
+import { standingJsonOf, standingOfRow } from './standing-row';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -86,14 +90,12 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
 }
 
 /**
- * Singleton database instance.
- * Using the synchronous API available in expo-sqlite version 14.x+ 
+ * The community's copy open now: set only once its copy is made (openCopy, _doInitDB), so getDb never hands out a copy
+ * still being cleared or made. Every reader, writer, sync cycle and the socket reach the copy through getDb.
  */
 let db: SQLite.SQLiteDatabase | null = null;
 /** The community file each open handle is for: a group's key store reads only its own community's (groupKeyStore). */
 const dbFileOf = new WeakMap<object, string>();
-let dbInitialized = false;
-let dbInitPromise: Promise<void> | null = null;
 
 // Global JS mutex to prevent expo-sqlite "database is locked" crashes
 // arising from concurrent loops across background Pillar polls and foreground Inbox rendering.
@@ -153,89 +155,154 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     } while (copyMoving);
     const expectedDbName = getDatabaseFilenameForNode(url);
 
-    if (db && currentDbName === expectedDbName) {
+    // The copy open now, when it is this community's: made, since `db` is set only once it is. Matched by its own file,
+    // never by the name an open on its way is for (currentDbName): the community left is never handed out under the new name.
+    if (db && dbFileOf.get(db) === expectedDbName) {
         return db;
     }
 
+    // Its open on its way, which hands it out once its copy is made.
     if (getDbPromise && currentDbName === expectedDbName) {
         return getDbPromise;
     }
 
-    currentDbName = expectedDbName;
+    return openCopy(expectedDbName, url, null);
+}
 
-    getDbPromise = (async () => {
+/** A clear's open (clearDB): the cache tables go whatever the copy's number, and `alsoDrop` with them (the account's own, as it leaves). */
+interface CopyClear { alsoDrop: string }
+
+/**
+ * Open `file`'s copy and make it (_doInitDB) on a connection of its own, before anything else has it: published as the
+ * copy open (`db`) and handed to the asks waiting on it (getDbPromise) only once it is made. So no reader, writer, sync
+ * cycle or socket holds a statement on it while its tables are dropped: SQLite refuses a DROP TABLE while a statement of
+ * the same connection is still open ("database table is locked", SQLITE_LOCKED), which a reader that had the copy while
+ * a 1.3 copy was cleared hit on 1.4.0 (11 Nov). A copy not made is closed and not handed out: the next ask opens it again.
+ * `clear` (clearDB): the cache tables go whatever the copy's number.
+ *
+ * Another community's copy open now (getDb's own swap: an address written with no closeDB) is left at once: handed to no
+ * one from here, and closed under the sync lock on its own (leaveCopy), so a write in flight on it finishes first. The open
+ * takes no lock and waits for no close: a writer holding the lock as it asks (applyDelta, the deal and review writers, the
+ * ratings reads) waits on this open, and an open that waited for that lock would wait for good (review of #3053, db.ts:161).
+ */
+function openCopy(file: string, url: string | null, clear: CopyClear | null): Promise<SQLite.SQLiteDatabase> {
+    if (db) {
+        leaveCopy(db);
+        db = null;
+    }
+    currentDbName = file;
+    const seq = ++openSeq;
+    // Cleared once it settles, unless another open has taken its place since, and before the asks waiting on it go on.
+    const opening = openAndMakeCopy(file, url, clear, seq).finally(() => {
+        if (getDbPromise === opening) getDbPromise = null;
+    });
+    getDbPromise = opening;
+    return opening;
+}
+
+/** Each open's number (openCopy): only the latest is handed out. */
+let openSeq = 0;
+
+/** The copies a swap has left (openCopy) that are not closed yet: each waits for the sync lock (leaveCopy, closeOpenCopy). */
+const copiesLeft = new Set<SQLite.SQLiteDatabase>();
+
+/**
+ * Close `copy`, left by a swap, once the sync lock is free: a writer that had it as it took the lock finishes on it first.
+ * On its own: nothing waits for it, so no asker that holds the lock waits on its own lock. closeOpenCopy closes it sooner
+ * when a closeDB, a clear or a move has the lock first.
+ */
+function leaveCopy(copy: SQLite.SQLiteDatabase): void {
+    copiesLeft.add(copy);
+    void (async () => {
+        await acquireSyncLock({ urgent: true });
         try {
-            // Force strict database isolation and hot-swap reconnect if matrix url changes
-            if (db) {
-                await acquireSyncLock({ urgent: true });
-                try {
-                    if (db) {
-                        const oldDb = db;
-                        db = null;
-                        dbInitialized = false;
-                        dbInitPromise = null;
-                        try {
-                            await oldDb.closeAsync();
-                        } catch (e) {
-                            console.warn('[DB] Reconnect close warning:', e);
-                        }
-                    }
-                } finally {
-                    releaseSyncLock();
-                }
-            }
-
-            // Auto-track nodes we jump into correctly inside the UI Matrix. Never one that isn't plain host[:port]
-            // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
-            if (url && isPlainNodeAddress(url)) await addSavedNode(url);
-            
-            db = await SQLite.openDatabaseAsync(expectedDbName, { useNewConnection: true });
-            dbFileOf.set(db, expectedDbName);
-            
-            // Hardcode native concurrent locking parameters per-connection
-            await db.execAsync(`
-                PRAGMA journal_mode = WAL;
-                PRAGMA busy_timeout = 30000;
-            `);
-            
-            // Safety Init: If we blindly swapped contexts, ensure this newly mounted database replicates the exact Schema
-            if (!dbInitialized && !dbInitPromise) {
-                dbInitPromise = _doInitDB();
-                await dbInitPromise;
-            }
-
-            return db;
+            await closeLeftCopy(copy);
         } finally {
-            getDbPromise = null;
+            releaseSyncLock();
         }
     })();
+}
 
-    return getDbPromise;
+/** Close `copy`, left by a swap, unless it is closed already. The caller holds the sync lock (leaveCopy, closeOpenCopy). */
+async function closeLeftCopy(copy: SQLite.SQLiteDatabase): Promise<void> {
+    if (!copiesLeft.delete(copy)) return;
+    try {
+        await copy.closeAsync();
+    } catch (e) {
+        console.warn('[DB] Reconnect close warning:', e);
+    }
+}
+
+async function openAndMakeCopy(file: string, url: string | null, clear: CopyClear | null, seq: number): Promise<SQLite.SQLiteDatabase> {
+    // Auto-track nodes we jump into correctly inside the UI Matrix. Never one that isn't plain host[:port]
+    // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
+    if (url && isPlainNodeAddress(url)) await addSavedNode(url);
+
+    const handle = await SQLite.openDatabaseAsync(file, { useNewConnection: true });
+    dbFileOf.set(handle, file);
+    try {
+        // Hardcode native concurrent locking parameters per-connection
+        await handle.execAsync(`
+            PRAGMA journal_mode = WAL;
+            PRAGMA busy_timeout = 30000;
+        `);
+        await _doInitDB(handle, clear);
+    } catch (e) {
+        await handle.closeAsync().catch(() => {});
+        throw e;
+    }
+    if (seq !== openSeq) {
+        // Another copy was asked for while this one was made (the address changed): never a second connection left open
+        // beside the one in use. Its asks get the copy asked for now.
+        await handle.closeAsync().catch(() => {});
+        return getDb();
+    }
+    db = handle;
+    return handle;
 }
 
 export async function closeDB() {
     await acquireSyncLock({ urgent: true });
     try {
+        // An open on its way finishes first, and its copy is closed with the rest (the copies a swap left too): none is left
+        // open after this.
+        await untilNoOpenOnItsWay();
         await closeOpenCopy();
     } finally {
         releaseSyncLock();
     }
 }
 
-/** Close the copy open, if one is. The caller holds the sync lock (closeDB, whileCopyMoves). */
+/**
+ * Called holding the sync lock, and back holding it: an open on its way (getDbPromise) finishes first (closeDB,
+ * whileCopyMoves, clearDB). An open takes no lock; the lock is let go meanwhile all the same, so the writers queued for it
+ * are not held up while a copy is made.
+ */
+async function untilNoOpenOnItsWay(): Promise<void> {
+    while (getDbPromise) {
+        const opening = getDbPromise;
+        releaseSyncLock();
+        await opening.catch(() => {});
+        await acquireSyncLock({ urgent: true });
+    }
+}
+
+/**
+ * Close the copy open, if one is, and every copy a swap left that is still open (its own close waits for the lock this
+ * caller holds). The caller holds the sync lock (closeDB, whileCopyMoves, clearDB).
+ */
 async function closeOpenCopy() {
     if (db) {
         const oldDb = db;
         db = null;
         currentDbName = null;
-        dbInitialized = false;
-        dbInitPromise = null;
         try {
             await oldDb.closeAsync();
         } catch (e) {
             console.warn('[DB] closeDB warning:', e);
         }
     }
+    for (const copy of [...copiesLeft]) await closeLeftCopy(copy);
 }
 
 /**
@@ -251,20 +318,15 @@ async function closeOpenCopy() {
  * lock first and publishes copyMoving only while holding it, and clears it before letting go. A writer that took the lock
  * first finishes, its getDb with it, before the move starts; one waiting for the lock gets it after the move, with
  * copyMoving clear. (Published before the lock was taken, each waited for the other for good: confirmation 2 of #2138.)
- * Moves wait for each other on the lock. An open already on its way finishes first, outside the lock, since a hot swap
- * in getDb takes the lock itself.
+ * Moves wait for each other on the lock. An open already on its way finishes first (untilNoOpenOnItsWay), and a copy a
+ * swap left is closed with the copy open (closeOpenCopy).
  */
 export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Promise<T> {
     const toFile = getDatabaseFilenameForNode(to);
     // Never while the copies still move to their own names (cache-file-migration.ts): that opens and renames them too.
     await communityCachesRenamed();
     await acquireSyncLock({ urgent: true });
-    while (getDbPromise) {
-        const opening = getDbPromise;
-        releaseSyncLock();
-        await opening.catch(() => {});
-        await acquireSyncLock({ urgent: true });
-    }
+    await untilNoOpenOnItsWay();
     let moved!: () => void;
     copyMoving = new Promise<void>((resolve) => { moved = resolve; });
     try {
@@ -282,28 +344,17 @@ export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Pro
     }
 }
 
-/** Ensures initDB has completed before any query runs */
+/** The copy, made: getDb hands out none before its copy is made (openCopy). */
 async function waitForInit(): Promise<SQLite.SQLiteDatabase> {
-    if (dbInitialized) return getDb();
-    if (dbInitPromise) {
-        await dbInitPromise;
-        return getDb();
-    }
-    // If neither, trigger initDB ourselves
-    dbInitPromise = initDB();
-    await dbInitPromise;
     return getDb();
 }
 
 /**
- * Physically translates the Node Server schema identical array into
- * the local Native device's memory for Background Libp2p gossiping.
+ * The community's copy open and made (getDb, openCopy): the schema below, and a copy below this build's number cleared
+ * first. Rejects when it couldn't be made; the next ask tries again.
  */
 export async function initDB() {
-    if (dbInitialized) return;
-    if (dbInitPromise) { await dbInitPromise; return; }
-    dbInitPromise = _doInitDB();
-    await dbInitPromise;
+    await getDb();
 }
 
 /**
@@ -318,20 +369,61 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
         CREATE TRIGGER IF NOT EXISTS posts_au_nearby_tag AFTER UPDATE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;
         CREATE TRIGGER IF NOT EXISTS posts_ad_nearby_tag AFTER DELETE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;`;
 
-async function _doInitDB() {
-    const database = await getDb();
-    
-    // Nuke & Pave Version 3: Typed System Messages
+/**
+ * THE COPY'S SCHEMA NUMBER (`PRAGMA user_version`). A community's copy below this build's number is a cache made for older
+ * columns: its cache tables go (CACHE_TABLES, the ones a Force Resync's clearDB drops) and the sync reads it whole again.
+ * Nothing in it is read or rewritten on the way: the node holds every row, and the phone reads them again. Identity, the
+ * group keys with their verdicts and signers, and the tools' documents are not a copy of the node's and stay.
+ *
+ * The standing rule (the clean-slate cutover, DESIGN-clean-slate-cutover-fable.md §2 C1-C8): the schema in _doInitDB is
+ * the whole shape of a copy at this number, and nothing adds to a copy on open. A change to a cache table's columns or
+ * indexes raises the number, and every older copy is cleared and read again; never an ALTER TABLE on open, never a
+ * one-off pass keyed on a flag. A change to one of the five tables that are not a copy (GROUP_KEY_TABLES_SQL, TOOL_DOCS_TABLE)
+ * cannot be read again from the node: it is its own step, kept one build (a conversion-code row in the log), never this one.
+ * 4 (1.4.0): money is whole hundredths of a Bean (DESIGN-atomic-beans-fable.md M2). Every money column is an INTEGER `*_c`,
+ * as the node's are, so a copy that held Beans as REAL (`posts.credits`, `accounts.balance`, ...) is dropped, never converted.
+ */
+export const COPY_SCHEMA = 4;
+
+/** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
+const CACHE_TABLES = [
+    'messages', 'conversation_participants', 'conversations', 'posts', 'marketplace_transactions', 'transactions', 'accounts', 'members',
+    'projects', 'friends', 'ratings', 'member_reviews_read', 'poll_votes', 'event_rsvps', 'nearby_tied', 'nearby_held',
+] as const;
+const DROP_CACHE_TABLES_SQL = CACHE_TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`).join(' ');
+
+/**
+ * Make the copy `database` opens: the schema below, a copy below this build's number cleared first, and `clear`'s tables
+ * dropped first (clearDB). Only ever on the connection openCopy has just opened, which nothing else has yet: a statement of
+ * another reader open on it would refuse the drops. Throws when the copy couldn't be made, and leaves it as it was.
+ */
+async function _doInitDB(database: SQLite.SQLiteDatabase, clear: CopyClear | null = null) {
+    // A copy below this build's schema number (COPY_SCHEMA): its cache tables go before the schema below makes them again
+    // with today's columns, and the copy is read whole (every cursor forgotten, as for a Force Resync). A fresh copy has
+    // nothing to drop and takes the number.
     const versionResult = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    if (!versionResult || versionResult.user_version < 3) {
-        console.log("🧨 Native DB Version < 3. Nuking messaging tables for Object Attribution Overhaul...");
-        await database.execAsync(`
-            DROP TABLE IF EXISTS messages;
-            DROP TABLE IF EXISTS conversation_participants;
-            DROP TABLE IF EXISTS conversations;
-        `);
-        await database.execAsync('PRAGMA user_version = 3');
+    const copyBelowSchema = !versionResult || versionResult.user_version < COPY_SCHEMA;
+    if (copyBelowSchema) {
+        console.log(`[SQLite] Copy schema ${versionResult?.user_version ?? 0} is below ${COPY_SCHEMA}: clearing the cached tables to read them again.`);
+        // A sync cycle already under way read its cursor before this open: a new copy generation makes it store nothing,
+        // so it cannot write rows of the old shape or put back a cursor forgotten here (resetSyncFingerprints, as clearDB).
+        try {
+            const { resetSyncFingerprints } = require('../services/pillar-sync');
+            resetSyncFingerprints();
+        } catch (e) {
+            newCopyGeneration();
+        }
+        // The cursors go before the tables: stopped between the two, the copy is still below the number and is cleared at
+        // the next open, never left cleared with the cursors of what it held (its next sync would read only what changed).
+        try {
+            const file = dbFileOf.get(database);
+            const { syncCursorKeysOf } = await import('../services/pillar-sync');
+            if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+        } catch (e) {
+            console.warn('[SQLite] Could not forget the sync cursors of a copy below the schema number:', e);
+        }
     }
+    const drops = (copyBelowSchema || clear ? DROP_CACHE_TABLES_SQL : '') + (clear?.alsoDrop ?? '');
 
     // We execute the same exact schema.sql payload to guarantee 1:1 API compatibility locally
     const schema = `
@@ -351,14 +443,18 @@ async function _doInitDB() {
             status TEXT DEFAULT 'active',
             last_active_at DATETIME,
             profile_updated_at DATETIME,
-            earned_credit REAL DEFAULT 0,
-            archetype TEXT
+            -- Whole hundredths of a Bean, as every money column here (COPY_SCHEMA 4): the node's earnedCredit.
+            earned_credit_c INTEGER DEFAULT 0,
+            archetype TEXT,
+            -- When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
+            -- past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
+            card_fetched_at TEXT
         );
 
         -- 2. Ledger Accounts & Transactions
         CREATE TABLE IF NOT EXISTS accounts (
             public_key TEXT PRIMARY KEY,
-            balance REAL DEFAULT 0.0,
+            balance_c INTEGER DEFAULT 0,
             last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             last_demurrage_epoch INTEGER DEFAULT 0
         );
@@ -367,8 +463,8 @@ async function _doInitDB() {
             id TEXT PRIMARY KEY,
             from_pubkey TEXT NOT NULL,
             to_pubkey TEXT NOT NULL,
-            amount REAL NOT NULL CHECK (amount > 0),
-            tax_fee REAL DEFAULT 0.0,
+            amount_c INTEGER NOT NULL CHECK (amount_c > 0),
+            fee_c INTEGER DEFAULT 0,
             memo TEXT,
             timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         );
@@ -384,7 +480,8 @@ async function _doInitDB() {
             category TEXT NOT NULL,
             title TEXT NOT NULL,
             description TEXT NOT NULL,
-            credits REAL NOT NULL DEFAULT 0,
+            -- No figure (NULL) when the node's price isn't whole hundredths: shown "—", never as Free (0).
+            price_c INTEGER DEFAULT 0,
             author_pubkey TEXT NOT NULL,
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -507,14 +604,24 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_id TEXT NOT NULL,
             buyer_pubkey TEXT NOT NULL,
             seller_pubkey TEXT NOT NULL,
-            credits REAL NOT NULL,
+            amount_c INTEGER,
             hours REAL,
             status TEXT DEFAULT 'pending',
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             completed_at DATETIME,
             cover_image TEXT,
-            post_title TEXT
+            post_title TEXT,
+            rated_by_buyer INTEGER DEFAULT 0,
+            rated_by_seller INTEGER DEFAULT 0,
+            -- A period of a standing deal (DESIGN-standing-deals-fable §2.1): which one and its number, and on its current
+            -- period's row the standing deal as the node's transactions read says it (phase, Beans, unit, dates; standingOfRow).
+            standing_id TEXT,
+            period_no INTEGER,
+            standing TEXT
         );
+        -- The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat names
+        -- it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
+        CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);
 
         -- 5. Messaging & Chat
         CREATE TABLE IF NOT EXISTS conversations (
@@ -527,9 +634,12 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             post_title TEXT,
             post_status TEXT,
             post_photo TEXT,
-            post_credits REAL,
-            request TEXT
+            post_price_c INTEGER,
+            request TEXT,
+            -- 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
+            listed INTEGER
         );
+        CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);
 
         CREATE TABLE IF NOT EXISTS conversation_participants (
             conversation_id TEXT,
@@ -547,7 +657,9 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             type TEXT DEFAULT 'text',
             system_type TEXT,
             metadata TEXT,
-            timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            -- Edit-message window: when the line was last edited (null = never edited).
+            edited_at DATETIME
         );
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
@@ -586,8 +698,8 @@ ${GROUP_KEY_TABLES_SQL}
             title TEXT NOT NULL,
             description TEXT,
             photos TEXT,
-            goal_amount INTEGER NOT NULL,
-            current_amount INTEGER DEFAULT 0,
+            goal_amount_c INTEGER NOT NULL,
+            current_amount_c INTEGER DEFAULT 0,
             deadline_at DATETIME,
             status TEXT DEFAULT 'ACTIVE',
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -598,291 +710,30 @@ ${GROUP_KEY_TABLES_SQL}
 ${TOOL_DOCS_TABLE}
     `;
 
+    // One step: the drops, today's schema and the copy's number land together or not at all. A clear that stops part way
+    // (the app closed, a write refused) leaves the copy as it was, below the number with every table it had, and the next
+    // open clears it again: never a copy without its tables, nor one at the number that was never made.
+    await database.execAsync('BEGIN IMMEDIATE');
     try {
+        if (drops) await database.execAsync(drops);
         await database.execAsync(schema);
-        console.log('[SQLite] Local database initialized physically 1:1 with Server node.');
-        
-        // Add photos column if not exists (for existing simulators)
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN photos TEXT;`);
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-        
-        try {
-            await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN rated_by_buyer INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        try {
-            await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN rated_by_seller INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        try {
-            // Edit-message window: timestamp of the most recent edit (null = never edited)
-            await database.execAsync(`ALTER TABLE messages ADD COLUMN edited_at DATETIME;`);
-        } catch (e) {}
-        try {
-            await database.execAsync(`ALTER TABLE projects ADD COLUMN photos TEXT;`);
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-
-        // Add missing columns introduced in the State Engine patch
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN updated_at DATETIME;`);
-            console.log('[SQLite] Successfully added updated_at column');
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-        
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN origin_node TEXT;`);
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
-
-        // Add cover_image to marketplace_transactions
-        try {
-            await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN cover_image TEXT;`);
-        } catch (e) {}
-
-        // Add post caching columns to conversations table
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_title TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_status TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_photo TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN post_credits REAL;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN request TEXT;`); } catch (e) {}
-        // 1 while the node's list names the chat among the member's conversations, which no request waiting for them is.
-        try { await database.execAsync(`ALTER TABLE conversations ADD COLUMN listed INTEGER;`); } catch (e) {}
-
-        // Add post caching column to marketplace_transactions table
-        try { await database.execAsync(`ALTER TABLE marketplace_transactions ADD COLUMN post_title TEXT;`); } catch (e) {}
-
-        // Add audience scoping columns to posts table
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN audience_scope TEXT DEFAULT 'public';`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_group_id TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_pubkey TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN assigned_to TEXT;`); } catch (e) {}
-        // Dormant: nothing reads or writes target_archetypes any more (archetypes gate nothing).
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN target_archetypes TEXT;`); } catch (e) {}
-
-        // Add price_type column if not exists
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN price_type TEXT DEFAULT 'fixed';`);
-        } catch (e) {}
-        // Add repeatable column if not exists
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN repeatable INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        // #108: a listing may also need cash for fuel/consumables. Flag only, no amount.
-        try {
-            await database.execAsync(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0;`);
-        } catch (e) {}
-        // Transaction Tracking Migrations
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_by TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_by_callsign TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pending_transaction_id TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN completed_at DATETIME;`); } catch (e) {}
-        // The author's name as the node carried it on the listing, for a listing whose author this phone's directory copy
-        // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one; read
-        // as author_callsign, a name the column doesn't take, so `p.*` never repeats it (the review of #1778, finding 8).
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
-        // Its face the same way (the node's `authorAvatarUrl`, DESIGN-global-members-by-area §2.2.6): a by-area listing
-        // shows its author's face with no card for them. The card's face wins where the phone holds one.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_avatar TEXT;`); } catch (e) {}
-        // An enterprise's shop banner as its listing carried it (the node's `authorBannerUrl`, Pictures S6): the Market
-        // card's picture when the listing has none of its own (utils/market-card-picture.ts). A plain column, no default:
-        // a build from before it opens this table and writes past it.
-        // A copy from before the column holds its enterprises' listings without their banner, and the node sends a listing
-        // again only when it changes (since #2508 the photoless listings this serves are the older ones): such a copy is
-        // read whole once (review of #2565 at c05a9e37, blocking 2). Every cursor of the copy goes (syncCursorKeysOf), the
-        // held read and the checkpoint among them, so the read starts at its first page (#1719 B1), as a Force Resync's
-        // does, but nothing held is cleared. The cursors go before the column comes: an open cut off between the two finds
-        // the column still missing and forgets them again. A fresh copy has the column and no cursor to forget.
-        if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'carried_banner')) {
-            // A sync cycle already under way read its cursor before this open (Android's background sync after an app
-            // update): a new copy generation makes it store nothing, so it cannot put back the cursor forgotten below
-            // (review of #2565 at f72b4204, as clearDB does).
-            newCopyGeneration();
-            try {
-                const file = dbFileOf.get(database);
-                const { syncCursorKeysOf } = await import('../services/pillar-sync');
-                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
-            } catch (e) {
-                console.warn('[SQLite] Could not forget the sync cursors of a copy from before carried_banner:', e);
-            }
-            try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
-            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
-            try {
-                const { requestSync } = require('../services/pillar-sync');
-                requestSync().catch(() => {});
-            } catch (e) {}
-        }
-        // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
-        // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}
-        // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
-        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
-        // The set a by-area community's last set read named, and its hash (keepPostsNearby, readNearbyHeld).
-        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);`); } catch (e) {}
-        try { await database.execAsync(NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE); } catch (e) {}
-        // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
-        // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
-        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
-        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);`); } catch (e) {}
-        // Profile sync: track when a profile was last updated for cache-busting
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
-        // The old vouch's "who vouched" column goes (the vouching reset, R0): nothing on this phone reads or writes it any
-        // more, and no index, trigger or view here names it. A build from before adds it back, empty, so a downgrade is safe.
-        try { await database.execAsync(`ALTER TABLE members DROP COLUMN elder_vouched_by;`); } catch (e) {}
-        // Community Working Style / Archetype signature
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN archetype TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_energy_cycled INTEGER DEFAULT 0;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_founding_needed INTEGER DEFAULT 1;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE transactions ADD COLUMN tax_fee REAL DEFAULT 0.0;`); } catch (e) {}
-        // #143 step 4: per-listing reach control for federation
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach TEXT DEFAULT 'local';`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN reach_peers TEXT;`); } catch (e) {}
-        // Community Polls migrations
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_options TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
-        // A poll's ballot (2026-09-28): 1 an open vote (members see who chose what), 0 anonymous, the default.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER DEFAULT 0;`); } catch (e) {}
-        // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
-        // polls; NULL where it says nothing). The split by answer travels inside poll_options.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
-        // A member's copy of an event on the global community: its from-line as the node last said (@beanpool/core eventCopyOf).
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN shown_from TEXT;`); } catch (e) {}
-        // #2631/#2637 tag library: posts.tags space-separated tag ids (DESIGN-owner-seeding-tags-fable.md §4.5). F2: posts.free_tags,
-        // the member's own tags, the node's JSON list as it stores it (DESIGN-tags-free-entry-fable.md §2). Either one missing, the
-        // copy holds none of them for listings that have not changed since, so the whole copy is read again.
-        const postColumns = (await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).map(c => c.name);
-        const missingTagColumns = ['tags', 'free_tags'].filter(column => !postColumns.includes(column));
-        if (missingTagColumns.length > 0) {
-            newCopyGeneration();
-            try {
-                const file = dbFileOf.get(database);
-                const { syncCursorKeysOf } = await import('../services/pillar-sync');
-                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
-            } catch (e) {
-                console.warn('[SQLite] Could not forget the sync cursors of a copy from before tags:', e);
-            }
-            for (const column of missingTagColumns) {
-                try { await database.execAsync(`ALTER TABLE posts ADD COLUMN ${column} TEXT NOT NULL DEFAULT '';`); } catch (e) {}
-            }
-            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
-            try {
-                const { requestSync } = require('../services/pillar-sync');
-                requestSync().catch(() => {});
-            } catch (e) {}
-        }
-        try {
-            await database.execAsync(`
-                CREATE TABLE IF NOT EXISTS poll_votes (
-                    post_id TEXT NOT NULL,
-                    voter_pubkey TEXT NOT NULL,
-                    option_id TEXT NOT NULL,
-                    signature TEXT,
-                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    PRIMARY KEY (post_id, voter_pubkey)
-                );
-                CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
-            `);
-        } catch (e) {}
-        // Events migrations (docs/events-on-the-map.md, slice 3)
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_at DATETIME;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_place_name TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_state TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_going_count INTEGER DEFAULT 0;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_interested_count INTEGER DEFAULT 0;`); } catch (e) {}
-        // Event times (DESIGN-event-times amendment 1, item 3): the host's clock, its zone, online. Never the join link.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_start_local TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_local TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_tz TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_online INTEGER;`); } catch (e) {}
-        // A repeating event's pattern and last date (DESIGN-event-times §8), for the cached card's ↻ caption.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT;`); } catch (e) {}
-        // Lendable offers (S3): whether an Offer is lendable (tool store / lending)
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN lendable INTEGER DEFAULT 0;`); } catch (e) {}
-        // A pin (DESIGN-pinning-fable.md §2; apps/server engine/pins.ts): until when, and when made.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_until TEXT;`); } catch (e) {}
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_at TEXT;`); } catch (e) {}
-        try {
-            await database.execAsync(`
-                CREATE TABLE IF NOT EXISTS event_rsvps (
-                    post_id TEXT NOT NULL,
-                    member_pubkey TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    PRIMARY KEY (post_id, member_pubkey)
-                );
-            `);
-        } catch (e) {}
-        // Ratings table migration for legacy setups where Schema wasn't ran
-        try { 
-            await database.execAsync(`
-                CREATE TABLE IF NOT EXISTS ratings (
-                    id TEXT PRIMARY KEY,
-                    target_pubkey TEXT NOT NULL,
-                    rater_pubkey TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    stars INTEGER NOT NULL CHECK(stars BETWEEN 1 AND 5),
-                    comment TEXT,
-                    transaction_id TEXT,
-                    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    UNIQUE(rater_pubkey, transaction_id)
-                );
-            `);
-        } catch (e) {}
-        // Another member's reviews as the node last answered (getMemberRatings), for a phone whose schema ran before it.
-        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);`); } catch (e) {}
-        // The tools' documents (tools/schema.ts), for a phone whose schema ran before them.
-        try { await database.execAsync(TOOL_DOCS_TABLE); } catch (e) {}
-
-        // Force full synchronization once to populate new columns
-        AsyncStorage.getItem('bp_trust_sync_v3').then(async (val) => {
-            if (!val) {
-                console.log('[SQLite] Forcing full sync for unified trust system migration.');
-                await AsyncStorage.setItem('bp_trust_sync_v3', 'true');
-                await AsyncStorage.removeItem('pillar_sync_members_last_sync');
-                try {
-                    const keys = await AsyncStorage.getAllKeys();
-                    const syncKeys = keys.filter(k => k.startsWith('pillar_sync_') && (k.endsWith('_last-sync') || k.endsWith('_members_last_sync')));
-                    for (const k of syncKeys) {
-                        await AsyncStorage.removeItem(k);
-                    }
-                } catch (e) {}
-                // Trigger sync immediately in the background
-                try {
-                    const { requestSync } = require('../services/pillar-sync');
-                    requestSync().catch(() => {});
-                } catch (e) {}
-            }
-        });
-        // Client-side consolidation cleanup: one-time migration to remove legacy un-migrated post-keyed threads
-        try {
-            const postCleanupKey = 'bp_legacy_post_conv_cleaned_v1';
-            const alreadyCleaned = await AsyncStorage.getItem(postCleanupKey);
-            if (!alreadyCleaned) {
-                await database.execAsync(`
-                    DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL AND type != 'dm');
-                    DELETE FROM conversation_participants WHERE conversation_id IN (SELECT id FROM conversations WHERE post_id IS NOT NULL AND type != 'dm');
-                    DELETE FROM conversations WHERE post_id IS NOT NULL AND type != 'dm';
-                    UPDATE conversations SET post_id = NULL WHERE type = 'dm' AND post_id IS NOT NULL;
-                `);
-                await AsyncStorage.setItem(postCleanupKey, 'true');
-                console.log('[SQLite] Local legacy post-keyed conversations pruned successfully.');
-            }
-        } catch (cleanupErr) {
-            console.error('[SQLite] Failed to clean up legacy conversations locally:', cleanupErr);
-        }
-        
-        dbInitialized = true;
+        if (copyBelowSchema) await database.execAsync(`PRAGMA user_version = ${COPY_SCHEMA}`);
+        await database.execAsync('COMMIT');
     } catch (e) {
+        await database.execAsync('ROLLBACK').catch(() => {});
         console.error('[SQLite] Database init error:', e);
+        throw e;
+    }
+    console.log('[SQLite] Local database initialized physically 1:1 with Server node.');
+
+    // A copy cleared for being below the schema number (above): read it whole now rather than at the next timer. A cycle
+    // that began before it was handed out may have read the cursors forgotten above, so it stores nothing (a new generation).
+    if (copyBelowSchema) {
+        newCopyGeneration();
+        try {
+            const { requestSync } = require('../services/pillar-sync');
+            requestSync().catch(() => {});
+        } catch (e) {}
     }
 }
 
@@ -935,26 +786,30 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     } catch (e) {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
-    const database = await getDb();
+    // Never while the copies still move to their own names (cache-file-migration.ts), as getDb.
+    await communityCachesRenamed();
+    let cleared: Promise<SQLite.SQLiteDatabase> | undefined;
     // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
     // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
     await acquireSyncLock({ urgent: true });
     try {
+        await untilNoOpenOnItsWay();
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS member_reviews_read; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
+        // The community's copy by its address, never opened first: one that can't be made is what this clear mends. Read
+        // under the lock, so no copy moves to another name meanwhile (whileCopyMoves).
+        const file = getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url'));
+        // Closed, so no statement is open on it as its tables go ("database table is locked"); made again by openCopy.
+        await closeOpenCopy();
+        cleared = openCopy(file, null, {
             // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
-            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : ''));
+            alsoDrop: opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : '',
+        });
     } finally {
         releaseSyncLock();
     }
-
-    // Reset flags to force schema recreation
-    dbInitialized = false;
-    dbInitPromise = null;
-    
-    await initDB();
+    await cleared;
 }
 
 /**
@@ -1287,7 +1142,9 @@ function formatSystemMessage(
     if (metadataStr) {
         try { meta = JSON.parse(metadataStr); } catch {}
     }
-    const amount = meta?.amount ?? '';
+    // The node's escrow lines carry the figure as whole hundredths (TypedMessagePayload amount_c); anything else, no figure.
+    // Plain ASCII ("49.25"): this English is matched by utils/chat-line-words.ts, which writes the figure in the member's language.
+    const amount = isHundredths(meta?.amount_c) && meta.amount_c > 0 ? hundredthsAsDecimalText(meta.amount_c) : '';
     const beansStr = amount ? `${amount} Beans` : 'Beans';
 
     if (systemType === 'ESCROW_FUNDED') {
@@ -1352,7 +1209,7 @@ export async function getConversations(myPubkey: string) {
                    p.status,
                    c.post_status
                ) as postStatus,
-               COALESCE(p.credits, c.post_credits) as postCredits,
+               COALESCE(p.price_c, c.post_price_c) as postPrice_c,
                COALESCE(p.photos, c.post_photo) as postPhotos,
                m.ciphertext as lastMessage, m.nonce as lastNonce, m.type as lastMsgType, m.system_type as lastSysType, m.metadata as lastMetadata,
                m.id as lastId, m.author_pubkey as lastAuthor, MAX(m.timestamp) as timestamp,
@@ -1377,7 +1234,7 @@ export async function getConversations(myPubkey: string) {
          AND ${countsAsUnreadSql('msg')}
         ) as unreadCount,
         mt.id as pendingTxId,
-        mt.credits as pendingAmount,
+        mt.amount_c as pendingAmount_c,
         mt.buyer_pubkey as txBuyerPubkey,
         mt.seller_pubkey as txSellerPubkey,
         -- Has the current user already left a review for this post's trade?
@@ -1432,8 +1289,9 @@ export async function getConversations(myPubkey: string) {
         let fromApp = true;
         // A DM's newest line, judged as the thread judges it (e2e-crypto checkDmThread): an encrypted line opened bound to
         // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
-        // threads). Only words that open are shown as words; a row in a member's name that isn't an encrypted line, an
-        // old-format line and the admin page's message say what they are. The node's own notices are formatted below.
+        // threads), its sender's signature verified. Only words that open are shown as words; a line that doesn't, a row in
+        // a member's name that isn't an encrypted line and the admin page's message say what they are. The node's own
+        // notices are formatted below.
         const lastView = row.lastId && !isNodeReadableChatType(row.convType)
             ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
                 previewIdentity?.privateKey && previewPins && (dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey) ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey } : null, row.id).get(row.lastId)
@@ -1444,13 +1302,12 @@ export async function getConversations(myPubkey: string) {
         if (lastView) {
             if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
             else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
-            else if (lastView.mark === 'old-app') displayMsg = dmLineMarkText('old-app') as string;
             else if (lastView.mark === 'from-admins') {
                 displayMsg = `From your community's admins: ${lastView.text}`;
                 fromApp = false;
             } else {
                 displayMsg = dmLineShownText(lastView);
-                // Only a line that opened (format 2 or 3) holds its author's words; a deleted line's text is fixed.
+                // Only a line that opened (format 4, signed by its author) holds their words; a deleted line's text is fixed.
                 fromApp = lastView.format === null;
             }
         } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
@@ -1498,7 +1355,7 @@ export async function getConversations(myPubkey: string) {
             postId: row.post_id,
             postTitle: row.postTitle,
             postStatus: row.postStatus,
-            postCredits: row.postCredits,
+            postPrice_c: isHundredths(row.postPrice_c) ? row.postPrice_c : null,
             postPhoto,
             type: row.convType || 'dm',
             // No card held for the other member (a community that says `membersOnDemand`, before the cycle that fetches
@@ -1521,7 +1378,7 @@ export async function getConversations(myPubkey: string) {
             // Escrow role metadata for "Action Required" section
             isPayer,
             isPayee,
-            pendingAmount: row.pendingAmount || null,
+            pendingAmount_c: isHundredths(row.pendingAmount_c) && row.pendingAmount_c > 0 ? row.pendingAmount_c : null,
             pendingTxId: row.pendingTxId || null,
             hasRated: row.hasRated > 0,
             dealCount: row.dealCount || 0,
@@ -1541,8 +1398,9 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
     // The listing joins in for who answers a request (its author) and what kind it is: core's dealStep needs both.
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.buyer_pubkey as buyerPubkey,
-               mt.seller_pubkey as sellerPubkey, mt.credits as credits, mt.status as status,
+               mt.seller_pubkey as sellerPubkey, mt.amount_c as amount_c, mt.status as status,
                mt.post_title as postTitle, mt.created_at as createdAt,
+               mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                (SELECT c.id FROM conversations c
                   WHERE c.type = 'dm' AND c.post_id IS NULL
@@ -1574,8 +1432,9 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
 export async function getDealsBetween(myPubkey: string, peerPubkey: string): Promise<any[]> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.credits as credits,
+        SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.amount_c as amount_c,
                mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
+               mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = ?) as iRated
         FROM marketplace_transactions mt
@@ -1674,48 +1533,68 @@ export async function getUnreadByConversation(myPubkey: string): Promise<{ id: s
     }));
 }
 
-export async function refreshBalanceFromServer(pubkey: string) {
+/** The node's own balance read (GET /api/ledger/balance), as it answered: what a standing take-up's room is read from. */
+export type NodeBalanceRead = {
+    // Whole hundredths of a Bean (@beanpool/core hundredths.ts), as the node sends them.
+    balance_c?: number | null; floor_c?: number | null; usableFloor_c?: number | null;
+    [field: string]: unknown;
+};
+
+/** A money field of the node's answer as this phone keeps it: whole hundredths, or null (shown "—", never a number). */
+const hundredthsOrNull = (v: unknown): number | null => (isHundredths(v) ? v : null);
+
+/** What a deal holds as this phone keeps it (marketplace_transactions.amount_c): the node's whole hundredths, or null. */
+const dealAmountColumn = (tx: any): number | null => (isHundredths(tx?.amount_c) && tx.amount_c >= 0 ? tx.amount_c : null);
+
+/**
+ * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
+ * couldn't be read (no node, refused, offline), so a caller never takes the phone's cached copy for a fresh read. Every
+ * figure is whole hundredths of a Bean (`*_c`); one that isn't is not kept.
+ */
+export async function refreshBalanceFromServer(pubkey: string): Promise<NodeBalanceRead | null> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) return;
+    if (!anchorUrl) return null;
     try {
         const res = await fetch(`${anchorUrl}/api/ledger/balance/${pubkey}`);
-        if (!res.ok) return;
+        if (!res.ok) return null;
         const balData = await res.json();
         const database = await getDb();
-        const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
-        const row = await database.getFirstAsync<any>('SELECT balance, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
-        
+        const commons = await database.getFirstAsync<any>("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS' OR public_key = 'commons'");
+        const row = await database.getFirstAsync<any>('SELECT balance_c, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
+
         let changed = false;
         await acquireSyncLock();
         try {
-            if (typeof balData.balance === 'number') {
-                if (balData.balance !== (row?.balance || 0)) changed = true;
+            if (isHundredths(balData.balance_c)) {
+                if (balData.balance_c !== (row?.balance_c ?? 0)) changed = true;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                    [pubkey, balData.balance, balData.last_demurrage_epoch || 0]
+                    'INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)',
+                    [pubkey, balData.balance_c, balData.last_demurrage_epoch || 0]
                 );
             }
-            if (typeof balData.commonsBalance === 'number') {
-                if (balData.commonsBalance !== (commons?.balance || 0)) changed = true;
+            if (isHundredths(balData.commonsBalance_c)) {
+                if (balData.commonsBalance_c !== (commons?.balance_c ?? 0)) changed = true;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)',
-                    ['COMMONS', balData.commonsBalance, 0]
+                    'INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)',
+                    ['COMMONS', balData.commonsBalance_c, 0]
                 );
             }
         } finally {
             releaseSyncLock();
         }
-        
-        if (balData.tier || balData.floor !== undefined) {
-            const floor = 0;   // no baked-in credit: a floor is only ever what the node reports
+
+        if (balData.tier || balData.floor_c !== undefined) {
             const tier = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
+            // No baked-in credit: a floor is only ever what the node reports (0 until it does). Every figure in hundredths;
+            // `grantedCredit` and `qualifiedValue` keep their names on the node and carry hundredths (M1).
+            const floor_c = isHundredths(balData.floor_c) ? balData.floor_c : 0;
             const newTierStr = JSON.stringify({
                 tier: balData.tier || tier,
-                floor: balData.floor ?? floor,
-                tierCredit: typeof balData.tierCredit === 'number' ? balData.tierCredit : null,
-                earnedCredit: balData.earnedCredit ?? 0,
-                grantedCredit: balData.grantedCredit ?? 0,
-                qualifiedValue: balData.qualifiedValue ?? 0,
+                floor_c,
+                tierCredit_c: hundredthsOrNull(balData.tierCredit_c),
+                earnedCredit_c: hundredthsOrNull(balData.earnedCredit_c) ?? 0,
+                grantedCredit_c: hundredthsOrNull(balData.grantedCredit) ?? 0,
+                qualifiedValue_c: hundredthsOrNull(balData.qualifiedValue) ?? 0,
                 avgRating: balData.avgRating ?? 0,
                 reviewCount: balData.reviewCount ?? 0,
                 trustStats: balData.trustStats ?? null,
@@ -1725,9 +1604,10 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 isTreasury: !!balData.isTreasury,
                 activated: !!balData.activated,
                 hasLiveOffer: !!balData.hasLiveOffer,
-                usableFloor: balData.usableFloor ?? balData.floor ?? floor,
+                usableFloor_c: hundredthsOrNull(balData.usableFloor_c) ?? floor_c,
                 liveOffers: balData.liveOffers ?? 0,
-                knownGrant: typeof balData.knownGrant === 'number' ? balData.knownGrant : 0,
+                knownGrant_c: hundredthsOrNull(balData.knownGrant_c) ?? 0,
+                roomHeld_c: hundredthsOrNull(balData.roomHeld_c) ?? 0,
                 frozen: !!balData.frozen,
                 knownFrozen: balData.knownFrozen === true,
                 creditFrozen: balData.creditFrozen === true,
@@ -1743,24 +1623,31 @@ export async function refreshBalanceFromServer(pubkey: string) {
             const { DeviceEventEmitter } = require('react-native');
             DeviceEventEmitter.emit('sync_data_updated');
         }
+        return balData && typeof balData === 'object' ? balData as NodeBalanceRead : null;
     } catch (e) {
         console.warn(`[refreshBalanceFromServer] Failed for ${pubkey}:`, e);
+        return null;
     }
 }
 
+/**
+ * The member's balance as this phone holds it, with what the node last said of their line (kept by
+ * refreshBalanceFromServer). Every money figure is whole hundredths of a Bean (`*_c`); a cache from before them (its fields
+ * named without `_c`) reads as nothing known, never as hundredths.
+ */
 export async function getBalance(pubkey: string) {
     const database = await getDb();
-    const row = await database.getFirstAsync<any>('SELECT balance, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
-    const commons = await database.getFirstAsync<any>('SELECT balance FROM accounts WHERE public_key = "COMMONS" OR public_key = "commons"');
-    
+    const row = await database.getFirstAsync<any>('SELECT balance_c, last_demurrage_epoch FROM accounts WHERE public_key = ?', [pubkey]);
+    const commons = await database.getFirstAsync<any>("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS' OR public_key = 'commons'");
+
     // Store enriched data from server response
     let tier: { name: string; emoji: string } = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
 
-    let floor = 0;     // no baked-in credit until the node reports one
-    let tierCredit: number | null = null; // the credit the node read `tier` from; null from an older node (memberLevel)
-    let earnedCredit = 0;
-    let grantedCredit = 0;
-    let qualifiedValue = 0;
+    let floor_c = 0;     // no baked-in credit until the node reports one
+    let tierCredit_c: number | null = null; // the credit the node read `tier` from; null from an older node (memberLevel)
+    let earnedCredit_c = 0;
+    let grantedCredit_c = 0;
+    let qualifiedValue_c = 0;
     let avgRating = 0;
     let reviewCount = 0;
     let isBlockedFromTrading = false;
@@ -1769,9 +1656,10 @@ export async function getBalance(pubkey: string) {
     let isTreasury = false;    // this account IS a community treasury, not a person
     let activated = false;     // has a credit line at all (earned/granted/known)
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
-    let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
+    let usableFloor_c: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
     let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
-    let knownGrant = 0;        // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
+    let knownGrant_c = 0;      // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
+    let roomHeld_c = 0;        // the credit line a vouch or a member's gift gave (one live offer unlocks it)
     let frozen = false;        // v3: debt below usable floor → spending paused
     let knownFrozen = false;   // the community's admins froze this member's known floor (utils/credit-line-card.ts)
     let creditFrozen = false;  // … or their whole line (the manager's Freeze)
@@ -1787,11 +1675,11 @@ export async function getBalance(pubkey: string) {
         if (cached) {
             const parsed = JSON.parse(cached);
             tier = parsed.tier || tier;
-            floor = parsed.floor ?? floor;
-            tierCredit = typeof parsed.tierCredit === 'number' ? parsed.tierCredit : null;
-            earnedCredit = parsed.earnedCredit ?? 0;
-            grantedCredit = parsed.grantedCredit ?? 0;
-            qualifiedValue = parsed.qualifiedValue ?? 0;
+            floor_c = hundredthsOrNull(parsed.floor_c) ?? floor_c;
+            tierCredit_c = hundredthsOrNull(parsed.tierCredit_c);
+            earnedCredit_c = hundredthsOrNull(parsed.earnedCredit_c) ?? 0;
+            grantedCredit_c = hundredthsOrNull(parsed.grantedCredit_c) ?? 0;
+            qualifiedValue_c = hundredthsOrNull(parsed.qualifiedValue_c) ?? 0;
             avgRating = parsed.avgRating ?? 0;
             reviewCount = parsed.reviewCount ?? 0;
             trustStats = parsed.trustStats ?? null;
@@ -1801,9 +1689,10 @@ export async function getBalance(pubkey: string) {
             isTreasury = !!parsed.isTreasury;
             activated = !!parsed.activated;
             hasLiveOffer = !!parsed.hasLiveOffer;
-            usableFloor = parsed.usableFloor ?? floor;
+            usableFloor_c = hundredthsOrNull(parsed.usableFloor_c) ?? floor_c;
             liveOffers = parsed.liveOffers ?? 0;
-            knownGrant = typeof parsed.knownGrant === 'number' ? parsed.knownGrant : 0;
+            knownGrant_c = hundredthsOrNull(parsed.knownGrant_c) ?? 0;
+            roomHeld_c = hundredthsOrNull(parsed.roomHeld_c) ?? 0;
             frozen = !!parsed.frozen;
             knownFrozen = parsed.knownFrozen === true;
             creditFrozen = parsed.creditFrozen === true;
@@ -1812,26 +1701,27 @@ export async function getBalance(pubkey: string) {
     } catch { /* ignore */ }
 
     return {
-        balance: row?.balance || 0,
-        floor,
+        balance_c: hundredthsOrNull(row?.balance_c) ?? 0,
+        floor_c,
         tier,
-        tierCredit,
-        earnedCredit,
-        grantedCredit,
-        qualifiedValue,
+        tierCredit_c,
+        earnedCredit_c,
+        grantedCredit_c,
+        qualifiedValue_c,
         avgRating,
         reviewCount,
         trustStats,
-        commons: commons?.balance || 0,
+        commons_c: hundredthsOrNull(commons?.balance_c) ?? 0,
         isBlockedFromTrading,
         canOperate,
         keeperOf,
         isTreasury,
         activated,
         hasLiveOffer,
-        usableFloor: usableFloor ?? floor,
+        usableFloor_c: usableFloor_c ?? floor_c,
         liveOffers,
-        knownGrant,
+        knownGrant_c,
+        roomHeld_c,
         frozen,
         knownFrozen,
         creditFrozen,
@@ -1856,10 +1746,12 @@ export async function getTransactions(pubkey: string) {
                     try {
                         await database.withTransactionAsync(async () => {
                             for (const t of txns) {
+                                // Whole hundredths above 0 (the node's amount_c), or the row isn't kept: never a guessed figure.
+                                if (!isHundredths(t.amount_c) || t.amount_c <= 0) continue;
                                 try {
                                     const result = await database.runAsync(
-                                        'INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                                        [t.id, t.from_pubkey || t.from, t.to_pubkey || t.to, t.amount, t.taxFee || t.tax_fee || 0, t.memo, t.timestamp]
+                                        'INSERT OR IGNORE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                                        [t.id, t.from_pubkey || t.from, t.to_pubkey || t.to, t.amount_c, isHundredths(t.fee_c) ? t.fee_c : 0, t.memo, t.timestamp]
                                     );
                                     if (result.changes > 0) newInserted = true;
                                 } catch(e) {}
@@ -1938,8 +1830,9 @@ export async function getTransactions(pubkey: string) {
         return {
             id: row.id,
             type: row.type,
-            amount: row.amount,
-            taxFee: row.tax_fee || 0,
+            // Whole hundredths of a Bean, as the node keeps them (amount_c left the payer; fee_c went to the Commons).
+            amount_c: row.amount_c,
+            fee_c: row.fee_c || 0,
             peer: peerName,
             // The other account's key: the Ledger tab shows Beans from someone blocked on this phone without their note
             // (utils/ledger-note.ts).
@@ -2026,22 +1919,25 @@ export async function getAllCommunityMembers(): Promise<{ publicKey: string; cal
     return rows.map(r => ({ publicKey: r.public_key, callsign: r.callsign }));
 }
 
-export async function sendTransfer(from: string, to: string, amount: number, memo: string) {
-    const res = await _signedRequest('/api/ledger/transfer', { from, to, amount, memo });
-    
+/**
+ * A send of `amount_c` (whole hundredths of a Bean, above 0: the member's typed figure through core parseHundredths) to
+ * `to`. The signed body carries the integer exactly (`{ from, to, amount_c, memo }`), as the node takes it (money-body.ts).
+ */
+export async function sendTransfer(from: string, to: string, amount_c: number, memo: string) {
+    const res = await _signedRequest('/api/ledger/transfer', { from, to, amount_c, memo });
+
     // Write new transaction and refresh balances
     try {
         const database = await getDb();
-        
+
         // 1. Insert transaction into local DB so it shows up instantly
-        if (res?.transaction) {
-            const t = res.transaction;
+        const t = res?.transaction;
+        if (t && isHundredths(t.amount_c) && t.amount_c > 0) {
             const fromKey = t.from_pubkey || t.from || null;
             const toKey = t.to_pubkey || t.to || null;
-            const taxFee = t.taxFee ?? t.tax_fee ?? 0;
             await database.runAsync(
-                'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [t.id || null, fromKey, toKey, t.amount || 0, taxFee, t.memo || null, t.timestamp || null]
+                'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [t.id || null, fromKey, toKey, t.amount_c, isHundredths(t.fee_c) ? t.fee_c : 0, t.memo || null, t.timestamp || null]
             );
         }
 
@@ -2200,7 +2096,8 @@ export async function createPost(post: any) {
         category: post.category,
         title: post.title,
         description: post.description,
-        credits: post.credits,
+        // Whole hundredths of a Bean (the composer's typed price through core parseHundredths), as the node takes it.
+        price_c: post.price_c,
         priceType: post.price_type || 'fixed',
         authorPublicKey: post.author_pubkey,
         lat: post.lat,
@@ -2327,9 +2224,9 @@ export async function createPost(post: any) {
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [post.id, post.type, post.category, post.title, post.description, post.credits,
+        [post.id, post.type, post.category, post.title, post.description, post.price_c,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
          (post.lendable === true || post.lendable === 1) ? 1 : 0,
@@ -2495,6 +2392,26 @@ export async function fetchEventDetail(postId: string): Promise<any | null> {
     const identity = await loadIdentity();
     if (identity?.publicKey) await persistEventView(post, identity.publicKey);
     return post;
+}
+
+/**
+ * The listing a chat message is about, as THIS member may read it (core chat-about.ts): the post once found; null when the
+ * node holds none for them (gone, or hidden from them: the same answer, so a chat learns nothing about a listing it can't
+ * see); undefined when the node could not be asked, so the card keeps what the sender wrote rather than saying "gone".
+ * Signed, as the node decides what a member may see from who asks. Nothing is written to the local cache.
+ */
+export async function lookupAboutListing(postId: string): Promise<AboutPostLike | null | undefined> {
+    try {
+        const res = await signedGet(`/api/marketplace/posts?id=${encodeURIComponent(postId)}`);
+        if (!res.ok) return undefined;
+        const data = await res.json();
+        if (!Array.isArray(data)) return undefined;
+        const post = data.find((p: any) => p && p.id === postId);
+        if (!post) return null;
+        return { id: post.id, type: post.type, title: post.title, price_c: post.price_c, priceType: post.priceType ?? post.price_type, status: post.status };
+    } catch {
+        return undefined;
+    }
 }
 
 /** What a node older than a route answers. Carried on the error so a screen can hide a feature quietly. */
@@ -2832,7 +2749,8 @@ export async function createEnterpriseApi(data: {
     purpose?: string;
     description?: string;
     lifecycle?: 'ongoing' | 'bounded';
-    goalAmount?: number | null;
+    /** A project's goal, whole hundredths of a Bean (the node refuses the old `goalAmount`). */
+    goalAmount_c?: number | null;
     deadlineAt?: string | null;
     avatar?: string;
     photos?: string[];
@@ -2843,7 +2761,8 @@ export async function createEnterpriseApi(data: {
 export async function createProject(project: {
     title: string;
     description: string;
-    goal_amount?: number;
+    /** Whole hundredths of a Bean. */
+    goal_amount_c?: number;
     photos?: string[];
     deadline_at?: string | null;
     lifecycle?: 'ongoing' | 'bounded';
@@ -2852,8 +2771,8 @@ export async function createProject(project: {
         name: project.title,
         purpose: project.description,
         description: project.description,
-        lifecycle: project.lifecycle || (project.goal_amount ? 'bounded' : 'ongoing'),
-        goalAmount: project.goal_amount,
+        lifecycle: project.lifecycle || (project.goal_amount_c ? 'bounded' : 'ongoing'),
+        goalAmount_c: project.goal_amount_c,
         deadlineAt: project.deadline_at,
         photos: project.photos,
         avatar: project.photos && project.photos.length > 0 ? project.photos[0] : undefined,
@@ -2912,14 +2831,15 @@ export interface TreasurySummary {
     callsign?: string;
     avatar?: string | null;
     avatarUrl?: string | null;
-    balance: number;
-    creditLine: number;
+    // Every figure whole hundredths of a Bean, as the node sends them (`*_c`).
+    balance_c: number;
+    creditLine_c: number;
     liveOffers: number;
-    earnedSurplus?: number;
-    workingCapitalCeiling?: number | null;
+    earnedSurplus_c?: number;
+    workingCapitalCeiling_c?: number | null;
     purpose?: string | null;
-    goalAmount?: number | null;
-    currentAmount?: number | null;
+    goalAmount_c?: number | null;
+    currentAmount_c?: number | null;
     deadlineAt?: string | null;
     lifecycle?: string;
     status?: string;
@@ -2928,9 +2848,10 @@ export interface TreasurySummary {
     link?: any;
 }
 
-export async function treasuryPledge(treasury: string, amount: number, memo?: string) {
+/** A pledge of `amount_c` (whole hundredths of a Bean, above 0) to an enterprise or project: signed over the integer. */
+export async function treasuryPledge(treasury: string, amount_c: number, memo?: string) {
     if (memo) await refuseReadableIntoDm(treasury);
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount_c, memo });
 }
 
 export async function getTreasuries(): Promise<TreasurySummary[]> {
@@ -2956,11 +2877,11 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 // Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 /** `photos`: JPEG data URLs, at most five (utils/post-photo.ts), checked by the node as a member's own listing's are. */
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
@@ -2992,16 +2913,18 @@ export async function getDealsFor(publicKey: string): Promise<MarketplaceTransac
     };
     return (await Promise.all([read('pending'), read('requested')])).flat();
 }
-export async function treasurySweep(treasury: string, amount: number) {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
+// Every figure in these bodies and answers is whole hundredths of a Bean (`*_c`), as the node takes and answers them.
+export async function treasurySweep(treasury: string, amount_c: number): Promise<{ success: boolean; swept_c: number; balance_c: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount_c });
 }
-export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+export async function treasuryPledgeBacking(treasury: string, amount_c: number): Promise<{ success: boolean; pledge: any; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount_c });
 }
-export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number } | null> {
-    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+/** Release some of a backing (`amount_c`), or all of it (no amount: the body carries no money key). */
+export async function treasuryRelease(treasury: string, amount_c?: number): Promise<{ success: boolean; releasedAmount_c: number; remainingPledge_c: number; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number } | null> {
+    return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/release`, amount_c === undefined ? {} : { amount_c });
 }
-export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null } | null> {
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number | null } | null> {
     try {
         const res = await signedGet(`/api/treasury/${encodeURIComponent(treasury)}/pledges`);
         if (!res.ok) return null;
@@ -3012,8 +2935,9 @@ export async function getTreasuryPledges(treasury: string): Promise<{ pledges: a
 }
 
 // Enterprise Keepers & Succession API (docs/the-commons.md §2.3, §2.4 Rule 3, §2.6)
-export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number) {
-    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+/** Ask to keep an enterprise, pledging `pledgedBacking_c` (whole hundredths of a Bean, 0 for none) of backing. */
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking_c: number) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking_c });
 }
 
 export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending') {
@@ -3077,7 +3001,7 @@ export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDe
  * and a pay-out's memo are words the node reads, so a known DM's id refuses first (#1938 confirmation 7, finding 2).
  */
 export async function proposeEnterpriseDecision(treasury: string, body: {
-    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount_c: number; memo?: string };
 }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
@@ -3464,7 +3388,7 @@ export async function getConversationKind(conversationId: string, opts: { askNod
 
 // Enterprise Season & Wind-up (docs/the-commons.md §2.2). Same routes the web app calls. The server takes the
 // actor from the signature only and decides who may act; these throw the server's own error message.
-export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot?: number; alreadyPaused?: boolean }> {
+export async function pauseEnterprise(treasury: string): Promise<{ success: boolean; paused: boolean; pausedAt: string; pausedFloorSnapshot_c?: number; alreadyPaused?: boolean }> {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/pause`, {});
 }
 
@@ -3480,16 +3404,21 @@ export async function cancelWindUp(treasury: string): Promise<{ success: boolean
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/cancel`, {});
 }
 
+/** `sweptAmount`: what went to the Commons, whole hundredths of a Bean (the node keeps the name: a listed deviation of M1). */
 export async function finaliseWindUp(treasury: string): Promise<{ success: boolean; status: string; finalisedAt: string; sweptAmount: number; alreadyCompleted?: boolean }> {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/wind-up/finalise`, {});
 }
 
+/**
+ * One line of an enterprise's income & spend. Every figure is whole hundredths of a Bean: `amount_c` and `fee_c` as the
+ * node names them, and `netAmount` and `runningBalance`, which keep their names on the node (M1's listed deviations).
+ */
 export interface EnterpriseLedgerEntry {
     id: string;
     timestamp: string;
     direction: 'income' | 'spend';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     netAmount: number;
     counterparty: string;
     counterpartyName: string;
@@ -3499,8 +3428,9 @@ export interface EnterpriseLedgerEntry {
 }
 
 export interface EnterpriseLedgerResponse {
-    enterprise: { publicKey: string; name: string; purpose: string | null; status: string; paused: boolean; balance: number };
+    enterprise: { publicKey: string; name: string; purpose: string | null; status: string; paused: boolean; balance_c: number };
     period: { since: string | null; until: string | null };
+    /** The totals and balances, whole hundredths of a Bean (their names kept on the node). */
     summary: {
         totalIncome: number;
         totalSpend: number;
@@ -3784,7 +3714,8 @@ export async function updatePost(id: string, updates: any) {
         category: updates.category,
         title: updates.title,
         description: updates.description,
-        credits: updates.credits,
+        // Whole hundredths of a Bean (the edit's typed price through core parseHundredths), as the node takes it.
+        price_c: updates.price_c,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
         photos,
@@ -3802,13 +3733,13 @@ export async function updatePost(id: string, updates: any) {
     if (photos !== undefined) {
         const photosJson = photos && photos.length > 0 ? JSON.stringify(photos) : null;
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
         );
     } else {
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, price_c = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.price_c, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
         );
     }
 }
@@ -3960,14 +3891,15 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
             p.category ?? null,
             p.title ?? null,
             p.description ?? '',
-            p.credits ?? 0,
+            // Whole hundredths of a Bean (the node's price_c); anything else is no price (null, shown "—"), never Free.
+            isHundredths(p.price_c) && p.price_c >= 0 ? p.price_c : null,
             p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
             p.lat ?? null,
             p.lng ?? null,
@@ -4339,10 +4271,11 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const placeholders = batch.map(() => '(?, ?, ?)').join(', ');
             const params: any[] = [];
             for (const acc of batch) {
-                params.push(acc.public_key ?? null, acc.balance ?? 0, acc.last_demurrage_epoch ?? 0);
+                // Whole hundredths of a Bean (the node's balance_c); anything else is held as 0, never a guessed figure.
+                params.push(acc.public_key ?? null, isHundredths(acc.balance_c) ? acc.balance_c : 0, acc.last_demurrage_epoch ?? 0);
             }
             await txn.runAsync(
-                `INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ${placeholders}`,
+                `INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ${placeholders}`,
                 params
             );
         }
@@ -4376,7 +4309,9 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const av = m.avatarUrl || m.avatar_url || null;
             const joinedAt = m.joinedAt || m.joined_at || null;
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
-            const ec = m.earnedCredit || m.earned_credit || 0;
+            // The node's earnedCredit keeps its name and carries whole hundredths (M1). A card the phone already holds
+            // (asHeldRow, kept from a search result by keepCards) carries the copy's own earned_credit_c. Anything else is 0.
+            const ec = isHundredths(m.earnedCredit) ? m.earnedCredit : isHundredths(m.earned_credit_c) ? m.earned_credit_c : 0;
             let arch = m.archetype || null;
             let finalArch = arch;
             // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'
@@ -4415,7 +4350,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
-                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, archetype) VALUES (?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit_c, archetype) VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
                    archetype = CASE WHEN ? THEN excluded.archetype
@@ -4424,7 +4359,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                                      ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
-                   earned_credit = excluded.earned_credit`,
+                   earned_credit_c = excluded.earned_credit_c`,
                 // The CASE placeholders are the 8th (archetype) and 9th (avatar, last) `?` in the statement text, so
                 // they bind AFTER the seven VALUES parameters.
                 [pk, cs, av, joinedAt, profileUpdatedAt, ec, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
@@ -4473,12 +4408,13 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
     
     if (delta.transactions) {
             for (const t of delta.transactions) {
+                // Whole hundredths above 0 (the node's amount_c and fee_c), or the row isn't kept: never a guessed figure.
+                if (!isHundredths(t.amount_c) || t.amount_c <= 0) continue;
                 const fromKey = t.from_pubkey || t.from || null;
                 const toKey = t.to_pubkey || t.to || null;
-                const taxFee = t.taxFee ?? t.tax_fee ?? 0;
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [t.id ?? null, fromKey, toKey, t.amount ?? 0, taxFee, t.memo ?? null, t.timestamp ?? null]
+                    'INSERT OR REPLACE INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [t.id ?? null, fromKey, toKey, t.amount_c, isHundredths(t.fee_c) ? t.fee_c : 0, t.memo ?? null, t.timestamp ?? null]
                 );
             }
         }
@@ -4541,13 +4477,14 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 }
 
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         tx.id ?? null,
                         tx.postId ?? tx.post_id ?? null,
                         tx.buyerPublicKey ?? tx.buyerPubkey ?? tx.buyer_pubkey ?? null,
                         tx.sellerPublicKey ?? tx.sellerPubkey ?? tx.seller_pubkey ?? null,
-                        tx.credits ?? 0,
+                        // What the deal holds, whole hundredths (the node's amount_c); anything else, no figure (shown "—").
+                        dealAmountColumn(tx),
                         tx.hours ?? null,
                         incomingStatus,
                         tx.createdAt ?? tx.created_at ?? new Date().toISOString(),
@@ -4555,7 +4492,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                         tx.coverImage ?? tx.cover_image ?? null,
                         tx.ratedByBuyer ? 1 : 0,
                         tx.ratedBySeller ? 1 : 0,
-                        tx.postTitle ?? tx.post_title ?? null
+                        tx.postTitle ?? tx.post_title ?? null,
+                        // The node's read carries the standing deal on its current period's row (S2): a short one's row is
+                        // the period last settled, so its phase is kept on that row, not on a pending one.
+                        tx.standingId ?? null,
+                        tx.periodNo ?? null,
+                        standingJsonOf(tx),
                     ]
                 );
 
@@ -4579,15 +4521,16 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         if (delta.projects !== undefined) {
             for (const proj of delta.projects) {
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, current_amount_c, deadline_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         proj.id ?? null,
                         proj.creatorPubkey ?? proj.creator_pubkey ?? null,
                         proj.title ?? null,
                         proj.description ?? '',
                         proj.photos ? JSON.stringify((typeof proj.photos === 'string' ? JSON.parse(proj.photos) : proj.photos).filter((url: string) => !url.startsWith('file://'))) : null,
-                        proj.goalAmount ?? proj.goal_amount ?? 0,
-                        proj.currentAmount ?? proj.current_amount ?? 0,
+                        // Whole hundredths of a Bean (the node's project row: goal_amount_c, current_amount_c); anything else is 0.
+                        isHundredths(proj.goal_amount_c) ? proj.goal_amount_c : 0,
+                        isHundredths(proj.current_amount_c) ? proj.current_amount_c : 0,
                         proj.deadlineAt ?? proj.deadline_at ?? null,
                         proj.status ?? 'ACTIVE',
                         proj.createdAt ?? proj.created_at ?? new Date().toISOString()
@@ -5002,7 +4945,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
             const requestAfterList = () => requestAfterReadHere(conv.id, heldRequest, conv.request, decidedBefore);
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, type, post_title, post_status, post_photo, post_credits, request, listed FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, request, listed FROM conversations WHERE id = ?', [conv.id]);
                 heldRequest = localConv?.request;
                 const requestJson = requestAfterList();
                 // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
@@ -5015,7 +4958,6 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                     (localConv.post_title ?? null) !== (conv.postTitle ?? null) ||
                     (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
                     (localConv.post_photo ?? null) !== postPhotoString ||
-                    (localConv.post_credits ?? null) !== (conv.postCredits ?? null) ||
                     (requestJson !== undefined && (localConv.request ?? null) !== requestJson) ||
                     localConv.listed !== 1
                 ) {
@@ -5060,7 +5002,7 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                     const localConv = await txn.getFirstAsync<any>('SELECT id FROM conversations WHERE id = ?', [conv.id]);
                     if (!localConv) {
                         await txn.runAsync(
-                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits, request, listed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+                            'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, request, listed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
                             [
                                 conv.id,
                                 heldType,
@@ -5071,7 +5013,6 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
-                                conv.postCredits || null,
                                 requestAfterList() ?? null
                             ]
                         );
@@ -5079,12 +5020,11 @@ export async function syncMessages(publicKey: string): Promise<boolean> {
                         // Undefined: the row keeps the request it holds.
                         const requestJson = requestAfterList();
                         await txn.runAsync(
-                            `UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, ${requestJson === undefined ? '' : 'request = ?, '}listed = 1 WHERE id = ?`,
+                            `UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, ${requestJson === undefined ? '' : 'request = ?, '}listed = 1 WHERE id = ?`,
                             [
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
-                                conv.postCredits || null,
                                 ...(requestJson === undefined ? [] : [requestJson]),
                                 conv.id
                             ]
@@ -5532,7 +5472,7 @@ export async function getConversation(id: string, myPubkey?: string) {
                 p.status,
                 c.post_status
             ) as postStatus,
-            p.price_type, p.credits,
+            p.price_type, p.price_c,
             (SELECT memb.callsign FROM conversation_participants cp 
              LEFT JOIN members memb ON memb.public_key = cp.public_key
              WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherCallsign,
@@ -5542,7 +5482,7 @@ export async function getConversation(id: string, myPubkey?: string) {
              LEFT JOIN members memb ON memb.public_key = cp.public_key
              WHERE cp.conversation_id = c.id AND cp.public_key != ? LIMIT 1) as otherAvatar,
             mt.id as pendingTxId,
-            mt.credits as pendingAmount,
+            mt.amount_c as pendingAmount_c,
             mt.buyer_pubkey as txBuyerPubkey,
             mt.seller_pubkey as txSellerPubkey
             FROM conversations c 
@@ -6496,11 +6436,10 @@ function openDmPartWithFormer(
     payload: { ciphertext: string; nonce: string },
     ctx: PinnedDmKeyContext,
     ref: { conversationId: string; senderPubHex: string; messageId: string; metadata: unknown; part: DmPart },
-    formats?: ReadonlyArray<2 | 3>,
 ): { opened: ReturnType<typeof openDmLine>; keys: DMKeyContext; senderPubHex: string } {
     let first: unknown;
     try {
-        return { opened: openDmLine(payload, ctx, ref as any, formats as any), keys: ctx, senderPubHex: ref.senderPubHex };
+        return { opened: openDmLine(payload, ctx, ref), keys: ctx, senderPubHex: ref.senderPubHex };
     } catch (e) { first = e; }
     const mine = ctx.myPubHex && ref.senderPubHex === ctx.myPubHex;
     for (const peer of ctx.formerPeers) {
@@ -6509,14 +6448,14 @@ function openDmPartWithFormer(
         const keys: DMKeyContext = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: peer, conversationId: ctx.conversationId };
         const senderPubHex = mine ? ref.senderPubHex : peer;
         try {
-            return { opened: openDmLine(payload, keys, { ...ref, senderPubHex } as any, formats as any), keys, senderPubHex };
+            return { opened: openDmLine(payload, keys, { ...ref, senderPubHex }), keys, senderPubHex };
         } catch { /* the next former key */ }
     }
     throw first;
 }
 
 /**
- * What a DM line is sealed to besides its conversation (e2e-crypto, format 3): who sends it, under which message id the
+ * What a DM line is sealed and signed to besides its conversation (e2e-crypto, format 4): who sends it, under which message id the
  * node will store it, which part of the message it is, and the line it is written after.
  */
 interface DmLineToSeal {
@@ -6528,15 +6467,14 @@ interface DmLineToSeal {
     replyToId?: string | null;
 }
 
-/** Seal a DM line, and its words (not its photo) with my signature over them (core dm-line-report.ts), for its metadata. */
-function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string; metadata?: Record<string, unknown> } {
+/**
+ * Seal a DM line and sign it as me, in one (core sealDmLine, format 4): every part, the photo too, so the other person can't
+ * put one in my name. The signature is in the line's own ciphertext, which both apps check when they open it and a report
+ * of it stands on (core dm-line-report.ts); nothing rides beside it.
+ */
+function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
     try {
-        const sealed = sealDmLine(text, ctx, line);
-        if (line.part === 'attachment') return sealed;
-        const lineSig = signDmLine(sealed, ctx.myEdPrivHex, {
-            conversationId: ctx.conversationId, senderPubHex: line.senderPubHex, recipientPubHex: ctx.peerEdPubHex, messageId: line.messageId, at: new Date().toISOString(),
-        });
-        return { ...sealed, metadata: { [DM_LINE_SIG_KEY]: lineSig } };
+        return sealDmLine(text, ctx, line);
     } catch {
         throw new DmNotLockedError();
     }
@@ -6840,8 +6778,8 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // Every line of a DM judged at once, in the order it is shown (by the node's timestamps, as selected above), by
     // e2e-crypto checkDmThread: an encrypted line is opened bound to the author and id this phone holds it under, and one
     // that doesn't open is never shown as anyone's words; a row in a member's name that isn't an encrypted line never is
-    // either; one the node moved or reordered, and every old-format line, is marked; the admin page's message is shown
-    // as the community admins'. Only the node's own notices are left to the system formatting below.
+    // either, nor one its named sender didn't sign; one the node moved or reordered is marked; the admin page's message
+    // is shown as the community admins'. Only the node's own notices are left to the system formatting below.
     const lineViews = isDm
         ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId, dmCtx?.formerPeers)
         : null;
@@ -6910,6 +6848,10 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             type: row.type || 'text',
             systemType: row.system_type,
             metadata: parsedMeta,
+            // The listing this line is about, opened from its own sealed part (core chat-about.ts); null for every other line.
+            about: view && view.format != null && dmCtx
+                ? chatAboutOfLine({ myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.peerEdPubHex }, { conversationId, senderPubHex: row.author_pubkey, messageId: row.id, metadata: row.metadata })
+                : null,
             // 'sending' | 'failed' | undefined — optimistic-send delivery state
             sendState,
             outgoing,
@@ -6918,7 +6860,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // Raw edit timestamp: pins the text content for cheap change detection
             // (chat screen compares (id, editedAt) instead of the decrypted text).
             editedAt: row.edited_at ?? null,
-            // One line under a DM message the node moved or reordered, an old-format line, or the admin page's message.
+            // One line under a DM message the node moved or reordered, or the admin page's message.
             integrityNote,
             // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
             unattributed,
@@ -6939,10 +6881,10 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
 // prefixed rows from before client-generated ids) fall back to a fresh id.
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
+export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string, about?: ChatAboutChip | null) {
     const database = await getDb();
 
-    // The id is chosen first: a DM line is sealed to it (e2e-crypto, format 3), so the node must store the line under
+    // The id is chosen first: a DM line is sealed and signed to it (e2e-crypto, format 4), so the node must store the line under
     // exactly this id. Lower case, as the node keeps it. A resend keeps its failed row's id (see below).
     const tempId = (reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID()).toLowerCase();
 
@@ -6955,12 +6897,19 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         replyToId: replyToIdOf(metadata),
     });
     const { ciphertext, nonce } = locked;
-    // A group line names the epoch it was sealed under, and a DM line carries its signature, beside whatever the caller's
-    // metadata says (a reply).
+    // A group line names the epoch it was sealed under, beside whatever the caller's metadata says (a reply). A DM line
+    // carries nothing beside it: its signature is in its own ciphertext (format 4).
     if (locked.metadata) {
         let m: any = {};
         try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
         metadata = JSON.stringify({ ...m, ...locked.metadata });
+    }
+    // The listing this line is about (Message on a listing; core chat-about.ts): its own sealed part of the line, to the same
+    // key and the same message id, carried in the metadata as sealed bytes. The node reads nothing new. A resend keeps the
+    // one its failed row already holds (same id, same sender, same conversation, so it still opens).
+    if (about) {
+        const ctx = await requireDmKeyContext(conversationId);
+        metadata = metadataWithAbout(metadata, sealChatAbout(about, ctx, { senderPubHex: authorPubkey, messageId: tempId, replyToId: replyToIdOf(metadata) }));
     }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -7194,12 +7143,6 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
 
     const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
     const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
-    // The caption's signature goes in the line's metadata, beside whatever the caller's says (a reply).
-    if (encCap.metadata) {
-        let m: any = {};
-        try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
-        metadata = JSON.stringify({ ...m, ...encCap.metadata });
-    }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
@@ -7263,11 +7206,12 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         if (cached.exists) return cachePath;
 
         // 3. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk), bound as its words are and
-        //    in the format they opened in, so neither a photo from another line nor an old-format picture can stand in.
+        //    and signed by that sender (format 4), so neither a photo from another line nor one the other person sealed in
+        //    the sender's name can stand in.
         const res = await signedGet(`/api/messages/${messageId}/attachment`);
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
-        const decrypted = openDmLine({ ciphertext: data, nonce }, words.keys, { ...ref, senderPubHex: words.senderPubHex, part: 'attachment' }, [words.opened.format]).text;
+        const decrypted = openDmLine({ ciphertext: data, nonce }, words.keys, { ...ref, senderPubHex: words.senderPubHex, part: 'attachment' }).text;
 
         // 4. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
         //    image from the NODE, and the device owner already views it. Falls back to the inline
@@ -7360,18 +7304,18 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             let postTitle: string | null = null;
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
-            let postCredits: number | null = null;
+            let postPrice_c: number | null = null;
             // This phone asked for a DM: it is one, whatever type the answer names (the DM guard).
             const convType = await heldConversationType(conv.id, type);
             if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;
             if (lookupPid) {
-                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, credits: number }>('SELECT title, status, photos, credits FROM posts WHERE id = ?', [lookupPid]);
+                const post = await database.getFirstAsync<{ title: string, status: string, photos: string, price_c: number | null }>('SELECT title, status, photos, price_c FROM posts WHERE id = ?', [lookupPid]);
                 if (post) {
                     postTitle = post.title;
                     postStatus = post.status;
-                    postCredits = post.credits;
+                    postPrice_c = isHundredths(post.price_c) ? post.price_c : null;
                     if (post.photos) {
                         try {
                             const arr = JSON.parse(post.photos);
@@ -7381,7 +7325,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                 }
             }
             await database.runAsync(
-                'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_price_c) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
                     conv.id,
                     convType,
@@ -7392,7 +7336,7 @@ export async function createConversationApi(type: 'dm', participants: string[], 
                     postTitle,
                     postStatus,
                     postPhoto,
-                    postCredits
+                    postPrice_c
                 ]
             );
             // The key asked for is pinned now: a listing that names another key before the first send only offers it, the
@@ -7426,8 +7370,12 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
+    /**
+     * `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). The phone's
+     * own two (inviteCheckMiss), never a node's: `invites_off`, the address takes no invites (the global community);
+     * `not_a_community`, nothing at the address answers as a BeanPool community (the website, a name nobody runs).
+     */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only' | 'invites_off' | 'not_a_community';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }
@@ -7438,6 +7386,27 @@ export interface InviteCheck {
 // callers must fail OPEN and let redeemInvite give the definitive answer later.
 // An offline ticket goes with its `BP-`: the node reads a code as a ticket only by
 // it (engine/members.ts checkInvite). The redeem is the one that sends it without.
+/**
+ * A check that found no invite step at the address, so nothing is made or sent there (9 Nov: a code typed with the
+ * address beanpool.org, which the invite message names as where to install from, or with the global community's, went on
+ * to a redeem that could only fail, in words about a node): the global community, whose invites are off (404
+ * `feature_off`), or an address where nothing answers as a BeanPool community does (a 404 or 405 that is a web page, not a
+ * node's JSON). Anything else (busy, down, no answer in time, a node's own JSON) is null, and the redeem decides, as before.
+ */
+export function inviteCheckMiss(status: number, body: string): InviteCheck | null {
+    if (status !== 404 && status !== 405) return null;
+    let answer: unknown = null;
+    try {
+        answer = JSON.parse(body);
+    } catch {
+        return { valid: false, reason: 'not_a_community' };
+    }
+    if (answer && typeof answer === 'object') {
+        return (answer as { code?: unknown }).code === 'feature_off' ? { valid: false, reason: 'invites_off' } : null;
+    }
+    return { valid: false, reason: 'not_a_community' };
+}
+
 export async function checkInvite(code: string, nodeUrl: string): Promise<InviteCheck | null> {
     try {
         const controller = new AbortController();
@@ -7448,7 +7417,7 @@ export async function checkInvite(code: string, nodeUrl: string): Promise<Invite
                 headers: { 'Accept': 'application/json' },
                 signal: controller.signal,
             });
-            if (!res.ok) return null;
+            if (!res.ok) return inviteCheckMiss(res.status, await res.text().catch(() => ''));
             const data = await res.json();
             if (typeof data?.valid !== 'boolean') return null;
             return data;
@@ -8102,8 +8071,12 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
     return _signedRequest('/api/messages/react', { messageId, authorPubkey, emoji });
 }
 
-export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number) {
-    const res = await _signedRequest('/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
+/**
+ * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
+ * `standing` is the payer's signed authorisation (utils/member-statements.ts signStandingStatement), and no hours go.
+ */
+export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody) {
+    const res = await _signedRequest('/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
 
     // Await the local write: callers navigate into the chat as soon as this resolves,
     // and the chat screen reads the pending tx from local SQLite. The write itself is
@@ -8128,8 +8101,8 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, dealAmountColumn(tx), tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx)]
                 );
             }
 
@@ -8166,7 +8139,7 @@ export async function completeMarketplaceTransaction(transactionId: string, conf
 
             const buyerPubkey = res?.transaction?.buyerPublicKey || confirmerPublicKey;
             const sellerPubkey = res?.transaction?.sellerPublicKey || null;
-            console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, credits=${res?.transaction?.credits}`);
+            console.log(`[Escrow] Completing: buyer=${buyerPubkey?.slice(0,8)}, seller=${sellerPubkey?.slice(0,8)}, amount_c=${res?.transaction?.amount_c}`);
 
             // Emit events so Ledger screen refreshes immediately
             const { DeviceEventEmitter } = require('react-native');
@@ -8227,8 +8200,8 @@ export async function requestMarketplacePost(postId: string, buyerPublicKey: str
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, tx.credits || 0, tx.hours || null, tx.status || 'requested', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, cover_image, post_title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, dealAmountColumn(tx), tx.hours || null, tx.status || 'requested', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle]
                 );
             }
         } finally {
@@ -8241,8 +8214,9 @@ export async function requestMarketplacePost(postId: string, buyerPublicKey: str
     return res;
 }
 
-export async function approveMarketplaceRequest(transactionId: string, authorPublicKey: string) {
-    const res = await _signedRequest('/api/marketplace/transactions/approve', { transactionId, authorPublicKey });
+/** Approve a request. On a Need priced per week or per month its author pays: `standing` is their signed authorisation (§4). */
+export async function approveMarketplaceRequest(transactionId: string, authorPublicKey: string, standing?: StandingStartBody) {
+    const res = await _signedRequest('/api/marketplace/transactions/approve', standing ? { transactionId, authorPublicKey, standing } : { transactionId, authorPublicKey });
     try {
         const database = await getDb();
         // The transaction becomes pending, and the post becomes pending unless repeatable.
@@ -8251,8 +8225,31 @@ export async function approveMarketplaceRequest(transactionId: string, authorPub
             await database.runAsync("UPDATE posts SET status = 'pending', pending_transaction_id = ? WHERE id = (SELECT post_id FROM marketplace_transactions WHERE id = ?)", [transactionId, transactionId]);
         }
         await database.runAsync("UPDATE marketplace_transactions SET status = 'pending' WHERE id = ?", [transactionId]);
+        const tx = res?.transaction;
+        if (tx?.standingId) {
+            await database.runAsync('UPDATE marketplace_transactions SET amount_c = ?, standing_id = ?, period_no = ?, standing = ? WHERE id = ?',
+                [dealAmountColumn(tx), tx.standingId, tx.periodNo ?? null, standingJsonOf(tx), transactionId]);
+        }
     } catch(e) {}
     return res;
+}
+
+/**
+ * The payer's standing authorisation for the community this phone is on (§6), as the web makes it: core's builder, through
+ * utils/member-statements.ts signStandingStatement, for the address every request here goes to.
+ */
+export async function signStandingStart(fields: StandingAuthorisationFields): Promise<StandingStartBody> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to perform this action.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+    const { signStandingStatement } = await import('./member-statements');
+    return signStandingStatement(anchorUrl, fields, identity.privateKey);
+}
+
+/** Stop a standing deal (either side): after the period already paid, or at once while it is short (in the grace). */
+export async function stopStandingDeal(standingId: string) {
+    return _signedRequest(`/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
 }
 
 export async function rejectMarketplaceRequest(transactionId: string, authorPublicKey: string) {
@@ -8621,7 +8618,8 @@ export interface MarketplaceTransaction {
     buyerCallsign?: string | null;
     sellerPublicKey: string;
     sellerCallsign?: string | null;
-    credits: number;
+    /** What the deal holds, whole hundredths of a Bean (the node's amount_c); null when the figure isn't one. */
+    amount_c: number | null;
     hours?: number | null;
     status: string;
     createdAt: string;
@@ -8635,6 +8633,22 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /** A period of a standing deal, and on its current period's row the standing deal itself (standingOfRow; core StandingDealRow). */
+    standingId?: string | null;
+    periodNo?: number | null;
+    standingPhase?: StandingPhase | null;
+    /** Per period, whole hundredths of a Bean. */
+    standingBeans_c?: number | null;
+    standingUnit?: StandingPeriodUnit | null;
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string | null;
+    standingStartsAt?: string | null;
+    standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
+    standingStopped?: boolean;
 }
 
 export async function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): Promise<MarketplaceTransaction[]> {
@@ -8681,7 +8695,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             buyerCallsign: r.buyerCallsign, 
             sellerPublicKey: r.seller_pubkey, 
             sellerCallsign: r.sellerCallsign, 
-            credits: r.credits, 
+            amount_c: isHundredths(r.amount_c) ? r.amount_c : null,
             hours: typeof r.hours === 'number' ? r.hours : null,
             status: r.status, 
             createdAt: r.created_at, 
@@ -8695,6 +8709,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             postAuthorPublicKey: r.postAuthorPublicKey || undefined,
             postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
             postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+            ...standingOfRow(r),
         };
     });
 }
@@ -8709,7 +8724,7 @@ export async function getPledgeHistory(pubkey: string) {
     const database = await getDb();
     // Pledges are recorded as ledger transfers from the member to 'project_<id>'
     const rows = await database.getAllAsync<any>(
-        `SELECT t.id, t.amount, t.memo, t.timestamp,
+        `SELECT t.id, t.amount_c, t.memo, t.timestamp,
                 REPLACE(t.to_pubkey, 'project_', '') as project_id,
                 p.title as projectTitle
          FROM transactions t
@@ -8720,7 +8735,7 @@ export async function getPledgeHistory(pubkey: string) {
     );
     return rows.map(r => ({
         id: r.id,
-        amount: r.amount,
+        amount_c: r.amount_c,
         projectId: r.project_id,
         projectTitle: r.projectTitle || 'Community Project',
         timestamp: r.timestamp,
@@ -8735,10 +8750,11 @@ export async function getPledgeHistory(pubkey: string) {
  * out of 'pending' to 'completed' or 'cancelled', and a request turned down or left to expire never held any. The same
  * rule as the node's own ledger export (engine/audit.ts exportLedgerFor, its Pending_Trade rows).
  */
+/** In whole hundredths of a Bean: the deals' amount_c summed exactly (a deal with no figure counts nothing). */
 export async function getEscrowTotal(pubkey: string): Promise<number> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(
-        `SELECT COALESCE(SUM(credits), 0) as total
+        `SELECT COALESCE(SUM(amount_c), 0) as total
          FROM marketplace_transactions
          WHERE buyer_pubkey = ? AND status = 'pending'`,
         [pubkey]
@@ -9719,7 +9735,7 @@ export async function reportDmLine(conversationId: string, messageId: string, wo
     try {
         return await _signedRequest('/api/messages/report', {
             messageId, reason,
-            disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId, metadata: row.metadata }, words),
+            disclosure: dmLineDisclosureFor({ ciphertext: row.ciphertext, nonce: row.nonce, conversationId }, words),
         });
     } catch (e: any) {
         throw reportRefusal(e);

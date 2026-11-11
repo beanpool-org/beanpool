@@ -57,6 +57,7 @@ import WebSocket from 'ws';
 import { setMemberPhoto, haversineKm, getNearbySet, neighbourhoodOf } from '@beanpool/engine';
 import { pinMainServerForTests, unpinMainServerForTests } from './standby-pin-test-helper.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -105,7 +106,8 @@ async function call(id: Id, urlPath: string, body: unknown): Promise<{ status: n
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${urlPath}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'POST', path: urlPath, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -120,8 +122,8 @@ async function call(id: Id, urlPath: string, body: unknown): Promise<{ status: n
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 interface Sock { ws: WebSocket; raw: string[] }
@@ -181,11 +183,11 @@ async function main(): Promise<void> {
     const member = (callsign: string): Id => {
         const id = newId();
         // A profile photo, because posting needs one; joined long ago, so no new account's limits apply.
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, earned_credit_c)
                     VALUES (?, ?, ?, 'seed', 'seed', 'active', 10)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString());
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const setArea = async (id: Id, who: string, point: { lat: number; lng: number } | null) => {
@@ -332,7 +334,7 @@ async function main(): Promise<void> {
     };
     const ask = (post: string) => {
         const deal = `nearby-deal-${crypto.randomBytes(4).toString('hex')}`;
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, 'requested')").run(deal, post, tia.pk, ana.pk);
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 1, 'requested')").run(deal, post, tia.pk, ana.pk);
         return deal;
     };
     const dealStatus = (deal: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(deal) as { status: string }).status;
@@ -509,7 +511,7 @@ async function main(): Promise<void> {
         // A tie is not a nearby listing: an open deal on it reaches him wherever he is, blocked author or not, as his set
         // keeps the listings he is tied to (getNearbySet's ties hold no block).
         const tied = `nearby-deal-${crypto.randomBytes(4).toString('hex')}`;
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, 'requested')").run(tied, blocked, noel.pk, ana.pk);
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 1, 'requested')").run(tied, blocked, noel.pk, ana.pk);
         assert(noelsSet().includes(blocked), 'with his request open on it, his set holds the listing again (a tie)');
         clear();
         se.broadcast({ type: 'post_updated', id: blocked });

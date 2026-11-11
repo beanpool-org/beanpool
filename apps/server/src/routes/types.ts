@@ -23,8 +23,8 @@ export interface ActiveConnectionInfo {
  * This avoids module-level singleton coupling and keeps routes testable.
  */
 export interface RouteDeps {
-    /** Async admin password verification (with tarpit on failure) */
-    checkAdminAuth: (ctx: any, opts?: import('../admin-auth.js').PasswordAuthOptions) => Promise<boolean>;
+    /** An admin route's sign-in check (admin-auth.ts checkAdminAuth): a key session, an owner's token or a break-glass code */
+    checkAdminAuth: (ctx: any) => Promise<boolean>;
     /** Per-IP rate limiter for auth endpoints, one bucket per route (auth-rate-limit.ts); `admin` when none is named */
     rateLimit: (ctx: Koa.Context, bucket?: import('../auth-rate-limit.js').AuthLimitBucket) => boolean;
     /** Clamp a client-supplied limit to [1, MAX_PAGE_LIMIT] */

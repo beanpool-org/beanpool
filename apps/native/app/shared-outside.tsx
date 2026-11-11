@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { PEEK_WORDS as W, formatDate, t, word, type PeekShare } from '@beanpool/core';
+import { PEEK_WORDS as W, formatDate, t, tn, word, type PeekShare } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { fetchPeekShares, stopPeekShare } from '../utils/peek';
 
@@ -35,6 +35,7 @@ export default function SharedOutsideScreen() {
         item: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 14, gap: 6 },
         itemTitle: { fontSize: 16, fontWeight: '800', color: colors.text.heading },
         itemSub: { fontSize: 14, color: colors.text.secondary },
+        asked: { fontSize: 15, fontWeight: '700', color: colors.brand.primary },
         stop: { alignSelf: 'flex-start', minHeight: 44, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.fg, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
         stopText: { color: colors.feedback.danger.fg, fontSize: 15, fontWeight: '700', textAlign: 'center' },
         empty: { fontSize: 15, color: colors.text.secondary, lineHeight: 21 },
@@ -98,8 +99,9 @@ export default function SharedOutsideScreen() {
                     <View key={s.id} style={styles.item} testID="shared-outside-item">
                         <Text style={styles.itemTitle}>{s.title ?? t(W.postGone)}</Text>
                         <Text style={styles.itemSub}>{t(W.worksUntil, { date: formatDate(new Date(s.expiresAt), 'day-month') })}</Text>
+                        {s.asked > 0 && <Text style={styles.asked} testID="shared-outside-asked">{tn(s.asked, W.askedFromLink.one, W.askedFromLink.other)}</Text>}
                         <Pressable style={[styles.stop, stopping === s.id && { opacity: 0.6 }]} onPress={() => stop(s)} disabled={stopping === s.id}
-                            accessibilityRole="button" testID="shared-outside-stop">
+                            accessibilityRole="button" accessibilityState={{ disabled: stopping === s.id, busy: stopping === s.id }} testID="shared-outside-stop">
                             <Text style={styles.stopText}>{t(W.stopSharing)}</Text>
                         </Pressable>
                     </View>

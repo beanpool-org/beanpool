@@ -27,26 +27,26 @@ const ENT = 'farm-co-key';
 const AT = '2026-10-24T10:00:00.000Z';
 const PHOTO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="#7a9a6a"/></svg>');
 const post = (over) => ({
-    id: 'p', type: 'offer', category: 'education', title: 'Listing', description: 'Six weeks on the wheel, Saturday mornings.', credits: 45,
+    id: 'p', type: 'offer', category: 'education', title: 'Listing', description: 'Six weeks on the wheel, Saturday mornings.', price_c: 4500,
     priceType: 'fixed', status: 'active', active: true, repeatable: true, authorPublicKey: 'damo-key', authorCallsign: 'Damo', createdAt: AT,
     photos: [PHOTO], audienceScope: 'public', ...over,
 });
 const POSTS = [
     post({ id: 'p-course', title: 'Pottery course' }),
-    post({ id: 'p-stall', type: 'need', category: 'labour', title: 'Help at the market stall', credits: 20, authorPublicKey: 'kofi-key', authorCallsign: 'Kofi' }),
+    post({ id: 'p-stall', type: 'need', category: 'labour', title: 'Help at the market stall', price_c: 2000, authorPublicKey: 'kofi-key', authorCallsign: 'Kofi' }),
     post({ id: 'p-mine', title: 'Sourdough lessons', authorPublicKey: ME, authorCallsign: 'Ana' }),
-    post({ id: 'p-farm', type: 'need', category: 'labour', title: 'Mend the polytunnel', credits: 20, authorPublicKey: ENT, authorCallsign: 'Farm Co-op' }),
-    post({ id: 'p-ladder', category: 'tools', title: 'Long ladder', repeatable: false, lendable: true, credits: 0, createdAt: '2026-10-25T10:00:00.000Z' }),
-    post({ id: 'p-other', category: 'food', title: 'Duck eggs', credits: 6 }),
-    post({ id: 'p-olives', type: 'need', category: 'food', title: 'Pick the olives', credits: 20, priceType: 'daily', authorPublicKey: ME, authorCallsign: 'Ana' }),
+    post({ id: 'p-farm', type: 'need', category: 'labour', title: 'Mend the polytunnel', price_c: 2000, authorPublicKey: ENT, authorCallsign: 'Farm Co-op' }),
+    post({ id: 'p-ladder', category: 'tools', title: 'Long ladder', repeatable: false, lendable: true, price_c: 0, createdAt: '2026-10-25T10:00:00.000Z' }),
+    post({ id: 'p-other', category: 'food', title: 'Duck eggs', price_c: 600 }),
+    post({ id: 'p-olives', type: 'need', category: 'food', title: 'Pick the olives', price_c: 2000, priceType: 'daily', authorPublicKey: ME, authorCallsign: 'Ana' }),
 ];
 // A 4:3 photo (the frame's own shape), for the page's cases.
 const PHOTO_43 = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#9cb98a"/><circle cx="300" cy="320" r="120" fill="#c0392b"/><circle cx="500" cy="300" r="110" fill="#d35400"/></svg>');
 // Marty's apples (DESIGN-detail-pages-fable.md §2.9): a recurring Need, Beans off where it is read (the global community).
-if (PAGE_ONLY) POSTS.push(post({ id: 'p-apples', type: 'need', category: 'food', title: 'Apples needed', description: 'Looking for fresh apples', credits: 0,
+if (PAGE_ONLY) POSTS.push(post({ id: 'p-apples', type: 'need', category: 'food', title: 'Apples needed', description: 'Looking for fresh apples', price_c: 0,
     authorPublicKey: 'marty-key', authorCallsign: 'Marty', photos: [PHOTO_43], createdAt: '2026-11-03T10:00:00.000Z' }));
 if (PAGE_ONLY) for (const p of POSTS) if (p.id === 'p-course' || p.id === 'p-mine') p.photos = [PHOTO_43];
-const FARM_DEALS = [{ id: 'tx-f', postId: 'p-farm', postTitle: 'Mend the polytunnel', credits: 20, status: 'pending', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', createdAt: AT }];
+const FARM_DEALS = [{ id: 'tx-f', postId: 'p-farm', postTitle: 'Mend the polytunnel', amount_c: 2000, status: 'pending', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', createdAt: AT }];
 
 const cases = [
     { id: 'payer', wait: 'text=held in trust' },
@@ -138,7 +138,7 @@ async function pageShots(browser) {
                         const id = url.searchParams.get('id');
                         return json(route, id ? POSTS.filter(x => x.id === id) : (url.searchParams.get('author') ? [] : POSTS));
                     }
-                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, isBlockedFromTrading: false, keeperOf: [] });
+                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance_c: 10000, floor_c: -50000, isBlockedFromTrading: false, keeperOf: [] });
                     if (p === '/api/marketplace/transactions') return json(route, []);
                     if (p.startsWith('/api/ratings')) return json(route, { ratings: [], average: 4.6, count: 5 });
                     if (p.startsWith('/api/treasuries')) return json(route, { treasuries: [] });
@@ -207,7 +207,7 @@ try {
                     const id = url.searchParams.get('id');
                     return json(route, id ? POSTS.filter(x => x.id === id) : (url.searchParams.get('author') ? [] : POSTS));
                 }
-                if (p.startsWith('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, isBlockedFromTrading: false, keeperOf: c.id === 'keeper' ? [ENT] : [] });
+                if (p.startsWith('/api/ledger/balance')) return json(route, { balance_c: 10000, floor_c: -50000, isBlockedFromTrading: false, keeperOf: c.id === 'keeper' ? [ENT] : [] });
                 if (p === '/api/marketplace/transactions') return json(route, url.searchParams.get('publicKey') === ENT ? FARM_DEALS : []);
                 if (p.startsWith('/api/ratings')) return json(route, { ratings: [], average: 4.6, count: 5 });
                 if (p.startsWith('/api/treasuries')) return json(route, { treasuries: [] });

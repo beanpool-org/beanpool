@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { db, memberPhotoNotMovedYet } from '../db/db.js';
+import { db } from '../db/db.js';
 import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl, isBundledAvatar, word, wordsFor } from '@beanpool/core';
 import { isStorableImageValue, stripImageMetadata, tooManyPixels } from '../storage/image-metadata.js';
 
@@ -369,12 +369,11 @@ export class AvatarService {
         }
 
         // The member's avatar as they set it (member_photos: written with the row's avatar_ref, @beanpool/engine
-        // members.ts setMemberPhoto, so a member with none has no row here); or, while a move out of the rows is stopped
-        // part way, their photo still inline (db.ts memberPhotoNotMovedYet, #1482), which the members list gives a URL.
+        // members.ts setMemberPhoto, so a member with none has no row here).
         const row = db.prepare(
             `SELECT photo FROM member_photos WHERE public_key = ?`
         ).get(pubkey) as { photo: string } | undefined;
-        const photo = row ? row.photo : memberPhotoNotMovedYet(pubkey);
+        const photo = row?.photo;
 
         if (!photo || !photo.trim()) {
             return { status: 404, error: 'Avatar not found' };

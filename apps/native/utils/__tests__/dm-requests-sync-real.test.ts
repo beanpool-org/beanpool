@@ -76,7 +76,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests, getGlobalUnreadCount, getUnreadByConversation, getRecentChatMembers, decideMessageRequest, _resetDmPeerPinsForTests } from '../db';
 import { requestModeOf } from '@beanpool/core';
 import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
-import { encryptDmFormat2 } from '../e2e-crypto';
+import { sealDmLine } from '../e2e-crypto';
+import { randomUUID } from 'node:crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
 const sql = (globalThis as any).__phoneSql as import('node:sqlite').DatabaseSync;
@@ -102,7 +103,6 @@ const node = {
     beforeList: null as null | (() => Promise<void>),
 };
 let clock = Date.parse('2026-10-20T00:00:00.000Z');
-let serial = 0;
 
 function answer(status: number, body: unknown) {
     const text = JSON.stringify(body);
@@ -166,9 +166,10 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
 /** A DM line on the node, locked between its author and the other person, as the apps write it. */
 function write(conv: Conv, author: Person, text: string): Line {
     const peer = conv.participants.find((p) => p !== author.publicKey)!;
-    const { ciphertext, nonce } = encryptDmFormat2(text, { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id });
+    const id = randomUUID();   // a line is sealed and signed to its own id (format 4)
+    const { ciphertext, nonce } = sealDmLine(text, { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id }, { senderPubHex: author.publicKey, messageId: id });
     clock += 1000;
-    const line: Line = { id: `line-${++serial}`, conversationId: conv.id, authorPubkey: author.publicKey, ciphertext, nonce, type: 'text', systemType: null, metadata: null, timestamp: new Date(clock).toISOString(), editedAt: null };
+    const line: Line = { id, conversationId: conv.id, authorPubkey: author.publicKey, ciphertext, nonce, type: 'text', systemType: null, metadata: null, timestamp: new Date(clock).toISOString(), editedAt: null };
     node.lines.push(line);
     return line;
 }

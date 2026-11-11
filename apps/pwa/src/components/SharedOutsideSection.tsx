@@ -5,7 +5,7 @@
  * lets members share outside (`features.shareOutside`): turned off, every link has stopped and there is nothing to list.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { PEEK_WORDS as W, formatDate, t, type PeekShare } from '@beanpool/core';
+import { PEEK_WORDS as W, formatDate, t, tn, type PeekShare } from '@beanpool/core';
 import { useCommunityInfo } from '../lib/features';
 import { getPeekShares, stopPeekShare } from '../lib/peek';
 
@@ -63,6 +63,9 @@ export function SharedOutsideSection() {
                             <div key={s.id} data-testid="shared-outside-item" className="flex flex-col gap-2 p-3 rounded-xl border border-nature-200 dark:border-nature-800">
                                 <span className="font-bold text-nature-900 dark:text-white break-words" dir="auto">{s.title ?? t(W.postGone)}</span>
                                 <span className="text-xs text-nature-600 dark:text-nature-300">{t(W.worksUntil, { date: formatDate(new Date(s.expiresAt), 'day-month') })}</span>
+                                {s.asked > 0 && (
+                                    <span className="text-sm font-semibold text-bp-ink-accent break-words" data-testid="shared-outside-asked">{tn(s.asked, W.askedFromLink.one, W.askedFromLink.other)}</span>
+                                )}
                                 <button type="button" onClick={() => stop(s.id)} disabled={stopping === s.id} data-testid="shared-outside-stop"
                                     className="self-start min-h-[44px] px-4 rounded-xl border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 font-bold text-sm bg-transparent cursor-pointer disabled:opacity-60 break-words">
                                     {t(W.stopSharing)}

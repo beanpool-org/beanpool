@@ -28,6 +28,7 @@ vi.mock('./identity', () => identityMock);
 import { buildSignedWsParams, getMyUnread, request, signedFetchWithKey } from './api';
 import { connectToAnchor, resetSyncForTest } from './sync';
 import { resetCoordinatorForTest } from './sync-coordinator';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 
 const fetchMock = vi.fn();
 
@@ -110,6 +111,9 @@ describe('a request to the node that served the page is signed for its host', ()
 describe('a detached bp_node_url is signed for that URL\'s host, not the page\'s', () => {
     beforeEach(() => {
         localStorage.setItem('bp_node_url', 'https://Node.B.example:8443/');
+        // The fetch is read one call at a time: the node is heard new enough, so the version gate's own read is not among them.
+        resetNodeVersionGateForTests();
+        hearNodeVersionForTests('https://Node.B.example:8443');
     });
 
     it('request() signs for the node it fetches', async () => {

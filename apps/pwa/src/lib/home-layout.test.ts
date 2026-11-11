@@ -9,9 +9,9 @@ import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
-    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
-    columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
-    moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, placeLifted, placedBoxes, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
+    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
+    columnsFor, fewerCardsNews, gridWidth, layoutPrint,
+    moveCard, moveCardTo, packHome, pickLayout, pickerGroups, pinnedCards, placeLifted, placedBoxes, readLayout, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
 import { arrangeCards, cardLine, reorderAmong, reorderIds } from './home-layout';
@@ -226,14 +226,11 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
 });
 
 describe('which copy wins, and the members who were here before (§2.6)', () => {
-    it('a member who edited with a version-1 app: their order, hidden cards left out (translateV1); a v1 mark says whether it named anything', () => {
+    it('a member who edited with a version-1 app: their order, hidden cards left out (core\'s translateV1, still read, never written)', () => {
         const v1 = { v: 1, order: ['beans', 'market'], hidden: ['pulse'], dismissed: {}, updatedAt: iso(NOW - H) };
         expect(readLayout(v1)).toEqual(translateV1(v1));
         expect(ids(readLayout(v1))!.slice(0, 3)).toEqual(['beans', 'market', 'safety']);
         expect(ids(readLayout(v1))).not.toContain('pulse');
-        expect(layoutV1Of(v1)).toEqual({ empty: false });
-        expect(layoutV1Of({ v: 1, order: [], hidden: [], updatedAt: null })).toEqual({ empty: true });
-        expect(layoutV1Of({ v: 2, cards: [] })).toBeUndefined();
     });
 
     it('the newer copy wins by updatedAt; this browser\'s newer copy is sent', () => {
@@ -243,32 +240,8 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
         expect(pickLayout(b, a)).toEqual({ layout: b, push: false });
         expect(pickLayout(null, a)).toEqual({ layout: a, push: true });
         expect(pickLayout(a, null)).toEqual({ layout: a, push: false });
-    });
-
-    it('a not-yet-updated standby answers a v2 row as an empty v1 layout dated like it: this browser\'s v2 copy wins, on a tie and after (review of #1697, note b)', () => {
-        const local: HomeLayoutV2 = { v: 2, cards: [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }, ...starterCards()], dismissed: {}, updatedAt: iso(NOW) };
-        const emptyV1 = { v: 1, order: [], hidden: [], updatedAt: iso(NOW) };
-        expect(pickLayout(readLayout(emptyV1), local, layoutV1Of(emptyV1))).toEqual({ layout: local, push: false });
-        const later = { ...emptyV1, updatedAt: iso(NOW + H) };
-        expect(pickLayout(readLayout(later), local, layoutV1Of(later))).toEqual({ layout: local, push: false });
-        const edited = { v: 1, order: ['beans'], hidden: ['pulse'], updatedAt: iso(NOW + H) };
-        expect(pickLayout(readLayout(edited), local, layoutV1Of(edited)).layout).toEqual(readLayout(edited));
-        const tie = { ...edited, updatedAt: iso(NOW) };
-        expect(pickLayout(readLayout(tie), local, layoutV1Of(tie))).toEqual({ layout: local, push: false });
-    });
-
-    it('no copy here and an empty v1 account list: unknown, so the newcomer\'s list; an edit made then loses to the account\'s real list dated at or after it (review of #1699, finding 2)', () => {
-        const at = iso(NOW - 2 * H);
-        const standby = { v: 1, order: [], hidden: [], dismissed: { safety: at }, updatedAt: at };
-        expect(pickLayout(readLayout(standby), null, layoutV1Of(standby))).toEqual({ layout: { ...starterLayout(), dismissed: { safety: at } }, push: false });
-        const edit: HomeLayoutV2 = { v: 2, cards: starterCards().filter(c => c.type !== 'events'), dismissed: {}, updatedAt: iso(NOW) };
-        expect(pickLayout(readLayout(standby), edit, layoutV1Of(standby), at)).toEqual({ layout: edit, push: true });
-        const real: HomeLayoutV2 = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: at };
-        // The real list returns: it wins and the placeholder edit is never sent.
-        expect(pickLayout(real, edit, undefined, at)).toEqual({ layout: real, push: false });
-        expect(pickLayout(real, edit)).toEqual({ layout: edit, push: true });
-        expect(pickLayout({ ...real, updatedAt: iso(NOW - 3 * H) }, edit, undefined, at)).toEqual({ layout: edit, push: true });
-        expect(pickLayout(real, edit, undefined, '')).toEqual({ layout: real, push: false });
+        // A tie: the account's stands, and nothing is sent.
+        expect(pickLayout(a, { ...a })).toEqual({ layout: a, push: false });
     });
 
     it('the one-time "fewer cards" line: a member who never edited and joined over a week ago; never a newcomer, never one who edited', () => {
@@ -377,38 +350,6 @@ describe('this browser\'s own marked save, read back (review of #1701 confirmati
         expect(layoutPrint({ ...sent, view: { columns: 5 } } as never)).toBe(layoutPrint({ ...sent, view: { columns: 'auto' } }));
     });
 
-    it('the same list dated as sent or earlier is this browser\'s; dated later, another list, or a version-1 answer is not', () => {
-        const marks = rememberMarkSent([], sent);
-        expect(marks).toEqual([{ at: iso(NOW), print: layoutPrint(sent) }]);
-        expect(ownMarkedSave(answered(NOW), undefined, marks)).toBe(true);
-        expect(ownMarkedSave(answered(NOW - 200), undefined, marks)).toBe(true);
-        expect(ownMarkedSave(answered(NOW - H), undefined, marks)).toBe(true);
-        expect(ownMarkedSave(answered(NOW + 1), undefined, marks)).toBe(false);
-        expect(ownMarkedSave({ ...answered(NOW - 200), dismissed: {} }, undefined, marks)).toBe(false);
-        expect(ownMarkedSave(answered(NOW - 200), { empty: false }, marks)).toBe(false);
-        expect(ownMarkedSave(answered(NOW - 200), undefined, [])).toBe(false);
-    });
-
-    it('an entry an older build kept (a date alone) still loads and matches by its date only', () => {
-        const old = readMarkSent([iso(NOW), 7, 'x'.repeat(41), { at: iso(NOW - H), print: 'not-a-print' }, null]);
-        expect(old).toEqual([{ at: iso(NOW) }, { at: iso(NOW - H) }]);
-        expect(ownMarkedSave(answered(NOW), undefined, old)).toBe(true);
-        expect(ownMarkedSave(answered(NOW - 200), undefined, old)).toBe(false);
-        const kept = readMarkSent(JSON.parse(JSON.stringify(rememberMarkSent(old, sent))));
-        expect(ownMarkedSave(answered(NOW - 200), undefined, kept)).toBe(true);
-        expect(readMarkSent('nope')).toEqual([]);
-    });
-
-    it('at most the latest eight, and a date sent again keeps its latest list', () => {
-        let marks = rememberMarkSent([], sent);
-        for (let i = 1; i <= 10; i++) marks = rememberMarkSent(marks, { ...sent, updatedAt: iso(NOW + i) });
-        expect(marks).toHaveLength(MARK_SENT_MAX);
-        expect(marks[0].at).toBe(iso(NOW + 3));
-        const again = rememberMarkSent(marks, { ...sent, cards: [sent.cards[0]], updatedAt: iso(NOW + 10) });
-        expect(again).toHaveLength(MARK_SENT_MAX);
-        expect(again.at(-1)).toEqual({ at: iso(NOW + 10), print: layoutPrint({ ...sent, cards: [sent.cards[0]] }) });
-        expect(rememberMarkSent(marks, { ...sent, updatedAt: null })).toEqual(marks);
-    });
 });
 
 describe("a saved search's words on its card and in Arrange (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {

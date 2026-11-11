@@ -54,14 +54,14 @@ export function runPricingAggregationCycle(): {
                      AND p.status IN ('active', 'pending', 'completed')`;
     const hasPhoto = `(SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo`;
     const postsQuery = config.dataSource === 'local'
-        ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
+        ? `SELECT p.id, p.title, p.description, p.price_c, p.category, p.created_at,
                   ${hasPhoto}
            FROM posts p
-           WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0 AND ${onBoard}`
-        : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
+           WHERE p.active = 1 AND p.origin_node IS NULL AND p.price_c > 0 AND ${onBoard}`
+        : `SELECT p.id, p.title, p.description, p.price_c, p.category, p.created_at,
                   ${hasPhoto}
            FROM posts p
-           WHERE p.active = 1 AND p.credits > 0 AND ${onBoard}`;
+           WHERE p.active = 1 AND p.price_c > 0 AND ${onBoard}`;
 
     const posts = db.prepare(postsQuery).all() as any[];
 
@@ -69,7 +69,7 @@ export function runPricingAggregationCycle(): {
     const parsedPosts = posts.map(p => ({
         id: p.id,
         category: p.category,
-        credits: p.credits,
+        price_c: p.price_c,
         hasPhoto: Boolean(p.has_photo),
         tokens: new Set(tokenize(`${p.title} ${p.description}`)),
         text: `${p.title} ${p.description}`.toLowerCase(),
@@ -111,7 +111,9 @@ export function runPricingAggregationCycle(): {
                 const titleTokenMatch = categoryMatch && nameTokens.some(t => t.length >= 4 && post.tokens.has(t));
 
                 if (post.text.includes(nameLower) || (categoryMatch && matchScore >= 2) || titleTokenMatch) {
-                    matchedPrices.push(post.credits);
+                    // The guide is whole Beans (pricing_guide_items.price_beans, a hint that is never moved);
+                    // aggregateObservedPrice rounds what listings ask, in Beans, to its whole Beans.
+                    matchedPrices.push(post.price_c / 100);
                     if (post.hasPhoto && !latestPhotoUrl) {
                         latestPhotoUrl = `/api/marketplace/posts/${post.id}/photos/0`;
                     }

@@ -16,7 +16,8 @@
  *  8. The maker demoted: neither.
  *  9. Nothing that reaches a joiner before they join (/api/invite/check) or their card at the redeem carries the level,
  *     the vouch or the entry.
- * 10. An automation token and a password session reach the route not at all (401); a standby refuses it (409).
+ * 10. An automation token and an owner's key session (an admin credential, no member's signature) reach the route not at
+ *     all (401); a standby refuses it (409).
  * 11. No Bean moved: the ledger audit sums to zero and no transaction was written.
  * 12. The replication manifest carries the two new columns, and the hashes' version moved.
  */
@@ -28,15 +29,17 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 import crypto from 'node:crypto';
 import {
     newNamesEntryId, sealNamesEntry, makeNamesGenerationFor, syncNames, namesSharesToSend, checkNamesKeyInPerson, emptyNamesPin, namesRingKeys,
-    boundInviteLine, type NamesEntryText, type NamesPin, type NamesPlan, type NamesShare,
+    boundInviteLine, formatHundredths, type NamesEntryText, type NamesPin, type NamesPlan, type NamesShare,
 } from '@beanpool/core';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, getBalance, runLedgerAudit } from './state-engine.js';
+import { initStateEngine, getBalance, runLedgerAudit, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride } from './config/node-profile.js';
@@ -46,11 +49,11 @@ import { TABLE_HASHES_VERSION } from './engine/replica-hashes.js';
 import { budgetOf, returnLapsedHolds } from './engine/vouchers.js';
 import { listKeptNotices } from './engine/kept-notices.js';
 import { issueAutomationToken } from './automation-tokens.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
-const ADMIN_PW = 'Invite-Adds-Voucher-Pw-71!';
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -82,7 +85,8 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         h['X-Public-Key'] = id.pk;
-        h['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        h['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        h[SIGNED_FOR_HEADER] = signedForHost();
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }
@@ -93,6 +97,13 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
     return { status: res.status, body: parsed, text };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-');
+/**
+ * The story's figures are Beans; the node's are whole hundredths, a voucher budget, a vouch, its room and the known floor too
+ * (`vouchAmount`, `voucherLevel`, `level` keep their names, their values hundredths). `hc` turns Beans into hundredths, and
+ * `beansText` is a budget as the one money formatter writes it in English words ("1,000").
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansText = (beans: number) => formatHundredths(hc(beans), 'en');
 
 const generate = (id: Id) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
@@ -132,34 +143,35 @@ const codeRow = (code: string) => db.prepare('SELECT * FROM invite_codes WHERE c
 const liveConfirmation = (pk: string) => db.prepare('SELECT entry_id, confirmed_by, needs_second, id FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(pk) as
     { entry_id: string; confirmed_by: string; needs_second: number; id: string } | undefined;
 const voucherRow = (pk: string) => db.prepare('SELECT * FROM vouchers WHERE member_pubkey = ?').get(pk) as Record<string, any> | undefined;
-const linesOf = (pk: string) => db.prepare('SELECT kind, amount, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount: number; actor: string; ref: string | null }[];
+const linesOf = (pk: string) => db.prepare('SELECT kind, amount_c, actor, ref FROM voucher_allocations WHERE member_pubkey = ? ORDER BY rowid').all(pk) as { kind: string; amount_c: number; actor: string; ref: string | null }[];
 const allLines = () => count('SELECT COUNT(*) AS n FROM voucher_allocations');
 const floorLog = (action: string) => db.prepare('SELECT * FROM known_floor_log WHERE action = ? ORDER BY rowid').all(action) as Record<string, any>[];
-const roomOf = (pk: string) => count(`SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'`, pk);
+const roomOf = (pk: string) => count(`SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'`, pk);
 const voucherNotices = (pk: string) => listKeptNotices(pk).filter((n) => n.data.kind === 'voucher_budget');
-const sumBalances = () => count('SELECT COALESCE(SUM(balance), 0) AS n FROM accounts');
+const sumBalances = () => count('SELECT COALESCE(SUM(balance_c), 0) AS n FROM accounts');
 
 async function main(): Promise<void> {
     const COMMUNITY = (await ensureGenesis()).communityId;
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
     // ── Setup: Owen an owner (on the credit committee by role), Ada an admin (not on it), Mel a member ───────────────
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes Ada's role with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, mel] = ['Ada', 'Mel'].map(newId);
     for (const who of [ada, mel]) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+    for (const [who, role] of [[ada, 'admin']] as const) {
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER())).status === 200, `${who.name} is made ${role}`);
     }
     const owenP = new Phone(owen);
     const adaP = new Phone(ada);
@@ -168,7 +180,7 @@ async function main(): Promise<void> {
     require_((await owenP.open()).kind === 'ready', "Owen's phone makes the list's first key");
     await owenP.open();
     require_((await adaP.open()).kind === 'ready', "Ada's phone takes the list's key from Owen's");
-    require_((await call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, PASSWORD())).status === 200, 'the community turns on the known floor');
+    require_((await call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, OWNER())).status === 200, 'the community turns on the known floor');
     const addEntry = async (name: string) => {
         const id = newNamesEntryId();
         const r = await call(owen, 'POST', '/api/names/entries', { id, ciphertext: sealNamesEntry(owenP.key(), id, owenP.head(), { name, note: '' } as NamesEntryText), keyId: owenP.head() });
@@ -176,47 +188,54 @@ async function main(): Promise<void> {
         return id;
     };
     const bind = (id: Id, entryId: string, body: Record<string, unknown> = {}) => call(id, 'POST', `/api/names/entries/${entryId}/invite`, body);
-    require_(budgetOf(owen.pk).left === 1000 && budgetOf(ada.pk).left === 1000, `Owen and Ada each hold 1,000 by role (${budgetOf(owen.pk).left}, ${budgetOf(ada.pk).left})`);
+    // An admin is a voucher only when an owner makes them one (invites-vouching I5): Owen makes Ada one, no entry needed.
+    require_((await call(owen, 'POST', '/api/names/vouchers', { memberPubkey: ada.pk })).status === 201, 'Owen makes Ada, an admin, a voucher');
+    require_(budgetOf(owen.pk).left === hc(1000) && budgetOf(ada.pk).left === hc(1000), `Owen holds 1,000 by role and Ada the 1,000 he made her (${budgetOf(owen.pk).left}, ${budgetOf(ada.pk).left} hundredths)`);
     const txBefore = count('SELECT COUNT(*) AS n FROM transactions');
     const balancesBefore = sumBalances();
 
     // ── 1. Q1: a bound invite carries a vouch too ────────────────────────────────────────────────────────────────
     const e1 = await addEntry('Jory Pendlebury');
-    const b1 = await bind(owen, e1, { vouchAmount: 100 });
-    assert(b1.status === 201 && b1.body?.invite?.namesEntryId === e1 && b1.body?.invite?.vouchAmount === 100, `1. a bound invite with vouchAmount 100: 201, bound and carrying the vouch (${show(b1)})`);
+    const b1 = await bind(owen, e1, { vouchAmount: hc(100) });
+    assert(b1.status === 201 && b1.body?.invite?.namesEntryId === e1 && b1.body?.invite?.vouchAmount === hc(100), `1. a bound invite with vouchAmount 100: 201, bound and carrying the vouch (${show(b1)})`);
     const c1 = b1.body?.invite?.code as string;
     const owenAfterHold = budgetOf(owen.pk);
-    assert(codeRow(c1)?.vouch_amount === 100 && owenAfterHold.held === 100 && owenAfterHold.left === 900
-        && linesOf(owen.pk).some((l) => l.kind === 'hold' && l.amount === -100 && l.ref === c1),
-        `1. 100 is held from Owen's budget when the code is made (left ${owenAfterHold.left}, held ${owenAfterHold.held}, row ${codeRow(c1)?.vouch_amount})`);
+    // Owen is an owner: he vouches with no limit (Marty, 9 Nov; test-owner-vouch.ts), so the hold is recorded on his ledger as
+    // an owner's and drawn from no budget. Ada, an admin, holds from hers below (2.).
+    assert(codeRow(c1)?.vouch_amount_c === hc(100) && owenAfterHold.held === 0 && owenAfterHold.left === hc(1000)
+        && linesOf(owen.pk).some((l) => l.kind === 'hold' && l.amount_c === -hc(100) && l.ref === c1 && l.actor === 'role:owner'),
+        `1. 100 is recorded as an owner's hold on Owen's ledger when the code is made, his budget untouched (left ${owenAfterHold.left}, held ${owenAfterHold.held}, row ${codeRow(c1)?.vouch_amount_c}, in hundredths)`);
     const jory = newId('Jory');
     const j1 = await redeem(jory, c1);
-    assert(j1.status === 200 && j1.body?.vouch?.landed === 100 && liveConfirmation(jory.pk)?.entry_id === e1 && codeRow(c1)?.names_bind_outcome === 'confirmed',
+    assert(j1.status === 200 && j1.body?.vouch?.landed === hc(100) && liveConfirmation(jory.pk)?.entry_id === e1 && codeRow(c1)?.names_bind_outcome === 'confirmed',
         `1. the redeem confirms Jory against the entry and lands the vouch (${show(j1)})`);
-    assert(roomOf(jory.pk) === 100 && budgetOf(owen.pk).vouched === 100 && budgetOf(owen.pk).held === 0 && budgetOf(owen.pk).left === 900,
+    assert(roomOf(jory.pk) === hc(100) && budgetOf(owen.pk).vouched === hc(100) && budgetOf(owen.pk).held === 0 && budgetOf(owen.pk).left === hc(1000),
         `1. the vouch is room on Jory from Owen, and no longer held (${JSON.stringify(budgetOf(owen.pk))})`);
     // The measurement Marty asked for: how the vouch and the known floor combine on the joiner's floor.
     const jb = getBalance(jory.pk);
-    console.log(`   MEASURED: Jory knownGrant ${jb.knownGrant}, roomHeld ${jb.roomHeld}, floor ${jb.floor}, usableFloor ${jb.usableFloor}, liveOffers ${jb.liveOffers}`);
-    assert(jb.knownGrant === 1000 && jb.roomHeld === 100 && jb.floor === -1100,
-        `1. on Jory's floor the two add up: known 1,000 + vouch 100 = limit 1,100 (known ${jb.knownGrant}, room ${jb.roomHeld}, floor ${jb.floor})`);
+    console.log(`   MEASURED (hundredths): Jory knownGrant_c ${jb.knownGrant_c}, roomHeld_c ${jb.roomHeld_c}, floor_c ${jb.floor_c}, usableFloor_c ${jb.usableFloor_c}, liveOffers ${jb.liveOffers}`);
+    assert(jb.knownGrant_c === hc(1000) && jb.roomHeld_c === hc(100) && jb.floor_c === -hc(1100),
+        `1. on Jory's floor the two add up: known 1,000 + vouch 100 = limit 1,100 (known ${jb.knownGrant_c}, room ${jb.roomHeld_c}, floor ${jb.floor_c}, in hundredths)`);
 
     // ── 2. Q1: every vouch rule still refuses on a bound invite ─────────────────────────────────────────────────
     const e2 = await addEntry('Hollis Merriweather');
     let invitesBefore = count('SELECT COUNT(*) AS n FROM invite_codes');
     let linesBefore = allLines();
-    const notPreset = await bind(owen, e2, { vouchAmount: 60 });
+    const notPreset = await bind(owen, e2, { vouchAmount: hc(60) });
     assert(notPreset.status === 400 && notPreset.body?.code === 'bad_amount' && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore && allLines() === linesBefore,
         `2. a vouch of 60 on a bound invite: 400 bad_amount, nothing written (${show(notPreset)})`);
-    require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: 100 })).status === 200 && budgetOf(ada.pk).left === 100, "Owen sets Ada's budget to 100");
-    const adaFirst = await bind(ada, e2, { vouchAmount: 100 });
-    require_(adaFirst.status === 201 && budgetOf(ada.pk).held === 100 && budgetOf(ada.pk).left === 0, `Ada's bound invite holds all 100 of hers (${show(adaFirst)})`);
+    require_((await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: hc(100) })).status === 200 && budgetOf(ada.pk).left === hc(100), "Owen sets Ada's budget to 100");
+    const adaFirst = await bind(ada, e2, { vouchAmount: hc(100) });
+    require_(adaFirst.status === 201 && budgetOf(ada.pk).held === hc(100) && budgetOf(ada.pk).left === 0, `Ada's bound invite holds all 100 of hers (${show(adaFirst)})`);
+    // Each on an entry of its own: e2 has Ada's invite out now, and a second live invite on one entry is refused first (I2).
+    const e2b = await addEntry('Hollis Merriweather Two');
+    const e2c = await addEntry('Hollis Merriweather Three');
     invitesBefore = count('SELECT COUNT(*) AS n FROM invite_codes');
     linesBefore = allLines();
-    const overBudget = await bind(ada, e2, { vouchAmount: 25 });
+    const overBudget = await bind(ada, e2b, { vouchAmount: hc(25) });
     assert(overBudget.status === 409 && overBudget.body?.code === 'not_enough', `2. a vouch past what is left on a bound invite: 409 not_enough with the sentence (${show(overBudget)})`);
     db.prepare("UPDATE vouchers SET stopped_at = '2026-01-01T00:00:00.000Z' WHERE member_pubkey = ?").run(ada.pk);
-    const notVoucher = await bind(ada, e2, { vouchAmount: 25 });
+    const notVoucher = await bind(ada, e2c, { vouchAmount: hc(25) });
     db.prepare('UPDATE vouchers SET stopped_at = NULL WHERE member_pubkey = ?').run(ada.pk);
     assert(notVoucher.status === 403 && notVoucher.body?.code === 'not_a_voucher', `2. a maker who is no voucher: 403 not_a_voucher (${show(notVoucher)})`);
     assert(count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore && allLines() === linesBefore, '2. none of those wrote an invite or a budget line');
@@ -225,22 +244,22 @@ async function main(): Promise<void> {
     const e3 = await addEntry('Jane Albury');
     linesBefore = allLines();
     const vouchersBefore = count('SELECT COUNT(*) AS n FROM vouchers');
-    const b3 = await bind(owen, e3, { vouchAmount: 25, voucherLevel: 1000 });
-    assert(b3.status === 201 && b3.body?.invite?.voucherLevel === 1000 && b3.body?.invite?.vouchAmount === 25, `3. a bound invite with voucherLevel 1,000 and a vouch of 25: 201 (${show(b3)})`);
+    const b3 = await bind(owen, e3, { vouchAmount: hc(25), voucherLevel: hc(1000) });
+    assert(b3.status === 201 && b3.body?.invite?.voucherLevel === hc(1000) && b3.body?.invite?.vouchAmount === hc(25), `3. a bound invite with voucherLevel 1,000 and a vouch of 25: 201 (${show(b3)})`);
     const c3 = b3.body?.invite?.code as string;
     const promised = floorLog('voucher_promised').filter((l) => l.old_value === e3);
-    assert(codeRow(c3)?.voucher_level === 1000 && promised.length === 1 && promised[0].actor_pubkey === owen.pk && promised[0].new_value === '1000' && promised[0].member_pubkey === null,
+    assert(codeRow(c3)?.voucher_level_c === hc(1000) && promised.length === 1 && promised[0].actor_pubkey === owen.pk && promised[0].new_value === String(hc(1000)) && promised[0].member_pubkey === null,
         `3. the code keeps the level, and one voucher_promised line says who promised what for which entry (${JSON.stringify(promised)})`);
     assert(count('SELECT COUNT(*) AS n FROM vouchers') === vouchersBefore && allLines() === linesBefore + 1,
         `3. no voucher row and no grant yet: the only budget line is the 25 held from Owen's (${allLines() - linesBefore})`);
     const jane = newId('Jane');
     const j3 = await redeem(jane, c3);
-    assert(j3.status === 200 && liveConfirmation(jane.pk)?.entry_id === e3 && codeRow(c3)?.names_bind_outcome === 'confirmed' && j3.body?.vouch?.landed === 25,
+    assert(j3.status === 200 && liveConfirmation(jane.pk)?.entry_id === e3 && codeRow(c3)?.names_bind_outcome === 'confirmed' && j3.body?.vouch?.landed === hc(25),
         `3. Jane joins, confirmed against the entry, with Owen's vouch of 25 (${show(j3)})`);
     const janeBudget = budgetOf(jane.pk);
     const janeLines = linesOf(jane.pk);
     const janeRow = voucherRow(jane.pk);
-    assert(janeBudget.level === 1000 && janeBudget.left === 1000 && janeLines.length === 1 && janeLines[0].kind === 'grant' && janeLines[0].amount === 1000 && janeLines[0].actor === owen.pk,
+    assert(janeBudget.level === hc(1000) && janeBudget.left === hc(1000) && janeLines.length === 1 && janeLines[0].kind === 'grant' && janeLines[0].amount_c === hc(1000) && janeLines[0].actor === owen.pk,
         `3. and is made a voucher with 1,000: one grant line, by Owen (${JSON.stringify(janeLines)})`);
     assert(janeRow?.source === 'entry' && janeRow?.entry_id === e3 && janeRow?.made_by === owen.pk && janeRow?.stopped_at === null, `3. her budget's source is the entry, made by Owen (${JSON.stringify(janeRow)})`);
     const made = floorLog('voucher_made').filter((l) => l.member_pubkey === jane.pk);
@@ -250,35 +269,37 @@ async function main(): Promise<void> {
     assert(codeRow(c3)?.voucher_outcome === 'made', `3. the invite keeps the outcome (${codeRow(c3)?.voucher_outcome})`);
     const listed = await call(ada, 'GET', '/api/names/invites');
     const l3 = listed.body?.invites?.find((i: any) => i.entryId === e3);
-    assert(listed.status === 200 && l3?.voucherLevel === 1000 && l3?.voucherOutcome === 'made' && !('code' in l3), `3. GET /api/names/invites shows the level and the outcome, never the code (${JSON.stringify(l3)})`);
+    assert(listed.status === 200 && l3?.voucherLevel === hc(1000) && l3?.voucherOutcome === 'made' && !('code' in l3), `3. GET /api/names/invites shows the level and the outcome, never the code (${JSON.stringify(l3)})`);
     const line3 = boundInviteLine(l3, (pk) => (pk === jane.pk ? '@Jane' : pk === owen.pk ? '@Owen' : 'Someone'));
-    assert(line3 === '@Jane joined and was confirmed; made a voucher with a budget of 1000 Beans', `3. the entry's line says so: "${line3}"`);
+    assert(line3 === `@Jane joined and was confirmed; made a voucher with a budget of ${beansText(1000)} Beans`, `3. the entry's line says so: "${line3}"`);
 
     // ── 4. Refused before anything is written ────────────────────────────────────────────────────────────────────
     const e4 = await addEntry('Morwenna Treleaven');
     invitesBefore = count('SELECT COUNT(*) AS n FROM invite_codes');
     linesBefore = allLines();
     const promisedBefore = floorLog('voucher_promised').length;
-    const too = [await bind(owen, e4, { voucherLevel: 2100 }), await bind(owen, e4, { voucherLevel: 150 }), await bind(owen, e4, { voucherLevel: '1000' })];
-    assert(too.every((r) => r.status === 400 && r.body?.code === 'bad_level'), `4. 2,100, 150 and "1000": 400 bad_level (${too.map(show).join(' | ')})`);
-    const byAda = await bind(ada, e4, { voucherLevel: 1000 });
+    const too = [await bind(owen, e4, { voucherLevel: hc(2100) }), await bind(owen, e4, { voucherLevel: hc(150) }), await bind(owen, e4, { voucherLevel: String(hc(1000)) })];
+    assert(too.every((r) => r.status === 400 && r.body?.code === 'bad_level'), `4. 2,100, 150 and 1,000 written as text: 400 bad_level (${too.map(show).join(' | ')})`);
+    const byAda = await bind(ada, e4, { voucherLevel: hc(1000) });
     assert(byAda.status === 403 && byAda.body?.code === 'committee_only', `4. an admin off the credit committee: 403 committee_only with the sentence (${show(byAda)})`);
     setSwitchOverride('beans', false);
-    const beansOff = await bind(owen, e4, { voucherLevel: 1000 });
+    const beansOff = await bind(owen, e4, { voucherLevel: hc(1000) });
     setSwitchOverride('beans', true);
     assert(beansOff.status === 403 && beansOff.body?.code === 'profile_no_beans', `4. Beans off: refused (${show(beansOff)})`);
     assert(count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore && allLines() === linesBefore && floorLog('voucher_promised').length === promisedBefore,
         '4. none of those wrote an invite, a budget line or a promise');
 
     // ── 5. A code that expires: the vouch comes back, no voucher line ───────────────────────────────────────────
-    const b5 = await bind(owen, e4, { vouchAmount: 50, voucherLevel: 500 });
+    const b5 = await bind(owen, e4, { vouchAmount: hc(50), voucherLevel: hc(500) });
     require_(b5.status === 201, `Owen makes a bound invite with a vouch of 50 and a level of 500 (${show(b5)})`);
     const c5 = b5.body.invite.code as string;
-    const heldWithIt = budgetOf(owen.pk).held;
+    const withIt = budgetOf(owen.pk);
     db.prepare('UPDATE invite_codes SET created_at = ? WHERE code = ?').run(new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(), c5);
-    assert(budgetOf(owen.pk).held === heldWithIt - 50, `5. once the code lapses its 50 is no longer held (${heldWithIt} → ${budgetOf(owen.pk).held})`);
+    // An owner's 50 was never held from a budget (Marty, 9 Nov), so its lapse moves none of it.
+    assert(withIt.held === 0 && budgetOf(owen.pk).held === 0 && budgetOf(owen.pk).left === withIt.left,
+        `5. once the code lapses nothing moves in the owner's budget, which never held its 50 (held ${withIt.held} → ${budgetOf(owen.pk).held}, left ${withIt.left} → ${budgetOf(owen.pk).left})`);
     returnLapsedHolds(owen.pk);
-    assert(linesOf(owen.pk).some((l) => l.kind === 'return' && l.amount === 50 && l.ref === c5), '5. and the prune writes its return line');
+    assert(linesOf(owen.pk).some((l) => l.kind === 'return' && l.amount_c === hc(50) && l.ref === c5), '5. and the prune writes its return line');
     const late = newId('Late');
     const lateJoin = await redeem(late, c5);
     assert(lateJoin.status === 400 && /expired/i.test(lateJoin.body?.error ?? ''), `5. the expired code joins nobody (${show(lateJoin)})`);
@@ -288,7 +309,7 @@ async function main(): Promise<void> {
     // ── 6. Two admins to confirm: nothing lands until the second ────────────────────────────────────────────────
     require_((await call(owen, 'POST', '/api/names/settings', { twoAdminsToConfirm: true })).status === 200, 'Owen turns on two admins to confirm');
     const e6 = await addEntry('Tamsin Rowe');
-    const b6 = await bind(owen, e6, { voucherLevel: 800 });
+    const b6 = await bind(owen, e6, { voucherLevel: hc(800) });
     require_(b6.status === 201, `Owen makes a bound invite with a level of 800 (${show(b6)})`);
     const tamsin = newId('Tamsin');
     const j6 = await redeem(tamsin, b6.body.invite.code);
@@ -306,13 +327,13 @@ async function main(): Promise<void> {
     const after6 = (await call(ada, 'GET', '/api/names/invites')).body?.invites?.find((i: any) => i.entryId === e6);
     const line6 = boundInviteLine(after6, nameOf6);
     assert(after6?.outcome === 'confirmed' && after6?.voucherOutcome === 'made' && codeRow(b6.body.invite.code)?.names_bind_outcome === 'awaiting_second'
-        && line6 === '@Tamsin joined and was confirmed; made a voucher with a budget of 800 Beans',
+        && line6 === `@Tamsin joined and was confirmed; made a voucher with a budget of ${beansText(800)} Beans`,
         `6. once seconded, GET /api/names/invites reads confirmed, and the line says so: "${line6}" (${JSON.stringify(after6)})`);
-    assert(budgetOf(tamsin.pk).level === 800 && voucherRow(tamsin.pk)?.made_by === owen.pk && codeRow(b6.body.invite.code)?.voucher_outcome === 'made'
+    assert(budgetOf(tamsin.pk).level === hc(800) && voucherRow(tamsin.pk)?.made_by === owen.pk && codeRow(b6.body.invite.code)?.voucher_outcome === 'made'
         && floorLog('voucher_made').filter((l) => l.member_pubkey === tamsin.pk).length === 1 && voucherNotices(tamsin.pk).length === 1,
         `6. then the voucher lands, made by Owen, with its line and its notice (${JSON.stringify(budgetOf(tamsin.pk))})`);
     const e6b = await addEntry('Wynn Carrow');
-    const b6b = await bind(owen, e6b, { voucherLevel: 600 });
+    const b6b = await bind(owen, e6b, { voucherLevel: hc(600) });
     const wynn = newId('Wynn');
     require_(b6b.status === 201 && (await redeem(wynn, b6b.body.invite.code)).status === 200 && codeRow(b6b.body.invite.code)?.voucher_outcome === 'awaiting_second',
         'Wynn joins with another, waiting for a second admin');
@@ -330,7 +351,7 @@ async function main(): Promise<void> {
     // ── 7. The maker left the credit committee ───────────────────────────────────────────────────────────────────
     require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: ada.pk, on: true })).status === 200, 'Owen puts Ada on the credit committee');
     const e7 = await addEntry('Kit Fairweather');
-    const b7 = await bind(ada, e7, { voucherLevel: 500 });
+    const b7 = await bind(ada, e7, { voucherLevel: hc(500) });
     require_(b7.status === 201, `Ada makes a bound invite with a level of 500 (${show(b7)})`);
     require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: ada.pk, on: false })).status === 200, 'Owen takes Ada off the committee');
     const kit = newId('Kit');
@@ -346,9 +367,9 @@ async function main(): Promise<void> {
     // ── 8. The maker demoted: neither ────────────────────────────────────────────────────────────────────────────
     require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: ada.pk, on: true })).status === 200, 'Ada back on the committee');
     const e8 = await addEntry('Ned Ashworth');
-    const b8 = await bind(ada, e8, { voucherLevel: 500 });
+    const b8 = await bind(ada, e8, { voucherLevel: hc(500) });
     require_(b8.status === 201, `Ada makes another (${show(b8)})`);
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'moderator' }, PASSWORD())).status === 200, 'Ada is made a moderator');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'moderator' }, OWNER())).status === 200, 'Ada is made a moderator');
     const ned = newId('Ned');
     const j8 = await redeem(ned, b8.body.invite.code);
     assert(j8.status === 200 && !liveConfirmation(ned.pk) && !voucherRow(ned.pk) && codeRow(b8.body.invite.code)?.names_bind_outcome === 'maker_not_admin'
@@ -357,7 +378,7 @@ async function main(): Promise<void> {
     // ── 9. Nothing a joiner reads before joining carries the level, the vouch or the entry ──────────────────────
     require_((await owenP.open()).kind === 'ready', "with Ada no admin, Owen's phone makes the list a new key");
     const e9 = await addEntry('Pell Quarry');
-    const b9 = await bind(owen, e9, { vouchAmount: 75, voucherLevel: 1500 });
+    const b9 = await bind(owen, e9, { vouchAmount: hc(75), voucherLevel: hc(1500) });
     require_(b9.status === 201, `Owen makes a bound invite with both (${show(b9)})`);
     const c9 = b9.body.invite.code as string;
     const checked = await call(null, 'GET', `/api/invite/check?code=${encodeURIComponent(c9)}`);
@@ -373,23 +394,25 @@ async function main(): Promise<void> {
     invitesBefore = count('SELECT COUNT(*) AS n FROM invite_codes');
     const token = issueAutomationToken({ name: 'adds-voucher-suite', scope: 'admin', createdBy: owen.pk });
     require_(token.ok, 'Owen makes an admin automation token');
-    const byToken = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: 1000 }, { Authorization: `Bearer ${token.ok ? token.token : ''}` });
-    const byPassword = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: 1000 }, PASSWORD());
-    assert(byToken.status === 401 && byPassword.status === 401 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore,
-        `10. an automation token and a password session: 401, nothing written (${show(byToken)} | ${show(byPassword)})`);
+    const byToken = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: hc(1000) }, { Authorization: `Bearer ${token.ok ? token.token : ''}` });
+    const bySession = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: hc(1000) }, OWNER());
+    assert(byToken.status === 401 && bySession.status === 401 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore,
+        `10. an automation token and an owner's key session: 401, nothing written (${show(byToken)} | ${show(bySession)})`);
     setNodeRole('backup');
-    const onStandby = await bind(owen, e10, { voucherLevel: 1000 });
+    const onStandby = await bind(owen, e10, { voucherLevel: hc(1000) });
     setNodeRole('primary');
     assert(onStandby.status === 409 && onStandby.body?.code === 'standby' && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore, `10. a standby: 409 standby (${show(onStandby)})`);
 
     // ── 11. No Bean moved ────────────────────────────────────────────────────────────────────────────────────────
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.sumBalances) < 0.01 && sumBalances() === balancesBefore && count('SELECT COUNT(*) AS n FROM transactions') === txBefore,
+    assert(audit.ok && audit.sumBalances === 0 && audit.drift === 0 && sumBalances() === balancesBefore && count('SELECT COUNT(*) AS n FROM transactions') === txBefore,
         `11. the ledger audit sums to zero (${audit.sumBalances}), no balance moved and no transaction was written`);
 
     // ── 12. Replication ──────────────────────────────────────────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);
-    assert(cols.includes('voucher_level') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION === 23, `12. the manifest carries both columns as plain, hashes version 23 (${TABLE_HASHES_VERSION})`);
+    // 23 raised the version for these two columns; a later raise (24: standing deals) still hashes them. Which columns each
+    // version hashes is pinned exactly in test-replica-hashes (COLUMNS_OF_VERSION), as test-vouch-reset reads "21 or later".
+    assert(cols.includes('voucher_level_c') && cols.includes('voucher_outcome') && TABLE_HASHES_VERSION >= 23, `12. the manifest carries both columns as plain, hashes version 23 or later (${TABLE_HASHES_VERSION})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

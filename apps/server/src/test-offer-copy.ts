@@ -4,9 +4,9 @@
  * (test-event-copy); this holds what a listing adds. Boots the real server on the global profile and goes through the real
  * middleware over HTTPS, signed:
  *
- *   1. the write: 0 Beans in `credits`, the price as words, the rounded point, and nothing of a deal, whatever is sent
+ *   1. the write: 0 Beans in `price_c`, the price as words, the rounded point, and nothing of a deal, whatever is sent
  *   2. the reads: every way a listing leaves the node names nobody, for a visitor and a member
- *   3. the price: drawn from `shownPrice`; never a number any read of `credits` or a Beans filter can use
+ *   3. the price: drawn from `shownPrice`; never a number any read of `price_c` or a Beans filter can use
  *   4. no way to pay: every money and deal route refuses with Beans off
  *   5. an edit keeps to it; a listing's kind and price follow; nothing else can put a price on a post
  *   6. no read goes by who wrote it, for the paths a listing has and an event hadn't
@@ -29,6 +29,7 @@ import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -45,10 +46,11 @@ function keypair(): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -73,7 +75,8 @@ const ROUNDED = { lat: -28.7, lng: 153.5 };
 const HOST = 'mullum.example.org';
 const NAME = 'Mullumbimby Commons';
 const HOME_ID = '5b0d5a3e-5d6c-4f0a-9a57-222222222222';
-const PRICE = { beans: 20, per: 'fixed' };
+/** A copy's price as the phone sends it: whole hundredths (2000 is 20 Beans) and how it is charged; kept as '2000 fixed'. */
+const PRICE = { price_c: 2000, per: 'fixed' };
 
 async function main() {
     console.log('A member\'s copy of an Offer or a Need on the global community...\n');
@@ -110,7 +113,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_treasury, updated_at)
                     VALUES (?, ?, 'active', ?, 'genesis', 'TEST', 0, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pubKeyHex, name, joinedAt);
         setMemberPhoto(db, id.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const robin = member('RobinSeller');
@@ -137,8 +140,8 @@ async function main() {
     const socketOf = (id: Id): Promise<{ ws: WebSocket; raw: string[] }> => new Promise((resolve, reject) => {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-        const ws = new WebSocket(`wss://localhost:${port}/ws?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`, { rejectUnauthorized: false });
+        const sig = signSocket(id.privateKey, ts, nonce);
+        const ws = new WebSocket(`wss://localhost:${port}/ws?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`, { rejectUnauthorized: false });
         const raw: string[] = [];
         ws.on('message', (d) => raw.push(d.toString()));
         ws.on('open', () => resolve({ ws, raw }));
@@ -150,27 +153,29 @@ async function main() {
     console.log('── 1. The write ──');
     const made = await postCopy(robin, 'Sourdough loaves', {
         // Sent here to prove they don't land. The phone sends none of them.
-        credits: 20, priceType: 'hourly', repeatable: true, cashAlsoNeeded: true, lendable: true, lendMaxDays: 7, lendTerms: 'Ring 0400 000 000', replacementValue: '50 dollars',
+        price_c: 2000, priceType: 'hourly', repeatable: true, cashAlsoNeeded: true, lendable: true, lendMaxDays: 7, lendTerms: 'Ring 0400 000 000', replacementValue: '50 dollars',
         reach: 'everywhere', shopId: 'a-shop', targetPubkey: sam.pubKeyHex,
     });
     const copyId: string = made.body?.post?.id;
-    assert(made.status === 200 && !!copyId, `a copy is made by its member's key, a price in \`credits\` sent or not (${made.status} ${made.text.slice(0, 160)})`);
+    assert(made.status === 200 && !!copyId, `a copy is made by its member's key, a price in \`price_c\` sent or not (${made.status} ${made.text.slice(0, 160)})`);
     const kept = stored(copyId);
     assert(kept?.shown_from_host === HOST && kept?.shown_from_post_id === HOME_ID, 'it keeps the host of a shown row and the listing\'s id there');
-    assert(kept?.credits === 0 && kept?.price_type === 'fixed', `\`credits\` is 0: the column every Beans read goes by holds nothing (${kept?.credits} ${kept?.price_type})`);
-    assert(kept?.shown_price === '20 fixed', `the price is kept for its words alone (${kept?.shown_price})`);
+    assert(kept?.price_c === 0 && kept?.price_type === 'fixed', `\`price_c\` is 0: the column every Beans read goes by holds nothing (${kept?.price_c} ${kept?.price_type})`);
+    assert(kept?.shown_price === '2000 fixed', `the price is kept for its words alone, in whole hundredths (${kept?.shown_price})`);
     assert(kept?.lat === ROUNDED.lat && kept?.lng === ROUNDED.lng, `the point stored is the rounded home point, whatever was sent (${kept?.lat}, ${kept?.lng})`);
     assert(kept?.repeatable === 0 && kept?.cash_also_needed === 0 && !kept?.lendable && kept?.lend_terms === null && kept?.replacement_value === null,
         'nothing of a deal lands: no repeat, no cash, no lending and no lender\'s words');
     assert(kept?.shop_id === null && kept?.reach === 'local' && kept?.target_pubkey === null && kept?.audience_scope === 'public', 'no shop, no reach past this board, nobody named');
     assert(made.body?.post?.shownCopy === true && made.body?.post?.authorPublicKey === robin.pubKeyHex, 'its author\'s answer says it is a copy, and that it is theirs');
-    const need = await postCopy(robin, 'Help moving a piano', { type: 'need', shownPrice: { beans: 5, per: 'hourly' } });
-    assert(need.status === 200 && stored(need.body?.post?.id)?.shown_price === '5 hourly' && stored(need.body?.post?.id)?.credits === 0, 'a Need is the same, with its unit');
-    const loan = await postCopy(robin, 'Post-hole digger', { shownPrice: { beans: 3, per: 'daily' } });
-    assert(loan.status === 200 && stored(loan.body?.post?.id)?.shown_price === '3 daily', 'a lendable Offer counts as an Offer: its price and unit, and no lending here');
-    const free = await postCopy(robin, 'Free lemons', { shownPrice: { beans: 0, per: 'fixed' } });
+    const need = await postCopy(robin, 'Help moving a piano', { type: 'need', shownPrice: { price_c: 500, per: 'hourly' } });
+    assert(need.status === 200 && stored(need.body?.post?.id)?.shown_price === '500 hourly' && stored(need.body?.post?.id)?.price_c === 0, 'a Need is the same, with its unit');
+    const loan = await postCopy(robin, 'Post-hole digger', { shownPrice: { price_c: 300, per: 'daily' } });
+    assert(loan.status === 200 && stored(loan.body?.post?.id)?.shown_price === '300 daily', 'a lendable Offer counts as an Offer: its price and unit, and no lending here');
+    const free = await postCopy(robin, 'Free lemons', { shownPrice: { price_c: 0, per: 'fixed' } });
     assert(free.status === 200 && (await byId(free.body?.post?.id, sam))?.shownPrice === '0 fixed', 'a free listing says so: a price of nothing is a price');
-    for (const [what, price] of [['none', undefined], ['words', { beans: 'twenty', per: 'fixed' }], ['below nothing', { beans: -1, per: 'fixed' }], ['past the most', { beans: 2_000_000, per: 'fixed' }], ['an unknown unit', { beans: 1, per: 'fortnightly' }], ['free text', 'Ring me on 0400 000 000']] as const) {
+    // An app from before whole hundredths sends `{ beans }`, and a figure finer than a hundredth is no price: both refused, never read.
+    for (const [what, price] of [['none', undefined], ['words', { price_c: 'twenty', per: 'fixed' }], ['below nothing', { price_c: -100, per: 'fixed' }], ['past the most', { price_c: 200_000_000, per: 'fixed' }], ['an unknown unit', { price_c: 100, per: 'fortnightly' }], ['free text', 'Ring me on 0400 000 000'],
+        ['the old figure in Beans', { beans: 20, per: 'fixed' }], ['a part of a hundredth', { price_c: 20.5, per: 'fixed' }]] as const) {
         const refused = await postCopy(robin, `Bad price, ${what}`, { shownPrice: price });
         assert(refused.status === 400, `a price of ${what} is refused, and the phone's words never stand in for one (${refused.status})`);
     }
@@ -188,8 +193,8 @@ async function main() {
     for (const [who, id] of [['a visitor', null], ['a member', sam]] as const) {
         const one = await byId(copyId, id);
         assert(one?.title === 'Sourdough loaves' && one?.authorPublicKey === 'hidden' && one?.authorCallsign === '', `${who} reads it by id, with the neutral author`);
-        assert(one?.shownCopy === true && one?.shownFrom?.name === NAME && one?.shownFrom?.door === 'ask' && one?.shownPrice === '20 fixed', `${who}: the from-line is the row's, the price is words`);
-        assert(!('shownFromHost' in one) && !('shownFromPostId' in one) && one?.credits === 0, `${who}: never the stored columns, and no price in \`credits\``);
+        assert(one?.shownCopy === true && one?.shownFrom?.name === NAME && one?.shownFrom?.door === 'ask' && one?.shownPrice === '2000 fixed', `${who}: the from-line is the row's, the price is words`);
+        assert(!('shownFromHost' in one) && !('shownFromPostId' in one) && one?.price_c === 0, `${who}: never the stored columns, and no price in \`price_c\``);
         assert(one?.lat === ROUNDED.lat && one?.lng === ROUNDED.lng, `${who}: the rounded point`);
         leaks(JSON.stringify(one), `${who}, by id`);
         for (const [what, path] of [
@@ -220,14 +225,14 @@ async function main() {
         assert(Array.isArray(pins.body) && pins.body.find((p: any) => p.id === copyId)?.distanceKm !== undefined, `${who} finds it from a point`);
         // The newest few: any of the copies made above. Each says the same of itself.
         const onHome = (await call('GET', '/api/home', id)).body?.cards?.market?.items?.find((i: any) => i.title === 'Free lemons');
-        assert(onHome?.shownCopy === true && onHome?.shownFrom?.name === NAME && onHome?.shownPrice === '0 fixed' && onHome?.credits === undefined,
+        assert(onHome?.shownCopy === true && onHome?.shownFrom?.name === NAME && onHome?.shownPrice === '0 fixed' && onHome?.price_c === undefined,
             `${who}, Home's Market: says it is a copy, where from and its words (${JSON.stringify(onHome)?.slice(0, 170)})`);
     }
     const nearbySet = await call('GET', '/api/marketplace/posts?nearby=1&sync=true', sam);
     assert(JSON.stringify(nearbySet.body?.posts ?? []).includes(copyId), 'a member near it has it in their set');
     leaks(nearbySet.text, 'a member, their set');
     const saved = (await call('GET', '/api/home', sam)).body?.cards?.['search-loaf']?.items?.find((i: any) => i.id === copyId);
-    assert(saved?.shownCopy === true && saved?.shownFrom?.name === NAME && saved?.shownPrice === '20 fixed', `a saved search: says the same (${JSON.stringify(saved)?.slice(0, 160)})`);
+    assert(saved?.shownCopy === true && saved?.shownFrom?.name === NAME && saved?.shownPrice === '2000 fixed', `a saved search: says the same (${JSON.stringify(saved)?.slice(0, 160)})`);
     const photo = await localFetch(`${BASE}${(await byId(copyId, null))?.photos?.[0]}`);
     assert(photo.status === 200, `its photo opens for anyone, as a listing's on the board does (${photo.status})`);
     assert(!JSON.stringify(listingsForPeer('any-peer')).includes(copyId), 'no peer is sent it, whatever reach was asked for');
@@ -258,15 +263,15 @@ async function main() {
     const mine = await call('GET', `/api/marketplace/posts?author=${robin.pubKeyHex}`, sam);
     assert(!mine.text.includes(copyId), 'one member\'s list, read by another, leaves it out');
     const own = await byId(copyId, robin);
-    assert(own?.authorPublicKey === robin.pubKeyHex && own?.shownCopy === true && own?.shownPrice === '20 fixed', 'its author reads it as theirs, to tend it');
+    assert(own?.authorPublicKey === robin.pubKeyHex && own?.shownCopy === true && own?.shownPrice === '2000 fixed', 'its author reads it as theirs, to tend it');
     const plain = await call('POST', '/api/marketplace/posts', robin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Plain loaves', description: 'On global by hand', authorPublicKey: robin.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS });
     const plainRead = await byId(plain.body?.post?.id, sam);
     assert(plainRead?.authorPublicKey === robin.pubKeyHex && !plainRead?.shownCopy && !('shownPrice' in plainRead), 'a plain listing reads as it did, with its author (the control)');
 
     // ── 3. The price is words ──
     console.log('\n── 3. The price is words ──');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM posts WHERE id = ? AND credits > 0').get(copyId) as { c: number }).c === 0, 'the pricing guide reads `credits > 0`, and so never reads a copy');
-    const refusedPrice = await call('POST', '/api/marketplace/posts', robin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Priced loaves', description: 'x', authorPublicKey: robin.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS, credits: 20 });
+    assert((db.prepare('SELECT COUNT(*) AS c FROM posts WHERE id = ? AND price_c > 0').get(copyId) as { c: number }).c === 0, 'the pricing guide reads `price_c > 0`, and so never reads a copy');
+    const refusedPrice = await call('POST', '/api/marketplace/posts', robin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Priced loaves', description: 'x', authorPublicKey: robin.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS, price_c: 2000 });
     assert(refusedPrice.status === 403, `a plain post with a price is refused here as ever (${refusedPrice.status})`);
     const smuggled = await call('POST', '/api/marketplace/posts', robin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Smuggled words', description: 'x', authorPublicKey: robin.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS, shownPrice: PRICE });
     assert(smuggled.status === 200 && stored(smuggled.body?.post?.id)?.shown_price === null, 'a price with no `shownFrom` lands nowhere: only a copy holds one');
@@ -274,7 +279,7 @@ async function main() {
     // ── 4. No way to pay ──
     console.log('\n── 4. No way to pay ──');
     const deals = () => (db.prepare('SELECT COUNT(*) AS c FROM marketplace_transactions').get() as { c: number }).c;
-    const balance = () => (db.prepare('SELECT SUM(balance) AS b FROM accounts').get() as { b: number }).b;
+    const balance = () => (db.prepare('SELECT SUM(balance_c) AS b FROM accounts').get() as { b: number }).b;
     const before = { deals: deals(), balance: balance() };
     const doors = [
         ['take it up', '/api/marketplace/posts/accept', { postId: copyId, buyerPublicKey: sam.pubKeyHex }],
@@ -286,8 +291,8 @@ async function main() {
         leaks(off.text, `Beans off, ${what}`);
     }
     // A request row put there by hand, as an older server might have left one. A made-up id would be refused by anything.
-    const handMadeRequest = (id: string, seller: string, postId = copyId) => db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-                VALUES (?, ?, ?, ?, 20, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id, postId, sam.pubKeyHex, seller);
+    const handMadeRequest = (id: string, seller: string, postId = copyId) => db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
+                VALUES (?, ?, ?, ?, 2000, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id, postId, sam.pubKeyHex, seller);
     const requestState = (id: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(id) as { status: string }).status;
     const dropRequest = (id: string) => db.prepare('DELETE FROM marketplace_transactions WHERE id = ?').run(id);
     handMadeRequest('hand-made-off', robin.pubKeyHex);
@@ -300,25 +305,25 @@ async function main() {
     const talk = await call('POST', '/api/messages/conversation', sam, { type: 'dm', participants: ['hidden', sam.pubKeyHex], createdBy: sam.pubKeyHex, postId: copyId });
     assert(talk.status === 400 && !talk.text.includes(robin.pubKeyHex), `no message door: the neutral author is nobody to write to (${talk.status} ${talk.text.slice(0, 90)})`);
     assert((db.prepare("SELECT COUNT(*) AS c FROM conversation_participants WHERE public_key = 'hidden'").get() as { c: number }).c === 0, 'and no conversation was made for it');
-    const transfer = await call('POST', '/api/ledger/transfer', sam, { from: sam.pubKeyHex, to: robin.pubKeyHex, amount: 20, memo: copyId });
+    const transfer = await call('POST', '/api/ledger/transfer', sam, { from: sam.pubKeyHex, to: robin.pubKeyHex, amount_c: 2000, memo: copyId });
     assert(transfer.status === 403, `no send: Beans are off (${transfer.status} ${transfer.text.slice(0, 100)})`);
     assert(deals() === before.deals && balance() === before.balance, `no deal row, and no Bean moved (${before.deals} → ${deals()})`);
 
     // ── 5. An edit ──
     console.log('\n── 5. An edit ──');
     const edit = await call('POST', '/api/marketplace/posts/update', robin, {
-        id: copyId, authorPublicKey: robin.pubKeyHex, title: 'Rye loaves', description: 'Baked today', category: 'tools', shownPrice: { beans: 25, per: 'hourly' }, lat: -28.61234, lng: 153.41234,
-        credits: 25, priceType: 'hourly', reach: 'everywhere', reachPeers: ['peer'], repeatable: true, cashAlsoNeeded: true, lendable: true, lendTerms: 'Ring 0400 000 000', shopId: 'a-shop', audienceScope: 'group', targetGroupId: 'g',
+        id: copyId, authorPublicKey: robin.pubKeyHex, title: 'Rye loaves', description: 'Baked today', category: 'tools', shownPrice: { price_c: 2500, per: 'hourly' }, lat: -28.61234, lng: 153.41234,
+        price_c: 2500, priceType: 'hourly', reach: 'everywhere', reachPeers: ['peer'], repeatable: true, cashAlsoNeeded: true, lendable: true, lendTerms: 'Ring 0400 000 000', shopId: 'a-shop', audienceScope: 'group', targetGroupId: 'g',
     });
     const after = stored(copyId);
-    assert(edit.status === 200 && after?.title === 'Rye loaves' && after?.shown_price === '25 hourly', `words and the price follow (${edit.status} ${edit.text.slice(0, 140)})`);
+    assert(edit.status === 200 && after?.title === 'Rye loaves' && after?.shown_price === '2500 hourly', `words and the price follow (${edit.status} ${edit.text.slice(0, 140)})`);
     assert(after?.category === 'tools', 'its category follows');
     assert(after?.lat === -28.6 && after?.lng === 153.4, `a moved pin is rounded (${after?.lat}, ${after?.lng})`);
-    assert(after?.credits === 0 && after?.price_type === 'fixed' && after?.reach === 'local' && after?.repeatable === 0 && after?.cash_also_needed === 0 && !after?.lendable
+    assert(after?.price_c === 0 && after?.price_type === 'fixed' && after?.reach === 'local' && after?.repeatable === 0 && after?.cash_also_needed === 0 && !after?.lendable
         && after?.lend_terms === null && after?.shop_id === null && after?.audience_scope === 'public', 'nothing of a deal comes in by an edit');
     const badEdit = await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, shownPrice: 'Ring me' });
-    assert(badEdit.status === 400 && stored(copyId)?.shown_price === '25 hourly', `free text is no price, on an edit too (${badEdit.status})`);
-    for (const asked of [PRICE, '20 fixed']) {
+    assert(badEdit.status === 400 && stored(copyId)?.shown_price === '2500 hourly', `free text is no price, on an edit too (${badEdit.status})`);
+    for (const asked of [PRICE, '2000 fixed']) {
         const plainEdit = await call('POST', '/api/marketplace/posts/update', robin, { id: plain.body?.post?.id, authorPublicKey: robin.pubKeyHex, shownPrice: asked });
         assert(plainEdit.status === 200 && stored(plain.body?.post?.id)?.shown_price === null, `an edit puts no price on a post that is no copy (${JSON.stringify(asked)}: ${plainEdit.status})`);
     }
@@ -360,7 +365,7 @@ async function main() {
     assert(bare.status === 200 && bareRow?.shown_from_host === '' && bareRow?.shown_from_post_id === null && !JSON.stringify(bareRow).includes('hidden-valley'), 'an unlisted host is dropped at write, and is nowhere in the row');
     assert(bare.body?.post?.shownCopy === true && !bare.body?.post?.shownFrom, 'the answer has no from-line, so the phone can say so once');
     const bareRead = await byId(bare.body?.post?.id, sam);
-    assert(bareRead?.authorPublicKey === 'hidden' && bareRead?.shownCopy === true && !bareRead?.shownFrom && bareRead?.shownPrice === '20 fixed', 'still a copy: no author, no line, and its price in words');
+    assert(bareRead?.authorPublicKey === 'hidden' && bareRead?.shownCopy === true && !bareRead?.shownFrom && bareRead?.shownPrice === '2000 fixed', 'still a copy: no author, no line, and its price in words');
     const withRow = (await byId(copyId, sam));
     directory([]);
     const noRow = await byId(copyId, sam);
@@ -385,7 +390,7 @@ async function main() {
     const { scrubPostsOf } = await import('./engine/post-scrub.js') as any;
     const gone = (await postCopy(sam, 'Sam\'s last loaf')).body?.post?.id;
     scrubPostsOf(sam.pubKeyHex, new Date().toISOString());
-    assert(stored(gone)?.shown_price === null && stored(gone)?.shown_from_host === '' && stored(gone)?.credits === 0, `Delete account takes the price with the rest (${stored(gone)?.shown_price})`);
+    assert(stored(gone)?.shown_price === null && stored(gone)?.shown_from_host === '' && stored(gone)?.price_c === 0, `Delete account takes the price with the rest (${stored(gone)?.shown_price})`);
 
     // ── 10. A node that keeps no directory ──
     console.log('\n── 10. A node that keeps no directory ──');
@@ -434,8 +439,8 @@ async function main() {
         assert(atLimit.status === 409 && atLimit.body?.code === LISTING_COPY_CODE, `at that limit, ${what} on a copy reads no author: the same answer, paid before or not (${atLimit.status} ${atLimit.text.slice(0, 100)})`);
     }
     db.prepare('DELETE FROM money_acts WHERE account = ?').run(sam.pubKeyHex);
-    const editPrice =await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, credits: 20 });
-    assert(stored(copyId)?.credits === 0, `Beans on: an edit can't give a copy a price in \`credits\` (${editPrice.status})`);
+    const editPrice =await call('POST', '/api/marketplace/posts/update', robin, { id: copyId, authorPublicKey: robin.pubKeyHex, price_c: 2000 });
+    assert(stored(copyId)?.price_c === 0, `Beans on: an edit can't give a copy a price in \`price_c\` (${editPrice.status})`);
     const samsOffer = await call('POST', '/api/marketplace/posts', sam, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Sam lists first', description: 'x', authorPublicKey: sam.pubKeyHex, ...ROUNDED, photos: TEST_PHOTOS });
     assert(samsOffer.status === 200, `setup: Sam lists an Offer, as a community with Beans asks (${samsOffer.status})`);
     const before2 = deals();

@@ -6,7 +6,7 @@
  *   2. Every join that isn't an owner's or admin's invite is refused with the one sentence (403 private_preview): the
  *      open door (join, its work, its sign-in nonce), a knock, the old register route, a member's code (made before the
  *      preview, as a row) and a member making one (admins_only).
- *   3. An owner's invite (password-issued seed invite) and an admin's own code redeem.
+ *   3. An owner's invite (a seed invite made under the owner's key session) and an admin's own code redeem.
  *   4. A member signs in and reads as usual; recovery by a sign-in still reaches its routes.
  *   5. A visitor (unsigned, or signed by a non-member key) is refused every read but the listed open routes, and its
  *      /ws upgrade is refused 403; a member's socket opens.
@@ -18,7 +18,6 @@
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdminPass123!';
 process.env.NODE_PROFILE = 'global';
 process.env.PRIVATE_PREVIEW = '1';
 
@@ -27,14 +26,14 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { seedOwnerForTests, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { PRIVATE_PREVIEW_MESSAGE, VISITOR_OPEN_ROUTES, PRIVATE_PREVIEW_BOOT_LINE, privatePreviewAtBoot } from './config/private-preview.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import * as se from './state-engine.js';
 import { mirrorNodeProfileAtBoot } from './config/node-profile.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const RED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM4IScHAAK2AQU0pnWqAAAAAElFTkSuQmCC';
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
@@ -63,7 +62,6 @@ function withKey(url: string, k: string | null): string {
 
 let BASE = '';
 let WS_BASE = '';
-const PW = 'TestAdminPass123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -78,16 +76,17 @@ function newId(): Id {
 }
 
 type Method = 'GET' | 'POST';
-async function call(method: Method, id: Id | null, urlPath: string, body?: unknown): Promise<{ status: number; body: any }> {
+async function call(method: Method, id: Id | null, urlPath: string, body?: unknown, extra: Record<string, string> = {}): Promise<{ status: number; body: any }> {
     const bodiless = method === 'GET';
     const raw = bodiless ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...extra };
     if (!bodiless) headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -105,8 +104,8 @@ const show = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 /** 'open', or the HTTP status the upgrade was refused with. */
 function trySocket(url: string): Promise<'open' | number> {
@@ -125,7 +124,6 @@ async function redeem(id: Id, code: string, callsign: string) {
 
 async function main() {
     console.log('--- TEST: private preview (PRIVATE_PREVIEW=1 on a global-profile node) ---');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -143,9 +141,9 @@ async function main() {
     assert(f.invites === true && f.knocks === false, 'info: invites on (an owner\'s or admin\'s), no knocks');
     assert(f.door === 'admins', `info: door is admins (got ${f.door})`);
 
-    // ── 3a. an owner's invite: the password-issued seed invite (fresh node: it seeds the genesis member too) ──
-    const tfa = turnOn2faForTests(PW);
-    const seed = await call('POST', null, '/api/admin/seed-invite', { password: PW, totpCode: tfa.code(), type: 'standard' });
+    // ── 3a. an owner's invite: a seed invite made under the owner's key session, so it hangs off that owner ──
+    const owner = seedOwnerForTests('Olwen');
+    const seed = await call('POST', null, '/api/admin/seed-invite', { type: 'standard' }, ownerSessionHeaders(owner));
     assert(seed.status === 200 && typeof seed.body.code === 'string', `owner makes a seed invite on a global node in preview (${show(seed)})`);
     const marty = newId();
     const martyIn = await redeem(marty, seed.body.code, 'Marty');

@@ -38,7 +38,7 @@
  *      membership probe answers only the key it asks about, whether it is a member as well as its name (multi-community
  *      review F3); the name check is rate-limited per address; the trust
  *      profile answers only a member, and a redeem gives an existing member's card only to that member's own key.
- *      Settings lists the enterprises with the admin password. A key-less socket hears no doorbell for any of them.
+ *      Settings lists the enterprises to an owner's key session. A key-less socket hears no doorbell for any of them.
  *
  * The real server, every request over TLS through the signature middleware, with every ENFORCE_* variable removed
  * (the fresh-download default) on a local node (NODE_PROFILE unset). The global node's guest view is the business of
@@ -53,12 +53,11 @@ delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 delete process.env.NODE_PROFILE;
-const ADMIN_PW = 'PrivAdminPass123!';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -68,6 +67,11 @@ function assert(cond: boolean, msg: string): void {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const DAY = 24 * 60 * 60 * 1000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns a Beans figure into hundredths
+ * for a row, a call or a check.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
 type Id = { pk: string; privateKey: crypto.KeyObject };
@@ -79,10 +83,11 @@ function newId(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -116,8 +121,8 @@ async function post(path: string, payload: unknown, id: Id): Promise<Res> {
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 type Sock = { ws: WebSocket; events: any[]; raw: string[] };
 function openSocket(url: string): Promise<Sock> {
@@ -156,12 +161,12 @@ async function main() {
 
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number; balance?: number; joinedAt?: string } = {}): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor, earned_credit_c)
                     VALUES (?, ?, ?, ?, 'seed', ?, ?, ?)`)
             .run(id.pk, callsign, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(),
-                `INV-${callsign.toUpperCase()}`, opts.visitor ? 1 : 0, opts.earned ?? 0);
+                `INV-${callsign.toUpperCase()}`, opts.visitor ? 1 : 0, hc(opts.earned ?? 0));
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, opts.balance ?? 0);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, hc(opts.balance ?? 0));
         return id;
     };
     const alice = member('PrivAlice', { earned: 10, balance: 42.5 });
@@ -170,10 +175,18 @@ async function main() {
     const sam = member('PrivSam', { status: 'disabled' }); // suspended: still a member, reads as a non-member
     const vera = member('PrivVera', { visitor: true, balance: 3 }); // a visitor's row
     const outsider = newId(); // signs, but no member here
+    // The community's owner, for Settings' reads (the node has no admin password: Settings signs in with an owner's key).
+    // Seeded where first needed (section 5), so every section before it runs on the members above alone.
+    let settingsOwner: string | null = null;
+    const asSettingsOwner = async (): Promise<Record<string, string>> => {
+        const { ownerSessionHeaders, seedOwnerForTests } = await import('./admin-auth-test-harness.js');
+        settingsOwner ??= seedOwnerForTests('Olwen');
+        return ownerSessionHeaders(settingsOwner);
+    };
 
-    const tx = (id: string, from: string, to: string, amount: number, memo: string) =>
-        db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(id, from, to, amount, memo, new Date().toISOString());
+    const tx = (id: string, from: string, to: string, beans: number, memo: string) =>
+        db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(id, from, to, hc(beans), memo, new Date().toISOString());
     tx('tx-priv-ab', alice.pk, bob.pk, 5, 'Sentinel memo alice to bob');
     tx('tx-priv-bc', bob.pk, carol.pk, 2, 'Sentinel memo bob to carol');
     tx('tx-priv-v', carol.pk, vera.pk, 1, 'Sentinel memo carol to vera');
@@ -182,10 +195,10 @@ async function main() {
     console.log('── 1. balances and trades ──');
     {
         const own = await get(`/api/ledger/balance/${alice.pk}`, alice);
-        assert(own.status === 200 && typeof own.body?.balance === 'number', `Alice reads her own balance (got ${own.status} ${own.text.slice(0, 80)})`);
+        assert(own.status === 200 && typeof own.body?.balance_c === 'number', `Alice reads her own balance (got ${own.status} ${own.text.slice(0, 80)})`);
         const other = await get(`/api/ledger/balance/${alice.pk}`, carol);
         assert(other.status === 403 && other.body?.code === 'own_only', `Carol is refused Alice's balance, 403 own_only (got ${other.status} ${other.text.slice(0, 80)})`);
-        assert(!other.text.includes('42.5') && !other.text.includes('trustStats'), "the refusal carries none of Alice's figures");
+        assert(!other.text.includes(String(hc(42.5))) && !other.text.includes('42.5') && !other.text.includes('trustStats'), "the refusal carries none of Alice's figures");
         const missing = await get(`/api/ledger/balance/${newId().pk}`, carol);
         assert(missing.status === 403, `a key that is no member here is refused the same way, never "not found" (got ${missing.status})`);
         const unsigned = await get(`/api/ledger/balance/${alice.pk}`);
@@ -225,7 +238,7 @@ async function main() {
             `a visitor's row reads its own Beans and history and no one else's (own ${vOwn.status}, history ${vTx.status}, Carol's ${vOther.status})`);
 
         const pool = await get('/api/commons/balance');
-        assert(pool.status === 200 && typeof pool.body?.balance === 'number', `the Commons pot stays public (got ${pool.status})`);
+        assert(pool.status === 200 && typeof pool.body?.balance_c === 'number', `the Commons pot stays public (got ${pool.status})`);
         const info = await get('/api/community/info');
         assert(info.status === 200, `the community's info stays public (got ${info.status})`);
     }
@@ -235,7 +248,7 @@ async function main() {
     tx('tx-priv-bread', bob.pk, enterprise, 4, 'Sentinel memo for the rye loaf');
     {
         const bal = await get(`/api/ledger/balance/${enterprise}`, carol);
-        assert(bal.status === 200 && typeof bal.body?.balance === 'number', `an enterprise's balance stays open to a member (got ${bal.status})`);
+        assert(bal.status === 200 && typeof bal.body?.balance_c === 'number', `an enterprise's balance stays open to a member (got ${bal.status})`);
         const keeperTx = await get(`/api/ledger/transactions?publicKey=${enterprise}`, alice);
         assert(keeperTx.status === 200 && Array.isArray(keeperTx.body) && keeperTx.body.some((t: any) => t.id === 'tx-priv-bread'),
             `its keeper reads its history (got ${keeperTx.status})`);
@@ -256,15 +269,15 @@ async function main() {
     await sleep(200);
     // A completed trade is Alice's standing to propose (her earned_credit badge is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
-                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), alice.pk, carol.pk, tradedAt, tradedAt);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), alice.pk, carol.pk, hc(5), tradedAt, tradedAt);
     // A removal Alice proposed before removal by vote S3 (since then only an admin's pause opens one), still open: what it
     // records about Bob is what each reader is served below.
     const { removalProposedFromBefore } = await import('./decisions-from-before-test-fixture.js');
     const decisionId = removalProposedFromBefore({ authorPubkey: alice.pk, title: 'Remove PrivBob', description: 'A privacy test Decision about Bob', subject: bob.pk }).id as string | undefined;
     const proposed = await get(`/api/commons/decisions/${decisionId}`, alice);
     assert(proposed.status === 200 && !!decisionId, `Alice's removal of Bob is open (got ${proposed.status} ${proposed.text.slice(0, 160)})`);
-    assert(proposed.body?.decision?.params?.balance === -12 && proposed.body?.decision?.params?.debt === 12,
+    assert(proposed.body?.decision?.params?.balance_c === hc(-12) && proposed.body?.decision?.params?.debt_c === hc(12),
         'Alice, who may vote in it, is answered with his balance and debt');
     await sleep(300);
     // Joined after it opened: a member, with no vote in it.
@@ -273,32 +286,33 @@ async function main() {
         const card = (r: Res) => (r.body?.decisions ?? []).find((d: any) => d.id === decisionId);
         const voterList = await get('/api/commons/decisions', carol);
         const voterOne = await get(`/api/commons/decisions/${decisionId}`, carol);
-        assert(card(voterList)?.params?.balance === -12 && card(voterList)?.params?.debt === 12,
+        assert(card(voterList)?.params?.balance_c === hc(-12) && card(voterList)?.params?.debt_c === hc(12),
             `Carol, a voter, reads Bob's balance on its card in the list (got ${JSON.stringify(card(voterList)?.params)})`);
-        assert(voterOne.body?.decision?.params?.balance === -12, 'and in the Decision itself');
+        assert(voterOne.body?.decision?.params?.balance_c === hc(-12), 'and in the Decision itself');
         const subject = await get(`/api/commons/decisions/${decisionId}`, bob);
-        assert(subject.body?.decision?.params?.balance === -12, 'Bob reads his own');
+        assert(subject.body?.decision?.params?.balance_c === hc(-12), 'Bob reads his own');
         for (const [who, id] of [['Dora, who joined after it opened', dora], ['a suspended member', sam]] as const) {
             const l = await get('/api/commons/decisions', id);
             const one = await get(`/api/commons/decisions/${decisionId}`, id);
             const p1 = card(l)?.params ?? {};
             const p2 = one.body?.decision?.params ?? {};
-            assert(l.status === 200 && !!card(l) && !('balance' in p1) && !('debt' in p1) && p1.memberName === 'PrivBob',
+            assert(l.status === 200 && !!card(l) && !('balance_c' in p1) && !('debt_c' in p1) && !('balance' in p1) && !('debt' in p1) && p1.memberName === 'PrivBob',
                 `${who} sees the card, and not Bob's balance or debt, in the list (got ${l.status} ${JSON.stringify(p1)})`);
-            assert(one.status === 200 && !('balance' in p2) && !('debt' in p2), `${who} does not see them in the Decision either (got ${one.status})`);
+            assert(one.status === 200 && !('balance_c' in p2) && !('debt_c' in p2) && !('balance' in p2) && !('debt' in p2), `${who} does not see them in the Decision either (got ${one.status})`);
         }
         // Anyone who is no member here is refused the Decision itself, and so learns nothing of whom it is about (section 9).
         for (const [who, id, status] of [["a visitor's row", vera, 403], ['a key that is no member here', outsider, 403], ['a stranger (unsigned)', undefined, 401]] as const) {
             const l = await get('/api/commons/decisions', id);
             const one = await get(`/api/commons/decisions/${decisionId}`, id);
             assert(l.status === status && one.status === status && l.body?.code === 'members_only' && one.body?.code === 'members_only'
-                && ![l.text, one.text].some(t => t.includes('PrivBob') || t.includes(bob.pk) || t.includes('"debt"')),
+                && ![l.text, one.text].some(t => t.includes('PrivBob') || t.includes(bob.pk) || t.includes('"debt"') || t.includes('"debt_c"')),
                 `${who} is refused the list and the Decision, ${status} members_only, naming nobody (got ${l.status}/${one.status})`);
         }
         const created = carolSock.events.find(e => e.type === 'decision_created');
-        assert(!!created && !('balance' in (created.decision?.params ?? {})) && !('debt' in (created.decision?.params ?? {})),
+        assert(!!created && !('balance_c' in (created.decision?.params ?? {})) && !('debt_c' in (created.decision?.params ?? {}))
+            && !('balance' in (created.decision?.params ?? {})) && !('debt' in (created.decision?.params ?? {})),
             "the live feed's decision_created carries neither, even to a voter's socket (she reads them from the Decision)");
-        assert(!strangerSock.raw.some(r => r.includes('"debt"')), "a stranger's socket is sent nothing with a debt in it");
+        assert(!strangerSock.raw.some(r => r.includes('"debt"') || r.includes('"debt_c"')), "a stranger's socket is sent nothing with a debt in it");
         const outside = await get(`/api/ledger/balance/${bob.pk}`, carol);
         assert(outside.status === 403, `outside the Decision, Carol still may not read Bob's balance (got ${outside.status})`);
     }
@@ -309,7 +323,7 @@ async function main() {
     console.log('\n── 3. the activity feed shows a trade to its two people only ──');
     {
         recordActivity('member_joined', dora.pk, null, { callsign: 'PrivDora' });
-        recordActivity('trade_completed', alice.pk, bob.pk, { postId: 'post-priv', postTitle: 'Sentinel loaf', credits: 6 });
+        recordActivity('trade_completed', alice.pk, bob.pk, { postId: 'post-priv', postTitle: 'Sentinel loaf', amount_c: hc(6) });
         const feedOf = async (id: Id, extra: Record<string, string> = {}) => get('/api/activity/feed', id, extra);
         const a = await feedOf(alice);
         const b = await feedOf(bob);
@@ -335,11 +349,11 @@ async function main() {
         const payer = await get(`/api/treasury/${enterprise}/ledger`, bob);
         assert(line(payer)?.counterparty === bob.pk && line(payer)?.memo === 'Sentinel memo for the rye loaf', 'Bob reads his own line in full');
         const other = await get(`/api/treasury/${enterprise}/ledger`, carol);
-        assert(other.status === 200 && line(other)?.amount === 4 && line(other)?.counterpartyName === 'A member'
+        assert(other.status === 200 && line(other)?.amount_c === hc(4) && line(other)?.counterpartyName === 'A member'
             && line(other)?.memo === '' && line(other)?.counterparty === '' && !other.text.includes(bob.pk) && !other.text.includes('rye loaf'),
             `Carol reads the amount, not who paid or what they wrote (got ${JSON.stringify(line(other))})`);
         const flowOther = await get(`/api/treasury/${enterprise}`, carol);
-        assert(flowOther.status === 200 && Array.isArray(flowOther.body?.flow) && flowOther.body.flow.some((f: any) => f.amount === 4)
+        assert(flowOther.status === 200 && Array.isArray(flowOther.body?.flow) && flowOther.body.flow.some((f: any) => f.amount_c === hc(4))
             && !flowOther.text.includes('rye loaf'), `its page shows Carol, a member who keeps nothing there, the flow's amounts and no memo (got ${flowOther.status})`);
         const flowUnsigned = await get(`/api/treasury/${enterprise}`);
         assert(flowUnsigned.status === 401 && flowUnsigned.body?.code === 'members_only' && !flowUnsigned.text.includes('rye loaf') && !flowUnsigned.text.includes(alice.pk),
@@ -351,18 +365,18 @@ async function main() {
         // keeper and the enterprise's keepers, and never to another member's socket.
         const kim = member('PrivKim');
         se.adminAssignTreasuryOperator(enterprise, kim.pk);
-        se.transfer('genesis', enterprise, 20, 'Seed the bakery', 'direct', true);
-        db.prepare('UPDATE members SET earned_surplus = 20 WHERE public_key = ?').run(enterprise);
+        se.transfer('genesis', enterprise, hc(20), 'Seed the bakery', 'direct', true);
+        db.prepare('UPDATE members SET earned_surplus_c = ? WHERE public_key = ?').run(hc(20), enterprise);
         const kimSock = await openSocket(`${wsBase}?${signedWsQuery(kim)}`);
         const aliceSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
         const bystanderSock = await openSocket(`${wsBase}?${signedWsQuery(carol)}`);
         const keylessSock = await openSocket(wsBase);
         await sleep(200);
-        se.recordDeferredWageClaim(enterprise, kim.pk, 7);
+        se.recordDeferredWageClaim(enterprise, kim.pk, hc(7));
         assert(se.processDeferredWageClaims(enterprise) === 1, 'setup: the bakery pays Kim, a keeper, a deferred wage of 7');
         await sleep(300);
         const wage = (s: Sock) => s.events.find(e => e.type === 'deferred_wage_paid');
-        assert(wage(kimSock)?.keeper === kim.pk && wage(kimSock)?.amount === 7, `Kim, the keeper it paid, hears it (got ${JSON.stringify(wage(kimSock))})`);
+        assert(wage(kimSock)?.keeper === kim.pk && wage(kimSock)?.amount_c === hc(7), `Kim, the keeper it paid, hears it (got ${JSON.stringify(wage(kimSock))})`);
         assert(wage(aliceSock)?.keeper === kim.pk, "Alice, the bakery's lead keeper, hears it");
         assert(!bystanderSock.raw.some(r => r.includes('deferred_wage_paid')), "Carol, a member who keeps nothing there, hears no wage");
         assert(!keylessSock.raw.some(r => r.includes('deferred_wage_paid') || r.includes(kim.pk)), "a key-less socket hears no wage, and nothing that names Kim");
@@ -409,16 +423,12 @@ async function main() {
         // An admin is neither of its two people: the manager's data (/admin/data) lists it spoken for, and not by whom or
         // in which deal. An admin's look at a trade is the logged one (/admin/disputes, queue item 29, Marty 4 Oct).
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         resetAdminAuthTarpit();
-        const twoFa = turnOn2faForTests(ADMIN_PW);
+        const ownerHeaders = await asSettingsOwner();
         beforeCall();
         const dataRes = await fetch(`${BASE}/api/local/admin/data`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', ...twoFa.headers() }, body: JSON.stringify({}),
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...ownerHeaders }, body: JSON.stringify({}),
         });
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
         resetAdminAuthTarpit();
         const dataText = await dataRes.text();
         const adminPost = (JSON.parse(dataText)?.posts ?? []).find((p: any) => p.id === takenId);
@@ -455,7 +465,7 @@ async function main() {
 
         // A visitor's row may still hold a listing from before visitors were refused one, and may take it down: it reads
         // its own listings, and nothing else of the board.
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status) VALUES ('priv-vera-old', 'offer', 'other', 'Sentinel old visitor offer', 'd', 1, ?, 1, 'active')").run(vera.pk);
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status) VALUES ('priv-vera-old', 'offer', 'other', 'Sentinel old visitor offer', 'd', 100, ?, 1, 'active')").run(vera.pk); // 1 Bean
         const own = await get(`/api/marketplace/posts?author=${vera.pk}`, vera);
         assert(own.status === 200 && Array.isArray(own.body) && own.body.length === 1 && own.body[0].id === 'priv-vera-old',
             `a visitor's row reads its own listing (got ${own.status} ${own.text.slice(0, 100)})`);
@@ -469,7 +479,7 @@ async function main() {
         // The pricing guide, public on every node, takes a matching listing's photo as an item's thumbnail: a listing whose
         // title is a catalogue item's name (#1286's open question 3, measured).
         const eggs = await post('/api/marketplace/posts', {
-            type: 'offer', category: 'food', title: 'Free-range Eggs (Dozen)', description: 'Sentinel eggs', credits: 6, authorPublicKey: alice.pk,
+            type: 'offer', category: 'food', title: 'Free-range Eggs (Dozen)', description: 'Sentinel eggs', price_c: hc(6), authorPublicKey: alice.pk,
             lat: -28.5, lng: 153.5, photos: [TINY_PNG],
         }, alice);
         const eggsId = eggs.body?.post?.id as string;
@@ -541,7 +551,7 @@ async function main() {
                 `${who} reads the pricing guide's eggs, without the listing's photo (${r.status} ${JSON.stringify(eggsItem(r)?.thumbnailUrl)})`);
         }
 
-        const entPost = createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', 1, 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
+        const entPost = createPost('offer', 'food', 'Sentinel bakery loaf', 'Enterprise listing', hc(1), 'fixed', enterprise, -28.5, 153.5, undefined, false, undefined, false, { createdBy: alice.pk });
         assert(!!entPost?.id, 'setup: the enterprise lists a loaf');
         const pageStranger = await get(`/api/treasury/${enterprise}`);
         const pageMember = await get(`/api/treasury/${enterprise}`, carol);
@@ -668,15 +678,13 @@ async function main() {
     {
         const { createCrowdfundProject } = await import('./db/db.js');
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { initAdminPassword } = await import('./config/local-config.js');
-        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         // Bob backs the bakery, which is placed on the map; Bob runs a crowdfund; Alice proposes a Commons project; Alice's
         // Pulse channel lists a video on her own page elsewhere.
-        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('pledge-priv', ?, ?, 5)").run(bob.pk, enterprise);
+        db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-priv', ?, ?, ?)").run(bob.pk, enterprise, hc(5));
         db.prepare('UPDATE members SET lat = ?, lng = ? WHERE public_key = ?').run(-28.5123457, 153.5123457, enterprise);
         const crowdfund = newId().pk;
-        createCrowdfundProject(crowdfund, bob.pk, 'Sentinel priv roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);
-        const project = se.createProject(alice.pk, 'Sentinel priv garden', 'Sentinel beds by the hall', 50);
+        createCrowdfundProject(crowdfund, bob.pk, 'Sentinel priv roof fund', 'Sentinel roof for the hall', [TINY_PNG], hc(100), null);
+        const project = se.createProject(alice.pk, 'Sentinel priv garden', 'Sentinel beds by the hall', hc(50));
         assert(!!project?.id, 'setup: Alice proposes a Commons project');
         db.prepare(`INSERT INTO creator_channels (id, owner_pubkey, platform, url, handle, category) VALUES ('chan-priv', ?, 'youtube', 'https://youtube.example/@privalice', 'privalice', 'food')`)
             .run(alice.pk);
@@ -687,12 +695,12 @@ async function main() {
         // Each read, and what a member reads in it: its people.
         const reads: Array<[string, (r: Res) => boolean]> = [
             ['/api/enterprises', r => r.text.includes(enterprise) && r.body?.treasuries?.some((t: any) => t.keepers?.some((k: any) => k.publicKey === alice.pk)
-                && t.pledges?.some((p: any) => p.keeper === bob.pk && p.amount === 5))],
+                && t.pledges?.some((p: any) => p.keeper === bob.pk && p.amount_c === hc(5)))],
             ['/api/treasuries', r => r.text.includes(enterprise) && r.text.includes(alice.pk)],
             ['/api/enterprises/map', r => r.body?.enterprises?.some((e: any) => e.publicKey === enterprise && e.lat === -28.5123457)],
             ['/api/map/enterprises', r => r.text.includes(enterprise)],
             ['/api/treasuries/map', r => r.text.includes(enterprise)],
-            [`/api/enterprise/${enterprise}`, r => r.body?.keepers?.some((k: any) => k.publicKey === alice.pk) && r.body?.pledges?.some((p: any) => p.keeper === bob.pk && p.amount === 5)],
+            [`/api/enterprise/${enterprise}`, r => r.body?.keepers?.some((k: any) => k.publicKey === alice.pk) && r.body?.pledges?.some((p: any) => p.keeper === bob.pk && p.amount_c === hc(5))],
             [`/api/treasury/${enterprise}`, r => r.text.includes(alice.pk) && r.text.includes('PrivBob')],
             ['/api/commons/decisions', r => r.body?.decisions?.some((d: any) => d.id === decisionId && d.params?.memberName === 'PrivBob' && d.authorPubkey === alice.pk)],
             [`/api/commons/decisions/${decisionId}`, r => r.body?.decision?.params?.memberName === 'PrivBob'],
@@ -727,8 +735,8 @@ async function main() {
         // The totals stay public: the Commons pot and the community's counts, which name nobody.
         const pot = await get('/api/commons/balance');
         const info = await get('/api/community/info');
-        assert(pot.status === 200 && typeof pot.body?.balance === 'number' && info.status === 200 && typeof info.body?.memberCount === 'number'
-            && typeof info.body?.commonsBalance === 'number' && !people.some(p => pot.text.includes(p) || info.text.includes(p)),
+        assert(pot.status === 200 && typeof pot.body?.balance_c === 'number' && info.status === 200 && typeof info.body?.memberCount === 'number'
+            && typeof info.body?.commonsBalance_c === 'number' && !people.some(p => pot.text.includes(p) || info.text.includes(p)),
             `the Commons pot and the community's counts stay public, naming nobody (${pot.status}, ${info.status})`);
 
         // F2: the recovery lookup finds the whole name only (case forgiven), with no photo or join date.
@@ -808,17 +816,11 @@ async function main() {
         const ownCard = await post('/api/invite/redeem', redeemBody, alice);
         assert(ownCard.body?.alreadyMember === true && ownCard.body?.member?.callsign === 'PrivAlice', `Alice, signing with her own key, gets her own card (got ${ownCard.status} ${ownCard.text.slice(0, 90)})`);
 
-        // Settings reads the enterprises with the admin password, and nobody reads them there without it.
+        // Settings reads the enterprises with an owner's key session, and nobody reads them there without one.
         resetAdminAuthTarpit();
-        // Step 7c: with 2FA off the password alone opens no admin route, so Settings sends it with 2FA on and a code (2FA goes
-        // off again after).
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        const { updateLocalConfig } = await import('./config/local-config.js');
-        const twoFa = turnOn2faForTests(ADMIN_PW);
-        const admin = await get('/api/local/admin/treasury', undefined, twoFa.headers());
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+        const admin = await get('/api/local/admin/treasury', undefined, await asSettingsOwner());
         assert(admin.status === 200 && admin.body?.treasuries?.some((t: any) => t.publicKey === enterprise && t.keepers?.some((k: any) => k.publicKey === alice.pk)),
-            `Settings lists the enterprises with the admin password (got ${admin.status} ${admin.text.slice(0, 90)})`);
+            `Settings lists the enterprises to an owner's key session (got ${admin.status} ${admin.text.slice(0, 90)})`);
         resetAdminAuthTarpit();
         const noAdmin = await get('/api/local/admin/treasury');
         assert((noAdmin.status === 401 || noAdmin.status === 403) && !noAdmin.text.includes(enterprise), `and nobody without it (got ${noAdmin.status})`);

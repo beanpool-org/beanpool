@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 import { join, relative, resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, SAMPLE_COMMUNITY, TIER_LEVELS, formatHundredths } from '@beanpool/core';
 import { CommonsPreview, sampleDealChip, sampleInvites, sampleInviteTree, sampleDecisions, samplePoolVoting, sampleCommonsBalance } from './ShowcasePreviews';
 import { MyDealsModal } from './MyDealsModal';
 import { LedgerPage } from '../pages/LedgerPage';
@@ -22,7 +22,7 @@ import type { CommunityInfo } from '../lib/api';
 import { formatInviteCode, normaliseInviteCode } from '../lib/invite-code';
 
 const GLOBAL_INFO = {
-    name: 'A worldwide community', profile: 'global', commonsBalance: 0,
+    name: 'A worldwide community', profile: 'global', commonsBalance_c: 0,
     features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
     startCommunityUrl: 'https://example.org/start',
 } as unknown as CommunityInfo;
@@ -65,7 +65,7 @@ describe('preview mode asks the node for its info and nothing else, and writes n
             const onNearYou = vi.fn();
             const onGuide = vi.fn();
             render(<LedgerPage identity={identity} isMember={identity !== null} preview onNearYou={onNearYou} onGuide={onGuide} />);
-            expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${S.balance.toFixed(1)}B`);
+            expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${formatHundredths(S.balance * 100)}B`);
             expect(screen.getByText(LOCAL_COMMUNITY_STRIP.header)).toBeInTheDocument();
             expect(screen.queryByText('RealMember')).toBeNull();
 
@@ -199,7 +199,8 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(poolVoting.voiceCredits).toBe(SAMPLE_COMMUNITY.voiceCredits);
         expect(poolVoting.hasCompletedTrade).toBe(true);
 
-        expect(sampleCommonsBalance()).toBe(SAMPLE_COMMUNITY.pool);
+        // Whole hundredths, as the Decide screen takes the pot (640 Beans is 64000).
+        expect(sampleCommonsBalance()).toBe(SAMPLE_COMMUNITY.pool * 100);
     });
 
     it('Your deals: the real modal in preview with In Progress / My Posts / History tabs; requested shows Action Required, held Held in trust, sold +30; every button opens the sheet', async () => {
@@ -294,18 +295,19 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
         expect(screen.getByTestId('sample-header')).toHaveTextContent(`${S.name} · ${S.member}`);
         expect(screen.getByRole('heading', { name: S.member })).toBeInTheDocument();
         expect(screen.getAllByText(tier.name).length).toBeGreaterThanOrEqual(2);
-        expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${S.balance.toFixed(1)}B`);
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${formatHundredths(S.balance * 100)}B`);
         // The credit bar, as a member's: zero the sweet spot, the fee-free ceiling above it.
         expect(screen.getByText('sweet spot')).toBeInTheDocument();
         expect(screen.getByText('fee-free')).toBeInTheDocument();
-        expect(screen.getByText(`Level ${S.level} of ${S.levels} · ${S.trust} trust`)).toBeInTheDocument();
-        expect(document.body.textContent).toContain(`${next.minCredit - S.trust} more trust to ${next.emoji} ${next.name}`);
+        // The sample's figures are whole Beans; the screen writes them from hundredths (formatHundredths), as a node's.
+        expect(screen.getByText(`Level ${S.level} of ${S.levels} · ${formatHundredths(S.trust * 100)} trust`)).toBeInTheDocument();
+        expect(document.body.textContent).toContain(`${formatHundredths(next.minCredit - S.trust * 100)} more trust to ${next.emoji} ${next.name}`);
         const tiles = within(screen.getByTestId('levels-shelf')).getAllByRole('button');
         expect(tiles.map(b => b.textContent)).toEqual(TIER_LEVELS.map((l, i) =>
-            `${l.emoji}${l.name}${i === S.level - 1 ? "You're here" : i < S.level - 1 ? 'Reached' : `${l.minCredit} trust`}`));
+            `${l.emoji}${l.name}${i === S.level - 1 ? "You're here" : i < S.level - 1 ? 'Reached' : `${formatHundredths(l.minCredit)} trust`}`));
         const builders = screen.getByTestId('trust-builders');
-        expect(builders).toHaveTextContent(String(S.valueTraded));
-        expect(builders).toHaveTextContent(`+${S.trust} trust`);
+        expect(builders).toHaveTextContent(formatHundredths(S.valueTraded * 100));
+        expect(builders).toHaveTextContent(`+${formatHundredths(S.trust * 100)} trust`);
         expect(builders).toHaveTextContent(String(S.partners));
         expect(builders).toHaveTextContent(S.rating.toFixed(1));
         expect(builders).toHaveTextContent(`${S.reviews} reviews`);
@@ -315,11 +317,11 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
         render(<LedgerPage identity={MEMBER} preview />);
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         const wallet = screen.getByTestId('ledger-wallet');
-        expect(wallet).toHaveTextContent(`Overdraft Floor${S.floor}`);
-        expect(wallet).toHaveTextContent(S.pool.toFixed(1));
+        expect(wallet).toHaveTextContent(`Overdraft Floor${formatHundredths(S.floor * 100)}`);
+        expect(wallet).toHaveTextContent(`Commons Pool ⓘ${formatHundredths(S.pool * 100)}`);
         for (const tx of S.transactions) {
             expect(wallet).toHaveTextContent(tx.what);
-            expect(wallet).toHaveTextContent(`${tx.amount < 0 ? '−' : '+'}${Math.abs(tx.amount).toFixed(1)}`);
+            expect(wallet).toHaveTextContent(`${tx.amount < 0 ? '−' : '+'}${formatHundredths(Math.abs(tx.amount) * 100)}`);
         }
         expect(wallet).toHaveTextContent('from a neighbour · yesterday');
         // The held deal's row, as a node's escrow hold reads here: "Held in trust · Fixing a bike puncture", −20, yesterday.
@@ -327,7 +329,7 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
         const holdNote = within(wallet).getByText(`Held in trust · ${held.what}`);
         const holdRow = holdNote.closest('div.rounded-xl') as HTMLElement;
         expect(holdRow).toHaveTextContent(/↑ Sent/);
-        expect(holdRow).toHaveTextContent(`−${held.amount.toFixed(1)}`);
+        expect(holdRow).toHaveTextContent(`−${formatHundredths(held.amount * 100)}`);
         expect(within(holdRow).getByText('yesterday')).toBeInTheDocument();
         expect(holdRow).not.toHaveTextContent('to a neighbour');
         expect(held.amount).toBe(S.inEscrow);

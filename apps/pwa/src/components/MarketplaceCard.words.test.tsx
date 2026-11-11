@@ -21,7 +21,7 @@ vi.mock('./PostAuthorTrust', async (importOriginal) => ({
 import { MarketplaceCard } from './MarketplaceCard';
 
 const base = {
-    id: 'p1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning', credits: 12,
+    id: 'p1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning', price_c: 1200,
     priceType: 'hourly', authorPublicKey: 'a'.repeat(64), authorCallsign: 'Kofi', active: true, status: 'active',
     createdAt: new Date().toISOString(),
 } as unknown as MarketplacePost;
@@ -30,7 +30,7 @@ const marked = {
 } as MarketplacePost;
 const withPhoto = { ...marked, photos: ['/api/marketplace/posts/p1/photos/0?v=1'] } as MarketplacePost;
 const need = { ...base, id: 'p2', type: 'need', category: 'tools', title: 'Borrow a ladder', description: '', status: 'pending', priceType: 'daily' } as MarketplacePost;
-const paused = { ...base, id: 'p3', status: 'paused', priceType: 'monthly', credits: 2.5 } as MarketplacePost;
+const paused = { ...base, id: 'p3', status: 'paused', priceType: 'monthly', price_c: 250 } as MarketplacePost;
 const pulse = { ...base, id: 'p4', authorCallsign: 'Daily Pulse', title: 'On sharing', description: 'A thought for today' } as MarketplacePost;
 const others = ['Sourdough loaf', 'Baked this morning', 'Kofi', 'Garden club', 'Borrow a ladder', 'On sharing', 'A thought for today', 'Daily Pulse', 'mullum'];
 
@@ -43,7 +43,7 @@ describe('a Market card in the pseudo-locale', () => {
         await showIn('xx');
         render(
             <div>
-                <MarketplaceCard post={marked} viewMode={viewMode} distanceKm={2.4} remoteNode="mullum" isOwnPost authorEnergy={100000} />
+                <MarketplaceCard post={marked} viewMode={viewMode} distanceKm={2.4} remoteNode="mullum" isOwnPost authorEnergy={10000000} />
                 <MarketplaceCard post={withPhoto} viewMode={viewMode} distanceKm={0.42} />
                 <MarketplaceCard post={need} viewMode={viewMode} distanceKm={12} />
                 <MarketplaceCard post={paused} viewMode={viewMode} />
@@ -65,7 +65,7 @@ describe('a Market card in the pseudo-locale', () => {
                 {/* A grid tile's row 4 holds one chip (G2): the group lock beats RECURRING on `withPhoto`, so this one carries it. */}
                 <MarketplaceCard post={{ ...base, id: 'p5', repeatable: true } as MarketplacePost} viewMode="grid" />
                 <MarketplaceCard post={marked} viewMode="list" isOwnPost distanceKm={2.4} />
-                <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={100000} />
+                <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={10000000} />
             </div>,
         );
         // The photo is part of the card (4 Nov): it names the listing, and there is no enlarge button on a card.
@@ -90,7 +90,7 @@ describe('a Market card in the pseudo-locale', () => {
                 <MarketplaceCard post={need} viewMode="grid" />
                 <MarketplaceCard post={marked} viewMode="list" isOwnPost distanceKm={2.4} />
                 <MarketplaceCard post={paused} viewMode="list" />
-                <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={100000} />
+                <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={10000000} />
                 <MarketplaceCard post={pulse} viewMode="grid" />
             </div>,
         );
@@ -112,7 +112,8 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.queryByText('No description provided.')).toBeNull();
         expect(screen.getByText('420 m')).toBeInTheDocument();
         expect(screen.getByText('2.4 km')).toBeInTheDocument();
-        expect(screen.getByText('2.5')).toBeInTheDocument();
+        // 250 hundredths, written as formatHundredths writes them: two decimals whenever there are cents.
+        expect(screen.getByText('2.50')).toBeInTheDocument();
         expect(screen.getByText('/mo')).toBeInTheDocument();
         expect(screen.getByText('/day')).toBeInTheDocument();
         // The compact row's type chip is the box's one chip now (C1), its capitals from core's upperCase() as the list card's and

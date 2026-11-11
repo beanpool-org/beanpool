@@ -32,17 +32,16 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'ElectoratePass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, createGroup, joinGroup, setMemberRole, seedGenesisMember, tickGroupSuccession, GROUP_SUCCESSION_WINDOW_MS } from './state-engine.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedGroupLine } from './group-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -69,7 +68,7 @@ function makeMember(callsign: string): Id {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(id.pk, callsign);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -77,10 +76,11 @@ async function call(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, i
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -124,7 +124,6 @@ function groupOf(name: string, lead: Id, members: Id[]): string {
 
 async function main(): Promise<void> {
     console.log('Only people who were in a group before its lead went quiet vote in a new lead\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

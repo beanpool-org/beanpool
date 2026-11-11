@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, ActivityIndicator, Alert, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
+import { useLocalSearchParams, router, ErrorBoundary, useFocusEffect } from 'expo-router';
 
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName, VOUCH_MAX, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatHundredths, formatNumber, freePriceWords, isHundredths, t, tn, type TierName, vouchMaxFor, vouchFor, raiseVouchFor } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -38,6 +38,8 @@ import { Sentence } from '../components/Sentence';
 import { signedRequestWords } from '../components/signed-request-lines';
 import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
+import { InvitedByCard } from '../components/InvitedByCard';
+import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
 
 
 
@@ -203,14 +205,6 @@ export default function PublicProfileScreen() {
         mutualName: { fontSize: 14, fontWeight: '700', color: colors.text.heading, flex: 1 },
         mutualAsk: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 },
 
-        inviterCard: {
-            backgroundColor: colors.surface.app, marginHorizontal: 16, marginTop: 12, padding: 14,
-            borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, gap: 6,
-        },
-        inviterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-        inviterName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
-        inviterSub: { fontSize: 12, color: colors.text.secondary, fontWeight: '600', marginTop: 1 },
-        systemBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brand.tint, alignItems: 'center', justifyContent: 'center' },
 
         // Synergy & Collaboration
         synergyCard: {
@@ -522,6 +516,8 @@ export default function PublicProfileScreen() {
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
+    // Your own profile's inviter line and Brought in (I3), from the same trust profile read for yourself.
+    const [selfInvite, setSelfInvite] = useState<{ vouchedInBy: any; broughtIn?: number } | null>(null);
     /** The key whose trust profile the node has answered (or failed to): until then, what the key is isn't known. */
     const [trustFor, setTrustFor] = useState<string | null>(null);
     const [editingReview, setEditingReview] = useState<any | null>(null);
@@ -559,19 +555,23 @@ export default function PublicProfileScreen() {
 
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
 
+    // What you have vouched for this person, from your own budget's history: whole hundredths, summed exactly (a line whose
+    // figure isn't whole hundredths counts nothing).
     const myPriorVouch = useMemo(() => {
         if (!myVouching?.history || !pubKeyStr) return 0;
         let sum = 0;
         for (const h of myVouching.history) {
-            if (h.person?.memberPubkey === pubKeyStr && (h.for === 'profile' || h.outcome === 'vouched')) {
-                sum += Math.abs(h.amount);
+            if (h.person?.memberPubkey === pubKeyStr && (h.for === 'profile' || h.outcome === 'vouched') && isHundredths(h.amount_c)) {
+                sum += Math.abs(h.amount_c);
             }
         }
         return sum;
     }, [myVouching, pubKeyStr]);
     const effectivePriorVouch = nodePriorVouch ?? myPriorVouch;
     const isRaise = effectivePriorVouch > 0;
-    const atMax = effectivePriorVouch >= VOUCH_MAX;
+    // One voucher's vouches for one person: 100, or 500 for an owner (core vouchMaxFor; the node's noLimit, Marty 9 Nov).
+    const pairMax = vouchMaxFor(myVouching?.noLimit === true);
+    const atMax = effectivePriorVouch >= pairMax;
     // Your own name and picture are this community's row (utils/use-own-profile.ts), once read: never the name the door
     // passed, nor the phone-wide one, which can be another community's (DESIGN-per-community-profile-fable.md §2). For
     // your own key the door's name is ignored altogether (Profile S2), so a name passed from a screen that read it
@@ -771,6 +771,12 @@ export default function PublicProfileScreen() {
         } else {
             setTrustLoading(false);
             setTrust(null);
+            // Your own profile reads only who invited you and whom you brought in from it (I3), never the trust panel.
+            const asked = pubKeyStr;
+            setSelfInvite(null);
+            getTrustProfile(asked)
+                .then(own => { if (!cancelled && own) setSelfInvite({ vouchedInBy: own.vouchedInBy ?? null, broughtIn: own.broughtIn }); })
+                .catch(() => null);
         }
 
         // 4. Load given ratings asynchronously in the background (if self)
@@ -788,6 +794,32 @@ export default function PublicProfileScreen() {
         }
         return () => { cancelled = true; };
     }, [pubKeyStr, isSelf, identity?.publicKey]);
+
+    // The owner's or admin's button (I4) follows the person's state, and this screen stays under the ones the button opens (the
+    // names list, the voucher's card): when it is in front again the node is asked again, so Add to the names list does not
+    // stay on screen after the person was added (a second tap would seal a duplicate entry) and Make a voucher does not stay
+    // after a voucher was made. Only where a button was shown (the node sends one to owners and admins alone), and only the
+    // button is taken from the answer; the first focus is the read above.
+    const voucherButtonNow = useRef<unknown>(undefined);
+    voucherButtonNow.current = trust?.voucherButton;
+    const profileKeyNow = useRef(pubKeyStr);
+    profileKeyNow.current = pubKeyStr;
+    const focusedBefore = useRef(false);
+    useFocusEffect(useCallback(() => {
+        if (!focusedBefore.current) { focusedBefore.current = true; return undefined; }
+        const asked = profileKeyNow.current;
+        if (!asked || voucherButtonNow.current === undefined) return undefined;
+        let stale = false;
+        getTrustProfile(asked)
+            .then((fresh: any) => {
+                if (stale || !fresh || profileKeyNow.current !== asked) return;
+                setTrust((prev: any) => (!prev || JSON.stringify(prev.voucherButton ?? null) === JSON.stringify(fresh.voucherButton ?? null)
+                    ? prev
+                    : { ...prev, voucherButton: fresh.voucherButton }));
+            })
+            .catch(() => null);
+        return () => { stale = true; };
+    }, []));
 
     // On a community that says `membersOnDemand`: the card by key when none is held or it is a day old. Its own effect:
     // the node profile (useNodeProfile) is known a moment after the screen mounts, and as a dependency of the reads above
@@ -1130,6 +1162,12 @@ export default function PublicProfileScreen() {
                     )
                 )}
 
+                {/* Your own profile: who invited you ("You were invited by @x"), and whom you brought in (I3). Beans-gated as the
+                    same lines on anyone else's profile are. */}
+                {isSelf && showsBeans && selfInvite && (
+                    <InvitedByCard vouchedInBy={selfInvite.vouchedInBy} broughtIn={selfInvite.broughtIn} isSelf targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
+                )}
+
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel. Its verdict, tier,
                     Trust Points, track record and who invited them are all Beans: gated like the own card (`showsBeans`).
                     On a community with Beans off (the worldwide one) every member reads "🌱 Newcomer · 0 Trust Points" and is
@@ -1177,7 +1215,8 @@ export default function PublicProfileScreen() {
                                         <Text style={[styles.trustTierName, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{trust.tier?.name ? tierWords(trust.tier.name) : t('Member', undefined, 'trust tier')}</Text>
                                         <View style={{ backgroundColor: colors.brand.tint, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: colors.brand.primary }}>
                                             <Text style={{ fontSize: 13, fontWeight: '900', color: colors.brand.primary }}>
-                                                {tn(Math.round(trust.earnedCredit || 0), '{n} Trust Points', '{n} Trust Points')}
+                                                {/* The trust profile's earnedCredit keeps its name and carries whole hundredths (M1). */}
+                                                {tn((isHundredths(trust.earnedCredit) ? trust.earnedCredit : 0) / 100, '{n} Trust Points', '{n} Trust Points', { n: formatHundredths(isHundredths(trust.earnedCredit) ? trust.earnedCredit : 0) })}
                                             </Text>
                                         </View>
                                     </View>
@@ -1405,39 +1444,21 @@ export default function PublicProfileScreen() {
                                 </View>
                             )}
 
-                            {/* Invited by */}
-                            {showsBeans && trust.vouchedInBy && (
-                                <View style={styles.inviterCard}>
-                                    {trust.vouchedInBy.kind === 'member' && (
-                                        <Pressable
-                                            accessibilityRole="button"
-                                            style={styles.inviterRow}
-                                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: trust.vouchedInBy.publicKey, callsign: trust.vouchedInBy.callsign || '' } })}
-                                        >
-                                            <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
-                                            <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.inviterName} numberOfLines={1}>{t('🌱 Invited by {name}', { name: trust.vouchedInBy.callsign ?? '' })}</Text>
-                                                <Text style={styles.inviterSub} numberOfLines={2}>{t('{tier} tier · tap to reach out', { tier: tierWords(trust.vouchedInBy.tier) })}</Text>
-                                            </View>
-                                            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
-                                        </Pressable>
-                                    )}
-                                    {trust.vouchedInBy.kind !== 'member' && (
-                                        <View style={styles.inviterRow}>
-                                            <View style={styles.systemBadge}>
-                                                <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
-                                            </View>
-                                            <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.inviterName} numberOfLines={2}>
-                                                    {trust.vouchedInBy.kind === 'founder' ? t('Founding member') : t('Invited directly by the system admin')}
-                                                </Text>
-                                                <Text style={styles.inviterSub} numberOfLines={2}>
-                                                    {trust.vouchedInBy.kind === 'founder' ? t('Here since the community began') : t('Vetted by the admin at sign-up')}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
+                            {/* Invited by, and Brought in n people (I3): the server says who reads which (InvitedByCard). */}
+                            {showsBeans && (
+                                <InvitedByCard vouchedInBy={trust.vouchedInBy} broughtIn={trust.broughtIn} isSelf={false} targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
+                            )}
+
+                            {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only, and
+                                says none where Beans are off (a voucher is a Beans budget). Gated here as the web is, and as the card above. */}
+                            {!isSelf && showsBeans && (
+                                <ProfileVoucherButton
+                                    button={trust.voucherButton}
+                                    memberPubkey={pubKeyStr ?? ''}
+                                    callsign={profile?.callsign || callsignStr || ''}
+                                    anchorUrl={anchorUrl ?? ''}
+                                    identity={identity}
+                                />
                             )}
 
                             {/* Vouch for @sam (V3 §9) */}
@@ -1453,9 +1474,9 @@ export default function PublicProfileScreen() {
                                             {isRaise && (
                                                 <Text style={styles.vouchSub}>
                                                     {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
-                                                        prior: effectivePriorVouch,
+                                                        prior: formatHundredths(effectivePriorVouch),
                                                         name: profile?.callsign || callsignStr || '',
-                                                        max: VOUCH_MAX,
+                                                        max: formatHundredths(pairMax),
                                                     })}
                                                 </Text>
                                             )}
@@ -1464,8 +1485,8 @@ export default function PublicProfileScreen() {
                                                 onChange={setProfileVouchPreset}
                                                 budgetLeft={myVouching.budget?.left ?? 0}
                                                 budgetTotal={myVouching.budget?.level ?? 0}
-                                                priorVouch={effectivePriorVouch}
-                                                personName={profile?.callsign || callsignStr || ''}
+                                                noLimit={myVouching.noLimit === true}
+                                                raiseFrom={isRaise ? effectivePriorVouch : undefined}
                                             />
                                         </>
                                     )}
@@ -1492,68 +1513,21 @@ export default function PublicProfileScreen() {
                                                 setVouchRefusal(null);
                                                 setVouchSuccess(null);
                                                 try {
-                                                    const res = await vouchFromProfile(anchorUrl, identity, {
-                                                        memberPubkey: pubKeyStr,
-                                                        vouchAmount: profileVouchPreset,
-                                                        raise: isRaise,
-                                                    });
-                                                    // The node's figure for your earlier vouch, when it sent one (`already_vouched`,
-                                                    // `over_max`). Without it nothing is guessed: the node's own sentence is shown.
+                                                    // A raise posts the total it ends at, a first vouch its amount; the node lands the difference.
+                                                    const res = await vouchFromProfile(anchorUrl, identity, isRaise
+                                                        ? { memberPubkey: pubKeyStr, raiseTo: profileVouchPreset }
+                                                        : { memberPubkey: pubKeyStr, vouchAmount: profileVouchPreset });
+                                                    // The node's figure for your earlier vouch, when it sent one (`already_vouched`, `raise_not_above`):
+                                                    // the card follows it, so a screen that took a raise for a first vouch becomes the raise card.
+                                                    // Without it nothing is guessed: the node's own sentence is shown.
                                                     const prior = !res.ok && typeof res.prior === 'number' && res.prior > 0 ? res.prior : null;
                                                     if (prior !== null) setNodePriorVouch(prior);
-                                                    if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null && prior + profileVouchPreset <= VOUCH_MAX) {
-                                                        const newTotal = prior + profileVouchPreset;
-                                                        Alert.alert(
-                                                            t(VOUCH_PRESET_WORDS.raiseTitle),
-                                                            t(VOUCH_PRESET_WORDS.raiseConfirmQuestion, {
-                                                                prior,
-                                                                name: profile?.callsign || callsignStr || '',
-                                                                newTotal,
-                                                            }),
-                                                            [
-                                                                { text: t('Cancel'), style: 'cancel' },
-                                                                {
-                                                                    text: t(VOUCH_PRESET_WORDS.raise),
-                                                                    onPress: async () => {
-                                                                        setVouchBusy(true);
-                                                                        setVouchRefusal(null);
-                                                                        setVouchSuccess(null);
-                                                                        try {
-                                                                            const raiseRes = await vouchFromProfile(anchorUrl, identity, {
-                                                                                memberPubkey: pubKeyStr,
-                                                                                vouchAmount: profileVouchPreset,
-                                                                                raise: true,
-                                                                            });
-                                                                            if (raiseRes.ok) {
-                                                                                // The node's new total: the heading and the greyed presets follow it.
-                                                                                if (raiseRes.total > 0) setNodePriorVouch(raiseRes.total);
-                                                                                setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: raiseRes.total }));
-                                                                                setProfileVouchPreset(null);
-                                                                                // A failed re-read keeps the card, its figures and this banner.
-                                                                                void rereadMyVouching(anchorUrl, identity, setMyVouching);
-                                                                            } else {
-                                                                                if (typeof raiseRes.prior === 'number' && raiseRes.prior > 0) setNodePriorVouch(raiseRes.prior);
-                                                                                setProfileVouchPreset(null);
-                                                                                setVouchRefusal(raiseRes.message);
-                                                                            }
-                                                                        } catch (e: any) {
-                                                                            setProfileVouchPreset(null);
-                                                                            setVouchRefusal(e?.message ?? t('Could not vouch.'));
-                                                                        } finally {
-                                                                            setVouchBusy(false);
-                                                                        }
-                                                                    },
-                                                                },
-                                                            ]
-                                                        );
-                                                        return;
-                                                    }
                                                     if (res.ok) {
-                                                        // The node's new total: the heading and the greyed presets follow it.
+                                                        // The node's new total: the heading and the raise choices follow it.
                                                         if (res.total > 0) setNodePriorVouch(res.total);
                                                         setVouchSuccess(isRaise
-                                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: res.total })
-                                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: profileVouchPreset }));
+                                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: formatHundredths(res.total) })
+                                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: formatHundredths(profileVouchPreset) }));
                                                         setProfileVouchPreset(null);
                                                         // A failed re-read keeps the card, its figures and this banner.
                                                         void rereadMyVouching(anchorUrl, identity, setMyVouching);
@@ -1606,12 +1580,13 @@ export default function PublicProfileScreen() {
                             <Text style={styles.trustEmoji} allowFontScaling={false}>{balanceInfo.tier?.emoji || '🌱'}</Text>
                             <View style={{ flexShrink: 1 }}>
                                 <Text style={styles.trustTierName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{balanceInfo.tier?.name ? tierWords(balanceInfo.tier.name) : t('Member', undefined, 'trust tier')}</Text>
-                                <Text style={styles.trustSub} numberOfLines={1}>{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</Text>
+                                <Text style={styles.trustSub} numberOfLines={1}>{tn((balanceInfo.earnedCredit_c || 0) / 100, '{n} trust points', '{n} trust points', { n: formatHundredths(balanceInfo.earnedCredit_c || 0) })}</Text>
                             </View>
                         </View>
                         <View style={styles.trustRight}>
                             <View style={{ alignItems: 'flex-end' }}>
-                                <Text style={styles.trustBalance}>{balanceInfo.balance >= 0 ? '+' : ''}{formatNumber(balanceInfo.balance ?? 0, 1)}</Text>
+                                {/* Whole hundredths (getBalance's balance_c): a true minus below zero, a plus at and above it. */}
+                                <Text style={styles.trustBalance}>{(balanceInfo.balance_c ?? 0) >= 0 ? '+' : ''}{formatHundredths(balanceInfo.balance_c ?? 0)}</Text>
                                 <Text style={styles.trustSub}>{t('Beans')}</Text>
                             </View>
                             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.secondary} />
@@ -1841,8 +1816,12 @@ export default function PublicProfileScreen() {
                                                                 </View>
                                                                 {showsBeans && (
                                                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                                    <Text style={styles.creditAmount}>{p.credits ?? '?'}</Text>
+                                                                    {/* Priced at 0 it reads Free, with no Beans sign (core listing-price.ts, as on every card). The price is
+                                                                        whole hundredths (the copy's price_c): formatHundredths, "—" for one that isn't. */}
+                                                                    {freePriceWords(p.price_c, p.type) ? <Text style={styles.creditAmount}>{freePriceWords(p.price_c, p.type)}</Text> : <>
+                                                                    <Text style={styles.creditAmount}>{formatHundredths(p.price_c)}</Text>
                                                                     <Image accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" source={require('../assets/images/bean.png')} style={styles.beanIcon} />
+                                                                    </>}
                                                                 </View>
                                                                 )}
                                                             </View>

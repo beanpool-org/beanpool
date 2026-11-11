@@ -18,7 +18,7 @@ const LISTING = '123e4567-e89b-12d3-a456-426614174000';
 
 const DEALS: MarketplaceTransaction[] = held ? [{
     id: 'deal-1', postId: LISTING, postTitle: 'Sourdough baking course', buyerPublicKey: ME, buyerCallsign: 'Visitor',
-    sellerPublicKey: 'member-damo', sellerCallsign: 'Damo', credits: 45, status: 'pending', createdAt: new Date().toISOString(),
+    sellerPublicKey: 'member-damo', sellerCallsign: 'Damo', amount_c: 4500, status: 'pending', createdAt: new Date().toISOString(),
 }] : [];
 
 (window as unknown as { __navigated: unknown[] }).__navigated = [];

@@ -52,6 +52,7 @@ import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { isMemberKeySpelling } from '../engine/member-key.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
 import { OPEN_JOIN_KEY_FILE, readOpenJoinKeyForBundle } from './open-join-key.js';
+import { VAPID_KEY_FILE } from './web-push.js';
 import { withoutOldAddresses } from './address-retention.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
@@ -69,30 +70,13 @@ function envelopePath(): string {
 
 // ── What is sealed (§2.1) ──────────────────────────────────────────────────────────────────
 
-/** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials.
- *  `passwordRetired` is never copied plain: {@link bundledLocalConfigUpdates} merges it. */
-export const BUNDLED_LOCAL_CONFIG_FIELDS = [
-    'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode', 'passwordRetired',
-] as const;
-
 /**
- * What a take-over (`admin-settings`) and a sealed-backup restore write into this server's local-config from a bundle.
- * The admin password's retirement is sticky: retired when the bundle says so OR this server already is (a bundle
- * sealed before the retirement carries no such field), and then no hash, salt or the 2FA that guarded the password
- * come with it. So an older envelope or backup never brings a retired password back, and a restore never clears the
- * flag. A server that never saw the retirement, given a bundle sealed before it, cannot learn of it from that bundle.
+ * The bundle's `localConfig`: empty. It held the community's admin password (its hash and salt), the 2FA that guarded it,
+ * break-glass mode and the password's retirement; the node has no admin password now (Marty, 11 Nov 2026). It stays in
+ * the bundle, empty, so every reader finds the shape it checks (services/sealed-backup.ts); what an older server's bundle
+ * still carries there is never read.
  */
-export function bundledLocalConfigUpdates(
-    bundled: Record<string, unknown>, current: Record<string, unknown>,
-): Record<string, unknown> {
-    const updates: Record<string, unknown> = {};
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = bundled[f] ?? null;
-    updates.passwordRetired = bundled.passwordRetired || current.passwordRetired || null;
-    if (updates.passwordRetired) {
-        Object.assign(updates, { adminHash: null, salt: null, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-    }
-    return updates;
-}
+export type BundledLocalConfig = Record<string, never>;
 
 /**
  * Identity files, raw bytes as base64 so a take-over writes back exactly what was read.
@@ -107,15 +91,20 @@ export function bundledLocalConfigUpdates(
  * `open-join.key` is the open door's key (services/open-join-key.ts), kept the same way: only here, installed by the
  * take-over's `open-door` step and a sealed-backup restore with installCarriedOpenJoinKey. A bundle sealed before it was a
  * file carries it as `openJoins.salt` instead.
+ *
+ * `vapid.key` is the node's own web push key (services/web-push.ts): browsers subscribe to its public key, so the server
+ * that takes over, or a restore, must hold the same one or every push service refuses it. Written as the other files are
+ * (0600); a bundle sealed before it travelled, or from a node that never needed one, has none, and the server makes its own
+ * at first need (its browsers then subscribe again at their next tap).
  */
-export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE] as const;
+export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE, VAPID_KEY_FILE] as const;
 
 export interface TakeoverBundle {
     v: 1;
     /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all, and one sealed before
      *  the open door's key was a file no `open-join.key` entry. */
     files: Record<(typeof BUNDLED_FILES)[number], string | null>;
-    localConfig: Record<(typeof BUNDLED_LOCAL_CONFIG_FIELDS)[number], unknown>;
+    localConfig: BundledLocalConfig;
     /** The raw table: a standby does not replicate roles (backups-and-replicas.md), so without these a promoted
      *  node has no owners and key sign-in fails. */
     nodeRoles: {
@@ -226,8 +215,7 @@ function readRegistrarNames(): unknown[] {
 
 function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
     const config = getLocalConfig() as any;
-    const localConfig = {} as TakeoverBundle['localConfig'];
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) localConfig[f] = config[f] ?? null;
+    const localConfig: BundledLocalConfig = {};
     const nodeRoles = db.prepare(
         `SELECT member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
          FROM node_roles ORDER BY member_pubkey`,

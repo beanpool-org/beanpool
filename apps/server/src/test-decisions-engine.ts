@@ -90,6 +90,10 @@ function testAssert(cond: any, msg: string): void {
     }
 }
 
+/** The story's figures are Beans; balances, the pot, grants and trade values are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/** `earnedCredit` is in Beans, as the story tells it. */
 function seedTestMember(pk: string, callsign: string, opts?: {
     isTreasury?: boolean;
     creditFrozen?: boolean;
@@ -104,31 +108,32 @@ function seedTestMember(pk: string, callsign: string, opts?: {
     const joinedAt = opts?.joinedAt || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, status, credit_frozen, is_treasury, earned_credit_c)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(public_key) DO UPDATE SET
             status = excluded.status,
             credit_frozen = excluded.credit_frozen,
             is_treasury = excluded.is_treasury,
-            earned_credit = excluded.earned_credit
-    `).run(pk, callsign, joinedAt, status, creditFrozen, isTreasury, earnedCredit);
+            earned_credit_c = excluded.earned_credit_c
+    `).run(pk, callsign, joinedAt, status, creditFrozen, isTreasury, hc(earnedCredit));
 
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, 0, 0)
         ON CONFLICT(public_key) DO NOTHING
     `).run(pk);
 }
 
+/** A completed trade of `amount` Beans (voice credits on a pool Decision are the Beans of value traded). */
 function recordTestActivity(buyer: string, seller: string, amount: number) {
     const txId = 'tx-' + Math.random().toString(36).slice(2);
     const postId = 'post-' + Math.random().toString(36).slice(2);
     const now = new Date().toISOString();
 
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
         VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
-    `).run(txId, postId, buyer, seller, amount, now, now);
+    `).run(txId, postId, buyer, seller, hc(amount), now, now);
 }
 
 function closeForTick(id: string) {
@@ -153,7 +158,7 @@ async function runDecisionsSuite() {
     console.log('🏛️ Running Community Decisions Engine Test Suite (§3.2–§3.8)...\n');
 
     initStateEngine();
-    setCommonsBalance(1000);
+    setCommonsBalance(hc(1000));
 
     const admin = 'admin_user_' + Date.now();
     seedTestMember(admin, 'AdminDave', { earnedCredit: 500 });
@@ -244,7 +249,7 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_enterprise',
         subject: enterprise1,
-        params: { amount: 200 },
+        params: { amount_c: hc(200) },
     });
     testAssert(decPool.franchise === 'quadratic_trade', 'Decisions touching pool receive quadratic_trade franchise (§3.6)');
 
@@ -302,7 +307,7 @@ async function runDecisionsSuite() {
 
     // Close and execute decPool on tick
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(decPool.id);
-    const balanceBeforeGrant = getBalance(enterprise1).balance;
+    const balanceBeforeGrant = getBalance(enterprise1).balance_c;
     const commonsBeforeGrant = getCommonsBalance();
 
     const tickRes1 = tickDecisions();
@@ -310,8 +315,8 @@ async function runDecisionsSuite() {
 
     const decPoolExecuted = getDecision(decPool.id)!;
     testAssert(decPoolExecuted.status === 'executed', 'Pool grant transitioned to EXECUTED');
-    testAssert(getBalance(enterprise1).balance === balanceBeforeGrant + 200, 'Enterprise credited 200 beans in balance');
-    testAssert(getCommonsBalance() === commonsBeforeGrant - 200, 'Commons pool debited 200 beans');
+    testAssert(getBalance(enterprise1).balance_c === balanceBeforeGrant + hc(200), 'Enterprise credited 200 beans in balance');
+    testAssert(getCommonsBalance() === commonsBeforeGrant - hc(200), 'Commons pool debited 200 beans');
 
     // Verify transaction auth_signer provenance stamp (§3.7)
     const txRow = db.prepare(
@@ -425,7 +430,7 @@ async function runDecisionsSuite() {
     seedTestMember(bigGrantEnterprise, 'Big Solar Co-op', { isTreasury: true });
 
     const currentCommons = getCommonsBalance();
-    const bigAmount = currentCommons + 500; // More than commons balance!
+    const bigAmount = currentCommons + hc(500); // More than commons balance! (whole hundredths, as the pot is)
 
     // A grant is capped when proposed (grant cap, 2026-09-27), so an underfunded one gets here only by the Commons paying
     // out between proposal and close: it could pay the grant when proposed, and is short of it by the tick.
@@ -437,7 +442,7 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_enterprise',
         subject: bigGrantEnterprise,
-        params: { amount: bigAmount },
+        params: { amount_c: bigAmount },
     });
     setCommonsBalance(currentCommons);
     castDecisionVote(decBigGrant.id, voterA, true, 5);
@@ -450,18 +455,18 @@ async function runDecisionsSuite() {
     testAssert(decQueued.executionReason?.includes('Insufficient pool funds'), 'Queue reason explains waiting for funds');
 
     // Increase commons pool (simulating fee revenue influx)
-    setCommonsBalance(bigAmount + 200);
+    setCommonsBalance(bigAmount + hc(200));
     const tickQueueRes = tickDecisions();
     testAssert(tickQueueRes.executed >= 1, 'Next tick executed queued grant once pool became solvent');
 
     const decQueuedAfterFunding = getDecision(decBigGrant.id)!;
     testAssert(decQueuedAfterFunding.status === 'executed', 'Queued grant completed execution');
-    testAssert(getBalance(bigGrantEnterprise).balance === bigAmount, 'Solar enterprise received full grant amount');
+    testAssert(getBalance(bigGrantEnterprise).balance_c === bigAmount, 'Solar enterprise received full grant amount');
 
     // Test 90-day expiry of queued grants
     const staleGrantEnterprise = 'ent_stale_grant_' + Date.now();
     seedTestMember(staleGrantEnterprise, 'Stale Initiative', { isTreasury: true });
-    setCommonsBalance(500); // Within the cap when proposed...
+    setCommonsBalance(hc(500)); // Within the cap when proposed...
     const decStale = createDecision({
         authorPubkey: admin,
         title: 'Stale initiative grant',
@@ -469,9 +474,9 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_enterprise',
         subject: staleGrantEnterprise,
-        params: { amount: 500 },
+        params: { amount_c: hc(500) },
     });
-    setCommonsBalance(10); // ...then a low pool by the time it closes
+    setCommonsBalance(hc(10)); // ...then a low pool by the time it closes
     castDecisionVote(decStale.id, voterA, true, 2);
     castDecisionVote(decStale.id, voterB, true, 2);
     castDecisionVote(decStale.id, voterC, true, 2);
@@ -487,7 +492,7 @@ async function runDecisionsSuite() {
     testAssert(decStaleAfter90.executionReason?.includes('expired after 90 days'), 'Expiration reason recorded');
 
     // Reset pool
-    setCommonsBalance(1000);
+    setCommonsBalance(hc(1000));
 
     // ── 7. Destructive Member Removal & Grace Window ────────────────────────
     console.log('\n--- 7. Destructive Member Removal & Grace Window ---');
@@ -526,7 +531,7 @@ async function runDecisionsSuite() {
     const disabledMember = 'disabled_member_' + Date.now();
     seedTestMember(disabledMember, 'DisabledDave');
     db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(disabledMember);
-    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at) VALUES (?, -75, 0, ?)").run(disabledMember, new Date().toISOString());
+    db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at) VALUES (?, ?, 0, ?)").run(disabledMember, -hc(75), new Date().toISOString());
 
     const decOpenRemoval = removalProposedFromBefore({
         authorPubkey: admin,
@@ -536,7 +541,7 @@ async function runDecisionsSuite() {
         closesAt: new Date(Date.now() + 100000).toISOString(),
     });
     testAssert(decOpenRemoval.status === 'open', 'Decision is open');
-    testAssert(decOpenRemoval.params?.debt === 75, 'Canonical debt of 75 beans populated on removal decision from accounts ledger');
+    testAssert(decOpenRemoval.params?.debt_c === hc(75), `Canonical debt of 75 beans populated on removal decision from accounts ledger (${decOpenRemoval.params?.debt_c} hundredths)`);
     testAssert(decOpenRemoval.params?.memberName === 'DisabledDave', 'Member callsign populated in params.memberName');
     const haltOpenRes = adminHaltDecision(decOpenRemoval.id, admin, 'Halted while open; member remains disabled');
     testAssert(haltOpenRes.success, 'Halted open decision');
@@ -668,7 +673,7 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_hardship',
         subject: fakeRecipient,
-        params: { amount: 50 },
+        params: { amount_c: hc(50) },
     });
     const execHardshipRes = executeDecision(hardshipDec.id);
     testAssert(execHardshipRes.status === 'execution_void', 'Hardship to nonexistent recipient halts at execution_void');
@@ -789,7 +794,7 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_enterprise',
         subject: enterprise1,
-        params: { amount: 10 },
+        params: { amount_c: hc(10) },
     });
     const initialCredits = getDecisionVoiceCredits(decQCredits.id, voterA);
     castDecisionVote(decQCredits.id, voterA, true, 3); // 9 credits
@@ -882,7 +887,7 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_hardship',
         subject: enterprise1, // Enterprise, not member!
-        params: { amount: 50 },
+        params: { amount_c: hc(50) },
     });
     castDecisionVote(decBadHardship.id, voterA, true, 2);
     castDecisionVote(decBadHardship.id, voterB, true, 2);
@@ -896,9 +901,9 @@ async function runDecisionsSuite() {
     seedTestMember(insolventEnt, 'Insolvent Shop', { isTreasury: true });
     // Give negative balance
     const acctInsolvent = ledger.getAccount(insolventEnt);
-    acctInsolvent.balance = -150;
-    db.prepare("UPDATE accounts SET balance = -150 WHERE public_key = ?").run(insolventEnt);
-    setCommonsBalance(500);
+    acctInsolvent.balance_c = -hc(150);
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = ?").run(-hc(150), insolventEnt);
+    setCommonsBalance(hc(500));
 
     const decWriteOff = createDecision({
         authorPubkey: admin,
@@ -914,18 +919,18 @@ async function runDecisionsSuite() {
     closeForTick(decWriteOff.id);
     tickDecisions();
     testAssert(getDecision(decWriteOff.id)!.status === 'executed', 'write_off_deficit executed successfully');
-    testAssert(ledger.getAccount(insolventEnt).balance === 0, 'Insolvent enterprise balance reset to 0');
-    testAssert(getCommonsBalance() === 350, 'Commons pool debited 150 beans to cover deficit');
+    testAssert(ledger.getAccount(insolventEnt).balance_c === 0, 'Insolvent enterprise balance reset to 0');
+    testAssert(getCommonsBalance() === hc(350), 'Commons pool debited 150 beans to cover deficit');
     const writeOffTx = db.prepare("SELECT * FROM transactions WHERE to_pubkey = ? AND auth_signer = ?").get(insolventEnt, `system:decision:${decWriteOff.id}`) as any;
-    testAssert(writeOffTx != null && writeOffTx.amount === 150, 'Deficit write-off transaction recorded with provenance');
+    testAssert(writeOffTx != null && writeOffTx.amount_c === hc(150), 'Deficit write-off transaction recorded with provenance');
 
     // 11h. Write off deficit queued when pool funds insufficient, then automatically executed on tick when replenished
     const queuedInsolventEnt = 'ent_queued_insolvent_' + Date.now();
     seedTestMember(queuedInsolventEnt, 'Queued Insolvent', { isTreasury: true });
     const acctQueued = ledger.getAccount(queuedInsolventEnt);
-    acctQueued.balance = -200;
-    db.prepare("UPDATE accounts SET balance = -200 WHERE public_key = ?").run(queuedInsolventEnt);
-    setCommonsBalance(50); // Only 50 available, deficit is 200
+    acctQueued.balance_c = -hc(200);
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = ?").run(-hc(200), queuedInsolventEnt);
+    setCommonsBalance(hc(50)); // Only 50 available, deficit is 200
 
     const decQueuedWriteOff = createDecision({
         authorPubkey: admin,
@@ -943,13 +948,13 @@ async function runDecisionsSuite() {
     testAssert(getDecision(decQueuedWriteOff.id)!.status === 'passed_queued_for_funds', 'Underfunded write_off_deficit enters passed_queued_for_funds');
 
     // Replenish Commons pool
-    setCommonsBalance(300);
+    setCommonsBalance(hc(300));
     tickDecisions();
     testAssert(getDecision(decQueuedWriteOff.id)!.status === 'executed', 'Queued write_off_deficit executes automatically once pool has funds');
-    testAssert(ledger.getAccount(queuedInsolventEnt).balance === 0, 'Queued insolvent enterprise balance reset to 0');
+    testAssert(ledger.getAccount(queuedInsolventEnt).balance_c === 0, 'Queued insolvent enterprise balance reset to 0');
     // 11i. Enforce 1-grant queue capacity per §3.7: trailing underfunded grants become execution_blocked
     // Each grant is within the cap when proposed; the pool is underfunded by the time each one closes.
-    setCommonsBalance(100);
+    setCommonsBalance(hc(100));
     const entQueue1 = 'ent_q1_' + Date.now();
     seedTestMember(entQueue1, 'Q1 Enterprise', { isTreasury: true });
     const decQ1 = createDecision({
@@ -959,9 +964,9 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_enterprise',
         subject: entQueue1,
-        params: { amount: 100 },
+        params: { amount_c: hc(100) },
     });
-    setCommonsBalance(10); // Pool underfunded
+    setCommonsBalance(hc(10)); // Pool underfunded
     castDecisionVote(decQ1.id, voterA, true, 4);
     castDecisionVote(decQ1.id, voterB, true, 4);
     castDecisionVote(decQ1.id, voterC, true, 4);
@@ -971,7 +976,7 @@ async function runDecisionsSuite() {
 
     const entQueue2 = 'ent_q2_' + Date.now();
     seedTestMember(entQueue2, 'Q2 Enterprise', { isTreasury: true });
-    setCommonsBalance(150);
+    setCommonsBalance(hc(150));
     const decQ2 = createDecision({
         authorPubkey: admin,
         title: 'Grant Q2',
@@ -979,9 +984,9 @@ async function runDecisionsSuite() {
         touches: 'pool',
         effect: 'grant_enterprise',
         subject: entQueue2,
-        params: { amount: 150 },
+        params: { amount_c: hc(150) },
     });
-    setCommonsBalance(10); // Pool underfunded again
+    setCommonsBalance(hc(10)); // Pool underfunded again
     castDecisionVote(decQ2.id, voterA, true, 4);
     castDecisionVote(decQ2.id, voterB, true, 4);
     castDecisionVote(decQ2.id, voterC, true, 4);
@@ -1002,7 +1007,7 @@ async function runDecisionsSuite() {
     const sameRole = (before: any, after: any) => !!before && !!after && before.role === after.role && before.granted_at === after.granted_at
         && before.granted_by === after.granted_by && after.session_epoch === before.session_epoch + 1;
     const heldAside = (decisionId: string) => db.prepare('SELECT member_pubkey, role FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as any;
-    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
     const markActive = (pk: string) => db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date().toISOString(), pk);
     // Every block below measures its own electorate: nobody from the sections above counts as active any more.
     db.prepare('UPDATE members SET last_active_at = NULL').run();
@@ -1060,7 +1065,7 @@ async function runDecisionsSuite() {
         && String(piaVote.description).endsWith('Reason given: Threats made to another member at the market'),
         `Its description says who paused whom when, and the reason (${JSON.stringify(piaVote.description)})`);
     testAssert(Date.parse(piaVote.closesAt) - Date.parse(piaVote.opensAt) === 7 * DAY, 'It runs 7 days');
-    testAssert(typeof piaVote.params?.balance === 'number' && typeof piaVote.params?.debt === 'number' && typeof piaVote.params?.commonsPool === 'number',
+    testAssert(typeof piaVote.params?.balance_c === 'number' && typeof piaVote.params?.debt_c === 'number' && typeof piaVote.params?.commonsPool_c === 'number',
         `It records the member's balance, debt and the pot, as every removal vote does (${JSON.stringify(piaVote.params)})`);
     testAssert(!db.prepare("SELECT 1 FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(pia), 'No "Keep the suspension?" vote opens');
     testAssert(statusOf(pia) === 'disabled' && !roleRow(pia) && heldAside(piaVote.id)?.role === 'moderator',
@@ -1336,7 +1341,7 @@ async function runDecisionsSuite() {
         testAssert(waiting.status === 'execution_pending_grace' && waiting.executionReason === decisionsEngine.WAITING_FOR_POT && statusOf(pat) === 'disabled',
             `Its grace window ends with the pot unknown: the removal waits, Pat still paused (${waiting.status}: ${waiting.executionReason})`);
         testAssert(statusOf(yes.pk) === 'disabled' && getDecision(yes.d.id)!.status === 'execution_pending_grace', 'and so does Yan\'s, whose window ended too');
-        setCommonsBalance(1000);
+        setCommonsBalance(hc(1000));
         tickDecisions(at + 120_000);
         const reopened = getDecision(patVote.id)!;
         const reopenedEnds = Date.parse(reopened.gracePeriodEndsAt ?? '');
@@ -1348,7 +1353,7 @@ async function runDecisionsSuite() {
         testAssert(getDecision(yes.d.id)!.status === 'executed' && statusOf(yes.pk) === 'pruned' && !heldAside(yes.d.id),
             'Yan\'s too: removed on the tick, the held role gone with them');
     } finally {
-        setCommonsBalance(1000);
+        setCommonsBalance(hc(1000));
     }
 
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} of ${testsRun} Decisions Engine checks failed`);

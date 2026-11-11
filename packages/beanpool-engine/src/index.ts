@@ -17,7 +17,6 @@ export * from './photo-url.js';
 export * from './escrow.js';
 export * from './messaging.js';
 export * from './sync.js';
-export * from './archetypes.js';
 export * from './groups.js';
 export * from './geo.js';
 export * from './names.js';

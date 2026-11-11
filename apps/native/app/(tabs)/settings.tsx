@@ -17,7 +17,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, fetchNodeCallsign, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, fetchNodeCallsign, signedRequest, signedGet, signedRequestWithMethod, resetDmChatMemory } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../../utils/event-extras';
@@ -28,9 +28,11 @@ import {
 } from '../../utils/pending-profile-sync';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
-import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
+import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
 import { withNodeScheme } from '../../utils/node-address-scheme';
+import { claimNodeOrigin } from '../../utils/claim-link';
+import { NoOwnerCard, type OwnerlessServer } from '../../components/NoOwnerCard';
 import { fetchMembership } from '../../utils/membership-probe';
 import { remoteOwnTransactionCount } from '../../utils/diagnostics-own-count';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -67,13 +69,13 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useOwnProfile } from '../../utils/use-own-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn, effectiveFeatures, shareOutsideOn } from '../../utils/node-profile';
+import { beansOn, effectiveFeatures, invitesOn, shareOutsideOn } from '../../utils/node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
@@ -966,7 +968,6 @@ export default function SettingsScreen() {
                     const res = await fetch(`${cleanUrl}/api/community/info?_t=${Date.now()}`);
                      if (res.ok) {
                         const data = await res.json();
-                        await recordRequestSigning(cleanUrl, data);
                         let remoteTxCount = data.transactionCount || 0;
                         
                         // The member's own ledger is Beans: never asked where they are a preview (the global node).
@@ -992,6 +993,8 @@ export default function SettingsScreen() {
     
     // Advanced subsystem state
     const [newAnchorInput, setNewAnchorInput] = useState('');
+    // "Add a community by address" on a server with no owner yet: its card, instead of the server saved as a community.
+    const [ownerless, setOwnerless] = useState<OwnerlessServer | null>(null);
     const [changeConfirm, setChangeConfirm] = useState('');
     const [wipeConfirm, setWipeConfirm] = useState('');
     const [wipeType, setWipeType] = useState<'options' | 'local' | 'purge'>('options');
@@ -1086,6 +1089,19 @@ export default function SettingsScreen() {
             .catch(e => console.warn('[Prefs] Could not read the connection-in-common setting:', e));
         return () => { cancelled = true; };
     }, [identity?.publicKey]);
+    // "Show who invited me to other members" (I3; server members.inviter_shown), on unless turned off. null until the node
+    // says (GET /api/profile/privacy, the member's alone); where invites are off nobody was invited, so it isn't asked.
+    const [inviterShown, setInviterShown] = useState<boolean | null>(null);
+    const invitesHere = invitesOn(nodeProfile?.features);
+    useEffect(() => {
+        if (!identity?.publicKey || !invitesHere) { setInviterShown(null); return; }
+        let cancelled = false;
+        signedGet('/api/profile/privacy')
+            .then(res => (res.ok ? res.json() : null))
+            .then(body => { if (!cancelled && body && typeof body.inviterShown === 'boolean') setInviterShown(body.inviterShown); })
+            .catch(e => console.warn('[Prefs] Could not read the show-who-invited-me setting:', e));
+        return () => { cancelled = true; };
+    }, [identity?.publicKey, invitesHere]);
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
 
@@ -1594,16 +1610,30 @@ export default function SettingsScreen() {
 
     async function handleUpdateAnchor() {
         if (!newAnchorInput.trim()) {
-            Alert.alert(t("Invalid URL"), t("Please enter a valid BeanPool Node IP address."));
+            Alert.alert(t("Invalid URL"), t("Type the community's address, like yourtown.beanpool.org."));
             return;
         }
 
         setAdvancedLoading(true);
+        setOwnerless(null);
         try {
             // A bare public IP gets https://; http:// only for localhost and a LAN address (utils/node-address-scheme.ts).
             const finalAnchorUrl = withNodeScheme(newAnchorInput);
             // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
             if (!isPlainNodeAddress(finalAnchorUrl)) throw new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
+            // A server with no owner yet and its one-time code waiting is one its installer claims, not a community to
+            // visit: asked BEFORE anything is saved (DESIGN-new-operator-path-fable.md, decision 1, Marty 9 Nov). On that
+            // answer nothing is saved, nothing switches and no guest mark is written; its card offers Claim. Any other
+            // answer (an owner, no code waiting, busy, no answer) adds the community as before.
+            const claimOrigin = claimNodeOrigin(finalAnchorUrl);
+            if (claimOrigin) {
+                const { readClaimStatus } = await import('../../utils/node-claim');
+                const status = await readClaimStatus(claimOrigin);
+                if (status.kind === 'unclaimed') {
+                    setOwnerless({ origin: claimOrigin, name: status.communityName, codeId: status.codeId });
+                    return;
+                }
+            }
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
             // A switch too: the update screen asks the community now in use at once, whatever fails below
             // (utils/community-switch.ts).
@@ -2298,6 +2328,26 @@ export default function SettingsScreen() {
                             </Pressable>
                         </View>
                     )}
+                    {inviterShown !== null && (
+                        <View style={styles.menuBtn} testID="settings-show-inviter">
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌱</Text></View>
+                            <View style={styles.menuTextBesideSwitch}>
+                                <Text style={styles.menuText}>{showInviterSwitchWords().label}</Text>
+                                <Text style={styles.menuSub}>{showInviterSwitchWords().hint}</Text>
+                            </View>
+                            <Pressable style={[styles.toggle, inviterShown && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel={showInviterSwitchWords().label} accessibilityState={{ checked: inviterShown }} onPress={async () => {
+                                const next = !inviterShown; setInviterShown(next);
+                                try {
+                                    await signedRequestWithMethod('PUT', '/api/profile/privacy', { inviterShown: next });
+                                } catch (e: any) {
+                                    setInviterShown(!next);
+                                    Alert.alert(t('Not saved'), e?.message ? signedRequestWords(e.message) : t('Your community could not save that.'));
+                                }
+                            }}>
+                                <View style={[styles.toggleThumb, inviterShown && styles.toggleThumbOn]} />
+                            </Pressable>
+                        </View>
+                    )}
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>{t("Privacy Policy")}</Text>
@@ -2944,17 +2994,22 @@ export default function SettingsScreen() {
                     <TextInput
                         style={styles.input}
                         value={newAnchorInput}
-                        onChangeText={setNewAnchorInput}
-                        placeholder={t('e.g. {address}', { address: 'http://192.168.1.55' })}
+                        onChangeText={(v) => { setNewAnchorInput(v); setOwnerless(null); }}
+                        placeholder={t('e.g. {address}', { address: 'yourtown.beanpool.org' })}
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="none"
                         autoCorrect={false}
+                        keyboardType="url"
                         accessibilityLabel={t("Community address")}
+                        testID="settings-add-address"
                     />
-                    
-                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
+
+                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button" testID="settings-add-connect">
                         {advancedLoading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
                     </Pressable>
+
+                    {/* The typed server has no owner yet: claim it (app/claim-community.tsx), nothing saved. */}
+                    {ownerless && <NoOwnerCard server={ownerless} style={{ marginTop: 12, marginBottom: 0 }} testID="settings-no-owner" />}
 
                     {/* Lights-out H2: the typed hall door (app/hall.tsx). Your own community, on the hall laptop's number,
                         checked first and with your copy carried: not a new community in this list. */}

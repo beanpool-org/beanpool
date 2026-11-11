@@ -39,6 +39,7 @@ import Koa from 'koa';
 import WebSocket from 'ws';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signSocket, socketBinding } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -56,8 +57,8 @@ function keypair(callsign: string): Id {
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 type Sock = { ws: WebSocket; events: any[]; raw: string[] };
@@ -98,7 +99,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(id.pubKeyHex, callsign);
         setMemberPhoto(db, id.pubKeyHex, '/uploads/avatar.jpg');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         putPushTokenRow(id.pubKeyHex, `ExponentPushToken[${callsign}]`, 'android');
         return id;
     };

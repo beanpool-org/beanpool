@@ -34,6 +34,7 @@ import {
     lastActiveForViewer,
     contactVisibleTo, contactViewer, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
+    inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
@@ -47,11 +48,8 @@ import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js'
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText, normaliseLang } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
-    validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
-    isPasswordRetired,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, type LocalConfig,
 } from '../config/local-config.js';
-import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -83,7 +81,8 @@ import { HIDDEN_AUTHOR, ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
-import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF, isWholeCents, WHOLE_CENTS_ERROR } from '../db/db.js';
+import { db } from '../db/db.js';
+import { requirePositiveHundredths } from '../money-body.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR, PhotoTooBigError, routePhotoValueRefusal, tooManyPixelsText } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
@@ -92,12 +91,10 @@ import { READER_CACHE_CONTROL } from '../guest-cache.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
-import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
-import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
-import { restampPasswordSession } from '../admin-key-auth.js';
+import { requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
-import { isPausedMember } from '../engine/invites.js';
+import { isPausedMember, revokeInvite, InviteRevokeError } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
@@ -142,89 +139,12 @@ router.get('/api/local/status', async (ctx) => {
     // sister-node map, is gone, and with it any web page could read this from a visitor's browser. An origin the operator
     // lists in corsAllowedOrigins still gets it through the gateway's CORS layer, as every other route does.
     ctx.body = {
-        // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
-        // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
-        isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
         // As anyone else gets it (config/community-place.ts): rounded to two decimals (~1 km) with "Share Location & Radius"
         // on, null with it off. This route answers anyone, from anywhere, and isn't signature-checked, so it can't tell a
         // member; an operator may have set a home address. Its one reader was the sister map in the legacy settings page.
         location: placeAs(config.location, placeShownTo({ ownerOrAdmin: false })),
-        // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
-        // manager knows to use a token. Absent on a node from before.
-        passwordRetired: !!config.passwordRetired,
     };
-});
-
-// ===================== AUTH API =====================
-
-router.post('/api/local/verify-password', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
-    const body = (ctx as any).requestBody || {};
-    const password = body.password;
-    const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
-
-    if (!password && !headerPass) {
-        ctx.status = 400;
-        ctx.body = { error: 'Password required' };
-        return;
-    }
-
-    const pw = password || headerPass;
-    // Under 2FA a right password alone clears nothing: the brake lets go only once the code is right too
-    // (checkAdminPassword and notePasswordSuccess below).
-    const pwCheck = await checkAdminPassword(ctx, pw);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        logger.security('AUTH', 'Failed administrative login attempt.');
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
-
-    // #135: Check TOTP 2FA if enabled. Read after the password check's wait, and nothing below waits: another request
-    // may have spent a backup code or replaced the authenticator meanwhile, and writing back a list read before the
-    // wait would bring those codes back.
-    const config = getLocalConfig();
-    if (config.totpEnabled && config.totpSecret) {
-        const totpCode = body.totpCode || ctx.request?.headers?.['x-admin-totp'] || (ctx as any).headers?.['x-admin-totp'] || '';
-        if (!totpCode) {
-            ctx.status = 401;
-            ctx.body = { error: '2FA code required', totpRequired: true };
-            return;
-        }
-        const cleanCode = String(totpCode).trim();
-        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
-        const totpUse = useTotpCode(cleanCode, config.totpSecret);
-        let totpValid = totpUse === 'ok';
-
-        // Check backup codes if TOTP didn't match
-        const backupHashes = config.totpBackupCodesHashes || [];
-        if (!totpValid && backupHashes.length > 0) {
-            const codeIndex = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
-            if (codeIndex !== -1) {
-                totpValid = true;
-                const updatedHashes = [...backupHashes];
-                updatedHashes.splice(codeIndex, 1);
-                updateLocalConfig({ totpBackupCodesHashes: updatedHashes });
-            }
-        }
-
-        if (!totpValid) {
-            notePasswordFailure(clientLimiterKey(ctx));
-            ctx.status = 401;
-            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
-            return;
-        }
-        notePasswordSuccess(clientLimiterKey(ctx));
-    }
-
-    // Issue 2FA session token so subsequent API calls can skip TOTP re-entry
-    const tfaSession = config.totpEnabled ? issue2faSessionToken() : undefined;
-
-    logger.security('AUTH', 'Successful administrative login.');
-    ctx.body = { success: true, ...(tfaSession ? { tfaSessionToken: tfaSession } : {}) };
 });
 
 /** A voucher's refusal (engine/vouchers.ts), in its own status, code and sentence. */
@@ -272,7 +192,12 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         // code hung off a pruned or re-keyed member, or off a row an old door stored under another spelling of a key,
         // never redeems (engine/invites.ts), so past one the fallbacks below pick another.
         const members = getAllMembers().filter(m => mayBringSomeoneIn(m.publicKey));
-        let genesisMember = members.find(m => m.invitedBy === 'genesis');
+        // Made under an owner's or admin's key, the code hangs off that person, so whoever joins with it reads "Invited by"
+        // them (state-engine.ts resolveVouchedInBy, DESIGN-invites-vouching-review-fable.md slice I3). Under the node
+        // password no person is known: it hangs off the genesis member as before, and reads as an owner's invite card.
+        // Codes made before this hang where they were made (nothing is rewritten).
+        let genesisMember = issuedBy !== 'owner:password' ? members.find(m => m.publicKey === issuedBy) : undefined;
+        if (!genesisMember) genesisMember = members.find(m => m.invitedBy === 'genesis');
         if (!genesisMember) {
             // Restored DB fallback: find the 'Admin' or first non-system member to act as genesis
             genesisMember = members.find(m => m.callsign === 'Admin')
@@ -437,82 +362,6 @@ router.post('/api/funnel-event', async (ctx) => {
     // unbounded number of rows.
     const safeVariant = typeof variant === 'string' ? variant.slice(0, 16) : '';
     recordFunnelEvent(event, safeVariant);
-    ctx.body = { success: true };
-});
-
-router.post('/api/local/change-password', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    // Retired for good: no route sets a password again, a key session's included.
-    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
-    // The password this request replaces, read before any wait. It must still be the one on disk when the new one is
-    // written (below).
-    const replacing = getLocalConfig();
-    const body = (ctx as any).requestBody || {};
-    const { currentPassword, newPassword } = body;
-
-    // Clients that send only { currentPassword, newPassword } sign in with that same password: it still has to
-    // pass checkAdminAuth, 2FA included.
-    const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
-        || ctx.request?.headers?.['x-admin-password'];
-    if (!body.password && !headerPass && currentPassword) body.password = currentPassword;
-
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can change its password')) return;
-
-    // The current password is asked for even under a key session. A key session proves who you are, not that you
-    // know the password; without this, a phone left signed in could set a password its holder has never known, and
-    // with it sign in anywhere the password works.
-    // When checkAdminAuth has just verified this very string as the node password (a password caller, or a body-only
-    // client whose currentPassword was its sign-in), that is the proof: checking it again would only run scrypt and
-    // take the brake a second time. Anything else (a key session, a different string) is checked.
-    const proven = typeof ctx.state?.verifiedAdminPassword === 'string' ? Buffer.from(ctx.state.verifiedAdminPassword) : null;
-    const given = typeof currentPassword === 'string' ? Buffer.from(currentPassword) : null;
-    const alreadyProven = !!proven && !!given && proven.length === given.length && crypto.timingSafeEqual(proven, given);
-    const pwCheck = alreadyProven ? 'ok' : await checkAdminPassword(ctx, currentPassword);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid current password' };
-        return;
-    }
-
-    const validation = validatePasswordStrength(newPassword || '');
-    if (!validation.valid) {
-        ctx.status = 400;
-        ctx.body = { error: validation.error };
-        return;
-    }
-
-    const { hash, salt } = hashPassword(newPassword);
-    // The checks above waited (scrypt runs off the event loop), and any other request may have written the settings
-    // file meanwhile: two-factor setup, a gateway setting, the replication token. From here to the answer nothing
-    // waits: read the file as it is now, and write only the password into it (updateLocalConfig), so none of that
-    // is lost.
-    const current = getLocalConfig();
-    if (current.adminHash !== replacing.adminHash || current.salt !== replacing.salt) {
-        // Another owner changed it while this one was being checked: the current password this request proved is
-        // not the one it would replace.
-        ctx.status = 409;
-        ctx.body = { error: 'The admin password was changed while this was being checked. Sign in with the new one and try again.' };
-        return;
-    }
-    updateLocalConfig({ adminHash: hash, salt });
-    // saveLocalConfig reports a failed write in the log only: success only once the new hash is read back from disk.
-    const saved = getLocalConfig();
-    if (saved.adminHash !== hash || saved.salt !== salt) {
-        ctx.status = 500;
-        ctx.body = {
-            error: saved.adminHash === replacing.adminHash && saved.salt === replacing.salt
-                ? 'The new password could not be saved: check the data folder is writable and has free space. The current password still works.'
-                : 'The new password could not be saved, and the settings file could not be read back. Check the server log.',
-        };
-        return;
-    }
-    // The first boot's made-up password, if it was never changed before, no longer works. Only now the new one is on
-    // disk: until then the file holds the password that works.
-    removeFirstPasswordFile('The admin password was changed');
-    // Every Settings sign-in made with the old password ends on its next request; the one that changed it carries on.
-    restampPasswordSession(ctx);
     ctx.body = { success: true };
 });
 
@@ -1249,7 +1098,8 @@ router.post('/api/invite/generate', async (ctx) => {
 });
 
 // A vouch from a member's profile (engine/vouchers.ts vouchFromProfile; DESIGN-invites-and-names-list-amend2-fable.md §4 Q1,
-// Marty's §9): `{ memberPubkey, vouchAmount, raise? }`, from the signer's own budget, landing at once. The signer is the
+// Marty's §9): `{ memberPubkey, vouchAmount }` for a first vouch or `{ memberPubkey, raiseTo }` for a raise (the total it ends
+// at; DESIGN-invites-vouching-review-fable.md §4, I6), from the signer's own budget, landing at once. The signer is the
 // voucher; the body names only the person vouched for. Every rule is checked in the vouch's own transaction.
 router.post('/api/vouch', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
@@ -1326,12 +1176,7 @@ router.post('/api/credit/gift', async (ctx) => {
 function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
     if (!result.member) return undefined;
     if (result.alreadyMember && !signedByKey(ctx, publicKey)) return undefined;
-    const card = publicMemberCard(result.member);
-    // A photo still inline while the move out of the rows is stopped part way (db.ts memberPhotoNotMovedYet, #1482):
-    // getMember reads member_photos only, so without it the phone reads "no photo" and publishes its own copy, an older
-    // one, say, over the member's newer photo for good (native utils/db.ts redeemInvite nodeHasPhoto).
-    if (!card.avatarUrl) card.avatarUrl = memberPhotoNotMovedYet(result.member.publicKey);
-    return card;
+    return publicMemberCard(result.member);
 }
 
 /**
@@ -1349,7 +1194,7 @@ function redeemSignature(ctx: any, publicKey: string): ReturnType<typeof verifyM
     const nonce = ctx.get('X-Nonce');
     if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return null;
     // The one verifier (engine/member-signature.ts), in the middleware's window: signed for this community (a redeem
-    // signed at another is refused 421 here), or in the old format until the switch (426 after it).
+    // signed at another is refused 421 here); one in the old format, bound to none, is refused 426 unchecked (CUT4).
     const signedForHeader = ctx.headers?.[SIGNED_FOR_HEADER.toLowerCase()];
     return verifyMemberSignature({
         pubKeyHex: signer, signature, timestamp, nonce, method: ctx.method, path: ctx.path, body: ctx.rawBody ?? '',
@@ -1371,7 +1216,7 @@ const REDEEM_UNSIGNED_ERROR = word('This join must be signed by the key it regis
  * have signed their redeems since the first public release (native utils/db.ts redeemInvite; the web join passes its new
  * key), so no app in the stores sends one unsigned. Answered before the code or ticket is looked at, so it stays unused.
  * Not signed by that key at all: 401 `redeem_unsigned`. Signed by it and refused: the verifier's own answer, as for any
- * signed request (a stale clock, a bad signature, 421 for another community, 426 for the old format after the switch).
+ * signed request (a stale clock, a bad signature, 421 for another community, 426 for the old format: CUT4).
  * Returns false, with the answer set, when refused.
  */
 function requireRedeemSignature(ctx: any, joiner: string): boolean {
@@ -1501,7 +1346,72 @@ router.get('/api/invite/tree', async (ctx) => {
     // their own branch only: the people they brought in are theirs to know, as /api/invite/mine says.
     if ((typeof root !== 'string' || root !== ctx.state.actor)
         && refusedWholeDirectory(ctx, word('On this community you see the people you invited, not everyone: ask with root set to your own key'))) return;
-    ctx.body = getInviteTree(root);
+    ctx.body = treeForViewer(getInviteTree(root), ctx.state.actor as string | undefined, !root);
+});
+
+/**
+ * The invite tree as `viewer` may read it (I3): a member who switched "Show who invited me to other members" off is never
+ * shown under their inviter to a plain member (state-engine.ts viewerSeesInviterOf: the member themself, an owner or
+ * admin and the inviter still see it). In the whole tree they stand as a root of their own, their own branch with them;
+ * in someone's branch they and their branch are left out; and no node they are carries their inviter's key (`invitedBy`
+ * reads '' for that viewer, as for a member nobody invited). Nothing else changes.
+ */
+type TreeNode = ReturnType<typeof getInviteTree>[number];
+function treeForViewer(nodes: TreeNode[], viewer: string | undefined, wholeTree: boolean): TreeNode[] {
+    const sees = inviterVisibilityFor(viewer);
+    const detached: TreeNode[] = [];
+    const walk = (node: TreeNode): TreeNode => ({
+        ...node,
+        invitedBy: node.invitedBy && !sees(node.publicKey, node.invitedBy) ? '' : node.invitedBy,
+        children: node.children.filter((child) => {
+            if (sees(child.publicKey, node.publicKey)) return true;
+            if (wholeTree) detached.push(child);
+            return false;
+        }).map(walk),
+    });
+    const kept = nodes.map(walk);
+    // A detached member's own branch is walked as any other, which may detach more.
+    for (let i = 0; i < detached.length; i++) detached[i] = walk(detached[i]);
+    return wholeTree ? [...kept, ...detached].sort((a, b) => a.callsign.localeCompare(b.callsign)) : kept;
+}
+
+// A member's "Show who invited me to other members" (Settings → Privacy, I3): theirs to read and set, a member's alone.
+router.get('/api/profile/privacy', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (!isNodeMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: INVITER_SHOWN_MEMBERS_ONLY_MESSAGE };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { inviterShown: inviterShownOf(actor) };
+});
+
+router.put('/api/profile/privacy', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const { inviterShown } = (ctx as any).requestBody || {};
+    if (typeof inviterShown !== 'boolean') {
+        ctx.status = 400;
+        ctx.body = { error: word('Send inviterShown as true or false.') };
+        return;
+    }
+    if (!isNodeMember(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: INVITER_SHOWN_MEMBERS_ONLY_MESSAGE };
+        return;
+    }
+    setInviterShown(actor, inviterShown);
+    ctx.body = { success: true, inviterShown: inviterShownOf(actor) };
 });
 
 // A member's own invites, to that member alone, whatever ENFORCE_READ_AUTH says, as /api/community/me is: an unused code is
@@ -1524,6 +1434,30 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
     }
     ctx.set('Cache-Control', 'private, no-store');
     ctx.body = { invites: getInvitesByMember(publicKey) };
+});
+
+// Revoke an unused invite (invites-vouching I2; Marty, 10 Nov): its maker, or an owner for anyone's, signed. One transaction:
+// the vouch its code holds back in the budget, a promised voucher budget ended, the row gone (engine/invites.ts revokeInvite).
+// A used code is 409 `invite_used` and nothing moves; anyone else, about a code that exists or not, 404 `no_invite`.
+router.delete('/api/invite/:code', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor || (ctx.state as any).authSig?.signer !== actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        ctx.body = { success: true, ...revokeInvite(actor, ctx.params.code) };
+    } catch (e) {
+        if (e instanceof InviteRevokeError) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        if (respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
 });
 
 // ===================== PROFILE API (PUBLIC) =====================
@@ -1662,7 +1596,6 @@ router.post('/api/member/re-enroll', async (ctx) => {
         pubKeyHex: cleanNew,
         boundText: (host) => reEnrollText(host, cleanCode),
         signedFor: body.signedFor,
-        oldTexts: [],
     });
     if (!proof.ok) {
         const bound = proof.status === 421 || proof.status === 426;
@@ -1842,7 +1775,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
         ctx.body = { error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS };
         return;
     }
-    const { to, amount, memo, from: bodyFrom } = (ctx as any).requestBody || {};
+    const { to, memo, from: bodyFrom } = (ctx as any).requestBody || {};
     // The sender is the authenticated signer, and only that. The signature middleware sets both the actor
     // and authSig; requiring them to agree here keeps this route fail-closed on its own, rather than
     // trusting that every path to it was authenticated. transfer() cannot carry this check itself: its
@@ -1867,20 +1800,16 @@ router.post('/api/ledger/transfer', async (ctx) => {
         ctx.body = { error: NOT_A_MEMBER_ERROR, code: NOT_A_MEMBER_CODE };
         return;
     }
-    const parsedAmount = Number(amount);
-    // SECURITY (SRV-8): require a positive, finite amount at the route. Don't
-    // rely solely on transfer()'s internal guard / the transactions CHECK.
-    if (!to || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    // SECURITY (SRV-8): whole hundredths above 0 at the route (money-body.ts: 400 amount_c_required for the old `amount`,
+    // a float, a string, 0 or a negative). The signature covers this integer exactly (core request-signing.ts), and a
+    // standby re-verifies it against the row (engine/sync.ts verifyTransactionAuthorship).
+    if (!to) {
         ctx.status = 400;
         ctx.body = { error: 'to and a positive amount are required' };
         return;
     }
-    // To the cent, as a pledge and a payment to the Commons are (LED-05).
-    if (!isWholeCents(parsedAmount)) {
-        ctx.status = 400;
-        ctx.body = { error: WHOLE_CENTS_ERROR };
-        return;
-    }
+    const parsedAmount = requirePositiveHundredths(ctx, (ctx as any).requestBody);
+    if (parsedAmount === null) return;
 
     // A2-18: this public route is member→member only. Reject SYNTHETIC recipients
     // (escrow_/project_/COMMONS_POOL/SYSTEM/genesis). Sending to an escrow_* key
@@ -2114,7 +2043,6 @@ router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
         pubKeyHex: key,
         boundText: (host) => pushLeaveText(host, key, token, leftAt),
         signedFor,
-        oldTexts: [],
     });
     if (!proof.ok) {
         // Another community's statement (421) may still be this one's under a name it doesn't know yet: kept by the phone.
@@ -2543,9 +2471,9 @@ function directoryMembers(rows: ReturnType<typeof getMemberDirectoryRows>) {
         callsign: r.callsign,
         joinedAt: r.joined_at,
         nodeRole: rolesByPubkey.get(r.public_key) ?? null,
-        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
         profileUpdatedAt: r.profile_updated_at || null,
-        earnedCredit: r.earned_credit ?? 0,
+        earnedCredit: r.earned_credit_c ?? 0,
         archetype: r.archetype || null,
     }));
 }
@@ -2708,10 +2636,7 @@ router.get('/api/members', async (ctx) => {
     // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
     // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
     // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
-    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos. A photo still inline
-    // while a move out of the rows is stopped part way (#1482) gets a URL too, from photo_inline, a 0/1 SQLite works out
-    // (db.ts MEMBER_PHOTO_INLINE_REF): a null there told the member's phone "no photo", and its offline-edit retry
-    // published its own older copy over the newer one.
+    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
     const build = (): string => {
         const members = directoryMembers(directoryPeople(getMemberDirectoryRows(facesHeal ? undefined : ctx.query.updatedAfter || undefined)));
 

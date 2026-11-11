@@ -41,20 +41,21 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmationLimit, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
-    inviteForNamesEntry, readBoundInvites, firstSentence, makeNamesVoucher, fetchVouchers,
+    inviteForNamesEntry, revokeEntryInvite, readBoundInvites, firstSentence, makeNamesVoucher, fetchVouchers,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow, type VouchersBlockBody,
 } from '../utils/names-list';
 import { VoucherCard } from '../components/VoucherCard';
 import {
-    canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
+    canMakeVoucher, ownerOnlyVoucherTargets, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
+    passedOnAmountOf,
 } from '../utils/voucher-rules';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, showsBoundInviteLine, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
 import {
-    DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
+    DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, debtBeans, type NamesDebt,
 } from '../utils/names-debts';
 import { keyLineWords } from '../components/key-lines';
-import { formatNumber, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
+import { beans, formatHundredths, formatNumber, inviteOutLine, inviteRevokeAsk, inviteRevokeWords, ownerMakesAdminVoucherWords, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 /**
@@ -66,11 +67,12 @@ function say(text: string): string {
     return text.split('\n\n').map(keyLineWords).join('\n\n');
 }
 
-/** names-debts.ts beans() in the member's language: "12 Beans", "12.50 Beans" (one English form, as beans() writes it). */
-function beansWords(n: number): string {
-    const cents = Math.round(n * 100);
-    const amount = cents % 100 === 0 ? formatNumber(cents / 100) : formatNumber(cents / 100, 2);
-    return tn(cents / 100, '{n} Beans', '{n} Beans', { n: amount });
+/**
+ * names-debts.ts debtBeans() in the member's language: "12 Beans", "12.50 Beans", from whole hundredths of a Bean
+ * (formatHundredths; one English form, as debtBeans() writes it). Anything but whole hundredths reads "—".
+ */
+function beansWords(c: number): string {
+    return tn(c / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(c) });
 }
 
 export { ErrorBoundary };
@@ -78,8 +80,9 @@ export { ErrorBoundary };
 /** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
 type Picked = { pubkey: string; callsign: string } | null;
 /** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
+/** `confirmFor`: the one-step add-and-confirm from a member's profile (invites-vouching I4): the entry is added, then this member is confirmed against it. */
 /** `workOff`: the pick confirms the member to work this open debt off (POST /api/names/debts/:id/work-off). */
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry; workOff?: NamesDebt } | { kind: 'check'; picked: Picked }
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string; confirmFor?: { publicKey: string; callsign: string } } | { kind: 'pick'; entry: OpenedEntry; workOff?: NamesDebt } | { kind: 'check'; picked: Picked }
     // Settling an entry's open debt with the payment the member made for it (#1597): its reference, typed or pasted.
     | { kind: 'settle'; entry: OpenedEntry; debt: NamesDebt }
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
@@ -93,7 +96,7 @@ export default function NamesListScreen() {
     const { theme, colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create(namesListStyleSpec(colors)));
     const { identity } = useIdentity();
-    const params = useLocalSearchParams<{ community?: string }>();
+    const params = useLocalSearchParams<{ community?: string; act?: string; forMember?: string; forCallsign?: string }>();
     const communityName = typeof params.community === 'string' && params.community.trim() ? params.community.trim() : 'This community';
 
     const [anchor, setAnchor] = useState<string | null>(null);
@@ -132,6 +135,8 @@ export default function NamesListScreen() {
     const [scanning, setScanning] = useState(false);
     // Invites bound to entries (community modes slice 3): the node's list, and the one just made, shown as a QR code.
     const [boundInvites, setBoundInvites] = useState<BoundInvite[]>([]);
+    /** This admin's own unused codes by entry id (GET /api/invite/mine, theirs alone), for Share again on an entry's line (I2). */
+    const [myEntryCodes, setMyEntryCodes] = useState<ReadonlyMap<string, string>>(new Map());
     const [invited, setInvited] = useState<{ name: string; code: string; offline: boolean } | null>(null);
     const [showMyKey, setShowMyKey] = useState(false);
     /** The opening paragraph: its first sentence, the rest behind More (the rehearsal's 320dp finding). */
@@ -207,6 +212,9 @@ export default function NamesListScreen() {
     const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened, vouchers) : []), [opened, vouchers]);
     const shown = useMemo(() => filterEntries(entries, query), [entries, query]);
     const isCommittee = voucherBlock !== null;
+    const amOwner = !!state?.admins.some((a) => a.pubkey === identity?.publicKey && a.role === 'owner');
+    // Only an owner makes an admin a voucher (I5): to anyone else no admin's entry offers Make a voucher, as the profile's button doesn't.
+    const ownerOnlyTargets = useMemo(() => ownerOnlyVoucherTargets(state?.admins, amOwner), [state, amOwner]);
     const filteredRoleVouchers = useMemo(() => filterRoleVouchers(roleVouchersWithoutEntry(vouchers, entries), query), [vouchers, entries, query]);
     const filteredShown = useMemo(() => {
         if (filter === 'vouchers') {
@@ -343,6 +351,49 @@ export default function NamesListScreen() {
         setMode({ kind: 'edit', entry, addId: entry ? undefined : newEntryId() });
     };
 
+    // Arriving from a member's profile (invites-vouching I4, DESIGN §3 ask 2): `act=add` opens the one-step add-and-confirm form
+    // with the name prefilled with their callsign; `act=make` opens Make a voucher for their confirmed entry. Once, when the
+    // list is open: a phone that can't open it (no key yet) shows the list's own guidance, as always.
+    const arrived = useRef('');
+    useEffect(() => {
+        const member = typeof params.forMember === 'string' ? params.forMember : '';
+        // Once per arrival: the same screen opened again for another member (or another act) is a new arrival.
+        const arrival = `${params.act}:${member}`;
+        if (arrived.current === arrival || !opened || !list || loading) return;
+        if ((params.act !== 'add' && params.act !== 'make') || !/^[0-9a-f]{64}$/.test(member)) return;
+        arrived.current = arrival;
+        const forCallsign = typeof params.forCallsign === 'string' ? params.forCallsign : '';
+        // The profile's button can be a step behind (the node's state moved on: this phone just added them, or another admin did).
+        // A member already holding a live confirmation is never added a second time (the node refuses the second confirmation,
+        // 409 already_confirmed, and the entry sealed for it would stay behind), and a Make that cannot open says why.
+        const mine = entries.find((x) => x.confirmation?.memberPubkey === member);
+        if (params.act === 'add' && mine?.confirmation) {
+            const who = mine.confirmation.callsign || forCallsign;
+            setNotice(mine.text?.name ? t('@{member} is confirmed against {name}.', { member: who, name: mine.text.name })
+                : t('@{member} is confirmed against the entry.', { member: who }));
+            return;
+        }
+        if (params.act === 'add') {
+            setName(forCallsign);
+            setNote('');
+            setFormError(null);
+            setMode({ kind: 'edit', entry: null, addId: newEntryId(), confirmFor: { publicKey: member, callsign: forCallsign } });
+            return;
+        }
+        if (mine?.confirmation && canMakeVoucher(mine, isCommittee, identity?.publicKey, ownerOnlyTargets)) {
+            setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
+            setMode({ kind: 'make_voucher', entry: mine, memberPubkey: member, callsign: voucherCallsignFor(mine, callsignOf) || forCallsign });
+        } else if (mine?.voucher) {
+            setNotice(t('@{member} is a voucher already.', { member: forCallsign || mine.confirmation?.callsign || '' }));
+        } else if (!isCommittee) {
+            setError(t('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'));
+        } else if (mine?.confirmation && ownerOnlyTargets.has(mine.confirmation.memberPubkey)) {
+            setNotice(ownerMakesAdminVoucherWords());
+        } else {
+            setNotice(t('@{member} isn’t confirmed on this list yet, so there is no voucher to make.', { member: forCallsign }));
+        }
+    }, [opened, list, loading, entries, isCommittee, identity?.publicKey, ownerOnlyTargets, voucherBlock, callsignOf, params.act, params.forMember, params.forCallsign]);
+
     /** The matching-name warning (#1597): a name typed here that is on another entry with an open debt is said first. */
     const saveChecked = () => {
         if (mode.kind !== 'edit') return;
@@ -384,7 +435,23 @@ export default function NamesListScreen() {
                 }],
             },
         });
+        const confirmFor = mode.confirmFor;
         setMode({ kind: 'list' });
+        // The one-step add-and-confirm (I4): the entry is on the list; now confirm this member against it. A refusal leaves the
+        // entry added and says why, so nothing is half-done in silence.
+        if (confirmFor) await confirmNewEntry(sent.value.id, confirmFor, name);
+    };
+
+    const confirmNewEntry = async (entryId: string, who: { publicKey: string; callsign: string }, typedName: string) => {
+        if (!anchor || !identity) return;
+        if (!begin()) return;
+        const done = await confirmMember(anchor, identity, who.publicKey, entryId);
+        if (done.ok) await afterConfirmation();
+        finish();
+        if (!done.ok) { setError(done.message); return; }
+        setNotice(done.value.status === 'awaiting_second'
+            ? t('@{member} is confirmed by you and waits for a second admin.', { member: who.callsign })
+            : t('@{member} is confirmed against {name}.', { member: who.callsign, name: typedName.trim() }));
     };
 
     const remove = (entry: OpenedEntry) => {
@@ -432,6 +499,16 @@ export default function NamesListScreen() {
         if (!anchor || !identity) return;
         const r = await readBoundInvites(anchor, identity);
         if (r.ok) setBoundInvites(r.value.invites);
+        // The bound invites name no code, not even to their maker; the maker's own list does (Share again, I2).
+        try {
+            const res = await fetch(`${anchor}/api/invite/mine/${identity.publicKey}`);
+            const body = res.ok ? await res.json() : null;
+            const mine = new Map<string, string>();
+            for (const i of (body?.invites ?? []) as { code: string; usedBy?: string | null; namesEntryId?: string | null }[]) {
+                if (i.namesEntryId && !i.usedBy) mine.set(i.namesEntryId, i.code);
+            }
+            setMyEntryCodes(mine);
+        } catch { /* Share again waits for the next read */ }
     }, [anchor, identity]);
     useEffect(() => { if (opened) refreshBoundInvites(); }, [opened, refreshBoundInvites]);
 
@@ -482,8 +559,8 @@ export default function NamesListScreen() {
             try {
                 await createDecision({
                     authorPubkey: identity.publicKey, touches: 'pool', effect: 'forgive_debt', subject: debt.id,
-                    title: `Forgive a debt of ${beans(leftOf(debt))}`,
-                    description: `A member who left owed the Commons ${beans(debt.amount)}${debt.repaid > 0 ? `, and ${beans(debt.repaid)} of it was repaid` : ''}. `
+                    title: `Forgive a debt of ${debtBeans(leftOf(debt))}`,
+                    description: `A member who left owed the Commons ${debtBeans(debt.amount_c)}${debt.repaid_c > 0 ? `, and ${debtBeans(debt.repaid_c)} of it was repaid` : ''}. `
                         + 'Forgiving it moves no Beans: the Commons took the debt when they left. The record stays, marked forgiven.',
                 });
                 setNotice(t('The Decision is open: the community votes on forgiving the debt.'));
@@ -509,6 +586,24 @@ export default function NamesListScreen() {
         if (!made.ok) { setError(made.message); return; }
         setInvited({ name: entry.text?.name ?? 'this person', code: made.code, offline: made.offline });
         if (!made.offline) refreshBoundInvites();
+    };
+
+    /** Revoke the invite out for this entry (I2): its maker or an owner, asked first with the design's words. */
+    const revokeOut = (entry: OpenedEntry) => {
+        if (!anchor || !identity) return;
+        const words = inviteRevokeAsk({ namesEntryId: entry.id }, entry.text?.name);
+        Alert.alert(words.title, words.body, [
+            { text: inviteRevokeWords.cancel(), style: 'cancel' },
+            {
+                text: inviteRevokeWords.revoke(), style: 'destructive', onPress: async () => {
+                    if (!begin()) return;
+                    const done = await revokeEntryInvite(anchor, identity, entry.id);
+                    finish();
+                    if (!done.ok) { setError(done.message); return; }
+                    await refreshBoundInvites();
+                },
+            },
+        ]);
     };
 
     const second = async (entry: OpenedEntry) => {
@@ -691,6 +786,7 @@ export default function NamesListScreen() {
                         <Text style={styles.warnText}>{say(COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting, entry.checkedHere))}</Text>
                     </View>
                 ) : null}
+                {mode.confirmFor ? <Text style={styles.hint} testID="names-add-confirm-hint">{t('Confirm only someone you know is them.')}</Text> : null}
                 <Text style={styles.label}>{t('NAME')}</Text>
                 <TextInput
                     style={styles.input} value={name} onChangeText={setName} placeholder={t('Their real name')}
@@ -706,7 +802,7 @@ export default function NamesListScreen() {
                 <Text style={styles.hint}>{t('A name and a short note only: no address, date of birth or ID number. Sealed on this phone before it’s sent.')}</Text>
                 {formError ? <View style={styles.error}><Text style={styles.errorText}>{say(formError)}</Text></View> : null}
                 <View style={styles.buttonRow}>
-                    {btn(t('Save'), saveChecked, 'primary')}
+                    {mode.confirmFor ? btn(t('Add and confirm @{member}', { member: mode.confirmFor.callsign }), saveChecked, 'primary') : btn(t('Save'), saveChecked, 'primary')}
                     {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
                 {entry ? <View style={styles.buttonRow}>{btn(t('Delete this entry'), () => remove(entry), 'danger')}</View> : null}
@@ -831,13 +927,22 @@ export default function NamesListScreen() {
                                     <View key={v.memberPubkey} style={styles.entry}>
                                         <Text style={styles.entryName}>{(callsignOf(v.memberPubkey) || v.callsign) ? `@${callsignOf(v.memberPubkey) || v.callsign}` : t('a voucher')}</Text>
                                         <Text style={styles.entryNote}>
-                                            {t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
-                                                left: formatNumber(v.left),
-                                                level: formatNumber(v.level),
-                                                vouched: formatNumber(v.vouched),
+                                            {v.noLimit
+                                                // An owner vouches with no limit (Marty, 9 Nov): no budget figure.
+                                                // Every budget figure is whole hundredths (formatHundredths); belowZero is a count of people.
+                                                ? t('No limit · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
+                                                    vouched: formatHundredths(v.vouched),
+                                                    belowZero: v.belowZero,
+                                                    writtenOff: formatHundredths(v.writtenOff),
+                                                    passedOn: formatHundredths(passedOnAmountOf(v.passedOn) ?? 0),
+                                                })
+                                                : t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
+                                                left: formatHundredths(v.left),
+                                                level: formatHundredths(v.level),
+                                                vouched: formatHundredths(v.vouched),
                                                 belowZero: v.belowZero,
-                                                writtenOff: formatNumber(v.writtenOff),
-                                                passedOn: formatNumber(v.passedOn?.amount ?? 0),
+                                                writtenOff: formatHundredths(v.writtenOff),
+                                                passedOn: formatHundredths(passedOnAmountOf(v.passedOn) ?? 0),
                                             })}
                                         </Text>
                                     </View>
@@ -852,14 +957,15 @@ export default function NamesListScreen() {
             </>
         );
     } else if (mode.kind === 'make_voucher') {
-        const QUICK_BUDGETS = [500, 1000, 1500, 2000];
+        // 500 to 2,000 Beans, in whole hundredths as every budget figure is (core beans()).
+        const QUICK_BUDGETS = [beans(500), beans(1000), beans(1500), beans(2000)];
         body = (
             <>
                 <Text style={styles.body}>
                     {t('Make @{callsign} a voucher?', { callsign: mode.callsign })}
                 </Text>
                 <Text style={styles.hint}>
-                    {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each. Every owner and admin can see this in the known floor’s log.', { amount: formatNumber(makeVoucherAmount) })}
+                    {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each. Every owner and admin can see this in the known floor’s log.', { amount: formatHundredths(makeVoucherAmount) })}
                 </Text>
 
                 <Text style={styles.label}>{t('BUDGET AMOUNT')}</Text>
@@ -871,10 +977,10 @@ export default function NamesListScreen() {
                             onPress={() => setMakeVoucherAmount(amt)}
                             disabled={off}
                             accessibilityRole="button"
-                            accessibilityLabel={formatNumber(amt)}
+                            accessibilityLabel={formatHundredths(amt)}
                         >
                             <Text style={[styles.chipText, makeVoucherAmount === amt && styles.chipTextActive]}>
-                                {formatNumber(amt)}
+                                {formatHundredths(amt)}
                             </Text>
                         </Pressable>
                     ))}
@@ -891,7 +997,7 @@ export default function NamesListScreen() {
                         <Text style={styles.smallBtnText}>−</Text>
                     </Pressable>
                     <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.heading }}>
-                        {t('{amount} Beans', { amount: formatNumber(makeVoucherAmount) })}
+                        {t('{amount} Beans', { amount: formatHundredths(makeVoucherAmount) })}
                     </Text>
                     <Pressable
                         style={[styles.smallBtn, (budgetLevelUp(makeVoucherAmount) === null || off) && styles.disabled]}
@@ -910,7 +1016,7 @@ export default function NamesListScreen() {
                         const done = await makeNamesVoucher(anchor, identity, mode.entry.id, makeVoucherAmount);
                         finish();
                         if (!done.ok) { setError(done.message); return; }
-                        setNotice(t('Made @{callsign} a voucher with a budget of {amount} Beans.', { callsign: mode.callsign, amount: formatNumber(makeVoucherAmount) }));
+                        setNotice(t('Made @{callsign} a voucher with a budget of {amount} Beans.', { callsign: mode.callsign, amount: formatHundredths(makeVoucherAmount) }));
                         setMode({ kind: 'list' });
                         void load();
                     }, 'primary')}
@@ -1052,6 +1158,12 @@ export default function NamesListScreen() {
                     const history = debtsOfEntry(debts, e.id);
                     const open = openDebtOf(debts, e.id);
                     const invite = invitesForEntry(boundInvites, e.id)[0];
+                    // An invite out for this entry (I2): who made it and the days it has left; Share again for its maker, Revoke
+                    // for its maker or an owner, and no second Invite this person while it lives (the node refuses one).
+                    const out = invite ? inviteOutLine(invite, callsignOf(invite.createdBy), Date.now()) : null;
+                    const mineOut = !!out && invite?.createdBy === identity?.publicKey;
+                    const shareAgainCode = mineOut ? myEntryCodes.get(e.id) : undefined;
+                    const mayRevokeOut = !!out && (mineOut || amOwner);
                     return (
                         <View key={e.id} style={styles.entry}>
                             {e.text ? (
@@ -1068,14 +1180,18 @@ export default function NamesListScreen() {
                                         <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
                                     </View>
                                     <Text style={styles.entryMeta}>
-                                        {t('{left} of {level} left', { left: formatNumber(e.voucher.left), level: formatNumber(e.voucher.level) })}
+                                        {e.voucher.noLimit
+                                            ? t('No limit')
+                                            : t('{left} of {level} left', { left: formatHundredths(e.voucher.left), level: formatHundredths(e.voucher.level) })}
                                     </Text>
                                 </View>
                             ) : null}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : t('No member confirmed against it')}</Text>
                             {/* Its newest bound invite: on an unconfirmed entry, always; on a confirmed or waiting one, when the invite
                                 promised a voucher budget, so what became of it is seen (#2970's review, note 2). */}
-                            {invite && showsBoundInviteLine(invite, !!e.confirmation) ? (
+                            {out ? (
+                                <Text style={styles.entryMeta} testID="names-entry-invite-out">{out}</Text>
+                            ) : invite && showsBoundInviteLine(invite, !!e.confirmation) ? (
                                 <Text style={styles.entryMeta}>{boundInviteLine(invite, (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
                             ) : null}
                             {history.map((d) => (
@@ -1083,14 +1199,16 @@ export default function NamesListScreen() {
                             ))}
                             <View style={styles.buttonRow}>
                                 {e.voucher ? btn(t('See voucher card ›'), () => setSelectedVoucherPubkey(e.voucher!.memberPubkey), 'small') : null}
-                                {canMakeVoucher(e, isCommittee, identity?.publicKey) && e.confirmation
+                                {canMakeVoucher(e, isCommittee, identity?.publicKey, ownerOnlyTargets) && e.confirmation
                                     ? btn(t('Make a voucher'), () => {
                                         setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
                                         setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: voucherCallsignFor(e, callsignOf) });
                                     }, 'small')
                                     : null}
                                 {btn(e.text ? t('Change') : t('Type it again'), () => openForm(e), 'small')}
-                                {!e.confirmation && e.text && !open ? btn(t('Invite this person'), () => inviteEntry(e), 'small') : null}
+                                {shareAgainCode && e.text ? btn(t('Share again'), () => setInvited({ name: e.text!.name, code: shareAgainCode, offline: false }), 'small') : null}
+                                {mayRevokeOut ? btn(inviteRevokeWords.revoke(), () => revokeOut(e), 'small') : null}
+                                {!e.confirmation && e.text && !open && !out ? btn(t('Invite this person'), () => inviteEntry(e), 'small') : null}
                                 {!e.confirmation && e.text && !open ? btn(t('Confirm a member'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
                                 {!e.confirmation && e.text && open && !open.repaying_pubkey
                                     ? btn(t('Work it off'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e, workOff: open }); }, 'small') : null}
@@ -1111,11 +1229,14 @@ export default function NamesListScreen() {
                                 <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
                             </View>
                             <Text style={styles.entryMeta}>
-                                {t('{left} of {level} left · {vouched} vouched', {
-                                    left: formatNumber(rv.left),
-                                    level: formatNumber(rv.level),
-                                    vouched: formatNumber(rv.peopleVouched),
-                                })}
+                                {rv.noLimit
+                                    // An owner vouches with no limit (Marty, 9 Nov): no budget figure, as the VOUCHERS section.
+                                    ? t('No limit · {vouched} vouched', { vouched: formatNumber(rv.peopleVouched) })
+                                    : t('{left} of {level} left · {vouched} vouched', {
+                                        left: formatHundredths(rv.left),
+                                        level: formatHundredths(rv.level),
+                                        vouched: formatNumber(rv.peopleVouched),
+                                    })}
                             </Text>
                         </View>
                         <View style={styles.buttonRow}>

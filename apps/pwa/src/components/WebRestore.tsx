@@ -1,8 +1,10 @@
 /**
- * Getting an account back in a web browser with the sign-in it joined with (design G11 §4.4, G11-d): your name here,
- * the sign-in (Google, Apple and Facebook leave the page and come back to the join's own return page), then the
- * account, only if it is the one the name belongs to. The logic is lib/web-restore.ts; the throwaway
- * key waits in identity.ts's pending restore while the page is away.
+ * Getting an account back in a web browser with the sign-in it joined with (design G11 §4.4, G11-d), with nothing typed
+ * (recovery S1, scratch design DESIGN-recovery-no-callsign-fable.md §5): this page's community, the sign-in (Google, Apple
+ * and Facebook leave the page and come back to the join's own return page), then the community finds the accounts that
+ * sign-in protects; the member picks when there are several, and the account comes in only if it is the one the find
+ * named. The logic is lib/web-restore.ts; the throwaway key waits in identity.ts's pending restore while the page is
+ * away.
  *
  * WelcomePage shows it from the open door's "Already have BeanPool?" and from "You're already here" (a sign-in that
  * already has an account), and when a sign-in comes back for a restore. It saves nothing itself: `onRestored` hands the
@@ -33,27 +35,29 @@ import {
     type AuthReturn,
 } from '../lib/web-join';
 import {
+    collectAccount,
+    collectRefusalMessage,
     fetchSignInCopy,
-    lookupRestorable,
+    findAccounts,
+    findRefusalMessage,
     makeEphemeralKey,
-    openRestoreSession,
+    noAccountMessage,
     openRestoredAccount,
-    releaseRefusalMessage,
-    releaseSignInCopy,
-    requestRestoreNonce,
+    requestFindNonce,
     restoreProviders,
-    sessionRefusalMessage,
     type EphemeralKey,
     type RestoreCandidate,
     type RestoreNonce,
     type RestoreProof,
 } from '../lib/web-restore';
 import { heading, lede, NoticeLine, primaryButton, quietButton, saidWords, secondaryButton, JOIN_WORDS, type Notice, type Said } from './WebJoin';
+// lib/web-restore.ts is on the 12 words' key path and writes its sentences in English; they are shown through this.
+import { keyLineWords } from './key-lines';
 
 interface Props {
     /**
-     * The account came back, and its key is the one its name belongs to. WelcomePage asks the node and saves it; false
-     * when the node could not be asked, and then this screen keeps it and offers to try again.
+     * The account came back, and its key is the one the find named. WelcomePage asks the node and saves it; false when
+     * the node could not be asked, and then this screen keeps it and offers to try again.
      */
     onRestored: (identity: BeanPoolIdentity) => Promise<boolean>;
     /** This browser holds another account (saved from another tab, say): nothing here replaces it. */
@@ -64,6 +68,11 @@ interface Props {
     onBack: () => void;
     /** "Use my 12 words" / "Link with my phone": WelcomePage's own restore screens. */
     onOtherWay: (how: 'phone' | 'words') => void;
+    /**
+     * The community this page belongs to, by name, where the find looks: the web app is its community's own, so the
+     * address the member opened chose it (another community's account comes back on that community's page).
+     */
+    community: string;
     /** The sign-in the member just tried to join with, offered first. */
     provider?: JoinProvider | null;
     /** A sign-in coming back for a restore. Null when there is none. */
@@ -76,15 +85,19 @@ interface Props {
 
 type Screen =
     | { name: 'loading' }
-    | { name: 'name' }
-    /** Opening the node's recovery session and asking for a sign-in nonce. */
-    | { name: 'starting' }
+    /** The first screen: this community, and the sign-ins. */
     | { name: 'providers' }
-    /** Released, fetched and opened: the sign-in copy becoming the account. */
+    /** Back from the sign-in: the community finds the accounts it protects. */
+    | { name: 'finding' }
+    /** Several accounts use this sign-in: the member picks theirs. */
+    | { name: 'pick'; accounts: RestoreCandidate[] }
+    /** No account here uses this sign-in. */
+    | { name: 'none'; provider: JoinProvider }
+    /** Collected, fetched and opened: the sign-in copy becoming the account. */
     | { name: 'restoring' }
     /** Handed to WelcomePage, which asks the node and saves it. */
     | { name: 'saving' }
-    /** The copy opened to another account than the name's. Nothing saved. */
+    /** The copy opened to another account than the one the find named. Nothing saved. */
     | { name: 'wrong_account' }
     /** No copy to open, or one the web can't open. */
     | { name: 'no_copy'; message: Said }
@@ -95,11 +108,11 @@ type Screen =
      */
     | { name: 'save_failed'; unreachable: boolean };
 
-/** The node's recovery session this page is in: bound to `eph`, for `account`. */
-interface Session {
+/** What the find verified for this page's throwaway key: the sign-in the copy opens with, and the accounts it named. */
+interface Found {
     eph: EphemeralKey;
-    collectionId: string;
-    account: RestoreCandidate;
+    proof: RestoreProof;
+    accounts: RestoreCandidate[];
 }
 
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it goes to a provider. */
@@ -107,15 +120,24 @@ const NONCE_FRESH_MS = 5 * 60 * 1000;
 /** Said in more than one place: marked here, translated where it is shown. */
 const RESTORE_WORDS = { wentWrong: word('Something went wrong on this page. Start again.') } as const;
 
-export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay, provider: hinted = null, authReturn, navigate, origin }: Props) {
+/** The first letter of a name, for its round mark in the list (the node sends no photo to a restoring browser). */
+function initialOf(name: string): string {
+    return Array.from(name.trim())[0]?.toLocaleUpperCase() ?? '?';
+}
+
+export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay, community, provider: hinted = null, authReturn, navigate, origin }: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [notice, setNotice] = useState<Notice>(null);
-    const [name, setName] = useState('');
-    const [candidates, setCandidates] = useState<RestoreCandidate[] | null | 'looking'>([]);
-    const [session, setSession] = useState<Session | null>(null);
+    // This restore's throwaway key: made on arrival, or brought back from the provider in the pending restore, and made
+    // anew by Start again. A ref, read when an answer comes: an answer for a key let go is not this restore's.
+    const ephRef = useRef<EphemeralKey | null>(null);
     const [nonceHeld, setNonceHeld] = useState<{ value: RestoreNonce; at: number } | null>(null);
     const [fetchingNonce, setFetchingNonce] = useState(false);
     const [busy, setBusy] = useState(false);
+    // The account being brought back, once the find has named it and the member has it: its name, for the screens after.
+    const [account, setAccount] = useState<RestoreCandidate | null>(null);
+    // The find's answer, kept in memory only while the member picks.
+    const found = useRef<Found | null>(null);
     // The account once it has opened, kept in memory only, for "Try again" when the node could not be asked.
     const opened = useRef<BeanPoolIdentity | null>(null);
     const mounted = useRef(true);
@@ -173,82 +195,98 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         setScreen({ name: 'providers' });
     }, []);
 
-    const fetchNonce = useCallback(async (s: Session): Promise<RestoreNonce | null> => {
+    /**
+     * A find nonce for `key`, held for the next trip to a provider. Null when none came, and then the screen says why.
+     * Only the answers for this restore's current key count: a key let go may answer last (React's StrictMode runs the
+     * arrival twice, each with its own key), and its nonce was issued to it, never to the key the find will sign with.
+     */
+    const fetchNonce = useCallback(async (key: EphemeralKey): Promise<RestoreNonce | null> => {
+        const current = () => mounted.current && ephRef.current?.publicKey === key.publicKey;
         setFetchingNonce(true);
         try {
-            const got = await requestRestoreNonce(s.eph, s.collectionId);
+            const got = await requestFindNonce(key);
+            if (!current()) return null;
             if ('nonce' in got) {
-                if (mounted.current) setNonceHeld({ value: got.nonce, at: Date.now() });
+                setNonceHeld({ value: got.nonce, at: Date.now() });
                 return got.nonce;
             }
-            if (!mounted.current) return null;
-            if (got.answer.status === 404) {
-                // The node no longer has this session (it lives a while, then goes): from the name again.
-                setSession(null);
-                setNotice({ tone: 'error', text: () => t('That restore timed out on the community. Start again.') });
-                setScreen({ name: 'name' });
-                return null;
-            }
-            setNotice({ tone: 'error', text: sessionRefusalMessage(got.answer, s.account.callsign) });
+            setNotice({ tone: 'error', text: findRefusalMessage(got.answer, null) });
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) console.error('[WebRestore] could not ask for a sign-in:', e);
-            if (mounted.current) setNotice({ tone: 'error', text: e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(RESTORE_WORDS.wentWrong) });
+            if (current()) setNotice({ tone: 'error', text: e instanceof DoorUnreachableError ? () => t(JOIN_WORDS.unreachable) : () => t(RESTORE_WORDS.wentWrong) });
         } finally {
-            if (mounted.current) setFetchingNonce(false);
+            if (current()) setFetchingNonce(false);
         }
         return null;
     }, []);
 
-    /** Back to the sign-ins on the same session, saying why, with a fresh nonce (the last one went to a provider). */
-    const backToSignIns = useCallback(async (s: Session, n: Notice) => {
+    /** Back to the sign-ins with the same throwaway key, saying why, with a fresh nonce (the last one went to a provider). */
+    const backToSignIns = useCallback(async (key: EphemeralKey, n: Notice) => {
+        found.current = null;
+        setAccount(null);
         setNonceHeld(null);
         toProviders(n);
-        await fetchNonce(s);
+        await fetchNonce(key);
     }, [toProviders, fetchNonce]);
 
-    /** Release the copy with this sign-in, fetch it, open it, and hand the account on if it is the name's. */
-    const finishSignIn = useCallback(async (s: Session, proof: RestoreProof) => {
+    /**
+     * The account picked (or the only one): this browser first (nothing replaces an account here, and one already here
+     * needs nothing released), then the collect by the find's hold, the copy, and the one check that decides.
+     */
+    const bringBack = useCallback(async (f: Found, picked: RestoreCandidate) => {
+        const held = await loadIdentityStrict();
+        if (!mounted.current) return;
+        if (held?.publicKey === picked.publicKey) {
+            found.current = null;
+            setScreen({ name: 'already_here', identity: held });
+            return;
+        }
+        if (held?.publicKey) {
+            found.current = null;
+            onHeldRef.current(held);
+            return;
+        }
+        found.current = null; // the hold is spent by the collect, whatever its answer
+        setAccount(picked);
         setNotice(null);
         setScreen({ name: 'restoring' });
+        const { eph: key, proof } = f;
         const label = providerLabel(proof.provider);
-        let released;
+        let collected;
         try {
-            released = await releaseSignInCopy(s.eph, s.collectionId, proof);
+            collected = await collectAccount(key, picked);
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) throw e;
-            // Asked again with a fresh sign-in: the node lets the copy go to this session again, whichever answer was lost.
-            return backToSignIns(s, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
+            // The hold may be spent or not: a fresh sign-in finds again either way.
+            return backToSignIns(key, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
         }
-        if (released.status !== 200) {
-            return backToSignIns(s, { tone: 'error', text: releaseRefusalMessage(released, proof.provider, s.account.callsign) });
-        }
+        if (!mounted.current) return;
+        if ('answer' in collected) return backToSignIns(key, { tone: 'error', text: collectRefusalMessage(collected.answer) });
         let fetched;
         try {
-            fetched = await fetchSignInCopy(s.eph, s.collectionId);
+            fetched = await fetchSignInCopy(key, collected.collectionId);
         } catch (e) {
             if (!(e instanceof DoorUnreachableError)) throw e;
-            return backToSignIns(s, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
+            return backToSignIns(key, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
         }
+        if (!mounted.current) return;
         if ('answer' in fetched) {
             if (fetched.answer.status === 400) {
-                // The session ended between the release and the fetch (its owner stopped it, moved the copy, or it ran
-                // out): the node hands nothing over from a dead session. From the name again.
-                setSession(null);
-                setNotice({ tone: 'error', text: () => t('That restore was stopped on the community, or has ended. Start again.') });
-                setScreen({ name: 'name' });
-                return;
+                // The session ended between the collect and the fetch (its owner stopped it, moved the copy, or it ran
+                // out): the node hands nothing over from a dead session.
+                return backToSignIns(key, { tone: 'error', text: () => t('That restore was stopped on the community, or has ended. Start again.') });
             }
-            return backToSignIns(s, { tone: 'error', text: releaseRefusalMessage(fetched.answer, proof.provider, s.account.callsign) });
+            return backToSignIns(key, { tone: 'error', text: collectRefusalMessage(fetched.answer) });
         }
         if ('unopened' in fetched) {
-            setScreen({ name: 'no_copy', message: () => t("The community's copy of {name} didn't open in this browser, so nothing was changed. Start again, or use your 12 words.", { name: s.account.callsign }) });
+            setScreen({ name: 'no_copy', message: () => t("The community's copy of {name} didn't open in this browser, so nothing was changed. Start again, or use your 12 words.", { name: picked.callsign }) });
             return;
         }
         if (!fetched.copy) {
-            setScreen({ name: 'no_copy', message: () => t('The community has no {provider} copy of {name} to open.', { provider: label, name: s.account.callsign }) });
+            setScreen({ name: 'no_copy', message: () => t('The community has no {provider} copy of {name} to open.', { provider: label, name: picked.callsign }) });
             return;
         }
-        const result = await openRestoredAccount(fetched.copy, proof.provider, proof.sub, s.account);
+        const result = await openRestoredAccount(fetched.copy, proof.provider, proof.sub, picked);
         if (!mounted.current) return;
         switch (result.kind) {
             case 'ok':
@@ -257,22 +295,51 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 setScreen({ name: 'wrong_account' });
                 return;
             case 'old_format':
-                setScreen({ name: 'no_copy', message: () => t("{name}'s {provider} copy is an older kind the web app can't open. Use your 12 words, or the phone app.", { name: s.account.callsign, provider: label }) });
+                setScreen({ name: 'no_copy', message: () => t("{name}'s {provider} copy is an older kind the web app can't open. Use your 12 words, or the phone app.", { name: picked.callsign, provider: label }) });
                 return;
             case 'unreadable':
-                setScreen({ name: 'no_copy', message: () => t("{name}'s {provider} copy didn't open with this {provider} account. Use your 12 words, or the phone app.", { name: s.account.callsign, provider: label }) });
+                setScreen({ name: 'no_copy', message: () => t("{name}'s {provider} copy didn't open with this {provider} account. Use your 12 words, or the phone app.", { name: picked.callsign, provider: label }) });
                 return;
         }
     }, [backToSignIns, hand]);
+
+    /** Back from the provider with a token: the community finds the accounts this sign-in protects. */
+    const finishSignIn = useCallback(async (key: EphemeralKey, proof: RestoreProof) => {
+        setNotice(null);
+        setScreen({ name: 'finding' });
+        let answer;
+        try {
+            answer = await findAccounts(key, proof);
+        } catch (e) {
+            if (!(e instanceof DoorUnreachableError)) throw e;
+            return backToSignIns(key, { tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
+        }
+        if (!mounted.current) return;
+        if ('answer' in answer) return backToSignIns(key, { tone: 'error', text: findRefusalMessage(answer.answer, proof.provider) });
+        const f: Found = { eph: key, proof, accounts: answer.accounts };
+        if (f.accounts.length === 0) {
+            setScreen({ name: 'none', provider: proof.provider });
+            return;
+        }
+        if (f.accounts.length === 1) return bringBack(f, f.accounts[0]);
+        found.current = f;
+        setScreen({ name: 'pick', accounts: f.accounts });
+    }, [backToSignIns, bringBack]);
 
     const fail = useCallback((e: unknown) => {
         console.error('[WebRestore] could not finish:', e);
         if (!mounted.current) return;
         setBusy(false);
-        setSession(null);
+        found.current = null;
+        setAccount(null);
         setNotice({ tone: 'error', text: () => t(RESTORE_WORDS.wentWrong) });
-        setScreen({ name: 'name' });
-    }, []);
+        // A new throwaway key and a new nonce: nothing of the restore that failed is used again.
+        const key = makeEphemeralKey();
+        ephRef.current = key;
+        setNonceHeld(null);
+        setScreen({ name: 'providers' });
+        void fetchNonce(key);
+    }, [fetchNonce]);
 
     // ---------- where the page starts ----------
 
@@ -281,7 +348,10 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         (async () => {
             const ret = authReturn !== undefined ? authReturn : captureAuthReturn();
             if (!ret) {
-                setScreen({ name: 'name' });
+                const key = makeEphemeralKey();
+                ephRef.current = key;
+                setScreen({ name: 'providers' });
+                await fetchNonce(key);
                 return;
             }
             // A read first, which takes nothing: React's StrictMode (main.tsx) runs this effect, cancels it, and runs it
@@ -293,99 +363,38 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             const r = await takePendingRestore(ret.state ?? '');
             if (!mounted.current) return;
             if (!r) {
-                setNotice({ tone: 'error', text: refusalMessage('no_pending', ret.provider) });
-                setScreen({ name: 'name' });
+                const key = makeEphemeralKey();
+                ephRef.current = key;
+                toProviders({ tone: 'error', text: refusalMessage('no_pending', ret.provider) });
+                await fetchNonce(key);
                 return;
             }
-            const s: Session = { eph: r.ephemeral, collectionId: r.collectionId, account: r.account };
-            setSession(s);
-            setName(r.account.callsign);
+            ephRef.current = r.ephemeral;
             const outcome = matchAuthReturn(ret, { provider: r.provider, nonce: r.nonce });
             if (outcome.kind === 'token') {
-                return finishSignIn(s, { provider: outcome.provider, idToken: outcome.idToken, nonce: outcome.nonce, sub: outcome.sub });
+                return finishSignIn(r.ephemeral, { provider: outcome.provider, idToken: outcome.idToken, nonce: outcome.nonce, sub: outcome.sub });
             }
-            // Back to the sign-ins on the same session, with a fresh nonce: that one went to the provider.
+            // Back to the sign-ins with the same key, with a fresh nonce: that one went to the provider.
             const text: Said = outcome.kind === 'cancelled' ? () => t('Sign-in was cancelled.')
                 : outcome.kind === 'provider_error' ? outcome.message
                 : refusalMessage(outcome.reason, r.provider);
-            return backToSignIns(s, { tone: outcome.kind === 'cancelled' ? 'info' : 'error', text });
+            return backToSignIns(r.ephemeral, { tone: outcome.kind === 'cancelled' ? 'info' : 'error', text });
         })().catch((e) => { if (!cancelled) fail(e); });
         return () => { cancelled = true; };
         // Once, on arrival.
     }, []);
 
-    // The name: which accounts here it could be, as the member types.
-    useEffect(() => {
-        if (screen.name !== 'name') return;
-        const typed = name.trim();
-        if (typed.length < 2) {
-            setCandidates([]);
-            return;
-        }
-        let cancelled = false;
-        setCandidates('looking');
-        const t = setTimeout(() => {
-            lookupRestorable(typed).then((c) => { if (!cancelled) setCandidates(c); });
-        }, 400);
-        return () => { cancelled = true; clearTimeout(t); };
-    }, [name, screen.name]);
-
     // ---------- the screens' actions ----------
 
-    /** "That's me": this browser first (nothing replaces an account here), then the node's session for it. */
-    async function chooseAccount(account: RestoreCandidate) {
-        setBusy(true);
-        setNotice(null);
-        try {
-            const held = await loadIdentityStrict();
-            if (!mounted.current) return;
-            if (held?.publicKey === account.publicKey) {
-                setScreen({ name: 'already_here', identity: held });
-                return;
-            }
-            if (held?.publicKey) {
-                onHeldRef.current(held);
-                return;
-            }
-            setScreen({ name: 'starting' });
-            const eph = makeEphemeralKey();
-            let opened;
-            try {
-                opened = await openRestoreSession(eph, account.callsign, account.publicKey);
-            } catch (e) {
-                if (!(e instanceof DoorUnreachableError)) throw e;
-                setNotice({ tone: 'error', text: () => t(JOIN_WORDS.unreachable) });
-                setScreen({ name: 'name' });
-                return;
-            }
-            if (!mounted.current) return;
-            if ('answer' in opened) {
-                setNotice({ tone: 'error', text: sessionRefusalMessage(opened.answer, account.callsign) });
-                setScreen({ name: 'name' });
-                return;
-            }
-            const s: Session = { eph, collectionId: opened.collectionId, account };
-            setSession(s);
-            await fetchNonce(s);
-            // To the sign-ins, with Try again if the nonce did not come; unless the node had already let the session go
-            // and fetchNonce has gone back to the name.
-            if (mounted.current) setScreen((now) => (now.name === 'starting' ? { name: 'providers' } : now));
-        } catch (e) {
-            fail(e);
-        } finally {
-            if (mounted.current) setBusy(false);
-        }
-    }
-
     async function signIn(provider: JoinProvider) {
-        if (!session) return;
-        const s = session;
+        const key = ephRef.current;
+        if (!key) return;
         setBusy(true);
         setNotice(null);
         try {
             // A nonce is single use and lives ten minutes: every trip to a provider takes a fresh one.
             const fresh = nonceHeld && Date.now() - nonceHeld.at < NONCE_FRESH_MS ? nonceHeld.value : null;
-            const n = fresh ?? await fetchNonce(s);
+            const n = fresh ?? await fetchNonce(key);
             // fetchNonce has said why.
             if (!n) return;
             const clientId = n.clientIds[provider];
@@ -393,9 +402,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             const now = Date.now();
             await savePendingRestore({
                 kind: 'restore',
-                ephemeral: s.eph,
-                account: s.account,
-                collectionId: s.collectionId,
+                ephemeral: key,
                 provider,
                 nonce: n.nonce,
                 startedAt: now,
@@ -411,28 +418,41 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         }
     }
 
+    function pick(picked: RestoreCandidate) {
+        const f = found.current;
+        if (!f || busy) return;
+        setBusy(true);
+        bringBack(f, picked).catch(fail).finally(() => { if (mounted.current) setBusy(false); });
+    }
+
     /**
      * "Try again" for the sign-ins: the can't-reach notice goes as it is tried, and comes back only if it fails again. Not
      * cleared in fetchNonce itself: there it would wipe why backToSignIns came back here (review 4109590845).
      */
     function retryNonce() {
-        if (!session) return;
+        const key = ephRef.current;
+        if (!key) return;
         setNotice(null);
-        void fetchNonce(session);
+        void fetchNonce(key);
     }
 
-    async function backToName() {
+    /** From the start: a new throwaway key, so nothing of the last attempt (its hold, its session) is used again. */
+    async function startAgain() {
         await clearPendingRestore().catch(() => {});
         opened.current = null; // an account left on the save-failed screen is let go, not kept in memory
-        setSession(null);
+        found.current = null;
+        setAccount(null);
         setNonceHeld(null);
         setNotice(null);
-        setScreen({ name: 'name' });
+        const key = makeEphemeralKey();
+        ephRef.current = key;
+        setScreen({ name: 'providers' });
+        await fetchNonce(key);
     }
 
     async function retrySave() {
         const identity = opened.current;
-        if (!identity) return backToName();
+        if (!identity) return startAgain();
         await hand(identity).catch(fail);
     }
 
@@ -446,7 +466,8 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
     );
     const offered = nonceHeld ? restoreProviders(nonceHeld.value) : [];
     const ordered = hinted && offered.includes(hinted) ? [hinted, ...offered.filter((p) => p !== hinted)] : offered;
-    const callsign = session?.account.callsign ?? '';
+    const callsign = account?.callsign ?? '';
+    const back = <button type="button" style={quietButton} disabled={busy} onClick={onBack}>{t('← Back')}</button>;
 
     let body: React.ReactNode;
     switch (screen.name) {
@@ -454,76 +475,19 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             body = <p role="status" style={lede}>{t('One moment…')}</p>;
             break;
 
-        case 'name': {
-            const typed = name.trim();
-            body = (
-                <>
-                    <h3 style={heading}>{t('Get your account back')}</h3>
-                    <p style={lede}>{t('With the sign-in you joined with. First, type your whole name here.')}</p>
-                    <label htmlFor="restore-callsign" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-                        {t('Your name here')}
-                    </label>
-                    <input
-                        id="restore-callsign"
-                        data-testid="restore-callsign"
-                        type="text"
-                        value={name}
-                        maxLength={32}
-                        autoComplete="nickname"
-                        placeholder={t('e.g. Alice')}
-                        disabled={busy}
-                        onChange={(e) => { setName(e.target.value); setNotice(null); }}
-                        style={{
-                            width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '0.75rem 1rem', borderRadius: '10px',
-                            border: '1px solid var(--border-input)', background: 'var(--bg-secondary)',
-                            color: 'var(--text-primary)', fontSize: '1rem', fontFamily: 'inherit', outline: 'none',
-                            marginBottom: '0.75rem',
-                        }}
-                    />
-                    <NoticeLine notice={notice} />
-                    {typed.length >= 2 && candidates === 'looking' && (
-                        <p role="status" style={lede}>{t('Looking…')}</p>
-                    )}
-                    {typed.length >= 2 && candidates === null && (
-                        <p role="alert" style={{ ...lede, color: 'var(--text-primary)' }}>{t(JOIN_WORDS.unreachable)}</p>
-                    )}
-                    {typed.length >= 2 && Array.isArray(candidates) && candidates.length === 0 && (
-                        // Said so it is true on both kinds of node: most list names that start with what was typed, but one that
-                        // shows visitors the listings and not the people (the global one) finds the whole name only
-                        // (server routes/community.ts), so a name part-typed there finds nothing yet (review 4109516319).
-                        <p role="status" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>
-                            {t("No account called {name} here can come back with a sign-in. Check you've typed your whole name. Your 12 words or the phone app can still bring yours here.", { name: typed })}
-                        </p>
-                    )}
-                    {typed.length >= 2 && Array.isArray(candidates) && candidates.length > 0 && (
-                        <>
-                            <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                                {t('Which one is you?')}
-                            </p>
-                            {candidates.map((c) => (
-                                <button key={c.publicKey} type="button" data-testid="restore-candidate" style={secondaryButton} disabled={busy}
-                                    onClick={() => void chooseAccount(c)}>
-                                    {c.callsign}
-                                </button>
-                            ))}
-                        </>
-                    )}
-                    {typed.length >= 2 && Array.isArray(candidates) && candidates.length === 0 && otherWays}
-                    <button type="button" style={quietButton} disabled={busy} onClick={onBack}>{t('← Back')}</button>
-                </>
-            );
-            break;
-        }
-
-        case 'starting':
-            body = <p role="status" data-testid="restore-starting" style={lede}>{t('One moment…')}</p>;
-            break;
-
         case 'providers':
             body = (
                 <>
-                    <h3 style={heading}>{t('Sign in as {name}', { name: callsign })}</h3>
-                    <p style={lede}>{t('Choose the sign-in you joined with. It brings your account back to this browser.')}</p>
+                    <h3 style={heading}>{t('Get your account back')}</h3>
+                    <p style={lede}>{t('Choose your community, then sign in with the account you linked. It finds your account, so there is nothing else to type.')}</p>
+                    {/* The community step: this page's own community, the one the address chose. */}
+                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('Which community?')}</p>
+                    <p data-testid="restore-community" dir="auto" style={{
+                        padding: '0.6rem 0.9rem', borderRadius: '10px', marginBottom: '0.75rem', overflowWrap: 'anywhere',
+                        border: '2px solid var(--accent)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 600,
+                    }}>
+                        {community}
+                    </p>
                     <NoticeLine notice={notice} />
                     {!nonceHeld && fetchingNonce ? (
                         <p role="status" style={lede}>{t('Getting the sign-ins ready…')}</p>
@@ -540,9 +504,46 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                         ))
                     )}
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
-                        {t("{name} is told on their devices that the account is being brought back, in case it isn't them.", { name: callsign })}
+                        {t("The account's owner is told on their devices that it is being brought back, in case it isn't them.")}
                     </p>
-                    <button type="button" style={quietButton} disabled={busy} onClick={() => void backToName()}>{t('← Not {name}', { name: callsign })}</button>
+                    {back}
+                </>
+            );
+            break;
+
+        case 'finding':
+            body = <p role="status" data-testid="restore-finding" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600 }}>{t('Finding your account…')}</p>;
+            break;
+
+        case 'pick':
+            body = (
+                <>
+                    <h3 style={heading}>{t('Which account is yours?')}</h3>
+                    {screen.accounts.map((c) => (
+                        <button key={c.publicKey} type="button" data-testid="restore-candidate" disabled={busy} onClick={() => pick(c)}
+                            style={{ ...secondaryButton, display: 'flex', alignItems: 'center', gap: '0.75rem', textAlign: 'start', paddingInline: '0.75rem' }}>
+                            <span aria-hidden="true" style={{
+                                flex: '0 0 auto', width: '2rem', height: '2rem', borderRadius: '50%', display: 'inline-flex',
+                                alignItems: 'center', justifyContent: 'center', background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border-input)', color: 'var(--text-primary)', fontWeight: 700,
+                            }}>
+                                {initialOf(c.callsign)}
+                            </span>
+                            <span dir="auto" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{c.callsign}</span>
+                        </button>
+                    ))}
+                    <button type="button" style={quietButton} disabled={busy} onClick={() => void startAgain()}>{t('← Start again')}</button>
+                </>
+            );
+            break;
+
+        case 'none':
+            body = (
+                <>
+                    <p role="alert" data-testid="restore-none" style={{ ...lede, color: 'var(--text-primary)' }}>{keyLineWords(noAccountMessage(community, screen.provider))}</p>
+                    <button type="button" style={primaryButton} onClick={() => void startAgain()}>{t('Start again')}</button>
+                    {otherWays}
+                    {back}
                 </>
             );
             break;
@@ -563,7 +564,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                     <p role="alert" data-testid="restore-wrong-account" style={{ ...lede, color: 'var(--text-primary)' }}>
                         {t("The account that came back isn't {name}, so nothing was saved in this browser. Try again, or use your 12 words.", { name: callsign })}
                     </p>
-                    <button type="button" style={primaryButton} onClick={() => void backToName()}>{t('Start again')}</button>
+                    <button type="button" style={primaryButton} onClick={() => void startAgain()}>{t('Start again')}</button>
                     {otherWays}
                 </>
             );
@@ -574,7 +575,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                 <>
                     <p role="alert" data-testid="restore-no-copy" style={{ ...lede, color: 'var(--text-primary)' }}>{saidWords(screen.message)}</p>
                     {otherWays}
-                    <button type="button" style={quietButton} onClick={() => void backToName()}>{t('← Start again')}</button>
+                    <button type="button" style={quietButton} onClick={() => void startAgain()}>{t('← Start again')}</button>
                 </>
             );
             break;
@@ -604,9 +605,9 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                             : t("{name} is back on this page, but this browser couldn't save it. Try again, or try another browser. Nothing has been saved yet.", { name: callsign })}
                     </p>
                     <button type="button" style={primaryButton} onClick={() => void retrySave()}>{t('Try again')}</button>
-                    {/* A browser that can never save it (no storage, say) is not a dead end: the other ways, or the name. */}
+                    {/* A browser that can never save it (no storage, say) is not a dead end: the other ways, or the start. */}
                     {otherWays}
-                    <button type="button" style={quietButton} onClick={() => void backToName()}>{t('← Start again')}</button>
+                    <button type="button" style={quietButton} onClick={() => void startAgain()}>{t('← Start again')}</button>
                 </>
             );
             break;

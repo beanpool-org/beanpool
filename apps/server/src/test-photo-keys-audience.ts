@@ -59,6 +59,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let BASE = '';
@@ -84,10 +85,11 @@ function newId(): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -101,11 +103,11 @@ async function call(method: 'GET' | 'HEAD', p: string, id?: Id): Promise<Res> {
     const text = method === 'HEAD' ? '' : await res.text();
     let body: any;
     try { body = JSON.parse(text); } catch { /* not JSON */ }
-    // Every photo asked for is asked for its list-sized copy too (`size=thumb`, storage/photo-thumbnails.ts), by the same
+    // Every photo asked for is asked for its list-sized copy too (`size=thumb2`, storage/photo-thumbnails.ts), by the same
     // reader: refused exactly when the photo is, under the same cache header.
     if (/^\/api\/marketplace\/posts\/[^/]+\/photos\/\d+/.test(p) && !/[?&]size=thumb/.test(p)) {
         beforeCall();
-        const small = await fetch(`${BASE}${p}${p.includes('?') ? '&' : '?'}size=thumb`, { method, headers: id ? signedHeaders(method, p, '', id) : {} });
+        const small = await fetch(`${BASE}${p}${p.includes('?') ? '&' : '?'}size=thumb2`, { method, headers: id ? signedHeaders(method, p, '', id) : {} });
         await small.arrayBuffer();
         assert(small.status === res.status && small.headers.get('cache-control') === res.headers.get('cache-control'),
             `…its small copy too: ${small.status} "${small.headers.get('cache-control')}" (the photo ${res.status} "${res.headers.get('cache-control')}")`);
@@ -126,8 +128,8 @@ async function post(p: string, payload: unknown, id: Id): Promise<Res> {
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 type Sock = { ws: WebSocket; raw: string[] };
 function openSocket(url: string): Promise<Sock> {
@@ -172,7 +174,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('AudAlice');
@@ -187,7 +189,7 @@ async function main(): Promise<void> {
         const p = se.createPost(type, category, title, `${title}, described`, 0, 'fixed', alice.pk, AT.lat, AT.lng, photos, false, undefined, false, options)!;
         // Priced (the pricing guide learns from priced listings), and set back an hour, so a cursor from before now
         // leaves it out of a delta. Explicit updated_at: posts_touch_updated_at leaves a write that sets it alone.
-        db.prepare('UPDATE posts SET credits = 5, updated_at = ? WHERE id = ?').run(new Date(Date.now() - HOUR).toISOString(), p.id);
+        db.prepare('UPDATE posts SET price_c = 5, updated_at = ? WHERE id = ?').run(new Date(Date.now() - HOUR).toISOString(), p.id);
         return p.id as string;
     };
     const shapeRow = () => (db.prepare("SELECT value FROM node_config WHERE key = 'photoKeysShape'").get() as { value: string } | undefined)?.value;
@@ -352,9 +354,9 @@ async function main(): Promise<void> {
         for (const s of [bobSock, carolSock, strangerSock]) s.ws.close();
 
         // A trade's cover, and an escrow dispute's photos.
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
             .run('aud-tx-grp', grp, bob.pk, alice.pk, new Date(Date.now() - 10 * DAY).toISOString());
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 5, 'pending', ?)")
             .run('aud-tx-pub', pub, bob.pk, alice.pk, new Date(Date.now() - 10 * DAY).toISOString());
         const one = se.getMarketplaceTransaction('aud-tx-grp');
         const oneOpen = one?.coverImage ? (await get(one.coverImage)).status : null;

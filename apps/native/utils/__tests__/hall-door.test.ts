@@ -55,7 +55,6 @@ import {
 } from '../hall';
 import { HALL_KEY, forgetHallCache, hallAudienceFor, readHall, writeHall } from '../hall-state';
 import { buildSignedHeaders, buildSignedWsParams } from '../crypto';
-import { rememberRequestSigning } from '../request-signing-version';
 
 // ─── Node keys, statements and attestations, as the server makes them ─────────────────────────────
 
@@ -153,8 +152,6 @@ beforeEach(() => {
         mem.set('beanpool_anchor_url', url);
         return 'carried';
     });
-    rememberRequestSigning(HALL, 2);
-    rememberRequestSigning(HOME, 2);
 });
 
 // ─── The door's link and the typed number ──────────────────────────────────────────────────────
@@ -424,7 +421,6 @@ describe('a community with two names (Byron: mullum.beanpool.org and byron.beanp
     function phoneAtMullum(epoch = 0) {
         mem.set('beanpool_anchor_url', MULLUM);
         mem.set(COMMUNITY_IDENTITY_KEY, JSON.stringify({ [MULLUM]: { peerId: COMMUNITY_KEY.peerId, communityId: COMMUNITY, epoch } }));
-        rememberRequestSigning(MULLUM, 2);
     }
 
     it('the poster names the main name: the laptop is checked, and the phone moves signing for its own name', async () => {

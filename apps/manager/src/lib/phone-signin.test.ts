@@ -107,7 +107,7 @@ describe('phone-signin utilities', () => {
             });
         });
 
-        it('returns error when endpoint returns 404', async () => {
+        it('a 404 is an ordinary failure: the node did not answer, with its status', async () => {
             globalThis.fetch = vi.fn().mockResolvedValue({
                 ok: false,
                 status: 404,
@@ -118,7 +118,7 @@ describe('phone-signin utilities', () => {
 
             expect(res).toEqual({
                 kind: 'error',
-                message: "This node doesn't offer phone sign-in yet. Use the admin password.",
+                message: 'The node did not answer (404).',
             });
         });
 

@@ -29,6 +29,7 @@ process.env.NODE_PROFILE = 'global';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -43,8 +44,8 @@ function keypair(): Id {
 }
 function signedHeaders(id: Id, method: string, path: string, body = ''): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 
 async function main() {
@@ -53,12 +54,11 @@ async function main() {
     const se: any = await import('./state-engine.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { getMemberTrustProfile } = await import('@beanpool/engine');
     const { tierForCredit } = await import('@beanpool/core');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const httpPort = await startHttpServer(0);
@@ -69,7 +69,7 @@ async function main() {
     const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString();
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', ?, 'seed', 'seed')`);
-    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
+    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)');
     const authors: Id[] = [];
     for (let i = 0; i < 12; i++) {
         const id = keypair();
@@ -81,7 +81,7 @@ async function main() {
     insertMember.run(reader.pubKeyHex, 'BadgeReader', iso(-90 * 86_400_000));
     insertAccount.run(reader.pubKeyHex);
 
-    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at,
+    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at,
                 active, status, lat, lng) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, 1, 'active', ?, ?)`);
     const cats = ['food', 'goods', 'services', 'skills', 'housing', 'transport'];
     const postIds: string[] = [];
@@ -92,7 +92,7 @@ async function main() {
             authors[i % 12].pubKeyHex, at, at, -28.55 + ((i * 37) % 100) / 100 - 0.5, 153.5 + ((i * 53) % 100) / 100 - 0.5);
         postIds.push(id);
     }
-    const insertTrade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    const insertTrade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`);
     let trades = 0;
     const trade = (seller: number, buyer: number, credits: number) =>
@@ -129,7 +129,7 @@ async function main() {
         ['tiers set', () => { se.adminSetTier(authors[0].pubKeyHex, 'Resident'); se.adminSetTier(authors[1].pubKeyHex, 'Steward'); }],
         ['trades completed', () => { for (let i = 0; i < 30; i++) trade(2 + (i % 5), (i + 7) % 12, 40 + i * 7); }],
         ['a line frozen', () => { db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(authors[2].pubKeyHex); }],
-        ['a grant written to the row', () => { db.prepare('UPDATE members SET earned_credit = 50 WHERE public_key = ?').run(authors[9].pubKeyHex); }],
+        ['a grant written to the row', () => { db.prepare('UPDATE members SET earned_credit_c = 50 WHERE public_key = ?').run(authors[9].pubKeyHex); }],
         ['a tier taken back', () => { se.adminSetTier(authors[1].pubKeyHex, 'Newcomer'); }],
     ];
     const seenBadges = new Set<number>();

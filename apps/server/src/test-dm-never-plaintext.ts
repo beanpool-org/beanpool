@@ -4,10 +4,12 @@
  * Over REAL HTTPS through the real signature middleware:
  *
  *   1. a member's `plaintext-v1` line into a DM is refused 400 `dm_not_encrypted`, with the plain line old apps show,
- *      and nothing is stored; so is every other form that is not the encrypted one (a short nonce, a ciphertext that
- *      is not base64, one shorter than the AEAD tag, a missing prefix); an encrypted line is stored exactly as sent
- *   2. an edit follows the same rule; the message is untouched by a refused one
- *   3. a photo: an encrypted caption over a readable picture is refused; both encrypted is stored
+ *      and nothing is stored; so is every other form that is not line format 4's (a short nonce, a ciphertext that
+ *      is not base64, one shorter than the AEAD tag, a missing prefix, a format-3 line as a 1.3.x app sealed it with
+ *      its signature beside it, a column whose format byte, time or length is wrong); a format-4 line is stored exactly
+ *      as sent; a listing reference (metadata `about`) that isn't format 4 is refused with its line
+ *   2. an edit follows the same rule, a format-3 edit included; the message is untouched by a refused one
+ *   3. a photo: an encrypted caption over a readable picture, or over a format-3 picture, is refused; both format 4 is stored
  *   4. every DM is held to it: one tied to a listing (the old per-post DM), and a conversation of any other kind that
  *      reaches the DM store
  *   5. a DM opened with a name (the phone's old "decline with a message") is refused: those words go as a message
@@ -35,9 +37,20 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
-import { lockedDm } from './dm-test-payload.js';
+import { lockedColumn, lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { DM_REFUSED_LINES } from '@beanpool/core/dm-line-vectors';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+
+/** A line as an app before 1.4.0 seals it, frozen in core's vectors: format 3, the AEAD output alone, its signature beside it. */
+const format3 = DM_REFUSED_LINES[0];
+/** A format-4 column with one byte set, from a well-formed one: the format byte (0) or a byte of the signing time (65 on). */
+function columnWith(at: number, value: number): string {
+    const b = Buffer.from(lockedColumn(120), 'base64');
+    b[at] = value;
+    return b.toString('base64');
+}
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -66,7 +79,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(id.pk, name, owner.pk);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -79,7 +92,8 @@ async function call(method: 'GET' | 'POST', signer: Id, path: string, body?: unk
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -130,9 +144,15 @@ async function main(): Promise<void> {
         ['the 24 bytes without the prefix', { ciphertext: good.ciphertext, nonce: crypto.randomBytes(24).toString('base64') }],
         ['a ciphertext that is words, not base64', { ciphertext: 'meet at the gate', nonce: good.nonce }],
         ['a ciphertext shorter than the AEAD tag', { ciphertext: crypto.randomBytes(8).toString('base64'), nonce: good.nonce }],
-        ['a ciphertext in URL-safe base64', { ciphertext: Buffer.from([0xfb, 0xff, ...crypto.randomBytes(30)]).toString('base64url'), nonce: good.nonce }],
+        ['a ciphertext in URL-safe base64', { ciphertext: (() => { const b = Buffer.from(lockedColumn(123), 'base64'); b[3] = 0xfb; b[4] = 0xff; b[5] = 0xff; return b.toString('base64url'); })(), nonce: good.nonce }],
         ['a legacy "plaintext" nonce', { ciphertext: b64('hello'), nonce: 'plaintext' }],
         ['a nonce that is not a string', { ciphertext: good.ciphertext, nonce: 42 }],
+        // Line format 4 is the only form (the 1.4.0 cutover): an older app's line is refused, signed or not.
+        ['a format-3 line as a 1.3.x app sealed it, its signature beside it in the metadata', { ...format3.payload, metadata: format3.metadata }],
+        ['a format-3 line of any length (the AEAD output alone)', { ciphertext: crypto.randomBytes(200).toString('base64'), nonce: good.nonce }],
+        ['a column whose format byte is 3', { ciphertext: columnWith(0, 3), nonce: good.nonce }],
+        ['a column whose signing time is not a time', { ciphertext: columnWith(1 + 64 + 4, 0x2f), nonce: good.nonce }],
+        ['a column that ends before its AEAD tag', { ciphertext: lockedColumn(1 + 64 + 24 + 16).slice(0, -8), nonce: good.nonce }],
     ];
     for (const [what, payload] of forms) {
         const r = await send(ana, dmId, payload);
@@ -150,6 +170,19 @@ async function main(): Promise<void> {
     const read = await call('GET', ben, `/api/messages/${dmId}`);
     assert(read.status === 200 && read.body.messages.some((m: any) => m.id === lockedId && m.nonce === good.nonce),
         'and Ben reads it back from the node as it was sent');
+    // A listing reference (core chat-about.ts) is its own sealed and signed part, held to the same rule as the words.
+    const beforeAbout = countIn(dmId);
+    const aboutOld = await send(ana, dmId, { ...lockedDm(), metadata: JSON.stringify({ about: format3.payload }) });
+    assert(refusedAsUnlocked(aboutOld), `a format-4 line whose listing reference is format 3 is refused (got ${aboutOld.status} ${aboutOld.body?.code ?? ''})`);
+    const aboutReadable = await send(ana, dmId, { ...lockedDm(), metadata: JSON.stringify({ about: { ciphertext: b64('{"v":1,"post":"p1"}'), nonce: 'plaintext-v1' } }) });
+    assert(refusedAsUnlocked(aboutReadable), `one whose listing reference is readable is refused (got ${aboutReadable.status})`);
+    const aboutNull = await send(ana, dmId, { ...lockedDm(), metadata: JSON.stringify({ about: null }) });
+    assert(refusedAsUnlocked(aboutNull), `one whose listing reference is empty is refused (got ${aboutNull.status})`);
+    assert(countIn(dmId) === beforeAbout, 'none of them was stored');
+    const about = lockedDm(60);
+    const withAbout = await send(ana, dmId, { ...lockedDm(), metadata: JSON.stringify({ replyToId: lockedId, about }) });
+    assert(withAbout.status === 200 && JSON.parse(rowOf(withAbout.body?.message?.id)?.metadata ?? '{}')?.about?.ciphertext === about.ciphertext,
+        `a format-4 line with a format-4 listing reference is stored, the reference as sent (got ${withAbout.status} ${JSON.stringify(withAbout.body?.error ?? '')})`);
 
     // ── 2. an edit ───────────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. an edit ──');
@@ -157,6 +190,9 @@ async function main(): Promise<void> {
     assert(refusedAsUnlocked(plainEdit), `a plaintext-v1 edit is refused 400 dm_not_encrypted (got ${plainEdit.status} ${JSON.stringify(plainEdit.body)})`);
     assert(rowOf(lockedId)?.ciphertext === good.ciphertext && rowOf(lockedId)?.nonce === good.nonce && !rowOf(lockedId)?.edited_at,
         'and the message is untouched');
+    const format3Edit = await call('POST', ana, '/api/messages/edit', { messageId: lockedId, ...format3.payload, metadata: JSON.parse(format3.metadata!) });
+    assert(refusedAsUnlocked(format3Edit) && rowOf(lockedId)?.ciphertext === good.ciphertext && !rowOf(lockedId)?.edited_at,
+        `a format-3 edit, its signature beside it, is refused and the message is untouched (got ${format3Edit.status} ${format3Edit.body?.code ?? ''})`);
     const newWords = lockedDm();
     const lockedEdit = await call('POST', ana, '/api/messages/edit', { messageId: lockedId, ...newWords });
     assert(lockedEdit.status === 200 && rowOf(lockedId)?.ciphertext === newWords.ciphertext && rowOf(lockedId)?.nonce === newWords.nonce,
@@ -176,6 +212,11 @@ async function main(): Promise<void> {
         ...readable('look at this'), type: 'image', attachment: { data: picture.ciphertext, nonce: picture.nonce, mime: 'image/jpeg' },
     });
     assert(refusedAsUnlocked(readableCaption), `a readable caption over an encrypted picture is refused (got ${readableCaption.status})`);
+    const format3Picture = await send(ana, dmId, {
+        ...lockedDm(16), type: 'image', attachment: { data: crypto.randomBytes(600).toString('base64'), nonce: picture.nonce, mime: 'image/jpeg' },
+    });
+    assert(refusedAsUnlocked(format3Picture), `a format-4 caption over a format-3 picture (the AEAD output alone) is refused (got ${format3Picture.status})`);
+    assert(countIn(dmId) === beforePhoto, 'and none of the three was stored');
     const photo = await send(ana, dmId, {
         ...lockedDm(16), type: 'image', attachment: { data: picture.ciphertext, nonce: picture.nonce, mime: 'image/jpeg' },
     });
@@ -237,12 +278,14 @@ async function main(): Promise<void> {
     assert(eventLine.status === 201 && rowOf(eventLine.body?.message?.id)?.nonce === 'plaintext-v1',
         `an event chat line is stored readable, as the event chat says (got ${eventLine.status} ${JSON.stringify(eventLine.body?.error ?? '')})`);
 
-    const { publicKey: bakery } = createTreasury('Bakery', AVATAR, 300, { leadKeeperPubkey: ana.pk });
+    // A credit line of 300 Beans: whole hundredths.
+    const { publicKey: bakery } = createTreasury('Bakery', AVATAR, 30000, { leadKeeperPubkey: ana.pk });
     const threadLine = await call('POST', ben, `/api/enterprise/${bakery}/thread/message`, { text: 'bread on Fridays?' });
     assert(threadLine.status === 201 && rowOf(threadLine.body?.message?.id)?.nonce === 'plaintext-v1',
         `an enterprise discussion line is stored readable, as the thread says (got ${threadLine.status} ${JSON.stringify(threadLine.body?.error ?? '')})`);
 
-    injectSystemMessage(listing.id, 'ESCROW_FUNDED', { amount: 5 } as any, ana.pk, ben.pk);
+    // The deal's figure as the node holds it: whole hundredths (5 Beans), in words as formatHundredths writes it.
+    injectSystemMessage(listing.id, 'ESCROW_FUNDED', { amount_c: 500 } as any, ana.pk, ben.pk);
     const notice = db.prepare("SELECT * FROM messages WHERE conversation_id = ? AND type = 'system' ORDER BY timestamp DESC LIMIT 1").get(dmId) as any;
     assert(notice?.ciphertext === '5 Beans placed in escrow.' && notice?.nonce === '00000',
         `the node still writes its deal notice into the pair's DM, readable (got ${JSON.stringify(notice?.ciphertext)})`);

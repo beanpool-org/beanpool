@@ -32,14 +32,16 @@ delete process.env.CF_RECORD_NAME;
 // Whatever the shell running the suite has set, the suite starts from a node with no profile configured.
 delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
-process.env.ADMIN_PASSWORD = 'Global-No-Beans-Admin-83!';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
+/** The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns one into the other. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -69,7 +71,8 @@ async function call(method: 'GET' | 'POST', path: string, body: unknown, id: Id 
         const nonce = crypto.randomBytes(16).toString('hex');
         const signPath = path.split('?')[0];
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method, path: signPath, timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -90,14 +93,12 @@ async function main() {
             .run(`${NODE_PROFILE_KEY}.${name}`, value);
     const clearOverrides = () => db.prepare('DELETE FROM node_config WHERE substr(key, 1, 12) = ?').run(`${NODE_PROFILE_KEY}.`);
     const count = (table: string) => (db.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c;
-    const nonZeroBalances = () => (db.prepare('SELECT COUNT(*) AS c FROM accounts WHERE balance != 0').get() as { c: number }).c;
+    const nonZeroBalances = () => (db.prepare('SELECT COUNT(*) AS c FROM accounts WHERE balance_c != 0').get() as { c: number }).c;
 
     // ── 1. A fresh local node, Beans switched off by an override ──
     console.log('── 1. a fresh local node with nodeProfile.beans=false ──');
     initSchema();
     setOverride('beans', 'false');
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     const se = await import('./state-engine.js');
     const boot1 = await capture(() => se.initStateEngine());
     assert(!boot1.error, `the node boots (${String(boot1.error ?? 'ok')})`);
@@ -120,11 +121,11 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
             .run(pubKeyHex, callsign);
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
         return { pubKeyHex, privateKey, callsign };
     };
     const alice = member('Alice'), bob = member('Bob'), carol = member('Carol'), dave = member('Dave');
-    const send = (from: Id, to: Id, amount = 5) => call('POST', '/api/ledger/transfer', { to: to.pubKeyHex, amount, memo: 'thanks' }, from);
+    const send = (from: Id, to: Id, beans = 5) => call('POST', '/api/ledger/transfer', { to: to.pubKeyHex, amount_c: hc(beans), memo: 'thanks' }, from);
 
     const s1 = await send(alice, bob);
     assert(s1.status === 403 && s1.body?.code === 'profile_no_beans', `a send is refused with profile_no_beans (${s1.status} ${JSON.stringify(s1.body)})`);
@@ -156,21 +157,28 @@ async function main() {
     const s2 = await send(alice, bob);
     assert(s2.status === 403 && s2.body?.code === 'profile_no_beans' && s2.body?.error === profile.BEANS_OFF_MESSAGE,
         `POST /api/ledger/transfer → 403 profile_no_beans with the plain message (${s2.status} ${JSON.stringify(s2.body)})`);
-    const s3 = await call('POST', '/api/ledger/transfer', { to: 'COMMONS_POOL', amount: -1 }, alice);
+    const s3 = await call('POST', '/api/ledger/transfer', { to: 'COMMONS_POOL', amount_c: -1 }, alice);
     assert(s3.status === 403 && s3.body?.code === 'profile_no_beans', `…before any other check, even a malformed send (${s3.status})`);
 
     // Posts
-    const priced = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 10, authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
+    const priced = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', price_c: hc(10), authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     assert(priced.status === 403 && priced.body?.code === 'profile_no_beans' && priced.body?.error === profile.BEANS_OFF_PRICE_MESSAGE,
         `a post with a Beans price → 403 profile_no_beans, saying how to post it instead (${priced.status} ${JSON.stringify(priced.body)})`);
     assert(count('posts') === 0, 'and nothing was stored');
     const free = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag, free', authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
     const freeId = free.body?.post?.id;
-    const storedCredits = () => (db.prepare('SELECT credits FROM posts WHERE id = ?').get(freeId) as { credits: number } | undefined)?.credits;
+    const storedCredits = () => (db.prepare('SELECT price_c FROM posts WHERE id = ?').get(freeId) as { price_c: number } | undefined)?.price_c;
     assert(free.status === 200 && freeId && storedCredits() === 0, `a post with no price is stored, at 0 Beans (${free.status} ${storedCredits()})`);
-    const zero = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'A ladder', description: 'Borrow it for a day', credits: '0', authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
-    assert(zero.status === 200 && zero.body?.post?.credits === 0, `credits "0" is stored as 0 (${zero.status} ${JSON.stringify(zero.body)})`);
-    const repriced = await call('POST', '/api/marketplace/posts/update', { id: freeId, authorPublicKey: alice.pubKeyHex, credits: 15 }, alice);
+    // A price is whole hundredths on the wire, a JSON integer (engine/post-fields.ts isListingPrice): the route no longer
+    // turns a text "0" into 0 as it did for `credits`, so it is refused as any price that is not one, before Beans-off is
+    // asked, and nothing is stored. A price of 0 is stored as 0.
+    const postsBeforeText = count('posts');
+    const zeroText = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'A ladder', description: 'Borrow it for a day', price_c: '0', authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
+    assert(zeroText.status === 400 && zeroText.body?.error === 'The price must be a number of Beans from 0 to 1000000' && count('posts') === postsBeforeText,
+        `price_c "0" (text) is refused as no price, and nothing is stored (${zeroText.status} ${JSON.stringify(zeroText.body)})`);
+    const zero = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'A ladder', description: 'Borrow it for a day', price_c: 0, authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
+    assert(zero.status === 200 && zero.body?.post?.price_c === 0, `price_c 0 is stored as 0 (${zero.status} ${JSON.stringify(zero.body)})`);
+    const repriced = await call('POST', '/api/marketplace/posts/update', { id: freeId, authorPublicKey: alice.pubKeyHex, price_c: hc(15) }, alice);
     assert(repriced.status === 403 && repriced.body?.code === 'profile_no_beans' && storedCredits() === 0,
         `an edit that adds a Beans price → 403, the post keeps 0 (${repriced.status} ${storedCredits()})`);
     const retitled = await call('POST', '/api/marketplace/posts/update', { id: freeId, authorPublicKey: alice.pubKeyHex, title: 'Lemons and limes' }, alice);
@@ -214,17 +222,17 @@ async function main() {
     // Crowdfunds and Commons projects
     for (const [method, path, body] of [
         ['GET', '/api/crowdfund/projects', null],
-        ['POST', '/api/crowdfund/projects', { title: 'A well', description: 'Water', goalAmount: 100 }],
-        ['POST', '/api/crowdfund/projects/p1/pledge', { amount: 5 }],
+        ['POST', '/api/crowdfund/projects', { title: 'A well', description: 'Water', goalAmount_c: hc(100) }],
+        ['POST', '/api/crowdfund/projects/p1/pledge', { amount_c: hc(5) }],
         ['GET', '/api/commons/projects', null],
-        ['POST', '/api/commons/projects', { title: 'A well', description: 'Water', requestedAmount: 100 }],
+        ['POST', '/api/commons/projects', { title: 'A well', description: 'Water', requestedAmount_c: hc(100) }],
     ] as const) {
         const r = await call(method, path, body, carol);
         assert(r.status === 404 && r.body?.code === 'feature_off' && r.body?.feature === 'crowdfund', `${method} ${path} → 404 feature_off (crowdfund) (${r.status})`);
     }
 
     // Federation
-    const purchase = await call('POST', '/api/federation/purchase', { postId: 'x', amount: 5 }, alice);
+    const purchase = await call('POST', '/api/federation/purchase', { postId: 'x', amount_c: hc(5) }, alice);
     assert(purchase.status === 404 && purchase.body?.code === 'feature_off' && purchase.body?.feature === 'beans', `POST /api/federation/purchase → 404 feature_off (${purchase.status})`);
     const capacity = await call('GET', '/api/federation/commission/capacity', null, alice);
     assert(capacity.status === 404 && capacity.body?.code === 'feature_off', `GET /api/federation/commission/capacity → 404 feature_off (${capacity.status})`);
@@ -237,13 +245,13 @@ async function main() {
     // (the profile has them off, and then nothing is proposed at all: test-decisions-off).
     setOverride('decisions', 'true');
     const noStanding = await call('POST', '/api/commons/decisions', {
-        title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount: 5 },
+        title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount_c: hc(5) },
     }, alice);
     assert(noStanding.status === 403 && noStanding.body?.code === 'profile_no_beans',
         `a pool-money Decision gets the plain answer first, even from a member with no standing to propose (${noStanding.status} ${JSON.stringify(noStanding.body)})`);
     // Standing to propose is a trading record, and a node without Beans has none. A trust badge is no standing (badges
     // unlock nothing), so here only an admin proposes.
-    db.prepare('UPDATE members SET earned_credit = 1 WHERE public_key = ?').run(carol.pubKeyHex);
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(1), carol.pubKeyHex);
     const badgeOnly = await call('POST', '/api/commons/decisions', {
         title: 'Freeze Dave', description: 'Freeze Dave for a while', touches: 'member', effect: 'freeze_credit', subject: dave.pubKeyHex,
     }, carol);
@@ -251,7 +259,7 @@ async function main() {
         `a member with a trust badge and no trade can't propose one (${badgeOnly.status} ${JSON.stringify(badgeOnly.body)})`);
     se.grantNodeRole(carol.pubKeyHex, 'admin', 'owner:password');
     const grant = await call('POST', '/api/commons/decisions', {
-        title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount: 5 },
+        title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount_c: hc(5) },
     }, carol);
     assert(grant.status === 403 && grant.body?.code === 'profile_no_beans', `a pool-money Decision is refused, profile_no_beans (${grant.status} ${JSON.stringify(grant.body)})`);
     const memberDecision = await call('POST', '/api/commons/decisions', {
@@ -260,7 +268,7 @@ async function main() {
     assert(memberDecision.status === 200 && memberDecision.body?.success, `a member Decision is still proposed (${memberDecision.status} ${JSON.stringify(memberDecision.body).slice(0, 120)})`);
     se.revokeNodeRole(carol.pubKeyHex, 'admin', 'owner:password');
     const { preflightAssert } = await import('./decisions-engine.js');
-    const pre = preflightAssert({ effect: 'grant_hardship', touches: 'pool', subject: dave.pubKeyHex, params: { amount: 5 } } as any);
+    const pre = preflightAssert({ effect: 'grant_hardship', touches: 'pool', subject: dave.pubKeyHex, params: { amount_c: hc(5) } } as any);
     assert(pre.status === 'blocked', `a pool Decision that reached execution would be blocked (${JSON.stringify(pre)})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
 
@@ -270,23 +278,23 @@ async function main() {
     const history = await call('GET', `/api/marketplace/transactions?publicKey=${bob.pubKeyHex}`, null, bob);
     assert(history.status === 200 && Array.isArray(history.body) && history.body.length === 0, `a member's own trade list still answers, empty (${history.status})`);
     const bal = await call('GET', `/api/ledger/balance/${bob.pubKeyHex}`, null, bob);
-    assert(bal.status === 200 && bal.body?.balance === 0, `a member's balance still answers: 0 (${bal.status} ${bal.body?.balance})`);
+    assert(bal.status === 200 && bal.body?.balance_c === 0, `a member's balance still answers: 0 (${bal.status} ${bal.body?.balance_c})`);
 
     // Underneath the routes: every primitive refuses by itself
     const refuses = (fn: () => unknown, code: string) => { try { fn(); return false; } catch (e: any) { return e?.code === code; } };
-    assert(refuses(() => se.transfer('COMMONS_POOL', alice.pubKeyHex, 1, 'direct'), 'profile_no_beans'), 'transfer() refuses (profile_no_beans)');
-    assert(refuses(() => se.transfer(alice.pubKeyHex, bob.pubKeyHex, 1, 'gift', 'direct', true, { signer: 'owner:password', offboardOverride: true }), 'profile_no_beans'),
+    assert(refuses(() => se.transfer('COMMONS_POOL', alice.pubKeyHex, hc(1), 'direct'), 'profile_no_beans'), 'transfer() refuses (profile_no_beans)');
+    assert(refuses(() => se.transfer(alice.pubKeyHex, bob.pubKeyHex, hc(1), 'gift', 'direct', true, { signer: 'owner:password', offboardOverride: true }), 'profile_no_beans'),
         "transfer() refuses an offboarding wizard's gift too");
-    assert(refuses(() => se.payFromCommons(alice.pubKeyHex, 1, 'grant', { allowDeficit: true }), 'profile_no_beans'), 'payFromCommons() refuses, even allowed a deficit');
-    assert(refuses(() => se.moveToCommons('escrow_nothing', 1, 'sweep'), 'profile_no_beans'), 'moveToCommons() refuses');
+    assert(refuses(() => se.payFromCommons(alice.pubKeyHex, hc(1), 'grant', { allowDeficit: true }), 'profile_no_beans'), 'payFromCommons() refuses, even allowed a deficit');
+    assert(refuses(() => se.moveToCommons('escrow_nothing', hc(1), 'sweep'), 'profile_no_beans'), 'moveToCommons() refuses');
     const { pledgeToProject } = await import('./db/db.js');
-    assert(refuses(() => pledgeToProject('tx1', 'no-such-project', alice.pubKeyHex, 1, 'pledge'), 'profile_no_beans'), 'a crowdfund pledge refuses before it looks for the project');
+    assert(refuses(() => pledgeToProject('tx1', 'no-such-project', alice.pubKeyHex, hc(1), 'pledge'), 'profile_no_beans'), 'a crowdfund pledge refuses before it looks for the project');
     assert(refuses(() => se.acceptPost(freeId, bob.pubKeyHex), 'feature_off') && refuses(() => se.requestPost(freeId, bob.pubKeyHex), 'feature_off')
         && refuses(() => se.approvePostRequest('x', alice.pubKeyHex), 'feature_off'), 'the escrow engine refuses to open an escrow (request, approve, accept)');
-    assert(refuses(() => se.createPost('offer', 'food', 'Eggs', '', 3, 'fixed', alice.pubKeyHex, undefined, undefined, [AVATAR]), 'profile_no_beans'), 'createPost() refuses a price whoever calls it');
+    assert(refuses(() => se.createPost('offer', 'food', 'Eggs', '', hc(3), 'fixed', alice.pubKeyHex, undefined, undefined, [AVATAR]), 'profile_no_beans'), 'createPost() refuses a price whoever calls it');
 
     const audit = se.runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.drift) < 1e-9 && audit.strandedEscrows === 0, `the ledger audit is clean (${JSON.stringify(audit)})`);
+    assert(audit.ok && audit.drift === 0 && audit.strandedEscrows === 0, `the ledger audit is clean (${JSON.stringify(audit)})`);
     assert(count('transactions') === 0 && count('marketplace_transactions') === 0 && nonZeroBalances() === 0,
         'no transaction, no escrow, every balance 0: nothing moved');
     assert(profile.ledgerHistory() === null, 'so this ledger has never moved');
@@ -341,16 +349,16 @@ async function main() {
     const s4 = await send(alice, bob);
     assert(s4.status === 400 && s4.body?.code === undefined && /first completed trade/.test(s4.body?.error ?? ''),
         `a send by a member with no trade yet fails for the old reason, not the profile (${s4.status} ${s4.body?.error})`);
-    const lemons = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', credits: 10, authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
-    assert(lemons.status === 200 && lemons.body?.post?.credits === 10, `a post keeps its Beans price (${lemons.status} ${lemons.body?.post?.credits})`);
+    const lemons = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Lemons', description: 'A bag', price_c: hc(10), authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
+    assert(lemons.status === 200 && lemons.body?.post?.price_c === hc(10), `a post keeps its Beans price (${lemons.status} ${lemons.body?.post?.price_c})`);
     for (const path of ['/api/treasuries', '/api/crowdfund/projects', '/api/commons/projects']) {
         const r = await call('GET', path, null, carol);
         assert(r.status === 200, `GET ${path} → 200 (${r.status})`);
     }
     // A real escrow: Bob is given Beans the way a prune write-off pays out, lists an offer (the contribution rule),
     // and accepts Alice's lemons.
-    se.payFromCommons(bob.pubKeyHex, 20, 'Test: Beans for Bob', { allowDeficit: true });
-    await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'Ladder loan', description: 'Any day', credits: 1, authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
+    se.payFromCommons(bob.pubKeyHex, hc(20), 'Test: Beans for Bob', { allowDeficit: true });
+    await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'tools', title: 'Ladder loan', description: 'Any day', price_c: hc(1), authorPublicKey: bob.pubKeyHex, photos: [AVATAR] }, bob);
     const accepted = await call('POST', '/api/marketplace/posts/accept', { postId: lemons.body.post.id, buyerPublicKey: bob.pubKeyHex }, bob);
     const escrowTx = accepted.body?.transaction?.id;
     assert(accepted.status === 200 && escrowTx, `Bob accepts: an escrow opens (${accepted.status} ${JSON.stringify(accepted.body).slice(0, 160)})`);
@@ -374,8 +382,8 @@ async function main() {
     assert(sw5.beans && sw5.escrow, 'Beans and escrow stay on');
     const s5 = await send(alice, bob);
     assert(s5.status !== 403 && s5.body?.code !== 'profile_no_beans', `a send is not refused for the profile (${s5.status} ${s5.body?.error})`);
-    const priced5 = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Eggs', description: 'A dozen', credits: 4, authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
-    assert(priced5.status === 200 && priced5.body?.post?.credits === 4, `a Beans price is still kept (${priced5.status})`);
+    const priced5 = await call('POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Eggs', description: 'A dozen', price_c: hc(4), authorPublicKey: alice.pubKeyHex, photos: [AVATAR] }, alice);
+    assert(priced5.status === 200 && priced5.body?.post?.price_c === hc(4), `a Beans price is still kept (${priced5.status})`);
     clearOverrides();
 
     process.env.NODE_PROFILE = 'global';

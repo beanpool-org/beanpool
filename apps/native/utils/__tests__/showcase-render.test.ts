@@ -96,7 +96,7 @@ const net = vi.hoisted(() => ({ calls: [] as string[] }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls));
 
 import { LocalCommunityMark, LocalCommunitySheet, markTone } from '../../components/showcase/LocalCommunityMark';
-import { CommonsPreview } from '../../components/showcase/Previews';
+import { CommonsPreview, beansText } from '../../components/showcase/Previews';
 import { DecideSection } from '../../components/DecideSection';
 import { sampleDecisions, samplePoolVoting } from '../../components/showcase/sample-screens';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
@@ -291,6 +291,18 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(onClose).toHaveBeenCalledTimes(2);
         });
 
+        it('a row\'s amount is whole hundredths, written as every figure is: 0.01, 1, 49.25, −9.82, 500', () => {
+            expect(beansText(1)).toBe('0.01 Beans');
+            expect(beansText(100)).toBe('1 Bean');
+            expect(beansText(4925)).toBe('49.25 Beans');
+            expect(beansText(-982)).toBe('−9.82 Beans');
+            expect(beansText(50000)).toBe('500 Beans');
+            expect(beansText(1250, true)).toBe('+12.50 Beans');
+            expect(beansText(-1250, true)).toBe('−12.50 Beans');
+            // Not whole hundredths: no figure, never a number made up.
+            expect(beansText(12.5)).toBe('— Beans');
+        });
+
         it('Commons in preview: the pool and the Bakery; Pledge and Pause open the sheet', async () => {
             await render(createElement(CommonsPreview));
             expect(text()).toContain('Example Valley');
@@ -313,7 +325,7 @@ for (const scheme of ['light', 'dark'] as const) {
                 decisions: sampleDecisions(),
                 myPoolVoting: samplePoolVoting(),
                 identity: { publicKey: 'a-real-member' } as any,
-                balanceState: { earnedCredit: 0, commons: 640 },
+                balanceState: { earnedCredit_c: 0, commons_c: 64000 },
                 activeView: 'open',
                 onChangeView: () => {},
                 onRefresh: async () => {},

@@ -13,7 +13,7 @@ export interface AlertsPanelProps {
     activeNode: NodeProfile;
 }
 
-const TOO_OLD = "This server's BeanPool is older than alerts: update it to use them.";
+const NOT_A_STATUS = "The server's answer was not an alerts status.";
 
 /** " (×5)": the same line told that many times, kept as one, as the channel shows it; nothing when once. */
 function times(count: number | undefined): string {
@@ -45,18 +45,18 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
     const load = useCallback(async () => {
         try {
             const s = await getAlertsStatus(activeNode.url, ...creds());
-            if (!s || typeof s !== 'object' || !Array.isArray(s.active)) throw new Error(TOO_OLD);
+            if (!s || typeof s !== 'object' || !Array.isArray(s.active)) throw new Error(NOT_A_STATUS);
             setStatus(s);
             setLoadError(null);
         } catch (e: unknown) {
             setStatus(null);
-            setLoadError((e as { status?: number })?.status === 404 ? TOO_OLD : e instanceof Error ? e.message : String(e));
+            setLoadError(e instanceof Error ? e.message : String(e));
         }
     }, [activeNode.url, creds]);
 
     useEffect(() => { void load(); }, [load]);
 
-    const run = async (work: () => Promise<{ status: AlertsStatus }>, done: string | ((r: any) => string)) => {
+    const run = async <T extends { status: AlertsStatus }>(work: () => Promise<T>, done: string | ((r: T) => string)) => {
         setBusy(true);
         setMessage(null);
         try {

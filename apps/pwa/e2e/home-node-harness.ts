@@ -9,8 +9,8 @@
  *
  * Env (set by the check): BEANPOOL_DATA_DIR (a fresh folder), FIXTURE_ROOT (a folder whose `public/` holds the web app
  * build), FIXTURE_PROFILE ('local' | 'global'), FIXTURE_MEMBERS (JSON `[{ "publicKey", "callsign", "joinedDaysAgo",
- * "avatar"?, "balance"? }]`: the browsers' own keys, made members here; `avatar` true gives one a photo, so it may post;
- * `balance` gives one that many Beans, as of today, owed by Tama so the books still sum to zero).
+ * "avatar"?, "balance_c"? }]`: the browsers' own keys, made members here; `avatar` true gives one a photo, so it may post;
+ * `balance_c` gives one that many whole hundredths of a Bean, as of today, owed by Tama so the books still sum to zero).
  *
  * Says `FIXTURE_READY {"port":N}` once listening. Takes one JSON request a line on stdin and answers one
  * `FIXTURE_ANSWER {"id":…,"ok":…,"result"|"error":…}` line:
@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     const root = process.env.FIXTURE_ROOT;
     if (!root) throw new Error('FIXTURE_ROOT is not set');
     const profile = process.env.FIXTURE_PROFILE === 'global' ? 'global' : 'local';
-    const browsers = JSON.parse(process.env.FIXTURE_MEMBERS || '[]') as { publicKey: string; callsign: string; joinedDaysAgo?: number; avatar?: boolean; balance?: number }[];
+    const browsers = JSON.parse(process.env.FIXTURE_MEMBERS || '[]') as { publicKey: string; callsign: string; joinedDaysAgo?: number; avatar?: boolean; balance_c?: number }[];
     process.chdir(root);
 
     const { initTls } = await import('../../server/src/services/tls.js');
@@ -89,7 +89,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, ?, ?, ?, ?)`)
             .run(pk, callsign, ago(joinedDaysAgo), owner, `INV-${callsign.toUpperCase()}`, opts.area?.lat ?? null, opts.area?.lng ?? null);
         if (opts.avatar) setMemberPhoto(db, pk, TINY_PNG);
-        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+        db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return pk;
     };
     for (const b of browsers) member(b.publicKey, b.callsign, b.joinedDaysAgo ?? 1, { avatar: b.avatar === true });
@@ -98,16 +98,18 @@ async function main(): Promise<void> {
     const tama = member(key(), 'Tama', 60, { avatar: true, area: BYRON });
     // A browser's Beans: credited as of today (no demurrage owed yet), Tama's debit the other side of it.
     const today = Math.floor(Date.now() / DAY);
-    for (const b of browsers.filter((x) => typeof x.balance === 'number' && x.balance !== 0)) {
-        const setAccount = db.prepare('UPDATE accounts SET balance = balance + ?, last_demurrage_epoch = ? WHERE public_key = ?');
-        setAccount.run(b.balance, today, b.publicKey);
-        setAccount.run(-(b.balance as number), today, tama);
+    for (const b of browsers.filter((x) => typeof x.balance_c === 'number' && x.balance_c !== 0)) {
+        const setAccount = db.prepare('UPDATE accounts SET balance_c = balance_c + ?, last_demurrage_epoch = ? WHERE public_key = ?');
+        setAccount.run(b.balance_c, today, b.publicKey);
+        setAccount.run(-(b.balance_c as number), today, tama);
     }
     se.reconcileLedgerFromDb();
 
     const beans = profile === 'local';
+    // The node's price is whole hundredths of a Bean (the createPost argument still called `credits`): these are written in Beans.
+    const hc = (beansAmount: number) => Math.round(beansAmount * 100);
     const post = (author: string, type: 'offer' | 'need' | 'event', category: string, title: string, credits: number, extra: Record<string, unknown> = {}, at = BYRON) =>
-        se.createPost(type, category, title, `${title}. Ask me anything.`, beans && type !== 'event' ? credits : 0, 'fixed', author,
+        se.createPost(type, category, title, `${title}. Ask me anything.`, beans && type !== 'event' ? hc(credits) : 0, 'fixed', author,
             at.lat + 0.01, at.lng + 0.01, [TINY_PNG], false, undefined, false, extra as any);
     post(tama, 'offer', 'garden', 'Seedlings to give away', 0);
     // A Need comes after the member's own first Offer (the node's rule).

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { t } from '@beanpool/core';
 import {
-    getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
+    getMyEvents, getNodeApiUrl, getNotificationPreferences, setEventReminder, type MarketplacePost,
 } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -177,13 +177,10 @@ interface ReminderProps {
  * member's default.
  *
  * What this event is set to comes from `/api/events/mine`, because that is the one place the contract puts
- * it; the member's default comes from their preferences, so the line can say which it is. A 404 from
- * either takes the whole block away — that is an older node, and there is nothing here to offer on one.
- * A member who has just tapped Going may not be in the list yet; they read as "my default", which is
+ * it; the member's default comes from their preferences, so the line can say which it is. A member who has just tapped Going may not be in the list yet; they read as "my default", which is
  * exactly what the node will do for them until they choose otherwise.
  */
 export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
-    const [supported, setSupported] = useState(true);
     const [defaults, setDefaults] = useState<number[]>(DEFAULT_REMINDER_OFFSETS);
     const [offsets, setOffsets] = useState<number[] | null>(null);
     const [open, setOpen] = useState(false);
@@ -196,10 +193,9 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
             const mine = await getMyEvents();
             const row = mine.find(r => r.postId === post.id);
             setOffsets(row ? parseReminderOffsets(row.reminderOffsets) : null);
-        } catch (e) {
-            if (isRouteMissing(e)) setSupported(false);
-            // Anything else (offline, a node having a bad minute) leaves the line reading "your default",
-            // which is what the node would in fact do.
+        } catch {
+            // Offline, or a node having a bad minute: leaves the line reading "your default", which is what the node
+            // would in fact do.
         }
     }, [post.id]);
 
@@ -221,7 +217,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
         return () => { cancelled = true; };
     }, [identity?.publicKey, myRsvp]);
 
-    if (!supported || !myRsvp) return null;
+    if (!myRsvp) return null;
 
     const openPicker = () => {
         setDraft(offsets ?? defaults);
@@ -238,10 +234,6 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
             setOffsets(cleaned);
             setOpen(false);
         } catch (e) {
-            if (isRouteMissing(e)) {
-                setSupported(false);
-                return;
-            }
             setError((e as Error)?.message || t('Could not save your reminder.'));
         } finally {
             setSaving(false);

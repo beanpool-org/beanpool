@@ -39,7 +39,6 @@ delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
 const PW = 'RemovedDeletePass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -54,11 +53,11 @@ import { removalProposedFromBefore } from './decisions-from-before-test-fixture.
 import { openJoinTaken } from './engine/open-join.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -80,6 +79,12 @@ function keypair(name: string): Id {
     return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey, name };
 }
 
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door:
+ * exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+
 /** A member with a whole profile, Beans, a friend each way and two sign-in recovery copies. */
 function makeMember(name: string, beans = 40): Id {
     const id = keypair(name);
@@ -88,8 +93,8 @@ function makeMember(name: string, beans = 40): Id {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'community', 'gardener', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(id.pk, name, `${name} grows garlic`, `${name.toLowerCase()}@example.com`);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     return id;
 }
 
@@ -102,15 +107,16 @@ function giveFriendsAndCopies(m: Id, friend: Id): void {
     }
 }
 
-/** The app's signed request (the format before request binding, which every node still takes), ready to send or send again. */
+/** The app's signed request (format 2, through signed-request-test-helper.ts), ready to send or send again. */
 function signed(method: 'GET' | 'POST', path: string, id: Id, body?: unknown, headerKey = id.pk) {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': headerKey,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -175,8 +181,8 @@ const changedTables = (a: Map<string, string>, b: Map<string, string>) =>
 /** A member row as it is, activity stamp and all. */
 const wholeRow = (pk: string) => JSON.stringify(db.prepare('SELECT * FROM members WHERE public_key = ?').get(pk));
 
-/** Every Bean on the node: the ledger audit's figures, which Delete account must leave as they are. */
-const audit = () => { const a = runLedgerAudit(); return { ok: a.ok, drift: Math.round(a.drift * 1e6) / 1e6 }; };
+/** Every Bean on the node: the ledger audit's figures (whole hundredths, exact), which Delete account must leave as they are. */
+const audit = () => { const a = runLedgerAudit(); return { ok: a.ok, drift: a.drift }; };
 
 /** An enterprise holding 20 Beans of its own: its lead, then its other keepers, bound in order of seniority. */
 let enterprises = 0;
@@ -188,7 +194,7 @@ function makeEnterprise(lead: Id, others: Id[]): string {
             .run(new Date(Date.now() - (100 - i) * 86400000).toISOString(), ent, k.pk);
     });
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(ent, lead.pk);
-    transfer('genesis', ent, 20, 'seed enterprise', 'direct', true);
+    transfer('genesis', ent, hc(20), 'seed enterprise', 'direct', true);
     return ent;
 }
 const roleIn = (ent: string, pk: string) =>
@@ -199,12 +205,12 @@ const pausedOf = (ent: string) => db.prepare('SELECT paused, paused_by FROM memb
 const changeOf = (id: string) => db.prepare('SELECT status, reason FROM enterprise_keeper_changes WHERE id = ?').get(id) as { status: string; reason: string | null };
 const requestStatus = (id: string) => (db.prepare('SELECT status FROM enterprise_keeper_requests WHERE id = ?').get(id) as { status: string }).status;
 const pledgeOf = (ent: string, pk: string) => (db.prepare(
-    'SELECT COALESCE(SUM(amount), 0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(ent, pk) as { t: number }).t;
-const beansOf = (...ents: string[]) => ents.map(e => getBalance(e).balance);
+    'SELECT COALESCE(SUM(amount_c), 0) AS t FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(ent, pk) as { t: number }).t;
+/** The balances of these accounts, whole hundredths. */
+const balancesOf = (...ents: string[]) => ents.map(e => getBalance(e).balance_c);
 
 async function main(): Promise<void> {
     console.log('Delete account from an account the community closed, and from a visitor’s row\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     ADMIN = ownerTokenHeaders('admin');
@@ -224,8 +230,8 @@ async function main(): Promise<void> {
         const partner = makeMember(`PartnerRD${proposers}`, 0);
         db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(new Date(Date.now() - 60 * 86400_000).toISOString(), m.pk, partner.pk);
         const at = new Date().toISOString();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
-                    VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+                    VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, hc(5), at, at);
         return m;
     };
     const proposeReinstate = (subject: string) => call('POST', '/api/commons/decisions', proposer(),
@@ -240,7 +246,7 @@ async function main(): Promise<void> {
     {
         const kept = profileOf(rita.pk);
         assert(kept?.status === 'pruned' && kept?.callsign === 'RitaRD' && kept?.bio === 'RitaRD grows garlic' && kept?.contact_value === 'ritard@example.com'
-            && friendsOf(rita.pk) === 2 && copiesOf(rita.pk) === 2 && getBalance(rita.pk).balance === 0,
+            && friendsOf(rita.pk) === 2 && copiesOf(rita.pk) === 2 && getBalance(rita.pk).balance_c === 0,
             `setup: the removal kept Rita's name, bio, contact, 2 friends and 2 recovery copies, and took her 40 Beans (${JSON.stringify(kept)})`);
     }
     const auditBefore = audit();
@@ -257,8 +263,8 @@ async function main(): Promise<void> {
     assert(copiesOf(rita.pk) === 0 && tombstoned('recovery_shares', `${rita.pk}|${generation}`),
         `her sign-in recovery copies are gone, and tombstoned for a standby (${copiesOf(rita.pk)} left)`);
     const auditAfter = audit();
-    assert(auditAfter.ok && auditAfter.drift === auditBefore.drift && Math.abs(getCommonsBalance() - commonsBefore) < 1e-9
-        && getBalance(rita.pk).balance === 0 && txCountFor(rita.pk) === ritaTx,
+    assert(auditAfter.ok && auditAfter.drift === auditBefore.drift && getCommonsBalance() === commonsBefore
+        && getBalance(rita.pk).balance_c === 0 && txCountFor(rita.pk) === ritaTx,
         `no Beans move: her balance stays 0, the Commons and the ledger audit are unchanged, no transaction is written (audit ${JSON.stringify(auditBefore)} → ${JSON.stringify(auditAfter)})`);
     {
         const profile = await call('POST', '/api/profile/update', rita, { bio: 'Back again' });
@@ -279,9 +285,9 @@ async function main(): Promise<void> {
     // Rex is removed while Alice is buying from him: his key can't close that deal, so the answer says who can.
     {
         const rex = makeMember('RexRD', 0);
-        const offer = createPost('offer', 'produce', 'Rex walnuts', 'A bag of walnuts', 5, 'fixed', rex.pk)!;
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, updated_at)
-                    VALUES ('rex-deal', ?, ?, ?, 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(offer.id, alice.pk, rex.pk);
+        const offer = createPost('offer', 'produce', 'Rex walnuts', 'A bag of walnuts', hc(5), 'fixed', rex.pk)!;
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, updated_at)
+                    VALUES ('rex-deal', ?, ?, ?, ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(offer.id, alice.pk, rex.pk, hc(5));
         adminPruneUser(rex.pk, COMMUNITY_DECISION_ACTOR);
         const before = snapshot();
         const refused = await call('POST', '/api/member/purge', rex, {});
@@ -342,9 +348,9 @@ async function main(): Promise<void> {
         const dm = createConversation('dm', [alice.pk, vic.pk], alice.pk)!;
         const hi = lockedDm();   // a DM line is sent encrypted
         sendMessage(dm.id, alice.pk, hi.ciphertext, hi.nonce);
-        transfer('genesis', vic.pk, 30, 'welcome gift', 'direct', true);
+        transfer('genesis', vic.pk, hc(30), 'welcome gift', 'direct', true);
         const row = profileOf(vic.pk);
-        assert(!!row && String(row.callsign).startsWith('Visitor-') && getBalance(vic.pk).balance === 30,
+        assert(!!row && String(row.callsign).startsWith('Visitor-') && getBalance(vic.pk).balance_c === hc(30),
             `setup: Vic's row is a visitor's, with a generated name and 30 Beans (${JSON.stringify(row)})`);
         const auditBeforeV = audit();
         const commonsBeforeV = getCommonsBalance();
@@ -352,7 +358,7 @@ async function main(): Promise<void> {
         assert(vicDeletes.status === 200 && vicDeletes.body?.ok === true && erased(vic.pk),
             `Vic signs Delete account and its row is erased (${show(vicDeletes)}; ${JSON.stringify(profileOf(vic.pk))})`);
         const auditAfterV = audit();
-        assert(getBalance(vic.pk).balance === 0 && Math.abs(getCommonsBalance() - (commonsBeforeV + 30)) < 1e-6
+        assert(getBalance(vic.pk).balance_c === 0 && getCommonsBalance() === commonsBeforeV + hc(30)
             && auditAfterV.ok && auditAfterV.drift === auditBeforeV.drift,
             `its 30 Beans go to the Commons, as a member's self-delete sends theirs, and the ledger audit is unchanged (Commons ${commonsBeforeV} → ${getCommonsBalance()})`);
         const reply = await call('POST', '/api/messages/send', vic, { conversationId: dm.id, authorPubkey: vic.pk, ...lockedDm() });
@@ -374,8 +380,8 @@ async function main(): Promise<void> {
         const commonsBeforeN = getCommonsBalance();
         const niaDeletes = await call('POST', '/api/member/purge', nia, {});
         assert(niaDeletes.status === 200 && niaDeletes.body?.message === 'Account successfully purged from node.' && erased(nia.pk)
-            && friendsOf(nia.pk) === 0 && copiesOf(nia.pk) === 0 && getBalance(nia.pk).balance === 0
-            && Math.abs(getCommonsBalance() - (commonsBeforeN + 25)) < 1e-6,
+            && friendsOf(nia.pk) === 0 && copiesOf(nia.pk) === 0 && getBalance(nia.pk).balance_c === 0
+            && getCommonsBalance() === commonsBeforeN + hc(25),
             `Nia deletes her account as before: erased, friends and copies gone, her 25 Beans to the Commons (${show(niaDeletes)})`);
         assert(String(joinHashOf(nia.pk)).startsWith('released:') && openJoinTaken('door-hash-nia') === null,
             `and the sign-in account she joined with is released, so it can join again (${joinHashOf(nia.pk)})`);
@@ -431,7 +437,7 @@ async function main(): Promise<void> {
         assert(roleIn(ent, lena.pk) === 'lead' && getLeadInactivity(ent).leadPubkey === lena.pk && changeOf(removeKai.id).status === 'pending'
             && changeOf(addLena.id).status === 'pending',
             'setup: the removal leaves Lena lead, whom the keepers could replace by succession, and her two keeper changes pending');
-        const beansBefore = beansOf(ent, mos);
+        const beansBefore = balancesOf(ent, mos);
         const auditBefore6 = audit();
 
         const lenaDeletes = await call('POST', '/api/member/purge', lena, {});
@@ -447,19 +453,19 @@ async function main(): Promise<void> {
             && roleIn(mos, lena.pk) === null,
             `the keeper change she made, and the one that would have added her to Mo's enterprise, close now (${JSON.stringify([changeOf(removeKai.id), changeOf(addLena.id)])})`);
         const auditAfter6 = audit();
-        assert(JSON.stringify(beansOf(ent, mos)) === JSON.stringify(beansBefore) && auditAfter6.ok && auditAfter6.drift === auditBefore6.drift,
-            `no enterprise's Beans move, and the ledger audit is unchanged (${JSON.stringify(beansBefore)} → ${JSON.stringify(beansOf(ent, mos))})`);
+        assert(JSON.stringify(balancesOf(ent, mos)) === JSON.stringify(beansBefore) && auditAfter6.ok && auditAfter6.drift === auditBefore6.drift,
+            `no enterprise's Beans move, and the ledger audit is unchanged (${JSON.stringify(beansBefore)} → ${JSON.stringify(balancesOf(ent, mos))})`);
     }
     {
         // Sol is the only keeper of an enterprise, and is removed.
         const sol = makeMember('SolRD', 0);
         const solo = makeEnterprise(sol, []);
         adminPruneUser(sol.pk, COMMUNITY_DECISION_ACTOR);
-        const beansBefore = beansOf(solo);
+        const beansBefore = balancesOf(solo);
         const solDeletes = await call('POST', '/api/member/purge', sol, {});
         const p = pausedOf(solo);
         assert(solDeletes.status === 200 && keepersOf(solo).length === 0 && p.paused === 1 && p.paused_by === sol.pk
-            && JSON.stringify(beansOf(solo)) === JSON.stringify(beansBefore),
+            && JSON.stringify(balancesOf(solo)) === JSON.stringify(beansBefore),
             `a removed sole keeper's Delete account pauses the enterprise, as when its last keeper leaves, its Beans kept (${show(solDeletes)}; ${JSON.stringify(p)})`);
     }
     {
@@ -468,7 +474,7 @@ async function main(): Promise<void> {
         const ada = makeMember('AdaRD', 15), ivy = makeMember('IvyRD', 0), ian = makeMember('IanRD', 0);
         const shared = makeEnterprise(ada, [ivy, ian]);
         const alone = makeEnterprise(ada, []);
-        const beansBefore = beansOf(shared, alone);
+        const beansBefore = balancesOf(shared, alone);
         const commonsBeforeA = getCommonsBalance();
         const auditBeforeA = audit();
         const adaDeletes = await call('POST', '/api/member/purge', ada, {});
@@ -480,23 +486,23 @@ async function main(): Promise<void> {
         const succession = await call('POST', `/api/enterprise/${shared}/succession/propose`, ian, { candidatePubkey: ian.pk });
         assert(succession.status === 200, `and Ian can propose a new lead there (${show(succession)})`);
         const auditAfterA = audit();
-        assert(JSON.stringify(beansOf(shared, alone)) === JSON.stringify(beansBefore) && Math.abs(getCommonsBalance() - (commonsBeforeA + 15)) < 1e-6
+        assert(JSON.stringify(balancesOf(shared, alone)) === JSON.stringify(beansBefore) && getCommonsBalance() === commonsBeforeA + hc(15)
             && auditAfterA.ok && auditAfterA.drift === auditBeforeA.drift,
-            `her own 15 Beans go to the Commons as before, the enterprises keep theirs, and the ledger audit is unchanged (${JSON.stringify(beansBefore)} → ${JSON.stringify(beansOf(shared, alone))})`);
+            `her own 15 Beans go to the Commons as before, the enterprises keep theirs, and the ledger audit is unchanged (${JSON.stringify(beansBefore)} → ${JSON.stringify(balancesOf(shared, alone))})`);
     }
     {
         // Pia is an ordinary keeper under Gus, with a 10-Bean pledge, and Gus has proposed removing her.
         const gus = makeMember('GusRD', 0), pia = makeMember('PiaRD', 0), quin = makeMember('QuinRD', 0);
         const ent = makeEnterprise(gus, [pia, quin]);
-        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES (?, ?, ?, 10)').run(crypto.randomUUID(), pia.pk, ent);
+        db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), pia.pk, ent, hc(10));
         const removePia = proposeKeeperRemoval(ent, gus.pk, pia.pk).change!;
-        const beansBefore = beansOf(ent);
+        const beansBefore = balancesOf(ent);
         const piaDeletes = await call('POST', '/api/member/purge', pia, {});
         const keepers = keepersOf(ent);
         assert(piaDeletes.status === 200 && roleIn(ent, pia.pk) === null && roleIn(ent, gus.pk) === 'lead' && roleIn(ent, quin.pk) === 'keeper'
             && keepers.every(k => k.auto_promoted_at === null) && pausedOf(ent).paused === 0,
             `a plain keeper's Delete account unbinds her and leaves Gus lead, nothing else changed (${JSON.stringify(keepers)})`);
-        assert(pledgeOf(ent, pia.pk) === 0 && changeOf(removePia.id).status === 'failed' && JSON.stringify(beansOf(ent)) === JSON.stringify(beansBefore),
+        assert(pledgeOf(ent, pia.pk) === 0 && changeOf(removePia.id).status === 'failed' && JSON.stringify(balancesOf(ent)) === JSON.stringify(beansBefore),
             `her pledge is released as when a keeper steps down, the change naming her closes, and the enterprise keeps its Beans (pledge ${pledgeOf(ent, pia.pk)}; ${JSON.stringify(changeOf(removePia.id))})`);
     }
 

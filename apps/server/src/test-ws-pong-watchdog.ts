@@ -1,11 +1,16 @@
 /**
  * WebSocket Opt-in Application-level Pong Integration Test
  *
+ * A ping is answered only when it asks to be (`wantPong: true`, what both apps send): that is the protocol, so a socket
+ * that never asks never hears a pong. An app from before the opt-in (14 Sep, #767) took any frame it didn't know for a
+ * doorbell and ran a full sync for each, every 30 s; cutover N2 keeps the opt-in (audit E10, the deciding review of #3047).
+ *
  * Verifies:
  * 1. Default/legacy ping {"type":"ping"} receives NO pong reply (Trap 1: protecting old clients)
  * 2. Opt-in ping {"type":"ping","wantPong":true} receives {"type":"pong"}
- * 3. Opt-in ping {"type":"ping","pong":true} receives {"type":"pong"}
+ * 3. `wantPong` is the only opt-in key: {"type":"ping","pong":true} receives NO pong
  * 4. Non-ping or malformed messages are handled safely without crashing
+ * 5. The length bound: an opt-in ping in a frame of 256 bytes or more is never parsed, so it receives no reply
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -79,7 +84,14 @@ async function main() {
     assert(!otherPongReceived, 'Non-ping message does NOT trigger pong reply');
     receivedMessages.length = 0;
 
-    // 5. Malformed payload does not crash server
+    // 5. The length bound: a frame of 256 bytes or more is never scanned or parsed, so even an opt-in ping gets no reply.
+    ws.send(JSON.stringify({ type: 'ping', wantPong: true, pad: 'x'.repeat(256) }));
+    await sleep(150);
+    const longPongReceived = receivedMessages.some(m => m.type === 'pong');
+    assert(!longPongReceived, 'An opt-in ping in a frame of 256 bytes or more receives no reply');
+    receivedMessages.length = 0;
+
+    // 6. Malformed payload does not crash server
     ws.send('NOT_VALID_JSON{:::');
     await sleep(150);
     assert(ws.readyState === WebSocket.OPEN, 'Malformed message handled safely without closing socket');

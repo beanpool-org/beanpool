@@ -1,8 +1,9 @@
 /**
  * Paying from a Commons pot that isn't a number moves nothing (confirmation of #1445, NB-3, 2026-10-02).
  *
- * The pot is the COMMONS_BALANCE global. It is not a finite number when its COMMONS_POOL row held ±Infinity at boot,
- * and it is unknown (NaN) when the row held text or NULL (NB-1, test-takeover-infinite-balance covers the boot). Every
+ * The pot is the COMMONS_BALANCE global. It was not a finite number when its COMMONS_POOL row held ±Infinity at boot,
+ * and it is unknown (NaN) when the row held text or NULL (NB-1, test-takeover-infinite-balance covers the boot); since
+ * whole hundredths a row is read as a safe integer or NaN, so a ±Infinity row reads back as the unknown pot too. Every
  * write of the pot refuses such a value (engine/audit.ts persistCommonsBalance), so a payment that moved the recipient
  * first and wrote the pot last was a half-move: `payFromCommons(…, { allowDeficit })` outside a conservingTransaction
  * credited the recipient, wrote the history row, and only then threw at the pot's flush. The credit stayed and the
@@ -20,7 +21,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { generateKeyPair } from '@libp2p/crypto/keys';
@@ -47,23 +47,30 @@ function assert(cond: unknown, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths,
+ * and the pot, the rows and the audit's drift are compared as the integers they are, exactly.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/** `balance` is the story's Beans; each member has 500 Beans of earned credit. */
 function makeMember(callsign: string, balance: number): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`)
-        .run(pk, callsign);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
+        .run(pk, callsign, hc(500));
     // Epoch at now: epoch 0 would charge ~56 years of demurrage at the first read.
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, hc(balance), ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
 
-const potRow = () => db.prepare("SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown; t: string };
-const rowBalance = (pk: string) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance;
+const potRow = () => db.prepare("SELECT balance_c, typeof(balance_c) AS t FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance_c: unknown; t: string };
+const rowBalance = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c;
 const txCount = () => (db.prepare('SELECT COUNT(*) AS c FROM transactions').get() as { c: number }).c;
 /** Everything a payment could touch, as one string to compare. */
 const snapshot = (pks: string[]) => JSON.stringify({
-    rows: pks.map((pk) => [pk, rowBalance(pk), ledger.getAccount(pk).balance]),
+    rows: pks.map((pk) => [pk, rowBalance(pk), ledger.getAccount(pk).balance_c]),
     pot: potRow(), memory: String(COMMONS_BALANCE), tx: txCount(),
 });
 
@@ -80,49 +87,50 @@ async function main(): Promise<void> {
 
     // ── 1. A healthy pot: unchanged behaviour ───────────────────────────────────────────────
     console.log('\n── 1. a healthy pot still pays, and the ledger adds up ──');
-    setCommonsBalance(20);
-    db.prepare("UPDATE accounts SET balance = 20 WHERE public_key = 'COMMONS_POOL'").run();
+    setCommonsBalance(hc(20));
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'").run(hc(20));
     db.prepare("DELETE FROM node_config WHERE key = 'ledger_audit_baseline'").run();
     const base = runLedgerAudit();
     assert(base.ok && base.badBalances === 0, `the starting ledger adds up (${JSON.stringify(base)})`);
 
-    const paid = payFromCommons(ben, 5, 'a commons grant');
-    assert(paid && paid.from === 'COMMONS_POOL' && rowBalance(ben) === 5 && getCommonsBalanceExact() === 15 && potRow().balance === 15,
-        `5 paid from a pot of 20 outside any transaction: Ben's row 5, the pot 15 in memory and in its row (${rowBalance(ben)}, ${getCommonsBalanceExact()}, ${potRow().balance})`);
-    const refused = payFromCommons(ben, 50, 'more than the pot holds');
-    assert(refused === null && rowBalance(ben) === 5 && getCommonsBalanceExact() === 15, 'more than the pot holds, with no deficit allowed: refused, nothing moves');
-    const deficit = payFromCommons(cara, 25, 'a write-off into deficit', { allowDeficit: true });
-    assert(deficit && rowBalance(cara) === 25 && getCommonsBalanceExact() === -10 && potRow().balance === -10,
-        `25 paid with a deficit allowed: Cara's row 25, the pot -10 in memory and in its row (${rowBalance(cara)}, ${getCommonsBalanceExact()}, ${potRow().balance})`);
+    const paid = payFromCommons(ben, hc(5), 'a commons grant');
+    assert(paid && paid.from === 'COMMONS_POOL' && rowBalance(ben) === hc(5) && getCommonsBalanceExact() === hc(15) && potRow().balance_c === hc(15),
+        `5 paid from a pot of 20 outside any transaction: Ben's row 5, the pot 15 in memory and in its row (${rowBalance(ben)}, ${getCommonsBalanceExact()}, ${potRow().balance_c} hundredths)`);
+    const refused = payFromCommons(ben, hc(50), 'more than the pot holds');
+    assert(refused === null && rowBalance(ben) === hc(5) && getCommonsBalanceExact() === hc(15), 'more than the pot holds, with no deficit allowed: refused, nothing moves');
+    const deficit = payFromCommons(cara, hc(25), 'a write-off into deficit', { allowDeficit: true });
+    assert(deficit && rowBalance(cara) === hc(25) && getCommonsBalanceExact() === -hc(10) && potRow().balance_c === -hc(10),
+        `25 paid with a deficit allowed: Cara's row 25, the pot -10 in memory and in its row (${rowBalance(cara)}, ${getCommonsBalanceExact()}, ${potRow().balance_c} hundredths)`);
     const healthy = runLedgerAudit();
-    assert(healthy.ok && Math.abs(healthy.drift) < 1e-9 && healthy.badBalances === 0, `the ledger still adds up (${JSON.stringify(healthy)})`);
+    assert(healthy.ok && healthy.drift === 0 && healthy.badBalances === 0, `the ledger still adds up, exactly (${JSON.stringify(healthy)})`);
 
     // ── The federation link fundCommission draws for ──────────────────────────────────────────
     const peerKey = await generateKeyPair('Ed25519');
     const PEER = peerIdFromPrivateKey(peerKey).toString();
     const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
     addConnector(PEER_ADDR, 'peer', 'byron', 'https://byron.beanpool.org');
-    setConnectorCreditCap(PEER_ADDR, 500);
+    setConnectorCreditCap(PEER_ADDR, hc(500));
     const link = ensureFederationLink(PEER, 'byron', createTreasury)!;
     ensureBridgeAccount(PEER);
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(bridgeAccountId(PEER));
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(bridgeAccountId(PEER));
     reconcileLedgerFromDb();
-    setCommissionCeiling(PEER, 500);
+    setCommissionCeiling(PEER, hc(500));
     assert(link && rowBalance(link.treasuryPubkey) !== undefined, 'a federation link with an empty enterprise to fund');
 
     // A healthy pot funds a commission, as before.
-    setCommonsBalance(200);
-    db.prepare("UPDATE accounts SET balance = 200 WHERE public_key = 'COMMONS_POOL'").run();
+    setCommonsBalance(hc(200));
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'").run(hc(200));
     db.prepare("DELETE FROM node_config WHERE key = 'ledger_audit_baseline'").run();
     runLedgerAudit();
-    const funded = fundCommission(PEER, 10);
-    assert(funded.ok === true && funded.drawnFromCommons === 10.15 && getCommonsBalanceExact() === 189.85,
+    const funded = fundCommission(PEER, hc(10));
+    // 10 and its fee of 0.15 (1.5% of 1000 hundredths, a whole 15): the pot gives 1015 hundredths.
+    assert(funded.ok === true && funded.drawnFromCommons === hc(10.15) && getCommonsBalanceExact() === hc(189.85),
         `a commission of 10 draws 10.15 from a pot of 200 (${JSON.stringify(funded).slice(0, 160)}, pot ${getCommonsBalanceExact()})`);
     const afterFund = runLedgerAudit();
     assert(afterFund.ok, `and the ledger adds up (${JSON.stringify(afterFund)})`);
-    db.prepare('UPDATE accounts SET balance = 0 WHERE public_key = ?').run(link.treasuryPubkey);
-    setCommonsBalance(getCommonsBalanceExact() + 10.15);
-    db.prepare("UPDATE accounts SET balance = ? WHERE public_key = 'COMMONS_POOL'").run(getCommonsBalanceExact());
+    db.prepare('UPDATE accounts SET balance_c = 0 WHERE public_key = ?').run(link.treasuryPubkey);
+    setCommonsBalance(getCommonsBalanceExact() + hc(10.15));
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'").run(getCommonsBalanceExact());
     reconcileLedgerFromDb();
 
     // ── 2–4. A pot that isn't a number ───────────────────────────────────────────────────────
@@ -131,22 +139,27 @@ async function main(): Promise<void> {
         const rowBefore = potRow();
         // As a boot leaves it: the row holds what makes the pot so (text for the unknown pot, ±9e999 for ±Infinity), and
         // the pot in memory is what the row gives. A failed move's resync reads the row back, so the two must agree.
+        // Whole hundredths: a row is read as a safe integer or as the unknown pot, NaN (state-engine.ts commonsPotFromRow),
+        // so ±9e999 now reads back as NaN too, and a pot of ±Infinity in memory is one no boot leaves. It is still refused
+        // by every move below; the first refusal that resyncs memory to the rows (the send's) leaves the pot the row gives.
         const broken = Number.isNaN(pot) ? "'abc'" : pot > 0 ? '9e999' : '-9e999';
-        db.prepare(`UPDATE accounts SET balance = ${broken} WHERE public_key = 'COMMONS_POOL'`).run();
+        db.prepare(`UPDATE accounts SET balance_c = ${broken} WHERE public_key = 'COMMONS_POOL'`).run();
         const brokenRow = potRow();
         setCommonsBalance(pot);
         const keys = [ben, cara, link.treasuryPubkey];
         const before = snapshot(keys);
+        /** The same, with memory holding the pot this row gives: the unknown pot (NaN) for text and for ±9e999 alike. */
+        const asTheRowGives = (snap: string) => snap.replace(`"memory":"${String(pot)}"`, '"memory":"NaN"');
 
-        const withDeficit = attempt(() => payFromCommons(ben, 1, 'a grant with a deficit allowed', { allowDeficit: true }));
+        const withDeficit = attempt(() => payFromCommons(ben, hc(1), 'a grant with a deficit allowed', { allowDeficit: true }));
         assert(withDeficit.threw === undefined && withDeficit.value === null,
             `payFromCommons with allowDeficit, outside any transaction, is refused with null, not a throw (${withDeficit.threw ?? JSON.stringify(withDeficit.value)?.slice(0, 80)})`);
         assert(snapshot(keys) === before, `nothing moved: Ben's balance in memory and in its row, the history, the pot's row (${snapshot(keys)} vs ${before})`);
 
-        const without = attempt(() => payFromCommons(cara, 1, 'a grant'));
+        const without = attempt(() => payFromCommons(cara, hc(1), 'a grant'));
         assert(without.threw === undefined && without.value === null && snapshot(keys) === before, `without allowDeficit: null, nothing moved (${without.threw ?? 'null'})`);
 
-        const commission = attempt(() => fundCommission(PEER, 10));
+        const commission = attempt(() => fundCommission(PEER, hc(10)));
         const c = commission.value as any;
         assert(commission.threw === undefined && c?.ok === false && c?.reason === 'commons_not_a_number',
             `fundCommission refuses: the pot isn't a number (${commission.threw ?? JSON.stringify(c).slice(0, 200)})`);
@@ -154,21 +167,23 @@ async function main(): Promise<void> {
         assert(snapshot(keys) === before, 'and nothing moved');
 
         // Any other move (here a send from genesis, past every gate): refused with the plain words, as a
-        // CommonsPotUnknownError a route answers 503, and nothing moves (#1465 review, NB-2).
-        const sent = attempt(() => transfer('genesis', ben, 1, 'a send', 'direct', true));
-        assert(sent.threw === COMMONS_POT_PAUSED && snapshot(keys) === before, `a send is refused in plain words, nothing moved (${sent.threw ?? 'no throw'})`);
+        // CommonsPotUnknownError a route answers 503, and nothing moves (#1465 review, NB-2). Its refusal resyncs memory to
+        // the rows: no Bean moves, and the pot in memory is the one the row gives.
+        const sent = attempt(() => transfer('genesis', ben, hc(1), 'a send', 'direct', true));
+        assert(sent.threw === COMMONS_POT_PAUSED && snapshot(keys) === asTheRowGives(before),
+            `a send is refused in plain words, nothing moved, the pot in memory the unknown pot its row gives (${sent.threw ?? 'no throw'}; ${snapshot(keys)} vs ${asTheRowGives(before)})`);
         let caught: unknown = null;
-        try { transfer('genesis', ben, 1, 'a send', 'direct', true); } catch (e) { caught = e; }
+        try { transfer('genesis', ben, hc(1), 'a send', 'direct', true); } catch (e) { caught = e; }
         const PotError = (auditModule as Record<string, unknown>).CommonsPotUnknownError as (new () => Error) | undefined;
         assert(!!PotError && caught instanceof PotError && (caught as { code?: string }).code === 'COMMONS_POT_UNKNOWN', 'thrown as a CommonsPotUnknownError');
 
         // The pot set back to what its row holds, as the operator's repair does: the books add up, nothing minted or lost.
-        assert(JSON.stringify(potRow()) === JSON.stringify(brokenRow) && String(COMMONS_BALANCE) === String(pot),
-            `the pot's row was never written, and the pot is still ${pot} (${JSON.stringify(potRow())}, ${String(COMMONS_BALANCE)})`);
-        db.prepare("UPDATE accounts SET balance = ? WHERE public_key = 'COMMONS_POOL'").run(rowBefore.balance);
-        setCommonsBalance(rowBefore.balance as number);
+        assert(JSON.stringify(potRow()) === JSON.stringify(brokenRow) && String(COMMONS_BALANCE) === 'NaN',
+            `the pot's row was never written, and the pot is the unknown pot its row gives, NaN (was ${pot}) (${JSON.stringify(potRow())}, ${String(COMMONS_BALANCE)})`);
+        db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = 'COMMONS_POOL'").run(rowBefore.balance_c);
+        setCommonsBalance(rowBefore.balance_c as number);
         const audit = runLedgerAudit();
-        assert(audit.ok && audit.badBalances === 0 && Math.abs(audit.drift) < 1e-9, `with the pot mended, the ledger adds up (${JSON.stringify(audit)})`);
+        assert(audit.ok && audit.badBalances === 0 && audit.drift === 0, `with the pot mended, the ledger adds up, exactly (${JSON.stringify(audit)})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

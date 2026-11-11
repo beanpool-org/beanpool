@@ -1,4 +1,4 @@
-import { t, tn } from '@beanpool/core';
+import { isHundredths, t, tn } from '@beanpool/core';
 import type { TreasurySummary } from './db';
 import { pledgeClosedLine } from './enterprise-pledge';
 
@@ -27,17 +27,20 @@ export interface EnterpriseCardStatus {
     isFunded: boolean;
     /** The card says "Pledge Beans": a goal not yet reached, and an enterprise the node still takes pledges for. */
     takesPledges: boolean;
+    /** What the card shows as raised, whole hundredths of a Bean. */
     currentRaised: number;
     /** Meta line under the name, e.g. "Paused for season · 2 keepers". */
     meta: string;
 }
 
-type CardInput = Pick<TreasurySummary, 'balance' | 'liveOffers' | 'goalAmount' | 'currentAmount' | 'lifecycle' | 'status' | 'paused' | 'keepers' | 'deadlineAt'>;
+type CardInput = Pick<TreasurySummary, 'balance_c' | 'liveOffers' | 'goalAmount_c' | 'currentAmount_c' | 'lifecycle' | 'status' | 'paused' | 'keepers' | 'deadlineAt'>;
 
+/** Whole hundredths of a Bean, every figure (the node's `*_c` fields): compared as they are, never scaled. */
 export function enterpriseCardStatus(item: CardInput): EnterpriseCardStatus {
-    const hasGoal = item.goalAmount != null && item.goalAmount > 0;
-    const currentRaised = item.currentAmount != null ? item.currentAmount : Math.max(0, item.balance);
-    const goalAmount = item.goalAmount || 1;
+    const hasGoal = isHundredths(item.goalAmount_c) && item.goalAmount_c > 0;
+    const raised = isHundredths(item.currentAmount_c) ? item.currentAmount_c : null;
+    const currentRaised = raised !== null ? raised : Math.max(0, isHundredths(item.balance_c) ? item.balance_c : 0);
+    const goalAmount = hasGoal ? item.goalAmount_c as number : 1;
     const isFunded = hasGoal && (currentRaised >= goalAmount || item.status === 'funded' || item.status === 'completed');
 
     let stateBadge: EnterpriseStateBadge = null;

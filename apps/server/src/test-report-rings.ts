@@ -48,6 +48,7 @@ import { knockRefusal } from './engine/probation.js';
 import { writeOpenJoinRecord } from './engine/open-join.js';
 import { hideTally } from './engine/auto-moderation.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -72,7 +73,7 @@ function member(name: string, daysAgo: number, invitedBy?: Id): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), (invitedBy ?? owner).pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     // The 150-day members are the established reporters (off probation: a reporter on it counts for nothing, design 2.3).
     if (daysAgo >= 150) for (let i = 0; i < 3; i++) oldPost(id, `${name} established ${i}`);
     return id;
@@ -90,7 +91,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -109,8 +111,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
 /** A moderator's key session, signed in as the app does it: challenge → signature → handshake → session. */
 function keySession(id: Id): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), id.priv).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (!solved.ok) throw new Error(`no session: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`no session: ${ex.error}`);
@@ -222,7 +224,7 @@ async function main(): Promise<void> {
     // ── 2. the same ring still hides a brand-new account's post ──────────────────────────────────
     console.log('\n── 2. the same ring against a brand-new account ──');
     const sid = member('Sid', 0);
-    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', credits: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
+    const sidPost = await call('POST', sid, '/api/marketplace/posts', { type: 'offer', category: 'other', title: 'Sid offer', description: 'Cheap watches', price_c: 0, authorPublicKey: sid.pk, photos: TEST_PHOTOS });
     assert(sidPost.status === 200, `setup: a member who joined today posts (${sidPost.status})`);
     await reportAll(ring, sidPost.body?.post?.id, sid);
     assert(!!hiddenAt(sidPost.body?.post?.id), 'three week-old members hide a brand-new account\'s post: it is not well above them');

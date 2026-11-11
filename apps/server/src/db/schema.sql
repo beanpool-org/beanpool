@@ -32,35 +32,32 @@ CREATE TABLE IF NOT EXISTS members (
     -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
     can_operate INTEGER DEFAULT 0,
     -- On the credit committee (DESIGN-invites-and-names-list-fable.md §5.4; engine/vouchers.ts): an admin an owner put on it
-    -- makes and stops vouchers and sets their budgets, as every owner does. Cleared when they stop being an admin. Also
-    -- added by db.ts's ALTER before this file runs, for the touch trigger's list below.
+    -- makes and stops vouchers and sets their budgets, as every owner does. Cleared when they stop being an admin.
     credit_committee INTEGER DEFAULT 0,
-    -- #127: declared HERE as well as by the guarded ALTER in db.ts, because the ALTER now runs BEFORE
-    -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
-    -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
-    -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
+    -- #127: a column a schema step in db.ts adds to an older database is declared HERE too, because the steps run
+    -- BEFORE db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
+    -- this line is the only thing that creates the column. A step without a declaration here silently gives fresh
     -- installs a table missing the column, which is caught by test-schema-upgrade-fresh-shape.ts.
+    -- MONEY IS WHOLE HUNDREDTHS OF A BEAN (@beanpool/core hundredths.ts; DESIGN-atomic-beans-fable.md): every money column
+    -- is INTEGER and named *_c, so a REAL or a whole-Bean figure can never be mistaken for one.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
-    earned_credit REAL DEFAULT 0,
+    earned_credit_c INTEGER NOT NULL DEFAULT 0,
     -- Enterprise Credit Model (Rules 6 & 7)
-    earned_surplus REAL DEFAULT 0,
-    working_capital_ceiling REAL DEFAULT NULL,
-    -- Grandfathered credit floor for enterprises (docs/the-commons.md §2.4, §6 Slice 4).
-    -- Auto-cleared once keepers' pledges exceed it.
-    legacy_credit_floor REAL DEFAULT NULL,
+    earned_surplus_c INTEGER NOT NULL DEFAULT 0,
+    working_capital_ceiling_c INTEGER DEFAULT NULL,
     -- Profile mutation timestamp, for cache-busting.
     profile_updated_at DATETIME,
     -- Community working style / archetype signature (JSON or archetype key)
     archetype TEXT,
     -- Enterprise / Project unification (docs/the-commons.md §2.1, Slice 3)
     purpose TEXT,
-    goal_amount REAL DEFAULT NULL CHECK (goal_amount IS NULL OR goal_amount >= 0),
+    goal_amount_c INTEGER DEFAULT NULL CHECK (goal_amount_c IS NULL OR goal_amount_c >= 0),
     deadline_at DATETIME DEFAULT NULL,
     lifecycle TEXT DEFAULT 'ongoing' CHECK (lifecycle IN ('ongoing', 'bounded')),
     paused INTEGER DEFAULT 0 CHECK (paused IN (0, 1)),
     paused_at DATETIME,
     paused_by TEXT,
-    paused_floor_snapshot REAL,
+    paused_floor_snapshot_c INTEGER,
     wind_up_initiated_at DATETIME,
     wind_up_initiated_by TEXT,
     wind_up_finalised_at DATETIME,
@@ -96,6 +93,11 @@ CREATE TABLE IF NOT EXISTS members (
     -- cleared: the row stays 'pruned', and nothing brings such an account back (no reinstate vote, no admin path;
     -- state-engine.ts isDeletedByOwner). In members_touch_updated_at's list, so delta sync carries it.
     deleted_by_owner_at TEXT,
+    -- The member's own "Show who invited me to other members" (Settings → Privacy; PUT /api/profile/privacy). 1, the
+    -- default: every member of this community reads "Invited by @x" on their profile. 0: a plain member reads no inviter
+    -- line; owners, admins, the inviter and the member themself still do (state-engine.ts getTrustProfileForViewer,
+    -- DESIGN-invites-vouching-review-fable.md §3 ask 2). In members_touch_updated_at's list, so delta sync carries it.
+    inviter_shown INTEGER DEFAULT 1,
     -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), an
     -- enterprise's `paused` or an off-board `status`, an account's pause among them (members_touch_board_standing); and, while an enterprise is off the
     -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
@@ -108,13 +110,12 @@ CREATE TABLE IF NOT EXISTS members (
     -- banner was set, replaced or taken down, which its listings carry (engine/shops.ts enterpriseBannerMoved; Pictures
     -- S6): the same kind of timing, about an enterprise, never a member. NULL: never changed since this column came in.
     -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
-    -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
-    -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
+    -- statement, so delta sync carries it to a standby; listed, the touch trigger would restamp a standby's copied row.
     board_standing_changed_at TEXT,
     -- foldName(callsign) (engine names.ts), the one rule by which two names are the same name (#1956): what every name
-    -- lookup and name check compares, through idx_members_callsign_fold (db.ts migrateCallsignFold, which also adds it to
-    -- an older table). Written by per-connection TEMP triggers, never stored ones, and re-folded at every boot. Not
-    -- copied to a standby (each server makes its own) and not in members_touch_updated_at's list.
+    -- lookup and name check compares, through idx_members_callsign_fold (below). Written by per-connection TEMP triggers
+    -- (the engine's installNameFold), never stored ones. Not copied to a standby (each server makes its own) and not in
+    -- members_touch_updated_at's list.
     callsign_fold TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
@@ -126,8 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(boar
 -- the board leaves off for a paused or finished enterprise or a paused account (ENTERPRISE_ON_BOARD_BY_KEY_SQL: the same
 -- expression, so the planner takes this index), and the standing of the authors whose standing ever moved, by key (the
 -- set's ETag), each from the few rows they hold. Joined per listing instead, the busy town's set took 18 ms at 100k
--- posts (2026-10-10). A node from before 'disabled' was in it has the older one replaced at boot (db.ts
--- replaceOffBoardShapes).
+-- posts (2026-10-10).
 CREATE INDEX IF NOT EXISTS idx_members_off_board ON members(public_key)
     WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed', 'disabled')));
 CREATE INDEX IF NOT EXISTS idx_members_standing_by_key ON members(public_key, board_standing_changed_at)
@@ -140,6 +140,13 @@ CREATE INDEX IF NOT EXISTS idx_members_joined_at ON members(joined_at);
 CREATE INDEX IF NOT EXISTS idx_members_profile_updated_at ON members(profile_updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
+-- One name per member, A–Z in any case, among the members who hold one ('migrated' and 'pruned' left, so their name is
+-- free again). The app checks first (engine/members.ts isCallsignAvailable); this is the database's own word.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_members_callsign_unique ON members(lower(callsign)) WHERE status NOT IN ('migrated', 'pruned');
+-- Names in any alphabet (#1956): every name lookup and name check compares callsign_fold, through this. NOT unique, on
+-- purpose: two members may already hold names that fold the same ("Олег" and "олег"), and both are kept;
+-- isCallsignAvailable refuses a new one at registration and at a rename.
+CREATE INDEX IF NOT EXISTS idx_members_callsign_fold ON members(callsign_fold) WHERE status NOT IN ('migrated', 'pruned');
 -- The members' own keys (is_visitor 0), from the index alone: the rule on which of push_tokens, push_token_leaves and
 -- pricing_reports travel to a standby (engine/replication-manifest.ts MEMBERS_OWN, MEMBERS_REPORTS) reads them on every
 -- page and hash slice of a copy, and without it walks every member's row, inline photo and all (at 6,000 members with
@@ -165,9 +172,7 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     used_by TEXT REFERENCES members(public_key),
     used_at DATETIME,
     intended_for TEXT,
-    -- Protocol v1 Admin Genesis Invites. Declared here as well as in db.ts's ALTER because the
-    -- ALTER now runs BEFORE this file is exec'd: on a fresh database the table does not exist yet,
-    -- the ALTER fails into its empty catch, and this line is the only thing that creates the column.
+    -- Protocol v1 Admin Genesis Invites.
     genesis_type TEXT DEFAULT 'standard',
     -- Who issued an admin (seed) invite: the owner/admin's pubkey under a key session, 'owner:password' under the
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
@@ -182,14 +187,14 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- The vouch the invite carries (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §4): one of core's
     -- VOUCH_PRESETS, held from its maker's budget when the code was made and landing on the joiner at the redeem. NULL for
     -- every other invite; an offline ticket never carries one. Declared here for the same reason as genesis_type.
-    vouch_amount INTEGER,
+    vouch_amount_c INTEGER,
     -- A voucher budget the invite promises (DESIGN-invites-and-names-list-amend3-fable.md §2, engine/vouchers.ts
-    -- landInviteVoucher): 100 to 2,000 in 100s, written only with names_entry_id, by an owner or a credit-committee admin.
+    -- landInviteVoucher): 100 to 2,000 Beans in 100s, in whole hundredths, written only with names_entry_id, by an owner or a credit-committee admin.
     -- Nothing is allocated when the code is made; whoever joins with it, confirmed against the entry, is made a voucher with
     -- this budget then. `voucher_outcome` is what the redeem (or, with two admins to confirm, the second confirmation) did
     -- with it: 'made', 'awaiting_second', or why not. NULL for every other invite. Declared here for the same reason as
     -- genesis_type.
-    voucher_level INTEGER,
+    voucher_level_c INTEGER,
     voucher_outcome TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -199,8 +204,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 CREATE TABLE IF NOT EXISTS accounts (
     public_key TEXT PRIMARY KEY,
     -- NOT NULL: better-sqlite3 binds NaN as NULL, so a nullable column took a NaN balance silently (review F1,
-    -- 2026-10-01). A node whose table predates this is rebuilt at boot (db.ts makeAccountBalanceNotNull).
-    balance REAL NOT NULL DEFAULT 0.0,
+    -- 2026-10-01). Whole hundredths of a Bean (hundredths.ts).
+    balance_c INTEGER NOT NULL DEFAULT 0,
     last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_demurrage_epoch INTEGER DEFAULT 0
 );
@@ -214,8 +219,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     from_pubkey TEXT NOT NULL,
     to_pubkey TEXT NOT NULL,
-    amount REAL NOT NULL CHECK (amount > 0),
-    tax_fee REAL DEFAULT 0.0,
+    -- Whole hundredths: amount_c left the payer, amount_c - fee_c reached the payee, fee_c reached the Commons.
+    amount_c INTEGER NOT NULL CHECK (amount_c > 0),
+    fee_c INTEGER NOT NULL DEFAULT 0 CHECK (fee_c >= 0 AND fee_c <= amount_c),
     memo TEXT,
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- SRV-20: cryptographic authorship. For member-authored transactions these hold
@@ -245,7 +251,8 @@ CREATE TABLE IF NOT EXISTS posts (
     category TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    credits REAL NOT NULL DEFAULT 0,
+    -- The price, whole hundredths of a Bean; 0 is Free.
+    price_c INTEGER NOT NULL DEFAULT 0 CHECK (price_c >= 0),
     author_pubkey TEXT NOT NULL REFERENCES members(public_key),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     active INTEGER DEFAULT 1,
@@ -342,41 +349,40 @@ CREATE TABLE IF NOT EXISTS posts (
     -- The shop it is in (section 29, shops; DESIGN-shops-and-tools-fable.md §9.1, slice S1): an Offer only, public, in its
     -- author's own shop, or an enterprise's in the enterprise's (engine/shops.ts assertShopForPost). NULL on every other row.
     -- Foreign keys are off on this database, and a standby may hold a listing a moment before the shop its copy names, so
-    -- every reader takes an id with no shop row as no shop. Added to an older database by db.ts, before this file runs.
+    -- every reader takes an id with no shop row as no shop.
     shop_id TEXT REFERENCES shops(id),
     -- When its author, or a keeper of the enterprise that posted it, featured it in its shop (DESIGN-shops-round3-enterprise-
     -- shopfront-fable.md §4; engine/shops.ts featureOffer): an Offer in a shop only, six at most of a shop's that can be on
     -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
-    -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
+    -- shop, or its shop closed, the stamp goes. NULL on every other row.
     featured_at TEXT,
     -- A pin (scratch/fable-design/DESIGN-pinning-fable.md §2; engine/pins.ts, @beanpool/core pinLive): when it ends, and when it
     -- was made. Both NULL on every row nobody pinned; a pin ends by the clock on every read, and the hourly hygiene clears
     -- the stamps (state-engine.ts runMarketplaceHygiene). A row that leaves the board loses them in the same statement
-    -- (posts_pin_ends_off_board, below). Three at most, a week at most. Added to an older database by db.ts.
+    -- (posts_pin_ends_off_board, below). Three at most, a week at most.
     pinned_until TEXT,
     pinned_at TEXT,
     -- What made it when that was not its author's own app: 'assistant:<grant id>' for a post an owner's AI assistant made
-    -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
-    -- an older database by db.ts.
+    -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row.
     created_via TEXT,
     -- Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5; @beanpool/core tags/post-tags.ts): ids
     -- such as food.fruit.lemon, space-separated, at most 5 in 200 characters, each one the library knows when a member
     -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this
-    -- column (beanpool-engine posts.ts tagCondition). '' on every row without. Added to an older database by db.ts.
+    -- column (beanpool-engine posts.ts tagCondition). '' on every row without.
     tags TEXT NOT NULL DEFAULT '',
     -- The tags its author typed (DESIGN-tags-free-entry-fable.md §2; @beanpool/core tags/free-tags.ts): a JSON list of them
     -- in their stored form, at most 5 in 200 characters, each held to the rule (engine/post-fields.ts), never mixed with
     -- `tags`. Their words are in search_keywords; the Market's `free=` is a json_each on this column (beanpool-engine posts.ts
     -- freeTagCondition). '' on every row without. No trigger, index or default here calls a connection function, so an
-    -- older image boots on this file. Added to an older database by db.ts.
+    -- older image boots on this file.
     free_tags TEXT NOT NULL DEFAULT '',
     -- A member's copy of an in-person event, an Offer or a Need from their own community (DESIGN-list-on-global-fable.md §3,
     -- slices G2′ and G1′), on a node that keeps the directory: `shown_from_host` is set on every copy and on nothing else. It
     -- holds the community's host while that was a shown row of the directory when the copy was written, else '' (an unlisted
     -- community's host is never kept). `shown_from_post_id` is the home listing's id there, or NULL. `shown_price` is an Offer's
-    -- or Need's price at home, as '<beans> <unit>' (@beanpool/core copyPriceOf), for its words alone: `credits` stays 0, and
+    -- or Need's price at home, as '<beans> <unit>' (@beanpool/core copyPriceOf), for its words alone: `price_c` stays 0, and
     -- nothing adds, compares or pays it. engine/event-copy.ts reads all three. No trigger, index or default here calls a
-    -- connection function, so an older image boots on this file. Added to an older database by db.ts.
+    -- connection function, so an older image boots on this file.
     shown_from_host TEXT,
     shown_from_post_id TEXT,
     shown_price TEXT,
@@ -424,8 +430,8 @@ CREATE TABLE IF NOT EXISTS poll_answers (
     words_removed INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (post_id, id)
 ) WITHOUT ROWID;
--- A plain index, under the name the unique one had (db.ts makeActivePollIndexPlain): how many active polls an author may
--- have is engine/posts.ts createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
+-- A plain index, under the name the unique one had: how many active polls an author may have is engine/posts.ts
+-- createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
 CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
 
 -- Event RSVPs (docs/events-on-the-map.md §2.1). "Not going" is a delete, not a third value, and travels
@@ -561,7 +567,8 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     post_id TEXT NOT NULL REFERENCES posts(id),
     buyer_pubkey TEXT NOT NULL,
     seller_pubkey TEXT NOT NULL,
-    credits REAL NOT NULL,
+    -- The deal's price, whole hundredths of a Bean (0 for a free listing). `hours` is hours, not money.
+    amount_c INTEGER NOT NULL DEFAULT 0 CHECK (amount_c >= 0),
     hours REAL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -574,7 +581,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- Escrow dispute arbitration (§5 item 2, §6 correction 2): resolution type, timestamp and acting admin
     dispute_resolution TEXT,
     dispute_resolved_at DATETIME,
-    dispute_resolved_by TEXT
+    dispute_resolved_by TEXT,
+    -- A period of a standing deal (standing_deals below; DESIGN-standing-deals-fable.md §2.1): which one, and its number
+    -- from 1. NULL on a one-off deal.
+    standing_id TEXT REFERENCES standing_deals(id),
+    period_no INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);
@@ -590,6 +601,53 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON
 -- A listing's open or held deals: both sides of its open deals hear its pushes on a node that reads by area, and a
 -- removal or hide asks whether it holds one. Without this each read searched every open deal on the node (#1769).
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status);
+-- At most one deal row per period of a standing deal: the node's second hold of a period is refused here, whatever the
+-- tick's own compare-and-swap missed (engine/standing-deals.ts).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketplace_transactions_standing_period
+    ON marketplace_transactions(standing_id, period_no) WHERE standing_id IS NOT NULL;
+
+-- 5b. Standing deals (DESIGN-standing-deals-upfront-fable.md and its amendment; Marty's decisions, 10 Nov 2026): a listing
+-- priced per week or per month, taken up, pays each period at its start, nothing held in trust, each period one finished
+-- deal row (marketplace_transactions.standing_id) and one ledger row; this row is the arrangement and the payer's signed
+-- authorisation that bounds every payment the node makes for it (auth_*: the text, its signature, its signer).
+-- engine/standing-deals.ts runs it.
+CREATE TABLE IF NOT EXISTS standing_deals (
+    id TEXT PRIMARY KEY,
+    post_id TEXT NOT NULL REFERENCES posts(id),
+    payer_pubkey TEXT NOT NULL,
+    payee_pubkey TEXT NOT NULL,
+    beans_per_period_c INTEGER NOT NULL CHECK (beans_per_period_c > 0),
+    period_unit TEXT NOT NULL CHECK (period_unit IN ('week', 'month')),
+    -- Period n runs [starts_at + (n-1) units, starts_at + n units), UTC, months clamped (@beanpool/core periodEnd).
+    starts_at TEXT NOT NULL,
+    -- NULL: until one of them stops it.
+    max_periods INTEGER,
+    -- paid: every period due so far is paid; short: the period now due is unpaid while its grace runs (half the period);
+    -- ended: nothing more is paid (@beanpool/core StandingPhase).
+    phase TEXT NOT NULL CHECK (phase IN ('paid', 'short', 'ended')),
+    -- How many periods are paid; current_tx_id is the latest one's row.
+    periods_done INTEGER NOT NULL DEFAULT 0,
+    current_tx_id TEXT REFERENCES marketplace_transactions(id),
+    -- Paid: the next period's start. Short: the next try (hourly, never after the grace ends).
+    next_due_at TEXT NOT NULL,
+    -- Short: when the unpaid period was due (its start).
+    short_since TEXT,
+    stopped_by TEXT,
+    stopped_at TEXT,
+    ended_at TEXT,
+    -- stopped | count_reached | short | listing_gone | account_closed | server_away | cant_run (@beanpool/core StandingEndReason)
+    ended_reason TEXT,
+    auth_signer TEXT NOT NULL,
+    auth_signature TEXT NOT NULL,
+    auth_payload TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_due ON standing_deals(phase, next_due_at);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_payer ON standing_deals(payer_pubkey, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubkey, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
+CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
@@ -638,8 +696,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_author_pubkey ON messages(author_pubkey)
 -- old id goes to the conversation such a line is in (engine/messaging.ts consolidatedConversationOf). Kept from
 -- messages.metadata by the three triggers below, on each server, and never copied: a standby keeps its own from the lines
 -- it imports, as posts_fts is kept from posts. An index, so an id nobody has is answered as fast as a real one: scanning
--- every line's metadata told a hidden group's chat id from an id nobody has by time (#1333 review). db.ts fills it once
--- from the lines already there (migration_message_old_conversation_ids_v1).
+-- every line's metadata told a hidden group's chat id from an id nobody has by time (#1333 review).
 CREATE TABLE IF NOT EXISTS message_old_conversation_ids (
     old_conversation_id TEXT NOT NULL,
     message_id TEXT NOT NULL,
@@ -771,8 +828,8 @@ CREATE TABLE IF NOT EXISTS projects (
     title TEXT NOT NULL,
     description TEXT,
     photos TEXT, -- JSON array of URLs
-    goal_amount INTEGER NOT NULL,
-    current_amount INTEGER DEFAULT 0,
+    goal_amount_c INTEGER NOT NULL,
+    current_amount_c INTEGER NOT NULL DEFAULT 0,
     deadline_at DATETIME,
     status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'FUNDED', 'FAILED', 'COMPLETED'
     migrated_at DATETIME,
@@ -833,6 +890,27 @@ CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves
 -- A new token of a key with no row here prunes such keys' tokens not registered again for a month (state-engine.ts
 -- STRANGER_PUSH_RULES): a search on this too.
 CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
+
+-- 11b2. Browsers that take this server's web pushes (engine/web-push-subscriptions.ts, services/web-push.ts;
+-- DESIGN-web-notifications-fable.md §2.2, slice W1). `kind` 'asker': a key with an open request to join here tapped "Tell me
+-- when they answer" on the waiting page; one row per key; no reference to members (it is no member yet); deleted when the
+-- request lapses, is cancelled or declined, kept when the key joins. Locked at rest as push_tokens are: `sub_id` is the
+-- endpoint's HMAC and `sub_box` the endpoint, the browser's keys and this server's address as the browser reached it,
+-- sealed, both under keys from data/recovery-seal.key (info beanpool-web-push/v1), which the database never holds. This
+-- server's own (engine/replication-manifest.ts, local).
+CREATE TABLE IF NOT EXISTS web_push_subscriptions (
+    public_key TEXT NOT NULL,
+    sub_id TEXT NOT NULL CHECK (length(sub_id) = 64),
+    sub_box TEXT NOT NULL CHECK (length(sub_box) <= 4000),
+    -- One of core's LANGS, so the push's sentence is in it; NULL: English.
+    lang TEXT CHECK (lang IS NULL OR length(lang) <= 16),
+    -- 'member' is W2's (members' own browsers), allowed now so the table needs no rebuild then; W1 writes 'asker' only.
+    kind TEXT NOT NULL CHECK (kind IN ('member', 'asker')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, sub_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_web_push_one_asker ON web_push_subscriptions(public_key) WHERE kind = 'asker';
 
 -- 11c. Where each write only a day cap by address bounds came from, for a day (db/writes-by-address.ts): a new push token
 -- or leave statement of a key with no row here (state-engine.ts STRANGER_PUSH_RULES, STRANGER_LEAVE_RULES) and a price
@@ -955,8 +1033,8 @@ END;
 -- because it lives on the table rather than in any one code path. It also stops status-only writes (an
 -- RSVP, an escrow step) from churning the index for text that did not change.
 --
--- db.ts replaces the old unguarded trigger on boot and rebuilds posts_fts once; state-engine.ts's
--- backfillSearchKeywords re-creates this trigger and must keep the same WHEN (test-posts-fts-same-ms checks).
+-- state-engine.ts's backfillSearchKeywords re-creates this trigger and must keep the same WHEN (test-posts-fts-same-ms
+-- checks).
 CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts
 WHEN OLD.title IS NOT NEW.title
   OR OLD.description IS NOT NEW.description
@@ -1010,6 +1088,10 @@ CREATE TABLE IF NOT EXISTS recovery_shares (
     -- move together by construction. The column exists so the table can join the delta set
     -- without a later migration; wiring it into engine/sync.ts is a separate, deliberate step.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- For 'sso' holders: HMAC-SHA-256 of `provider|sub` under a key derived from data/recovery-seal.key, never stored in
+    -- this database, so a restore finds the account from the verified sign-in alone (engine/recovery-find.ts). An index,
+    -- never a proof: a release still checks sso_lookup_hash. NULL on a copy made before it, until its first restore.
+    sso_find_hash TEXT,
     -- Column order is deliberate: leading with (owner_pubkey, generation) means this constraint's
     -- implicit index also serves every read in engine/recovery-shares.ts, all of which filter on
     -- exactly that pair. A separate owner+generation index would duplicate it for no gain.
@@ -1024,6 +1106,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_shares_sso
     ON recovery_shares(sso_lookup_hash)
     WHERE sso_lookup_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_recovery_shares_updated_at ON recovery_shares(updated_at);
+-- Plain, not unique: one sign-in may protect two accounts (Settings' Connect checks no other owner), and a restore names
+-- them all. It also answers the scan's `sso_find_hash IS NULL` for copies made before the column.
+CREATE INDEX IF NOT EXISTS idx_recovery_shares_find ON recovery_shares(sso_find_hash);
 
 -- 14b. Recovery collection — one attempt to gather enough fragments to rebuild a phrase.
 --
@@ -1087,7 +1172,7 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
     -- Whose account the fragment is of: the collection's owner, written with the release (engine/recovery-release.ts
     -- recordRelease) and copied to a standby with the row. The sessions (recovery_collections) stay each server's own, so
     -- on a server that took over this is the only thing naming the owner, and the owner's own account delete finds
-    -- their releases by it (state-engine.ts purgeMemberSelf). db.ts fills it at boot for a release whose session is here.
+    -- their releases by it (state-engine.ts purgeMemberSelf).
     owner_pubkey TEXT,
     UNIQUE(collection_id, share_id)
 );
@@ -1207,8 +1292,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_takedown_posts_held ON agent_takedown_posts
 -- about it once. Replicated to a standby (`updated_at`, stamped only when a row changes), so a server that takes over
 -- knows what the old one had already seen and tells nobody about it again. `promise`, `accepting_knocks` and
 -- `closing_on` are the listing promise (mothership A2, engine/directory-promise.ts): the promise as JSON text, checked
--- to its five fields; whether a stranger can ask to join; the day the community says it closes. Added to an existing
--- table by db.ts.
+-- to its five fields; whether a stranger can ask to join; the day the community says it closes.
 CREATE TABLE IF NOT EXISTS directory_cache (
     community_key TEXT PRIMARY KEY,
     listed INTEGER NOT NULL DEFAULT 1 CHECK (listed IN (0, 1)),
@@ -1277,6 +1361,12 @@ CREATE INDEX IF NOT EXISTS idx_place_watches_cell ON place_watches(lat, lng);
 -- tidy-up's clearing included; its deletions as `join_requests` tombstones) and carried in file and sealed backups.
 -- A re-key moves a member's rows, as applicant and as `decided_by`, to the new key (stamped, so the move replicates).
 -- A prune or a self-deletion of the member the applicant became scrubs what they wrote and keeps the record.
+-- `via_post_id` and `via_sharer_pubkey` (shared-listing door A3, DESIGN-shared-listing-door-fable.md §2.2): the post and
+-- the member a knock came from, when it carried the ticket of a link a member shared outside (engine/peek-tickets.ts
+-- peekProvenance) and that ticket opened its post when the knock was taken; else both NULL (a ticket that opens nothing
+-- leaves the knock plain). The ticket itself is never stored. Only the members who answer read them, as one line under
+-- the request (the post's title as it is now and the sharer's name); never the applicant's status read, the card or the
+-- directory. Cleared with what the applicant sent once the knock is off the list. A re-key moves `via_sharer_pubkey`.
 CREATE TABLE IF NOT EXISTS join_requests (
     id TEXT PRIMARY KEY,
     pubkey TEXT NOT NULL,
@@ -1291,6 +1381,8 @@ CREATE TABLE IF NOT EXISTS join_requests (
     decided_at TEXT,
     ip_hash TEXT,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    via_post_id TEXT,
+    via_sharer_pubkey TEXT,
     CHECK ((status = 'pending') = (decided_at IS NULL)),
     CHECK ((status = 'approved') = (invite_code IS NOT NULL))
 );
@@ -1358,6 +1450,8 @@ CREATE INDEX IF NOT EXISTS idx_member_blocks_updated_at ON member_blocks(updated
 -- it (GET /api/notices/push/:id, the signer's own). `sent_at` is the notice's time in whole seconds. Bounded: 7 days, and
 -- a member's newest 100 (the hourly hygiene job); the CHECKs cap a row's size. This server's own: never copied to a
 -- standby, which sends no push. Goes with the member on a prune, a self-deletion or a re-key.
+-- Kept for every member the push is for, a phone or not: it is the list both apps' bell reads (GET /api/notices/push).
+-- `seen_at` (whole seconds): when the member tapped the row or opened its thing; NULL while it is on the bell.
 CREATE TABLE IF NOT EXISTS push_notices (
     id TEXT PRIMARY KEY CHECK (length(id) = 32),
     recipient TEXT NOT NULL,
@@ -1365,7 +1459,8 @@ CREATE TABLE IF NOT EXISTS push_notices (
     title TEXT NOT NULL CHECK (length(title) <= 200),
     body TEXT NOT NULL CHECK (length(body) <= 4000),
     data TEXT NOT NULL DEFAULT '{}' CHECK (length(data) <= 1000),
-    sent_at INTEGER NOT NULL
+    sent_at INTEGER NOT NULL,
+    seen_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_push_notices_recipient ON push_notices(recipient, sent_at);
 CREATE INDEX IF NOT EXISTS idx_push_notices_sent_at ON push_notices(sent_at);
@@ -1471,21 +1566,21 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 -- to the `members` table above, add it to this whitelist too — otherwise
 -- mutations to that column won't be picked up by cursor-based delta sync.
 -- db.ts drops this trigger at every boot before this file runs, so the list here is the one in force on an existing
--- node too (an "if not exists" create keeps whatever list a node already has). earned_surplus and working_capital_ceiling
+-- node too (an "if not exists" create keeps whatever list a node already has). earned_surplus_c and working_capital_ceiling_c
 -- are an enterprise's standing a standby copies (engine/sync.ts importRemoteState, design G2a): Rule 6's surplus and the
 -- admin's ceiling are each written by a statement that sets nothing else.
 CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_ref, avatar_bytes, bio,
-    contact_value, contact_visibility, status, earned_credit, profile_updated_at,
+    contact_value, contact_visibility, status, earned_credit_c, profile_updated_at,
     archetype, credit_frozen, is_treasury, can_operate, credit_committee, joined_at, public_key,
-    legacy_credit_floor, earned_surplus, working_capital_ceiling,
-    purpose, goal_amount, deadline_at, lifecycle, paused,
-    paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
+    earned_surplus_c, working_capital_ceiling_c,
+    purpose, goal_amount_c, deadline_at, lifecycle, paused,
+    paused_at, paused_by, paused_floor_snapshot_c, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
     area_lat, area_lng, area_updated_at,
-    is_visitor, deleted_by_owner_at
+    is_visitor, deleted_by_owner_at, inviter_shown
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
@@ -1500,7 +1595,7 @@ END;
 -- S1), whichever writer does it. Nothing else a status says (suspended, pruned, funded…) changes what the board shows.
 -- The WHEN guard skips a write that sets the column itself: a standby taking its main server's. Holiday isn't on this
 -- row: setHolidayMode stamps it. Both columns are in members_touch_updated_at's list, so updated_at moves in the same
--- statement. A node from before 'disabled' was in it has the older one replaced at boot (db.ts replaceOffBoardShapes).
+-- statement.
 CREATE TRIGGER IF NOT EXISTS members_touch_board_standing
 AFTER UPDATE OF paused, status ON members
 FOR EACH ROW
@@ -1528,6 +1623,14 @@ BEGIN
     UPDATE marketplace_transactions SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
+CREATE TRIGGER IF NOT EXISTS standing_deals_touch_updated_at
+AFTER UPDATE ON standing_deals
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE standing_deals SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
 CREATE TRIGGER IF NOT EXISTS projects_touch_updated_at
 AFTER UPDATE ON projects
 FOR EACH ROW
@@ -1540,7 +1643,7 @@ END;
 -- Phase 2 delta backup — watermark triggers for the remaining mutable tables.
 --
 -- These tables gained their `updated_at` column via ALTER TABLE on already-live
--- DBs (see db.ts), where SQLite forbids a non-constant DEFAULT. So new rows on an
+-- DBs (a boot step before 1.2.36), where SQLite forbids a non-constant DEFAULT. So new rows on an
 -- existing node would be inserted with a NULL watermark and be invisible to the
 -- `WHERE updated_at > :since` delta filter. Each table therefore gets BOTH:
 --   * an AFTER INSERT trigger that stamps updated_at when it came in NULL, and
@@ -1680,7 +1783,7 @@ CREATE TABLE IF NOT EXISTS treasury_operators (
     role            TEXT NOT NULL DEFAULT 'keeper',
     granted_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by      TEXT,
-    backing         REAL DEFAULT 0,
+    backing_c       INTEGER NOT NULL DEFAULT 0,
     -- Set when this keeper became lead automatically (the community removed the old lead, or the old lead
     -- stepped down): the other keepers may then run succession at once, without the 30-day inactivity wait.
     auto_promoted_at DATETIME,
@@ -1695,7 +1798,7 @@ CREATE INDEX IF NOT EXISTS idx_treasury_operators_member ON treasury_operators(m
 -- getAdminPubkey() mechanism with explicit role assignments.
 --
 -- role CHECK IN ('owner', 'admin').
--- granted_by holds the granting owner's public key (or 'migration:genesis' when seeded).
+-- granted_by holds the granting owner's public key (or 'claim:<id>' for a claimed owner, 'genesis' for a seeded one).
 CREATE TABLE IF NOT EXISTS node_roles (
     member_pubkey    TEXT NOT NULL PRIMARY KEY REFERENCES members(public_key) ON DELETE CASCADE,
     role             TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'moderator')),
@@ -1890,31 +1993,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(
 -- Debts and a second chance (community modes slice 5, engine/names-debts.ts): a confirmed member who left in debt. The
 -- debt went to the Commons when they left; this says so, on the entry (by id only: the names are sealed). While `open`, no
 -- key is confirmed against the entry. Settled by a payment to the Commons (`settle_ref` the transaction), worked off
--- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid` reaches `amount`), or forgiven by
+-- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid_c` reaches `amount_c`), or forgiven by
 -- a community Decision (`settle_ref` the Decision). Each record goes 3 years after `removed_at`, whatever its status.
 CREATE TABLE IF NOT EXISTS names_debts (
     id               TEXT PRIMARY KEY,
     entry_id         TEXT NOT NULL,
-    amount           REAL NOT NULL CHECK (amount > 0),
+    amount_c         INTEGER NOT NULL CHECK (amount_c > 0),
     reason           TEXT NOT NULL CHECK (reason IN ('removed', 'account_deleted')),
     removed_at       DATETIME NOT NULL,
     status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled', 'forgiven')),
     repaying_pubkey  TEXT,
-    repaid           REAL NOT NULL DEFAULT 0,
+    repaid_c         INTEGER NOT NULL DEFAULT 0,
     settled_how      TEXT CHECK (settled_how IS NULL OR settled_how IN ('pay_back', 'work_off', 'forgiven')),
     settled_by       TEXT,
     settled_at       DATETIME,
     settle_ref       TEXT,
     note             TEXT,
     -- The work-off under way (engine/names-debts.ts): the confirmation that started it, and, once it set the 0 known
-    -- floor, the member's floor before ('default', 'frozen' or Beans) and the set_at it wrote. Its revoke puts back that
+    -- floor, the member's floor before ('default', 'frozen' or whole hundredths) and the set_at it wrote. Its revoke puts back that
     -- floor and nothing else, only while the floor is still the one it wrote.
     work_off_confirmation_id TEXT,
     work_off_floor_before    TEXT,
     work_off_floor_set_at    TEXT,
     -- What a hardship grant Decision gave the member working this debt off, as far as they still hold it: never swept
     -- (state-engine.ts sweepRepayment). Spending it shrinks it, so Beans spent and earned back count toward the debt.
-    hardship_held    REAL NOT NULL DEFAULT 0,
+    hardship_held_c  INTEGER NOT NULL DEFAULT 0,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1927,7 +2030,7 @@ CREATE TABLE IF NOT EXISTS names_debt_payments (
     transaction_id   TEXT PRIMARY KEY,
     debt_id          TEXT NOT NULL,
     payer_pubkey     TEXT NOT NULL,
-    amount           REAL NOT NULL CHECK (amount > 0),
+    amount_c         INTEGER NOT NULL CHECK (amount_c > 0),
     paid_at          DATETIME NOT NULL,
     updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1989,11 +2092,11 @@ CREATE TABLE IF NOT EXISTS known_consent_log (
 CREATE INDEX IF NOT EXISTS idx_known_consent_log_member ON known_consent_log(member_pubkey, at);
 
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
--- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
+-- `amount_c` (whole hundredths) replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
 -- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.
 CREATE TABLE IF NOT EXISTS known_floor_exceptions (
     member_pubkey  TEXT PRIMARY KEY,
-    amount         INTEGER,
+    amount_c       INTEGER,
     frozen         INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1)),
     set_by         TEXT NOT NULL,
     set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -2030,14 +2133,14 @@ CREATE TABLE IF NOT EXISTS vouchers (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- The allocation ledger (amend2 §3): every line of a voucher's budget, append-only. `amount` is signed by its kind: grant,
+-- The allocation ledger (amend2 §3): every line of a voucher's budget, append-only. `amount_c` (whole hundredths) is signed by its kind: grant,
 -- top_up and return add; lower, hold and stop take away. What is left is the sum. `ref`: the invite code a hold or its
 -- return is for, or the room_gifts id of a vouch from a profile. Nothing here is a Bean.
 CREATE TABLE IF NOT EXISTS voucher_allocations (
     id             TEXT PRIMARY KEY,
     member_pubkey  TEXT NOT NULL,
     kind           TEXT NOT NULL CHECK (kind IN ('grant', 'top_up', 'lower', 'hold', 'return', 'stop')),
-    amount         INTEGER NOT NULL CHECK ((kind IN ('grant', 'top_up', 'return') AND amount > 0) OR (kind IN ('lower', 'hold', 'stop') AND amount < 0)),
+    amount_c       INTEGER NOT NULL CHECK ((kind IN ('grant', 'top_up', 'return') AND amount_c > 0) OR (kind IN ('lower', 'hold', 'stop') AND amount_c < 0)),
     actor          TEXT NOT NULL,
     ref            TEXT,
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -2049,7 +2152,7 @@ CREATE INDEX IF NOT EXISTS idx_voucher_allocations_ref ON voucher_allocations(re
 -- Room: credit line one member gave another (amend2 §3, §6), a credit-limit input (engine trust.ts roomHeldOf), never a
 -- Bean. A voucher's vouch (`kind` 'vouch', out of their budget: at an invite's redeem, `invite_code`, or from a profile) or
 -- a member's gift of part of their own (kind 'gift', slice G1, `source_gift_id` the piece it was split from). `root_pubkey`
--- is the voucher every piece traces to, copied at each split. `written_off`: what of it a departed holder's debt used,
+-- is the voucher every piece traces to, copied at each split. `written_off_c`: what of it a departed holder's debt used,
 -- stamped when they left (the Commons' row stays the record of truth).
 CREATE TABLE IF NOT EXISTS room_gifts (
     id              TEXT PRIMARY KEY,
@@ -2057,11 +2160,11 @@ CREATE TABLE IF NOT EXISTS room_gifts (
     to_pubkey       TEXT NOT NULL,
     root_pubkey     TEXT NOT NULL,
     kind            TEXT NOT NULL CHECK (kind IN ('vouch', 'gift')),
-    amount          INTEGER NOT NULL CHECK (amount > 0),
+    amount_c        INTEGER NOT NULL CHECK (amount_c > 0),
     source_gift_id  TEXT,
     invite_code     TEXT,
     at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    written_off     REAL,
+    written_off_c   INTEGER,
     written_off_at  DATETIME,
     updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -2115,7 +2218,7 @@ CREATE TABLE IF NOT EXISTS deferred_wage_claims (
     keeper_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     post_id           TEXT REFERENCES posts(id) ON DELETE SET NULL,
     transaction_id    TEXT REFERENCES marketplace_transactions(id) ON DELETE CASCADE,
-    amount            REAL NOT NULL,
+    amount_c          INTEGER NOT NULL CHECK (amount_c > 0),
     status            TEXT NOT NULL DEFAULT 'pending',
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     paid_at           DATETIME,
@@ -2151,12 +2254,12 @@ CREATE TABLE IF NOT EXISTS settlements (
     buyer_home_node TEXT,
     seller_pubkey   TEXT,
     post_id         TEXT,
-    amount          REAL NOT NULL CHECK (amount > 0),
+    amount_c        INTEGER NOT NULL CHECK (amount_c > 0),
     -- Outbound only. The cross-node fee is paid by the buyer ON TOP of the price (§2.1), so it is a
-    -- separate figure from `amount` — the bridge entries carry the price alone, never price plus fee.
+    -- separate figure from `amount_c` — the bridge entries carry the price alone, never price plus fee.
     -- Stored rather than recomputed so a reversal refunds exactly what was taken, even if the fee rate
     -- changes between the commit and the reversal.
-    fee             REAL NOT NULL DEFAULT 0 CHECK (fee >= 0),
+    fee_c           INTEGER NOT NULL DEFAULT 0 CHECK (fee_c >= 0),
     -- Inbound only. When the cap reservation lapses. A reservation moves no beans, so expiry is free —
     -- but a receipt arriving after it must be re-validated against the cap, never honoured on trust.
     reserved_until  DATETIME,
@@ -2237,7 +2340,7 @@ CREATE TABLE IF NOT EXISTS federation_links (
     -- asking anyone (§7, "the ceiling is the safety, and it must be visible alongside the balance").
     -- Starts at 0 — a link with no ceiling can hold a balance and show it, but cannot spend. Deliberate:
     -- the link is created automatically, so anything it could do unattended must start switched off.
-    commission_ceiling REAL NOT NULL DEFAULT 0 CHECK (commission_ceiling >= 0),
+    commission_ceiling_c INTEGER NOT NULL DEFAULT 0 CHECK (commission_ceiling_c >= 0),
     created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -2556,8 +2659,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     scope_id             TEXT,
     -- A vote on removing a member (removal by vote, Amendment A): the member's own reply to its case (points 2), and a case
     -- an admin hid as shown to be false, kept as a halt is (point 4); a reply an admin took down, kept the same way, its
-    -- words gone (decisions-engine.ts adminHideReply). NULL on every other Decision. db.ts adds them to a table from before
-    -- (REMOVAL_CASE_COLUMNS).
+    -- words gone (decisions-engine.ts adminHideReply). NULL on every other Decision.
     subject_reply        TEXT,
     subject_replied_at   DATETIME,
     case_hidden_at       DATETIME,
@@ -2568,7 +2670,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     reply_hidden_reason  TEXT,
     -- A pause's own vote too few members could vote on, which an owner decided (removal by vote S6, design §5 point 3):
     -- when, which owner, the public reason, and when the tick carried it out as the vote closed (decisions-engine.ts
-    -- ownerDecideTooFew). NULL on every other Decision. db.ts adds them to a table from before (REMOVAL_CASE_COLUMNS).
+    -- ownerDecideTooFew). NULL on every other Decision.
     owner_decided_at          DATETIME,
     owner_decided_by          TEXT,
     owner_decided_reason      TEXT,
@@ -2582,9 +2684,12 @@ CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
--- One open Decision per member author per scope (idx_decisions_member_author_open) is made in db.ts after the scope columns
--- exist on an older table (decision-scope-migration.ts). The node itself (SYSTEM) is exempt.
 CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
+-- One open Decision per member author per scope; the node itself (SYSTEM) is exempt (a pause's vote on removing the
+-- member, a "Keep this suspension?").
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open
+    ON decisions(author_pubkey, scope_kind, COALESCE(scope_id, '')) WHERE status = 'open' AND author_pubkey != 'SYSTEM';
+CREATE INDEX IF NOT EXISTS idx_decisions_scope ON decisions(scope_kind, scope_id, status);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
     decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
@@ -2608,14 +2713,13 @@ CREATE TABLE IF NOT EXISTS decision_electors (
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     role_at_open  TEXT NOT NULL,
     -- 'stood_aside' and 'silent': a removal jury's (role_at_open 'juror', engine/removal-jury.ts): passed over at the draw
-    -- or by the juror, and seated but no vote in 72 hours (slice J2). db.ts rebuilds a table from before for this CHECK.
+    -- or by the juror, and seated but no vote in 72 hours (slice J2).
     status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- A removal juror's seat (slice J2b, decisions-engine.ts settleOpenJuries): it dates from created_at, when the walk
     -- reached them. answered_at: when they answered Serve (NULL: not yet; a vote is an answer too, and Step aside is
-    -- 'stood_aside'). reminded_at: when the tick last reminded them, so a reminder goes once. Added by db.ts on a node
-    -- from before.
+    -- 'stood_aside'). reminded_at: when the tick last reminded them, so a reminder goes once.
     answered_at   DATETIME,
     reminded_at   DATETIME,
     PRIMARY KEY (decision_id, member_pubkey)
@@ -2652,7 +2756,7 @@ CREATE TABLE IF NOT EXISTS enterprise_pledges (
     id TEXT PRIMARY KEY,
     keeper TEXT NOT NULL REFERENCES members(public_key),
     enterprise TEXT NOT NULL REFERENCES members(public_key),
-    amount REAL NOT NULL CHECK (amount > 0),
+    amount_c INTEGER NOT NULL CHECK (amount_c > 0),
     pledged_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     released_at DATETIME DEFAULT NULL
 );
@@ -2671,8 +2775,7 @@ CREATE TABLE IF NOT EXISTS groups (
     description TEXT,
     -- The group's own picture is in group_pictures (#1486), as a member's photo is in member_photos: this row keeps only
     -- its reference (@beanpool/core avatarRefOf: its version, or a shipped picture's name), which its URL is made from,
-    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture). db.ts
-    -- moveGroupPicturesOutOfRows moved the pictures out of the old `avatar_url` column.
+    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture).
     avatar_ref TEXT,
     avatar_bytes INTEGER,
     category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
@@ -2999,7 +3102,7 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_requests (
     id                TEXT PRIMARY KEY,
     enterprise_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     member_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-    pledged_backing   REAL NOT NULL DEFAULT 0 CHECK (pledged_backing >= 0),
+    pledged_backing_c INTEGER NOT NULL DEFAULT 0 CHECK (pledged_backing_c >= 0),
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     decided_at        DATETIME,
@@ -3058,7 +3161,7 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_changes (
     kind              TEXT NOT NULL CHECK (kind IN ('add', 'remove')),
     member_pubkey     TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     request_id        TEXT REFERENCES enterprise_keeper_requests(id) ON DELETE SET NULL,
-    pledged_backing   REAL NOT NULL DEFAULT 0 CHECK (pledged_backing >= 0),
+    pledged_backing_c INTEGER NOT NULL DEFAULT 0 CHECK (pledged_backing_c >= 0),
     proposed_by       TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'objected', 'withdrawn', 'failed')),
     created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -3079,7 +3182,7 @@ WHERE status = 'pending';
 -- `own`: per address of this community's; `unconfirmed`: per address a node with no configured names was reached at,
 -- which Settings offers the owner to confirm; `old_app`: signatures in the old format, bound to no community ("N
 -- members are on an old app", until the switch); `lost`: per lost name (another community holds it), the apps refused
--- there. Counts only: no key is stored. Rows older than 8 days are dropped. db.ts rebuilds a table from before `lost`.
+-- there. Counts only: no key is stored. Rows older than 8 days are dropped.
 CREATE TABLE IF NOT EXISTS signature_audiences (
     day      TEXT NOT NULL,
     kind     TEXT NOT NULL CHECK (kind IN ('own', 'unconfirmed', 'old_app', 'lost')),
@@ -3099,7 +3202,7 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
     -- The tool's id: 1 to 24 of a-z, 0-9 and '-' (engine/tool-state.ts TOOL_ID).
     tool       TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 24 AND tool NOT GLOB '*[^a-z0-9-]*'),
     -- The document as JSON text, at most 128 KB as UTF-8, the most any tool may name (TOOL_STATE_CEILING_BYTES); each
-    -- tool's own bound is the engine's (toolStateMaxBytes). db.ts rebuilds a table made with the 64 KB CHECK of before.
+    -- tool's own bound is the engine's (toolStateMaxBytes).
     body       TEXT NOT NULL CHECK (length(CAST(body AS BLOB)) <= 131072),
     -- The replication watermark (a plain table), and the copy's time the apps reconcile by: engine/tool-state.ts stamps it.
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -3123,8 +3226,7 @@ CREATE TABLE IF NOT EXISTS shops (
     -- members, so it follows every rename.
     name          TEXT CHECK (name IS NULL OR length(CAST(name AS BLOB)) BETWEEN 1 AND 180),
     -- One of the Market's categories (@beanpool/core SHOP_CATEGORIES, checked by engine/shops.ts), or NULL: the list its
-    -- listings pick from. The shape only here, so a category added later needs no rebuild. A node from before kept a kind
-    -- here (the column was `kind`): db.ts moveShopKindsToCategories renames it and moves each row to its category.
+    -- listings pick from. The shape only here, so a category added later needs no rebuild.
     category      TEXT CHECK (category IS NULL OR (length(category) BETWEEN 1 AND 24 AND category NOT GLOB '*[^a-z-]*')),
     -- What it is, and "how I deal", each ≤ 300 characters in its owner's words. NULL: none. An enterprise's blurb reads as
     -- its purpose until a keeper writes one.
@@ -3142,12 +3244,12 @@ CREATE TABLE IF NOT EXISTS shops (
     -- Its banner, its one photo (DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 4): only its reference here
     -- (@beanpool/core avatarRefOf: its version), which its URL is made from (shopPhotoUrlOf); the photo is in shop_photos,
     -- written with it by its one writer (engine/shops.ts setShopPhoto). NULL: none, and the apps draw a quiet block with its
-    -- category's emoji. Last, as db.ts adds it to an older database, before this file runs.
+    -- category's emoji. Last: an older database gained it by an ALTER.
     photo_ref     TEXT
 );
 -- An account's shop (shopOf), and an enterprise's newest one, whose banner its listings carry (engine posts.ts
 -- POST_ROW_SELECT, ORDER BY opened_at DESC): in this order, so that read is a search with no sort in every row of a list
--- or a sync page (test-posts-sync-paged-cost). It took the place of idx_shops_owner (owner_pubkey alone; db.ts drops it).
+-- or a sync page (test-posts-sync-paged-cost). It took the place of idx_shops_owner (owner_pubkey alone).
 CREATE INDEX IF NOT EXISTS idx_shops_owner_opened ON shops(owner_pubkey, opened_at);
 
 -- A shop's banner, exactly as it was set (a data URL, its metadata stripped, ≤ 2 MB of image bytes: @beanpool/core
@@ -3243,7 +3345,10 @@ CREATE TABLE IF NOT EXISTS peek_tickets (
     -- Seven days after it was made (@beanpool/core PEEK_TICKET_DAYS); a row is deleted 30 days after this.
     expires_at    TEXT NOT NULL,
     -- Set when the member stops sharing it, or when the community turns outside sharing off: it opens nothing from then.
-    revoked_at    TEXT
+    revoked_at    TEXT,
+    -- How many requests to join came with this link's ticket while it opened its post (shared-listing door A3): the
+    -- sharer's "{n} asked to join from this link". A count only: who asked is on the request, for its answerers.
+    asked         INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)
 );
 -- A member's open links (their list, and the cap on how many), and the prune by when they ran out.
 CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey, expires_at);

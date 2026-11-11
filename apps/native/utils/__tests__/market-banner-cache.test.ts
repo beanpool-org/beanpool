@@ -49,7 +49,7 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
-import { applyDelta, closeDB, getDb, getPosts } from '../db';
+import { applyDelta, getDb, getPosts } from '../db';
 import { marketCardPicture } from '../market-card-picture';
 
 const BAKERY = 'b'.repeat(64);
@@ -60,7 +60,7 @@ const OWN_PHOTO = '/api/marketplace/posts/L1/photos/0?v=1791608803169&k=AbCdEf';
 
 function listing(id: string, extra: Record<string, unknown> = {}) {
     return {
-        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', credits: 5, priceType: 'fixed',
+        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', price_c: 500, priceType: 'fixed',
         authorPublicKey: BAKERY, authorCallsign: 'Valley Bakery',
         createdAt: '2026-10-01T01:00:00.000Z', updatedAt: '2026-10-01T01:00:00.000Z', active: true, status: 'active',
         audienceScope: 'public', photos: [],
@@ -120,27 +120,13 @@ describe("the phone's Market list draws an enterprise's shop banner from its own
     });
 });
 
-describe('the column on a phone that already holds a copy, and on one rolled back', () => {
-    it("a copy from before the column gains it on open, keeps its rows, and the next sync fills it", async () => {
-        await applyDelta({ posts: [listing('L1')] });
-        // The previous build's table: the same, without the column.
-        await closeDB();
-        sql.exec('ALTER TABLE posts DROP COLUMN carried_banner');
-        await getDb();
-        const cols = sql.prepare('PRAGMA table_info(posts)').all() as { name: string; type: string; dflt_value: unknown }[];
-        const col = cols.find(c => c.name === 'carried_banner');
-        expect(col).toMatchObject({ type: 'TEXT', dflt_value: null });
-        expect((await cached('L1'))?.title).toBe('Listing L1');
-        await applyDelta({ posts: [listing('L1', { authorBannerUrl: BANNER, updatedAt: '2026-10-02T01:00:00.000Z' })] });
-        expect((await cached('L1')).authorBannerUrl).toBe(`${ANCHOR}${BANNER}`);
-    });
-
+describe('the column on a phone rolled back', () => {
     it('a previous build opens the new table: no trigger, index or default names the column, and its writer leaves it empty', async () => {
         const named = sql.prepare("SELECT name FROM sqlite_master WHERE type IN ('trigger', 'index', 'view') AND sql LIKE '%carried_banner%'").all();
         expect(named).toEqual([]);
         // The previous build's row writer names its columns and not this one (INSERT OR REPLACE): it runs, and the
         // column reads empty, so that build's cards draw as they always did.
-        sql.prepare("INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, audience_scope, created_at, updated_at, carried_callsign, carried_avatar) VALUES ('L9', 'offer', 'food', 'Old build', '', 5, ?, 'active', 1, 'public', '2026-10-01T01:00:00.000Z', '2026-10-01T01:00:00.000Z', 'Valley Bakery', NULL)").run(BAKERY);
+        sql.prepare("INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, audience_scope, created_at, updated_at, carried_callsign, carried_avatar) VALUES ('L9', 'offer', 'food', 'Old build', '', 500, ?, 'active', 1, 'public', '2026-10-01T01:00:00.000Z', '2026-10-01T01:00:00.000Z', 'Valley Bakery', NULL)").run(BAKERY);
         expect(stored('L9')).toBeNull();
         expect((sql.prepare('SELECT * FROM posts WHERE id = ?').get('L9') as any).title).toBe('Old build');
     });

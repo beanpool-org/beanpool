@@ -88,13 +88,14 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: '9'.repeat(64), privateKey: '8'.repeat(64), callsign: 'Wren' } }) }));
 vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://node.example', signedGet: vi.fn(), signedPost: vi.fn() }));
 /** The node: every payment it is sent. */
-const node = vi.hoisted(() => ({ payments: [] as Array<{ requestId: string; body: { amount: number } }> }));
+// Each payment's body as signed: whole hundredths of a Bean (`amount_c`), as the node takes it.
+const node = vi.hoisted(() => ({ payments: [] as Array<{ requestId: string; body: { amount_c: number } }> }));
 vi.mock('../names-debts', async (importOriginal) => ({
     ...(await importOriginal<object>()),
     fetchMyRepayment: vi.fn(async () => ({ ok: true, value: null })),
-    payTheCommons: vi.fn(async (_node: string, _who: unknown, payment: { requestId: string; body: { amount: number } }) => {
+    payTheCommons: vi.fn(async (_node: string, _who: unknown, payment: { requestId: string; body: { amount_c: number } }) => {
         node.payments.push(payment);
-        return { ok: true, value: { transactionId: `tx-${node.payments.length}`, amount: payment.body.amount } };
+        return { ok: true, value: { transactionId: `tx-${node.payments.length}`, amount_c: payment.body.amount_c } };
     }),
 }));
 
@@ -155,7 +156,7 @@ describe('Pay the Commons: a double tap on Pay with the keyboard up', () => {
         kb.finish();
         await settle();
         await payInEveryDialog();
-        expect(node.payments.map((p) => p.body.amount)).toEqual([5]); // one payment, not one per dialog
+        expect(node.payments.map((p) => p.body.amount_c)).toEqual([500]); // one payment, not one per dialog (5 Beans: 500 hundredths)
         expect(alerts.opened.map((d) => d.title)).toEqual([REPAYMENT_LINES.payTitle]);
         expect(alerts.opened[0].message).toContain('5');
         expect(kb.hides).toBe(1); // the second tap did not start a wait of its own
@@ -175,7 +176,7 @@ describe('Pay the Commons: a double tap on Pay with the keyboard up', () => {
         await settle();
         expect(alerts.opened).toHaveLength(1);
         await payInEveryDialog();
-        expect(node.payments.map((p) => p.body.amount)).toEqual([5]);
+        expect(node.payments.map((p) => p.body.amount_c)).toEqual([500]);
         expect(kb.hides).toBe(1);
         expect(host.textContent).toContain('Paid');
     });

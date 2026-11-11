@@ -36,9 +36,9 @@ delete process.env.DIRECTORY_UNLISTED;
 delete process.env.PRIVATE_PREVIEW;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1/directory-register';
-process.env.ADMIN_PASSWORD = 'PeekTicketAdmin123!';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -48,6 +48,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const HOST = 'peek-test.example.org';
+// The node takes this as its name from the config below; before that it takes any host, so every request is signed for it.
+setSignedForHost(HOST);
 const NAME = 'Sentinelvale Commons';
 // The listing's place, and what any rounding finer than its area (0.1°) would print: none may appear.
 const PLACE = { lat: -37.0657, lng: 144.2169 };
@@ -73,7 +75,8 @@ async function call(method: string, path: string, opts: { id?: Id | null; body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), opts.id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -95,7 +98,7 @@ function must<T>(v: T | null | undefined, what: string): T {
 async function main(): Promise<void> {
     console.log('\n=== The peek ticket: one post shared outside the community (S6) ===\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
@@ -109,7 +112,6 @@ async function main(): Promise<void> {
     beforeCall = () => { resetGatewayRateLimit(); resetAdminRateLimit(); resetAdminAuthTarpit(); pruneAuthAttempts(Date.now() + 120_000); };
 
     await initTls();
-    initAdminPassword();
     se.initStateEngine();
     const OWNER = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -120,7 +122,7 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 30 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
         setMemberPhoto(db, id.pk, TEST_FACE);
         return id;
     };
@@ -136,20 +138,20 @@ async function main(): Promise<void> {
         publicAddress: { mode: 'own', hostname: HOST, status: 'live', since: new Date().toISOString() },
     } as any);
 
-    const offer = must(createPost('offer', 'tools', 'Sentinel ladder to lend', 'A tall ladder.\nLight enough to carry.', 5, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'offer');
-    const other = must(createPost('offer', 'food', 'Sentinel lemons to give', 'Lemons, any amount.', 2, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'other');
+    const offer = must(createPost('offer', 'tools', 'Sentinel ladder to lend', 'A tall ladder.\nLight enough to carry.', 500, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'offer');
+    const other = must(createPost('offer', 'food', 'Sentinel lemons to give', 'Lemons, any amount.', 200, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'other');
     const startAt = new Date(Date.now() + 3 * DAY).toISOString();
     const endAt = new Date(Date.now() + 3 * DAY + 2 * 3_600_000).toISOString();
     const event = must(createPost('event', 'social', 'Sentinel working bee', 'Bring gloves.', 0, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {
         eventStartAt: startAt, eventEndAt: endAt, eventPlaceName: '42 Sentinel Crescent', eventPrivateNote: 'Gate code 4417',
     }), 'event');
-    const groupPost = must(createPost('offer', 'tools', 'Sentinel group drill', 'For the group.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'groupPost');
+    const groupPost = must(createPost('offer', 'tools', 'Sentinel group drill', 'For the group.', 100, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'groupPost');
     db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = 'g-sentinel' WHERE id = ?").run(groupPost.id);
-    const directPost = must(createPost('offer', 'tools', 'Sentinel direct saw', 'For one.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'directPost');
+    const directPost = must(createPost('offer', 'tools', 'Sentinel direct saw', 'For one.', 100, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'directPost');
     db.prepare("UPDATE posts SET audience_scope = 'direct', target_pubkey = ? WHERE id = ?").run(bob.pk, directPost.id);
-    const hiddenPost = must(createPost('offer', 'tools', 'Sentinel hidden thing', 'Reported.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'hiddenPost');
+    const hiddenPost = must(createPost('offer', 'tools', 'Sentinel hidden thing', 'Reported.', 100, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'hiddenPost');
     db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(new Date().toISOString(), hiddenPost.id);
-    const pausedPost = must(createPost('offer', 'tools', 'Sentinel paused thing', 'Paused.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'pausedPost');
+    const pausedPost = must(createPost('offer', 'tools', 'Sentinel paused thing', 'Paused.', 100, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'pausedPost');
     db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(pausedPost.id);
 
     /** What a ticket holder must never read, in a body. */
@@ -201,8 +203,8 @@ async function main(): Promise<void> {
         const r = await peekRead(offer.id, T1, id);
         const p = r.body?.post;
         assert(r.status === 200 && !!p && Object.keys(r.body).join() === 'post', `${who}: 200 { post } and nothing else (${r.status} ${r.text.slice(0, 80)})`);
-        assert(p?.id === offer.id && p?.title === 'Sentinel ladder to lend' && p?.type === 'offer' && p?.credits === 5,
-            `${who}: the listing itself: its title, kind and price`);
+        assert(p?.id === offer.id && p?.title === 'Sentinel ladder to lend' && p?.type === 'offer' && p?.price_c === 500,
+            `${who}: the listing itself: its title, kind and price (5 Beans, as price_c 500)`);
         assert(p?.authorPublicKey === 'hidden' && p?.authorCallsign === '' && p?.authorAvatarUrl === null && !('acceptedBy' in (p ?? {})),
             `${who}: nobody in it: the author hidden, no name, no face`);
         assert(Math.abs(p?.lat - Math.round(PLACE.lat * 10) / 10) < 1e-9 && Math.abs(p?.lng - Math.round(PLACE.lng * 10) / 10) < 1e-9,
@@ -293,7 +295,7 @@ async function main(): Promise<void> {
     const runOut = await share(alice, other.id);
     db.prepare('UPDATE peek_tickets SET expires_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), runOut.body?.id);
     assert(sameAsNoTicket(await peekRead(other.id, runOut.body?.ticket), 'unsigned'), 'run out: answered as with no ticket');
-    const gone = must(createPost('offer', 'tools', 'Sentinel gone thing', 'Soon gone.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'gone');
+    const gone = must(createPost('offer', 'tools', 'Sentinel gone thing', 'Soon gone.', 100, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'gone');
     const goneShare = await share(alice, gone.id);
     assert((await peekRead(gone.id, goneShare.body?.ticket)).status === 200, 'a fresh link opens before its post goes');
     se.removePost(gone.id, alice.pk);
@@ -325,7 +327,7 @@ async function main(): Promise<void> {
     ];
     for (const [label, author, flip, extra] of later) {
         const kind = extra ? 'event' : 'offer';
-        const p = must(createPost(kind, kind === 'event' ? 'social' : 'tools', `Sentinel ${label}`, 'Soon off the board.', kind === 'event' ? 0 : 1, 'fixed',
+        const p = must(createPost(kind, kind === 'event' ? 'social' : 'tools', `Sentinel ${label}`, 'Soon off the board.', kind === 'event' ? 0 : 100, 'fixed',
             author.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, extra ?? {}), `later: ${label}`);
         const s = await share(alice, p.id);
         const opened = s.status === 201 && (await peekRead(p.id, s.body?.ticket)).status === 200;

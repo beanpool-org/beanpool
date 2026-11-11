@@ -43,7 +43,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 callsign TEXT NOT NULL,
                 avatar_ref TEXT,
                 status TEXT DEFAULT 'active',
-                earned_credit REAL DEFAULT 0,
+                earned_credit_c REAL DEFAULT 0,
                 paused INTEGER DEFAULT 0,
                 joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 is_visitor INTEGER NOT NULL DEFAULT 0,
@@ -89,7 +89,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 category TEXT NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL,
-                credits REAL NOT NULL,
+                price_c INTEGER NOT NULL DEFAULT 0,
                 price_type TEXT DEFAULT 'fixed',
                 author_pubkey TEXT NOT NULL REFERENCES members(public_key),
                 created_at DATETIME NOT NULL,
@@ -155,7 +155,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 id TEXT PRIMARY KEY,
                 from_pubkey TEXT,
                 to_pubkey TEXT,
-                amount REAL
+                amount_c REAL
             );
 
             CREATE TABLE member_preferences (
@@ -786,7 +786,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         // Insert post in group
         const now = new Date().toISOString();
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
             VALUES ('post_g1', 'offer', 'tools', 'Shovel', 'Sturdy shovel', 5, 'bob_pub', ?, ?, 'group', ?)
         `).run(now, now, group.id);
 
@@ -805,7 +805,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
 
         // Residual non-group post with target_group_id cannot be deleted by convenor
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
             VALUES ('post_public_with_group', 'offer', 'tools', 'Public Ladder', 'Open ladder', 5, 'bob_pub', ?, ?, 'public', ?)
         `).run(now, now, group.id);
 
@@ -821,19 +821,19 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         const now = new Date().toISOString();
         // 1. Public post
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, audience_scope)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, audience_scope)
             VALUES ('p_pub', 'offer', 'food', 'Apples', 'Fresh apples', 2, 'carol_pub', ?, ?, 'public')
         `).run(now, now);
 
         // 2. Group post in Makers
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, audience_scope, target_group_id)
             VALUES ('p_grp', 'offer', 'tools', 'Laser cutter access', 'In maker shed', 10, 'alice_pub', ?, ?, 'group', ?)
         `).run(now, now, group.id);
 
         // 3. Direct post from Carol to Dave
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, audience_scope, target_pubkey)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, audience_scope, target_pubkey)
             VALUES ('p_dir', 'need', 'help', 'Private task', 'Confidential', 20, 'carol_pub', ?, ?, 'direct', 'dave_pub')
         `).run(now, now);
 

@@ -6,7 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { COMMUNITY_CARD_WORDS, PEEK_WORDS as W, eventPlaceTimeText, t, tn, word } from '@beanpool/core';
+import { COMMUNITY_CARD_WORDS, PEEK_WORDS as W, eventPlaceTimeText, formatHundredths, t, tn, word } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { communityOrigin } from '../utils/community-origin';
@@ -29,7 +29,7 @@ const PEEK_SCREEN_WORDS = {
  * (`beanpool://peek?node=…`): utils/peek-link.ts. The post is read from that community as a visitor reads it (unsigned:
  * the ticket lets it through; the node sends it through guestPost, so nobody is in it and its place is its area only),
  * under "A member of {community} shared this with you", with Ask to join, which opens the community's own card screen
- * (app/community-card.tsx: the request to join, I have an invite, or the first screen for a phone with no account).
+ * (app/community-card.tsx: the request to join, sent from there with or without an account, and I have an invite).
  * A member of that community on this phone sees the post itself, as before. Nothing is signed or sent from here.
  */
 export default function PeekScreen() {
@@ -89,7 +89,7 @@ export default function PeekScreen() {
 
     const askDoor = peek && (
         <View style={styles.actions}>
-            <Pressable style={styles.primary} onPress={() => router.push(communityCardRoute(peek.origin))} accessibilityRole="button" testID="peek-ask">
+            <Pressable style={styles.primary} onPress={() => router.push(communityCardRoute(peek.origin, peek.ticket))} accessibilityRole="button" testID="peek-ask">
                 <Text style={styles.primaryText}>{t(COMMUNITY_CARD_WORDS.ask)}</Text>
             </Pressable>
         </View>
@@ -120,8 +120,9 @@ export default function PeekScreen() {
         }
         const kind = post.type === 'offer' ? t(W.kindOffer) : post.type === 'need' ? t(W.kindNeed)
             : post.type === 'event' ? t(W.kindEvent) : post.type === 'poll' ? t(W.kindPoll) : null;
-        const price = (post.type === 'offer' || post.type === 'need') && typeof post.credits === 'number' && post.credits > 0
-            ? tn(post.credits, W.beans.one, W.beans.other) : null;
+        // Whole hundredths (price_c): the plural from its Beans, the figure as formatHundredths writes it ("12.50").
+        const price = (post.type === 'offer' || post.type === 'need') && typeof post.price_c === 'number' && post.price_c > 0
+            ? tn(post.price_c / 100, W.beans.one, W.beans.other, { n: formatHundredths(post.price_c) }) : null;
         const chip = [kind, price].filter(Boolean).join(' · ');
         const when = post.type === 'event' ? eventPlaceTimeText(post.eventStartLocal, post.eventTz, post.eventStartAt) : null;
         const photo = post.photos && post.photos.length > 0 ? `${peek.origin}${post.photos[0]}` : null;

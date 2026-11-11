@@ -31,7 +31,7 @@ function stubNode(info: unknown) {
     }));
 }
 
-const GLOBAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, beans: false } };
+const GLOBAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, beans: false } };
 const BEANS_ON = { ...GLOBAL, features: { openJoin: true } };
 
 function b64url(s: string): string {

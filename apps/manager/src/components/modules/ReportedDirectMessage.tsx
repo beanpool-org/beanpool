@@ -70,7 +70,7 @@ export function ReportedDirectMessage({ nodeUrl, reportId, adminPassword, tfaTok
                     ) : (
                         <p className="m-0 flex flex-wrap items-center gap-2 text-sm text-nature-300">
                             <ReportVerdict ok={false}>No signature</ReportVerdict>
-                            <span>It came from an older app, which doesn't sign its messages. Only the server's records say who sent it.</span>
+                            <span>It was sent before the server's update to BeanPool 1.4, and messages from before then aren't checked. Only the server's records say who sent it.</span>
                         </p>
                     )}
                     {message.words.text ? (

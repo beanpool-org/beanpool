@@ -23,21 +23,22 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 const sha512 = (b: Uint8Array): Uint8Array => new Uint8Array(crypto.createHash('sha512').update(b).digest());
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState, getBalance } from './state-engine.js';
+import { initStateEngine, exportSyncState, getBalance, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createSnapshot, SNAPSHOTS_DIR } from './services/snapshot-scheduler.js';
 import { TABLES } from './engine/replication-manifest.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
-const ADMIN_PW = 'Names-List-Admin-Pw-62!';
-// Step 7c: the password alone opens no admin route with 2FA off, so the suite turns 2FA on and sends a code with it.
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
 let run = 0, passed = 0;
@@ -74,7 +75,8 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         h['X-Public-Key'] = id.pk;
-        h['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        h['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        h[SIGNED_FOR_HEADER] = signedForHost();
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }
@@ -163,22 +165,23 @@ async function main(): Promise<void> {
     COMMUNITY = (await ensureGenesis()).communityId;
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes the other roles with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, mel] = ['Ada', 'Mel'].map(newId);
     for (const who of [ada, mel]) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+    for (const [who, role] of [[ada, 'admin']] as const) {
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER())).status === 200, `${who.name} is made ${role}`);
     }
     const owenP = new Phone(owen);
     const opened = await owenP.open();
@@ -221,8 +224,14 @@ async function main(): Promise<void> {
     assert(again.status === 409 && again.body?.code === 'entry_taken', `3. a new invite for an entry already confirmed: 409 entry_taken (${show(again)})`);
     const ott = await addEntry(owenP, { name: 'Ottoline Brackenbury', note: '' });
     const first = await bindInvite(owen, ott.entryId);
-    const second = await bindInvite(owen, ott.entryId);
-    require_(first.status === 201 && second.status === 201, '3. two invites for one entry nobody holds yet');
+    const refused = await bindInvite(owen, ott.entryId);
+    assert(first.status === 201 && refused.status === 409 && refused.body?.code === 'invite_out', `3. a second live invite on the entry is refused (invites I2): 409 invite_out (${show(refused)})`);
+    // Two bound invites on one entry no longer come from the route; the redeem still never strands the second's joiner (an
+    // offline ticket bound on a phone, or a row planted by whoever runs the server, as in 4.): planted here.
+    const planted = (await generate(owen)).body.invite.code as string;
+    db.prepare('UPDATE invite_codes SET names_entry_id = ? WHERE code = ?').run(ott.entryId, planted);
+    const second = { body: { invite: { code: planted } } };
+    require_(first.status === 201 && inviteRow(planted)?.names_entry_id === ott.entryId, '3. two invites for one entry nobody holds yet');
     const ottId = newId('Ott');
     const yanId = newId('Yan');
     require_((await redeem(ottId, first.body.invite.code)).status === 200 && liveConfirmation(ottId.pk)?.entry_id === ott.entryId, '3. the first confirms Ott');
@@ -284,7 +293,7 @@ async function main(): Promise<void> {
     assert(byMelTicket.status === 200 && !liveConfirmation(vee.pk), `7a. a member's ticket bound to an entry: the joiner is a member, unconfirmed (the maker isn't an admin) (${show(byMelTicket)})`);
 
     // ── 7b. With the known floor on, a bound invite confirms the joiner, who holds the known floor ──
-    const dial = async (on: boolean) => call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on } } }, PASSWORD());
+    const dial = async (on: boolean) => call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on } } }, OWNER());
     require_((await dial(true)).status === 200, '7b. the community turns on the known floor');
     const wes = await addEntry(owenP, { name: 'Wes by the weir', note: '' });
     const bothMade = await call(owen, 'POST', `/api/names/entries/${wes.entryId}/invite`, {});
@@ -294,8 +303,8 @@ async function main(): Promise<void> {
     assert(wesJoins.status === 200 && liveConfirmation(wesId.pk)?.entry_id === wes.entryId && inviteRow(bothMade.body.invite.code)?.names_bind_outcome === 'confirmed',
         `7b. the binding keeps working: Wes joins confirmed against the entry (${show(wesJoins)})`);
     const wesBalance = getBalance(wesId.pk);
-    assert(wesBalance.knownGrant > 0 && wesBalance.floor === -wesBalance.knownGrant, `7b. his floor is the known floor (known ${wesBalance.knownGrant}, floor ${wesBalance.floor})`);
-    assert(getBalance(wesId.pk).usableFloor === 0, '7b. and with no live Offer none of it is usable');
+    assert(wesBalance.knownGrant_c > 0 && wesBalance.floor_c === -wesBalance.knownGrant_c, `7b. his floor is the known floor (known ${wesBalance.knownGrant_c}, floor ${wesBalance.floor_c} hundredths)`);
+    assert(getBalance(wesId.pk).usableFloor_c === 0, '7b. and with no live Offer none of it is usable');
     require_((await dial(false)).status === 200, '7b. the dial goes back off');
 
     // ── 8. Answering a knock adds the entry and binds it in one step ─────────────────────────────

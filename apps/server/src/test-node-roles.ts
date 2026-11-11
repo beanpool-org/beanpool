@@ -3,10 +3,11 @@
  * (docs/admin-surface.md §1, §5; docs/the-commons.md §9.2)
  *
  * Covers:
- *   1. Seeding migration runs idempotently on boot.
- *   2. SYSTEM is NEVER seeded as an owner or admin.
- *   3. A node with no genesis member seeds nothing and warns.
- *   4. Multi-genesis seeding on boot seeds all human genesis members as 'owner'.
+ *   1. A node with no human genesis member boots with no owner (it is claimed with the claim code).
+ *   2. SYSTEM is NEVER an owner or admin.
+ *   3. A boot grants no node role: a genesis member removed as owner is still not one after the db layer boots again,
+ *      and a genesis row with no grant (a pruned one too) is given none.
+ *   4. Genesis members hold 'owner' by their node_roles row, as any owner does.
  *   5. Only an owner can grant 'owner'; only an owner can grant 'admin'.
  *   6. The last owner cannot be removed.
  *   7. A treasury (is_treasury=1) can NEVER hold a node role.
@@ -41,7 +42,7 @@ import {
     getMember,
     adminSendMessage,
 } from './state-engine.js';
-import { db, seedNodeRolesFromGenesis } from './db/db.js';
+import { db, initSchema } from './db/db.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import Koa from 'koa';
 import { createAdminRoutes } from './routes/admin.js';
@@ -80,7 +81,7 @@ function throws(fn: () => void, needle: string, msg: string) {
 
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 async function main() {
@@ -100,46 +101,21 @@ async function main() {
     assert(isNodeOwner('SYSTEM') === false, 'SYSTEM has isNodeOwner = false');
     assert(isNodeAdmin('SYSTEM') === false, 'SYSTEM has isNodeAdmin = false');
 
-    // Calling seedNodeRolesFromGenesis on empty node_roles with no human genesis member warns and returns 0
-    const reseedZero = seedNodeRolesFromGenesis();
-    assert(reseedZero === 0, 'seedNodeRolesFromGenesis() returns 0 when no human genesis member exists');
-
-    // ── 2. Multi-genesis seeding migration ──
-    // Simulate legacy node that had 2 human genesis members BEFORE node_roles table existed
+    // ── 2. Genesis members own the node by their node_roles row, as seedGenesisMember writes it ──
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                 VALUES ('gen_alice', 'Alice', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run();
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('gen_alice', 100, 0)`).run();
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('gen_alice', 100, 0)`).run();
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                 VALUES ('gen_bob', 'Bob', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run();
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('gen_bob', 100, 0)`).run();
-
-    const seededCount = seedNodeRolesFromGenesis();
-    assert(seededCount === 2, 'seedNodeRolesFromGenesis() seeds both human genesis members as owner');
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('gen_bob', 100, 0)`).run();
+    assert(isNodeOwner('gen_alice') === false && isNodeOwner('gen_bob') === false, 'a genesis row alone makes nobody an owner');
+    const ownerRow = db.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')`);
+    ownerRow.run('gen_alice');
+    ownerRow.run('gen_bob');
     assert(isNodeOwner('gen_alice') === true, 'Alice is an owner');
     assert(isNodeOwner('gen_bob') === true, 'Bob is an owner');
-    assert(isNodeOwner('SYSTEM') === false, 'SYSTEM is NOT an owner after seeding');
-
-    // Idempotence: calling seedNodeRolesFromGenesis again does nothing
-    const reseedCount = seedNodeRolesFromGenesis();
-    assert(reseedCount === 0, 'seedNodeRolesFromGenesis() is idempotent and writes 0 rows on re-run');
-    assert(db.prepare("SELECT COUNT(*) AS c FROM node_roles").pluck().get() === 2, 'node_roles row count unchanged after reseed');
-
-    // Regression: Pruned ghost genesis member is NEVER resurrected
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
-                VALUES ('gen_ghost', 'Ghost', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis', 'pruned')`).run();
-    seedNodeRolesFromGenesis();
-    assert(isNodeOwner('gen_ghost') === false, 'Pruned genesis member is NEVER resurrected as owner');
-    assert(nodeRoleOf('gen_ghost') === null, 'Pruned genesis member has nodeRoleOf = null');
-
-    // Regression: Late genesis member IS seeded even when node_roles already has rows (no short-circuit)
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
-                VALUES ('gen_late', 'LateGenesis', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis', 'active')`).run();
-    const lateSeeded = seedNodeRolesFromGenesis();
-    assert(lateSeeded === 1, 'seedNodeRolesFromGenesis() seeds late genesis member without short-circuiting');
-    assert(isNodeOwner('gen_late') === true, 'Late genesis member is now owner');
-    // clean up gen_late so subsequent tests keep expected owner count
-    db.prepare("DELETE FROM node_roles WHERE member_pubkey = 'gen_late'").run();
-    db.prepare("DELETE FROM members WHERE public_key = 'gen_late'").run();
+    assert(isNodeOwner('SYSTEM') === false, 'SYSTEM is NOT an owner');
+    assert(db.prepare("SELECT COUNT(*) AS c FROM node_roles").pluck().get() === 2, 'node_roles holds the two owners');
 
     // ── 3. Role predicates and role hierarchy ──
     assert(nodeRoleOf('gen_alice') === 'owner', "nodeRoleOf(Alice) === 'owner'");
@@ -227,6 +203,20 @@ async function main() {
     // Remove gen_bob: allowed because 2 owners remain
     revokeNodeRole('gen_bob', 'owner', 'gen_alice');
     assert(isNodeOwner('gen_bob') === false, 'Bob revoked as owner');
+
+    // A boot grants no role (conversion-s0). The db layer's boot used to give 'owner' to every active genesis member with
+    // no node_roles row (db.ts seedNodeRolesFromGenesis), so an original member removed as owner was an owner again after
+    // the next restart. A node's owner comes from its claim code, a grant or a vote, never from being a genesis member.
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES ('gen_ghost', 'Ghost', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis', 'pruned')`).run();
+    const ownersBeforeBoot = db.prepare("SELECT member_pubkey FROM node_roles WHERE role = 'owner' ORDER BY member_pubkey").pluck().all();
+    initSchema();
+    assert(isNodeOwner('gen_bob') === false && nodeRoleOf('gen_bob') === null,
+        'Bob, a genesis member removed as owner, is still not an owner after the db layer boots again');
+    assert(nodeRoleOf('gen_ghost') === null, 'a pruned genesis member is given no role at boot');
+    const ownersAfterBoot = db.prepare("SELECT member_pubkey FROM node_roles WHERE role = 'owner' ORDER BY member_pubkey").pluck().all();
+    assert(JSON.stringify(ownersAfterBoot) === JSON.stringify(ownersBeforeBoot),
+        `the boot added no owner (${JSON.stringify(ownersBeforeBoot)} before, ${JSON.stringify(ownersAfterBoot)} after)`);
 
     // Remove charlie: allowed because gen_alice remains
     revokeNodeRole('charlie', 'owner', 'gen_alice');
@@ -430,15 +420,24 @@ async function main() {
         const charlieRole = rolesAfterCharlie.find(r => r.member_pubkey === 'charlie');
         assert(charlieRole?.granted_by === 'owner:password', "Charlie granted_by is recorded as 'owner:password', ignoring body actorPubkey");
 
-        // Parameter aliases: publicKey and member_pubkey
+        // One spelling: the publicKey and member_pubkey aliases went in the cutover (1.4.0, audit E3). Either alone is a
+        // request naming nobody, 400, and grants nothing; `pubkey`, the manager's, does.
         seedMember('eve', 'Eve');
-        const postAlias = await fetch(`${base}/api/local/admin/node-roles`, {
+        for (const alias of ['publicKey', 'member_pubkey']) {
+            const postAlias = await fetch(`${base}/api/local/admin/node-roles`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [alias]: 'eve', role: 'admin' }),
+            });
+            assert(postAlias.status === 400, `POST /api/local/admin/node-roles with only the old ${alias} alias: 400 (got ${postAlias.status})`);
+            assert(isNodeAdmin('eve') === false, `and Eve is not made admin by the ${alias} alias`);
+        }
+        const postPubkey = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ publicKey: 'eve', role: 'admin' }),
+            body: JSON.stringify({ pubkey: 'eve', role: 'admin' }),
         });
-        assert(postAlias.status === 200, 'POST /api/local/admin/node-roles accepts publicKey alias');
-        assert(isNodeAdmin('eve') === true, 'Eve is now admin via publicKey alias');
+        assert(postPubkey.status === 200 && isNodeAdmin('eve') === true, `with pubkey, Eve is made admin (got ${postPubkey.status})`);
 
         // Member not found returns 404
         const postNonExistent = await fetch(`${base}/api/local/admin/node-roles`, {

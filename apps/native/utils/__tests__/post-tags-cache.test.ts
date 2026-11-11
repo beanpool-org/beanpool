@@ -67,10 +67,8 @@ const realLoad = (Module as any)._load;
 };
 afterAll(() => { (Module as any)._load = realLoad; });
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { listingFreeTags, livePostChange, postTagsOf } from '@beanpool/core';
-import { applyDelta, closeDB, createPost, getDb, getMemberPosts, getMyPosts, getPost, getPosts, updateEvent, updatePost } from '../db';
-import { syncCursorKeysOf } from '../../services/pillar-sync';
+import { applyDelta, createPost, getDb, getMemberPosts, getMyPosts, getPost, getPosts, updateEvent, updatePost } from '../db';
 import { eventEditValues } from '../events';
 
 const ME = 'me'.padEnd(64, '0');
@@ -83,7 +81,7 @@ const DAY2 = '2026-10-02T01:00:00.000Z';
 
 function listing(id: string, extra: Record<string, unknown> = {}) {
     return {
-        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', credits: 5, priceType: 'fixed',
+        id, type: 'offer', category: 'food', title: `Listing ${id}`, description: '', price_c: 500, priceType: 'fixed',
         authorPublicKey: ANN, authorCallsign: 'Ann', createdAt: DAY1, updatedAt: DAY1, active: true, status: 'active',
         audienceScope: 'public', photos: [],
         ...extra,
@@ -170,53 +168,12 @@ describe('what the node says about a listing lands in the copy, on each way in',
     });
 });
 
-describe('a copy from before the column', () => {
-    /** The previous build's table: the same, without the column. */
-    async function reopenedFromBeforeTags() {
-        await closeDB();
-        sql.exec('ALTER TABLE posts DROP COLUMN tags');
-        vi.mocked(AsyncStorage.multiRemove).mockClear();
-        await getDb();
-    }
-
-    it('gains it on open with its rows kept, and forgets every sync cursor, so the node sends the tags of listings that did not change', async () => {
-        await applyDelta({ posts: [listing('L1')] });
-        await reopenedFromBeforeTags();
-        expect(stored('L1')).toBe('');
-        expect((await getPost('L1')).title).toBe('Listing L1');
-        // Every cursor: a delta from a kept one would never send a listing that has not changed since.
-        expect(vi.mocked(AsyncStorage.multiRemove)).toHaveBeenCalledWith(syncCursorKeysOf('beanpool_valley.example.org.db'));
-    });
-
-    it('asks for that read now rather than at the next timer', async () => {
-        await applyDelta({ posts: [listing('L1')] });
-        await reopenedFromBeforeTags();
-        expect(syncsAsked).toEqual(['sync']);
-    });
-
-    it('that whole read fills the rows, though no listing changed: the same updatedAt is written over', async () => {
-        await applyDelta({ posts: [listing('L1')] });
-        await reopenedFromBeforeTags();
-        await applyDelta({ posts: [listing('L1', { tags: [LEMON, EGGS] })] });
-        expect(stored('L1')).toBe(`${LEMON} ${EGGS}`);
-    });
-
-    it('a fresh copy forgets nothing: it has the column and no cursor', async () => {
-        await getDb();
-        vi.mocked(AsyncStorage.multiRemove).mockClear();
-        await closeDB();
-        await getDb();
-        expect(vi.mocked(AsyncStorage.multiRemove)).not.toHaveBeenCalled();
-        expect(syncsAsked).toEqual([]);
-    });
-});
-
 describe("the phone's own writes", () => {
-    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, price_type: 'fixed', repeatable: false, photos: null };
+    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, price_type: 'fixed', repeatable: false, photos: null };
 
     it('a create keeps what the member chose', async () => {
         fetchMock.mockImplementation(async () => answer({ success: true, post: { id: 'new-1' } }));
-        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1, tags: [LEMON] });
+        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, author_pubkey: ME, created_at: DAY1, tags: [LEMON] });
         expect(stored('new-1')).toBe(LEMON);
     });
 
@@ -258,7 +215,7 @@ describe("the phone's own writes", () => {
 // it, down the same ways in, with the same cursor reset and the same rule on an edit.
 describe('the tags a member typed', () => {
     const free = (id: string) => (sql.prepare('SELECT free_tags FROM posts WHERE id = ?').get(id) as { free_tags: string } | undefined)?.free_tags;
-    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, price_type: 'fixed', repeatable: false, photos: null };
+    const edit = { type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, price_type: 'fixed', repeatable: false, photos: null };
     const event = { type: 'event', freeTags: ['live music'], eventStartAt: '2026-11-01T01:00:00.000Z' };
 
     it('the sync stores the list as the node does, and every read hands it back', async () => {
@@ -302,40 +259,16 @@ describe('the tags a member typed', () => {
         expect(emitted).not.toContain('sync_data_updated');
     });
 
-    it('a copy from before the column gains it with its rows kept, forgets every cursor and reads whole now, once', async () => {
-        await applyDelta({ posts: [listing('L1')] });
-        await closeDB();
-        sql.exec('ALTER TABLE posts DROP COLUMN free_tags');
-        vi.mocked(AsyncStorage.multiRemove).mockClear();
-        await getDb();
-        expect(free('L1')).toBe('');
-        expect((await getPost('L1')).title).toBe('Listing L1');
-        expect(vi.mocked(AsyncStorage.multiRemove)).toHaveBeenCalledWith(syncCursorKeysOf('beanpool_valley.example.org.db'));
-        expect(syncsAsked).toEqual(['sync']);
-        await applyDelta({ posts: [listing('L1', { freeTags: ['used'] })] });
-        expect(free('L1')).toBe('["used"]');
-    });
-
-    it('a copy from before both columns gains both, and reads whole once', async () => {
-        await closeDB();
-        sql.exec('ALTER TABLE posts DROP COLUMN free_tags');
-        sql.exec('ALTER TABLE posts DROP COLUMN tags');
-        await getDb();
-        const columns = (sql.prepare('PRAGMA table_info(posts)').all() as Array<{ name: string }>).map((c) => c.name);
-        expect(columns).toEqual(expect.arrayContaining(['tags', 'free_tags']));
-        expect(syncsAsked).toEqual(['sync']);
-    });
-
     it('a create sends them and keeps them; without any it sends none', async () => {
         const bodies: Array<Record<string, unknown>> = [];
         fetchMock.mockImplementation(async (_url: string, init?: { body?: string }) => {
             if (init?.body) bodies.push(JSON.parse(init.body));
             return answer({ success: true, post: { id: 'new' } });
         });
-        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1, freeTags: ['2nd hand'] });
+        await createPost({ id: 'new-1', type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, author_pubkey: ME, created_at: DAY1, freeTags: ['2nd hand'] });
         expect(free('new-1')).toBe('["2nd hand"]');
         expect(bodies.find((b) => b.id === 'new-1')?.freeTags).toEqual(['2nd hand']);
-        await createPost({ id: 'new-2', type: 'offer', category: 'food', title: 'Lemons', description: '', credits: 5, author_pubkey: ME, created_at: DAY1 });
+        await createPost({ id: 'new-2', type: 'offer', category: 'food', title: 'Lemons', description: '', price_c: 500, author_pubkey: ME, created_at: DAY1 });
         expect(free('new-2')).toBe('');
         expect(bodies.find((b) => b.id === 'new-2')).not.toHaveProperty('freeTags');
     });

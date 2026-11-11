@@ -142,8 +142,8 @@ async function main(): Promise<void> {
                 `S's own log line, its other cursor, its node role, a setting of its own and its copy record's id came through the swap (${JSON.stringify({ before: own0, after: own1, id: [rec0.id, rec1.id] })})`);
             const s1 = await snapS();
             const m1 = await snapM();
-            assert(s1.format === '14' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
-                `S's copy is format 14, with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
+            assert(s1.format === '15' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
+                `S's copy is format 15 (money in whole hundredths), with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
             const d1 = await standby.send('pull', {});
             const st1b = await standby.send('staging');
             assert(d1.ok === true && d1.mode === 'delta' && !st1b.previous, `the next pull is a delta, and once it lands the old database is deleted (${JSON.stringify({ pull: d1, ...st1b })})`);
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
                 `S's copy stops at the page M never sent: its staging deleted, S as it was, the record "no copy came" (${JSON.stringify({ pull: p4, staging: st4, why: r4.lastWhy })}; differences ${first(snapDiff(before, mid))})`);
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             built('Bo offers eggs on M after its restart', await As(bo, '/api/marketplace/posts', {
-                type: 'offer', category: 'food', title: 'Eggs', description: 'Eggs', credits: 2, priceType: 'fixed', authorPublicKey: bo.pk,
+                type: 'offer', category: 'food', title: 'Eggs', description: 'Eggs', price_c: 200, priceType: 'fixed', authorPublicKey: bo.pk,
                 photos: [TINY_PNG],
             }));
             const d4 = await standby.send('pull', {});
@@ -261,7 +261,8 @@ async function main(): Promise<void> {
         });
 
         await step('6. a balance planted on S: a copy that is no seed is refused by the conservation guard, S unchanged', async () => {
-            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
+            // 7 Beans, whole hundredths.
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c + 700 WHERE public_key = ?', args: [ann.pk] });
             await standby.send('checkpoint');
             const before = await snapS();
             const opened = px.opened.length;
@@ -270,8 +271,10 @@ async function main(): Promise<void> {
             const after = await snapS();
             const r6 = await standby.send('record');
             const st6 = await standby.send('staging');
-            assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && /the copy's ledger totals/.test(p6.error ?? '') && served >= 2
-                && r6.lastWhy === 'conservation' && snapDiff(before, after).length === 0 && Math.abs(after.ledgerSum - before.ledgerSum) < 1e-9 && !st6.staging,
+            // The shift is the 7 Beans planted, in Beans (core's formatter), never raw hundredths with four decimals ("700.0000").
+            assert(p6.ok === false && /conservation/i.test(p6.error ?? '') && /the copy's ledger totals/.test(p6.error ?? '')
+                && /a shift of −7 Beans/.test(p6.error ?? '') && !/\d\.\d{4}\b/.test(p6.error ?? '') && served >= 2
+                && r6.lastWhy === 'conservation' && snapDiff(before, after).length === 0 && after.ledgerSum === before.ledgerSum && !st6.staging,
                 `the routine whole copy, all ${served} pages of it built, is refused at the closing check against S's live ledger; S's ledger as it was, the plant included (${JSON.stringify({ pull: p6, why: r6.lastWhy })}; total ${after.ledgerSum}; before: one payload refused by the import's own guard)`);
             // The next pull's copy can make its staging before S has seen the refused one's stager exit (CI runs 36794955035
             // and 36808165404: the copy after a refused one failed at its first page, ENOENT). Here, always.
@@ -280,7 +283,7 @@ async function main(): Promise<void> {
                 `a whole copy started the moment the last one was stopped, before that one's stager is seen gone: its staging is its own once that `
                 + `stager has exited, and its first page reaches its stager; stopped in turn, it goes (${JSON.stringify(again)}; before: the stopped `
                 + 'copy\'s exit deleted the next one\'s staging, which failed at its first page, ENOENT)');
-            await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance - 7 WHERE public_key = ?', args: [ann.pk] });
+            await standby.send('sql', { sql: 'UPDATE accounts SET balance_c = balance_c - 700 WHERE public_key = ?', args: [ann.pk] });
             const p6b = await wholeCopy();
             assert(p6b.ok === true && p6b.staged === true && (await exactNow()).length === 0, `the plant gone, the next lands (${JSON.stringify(p6b)})`);
         });
@@ -604,7 +607,7 @@ async function main(): Promise<void> {
                 sql: `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${many})
                       INSERT INTO members (public_key, callsign, updated_at) SELECT lower(hex(randomblob(32))), 'Many ' || i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`,
             });
-            await main.send('sql', { sql: `INSERT INTO accounts (public_key, balance) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'` });
+            await main.send('sql', { sql: `INSERT INTO accounts (public_key, balance_c) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'` });
             const w16 = await wholeCopy();
             const st16 = await standby.send('staging');
             require_(w16.ok === true && w16.staged === true && st16.previous, `S takes a whole copy of M's ${many} more members, swapped in, the old database kept (${JSON.stringify({ w16, st16 })})`);

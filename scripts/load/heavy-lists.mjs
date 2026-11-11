@@ -43,12 +43,15 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { SIGNED_FOR_HEADER, signedRequestBytes, signedRequestText } from '../../packages/beanpool-core/dist/index.js';
 import { memberKey } from './heavy-lists-seed.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
 const SERVER_DIR = path.join(ROOT, 'apps/server');
 const PORT_HTTP = 18080, PORT_HTTPS = 18443, PORT_P2P = 14001, PORT_PROBE = 18999;
+/** The host every request goes to, and so the host it is signed for: this machine's own number (a node that knows no name takes it as its own). */
+const SIGNED_FOR = '127.0.0.1';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith('--') ? [...acc, [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]]] : acc), []));
 const heap = Number(args.heap || 256);
@@ -88,14 +91,15 @@ function bigGroupId() {
     return execFileSync(process.execPath, ['-e', read], { cwd: SERVER_DIR }).toString();
 }
 
-/** A member's signed GET, in the older request format every node takes (the server suites' own). */
+/** A member's signed GET, in format 2 as the apps send it: signed for the host it connects to (core request-signing.ts). */
 function signedGet(route, reader, ip) {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`GET\n${route.split('?')[0]}\n${ts}\n${nonce}\n`), reader.priv).toString('base64');
+    const text = signedRequestText({ host: SIGNED_FOR, method: 'GET', path: route.split('?')[0], timestamp: String(ts), nonce, body: '' });
+    const sig = crypto.sign(null, Buffer.from(signedRequestBytes(text)), reader.priv).toString('base64');
     return {
         method: 'GET', host: '127.0.0.1', port: PORT_HTTP, path: route, agent: false,
-        headers: { 'X-Public-Key': reader.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce, 'CF-Connecting-IP': ip },
+        headers: { 'X-Public-Key': reader.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce, [SIGNED_FOR_HEADER]: SIGNED_FOR, 'CF-Connecting-IP': ip },
     };
 }
 

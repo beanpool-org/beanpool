@@ -314,3 +314,12 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `AdviseTheOwners` component in `apps/manager/src/components/modules/AdviseTheOwners.tsx` was untested.
 **Learning:** `nodeCredential(activeNode)` inspects `automationToken` and `adminPassword` on `NodeProfile`. Mocking `adviseOwners` and `getTfaSessionToken` allowed full assertion on collapsed state, expand/cancel transitions, input character count formatting, send button disabled state on empty/whitespace text, error alert rendering, and callback triggering on success.
 **Action:** Continue identifying remaining untested modal or panel components in `apps/manager/src/components/modules/`.
+
+## 2026-11-08 - [manager tests] CoreWalkthrough component and helpers unit tests
+**Gap:** `CoreWalkthrough` component and helper functions (`currentDoor`, `draftFrom`, `knownFloorLock`, `changesFrom`, `knownFloorProblem`) in `apps/manager/src/components/modules/CoreWalkthrough.tsx` lacked a dedicated unit test suite.
+**Learning:** `CoreWalkthrough` requires partial mock of `@beanpool/core` preserving `wordsFor` used by `fresh-proof.ts` while mocking `createAddressLookup` to support place step location suggestions. Testing verified helper functions, step transitions, input validation gating on invalid known floor bounds, and lock confirmation via `confirmCoreSettings`.
+**Action:** Continue identifying remaining untested components or helper utilities across `apps/manager/src/components/`.
+## 2026-11-08 - [manager tests] ShapeRows and RowControls unit tests
+**Gap:** `ShapeRow`, `RowControls`, and helper functions (`joinDisplay`, `joinRadioTitle`, `joinRadioDescription`, `visitorsDisplay`) in `apps/manager/src/components/modules/ShapeRows.tsx` lacked a direct unit test suite.
+**Learning:** `ShapeLock.code` expects union type `ShapeLockCode` (e.g. `'server_env'`, `'auth_hatch_open'`). Testing verified expand toggle interactions, `serverBadge` interaction overrides, `auth_hatch_open` danger tint styling, `allowExpandWithLock` core lock overrides, and `RowControls` typed word gating.
+**Action:** Continue identifying remaining untested module components and helpers across `apps/manager/src/components/modules/`.

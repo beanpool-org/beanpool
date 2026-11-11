@@ -10,7 +10,7 @@
  * brings the phone's storage with it; core's words layer is pure); the test holds the two to the same answer.
  */
 
-import { t, word } from '@beanpool/core';
+import { parseHundredths, t, word } from '@beanpool/core';
 import type { NodeFeatures } from './node-profile';
 import type { DecisionTouch, DecisionEffect } from './db';
 
@@ -21,17 +21,20 @@ function beansShown(features: NodeFeatures | null | undefined): boolean {
 /*
  * A group's post form (app/group-post.tsx). With Beans off it has no price field, and the price never holds a post
  * back: the post goes up at 0 Beans and a total price, which is all the server takes there. With Beans on, or on a
- * node that says nothing, each of these is exactly what the form did before.
+ * node that says nothing, the typed price is read as every typed amount is (core parseHundredths): whole hundredths of
+ * a Bean, the language's decimal mark, at most two decimals, never a float.
  */
 
-/** The Beans and the price unit the post goes up with. */
-export function groupPostPrice(field: string, priceType: string, features: NodeFeatures | null | undefined): { credits: number; price_type: string } {
-    return beansShown(features) ? { credits: Number(field) || 0, price_type: priceType } : { credits: 0, price_type: 'fixed' };
+/** The price (whole hundredths of a Bean, the node's `price_c`) and its unit the post goes up with. */
+export function groupPostPrice(field: string, priceType: string, features: NodeFeatures | null | undefined): { price_c: number; price_type: string } {
+    if (!beansShown(features)) return { price_c: 0, price_type: 'fixed' };
+    const read = parseHundredths(field);
+    return { price_c: read.ok ? read.value : 0, price_type: priceType };
 }
 
-/** Tapping Post marks the price field: empty, not a number, or below 0. */
+/** Tapping Post marks the price field: empty, or not an amount of Beans 0 or more with at most two decimals (parseHundredths). */
 export function groupPostPriceInvalid(field: string, features: NodeFeatures | null | undefined): boolean {
-    return beansShown(features) && (!field.trim() || isNaN(Number(field)) || Number(field) < 0);
+    return beansShown(features) && !parseHundredths(field).ok;
 }
 
 /** What the alert says when a required field is missing. */

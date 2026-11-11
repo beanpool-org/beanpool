@@ -88,6 +88,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -139,7 +140,8 @@ async function call(id: Id, urlPath: string, body: unknown): Promise<{ status: n
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${urlPath}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'POST', path: urlPath, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -157,7 +159,8 @@ async function getAs(id: Id, urlPath: string): Promise<{ status: number; body: a
     const nonce = crypto.randomBytes(16).toString('hex');
     const res = await fetch(`${BASE}${urlPath}`, { headers: {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'GET', path: urlPath.split('?')[0], timestamp: ts, nonce }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     } });
@@ -170,8 +173,8 @@ async function getAs(id: Id, urlPath: string): Promise<{ status: number; body: a
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 interface Sock { ws: WebSocket; raw: string[] }
@@ -233,11 +236,11 @@ async function main(): Promise<void> {
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number } = {}): Id => {
         const id = newId();
         // A profile photo, because posting needs one; joined long ago, so no new account's limits apply.
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, earned_credit_c)
                     VALUES (?, ?, ?, 'seed', 'seed', ?, ?, ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), opts.status ?? 'active', opts.visitor ? 1 : 0, opts.earned ?? 0);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('DoorbellAlice', { earned: 10 });
@@ -541,7 +544,7 @@ async function main(): Promise<void> {
 
         // A trade's step on a members-only listing: the member socket gets the bare doorbell as before,
         // and no socket off the member feed is rung.
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope) VALUES ('doorbell-trade-group', 'offer', 'other', 'Group trade', 'desc', 1, ?, 'group')").run(alice.pk);
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope) VALUES ('doorbell-trade-group', 'offer', 'other', 'Group trade', 'desc', 1, ?, 'group')").run(alice.pk);
         await sleep(100);
         clear();
         se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade-group', transaction: { id: 'doorbell-trade-group-tx' } }, [alice.pk], { othersGetDoorbell: true });
@@ -555,7 +558,7 @@ async function main(): Promise<void> {
 
         // A trade's step on a public listing, sent to its parties with a bare doorbell for the other members (othersGetDoorbell):
         // the listing went pending, came back or went, so every socket off the member feed gets the listings' doorbell.
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope) VALUES ('doorbell-trade', 'offer', 'other', 'Public trade', 'desc', 1, ?, 'public')").run(alice.pk);
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope) VALUES ('doorbell-trade', 'offer', 'other', 'Public trade', 'desc', 1, ?, 'public')").run(alice.pk);
         await sleep(100);
         clear();
         se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade', transaction: { id: 'doorbell-trade-tx' } }, [alice.pk], { othersGetDoorbell: true });

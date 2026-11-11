@@ -42,6 +42,7 @@ import { db } from './db/db.js';
 import { resetAgentLimits } from './agent/limits.js';
 import { enterpriseRef } from './agent/owner-posts.js';
 import { AGENT_TOOLS, toolsFor, type AgentGrant } from './agent/tools.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -79,7 +80,8 @@ async function market(reader: Key, query: string): Promise<any[]> {
     const res = await fetch(`${BASE}${urlPath}`, {
         headers: {
             'X-Public-Key': reader.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), reader.priv).toString('base64'),
+            'X-Signature': signRequest(reader.priv, { method: 'GET', path: urlPath.split('?')[0], timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         },
     });
     const body = await res.json().catch(() => null);
@@ -117,12 +119,12 @@ async function main(): Promise<void> {
     setMemberPhoto(db, owner.pub, AVATAR);
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'Mia Neighbour', 'active', ?, ?, 'inv-test')`).run(mia.pub, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(mia.pub);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(mia.pub);
     setMemberPhoto(db, mia.pub, AVATAR);
     const bakery = keypair().pub;
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, 'Olive Bakery Co-op', ?, ?, 'inv-test', 'active', 1)`).run(bakery, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(bakery);
     setMemberPhoto(db, bakery, AVATAR);
     db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(bakery, owner.pub);
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(owner.pub);

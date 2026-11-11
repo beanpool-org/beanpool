@@ -51,7 +51,6 @@ delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
 const PW = 'MemberBlocksPass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -64,7 +63,6 @@ import {
     initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -74,6 +72,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 // Before each check, who blocked each key as a listing's push keeps it is held to the table (#1831, keptAgree in main).
@@ -104,20 +103,21 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active', ?)`)
         .run(id.pk, name, opts.visitor ? null : owner.pk, opts.visitor ? null : 'TEST', opts.visitor ? 1 : 0);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
 interface Req { method: string; path: string; headers: Record<string, string>; body?: string }
 interface Res { status: number; body: any; headers: Headers }
-/** The app's signed request (the format before request binding, which every node still takes), ready to send or send again. */
+/** The app's signed request (format 2, through signed-request-test-helper.ts), ready to send or send again. */
 function signed(method: 'GET' | 'POST', path: string, id: Id, body?: unknown, opts: { headerKey?: string } = {}): Req {
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': opts.headerKey ?? id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -167,8 +167,8 @@ function socket(id: Id | null): Promise<Sock> {
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-        url += `?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+        const sig = signSocket(id.priv, ts, nonce);
+        url += `?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     }
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
@@ -184,7 +184,6 @@ const aboutBlocks = (s: Sock) => s.events.filter(e => e.type === 'blocklist_upda
 
 async function main(): Promise<void> {
     console.log('\n=== A member\'s block list, kept by the community ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     // The ceiling's rounds send one member's 1,200 signed requests in seconds, the gateway reset before each (call): the

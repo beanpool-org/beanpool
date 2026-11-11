@@ -66,13 +66,13 @@ const GLOBAL = { profile: 'global', features: { beans: false, nearbyListings: { 
 const AREA = { lat: -28.5, lng: 153.5 };
 
 const listing = (id, title, author, createdAt, over = {}) => ({
-    id, title, type: 'offer', category: 'tools', credits: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false,
+    id, title, type: 'offer', category: 'tools', price_c: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false,
     description: 'Some words about it, enough to run onto a second line at this width.',
-    authorPublicKey: `member-${author.toLowerCase()}`, authorCallsign: author, authorEnergyCycled: 40, photos: [],
+    authorPublicKey: `member-${author.toLowerCase()}`, authorCallsign: author, authorEnergyCycled: 4000, photos: [],
     createdAt, updatedAt: createdAt, lat: -28.6, lng: 153.4, ...over,
 });
 const eventPost = (id, title, createdAt, start, over = {}) => ({
-    ...listing(id, title, 'Eve', createdAt, { category: 'community' }), type: 'event', credits: 0,
+    ...listing(id, title, 'Eve', createdAt, { category: 'community' }), type: 'event', price_c: 0,
     eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 2 * 3600_000).toISOString(), eventPlaceName: 'Civic hall',
     eventState: 'scheduled', goingCount: 4, interestedCount: 2, myRsvp: null, ...over,
 });
@@ -145,7 +145,7 @@ const LOCAL = [
     listing('lee-1', 'Kombucha scoby', 'Lee', at(10, 3, 12, 0), { category: 'food', photos: ['/assets/header-bg.png'] }),
     listing('sam-1', 'Lift to Lismore', 'Sam', at(10, 2, 23, 59), { type: 'need' }),
     // An Elder (the ⛰️ tier) in the category with the longest words, priced so the price takes the chip row's far end.
-    listing('kai-1', ELDER_TITLE, 'Kai', at(10, 2, 12, 0), { category: 'mindset', credits: 25, priceType: 'hourly', authorEnergyCycled: 5000 }),
+    listing('kai-1', ELDER_TITLE, 'Kai', at(10, 2, 12, 0), { category: 'mindset', price_c: 2500, priceType: 'hourly', authorEnergyCycled: 500000 }),
     eventPost('ev-1', 'Repair Cafe', at(8, 20, 9, 0), new Date(2026, 10, 4, 10, 0)),
     eventPost('ev-2', 'Garden day', at(9, 30, 9, 0), new Date(2026, 10, 10, 9, 0), { myRsvp: 'going', photos: ['/assets/neon-vines-banner.png'] }),
     PINNED_EVENT,
@@ -167,7 +167,6 @@ async function open(browser, origin, { dark, global, width = 320, scale = 1.3, s
     await context.addInitScript(([mode, list]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('marketplace_view_mode', list);
         } catch { /* a picture of the default theme is still a picture */ }
     }, [dark ? 'dark' : 'light', view]);

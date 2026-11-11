@@ -57,6 +57,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -80,7 +81,7 @@ function makeIdentity(callsign: string) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -88,10 +89,11 @@ async function signedFetch(method: 'GET' | 'POST' | 'DELETE', path: string, id: 
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -110,7 +112,7 @@ async function signedFetch(method: 'GET' | 'POST' | 'DELETE', path: string, id: 
 
 function verifyConservation(): number {
     const sumAccounts = (db.prepare(
-        "SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'"
+        "SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'"
     ).get() as any).s;
     return Math.abs(sumAccounts + getCommonsBalanceExact());
 }

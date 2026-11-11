@@ -77,8 +77,7 @@ import {
 import { chatAuthorWords, chatLineWords } from '../utils/chat-line-words';
 import { signedRequestWords } from './signed-request-lines';
 import { NotDeliveredMark } from './chat/NotDeliveredMark';
-import { groupNameShown, t, tn } from '@beanpool/core';
-import { normaliseTappedUrl } from '../utils/chat-links';
+import { groupNameShown, normaliseTappedUrl, t, tn } from '@beanpool/core';
 import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';

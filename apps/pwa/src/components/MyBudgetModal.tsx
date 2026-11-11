@@ -4,7 +4,7 @@
  * by its heading, focus in on open and back to what opened it on close, Escape and the ✕ (44 × 44 px) close it.
  */
 import { useRef } from 'react';
-import { formatDate, formatHistoryLine, formatNumber, t, tn } from '@beanpool/core';
+import { formatDate, formatHistoryLine, formatHundredths, t, tn, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import type { MyVouching } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
@@ -47,10 +47,15 @@ export function MyBudgetModal({ vouching, onClose }: MyBudgetModalProps) {
                 </div>
                 <div className="p-3.5 mb-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 space-y-1 text-xs text-nature-700 dark:text-nature-300">
                     <div className="text-sm font-extrabold text-nature-950 dark:text-white">
-                        {t('{left} of {total} left', { left: formatNumber(budget.left), total: formatNumber(budget.level) })}
+                        {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure and no held line. */}
+                        {vouching.noLimit
+                            ? t(VOUCH_PRESET_WORDS.noLimit)
+                            : t('{left} of {total} left', { left: formatHundredths(budget.left), total: formatHundredths(budget.level) })}
                     </div>
-                    <div>{t('Vouched {amount} to {people} who joined', { amount: formatNumber(budget.vouched), people: tn(budget.peopleVouched, '{n} person', '{n} people') })}</div>
-                    <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(budget.held), invites: tn(budget.heldInvites, '{n} invite', '{n} invites') })}</div>
+                    <div>{t('Vouched {amount} to {people} who joined', { amount: formatHundredths(budget.vouched), people: tn(budget.peopleVouched, '{n} person', '{n} people') })}</div>
+                    {!vouching.noLimit && (
+                        <div>{t('Held {amount} on {invites} not used yet', { amount: formatHundredths(budget.held), invites: tn(budget.heldInvites, '{n} invite', '{n} invites') })}</div>
+                    )}
                 </div>
 
                 <div className="mb-4">

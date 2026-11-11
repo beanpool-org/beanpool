@@ -13,7 +13,7 @@ const NATIVE = path.resolve(HERE, '..');
 const ROOT = path.resolve(NATIVE, '../..');
 const SCALE = 1.3;
 const WIDTH = 320;
-const SHOTS_DIR = path.join(NATIVE, 'e2e', 'screenshots', 'vouch-v3');
+const SHOTS_DIR = process.env.VOUCH_SHOTS_DIR || path.join(NATIVE, 'e2e', 'screenshots', 'vouch-v3');
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vouch-native-320-'));
@@ -74,29 +74,35 @@ const STUBS = {
         };
     `,
     'vouchers': `
+        // GET /api/vouchers/me: every figure whole hundredths of a Bean (the budget's kept names, the presets, vouchMax, budgetMax,
+        // a vouched-by row's and a history line's amount_c), as the node sends them.
         export const askMyVouching = async () => ({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
-            vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount: 100, at: '2026-11-01' }],
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
+            vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount_c: 10000, at: '2026-11-01' }],
             history: [
-                { kind: 'grant', amount: 1000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01' },
+                { kind: 'grant', amount_c: 100000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01' },
                 // #2915 round 4: an earlier 75 for @sam, so the profile card is a raise and 50, 75 and 100 are greyed by the cap.
-                { kind: 'hold', amount: -75, actor: 'me', actorCallsign: 'Alice', at: '2026-11-03', for: 'profile', person: { memberPubkey: 's'.repeat(64), callsign: 'sam' } },
+                { kind: 'hold', amount_c: -7500, actor: 'me', actorCallsign: 'Alice', at: '2026-11-03', for: 'profile', person: { memberPubkey: 's'.repeat(64), callsign: 'sam' } },
             ],
         });
         export const rereadMyVouching = async (anchor, identity, apply) => { const mv = await askMyVouching(); if (mv) apply(mv); };
-        export const vouchFromProfile = async () => ({ ok: true, amount: 25, total: 25 });
+        export const vouchFromProfile = async () => ({ ok: true, amount: 2500, total: 2500 });
     `,
     'db': `
         export const getMemberProfile = async () => ({ publicKey: 's'.repeat(64), callsign: 'sam', joinedAt: '2026-10-15T00:00:00.000Z' });
         export const getMemberRatings = async () => ({ average: 5, count: 1, asProvider: { average: 5 }, asReceiver: { average: 5 }, ratings: [] });
         export const getMemberPosts = async () => [];
+        // db.ts getBalance's answer: the *_c fields, whole hundredths of a Bean.
         export const getBalance = async () => ({
-            balance: 150, earnedCredit: 50, allowance: 100, usableAllowance: 100,
-            vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount: 100, at: '2026-11-01T00:00:00.000Z' }]
+            balance_c: 15000, floor_c: -10000, usableFloor_c: -10000, tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit_c: 5000, earnedCredit_c: 5000,
+            grantedCredit_c: 0, qualifiedValue_c: 5000, avgRating: 5, reviewCount: 1, trustStats: { uniquePartners: 1 }, commons_c: 0, isBlockedFromTrading: false,
+            canOperate: false, keeperOf: [], isTreasury: false, activated: true, hasLiveOffer: true, liveOffers: 1, knownGrant_c: 0, roomHeld_c: 10000,
+            frozen: false, knownFrozen: false, creditFrozen: false,
+            vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount_c: 10000, at: '2026-11-01T00:00:00.000Z' }]
         });
         export const getRatingsGiven = async () => [];
         export const getFriendsLocal = async () => [];
@@ -121,7 +127,8 @@ const STUBS = {
         export const refreshBalanceFromServer = async () => ({});
     `,
     'blocklist': `export const getBlockedUsers = async () => []; export const isUserBlocked = async () => false; export const BLOCKLIST_UPDATED_EVENT = 'bl'; export const blockUser = async () => {}; export const unblockUser = async () => {};`,
-    'trust-tier': `export const getTrustProfile = async () => ({ tier: 'trusted', mutualCount: 0, mutualConnections: [], vouchedInBy: null }); export const TIER_WORDS = {};`,
+    // The tiers' words are the real ones: the Ledger's header writes its tier through t(TIER_WORDS[name]) (an empty stand-in threw).
+    'trust-tier': `export const getTrustProfile = async () => ({ tier: 'trusted', mutualCount: 0, mutualConnections: [], vouchedInBy: null }); export { TIER_WORDS, getTrustTier, isElder } from ${JSON.stringify(path.join(NATIVE, 'utils/trust-tier.ts'))};`,
     'members-lookup': `export const cardNeedsFetch = () => false; export const fetchCardByKey = async () => null;`,
     'node-profile': `export const invitesOn = () => true; export const membersByKey = () => true; export const beansOn = () => true; export const getCachedNodeProfile = () => null; export const showcaseMode = () => 'off'; export const decisionsOn = () => false; export const hiddenTabsFor = () => [];`,
     'use-node-profile': `export const useNodeProfile = () => ({ nodeProfile: { profile: 'local', features: { beans: true, invites: true } } });`,
@@ -170,7 +177,8 @@ globalThis.__store = new Map([
 ]);
 
 function App() {
-    const [preset, setPreset] = useState<number | null>(25);
+    // Every figure whole hundredths of a Bean, as VouchPresetChoice takes them (2500 is a vouch of 25).
+    const [preset, setPreset] = useState<number | null>(Number(q.get('pick')) || 2500);
 
     if (view === 'profile') {
         return <PublicProfileScreen />;
@@ -183,8 +191,10 @@ function App() {
             <VouchPresetChoice
                 value={preset}
                 onChange={setPreset}
-                budgetLeft={550}
-                budgetTotal={1000}
+                budgetLeft={Number(q.get('left')) || 55000}
+                budgetTotal={100000}
+                noLimit={q.get('owner') === '1'}
+                raiseFrom={Number(q.get('raise')) || undefined}
             />
         </ScrollView>
     );
@@ -240,6 +250,15 @@ const browser = await chromium.launch();
 const cases = [
     { view: 'presets', scheme: 'light', name: 'native-presets-320dp-light.png' },
     { view: 'presets', scheme: 'dark', name: 'native-presets-320dp-dark.png' },
+    // An owner (Marty, 9 Nov): 200 and 500 too, "From your budget: No limit".
+    { view: 'presets', scheme: 'light', owner: true, name: 'native-owner-presets-320dp-light.png' },
+    { view: 'presets', scheme: 'dark', owner: true, name: 'native-owner-presets-320dp-dark.png' },
+    // A raise (invites-vouching I6): "Raise to" the totals above what was vouched, no None; a voucher at 25 with 30 left (50 open, 75 and 100 greyed
+    // on the difference), and an owner at 100 (200 and 500, nothing greyed).
+    { view: 'presets', scheme: 'light', raise: 2500, pick: 5000, left: 3000, name: 'native-raise-voucher-320dp-light.png' },
+    { view: 'presets', scheme: 'dark', raise: 2500, pick: 5000, left: 3000, name: 'native-raise-voucher-320dp-dark.png' },
+    { view: 'presets', scheme: 'light', owner: true, raise: 10000, pick: 20000, name: 'native-raise-owner-320dp-light.png' },
+    { view: 'presets', scheme: 'dark', owner: true, raise: 10000, pick: 20000, name: 'native-raise-owner-320dp-dark.png' },
     { view: 'profile', scheme: 'light', name: 'native-profile-320dp-light.png' },
     { view: 'profile', scheme: 'dark', name: 'native-profile-320dp-dark.png' },
     { view: 'ledger', scheme: 'light', name: 'native-ledger-320dp-light.png' },
@@ -251,7 +270,7 @@ try {
         const context = await browser.newContext({ viewport: { width: WIDTH, height: 640 }, deviceScaleFactor: 2 });
         const page = await context.newPage();
         page.on("pageerror", (e) => console.log(`[${c.view}/${c.scheme}] page error: ${String(e.message).slice(0, 300)}`));
-        await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}`);
+        await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}${c.owner ? '&owner=1' : ''}${c.raise ? `&raise=${c.raise}&pick=${c.pick}` : ''}${c.left ? `&left=${c.left}` : ''}`);
         await page.waitForTimeout(500);
         // #2915 round 4: the vouch card is below the fold inside the profile's ScrollView.
         if (c.view === "profile") { await page.evaluate(() => document.querySelector("[data-testid=\"profile-vouch\"]")?.scrollIntoView({ block: "start" })); await page.waitForTimeout(300); }

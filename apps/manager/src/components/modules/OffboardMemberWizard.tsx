@@ -7,6 +7,7 @@ import {
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { GATED_FOCUS, gatedProps, guardGated } from '../../lib/gated-control';
+import { beansFigure, beansText } from '../../lib/beans';
 
 /** The elements holding the visible reason each rule gives, so a blocked control can point at them. */
 const REASON_SOLE_OWNER = 'offboard-blocked-sole-owner';
@@ -87,7 +88,7 @@ export function OffboardMemberWizard({
     const isSelfDealing = Boolean(
         hasKeyAuth &&
         preview &&
-        preview.balance > 0 &&
+        preview.balance_c > 0 &&
         resolutionChoice === 'gift_to_member' &&
         currentAdminPubkey &&
         giftRecipient.toLowerCase() === currentAdminPubkey.toLowerCase()
@@ -127,9 +128,9 @@ export function OffboardMemberWizard({
         setError(null);
 
         let resolution: 'donate_to_commons' | 'gift_to_member' | 'write_off_commons' | 'prune_zero_balance';
-        if (preview.balance > 0) {
+        if (preview.balance_c > 0) {
             resolution = hasKeyAuth && (preview.activeMembers?.length ?? 0) > 0 ? resolutionChoice : 'donate_to_commons';
-        } else if (preview.balance < 0) {
+        } else if (preview.balance_c < 0) {
             resolution = 'write_off_commons';
         } else {
             resolution = 'prune_zero_balance';
@@ -253,25 +254,26 @@ export function OffboardMemberWizard({
                         <div className="p-4 bg-nature-900/80 border border-nature-800 rounded-2xl flex items-center justify-between">
                             <div>
                                 <span className="text-[11px] text-nature-400 font-mono uppercase block">Departing Balance</span>
+                                {/* Every figure here is the node's, whole hundredths of a Bean (getOffboardPreview's *_c fields). */}
                                 <span className={`text-2xl font-bold font-mono ${
-                                    preview.balance > 0 ? 'text-emerald-400' : preview.balance < 0 ? 'text-red-400' : 'text-nature-200'
+                                    preview.balance_c > 0 ? 'text-emerald-400' : preview.balance_c < 0 ? 'text-red-400' : 'text-nature-200'
                                 }`}>
-                                    {preview.balance > 0 ? `+${preview.balance.toFixed(2)}` : preview.balance.toFixed(2)} Beans
+                                    {preview.balance_c > 0 ? '+' : ''}{beansText(preview.balance_c)}
                                 </span>
                             </div>
                             <div className="text-right">
                                 <span className="text-[11px] text-nature-400 font-mono uppercase block">Commons Pool</span>
                                 <span className="text-lg font-bold font-mono text-nature-200">
-                                    {preview.commonsBalance.toFixed(2)} Beans
+                                    {beansText(preview.commonsBalance_c)}
                                 </span>
                             </div>
                         </div>
 
                         {/* Case 1: Positive Balance Surplus */}
-                        {preview.balance > 0 && (
+                        {preview.balance_c > 0 && (
                             <div className="space-y-3 bg-nature-900/50 border border-nature-800 p-4 rounded-2xl">
                                 <span className="font-bold text-nature-200 block text-xs">
-                                    Choose Surplus Resolution for +{preview.balance.toFixed(2)} Beans:
+                                    Choose Surplus Resolution for +{beansText(preview.balance_c)}:
                                 </span>
 
                                 <label className="flex items-start gap-2.5 p-2 rounded-xl hover:bg-nature-800/40 cursor-pointer">
@@ -286,7 +288,7 @@ export function OffboardMemberWizard({
                                     <div>
                                         <span className="font-bold text-white block">Donate to the Commons Pool</span>
                                         <span className="text-[11px] text-nature-300">
-                                            Adds {preview.balance.toFixed(2)} beans to community funds (New Commons pool: {(preview.commonsBalance + preview.balance).toFixed(2)} beans).
+                                            Adds {beansFigure(preview.balance_c)} beans to community funds (New Commons pool: {beansFigure(preview.projectedCommonsBalance_c)} beans).
                                         </span>
                                     </div>
                                 </label>
@@ -360,27 +362,27 @@ export function OffboardMemberWizard({
                         )}
 
                         {/* Case 2: Negative Balance / Debt Write-off */}
-                        {preview.balance < 0 && (
+                        {preview.balance_c < 0 && (
                             <div className="p-4 bg-amber-950/40 border border-amber-800/70 rounded-2xl space-y-2">
                                 <span className="font-bold text-amber-200 flex items-center gap-1.5 text-xs">
                                     <span>⚠️</span> Cost to Community (Formal Debt Write-Off)
                                 </span>
                                 <p className="text-[11px] text-amber-300/90 leading-relaxed m-0">
-                                    @{member.callsign}'s balance is <strong className="text-white font-mono">{preview.balance.toFixed(2)} beans</strong>. Offboarding will charge this debt to the Commons pool to preserve mutual credit zero-sum balance.
+                                    @{member.callsign}'s balance is <strong className="text-white font-mono">{beansFigure(preview.balance_c)} beans</strong>. Offboarding will charge this debt to the Commons pool to preserve mutual credit zero-sum balance.
                                 </p>
                                 <div className="p-2.5 bg-black/40 border border-amber-900/60 rounded-xl text-[11px] font-mono flex justify-between">
                                     <span className="text-nature-400">Commons Pool Impact:</span>
                                     <span className="text-amber-200">
-                                        {preview.commonsBalance.toFixed(2)} → {preview.projectedCommonsBalance.toFixed(2)} Beans
+                                        {beansFigure(preview.commonsBalance_c)} → {beansText(preview.projectedCommonsBalance_c)}
                                     </span>
                                 </div>
                             </div>
                         )}
 
                         {/* Case 3: Zero Balance */}
-                        {preview.balance === 0 && (
+                        {preview.balance_c === 0 && (
                             <div className="p-3 bg-nature-900/60 border border-nature-800 rounded-2xl text-nature-300 text-xs">
-                                Balance is 0.00 Beans. No community funds or transfers required.
+                                Balance is {beansText(0)}. No community funds or transfers required.
                             </div>
                         )}
 

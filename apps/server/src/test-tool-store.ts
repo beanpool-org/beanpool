@@ -53,7 +53,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ToolStorePass123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -65,7 +64,6 @@ import {
     reconcileLedgerFromDb,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db, pruneTombstones } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { emptyCopiedTables } from './engine/copied-tables.js';
@@ -75,6 +73,7 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { ledger } from './engine/ledger.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -103,21 +102,22 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
                 VALUES (?, ?, ?, ?, ?, 'active', ?)`)
         .run(id.pk, name, WEEK_AGO(), opts.visitor ? null : owner.pk, opts.visitor ? null : 'TEST', opts.visitor ? 1 : 0);
     if (!opts.visitor) setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 
 type Method = 'GET' | 'PUT' | 'DELETE' | 'POST';
 interface Req { method: Method; path: string; headers: Record<string, string>; body?: string }
 interface Res { status: number; body: any; headers: Headers }
-/** The app's signed request (the format before request binding, which every node still takes), ready to send or send again. */
+/** The app's signed request (format 2, through signed-request-test-helper.ts), ready to send or send again. */
 function signed(method: Method, route: string, id: Id, body?: unknown, opts: { headerKey?: string; raw?: string } = {}): Req {
     const raw = method === 'GET' ? '' : opts.raw ?? JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': opts.headerKey ?? id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -161,7 +161,6 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 async function main(): Promise<void> {
     console.log('\n=== The tool store: each tool\'s private copy, its owner\'s alone ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -855,10 +854,12 @@ async function main(): Promise<void> {
         }
     };
     for (const dir of ['apps/server/src', 'packages']) walk(path.join(root, dir));
-    const EXPECTED = ['apps/server/src/db/db.ts', 'apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
+    // db.ts named it for its one rebuild (a CHECK raised to 128 KB, rows copied across unread) until the 1.4.0 cutover: 1.2.36
+    // has the table in that shape, and the gate opens nothing older (db/schema-gate.ts).
+    const EXPECTED = ['apps/server/src/db/schema.sql', 'apps/server/src/engine/key-move.ts', 'apps/server/src/engine/replication-manifest.ts',
         'apps/server/src/engine/sync.ts', 'apps/server/src/engine/tool-state.ts'];
     assert(same(named.sort(), EXPECTED),
-        `only the store, its schema and its one rebuild (db.ts, a CHECK raised, rows copied across unread), its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
+        `only the store, its schema, its manifest line, the re-key and the standby's re-key tombstones name the table (${named.join(', ')})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

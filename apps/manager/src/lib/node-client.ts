@@ -2,7 +2,7 @@
  * Typed Node Client — Communicates with sovereign node REST and WebSocket APIs
  */
 
-import { audienceOf, type AddressReach } from '@beanpool/core';
+import { audienceOf, isHundredths, type AddressReach } from '@beanpool/core';
 import { downloadNotice, type DownloadNotice } from './backup-shortfall';
 import { freshProofRefusal, proofField, proofHeader, statusSentence, t, throwIfFreshProof, type FreshProofRefusal } from './fresh-proof';
 
@@ -280,13 +280,15 @@ export interface NodeDataPayload {
     knockCount?: number;
     /** Each member's posts and messages counts; no member's trades (queue item 29). */
     memberStats?: Record<string, unknown>;
-    /** Of trades, only the community's totals: completed deals, their volume in Beans, cancelled. */
+    /**
+     * Of trades, only the community's totals: completed deals, their volume, cancelled. `volume` is whole hundredths of a
+     * Bean (server state-engine getTradeTotals sums marketplace_transactions.amount_c).
+     */
     tradeTotals?: { deals: number; volume: number; cancelled: number };
-    tradeVolume?: number;
-    circulation?: number;
+    /** The Commons pot, whole hundredths of a Bean under its old name (server routes/admin.ts /admin/data getCommonsBalance). */
     commonsBalance?: number;
     enterprises?: unknown[];
-    /** What the screens count (the node's `counts`, or made from a whole list by a node from before the pages). */
+    /** What the screens count: the node's `counts`. */
     counts?: NodeDataCounts;
     /** The cursor of the next members page, or null when every member is held. */
     membersNext?: string | null;
@@ -793,14 +795,8 @@ export async function fetchOnboardingFunnel(
         cache: 'no-store',
     });
     if (!res.ok) {
-        // 401 and 404 need telling apart, because the fix is in a different place for
-        // each and the status code alone sent someone hunting the wrong one: 401 is this
-        // node's stored admin password, 404 is a node that predates the endpoint.
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error('This node is running a build without the funnel endpoint. Redeploy it.');
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -836,9 +832,6 @@ export async function fetchWebVisits(
     if (!res.ok) {
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error("This node's build doesn't count web app visits yet. Update it to see them.");
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -887,9 +880,6 @@ export async function fetchAppVersions(nodeUrl: string, adminPassword?: string, 
     if (!res.ok) {
         if (res.status === 401) {
             throw new Error("Wrong or missing admin password for this node — check it under the node's settings.");
-        }
-        if (res.status === 404) {
-            throw new Error("This node's build doesn't count app versions yet. Update it to see them.");
         }
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
@@ -1092,8 +1082,7 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
 /**
  * The data read fails rather than hang, so Home says it couldn't load, with a Retry, instead of "Loading…" for as long as
  * the browser keeps the socket open (review r4309394025). The node answers within 30 s or it hasn't answered; the rest
- * has 5 minutes, long on purpose: a node from before the pages sends every member (~4 MB on a big node), over what can
- * be a slow phone link.
+ * has 5 minutes, long on purpose: a big node's pages come over what can be a slow phone link.
  */
 export const NODE_DATA_ANSWER_MS = 30_000;
 export const NODE_DATA_ALL_MS = 5 * 60_000;
@@ -1195,37 +1184,13 @@ export function withPostsPage(data: NodeDataPayload, page: PostsPage): NodeDataP
     };
 }
 
-/** What a node from before the pages never sent: the counts, from its whole list. */
-export function countsFromMembers(members: MemberItem[] | undefined): NodeDataCounts | undefined {
-    if (!Array.isArray(members)) return undefined;
-    const platforms = { ios: 0, android: 0, web: 0, unknown: 0 };
-    for (const m of members) {
-        const p = String(m.platform || '').toLowerCase();
-        if (p === 'ios' || p === 'android') platforms[p]++;
-        else if (p === 'web' || p === 'pwa') platforms.web++;
-        else platforms.unknown++;
-    }
-    return {
-        members: members.length,
-        treasuries: members.filter((m) => m.isTreasury).length,
-        doorMembers: members.filter((m) => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:')).length,
-        owners: members.filter((m) => m.nodeRole === 'owner').length,
-        platforms,
-    };
-}
-
 /**
  * The node's data: its summary (`lists: 'none'`), with the first page of members and of posts, so every screen has the
- * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more. A node from before
- * the pages ignores `lists` and sends the lists whole: kept as they came, with counts made from them and nothing more to
- * load.
+ * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more.
  */
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const json = await postNodeRead(nodeUrl, '/api/local/admin/data', { lists: 'none' }, adminPassword, tfaToken);
     const data = normalizeNodeData(json);
-    if (Array.isArray(data.members) || !data.counts) {
-        return { ...data, counts: data.counts ?? countsFromMembers(data.members), membersNext: null, postsNext: null };
-    }
     const [members, posts] = await Promise.all([
         fetchMembersPage(nodeUrl, adminPassword, tfaToken),
         fetchPostsPage(nodeUrl, adminPassword, tfaToken),
@@ -1305,9 +1270,10 @@ export async function pruneNodeUser(
  */
 export interface BranchPruneFigures {
     members: number;
-    badDebt: number;
-    surplus: number;
-    net: number;
+    /** The three money figures, whole hundredths of a Bean, in `*_c` fields (server state-engine branchPrunePreview). */
+    badDebt_c: number;
+    surplus_c: number;
+    net_c: number;
 }
 
 /**
@@ -1336,8 +1302,9 @@ export async function fetchBranchPruneFigures(
         throw new BranchPruneRefusedError(data.error, data.code);
     }
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
-    const figures = { members: data?.members, badDebt: data?.badDebt, surplus: data?.surplus, net: data?.net };
-    if (!Object.values(figures).every((n) => typeof n === 'number' && Number.isFinite(n))) {
+    const figures = { members: data?.members, badDebt_c: data?.badDebt_c, surplus_c: data?.surplus_c, net_c: data?.net_c };
+    // A count and three whole-hundredths figures: anything else (absent, or a float from a node before them) is no figure.
+    if (!Object.values(figures).every((n) => isHundredths(n))) {
         throw new Error("The node's answer has no figures for this branch");
     }
     return figures as BranchPruneFigures;
@@ -1849,6 +1816,11 @@ export async function undoRequestLimit(nodeUrl: string, pubkey: string, adminPas
     await burstRequest(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/request-limit/undo`, 'POST', {}, adminPassword, tfaToken);
 }
 
+/**
+ * The signed-in admin's vouching (GET /api/local/admin/vouchers/me, server engine/vouchers.ts myVouching). Every figure keeps
+ * its name and is whole hundredths of a Bean: the budget's left, level, held and vouched, the presets (2500 is 25 Beans),
+ * vouchMax and budgetMax.
+ */
 export interface MyVouchingResponse {
     voucher: boolean;
     budget?: {
@@ -1876,6 +1848,10 @@ export async function fetchMyVouching(
     return res.json().catch(() => null);
 }
 
+/**
+ * An invite from the node (POST /api/admin/seed-invite, server routes/community.ts). `vouchAmount` keeps its name and is whole
+ * hundredths of a Bean, a vouch preset (2500 is 25 Beans), in the body and in the answer (engine/invites.ts adminGenerateInvite).
+ */
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,
@@ -1890,7 +1866,7 @@ export async function generateNodeInvite(
         body: JSON.stringify({
             ...passwordField(adminPassword),
             type,
-            ...(typeof vouchAmount === 'number' && vouchAmount > 0 ? { vouchAmount } : {}),
+            ...(isHundredths(vouchAmount) && vouchAmount > 0 ? { vouchAmount } : {}),
         }),
     });
     if (!res.ok) {
@@ -2080,15 +2056,20 @@ export async function revokeTreasuryKeeper(
     return Array.isArray(data.keepers) ? data.keepers : [];
 }
 
+/**
+ * One enterprise as GET /api/local/admin/treasury lists it (server routes/treasury.ts listTreasuries). Its money is whole
+ * hundredths of a Bean, in `*_c` fields: `balance_c`, `creditLine_c` (getBalance's earnedCredit_c), and the working-capital
+ * ceiling, null for none.
+ */
 export interface NodeTreasury {
     publicKey: string;
     name: string;
     avatar?: string;
     avatarUrl?: string;
-    balance: number;
-    creditLine: number;
+    balance_c: number;
+    creditLine_c: number;
     liveOffers: number;
-    workingCapitalCeiling?: number | null;
+    workingCapitalCeiling_c?: number | null;
     purpose?: string | null;
     keepers?: any[];
     lat?: number | null;
@@ -2117,9 +2098,14 @@ export async function fetchNodeTreasuries(nodeUrl: string, adminPassword?: strin
     });
 }
 
+/**
+ * A new enterprise (POST /api/local/admin/treasury, server routes/treasury.ts). Its credit line and working-capital ceiling
+ * are whole hundredths of a Bean, `creditLine_c` and `workingCapitalCeiling_c` (null or absent: none); anything else for
+ * them is refused 400 amount_c_required (money-body.ts optionalHundredthsOf).
+ */
 export async function createNodeTreasury(
     nodeUrl: string,
-    data: { name: string; avatar: string; creditLine?: number; workingCapitalCeiling?: number | null; purpose?: string; lat?: number | null; lng?: number | null },
+    data: { name: string; avatar: string; creditLine_c?: number; workingCapitalCeiling_c?: number | null; purpose?: string; lat?: number | null; lng?: number | null },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; publicKey: string }> {
@@ -2177,10 +2163,12 @@ export async function clearEnterpriseLocation(
 
 // `photos` is not optional: the node refuses a new Offer with none ("Add a photo first"), this admin route included.
 // Each one a JPEG/PNG/WebP data URL, at most 800 px (lib/photo-resize.ts); the node keeps five.
+// The price is `price_c`, whole hundredths of a Bean (1500 is 15 Beans; 0 is Free): the route refuses a body that carries the
+// old `credits` (400 amount_c_required, server routes/treasury.ts), and createPost checks price_c (engine/post-fields.ts).
 export async function seedTreasuryOffer(
     nodeUrl: string,
     treasuryPubkey: string,
-    offer: { title: string; category: string; credits: number; photos: string[]; description?: string; priceType?: string; repeatable?: boolean },
+    offer: { title: string; category: string; price_c: number; photos: string[]; description?: string; priceType?: string; repeatable?: boolean },
     adminPassword?: string,
     tfaToken?: string
 ): Promise<{ success: boolean; post: Record<string, unknown> }> {
@@ -2736,7 +2724,7 @@ export async function fetchTakeoverStatus(nodeUrl: string, adminPassword?: strin
     return await takeoverPost(nodeUrl, '/api/local/admin/takeover/status', {}, adminPassword, tfaToken) as unknown as TakeoverStatus;
 }
 
-/** Null when the node is too old to say (before #968). */
+/** Null when the answer carries no backup lock status. */
 export async function fetchBackupLock(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<BackupLockStatus | null> {
     const json = await takeoverPost(nodeUrl, '/api/local/admin/backup-status', {}, adminPassword, tfaToken);
     const lock = json.backupLock as BackupLockStatus | undefined;
@@ -2966,6 +2954,10 @@ export function downloadOffboxBackup(
 
 // ======================== ESCROW DISPUTES ========================
 
+/**
+ * One deal in escrow as GET /api/local/admin/disputes lists it (server state-engine mapDisputeRow). Its money is whole
+ * hundredths of a Bean: `amount_c`, what the escrow holds, and the listing's `price_c`.
+ */
 export interface EscrowDisputeItem {
     id: string;
     postId: string;
@@ -2975,7 +2967,7 @@ export interface EscrowDisputeItem {
     buyerName?: string;
     sellerCallsign?: string;
     sellerName?: string;
-    credits: number;
+    amount_c: number;
     status: string;
     createdAt: number;
     daysStuck: number;
@@ -2986,8 +2978,8 @@ export interface EscrowDisputeItem {
         authorPubkey: string;
         authorName?: string;
         authorCallsign?: string;
-        priceCredits: number;
-        unitPrice: number;
+        price_c: number;
+        priceType?: string;
         category: string;
         imageUrl?: string;
     } | null;
@@ -3090,21 +3082,25 @@ export async function resolveEscrowDisputeApi(
 
 // ===================== STRANDED ESCROW WRITE-OFF =====================
 
+/**
+ * One escrow left below zero, as GET /api/local/admin/stranded-escrows lists it (server engine/escrow-write-off.ts
+ * listStrandedEscrows). Every money figure is whole hundredths of a Bean, in a `*_c` field.
+ */
 export interface StrandedEscrowItem {
     escrowId: string;
-    balance: number;
+    balance_c: number;
     tradeId: string;
-    trade: { status: string; credits: number; postId: string; createdAt: string | null; completedAt: string | null } | null;
+    trade: { status: string; amount_c: number; postId: string; createdAt: string | null; completedAt: string | null } | null;
     transactionCount: number;
-    lastTransaction: { memo: string; amount: number; timestamp: string } | null;
-    writeOff: { eligible: boolean; refusal: string | null; commonsAfter: number | null; wouldDeficit: boolean };
+    lastTransaction: { memo: string; amount_c: number; timestamp: string } | null;
+    writeOff: { eligible: boolean; refusal: string | null; commonsAfter_c: number | null; wouldDeficit: boolean };
 }
 
 export interface StrandedEscrowsResponse {
     success: boolean;
-    commonsBalance: number;
+    commonsBalance_c: number;
     escrows: StrandedEscrowItem[];
-    commonsAfterAll: number;
+    commonsAfterAll_c: number;
     eligibleCount: number;
 }
 
@@ -3121,24 +3117,29 @@ export async function fetchStrandedEscrows(nodeUrl: string, adminPassword?: stri
     return res.json();
 }
 
+/** A write-off the node made (POST …/write-off): every figure whole hundredths of a Bean, in a `*_c` field. */
 export interface StrandedEscrowWriteOffResponse {
     success: true;
     escrowId: string;
     tradeId: string;
-    amount: number;
+    amount_c: number;
     transactionId: string;
     memo: string;
-    commonsBefore: number;
-    commonsAfter: number;
+    commonsBefore_c: number;
+    commonsAfter_c: number;
+    escrowBalanceAfter_c?: number;
 }
 
-/** A refused write-off. `code` says why; a deficit refusal also carries the Commons now and after. */
+/**
+ * A refused write-off. `code` says why; a deficit refusal also carries the Commons now and after, whole hundredths of a Bean
+ * (the answer's `commonsBalance_c` and `commonsAfter_c`).
+ */
 export class StrandedEscrowWriteOffError extends Error {
     constructor(
         message: string,
         readonly code: string | undefined,
-        readonly commonsBalance?: number,
-        readonly commonsAfter?: number,
+        readonly commonsBalance_c?: number,
+        readonly commonsAfter_c?: number,
     ) {
         super(message);
         this.name = 'StrandedEscrowWriteOffError';
@@ -3161,7 +3162,7 @@ export async function writeOffStrandedEscrow(
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-        throw new StrandedEscrowWriteOffError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, body.commonsBalance, body.commonsAfter);
+        throw new StrandedEscrowWriteOffError(body.error || `HTTP ${res.status}: ${res.statusText}`, body.code, body.commonsBalance_c, body.commonsAfter_c);
     }
     return body;
 }
@@ -3256,17 +3257,19 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
 
 /**
  * The members an admin lowered or froze the known floor of (GET /api/local/admin/known-floor's exceptions), for the
- * members list's mark. Empty with the dial off, on a node older than the known floor, or when it can't be read.
+ * members list's mark. Empty with the dial off, on a node older than the known floor, or when it can't be read. Each
+ * exception's amount is `amount_c`, whole hundredths of a Bean, or null for none kept (server config/known-floor.ts
+ * knownFloorExceptions).
  */
-export async function fetchKnownFloorMarks(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<Record<string, { amount: number | null; frozen: boolean }>> {
+export async function fetchKnownFloorMarks(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<Record<string, { amount_c: number | null; frozen: boolean }>> {
     const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/known-floor'), { headers: buildAdminHeaders(adminPassword, tfaToken) }).catch(() => null);
     if (!res || !res.ok) return {};
     const data = await res.json().catch(() => null) as { confirmation?: unknown; exceptions?: unknown } | null;
     if (!data || data.confirmation !== true || !Array.isArray(data.exceptions)) return {};
-    const marks: Record<string, { amount: number | null; frozen: boolean }> = {};
+    const marks: Record<string, { amount_c: number | null; frozen: boolean }> = {};
     for (const e of data.exceptions as Array<Record<string, unknown>>) {
         if (!e || typeof e.memberPubkey !== 'string') continue;
-        marks[e.memberPubkey] = { amount: Number.isInteger(e.amount) ? e.amount as number : null, frozen: e.frozen === true };
+        marks[e.memberPubkey] = { amount_c: isHundredths(e.amount_c) ? e.amount_c : null, frozen: e.frozen === true };
     }
     return marks;
 }
@@ -3486,6 +3489,10 @@ export class RekeyBindError extends Error {
     }
 }
 
+/**
+ * What offboarding a member would do (GET …/offboard/preview, server engine/member-wizards.ts getOffboardPreview). Every
+ * figure is whole hundredths of a Bean, in a `*_c` field.
+ */
 export interface OffboardPreviewResponse {
     member: {
         publicKey: string;
@@ -3493,10 +3500,10 @@ export interface OffboardPreviewResponse {
         status: string;
         joinedAt: string;
     };
-    balance: number;
-    commonsBalance: number;
-    costToCommunity: number;
-    projectedCommonsBalance: number;
+    balance_c: number;
+    commonsBalance_c: number;
+    costToCommunity_c: number;
+    projectedCommonsBalance_c: number;
     pendingEscrowsCount: number;
     isSoleOwner: boolean;
     activeMembers: Array<{
@@ -3516,6 +3523,7 @@ export interface OffboardResponse {
     memberPubkey: string;
     callsign: string;
     resolution: string;
+    /** Keeps its name, and is whole hundredths of a Bean (server engine/member-wizards.ts offboardMember). */
     balanceSettled: number;
 }
 
@@ -3597,8 +3605,7 @@ export async function cancelRekeyCodeApi(
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        // A node before the cancel answers 404 with no message.
-        throw new Error(body.error || (res.status === 404 ? 'This node can’t cancel a re-key code yet: update it first.' : `HTTP ${res.status}: ${res.statusText}`));
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
@@ -3721,7 +3728,7 @@ export async function executeOffboardApi(
 // ======================== ADDRESSES MEMBERS' APPS USE (request binding) ========================
 // A member's app signs each request for the address it reaches the community at, and the node accepts only its own
 // addresses (apps/server engine/own-addresses.ts). Settings lists them, offers to confirm one the node doesn't know,
-// and says how many apps are too old to name a community (engine/member-signature.ts).
+// and says that apps too old to name a community are refused (engine/member-signature.ts, CUT4).
 
 export interface AppAddress {
     address: string;
@@ -3804,9 +3811,11 @@ export interface AppAddressesReport {
     unconfirmed: AddressSighting[];
     /** Addresses apps reached it at that are not offered with one tap, and why. Absent from a server before the guard. */
     heldBack?: HeldBackAddress[];
-    /** Apps that signed in the old format, bound to no community. */
-    oldApps: { today: number; busiestDay: number };
-    /** The day (UTC) old apps stop working here, or null when they already don't. */
+    /**
+     * The day (UTC) until which a node that knows none of its names accepts any address (apps/server
+     * engine/member-signature.ts UNCONFIGURED_HOSTS_UNTIL), or null once it has passed. Apps too old to name a community are
+     * refused on every day since the cutover (1.4.0), so nothing here counts them.
+     */
     unboundSignaturesUntil: string | null;
     unboundSignaturesAccepted: boolean;
     /**

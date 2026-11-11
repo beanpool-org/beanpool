@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
@@ -51,8 +51,9 @@ function dealDate(iso: string | null | undefined): string {
 }
 
 /** A Beans amount on a card, the language's way (English as before: String(n)); anything else as it came. */
+/** A deal's amount (whole hundredths) as every figure is written; anything else as it came. */
 function beans(n: unknown): string {
-    return typeof n === 'number' ? formatNumber(n) : n === null || n === undefined ? '' : String(n);
+    return typeof n === 'number' ? formatHundredths(n) : n === null || n === undefined ? '' : String(n);
 }
 
 interface Props extends LocalCommunityWays {
@@ -187,6 +188,11 @@ export function MyDealsModal({
         }
         return map;
     }, [preview, effectiveTransactions, transactions]);
+    // A one-off listing a standing deal took stays off the board ('pending') while the deal runs, yet nothing is held in
+    // trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable §1, §3). Its card says 🔁 STANDING.
+    const standingPostIds = useMemo(() => new Set((preview ? effectiveTransactions : transactions)
+        .filter(t => !!t.standingId && (t.standingPhase === 'paid' || t.standingPhase === 'short'))
+        .map(t => t.postId)), [preview, effectiveTransactions, transactions]);
 
     const currentPubkey = (preview ? effectiveIdentity : identity)?.publicKey || '';
     const rawTxs = preview ? effectiveTransactions : transactions;
@@ -371,8 +377,15 @@ export function MyDealsModal({
                                     const isCompleted = item.status === 'completed';
                                     const isPending = item.status === 'pending';
                                     const isRequested = item.status === 'requested';
-                                    const isInteractive = isPending || (dealsTab === 'pending' && isRequested);
-                                    const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
+                                    // A standing deal still running, on its current period's row (DESIGN-standing-deals-fable §2.2): one card
+                                    // with 🔁 STANDING and its panel's line; short of the next period, its row is the period last settled,
+                                    // and the card still opens the listing, where Stop is.
+                                    const standing = dealsTab === 'pending' ? standingPanel(item, currentPubkey, (iso) => formatDate(new Date(iso), 'day-month')) : null;
+                                    const isInteractive = isPending || !!standing || (dealsTab === 'pending' && isRequested);
+                                    // Core's rule: a standing deal asks for one review, on its first period (design §3).
+                                    const needsReview = !standing && isCompleted && dealStep(item, currentPubkey).state === 'done-to-review';
+                                    // An ended standing deal's History line: stopped in the grace, or its grace run out (amendment §1, §2).
+                                    const historyLine = dealsTab === 'history' ? standingHistoryLine(item, currentPubkey, (iso) => formatDate(new Date(iso), 'day-month')) : null;
                                     const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
 
                                     if (!preview) {
@@ -418,6 +431,9 @@ export function MyDealsModal({
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex flex-wrap justify-between items-start gap-x-2 gap-y-1 mb-1">
                                                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
+                                                                {/* A standing deal's row out of trust (short: the period last settled) is no finished deal:
+                                                                    its card says 🔁 STANDING only, never "completed" (round 2 of #3000), as on the phone. */}
+                                                                {!(standing && !isPending) && (
                                                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                     isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                     : (isPending || isRequested) ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
@@ -425,13 +441,19 @@ export function MyDealsModal({
                                                                 }`}>
                                                                     {dealStatusWords(item.status)}
                                                                 </span>
+                                                                )}
+                                                                {standing && (
+                                                                    <span data-testid={`standing-chip-${item.id}`} className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink">
+                                                                        {standingLines.chip()}
+                                                                    </span>
+                                                                )}
                                                                 <span className="text-[10px] text-nature-400 font-bold">
                                                                     {dealDate(item.createdAt)}
                                                                 </span>
                                                             </div>
                                                             <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                                 <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                                    {isBuyer ? '- ' : '+ '}{beans(item.credits)}
+                                                                    {isBuyer ? '- ' : '+ '}{beans(item.amount_c)}
                                                                 </span>
                                                                 <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                             </div>
@@ -440,9 +462,13 @@ export function MyDealsModal({
                                                             {item.postTitle}
                                                         </h4>
                                                         {dealsTab === 'pending' && (
-                                                            <p className="text-xs text-nature-600 dark:text-nature-400 mt-1">
-                                                                {dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
+                                                            <p data-testid={`deal-state-${item.id}`} role={standing?.warning ? 'alert' : undefined}
+                                                                className={`text-xs mt-1 break-words ${standing?.warning ? 'font-bold text-amber-800 dark:text-amber-300' : 'text-nature-600 dark:text-nature-400'}`}>
+                                                                {standing ? standing.status : dealStateWords(dealStep(item, currentPubkey), partnerCallsign)}
                                                             </p>
+                                                        )}
+                                                        {historyLine && (
+                                                            <p data-testid={`deal-history-${item.id}`} dir="auto" className="text-xs mt-1 break-words text-nature-600 dark:text-nature-400">{historyLine}</p>
                                                         )}
                                                     </div>
                                                 </div>
@@ -527,7 +553,7 @@ export function MyDealsModal({
                                                         </div>
                                                         <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                             <span className={`font-black text-sm whitespace-nowrap shrink-0 ${isBuyer ? 'text-bp-ink-danger' : 'text-emerald-500 dark:text-emerald-400'}`}>
-                                                                {isBuyer ? '- ' : '+ '}{beans(item.credits)}
+                                                                {isBuyer ? '- ' : '+ '}{beans(item.amount_c)}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
@@ -591,7 +617,8 @@ export function MyDealsModal({
                                 if (!preview) {
                                     const coverImage = item.photos && item.photos.length > 0 ? item.photos[0] : null;
                                     const relatedTx = activeTxsByPostId.get(item.id)?.[0];
-                                    const isHeld = item.status === 'pending' || relatedTx?.status === 'pending';
+                                    const standingTaken = item.status === 'pending' && relatedTx?.status !== 'pending' && standingPostIds.has(item.id);
+                                    const isHeld = !standingTaken && (item.status === 'pending' || relatedTx?.status === 'pending');
                                     const isActionRequired = relatedTx?.status === 'requested' && ((item.authorPublicKey ?? (item as any).author_pubkey) === currentPubkey);
 
                                     return (
@@ -651,7 +678,7 @@ export function MyDealsModal({
                                                         </div>
                                                         <div className="flex items-center">
                                                             <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
-                                                                {beans(item.credits ?? '?')}
+                                                                {beans(item.price_c ?? '?')}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                         </div>
@@ -663,7 +690,9 @@ export function MyDealsModal({
                                                         isActionRequired ? 'text-amber-800 dark:text-amber-400' : 'text-nature-500 dark:text-nature-400'
                                                     }`}>
                                                         {(() => {
-                                                            if (isHeld) {
+                                                            if (standingTaken) {
+                                                                return standingLines.chip();
+                                                            } else if (isHeld) {
                                                                 return t('🤝 Held in Trust');
                                                             } else if (relatedTx?.status === 'requested') {
                                                                 return isActionRequired ? t('⚠️ Action Required') : t('⏳ Awaiting Approval');
@@ -718,7 +747,7 @@ export function MyDealsModal({
                                                     </span>
                                                     <div className="flex items-center shrink-0 whitespace-nowrap ml-auto">
                                                         <span className="font-black text-sm text-indigo-500 dark:text-indigo-300 whitespace-nowrap shrink-0">
-                                                            {beans(item.credits ?? '?')}
+                                                            {beans(item.price_c ?? '?')}
                                                         </span>
                                                         <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1 shrink-0" alt={t('B', undefined, 'the Beans sign')} />
                                                     </div>

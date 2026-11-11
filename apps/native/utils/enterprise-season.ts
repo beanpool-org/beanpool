@@ -10,7 +10,7 @@
  * Pure: no React Native imports, so it runs under the node test runner.
  */
 
-import { formatDate, formatNumber, keeperWords, t, tn, word, type WordKey } from '@beanpool/core';
+import { formatDate, formatHundredths, isHundredths, keeperWords, t, tn, word, type WordKey } from '@beanpool/core';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAUSE_DAYS = 90;
@@ -19,7 +19,13 @@ const GRACE_DAYS = 7;
 // A closed enterprise refuses every lifecycle call (requireKeeperOrAdmin). Same list the web map-pin gate uses (#844).
 const CLOSED_STATUSES = ['completed', 'disabled', 'suspended', 'pruned'];
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/**
+ * A money field of the enterprise's detail (GET /api/treasury/:id) or its ledger: whole hundredths of a Bean, or null when
+ * it isn't one (never a guessed figure). Every figure here is hundredths, written by formatHundredths.
+ */
+const hundredthsOf = (v: unknown): number | null => (isHundredths(v) ? v : null);
+/** The detail's balance, whole hundredths; 0 when it sent none. */
+const balanceOf = (detail: any): number => hundredthsOf(detail?.balance_c) ?? 0;
 
 const keeperKey = (k: any): string | undefined => k?.publicKey || k?.pubkey || k?.memberPubkey;
 /**
@@ -36,10 +42,18 @@ export function formatPauseDate(iso: string | null | undefined): string {
     return formatDate(d, 'day-month', { width: 'long' });
 }
 
-/** The credit floor a pause holds: the server's snapshot once paused, the current usable floor before. */
+/**
+ * The credit floor a pause holds, whole hundredths of a Bean: the server's snapshot once paused, the current usable floor
+ * before (the detail's `*_c` fields, the first of them that is whole hundredths).
+ */
 export function heldCredit(detail: any): number {
-    return round2(Math.abs(Number(detail?.pausedFloorSnapshot ?? detail?.usableFloor ?? detail?.floor ?? detail?.creditLine ?? 0) || 0));
+    const held = hundredthsOf(detail?.pausedFloorSnapshot_c) ?? hundredthsOf(detail?.usableFloor_c) ?? hundredthsOf(detail?.floor_c)
+        ?? hundredthsOf(detail?.creditLine_c) ?? 0;
+    return Math.abs(held);
 }
+
+/** tn()'s count and values for a figure: the plural form read from its Beans, `{n}` written as formatHundredths writes it. */
+const heldValues = (held: number, more: Record<string, string> = {}): [number, Record<string, string>] => [held / 100, { n: formatHundredths(held), ...more }];
 
 /** When the pause snapshot lapses: the server's date, else 90 days from pausedAt. */
 export function pauseExpiresAt(detail: any): string | null {
@@ -105,7 +119,7 @@ export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanne
     if (detail.paused) {
         const until = formatPauseDate(pauseExpiresAt(detail));
         const daysRemaining = detail.pauseDaysRemaining;
-        const held = heldCredit(detail);
+        const [held, heldN] = heldValues(heldCredit(detail));
         // The node's own warning is shown as it sent it (words slice S4).
         const warning = detail.pauseWarning
             || (typeof daysRemaining === 'number' && daysRemaining <= 14
@@ -117,8 +131,8 @@ export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanne
             kind: 'paused',
             label: t('Paused for the season'),
             headline: until
-                ? tn(held, 'Paused for the season. Credit held at {n} beans until {date}.', 'Paused for the season. Credit held at {n} beans until {date}.', { date: until })
-                : tn(held, 'Paused for the season. Credit held at {n} beans.', 'Paused for the season. Credit held at {n} beans.'),
+                ? tn(held, 'Paused for the season. Credit held at {n} beans until {date}.', 'Paused for the season. Credit held at {n} beans until {date}.', { ...heldN, date: until })
+                : tn(held, 'Paused for the season. Credit held at {n} beans.', 'Paused for the season. Credit held at {n} beans.', heldN),
             body: t('Listings are paused and cannot be bought right now.'),
             warning,
         };
@@ -175,15 +189,15 @@ export function seasonControls(detail: any, myPublicKey: string | null | undefin
 /** Plain-words consequences, shown before the confirming tap. */
 export function pauseConfirmText(detail: any): string {
     const until = formatPauseDate(pauseExpiresAt(detail));
-    const held = heldCredit(detail);
+    const [held, heldN] = heldValues(heldCredit(detail));
     if (isProject(detail)) {
         return until
-            ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { date: until })
-            : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.');
+            ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any collaborator can resume at any time.', { ...heldN, date: until })
+            : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any collaborator can resume at any time.', heldN);
     }
     return until
-        ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { date: until })
-        : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.');
+        ? tn(held, 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans until {date} and pauses active listings so members cannot buy. Any keeper can resume at any time.', { ...heldN, date: until })
+        : tn(held, 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', 'Pausing for the season holds your credit floor at {n} beans for up to 90 days and pauses active listings so members cannot buy. Any keeper can resume at any time.', heldN);
 }
 
 /** Marked here, translated where it is shown: t(RESUME_CONFIRM_TEXT). */
@@ -194,7 +208,7 @@ function keeperCount(detail: any): number {
 }
 
 export function windUpConfirmText(detail: any, name: string): string {
-    const amount = formatNumber(Math.max(0, Number(detail?.balance) || 0), 2);
+    const amount = formatHundredths(Math.max(0, balanceOf(detail)));
     const count = keeperCount(detail);
     return isProject(detail)
         ? tn(count, 'Winding up returns {amount} beans to the Commons, releases {n} collaborator, and closes {name} for good. Any collaborator can stop this for the next 7 days.', 'Winding up returns {amount} beans to the Commons, releases {n} collaborators, and closes {name} for good. Any collaborator can stop this for the next 7 days.', { amount, name })
@@ -203,11 +217,12 @@ export function windUpConfirmText(detail: any, name: string): string {
 
 /** Set when wind-up cannot start: the server refuses an enterprise in deficit. */
 export function windUpDeficitText(detail: any): string | null {
-    const balance = Number(detail?.balance) || 0;
+    const balance = balanceOf(detail);
     if (balance >= 0) return null;
+    // formatHundredths writes the deficit with its true minus ("−9.82").
     return isProject(detail)
-        ? t('Cannot wind up a project in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: balance })
-        : t('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: balance });
+        ? t('Cannot wind up a project in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatHundredths(balance) })
+        : t('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.', { amount: formatHundredths(balance) });
 }
 
 export function cancelWindUpConfirmText(name: string, lifecycle?: string | null): string {
@@ -217,12 +232,12 @@ export function cancelWindUpConfirmText(name: string, lifecycle?: string | null)
 }
 
 export function finaliseWindUpConfirmText(detail: any, name: string): string {
-    const back = Math.max(0, Number(detail?.balance) || 0);
-    // {n} written to two places, as the node counts Beans; its plural form still read from the amount.
-    const values = { n: formatNumber(back, 2), name };
+    const back = Math.max(0, balanceOf(detail));
+    // {n} written from whole hundredths ("12.50", "12"); its plural form read from the Beans.
+    const values = { n: formatHundredths(back), name };
     return isProject(detail)
-        ? tn(back, 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', values)
-        : tn(back, 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', values);
+        ? tn(back / 100, 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all collaborators, and closes {name} for good.', values)
+        : tn(back / 100, 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', 'The 7-day grace period has elapsed. Finalising sweeps {n} beans to the Commons, releases all keepers, and closes {name} for good.', values);
 }
 
 /** Posting new listings is refused while paused, winding up or completed; null when posting is open. */
@@ -261,14 +276,19 @@ export function ledgerLineLabels(entry: { direction: 'income' | 'spend'; counter
     };
 }
 
-export function signedBeans(n: number, direction: 'income' | 'spend'): string {
-    return `${direction === 'income' ? '+' : '-'}${formatNumber(Number(n) || 0, 2)} 🫘`;
+/**
+ * One ledger line's amount (whole hundredths, the entry's amount_c) with its direction: "+12.50 🫘" in, "−40 🫘" out (a true
+ * minus, as every figure below zero is written). Not whole hundredths: "—", never a number.
+ */
+export function signedBeans(amount_c: number, direction: 'income' | 'spend'): string {
+    if (!isHundredths(amount_c)) return `${formatHundredths(amount_c)} 🫘`;
+    return `${direction === 'income' ? '+' : '−'}${formatHundredths(Math.abs(amount_c))} 🫘`;
 }
 
-/** Beans to 2 places with a sign, but never "-0.00" / "+0.00": anything that rounds to zero is plain "0.00". */
-function signedTotal(n: number, sign: '+' | '-'): string {
-    const cents = Math.round(Math.abs(Number(n) || 0) * 100);
-    return cents === 0 ? `${formatNumber(0, 2)} 🫘` : `${sign}${formatNumber(cents / 100, 2)} 🫘`;
+/** A total (whole hundredths) with a sign, but never "−0" / "+0": nothing is plain "0". */
+function signedTotal(c: number, sign: '+' | '−'): string {
+    const abs = Math.abs(c);
+    return abs === 0 ? `${formatHundredths(0)} 🫘` : `${sign}${formatHundredths(abs)} 🫘`;
 }
 
 export interface PlSummaryText {
@@ -280,18 +300,22 @@ export interface PlSummaryText {
     feeNote: string | null;
 }
 
-/** The P&L boxes on an enterprise page: "Came in", "Went out", "Net change" and the fee note. */
+/**
+ * The P&L boxes on an enterprise page: "Came in", "Went out", "Net change" and the fee note. The summary's totals are whole
+ * hundredths of a Bean (the node keeps their names: M1's listed deviations); one that isn't counts as 0.
+ */
 export function plSummaryText(summary: { totalIncome?: number; totalSpend?: number; netChange?: number } | null | undefined): PlSummaryText {
-    const income = Number(summary?.totalIncome) || 0;
-    const spend = Number(summary?.totalSpend) || 0;
-    const net = Number(summary?.netChange) || 0;
-    // The node counts "came in" before the community fee, while net change is what the balance actually moved.
-    const fees = summary ? Math.round((income - spend - net) * 100) / 100 : 0;
+    const income = hundredthsOf(summary?.totalIncome) ?? 0;
+    const spend = hundredthsOf(summary?.totalSpend) ?? 0;
+    const net = hundredthsOf(summary?.netChange) ?? 0;
+    // The node counts "came in" before the community fee, while net change is what the balance actually moved: in whole
+    // hundredths the fees are exact.
+    const fees = summary ? income - spend - net : 0;
     return {
         cameIn: signedTotal(income, '+'),
-        wentOut: signedTotal(spend, '-'),
-        net: signedTotal(net, net < 0 ? '-' : '+'),
+        wentOut: signedTotal(spend, '−'),
+        net: signedTotal(net, net < 0 ? '−' : '+'),
         netIsPositive: net >= 0,
-        feeNote: fees > 0 ? t('Came in is before fees: {amount} 🫘 in fees came off it.', { amount: formatNumber(fees, 2) }) : null,
+        feeNote: fees > 0 ? t('Came in is before fees: {amount} 🫘 in fees came off it.', { amount: formatHundredths(fees) }) : null,
     };
 }

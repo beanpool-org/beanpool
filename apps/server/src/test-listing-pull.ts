@@ -22,7 +22,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -30,21 +29,19 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, getMember, getPosts, createPost as rawCreatePost, reconcileLedgerFromDb } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
     cacheRemoteListings, listingsForPeer, REMOTE_ID_PREFIX, LISTING_PULL_INTERVAL_MS,
 } from './federation-listings.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestAdmin123!';
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
-// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main().
+let asOwner: Record<string, string> = {};
 
 const BYRON = '12D3KooWByronPullTestPeer00000000000';
 const BYRON_ADDR = `/ip4/172.18.0.31/tcp/4001/p2p/${BYRON}`;
@@ -60,9 +57,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -74,8 +70,9 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeLocalMember(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    // 500 Beans of earned credit and a balance of 100 Beans, in whole hundredths.
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 50000)`).run(pk, callsign);
     setMemberPhoto(db, pk, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
@@ -85,7 +82,7 @@ function makeLocalMember(callsign: string): string {
     //   row INSERTed afterwards is invisible to it — `transfer` then debits from an in-memory zero and
     //   persists the result, discarding the seeded balance. §8h showed the payer going 100 → −4 on a 4-bean
     //   trade, read as a 100-bean conservation failure, and it was neither a product bug nor demurrage.
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 10000, ?)`)
         .run(pk, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
@@ -102,8 +99,9 @@ function makeLocalMember(callsign: string): string {
 function makeSigner(callsign: string): { publicKey: string; privateKey: crypto.KeyObject } {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    // 500 Beans of earned credit and a balance of 100 Beans, in whole hundredths.
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 50000)`).run(pk, callsign);
     setMemberPhoto(db, pk, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
@@ -113,7 +111,7 @@ function makeSigner(callsign: string): { publicKey: string; privateKey: crypto.K
     //   row INSERTed afterwards is invisible to it — `transfer` then debits from an in-memory zero and
     //   persists the result, discarding the seeded balance. §8h showed the payer going 100 → −4 on a 4-bean
     //   trade, read as a 100-bean conservation failure, and it was neither a product bug nor demurrage.
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, ?)`)
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 10000, ?)`)
         .run(pk, ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return { publicKey: pk, privateKey };
@@ -128,14 +126,15 @@ async function signedPost(
     const bodyString = JSON.stringify(body ?? {});
     const timestamp = String(Date.now());
     const nonce = crypto.randomUUID();
-    const canonical = `POST\n${path}\n${timestamp}\n${nonce}\n${bodyString}`;
-    const signature = crypto.sign(null, Buffer.from(canonical), signer.privateKey).toString('base64');
+    const canonical = { method: 'POST', path, timestamp, nonce, body: bodyString };
+    const signature = signRequest(signer.privateKey, canonical);
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': signer.publicKey,
             'X-Signature': signature,
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': timestamp,
             'X-Nonce': nonce,
         },
@@ -148,14 +147,14 @@ async function signedPost(
 
 const remoteAuthor = (): string => crypto.randomBytes(32).toString('hex');
 
-/** One listing in the shape a peer sends. */
+/** One listing in the shape a peer sends: its price whole hundredths (`price_c`, 1200 is 12 Beans). */
 const listing = (over: Record<string, unknown> = {}) => ({
     id: crypto.randomUUID(),
     type: 'offer',
     category: 'other',
     title: 'Remote tutoring',
     description: 'Maths, over video',
-    credits: 12,
+    price_c: 1200,
     priceType: 'fixed',
     authorPublicKey: remoteAuthor(),
     authorCallsign: 'ByronMember',
@@ -168,23 +167,19 @@ const cachedFor = (originNode: string): any[] =>
     db.prepare('SELECT * FROM posts WHERE origin_node = ?').all(originNode) as any[];
 
 const nodeTotal = (): number =>
-    (db.prepare('SELECT COALESCE(SUM(balance),0) AS t FROM accounts').get() as any).t;
+    (db.prepare('SELECT COALESCE(SUM(balance_c),0) AS t FROM accounts').get() as any).t;
 
 async function main() {
     console.log('Running listing pull tests (#143 step 4, second half)...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
-    const alone = await post('/api/local/connectors', { password: PW, address: BYRON_ADDR, trustLevel: 'peer', callsign: 'byron', publicUrl: BYRON_URL, enabled: true });
-    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
-        `setup: 2FA off, the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
     for (const [addr, callsign, url] of [[BYRON_ADDR, 'byron', BYRON_URL], [BRISBANE_ADDR, 'brisbane', BRISBANE_URL]] as const) {
-        const added = await post('/api/local/connectors', { password: PW, address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });
-        const capped = await post('/api/local/connectors/credit-cap', { password: PW, address: addr, cap: 500 });
+        const added = await post('/api/local/connectors', { address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });
+        const capped = await post('/api/local/connectors/credit-cap', { address: addr, cap: 500 });
         assert(added.status === 200 && capped.status === 200, `setup: ${callsign} added and capped over HTTP (got ${added.status}, ${capped.status})`);
     }
     // EVERY local member seeded BEFORE the baseline. `makeLocalMember` mints — a fixture's privilege, not the
@@ -233,7 +228,7 @@ async function main() {
         ['no title', listing({ title: '' })],
         ['no author', listing({ authorPublicKey: '' })],
         ['a bad type', listing({ type: 'rant' })],
-        ['credits that are not a number', listing({ credits: 'lots' })],
+        ['a price that is not a number', listing({ price_c: 'lots' })],
         ['a synthetic author', listing({ authorPublicKey: 'COMMONS_POOL' })],
         ['a bridge account as author', listing({ authorPublicKey: `bridge_${BRISBANE}` })],
         ['null', null],
@@ -249,9 +244,9 @@ async function main() {
     // Credits: NEGATIVE refused, ZERO kept. The compose form's own rule is `< 0` → invalid, so a local member
     // may post at zero (a gift, or "ask me") and holding a peer's members to a stricter rule than our own
     // would silently hide their free offers.
-    res = cacheRemoteListings(BYRON, BYRON_URL, [listing({ credits: -50, title: 'Negative price' })]);
+    res = cacheRemoteListings(BYRON, BYRON_URL, [listing({ price_c: -5000, title: 'Negative price' })]);
     assert(res.cached === 0 && res.dropped === 1, `3d. a NEGATIVE price is refused (${res.cached}/${res.dropped}) — nonsense in either community`);
-    res = cacheRemoteListings(BYRON, BYRON_URL, [listing({ credits: 0, title: 'A gift' })]);
+    res = cacheRemoteListings(BYRON, BYRON_URL, [listing({ price_c: 0, title: 'A gift' })]);
     assert(res.cached === 1,
         `3e. but ZERO is kept (${res.cached} cached) — the local form allows it, so a peer's free offer is not held to a stricter rule than ours`);
 
@@ -292,7 +287,7 @@ async function main() {
 
     // ── 5. One peer's cache is not another's, and neither is a local listing. ──────────────────────────
     const brisbaneBefore = cachedFor(BRISBANE_URL).length;
-    const localPost = createPost('offer', 'other', 'Local loaf', 'd', 5, 'fixed', localAuthor);
+    const localPost = createPost('offer', 'other', 'Local loaf', 'd', 500, 'fixed', localAuthor);
     cacheRemoteListings(BYRON, BYRON_URL, [listing({ title: 'Fresh byron' })]);
     assert(cachedFor(BRISBANE_URL).length === brisbaneBefore,
         '5a. re-caching byron did not touch brisbane\'s cache — the delete is scoped to byron (its id prefix and its address)');
@@ -328,17 +323,17 @@ async function main() {
     const cachedListing = cachedFor(BYRON_URL)[0];
     assert(cachedListing !== undefined, '8a. setup: there is a cached listing to aim at');
     // The buyer needs a live offer of their own — accepting is gated on having contributed.
-    createPost('offer', 'other', 'Alice can garden', 'd', 5, 'fixed', ours);
-    const balBefore = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ours) as any).balance;
+    createPost('offer', 'other', 'Alice can garden', 'd', 500, 'fixed', ours);
+    const balBefore = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(ours) as any).balance_c;
     const accept = await signedPost(buyer, '/api/marketplace/posts/accept', { postId: cachedListing.id, buyerPublicKey: ours });
     assert(accept.status >= 400 && !/signature/i.test(accept.json?.error ?? ''),
         `8b. THE BUG: accepting a cached listing through the ordinary route is refused (got ${accept.status}) — it belongs to the peer, and buying it has to open a bridge tab`);
     assert(/another community/i.test(accept.json?.error ?? ''),
         `8c. and says why, in the member's terms: "${accept.json?.error}"`);
-    const balAfter = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ours) as any).balance;
+    const balAfter = (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(ours) as any).balance_c;
     assert(balAfter === balBefore,
         `8d. with NOT ONE BEAN DEDUCTED (${balBefore} → ${balAfter}) — the live reproduction lost 3 here`);
-    assert((db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE public_key LIKE 'escrow_%' AND balance != 0").get() as any).c === 0,
+    assert((db.prepare("SELECT COUNT(*) AS c FROM accounts WHERE public_key LIKE 'escrow_%' AND balance_c != 0").get() as any).c === 0,
         '8e. and no escrow account holding anything');
     assert((db.prepare('SELECT COUNT(*) AS c FROM marketplace_transactions WHERE post_id = ?').get(cachedListing.id) as any).c === 0,
         '8f. and no transaction row against the peer\'s listing');
@@ -349,7 +344,7 @@ async function main() {
         `8g. and requesting one is refused too (got ${reqAttempt.status}) — accept and request are different draw points, so one guard on one of them is half a fix`);
 
     // A LOCAL listing still trades. The guard has to be about origin, not about anything the pull touched.
-    const localOffer = createPost('offer', 'other', 'Bob fixes bikes', 'd', 4, 'fixed', localAuthor)!;
+    const localOffer = createPost('offer', 'other', 'Bob fixes bikes', 'd', 400, 'fixed', localAuthor)!;
     const localAccept = await signedPost(buyer, '/api/marketplace/posts/accept', { postId: localOffer.id, buyerPublicKey: ours });
     assert(localAccept.status === 200,
         `8h. AND AN ORDINARY LOCAL TRADE IS UNTOUCHED (got ${localAccept.status}: ${localAccept.json?.error ?? 'ok'}) — a guard that broke the local board would be the worse bug`);
@@ -357,7 +352,7 @@ async function main() {
     // ── 9. Nothing about any of this minted a bean. ───────────────────────────────────────────────────
     //
     // §8h left 4 beans in a live escrow, which is a legitimate hold rather than drift — count it in.
-    const inEscrow = (db.prepare("SELECT COALESCE(SUM(balance),0) AS t FROM accounts WHERE public_key LIKE 'escrow_%'").get() as any).t;
+    const inEscrow = (db.prepare("SELECT COALESCE(SUM(balance_c),0) AS t FROM accounts WHERE public_key LIKE 'escrow_%'").get() as any).t;
     assert(nodeTotal() === baseline,
         `9. FINALLY: across every cache round the ledger is unchanged (${baseline} → ${nodeTotal()}, of which ${inEscrow} is the §8h hold) — a cached listing is a copy of an advert, not value`);
 

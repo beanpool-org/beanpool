@@ -25,6 +25,21 @@ const NOT_A_PICTURE = path.join(FIXTURES, 'eggs.txt');
 fs.writeFileSync(NOT_A_PICTURE, 'a dozen eggs');
 process.on('exit', () => fs.rmSync(FIXTURES, { recursive: true, force: true }));
 
+/**
+ * What the real node refuses on these two routes (apps/server/src/routes/treasury.ts with money-body.ts): money is whole
+ * hundredths under a *_c name, so a body with an old money key, or a *_c figure that isn't a whole number of hundredths
+ * at least 0, gets 400 amount_c_required. Null when the body is one the node takes.
+ */
+function nodeRefusal(url, body) {
+    const wholeHundredths = (v) => v === undefined || (Number.isSafeInteger(v) && v >= 0);
+    if (url === '/api/local/admin/treasury') {
+        if ('creditLine' in body || 'workingCapitalCeiling' in body || !wholeHundredths(body.creditLine_c) || !wholeHundredths(body.workingCapitalCeiling_c)) return 'amount_c_required';
+    } else if (url.endsWith('/offer')) {
+        if ('credits' in body || !wholeHundredths(body.price_c)) return 'amount_c_required';
+    }
+    return null;
+}
+
 /** A node that answers GET /api/local/admin/treasury with `listAnswer` and records every request (and each body, by route). */
 async function standIn(listAnswer) {
     const requests = [];
@@ -39,6 +54,8 @@ async function standIn(listAnswer) {
                 const [status, answer] = listAnswer;
                 return res.writeHead(status, { 'Content-Type': 'application/json' }).end(answer);
             }
+            const refused = req.method === 'POST' && body ? nodeRefusal(req.url, bodies[req.url]) : null;
+            if (refused) return res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Update the app to send this amount.', code: refused }));
             res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ success: true, publicKey: 'ab'.repeat(32) }));
         });
     });
@@ -96,6 +113,14 @@ test('an OK list with no Community Eggs still creates one and posts its offer', 
         // The Offer carries EGGS_PHOTO as a data URL: the node refuses a new Offer with no photo.
         const offer = node.bodies[node.requests[2].split(' ')[1]];
         assert.deepEqual(offer?.photos, [`data:image/png;base64,${PNG_BASE64}`], out);
+        // The money in the names the node takes, whole hundredths: a 200-Bean line and 12 Beans a dozen. The old keys
+        // (creditLine, credits) are refused by the node, and by the stand-in above as it does.
+        const made = node.bodies['/api/local/admin/treasury'];
+        assert.equal(made?.creditLine_c, 20000, out);
+        assert.ok(!('creditLine' in (made ?? {})), out);
+        assert.equal(offer?.price_c, 1200, out);
+        assert.ok(!('credits' in (offer ?? {})), out);
+        assert.match(out, /Posted recurring offer/, 'the node took both bodies');
     } finally {
         await node.close();
     }

@@ -18,8 +18,8 @@
  *      8th is refused, naming 7; an owner with 7 running from before is refused the 8th, naming 7 at a time.
  *   6. Demotion: an admin made a member again is held to a member's numbers at once (posts, events, groups, enterprises,
  *      polls); made admin again, the setting at once.
- *   7. The one-active-poll index (db.ts makeActivePollIndexPlain): a plain index after boot; a node's old UNIQUE one is
- *      replaced once; an older image's `CREATE UNIQUE INDEX IF NOT EXISTS` on it is a no-op with an owner's 2 open polls.
+ *   7. The one-active-poll index: a plain index after boot;
+ *      an older image's `CREATE UNIQUE INDEX IF NOT EXISTS` on it is a no-op with an owner's 2 open polls.
  *   8. Invites (Marty, 31 Oct ~20:35): a member's 21st in a day, and 51st unused, refused as before; an owner's and an
  *      admin's 8th, unused and in a day, naming 7; with it at 120 an admin's 21st and a 51st unused go; a moderator keeps a
  *      member's numbers; what was made in Settings still doesn't count; an offline ticket by the maker's role (7, a member 20).
@@ -38,7 +38,7 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
-import { db, makeActivePollIndexPlain } from './db/db.js';
+import { db } from './db/db.js';
 import { initStateEngine, createPost, createTreasury, adminAssignTreasuryOperator, generateInvite, pausePost, resumePost } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import {
@@ -68,7 +68,7 @@ function makeMember(callsign: string): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
     setMemberPhoto(db, pub, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
 
@@ -357,10 +357,6 @@ async function main(): Promise<void> {
     closeAllPolls();
     const uniqueOf = () => (db.prepare(`SELECT "unique" AS u FROM pragma_index_list('posts') WHERE name = 'idx_posts_author_active_poll'`).get() as { u: number } | undefined)?.u;
     assert(uniqueOf() === 0, `the boot leaves the active-poll index a plain one (unique: ${uniqueOf()})`);
-    db.exec(`DROP INDEX idx_posts_author_active_poll`);
-    db.exec(`CREATE UNIQUE INDEX idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
-    const replaced = makeActivePollIndexPlain();
-    assert(replaced === true && uniqueOf() === 0 && makeActivePollIndexPlain() === false, 'a node from before: its unique index is replaced by the plain one, once');
     newPoll(own); newPoll(own);
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
     assert(uniqueOf() === 0, 'an older image\'s schema line, run on it with an owner\'s 2 open polls, finds the name and does nothing (no failed boot)');

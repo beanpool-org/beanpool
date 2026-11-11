@@ -164,11 +164,11 @@ describe('asking for work (POST /api/join/work)', () => {
         expect((calls[0].init.headers as Record<string, string>)['X-Public-Key']).toBe(identity.publicKey);
     });
 
-    it('`work: null` (a sign-in at ordinary rates) and a node from before the work need none', async () => {
+    it('`work: null` (a sign-in at ordinary rates) needs none; a 404 is a refusal like any other, never "none"', async () => {
         stub(200, { work: null, turnstile: null });
         expect(await requestDoorWork(identity, 'sign-in')).toEqual({ kind: 'none' });
         stub(404, { error: 'Not Found' });
-        expect(await requestDoorWork(identity, 'sign-in')).toEqual({ kind: 'none' });
+        expect(await requestDoorWork(identity, 'sign-in')).toMatchObject({ kind: 'refused', answer: { status: 404 } });
     });
 
     it('a refusal keeps its answer, with its Retry-After', async () => {

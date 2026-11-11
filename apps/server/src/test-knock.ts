@@ -77,18 +77,17 @@ import { registerMemberInternal } from './engine/members.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
 import * as knockEngine from './engine/knocks.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { seedOwnerForTests, ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const ADMIN_PW = 'Knock-Knock-Admin-Pw-62!';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let run = 0, passed = 0;
@@ -119,7 +118,8 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
         const nonce = crypto.randomBytes(16).toString('hex');
         const signedPath = path.split('?')[0];
         headers['X-Public-Key'] = opts.upperKey ? id.pk.toUpperCase() : id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${signedPath}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: signedPath, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -129,9 +129,9 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }
     return { status: res.status, body: parsed, text };
 }
-// Step 7c: with 2FA off the password alone opens no admin route. main() turns 2FA on (no member is seeded, so no count
-// below moves) and the operator's calls send the password with a fresh code.
-let adminHeaders: () => Record<string, string> = () => ({ 'X-Admin-Password': ADMIN_PW });
+// The operator's calls: an owner's key session from the phone's Manage hand-off, opened for each call (the node has no
+// admin password). main() seeds that owner, a member of its own who never knocks or answers a knock.
+let adminHeaders: () => Record<string, string> = () => ({});
 const admin = (method: 'GET' | 'POST', path: string, body?: unknown) =>
     call(null, method, path, body, { headers: adminHeaders() });
 
@@ -185,9 +185,6 @@ function jpegWithXmp(marker: string): string {
 async function main(): Promise<void> {
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    adminHeaders = turnOn2faForTests(ADMIN_PW).headers;
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     // The tidy-up runs every minute by itself. Here it runs only when section 15 calls it: the sections before set a
@@ -208,6 +205,8 @@ async function main(): Promise<void> {
     adminSetUserStatus(quiet.pk, 'disabled');
     purgeMemberSelf(leaver.pk);
     completeRekey(rekeyed.pk, rekeyedNew.pk, issueRekeyCode(rekeyed.pk, 'owner:password').code, 'owner:password');
+    const operator = seedOwnerForTests('Operator');
+    adminHeaders = () => ownerPhoneSessionHeaders(operator);
 
     // Applicants: nobody here.
     const ann = newId('Ann');      // approved, redeems
@@ -356,6 +355,7 @@ async function main(): Promise<void> {
     const annStatus = await status(ann);
     assert(annStatus.status === 200 && annStatus.body?.status === 'approved' && annStatus.body?.invite === code && typeof annStatus.body?.expiresAt === 'string',
         `Ann's signed status returns the invite (${annStatus.text})`);
+    assert(!('member' in (annStatus.body ?? {})), `and says nothing of membership while she hasn't joined (${annStatus.text})`);
     const again = await approve(mia, annId);
     assert(again.status === 409 && again.body?.code === 'answered', `a second answer → 409 answered (${again.status})`);
     const declineApproved = await decline(mia, annId);
@@ -378,6 +378,9 @@ async function main(): Promise<void> {
     assert(annMember?.invited_by === max.pk && annMember?.invite_code === code, 'she is a member, invited by Max with that code');
     const annAfter = await status(ann);
     assert(annAfter.body?.status === 'approved', `her status still says approved (${annAfter.text})`);
+    // Beside the yes, that she is a member now (DESIGN-global-yes-join-fable.md §2.1, slice Y1): the page that holds her
+    // account elsewhere, and the phone's Find card, drop a yes she has used. Never a new status value.
+    assert(annAfter.body?.member === true && annAfter.body?.invite === code, `and that she is a member here now (${annAfter.text})`);
     const annMemberKnock = await knock(ann);
     assert(annMemberKnock.status === 409 && annMemberKnock.body?.code === 'already_member', 'and she can\'t knock: she is a member');
     const afterJoin = await list(mia);
@@ -993,8 +996,7 @@ async function main(): Promise<void> {
     assert(k1Redeem.status === 400 && /replaced/.test(k1Redeem.body?.error ?? ''), `her old key redeeming Mia's ordinary invite → refused (${k1Redeem.status} ${k1Redeem.body?.error})`);
     assert(!memberRow(olga.pk) && usedBy(ordinaryCode) === null, 'no member row for the old key, and the invite is not used');
     // A paper invite: an offline ticket Mia signed.
-    const ticketPayload = JSON.stringify({ i: mia.pk, t: Date.now() });
-    const ticket = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), mia.priv).toString('base64') })).toString('base64');
+    const ticket = offlineTicket(mia.priv, mia.pk);
     const redeemTicket = (id: Id) => call(id, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
     const k1Ticket = await redeemTicket(olga);
     assert(k1Ticket.status === 400 && /replaced/.test(k1Ticket.body?.error ?? ''), `her old key redeeming Mia's offline ticket → refused (${k1Ticket.status} ${k1Ticket.body?.error})`);

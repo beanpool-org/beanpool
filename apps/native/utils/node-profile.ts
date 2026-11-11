@@ -13,8 +13,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { recordRequestSigning } from './nodes';
-import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { readRecoveryCopiesRule, type RecoveryCopiesRule } from './vault-config';
@@ -100,7 +98,8 @@ export interface NodeFeatures {
      */
     dmRequests?: boolean;
     /**
-     * The community's known floor for confirmed members (design §4.2, S5).
+     * The community's known floor for confirmed members (design §4.2, S5), in whole hundredths of a Bean (the node kept the
+     * name; 100000 is a floor of 1,000 Beans): core's communityShapeLines writes it through formatHundredths.
      */
     knownFloor?: number;
     /**
@@ -334,9 +333,7 @@ export async function fetchNodeProfile(
     url: string, fetchImpl: typeof fetch = fetch, timeoutMs: number = FETCH_TIMEOUT_MS,
 ): Promise<NodeProfile | null> {
     const base = url.trim().replace(/\/+$/, '');
-    // Noted as in flight until its answer is recorded, so a request signed for this node meanwhile waits for this
-    // answer rather than asking again (request-signing-version.ts learnRequestSigning).
-    return trackInfoRead(base, readProfile(base, fetchImpl, timeoutMs));
+    return readProfile(base, fetchImpl, timeoutMs);
 }
 
 async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<NodeProfile | null> {
@@ -351,11 +348,7 @@ async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: num
         if (!res.ok) return null;
         const body = await res.json().catch(() => null);
         const profile = readNodeProfile(body);
-        if (profile) {
-            await remember(base, profile);
-            // The same answer says which request format the node reads (request binding, request-signing-version.ts).
-            await recordRequestSigning(base, body);
-        }
+        if (profile) await remember(base, profile);
         return profile;
     } catch {
         return null;

@@ -1,8 +1,8 @@
 /**
- * Getting an account back with a sign-in, in a browser (G11-d): the calls to the node's recovery routes are signed by
- * the throwaway key and nothing else, the lookup is read as the node means it, and the copy that comes back is saved
- * only when it opens to the account the lookup named. The node is a stubbed fetch; the copies are sealed here with
- * core's own seal, as a join seals them. No provider or node is contacted.
+ * Getting an account back with a sign-in, in a browser (G11-d), with nothing typed (recovery S1): the calls to the node's
+ * find and recovery routes are signed by the throwaway key and nothing else, the find is read as the node means it, and
+ * the copy that comes back is saved only when it opens to the account the find named. The node is a stubbed fetch; the
+ * copies are sealed here with core's own seal, as a join seals them. No provider or node is contacted.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -18,14 +18,15 @@ import {
     type SealedShare,
 } from '@beanpool/core';
 import {
+    collectAccount,
+    collectRefusalMessage,
     fetchSignInCopy,
-    lookupRestorable,
+    findAccounts,
+    findRefusalMessage,
     makeEphemeralKey,
-    openRestoreSession,
+    noAccountMessage,
     openRestoredAccount,
-    releaseRefusalMessage,
-    releaseSignInCopy,
-    requestRestoreNonce,
+    requestFindNonce,
     restoreProviders,
     type EphemeralKey,
 } from './web-restore';
@@ -89,26 +90,25 @@ describe('the throwaway key signs every call in the restore', () => {
         expect(makeEphemeralKey().publicKey).not.toBe(eph.publicKey);
     });
 
-    it('open, nonce, release and fetch: each signed by the throwaway key, never the account', async () => {
+    it('find nonce, find, collect and fetch: each signed by the throwaway key, never the account; no name is sent', async () => {
         const eph: EphemeralKey = makeEphemeralKey();
         const calls = stubNode({
-            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'n-1', expiresInSeconds: 600, clientIds: { google: 'web', apple: 'org.beanpool.web', facebook: null } }),
-            '/api/recovery/collect/sso': () => json(200, { collected: 1 }),
+            '/api/recovery/find-nonce': () => json(200, { nonce: 'n-1', expiresInSeconds: 600, clientIds: { google: 'web', apple: 'org.beanpool.web', facebook: null } }),
+            '/api/recovery/find': () => json(200, { accounts: [{ publicKey: account.publicKey, callsign: 'Alice' }] }),
             '/api/recovery/collect/fragments': () => json(200, { fragments: [] }),
             '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
         });
-        expect(await openRestoreSession(eph, 'Alice')).toEqual({ collectionId: 'col-1' });
-        const n = await requestRestoreNonce(eph, 'col-1');
+        const n = await requestFindNonce(eph);
         expect(n).toEqual({ nonce: { nonce: 'n-1', clientIds: { google: 'web', apple: 'org.beanpool.web', facebook: null } } });
-        await releaseSignInCopy(eph, 'col-1', { provider: 'google', idToken: 'a.b.c', nonce: 'n-1', sub: 's' });
-        await releaseSignInCopy(eph, 'col-1', { provider: 'apple', idToken: 'd.e.f', nonce: 'n-2', sub: 'a' });
+        expect(await findAccounts(eph, { provider: 'google', idToken: 'a.b.c', nonce: 'n-1', sub: 's' }))
+            .toEqual({ accounts: [{ publicKey: account.publicKey, callsign: 'Alice' }] });
+        expect(await collectAccount(eph, { publicKey: account.publicKey, callsign: 'Alice' })).toEqual({ collectionId: 'col-1' });
         await fetchSignInCopy(eph, 'col-1');
 
         expect(calls.map((c) => c.path)).toEqual([
+            '/api/recovery/find-nonce',
+            '/api/recovery/find',
             '/api/recovery/collect',
-            '/api/recovery/collect/sso-nonce',
-            '/api/recovery/collect/sso',
-            '/api/recovery/collect/sso',
             '/api/recovery/collect/fragments',
         ]);
         for (const c of calls) {
@@ -116,55 +116,57 @@ describe('the throwaway key signs every call in the restore', () => {
             expect(signedBy(c, eph.publicKey)).toBe(true);
             expect(c.headers['X-Public-Key']).not.toBe(account.publicKey);
         }
-        expect(calls[0].body).toEqual({ callsign: 'Alice' });
-        expect(calls[1].body).toEqual({ collectionId: 'col-1' });
+        expect(calls[0].body).toEqual({});
         // The token and its nonce, and nothing else of the sign-in: never its sub.
-        expect(calls[2].body).toEqual({ collectionId: 'col-1', provider: 'google', idToken: 'a.b.c', nonce: 'n-1' });
-        expect(calls[3].body).toEqual({ collectionId: 'col-1', provider: 'apple', idToken: 'd.e.f', nonce: 'n-2' });
+        expect(calls[1].body).toEqual({ provider: 'google', idToken: 'a.b.c', nonce: 'n-1' });
+        // The account picked, by its key alone: no name, no session id.
+        expect(calls[2].body).toEqual({ candidatePublicKey: account.publicKey });
+        expect(calls.some((c) => c.path.includes('/lookup/') || c.path.endsWith('/collect/sso') || c.path.endsWith('/collect/sso-nonce'))).toBe(false);
     });
 
-    it('opens the session for the account picked, by the key the lookup listed (a name two accounts hold in another case)', async () => {
-        const eph = makeEphemeralKey();
-        const calls = stubNode({ '/api/recovery/collect': () => json(200, { collectionId: 'col-2', threshold: 1 }) });
-        expect(await openRestoreSession(eph, 'Олег', account.publicKey)).toEqual({ collectionId: 'col-2' });
-        expect(calls[0].body).toEqual({ callsign: 'Олег', candidatePublicKey: account.publicKey });
-        expect(signedBy(calls[0], eph.publicKey)).toBe(true);
-    });
-
-    it('a refused open or nonce hands the answer back rather than a session', async () => {
+    it('a refused nonce, find or collect hands the answer back, a 404 included', async () => {
         const eph = makeEphemeralKey();
         stubNode({
-            '/api/recovery/collect/sso-nonce': () => json(404, { error: 'No recovery session for this device.' }),
-            '/api/recovery/collect': () => json(400, { error: 'That account has no recovery fragments to collect.' }),
+            '/api/recovery/find-nonce': () => json(404, { error: 'Not Found' }),
+            '/api/recovery/find': () => json(503, { error: 'Busy finding another account. Wait a minute, then sign in again.', code: 'find_busy' }),
+            '/api/recovery/collect': () => json(400, { error: "Sign in with your account's sign-in first." }),
         });
-        expect(await openRestoreSession(eph, 'Nobody')).toMatchObject({ answer: { status: 400 } });
-        expect(await requestRestoreNonce(eph, 'col-x')).toMatchObject({ answer: { status: 404 } });
+        expect(await requestFindNonce(eph)).toMatchObject({ answer: { status: 404 } });
+        expect(await findAccounts(eph, { provider: 'google', idToken: 'a.b.c', nonce: 'n-1', sub: 's' })).toMatchObject({ answer: { status: 503 } });
+        expect(await collectAccount(eph, { publicKey: account.publicKey, callsign: 'Alice' })).toMatchObject({ answer: { status: 400 } });
     });
 });
 
-describe('the lookup', () => {
-    it('lists only accounts a sign-in can bring back, with a key that reads as one; unsigned', async () => {
-        const calls = stubNode({
-            '/api/recovery/lookup/': () => json(200, [
-                { publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true },
-                { publicKey: other.publicKey, callsign: 'Alice2', canRecoverBySso: false },
-                { publicKey: 'not-a-key', callsign: 'Alice3', canRecoverBySso: true },
-                { publicKey: account.publicKey.toUpperCase(), callsign: 'Alice4', canRecoverBySso: true },
-            ]),
+describe('the find', () => {
+    it('names every account with a key that reads as one and a name, once each, in the node\'s order', async () => {
+        stubNode({
+            '/api/recovery/find': () => json(200, {
+                accounts: [
+                    { publicKey: other.publicKey, callsign: 'Kit' },
+                    { publicKey: 'not-a-key', callsign: 'Nobody' },
+                    { publicKey: account.publicKey.toUpperCase(), callsign: 'Pat' },
+                    { publicKey: account.publicKey, callsign: 'Pat again' },
+                    { publicKey: other.publicKey.slice(0, 63) + '0', callsign: '  ' },
+                    null,
+                ],
+            }),
         });
-        expect(await lookupRestorable(' Ali ')).toEqual([
-            { publicKey: account.publicKey, callsign: 'Alice' },
-            { publicKey: account.publicKey, callsign: 'Alice4' },
-        ]);
-        expect(calls[0].path).toBe('/api/recovery/lookup/Ali');
-        expect(calls[0].headers['X-Public-Key']).toBeUndefined();
+        expect(await findAccounts(makeEphemeralKey(), { provider: 'google', idToken: 't', nonce: 'n', sub: 's' })).toEqual({
+            accounts: [
+                { publicKey: other.publicKey, callsign: 'Kit' },
+                { publicKey: account.publicKey, callsign: 'Pat' },
+            ],
+        });
     });
 
-    it('null when the node cannot be asked or answers with something else', async () => {
-        stubNode({ '/api/recovery/lookup/': () => json(429, { error: 'slow down' }) });
-        expect(await lookupRestorable('Alice')).toBeNull();
-        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
-        expect(await lookupRestorable('Alice')).toBeNull();
+    it('an empty list is an answer: no account here uses this sign-in', async () => {
+        stubNode({ '/api/recovery/find': () => json(200, { accounts: [] }) });
+        expect(await findAccounts(makeEphemeralKey(), { provider: 'apple', idToken: 't', nonce: 'n', sub: 's' })).toEqual({ accounts: [] });
+    });
+
+    it('an answer with no list is handed back as refused', async () => {
+        stubNode({ '/api/recovery/find': () => json(200, { ok: true }) });
+        expect(await findAccounts(makeEphemeralKey(), { provider: 'google', idToken: 't', nonce: 'n', sub: 's' })).toMatchObject({ answer: { status: 200 } });
     });
 });
 
@@ -183,8 +185,8 @@ describe('which sign-ins are offered', () => {
     });
 });
 
-describe('the copy is saved only when it opens to the account the lookup named', () => {
-    it('opens with core, re-derives the 12 words, and gives the account the lookup named, as the web app holds it', async () => {
+describe('the copy is saved only when it opens to the account the find named', () => {
+    it('opens with core, re-derives the 12 words, and gives the account the find named, as the web app holds it', async () => {
         const copy = await sealed(account, 'google', 'g-sub-1');
         const r = await openRestoredAccount(copy, 'google', 'g-sub-1', { publicKey: account.publicKey, callsign: 'Alice' });
         expect(r.kind).toBe('ok');
@@ -197,7 +199,7 @@ describe('the copy is saved only when it opens to the account the lookup named',
         expect((await identityFromMnemonic(r.identity.mnemonic!, 'x')).publicKey).toBe(account.publicKey);
     });
 
-    it("another account's copy, where the lookup named Alice: refused, and nothing of it returned", async () => {
+    it("another account's copy, where the find named Alice: refused, and nothing of it returned", async () => {
         const copy = await sealed(other, 'google', 'g-sub-1');
         const r = await openRestoredAccount(copy, 'google', 'g-sub-1', { publicKey: account.publicKey, callsign: 'Alice' });
         expect(r).toEqual({ kind: 'wrong_account' });
@@ -281,8 +283,20 @@ describe('the copy is saved only when it opens to the account the lookup named',
 });
 
 describe('what the member reads', () => {
-    it("a sign-in that isn't the account's keeper, in plain words", () => {
-        expect(releaseRefusalMessage({ status: 400, body: { error: 'That sign-in account is not the keeper for this recovery.' } }, 'google', 'Alice'))
-            .toBe("That Google account isn't a way back into Alice. Try the sign-in you joined with, or your 12 words.");
+    it('no account here, in the words of design §5', () => {
+        expect(noAccountMessage('Mullumbimby', 'google')).toBe('No account at Mullumbimby uses this Google account. Try another community, or your 12 words.');
+    });
+
+    it("the node's own sentence where it gave one (a busy scan, a spent hold); plain words where it gave none", () => {
+        expect(findRefusalMessage({ status: 503, body: { error: 'Busy finding another account. Wait a minute, then sign in again.', code: 'find_busy' } }, 'google'))
+            .toBe('Busy finding another account. Wait a minute, then sign in again.');
+        expect(findRefusalMessage({ status: 401, body: { error: 'Invalid token', code: 'sso_invalid' } }, 'apple')).toBe("Apple sign-in couldn't be checked or took too long. Try again.");
+        // A 401 with no code is the signature middleware refusing this device's clock, before any sign-in was read.
+        expect(findRefusalMessage({ status: 401, body: { error: 'Stale request' } }, 'apple')).toMatch(/date and time look wrong/);
+        expect(findRefusalMessage({ status: 503, body: {} }, 'google')).toBe('Google sign-in could not be checked right now. Please try again in a minute.');
+        // A nonce refused before any sign-in names no provider.
+        expect(findRefusalMessage({ status: 500, body: {} }, null)).toBe('The community could not bring the account back (500). Please try again.');
+        expect(collectRefusalMessage({ status: 400, body: { error: "Sign in with your account's sign-in first." } })).toBe("Sign in with your account's sign-in first.");
+        expect(collectRefusalMessage({ status: 429, body: {} })).toBe('Too many tries from this network. Please try again later.');
     });
 });

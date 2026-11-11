@@ -26,6 +26,7 @@ import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, creat
 const createPost = wrapCreatePost(rawCreatePost);
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -38,6 +39,13 @@ function assert(cond: boolean, msg: string): void {
         process.exitCode = 1;
     }
 }
+
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a check: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 // Generate test Ed25519 keypairs
 function makeKeypair() {
@@ -74,11 +82,11 @@ async function runTests() {
     });
 
     // Give Alice 50 beans from Commons
-    payFromCommons(alice.pubKeyHex, 50, 'Grant initial beans to Alice', { allowDeficit: true });
-    assert(getBalance(alice.pubKeyHex).balance === 50, 'Alice has 50 beans initial balance');
+    payFromCommons(alice.pubKeyHex, hc(50), 'Grant initial beans to Alice', { allowDeficit: true });
+    assert(beansOf(getBalance(alice.pubKeyHex).balance_c) === 50, 'Alice has 50 beans initial balance');
 
     // Create active post for Alice
-    const post = createPost('offer', 'food', 'Fresh Organic Tomatoes', 'Fresh tomatoes from the garden', 10, 'fixed', alice.pubKeyHex)!;
+    const post = createPost('offer', 'food', 'Fresh Organic Tomatoes', 'Fresh tomatoes from the garden', hc(10), 'fixed', alice.pubKeyHex)!;
     assert(Boolean(post && post.id), 'Alice created an offer post');
 
     // Add push token and friend
@@ -89,9 +97,9 @@ async function runTests() {
     const txId = 'tx_test_escrow_123';
     db.prepare(`
         INSERT INTO marketplace_transactions (
-            id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, updated_at
+            id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))
-    `).run(txId, post.id, bob.pubKeyHex, alice.pubKeyHex, 10);
+    `).run(txId, post.id, bob.pubKeyHex, alice.pubKeyHex, hc(10));
 
     let failedAsExpected = false;
     try {
@@ -125,8 +133,8 @@ async function runTests() {
     assert(aliceMember?.bio === null || aliceMember?.bio === undefined, 'Bio is cleared');
 
     // 4. Verify balance returned to Commons Pool
-    assert(getBalance(alice.pubKeyHex).balance === 0, 'Alice balance is exactly 0 after purge');
-    assert(getCommonsBalance() === commonsBefore + 50, 'Commons pool received Alice surplus credits');
+    assert(getBalance(alice.pubKeyHex).balance_c === 0, 'Alice balance is exactly 0 after purge');
+    assert(getCommonsBalance() === commonsBefore + hc(50), 'Commons pool received Alice surplus credits');
 
     // 5. Verify post cancellation
     const alicePost = db.prepare("SELECT * FROM posts WHERE id = ?").get(post.id) as any;
@@ -151,19 +159,19 @@ async function runTests() {
     // 8. Test Bad Debt settlement on purge
     // Put Bob into deficit and Charlie into credit (simulating trade credit)
     const bobAcc = ledger.getAccount(bob.pubKeyHex);
-    bobAcc.balance = -30;
-    db.prepare("UPDATE accounts SET balance = -30 WHERE public_key = ?").run(bob.pubKeyHex);
+    bobAcc.balance_c = hc(-30);
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = ?").run(hc(-30), bob.pubKeyHex);
 
     const charlieAcc = ledger.getAccount(charlie.pubKeyHex);
-    charlieAcc.balance = 30;
-    db.prepare("UPDATE accounts SET balance = 30 WHERE public_key = ?").run(charlie.pubKeyHex);
+    charlieAcc.balance_c = hc(30);
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = ?").run(hc(30), charlie.pubKeyHex);
 
-    assert(getBalance(bob.pubKeyHex).balance < 0, 'Bob has negative balance (debt)');
-    const bobDebt = Math.abs(getBalance(bob.pubKeyHex).balance);
+    assert(getBalance(bob.pubKeyHex).balance_c < 0, 'Bob has negative balance (debt)');
+    const bobDebt = Math.abs(getBalance(bob.pubKeyHex).balance_c);
     const commonsBeforeBobPurge = getCommonsBalance();
 
     purgeMemberSelf(bob.pubKeyHex);
-    assert(getBalance(bob.pubKeyHex).balance === 0, 'Bob balance is exactly 0 after debt write-off');
+    assert(getBalance(bob.pubKeyHex).balance_c === 0, 'Bob balance is exactly 0 after debt write-off');
     assert(getCommonsBalance() === commonsBeforeBobPurge - bobDebt, 'Commons pool absorbed Bob bad debt');
 
     // Verify zero-sum ledger audit
@@ -187,8 +195,8 @@ async function runTests() {
     assert(unauthRes.status === 401, 'Unsigned POST /api/member/purge is rejected with 401');
 
     function signPayload(method: string, path: string, ts: number, nonce: string, bodyStr: string, privKey: crypto.KeyObject): string {
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyStr}`;
-        return crypto.sign(null, Buffer.from(canonical), privKey).toString('base64');
+        const canonical = { method, path, timestamp: ts, nonce, body: bodyStr };
+        return signRequest(privKey, canonical);
     }
 
     const ts = Date.now();
@@ -203,6 +211,7 @@ async function runTests() {
             'Content-Type': 'application/json',
             'X-Public-Key': dave.pubKeyHex,
             'X-Signature': signature,
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

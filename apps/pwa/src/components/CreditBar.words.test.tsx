@@ -31,8 +31,8 @@ function boldInSentences(root: ParentNode = document.body): string[] {
 describe('the credit bar in the pseudo-locale', () => {
     it('with live offers unlocking part of the line: the gauge, the tag, the caption with the next rung, the anchors', async () => {
         await showIn('xx');
-        render(<CreditBar balance={-100} floor={-1000} usableFloor={-200} liveOffers={1} />);
-        expect(screen.getByRole('meter', { name: xx('Credit balance gauge') })).toHaveAttribute('aria-valuetext', xx('{amount} Beans').replace('{amount}', '-100'));
+        render(<CreditBar balance_c={-10000} floor_c={-100000} usableFloor_c={-20000} liveOffers={1} />);
+        expect(screen.getByRole('meter', { name: xx('Credit balance gauge') })).toHaveAttribute('aria-valuetext', xx('{amount} Beans').replace('{amount}', '−100'));
         expect(screen.getByText(xx('your limit'))).toBeInTheDocument();
         expect(screen.getByText(xx('sweet spot'))).toBeInTheDocument();
         expect(screen.getByText(xx('fee-free'))).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe('the credit bar in the pseudo-locale', () => {
 
     it('with no live offer: the caption that says one opens the line', async () => {
         await showIn('xx');
-        render(<CreditBar balance={0} floor={-1000} usableFloor={0} liveOffers={0} knownGrant={1000} />);
+        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} knownGrant_c={100000} />);
         const bold = boldInSentences();
         expect(bold.length).toBeGreaterThan(0);
         expect(bypassing(document.body, { others: bold })).toEqual([]);
@@ -54,31 +54,31 @@ describe('the credit bar in the pseudo-locale', () => {
 
     it('above the fee-free line: the fee ladder and the tag with its monthly rate', async () => {
         await showIn('xx');
-        render(<CreditBar balance={600} floor={-500} />);
+        render(<CreditBar balance_c={60000} floor_c={-50000} />);
         expect(screen.getByText(xx('fee/mo'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
     });
 });
 
 describe('the credit bar in English', () => {
-    it('every word as it was', () => {
-        render(<CreditBar balance={-100} floor={-1000} usableFloor={-200} liveOffers={1} />);
+    it('every word as it was, every figure as formatHundredths writes it (a true minus, thousands grouped)', () => {
+        render(<CreditBar balance_c={-10000} floor_c={-100000} usableFloor_c={-20000} liveOffers={1} />);
         expect(bracketed()).toBe(0);
-        expect(screen.getByRole('meter', { name: 'Credit balance gauge' })).toHaveAttribute('aria-valuetext', '-100 Beans');
-        expect(screen.getByText('-100 B')).toBeInTheDocument();
+        expect(screen.getByRole('meter', { name: 'Credit balance gauge' })).toHaveAttribute('aria-valuetext', '−100 Beans');
+        expect(screen.getByText('−100 B')).toBeInTheDocument();
         expect(screen.getByText(/unlocks/).textContent).toBe('1 offer unlocks −200 · 2 offers → −500');
         for (const w of ['your limit', 'sweet spot', 'fee-free', '← carry credit', 'hold credit →']) expect(screen.getByText(w)).toBeInTheDocument();
         cleanup();
 
-        render(<CreditBar balance={0} floor={-1000} usableFloor={0} liveOffers={0} />);
-        expect(screen.getByText(/to open your credit line/).textContent).toBe('Post an Offer to open your credit line — 3 offers unlock your full −1000.');
+        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} />);
+        expect(screen.getByText(/to open your credit line/).textContent).toBe('Post an Offer to open your credit line — 3 offers unlock your full −1,000.');
         cleanup();
 
-        render(<CreditBar balance={0} floor={-1000} usableFloor={0} liveOffers={0} knownGrant={1000} />);
-        expect(screen.getByText(/to open your credit line/).textContent).toBe('Post an Offer to open your credit line — 1 offer unlocks your full −1000.');
+        render(<CreditBar balance_c={0} floor_c={-100000} usableFloor_c={0} liveOffers={0} knownGrant_c={100000} />);
+        expect(screen.getByText(/to open your credit line/).textContent).toBe('Post an Offer to open your credit line — 1 offer unlocks your full −1,000.');
         cleanup();
 
-        render(<CreditBar balance={600} floor={-500} />);
+        render(<CreditBar balance_c={60000} floor_c={-50000} />);
         expect(screen.getByText('+600 B · ≈1.5%/mo')).toBeInTheDocument();
         expect(screen.getByText('fee/mo')).toBeInTheDocument();
         expect(screen.getByText('1.5%')).toBeInTheDocument();

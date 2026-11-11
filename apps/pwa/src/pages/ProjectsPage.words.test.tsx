@@ -11,16 +11,16 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-w2.test-support';
 
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 
 vi.mock('../lib/api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/api')>()),
     getTreasuries: vi.fn(),
-    getBalance: vi.fn(async () => ({ balance: 100, floor: -500, commonsBalance: 250, earnedCredit: 12, callsign: 'Me', keeperOf: [], tier: 'contributor' })),
+    getBalance: vi.fn(async () => ({ balance_c: 10000, floor_c: -50000, commonsBalance_c: 25000, earnedCredit_c: 1200, callsign: 'Me', keeperOf: [], tier: 'contributor' })),
     createEnterprise: vi.fn(async () => ({ success: true })),
     getDecisions: vi.fn(),
-    getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
+    getCommonsBalance: vi.fn(async () => ({ balance_c: 25000 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(),
     getYourGroups: vi.fn(async () => ({ items: [] })),
@@ -32,10 +32,10 @@ import { ProjectsPage } from './ProjectsPage';
 const ME: any = { publicKey: 'me-pk', privateKey: 'k', callsign: 'Me', createdAt: '2026-09-01T00:00:00Z' };
 
 const TREASURIES: any[] = [
-    { publicKey: 't1', name: 'Garden Solar Pumps', callsign: 'garden', purpose: 'Solar pumps for the plots.', balance: 150, creditLine: 0, liveOffers: 1,
-        goalAmount: 500, currentAmount: 150, deadlineAt: null, lifecycle: 'bounded', status: 'active', avatar: null },
-    { publicKey: 't2', name: 'Bread Oven', callsign: 'oven', purpose: 'A shared wood oven.', balance: 40, creditLine: 0, liveOffers: 2,
-        goalAmount: null, currentAmount: 0, deadlineAt: null, lifecycle: 'ongoing', status: 'active', avatar: null },
+    { publicKey: 't1', name: 'Garden Solar Pumps', callsign: 'garden', purpose: 'Solar pumps for the plots.', balance_c: 15000, creditLine_c: 0, liveOffers: 1,
+        goalAmount_c: 50000, currentAmount_c: 15000, deadlineAt: null, lifecycle: 'bounded', status: 'active', avatar: null },
+    { publicKey: 't2', name: 'Bread Oven', callsign: 'oven', purpose: 'A shared wood oven.', balance_c: 4000, creditLine_c: 0, liveOffers: 2,
+        goalAmount_c: null, currentAmount_c: 0, deadlineAt: null, lifecycle: 'ongoing', status: 'active', avatar: null },
 ];
 const group = (over: Record<string, unknown>): any => ({
     id: 'g1', name: 'Seed Savers', slug: 'seed', description: 'We swap seeds.', category: 'working_group', createdBy: 'x',
@@ -209,7 +209,8 @@ describe('the Commons page in English', () => {
         await screen.findByText('Seed Savers');
         expect(bracketed()).toBe(0);
         expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Commons');
-        await waitFor(() => expect(screen.getByText('250.00 🫘')).toBeInTheDocument());
+        // The Commons pot as every figure is written (formatHundredths): no decimals when whole.
+        await waitFor(() => expect(screen.getByText('250 🫘')).toBeInTheDocument());
         // Yours (Seed Savers, Night Owls) open the chat and say the role; Find (Choir) opens the details.
         const cards = [
             screen.getByRole('button', { name: 'Seed Savers, convenor, Open chat →' }),

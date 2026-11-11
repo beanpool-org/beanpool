@@ -1,7 +1,7 @@
 /**
  * `beanpool recover` (node sign-in design step 4): the shell command that makes a member an owner when every owner's
- * key is gone, in place of deleting data/local-config.json (which also lost the community's name, gateway, thresholds,
- * 2FA, break-glass mode and the replication token).
+ * key is gone, in place of deleting data/local-config.json (which also lost the community's name, gateway, thresholds
+ * and the replication token).
  *
  * End to end against a node data dir: the command runs as its own process (as `docker compose exec` runs it beside a
  * live node), on the database and config the node uses.
@@ -53,7 +53,7 @@ const notices = () => fs.readdirSync(DATA_DIR).filter(f => f.startsWith('recover
 initStateEngine();
 updateLocalConfig({
     communityName: 'Recover Test', contactEmail: 'ops@example.org',
-    replicationTokenHash: 'a'.repeat(64), replicationTokenSalt: 'b'.repeat(32), breakGlassMode: true,
+    replicationTokenHash: 'a'.repeat(64), replicationTokenSalt: 'b'.repeat(32),
 } as any);
 const configBefore = fs.readFileSync(CONFIG);
 

@@ -170,7 +170,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', ?, ?, 'inv-test')`).run(k.pub, callsign, longAgo, owner.pub);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         setMemberPhoto(db, k.pub, AVATAR);
     };
     addMember(otto, 'Otto Owner');
@@ -292,7 +292,7 @@ async function main(): Promise<void> {
             "the report's planted words took nothing else: one record, one post");
         const escrowed = post('Held in escrow', mia.pub);
         const tx = crypto.randomUUID();
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(tx, escrowed, rae.pub, mia.pub);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 2, 'pending')`).run(tx, escrowed, rae.pub, mia.pub);
         const ownersPost = post("The owners' notice", owner.pub);
         const deal = structured(await ad.callTool({ name: 'take_down', arguments: { post_id: escrowed, reason: 'spam', why: WHY } }));
         const ownerKept = structured(await ad.callTool({ name: 'take_down', arguments: { post_id: ownersPost, reason: 'spam', why: WHY } }));

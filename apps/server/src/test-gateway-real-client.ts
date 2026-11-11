@@ -25,6 +25,7 @@ import { db } from './db/db.js';
 import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
 import { resolveClientIp, isTrustedProxy, setTrustConfigForTests } from './client-ip.js';
 import { resetGatewayRateLimit, SIGNED_CEILING_FACTOR } from './gateway-rate-limit.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -36,14 +37,14 @@ function makeMember(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
 function signedHeaders(id: { pubKeyHex: string; privateKey: crypto.KeyObject }, method: string, path: string): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path, timestamp: ts, nonce });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 
 /** What cloudflared forwards for a member at `ip` (Cloudflare's edge sets both). */

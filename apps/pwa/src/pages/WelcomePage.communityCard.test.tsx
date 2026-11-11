@@ -14,7 +14,7 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const LOCAL = { memberCount: 9, postCount: 3, transactionCount: 6, commonsBalance: 0, profile: 'local', features: { door: 'members' } };
+const LOCAL = { memberCount: 9, postCount: 3, transactionCount: 6, commonsBalance_c: 0, profile: 'local', features: { door: 'members' } };
 const CARD = {
     name: 'Castlemaine BeanPool', host: 'castlemaine.beanpool.org', members: 9, area: { name: 'Castlemaine and around', radiusKm: 15 },
     joining: 'requests', askUrl: 'https://global.beanpool.org/?ask=castlemaine.beanpool.org', globalUrl: 'https://global.beanpool.org',
@@ -52,10 +52,24 @@ describe("a local community's card on its welcome page", () => {
         render(<WelcomePage onComplete={vi.fn()} />);
         const card = await screen.findByTestId('community-card');
         expect(screen.getByRole('heading', { name: 'Castlemaine BeanPool' })).toBeTruthy();
-        const form = screen.getByText(/Join with Invite Code/);
+        // The form's heading says which community the code is for (join names N1, §2.5).
+        const form = screen.getByRole('heading', { name: 'Join Castlemaine BeanPool with an invite' });
         // The card comes first in the page.
         expect(card.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.queryByTestId('welcome-no-invite')).toBeNull();
+        expect(screen.queryByText(/Join with Invite Code/)).toBeNull();
+    });
+
+    it("the invite form's heading names the community by its card: its name, else its address; a node with no card keeps the form's old heading", async () => {
+        stubNode({ ...CARD, name: null });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        expect(await screen.findByRole('heading', { name: 'Join castlemaine.beanpool.org with an invite' })).toBeTruthy();
+        cleanup();
+
+        stubNode(404);
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await screen.findByText(/Join with Invite Code/);
+        expect(screen.queryByRole('heading', { name: /with an invite/ })).toBeNull();
     });
 
     it('Already a member opens the ways back', async () => {
@@ -112,7 +126,7 @@ describe("a local community's card on its welcome page", () => {
  * where the community confirms its members: the same sentence as the phone's card. Nothing to tick.
  */
 describe("the community's rule on its card's page", () => {
-    const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
+    const RULE = { known: true, knownFloor: 10000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
     const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
 
     it('rule on: the card, then the sentence on the same page, and nothing to tick', async () => {

@@ -28,6 +28,7 @@ delete process.env.ENFORCE_READ_AUTH;
 import crypto from 'node:crypto';
 import https from 'node:https';
 import zlib from 'node:zlib';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let PORT = 0;
@@ -46,10 +47,11 @@ function keypair(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -79,7 +81,6 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { withAreaDistances } = await import('./engine/member-area.js');
     const { grantNodeRole, revokeNodeRole, listNodeRoles } = await import('./engine/node-roles.js');
@@ -88,7 +89,6 @@ async function main() {
     const snapshot = await import('./members-snapshot.js');
     const { bumpMembersVersion } = await import('./engine/versions.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     PORT = await startHttpsServer(0);
@@ -123,7 +123,8 @@ async function main() {
             nodeRole: rolesByPubkey.get(r.public_key) ?? null,
             avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
             profileUpdatedAt: r.profile_updated_at || null,
-            earnedCredit: r.earned_credit ?? 0,
+            // The route's own key, its value whole hundredths (routes/community.ts directoryMembers reads earned_credit_c).
+            earnedCredit: r.earned_credit_c ?? 0,
             archetype: r.archetype || null,
         }));
         return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);

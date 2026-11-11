@@ -65,9 +65,10 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { addChannel } from './engine/creator-channels.js';
 import { createPulseSubmitRoutes, type PulseSubmitRouteDeps } from './routes/pulse-submit.js';
 import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
-import { lockedDm } from './dm-test-payload.js';
+import { lockedColumn, lockedDm } from './dm-test-payload.js';
 import { resolveChannel, prunePulseItems, type SsrfSafeResponse } from './engine/pulse-resolver.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields, offlineTicket } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -93,7 +94,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -107,7 +108,8 @@ async function call(method: Method, id: Id | null, path: string, body?: unknown,
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -131,8 +133,8 @@ async function many(n: number, width: number, one: (i: number) => Promise<Res>):
 /** A key session for an admin-surface request, as the app signs in: challenge → signature → handshake → session. */
 function keySession(id: Id): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), id.priv).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (!solved.ok) throw new Error(`no session: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`no session: ${ex.error}`);
@@ -141,24 +143,22 @@ function keySession(id: Id): string {
 
 // ── what members do ─────────────────────────────────────────────────────────────────────────────────────────────
 let n = 0;
-const post = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
+const post = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++n}`, description: 'An offer', price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
 const openDm = (from: Id, toPk: string) => call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, toPk], createdBy: from.pk });
 const line = (from: Id, conversationId: string, payload: Record<string, unknown> = lockedDm()) =>
     call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ...payload });
 const invite = (id: Id) => call('POST', id, '/api/invite/generate', { publicKey: id.pk });
 const enterprise = (id: Id, name: string) => call('POST', id, '/api/enterprise', { name, purpose: `${name}, a test enterprise` });
 const group = (id: Id, name: string) => call('POST', id, '/api/groups', { name });
-/** A line's ciphertext of exactly `chars` base64 characters (a multiple of 4), in the encrypted form a DM takes. */
+/** A line's ciphertext of exactly `chars` base64 characters (a multiple of 4), in the form a DM takes (format 4). */
 function lineOf(chars: number): { ciphertext: string; nonce: string } {
-    const ciphertext = crypto.randomBytes((chars / 4) * 3).toString('base64');
+    const ciphertext = lockedColumn((chars / 4) * 3);
     if (ciphertext.length !== chars) throw new Error(`fixture: ${ciphertext.length} characters, wanted ${chars}`);
     return { ciphertext, nonce: lockedDm().nonce };
 }
-/** A ticket as the phone makes one (apps/native app/(tabs)/people.tsx), as test-offline-ticket-check makes it. */
+/** A ticket as the phone makes one (core's buildInviteTicket, format 2), as test-offline-ticket-check makes it. */
 function phoneTicket(inviter: Id, t: number): string {
-    const payload = JSON.stringify({ i: inviter.pk, t });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: Buffer.from(payload).toString('base64'), s })).toString('base64');
+    return offlineTicket(inviter.priv, inviter.pk, { timestamp: t });
 }
 
 /** The rate limiter off (the minute bucket), the day budget still on: it is on whatever the operator's switch says. */
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
         minuteThrottle(true, PER_MINUTE);
         const ann = member('Ann');
         const routes: [string, unknown][] = [
-            ['/api/federation/purchase', { postId: 'none', amount: 1 }],
+            ['/api/federation/purchase', { postId: 'none', amount_c: 100 }],
             ['/api/federation/commission', { postId: 'none' }],
             ['/api/community/register', { publicKey: ann.pk, callsign: 'Ann' }],
             ['/api/community/me/area', { lat: -28.5, lng: 153.5 }],
@@ -236,7 +236,7 @@ async function main(): Promise<void> {
             ['a DM opened', await openDm(dee, eve.pk)],
             ['an area set', await call('POST', dee, '/api/community/me/area', { lat: -28.6, lng: 153.4 })],
             ['a push token removed (DELETE)', await call('DELETE', dee, '/api/push-tokens', { publicKey: dee.pk, token: 'none' })],
-            ['a purchase asked', await call('POST', dee, '/api/federation/purchase', { postId: 'none', amount: 1 })],
+            ['a purchase asked', await call('POST', dee, '/api/federation/purchase', { postId: 'none', amount_c: 100 })],
         ];
         const conv = mixed.find(([what]) => what === 'a DM opened')![1].body?.conversation?.id;
         mixed.push(['a DM line (the 5,000th)', await line(dee, conv)]);
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
         assert(count('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?', conv) === before, 'and neither is stored');
         const photo = await line(fay, conv, {
             ...lockedDm(), type: 'image',
-            attachment: { data: crypto.randomBytes(300 * 1024).toString('base64'), nonce: lockedDm().nonce, mime: 'image/jpeg' },
+            attachment: { data: lockedColumn(300 * 1024), nonce: lockedDm().nonce, mime: 'image/jpeg' },
         });
         assert(photo.status === 200, `a photo of 300 KB goes as an attachment, not counted in the line (${show(photo)})`);
         const edit = await call('POST', fay, '/api/messages/edit', { messageId: exact.body?.message?.id, ...lineOf(LIMIT + 4), authorPubkey: fay.pk });
@@ -393,10 +393,10 @@ async function main(): Promise<void> {
         // Changed by W-money (Marty, 2026-09-29: "maybe needs to be higher for enterprise/project"): what a keeper puts up
         // for an enterprise used to count with their own 100, so a keeper stocking a shop had nothing left for themselves.
         // It now counts against the enterprise's own WRITER_LIMITS.enterprisePostsPerDay.
-        const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', credits: 0, photos: TEST_PHOTOS });
+        const forEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'Eggs', category: 'food', price_c: 0, photos: TEST_PHOTOS });
         const own = await many(WRITER_LIMITS.postsPerDay, 8, () => post(max));
         const overOwn = await post(max);
-        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', credits: 0, photos: TEST_PHOTOS });
+        const stillEnt = await call('POST', max, `/api/treasury/${ent}/offer`, { title: 'More eggs', category: 'food', price_c: 0, photos: TEST_PHOTOS });
         assert(forEnt.status === 200 && own.every(s => s === 200) && overOwn.status === 429 && overOwn.body?.code === 'posts_per_day',
             `a keeper's post for the enterprise takes none of their 100: they still put up 100 of their own, and the 101st is 429 posts_per_day (${forEnt.status}, ${[...new Set(own)].join(',')}, ${show(overOwn)})`);
         assert(stillEnt.status === 200, `and past their own 100 they still post for the enterprise, against its own day (${show(stillEnt)})`);

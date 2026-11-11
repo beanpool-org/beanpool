@@ -122,21 +122,22 @@ const LISTING = '123e4567-e89b-12d3-a456-426614174000';
 const DEAL = 'deal-0001';
 const DAY = Date.UTC(2026, 9, 3, 12);
 
+/** Every figure in whole hundredths of a Bean, as getBalance and getTransactions answer them (db.ts). */
 const RESIDENT = {
-    balance: 1200, floor: -200, usableFloor: -150, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 0,
-    tier: { name: 'Resident', emoji: '🏠' }, tierCredit: 200, earnedCredit: 150, qualifiedValue: 300, avgRating: 4.5, reviewCount: 3, commons: 12.5,
+    balance_c: 120000, floor_c: -20000, usableFloor_c: -15000, liveOffers: 1, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant_c: 0,
+    tier: { name: 'Resident', emoji: '🏠' }, tierCredit_c: 20000, earnedCredit_c: 15000, qualifiedValue_c: 30000, avgRating: 4.5, reviewCount: 3, commons_c: 1250,
     trustStats: { uniquePartners: 4 },
 };
 const base = { projectWallet: false, timestamp: '03/10/2026', at: DAY };
 const ROWS = [
     // A hold the phone has the deal for: opens it.
-    { ...base, id: 'h1', type: 'debit', amount: 30, peer: 'Held in Trust: Fix the gate (to Mia)', peerPubkey: `escrow_${DEAL}`, memo: `Held in trust for offer ${LISTING}`,
+    { ...base, id: 'h1', type: 'debit', amount_c: 3000, peer: 'Held in Trust: Fix the gate (to Mia)', peerPubkey: `escrow_${DEAL}`, memo: `Held in trust for offer ${LISTING}`,
         held: { title: 'Fix the gate', counterparty: 'Mia', toCounterparty: true, dealId: DEAL, postId: LISTING } },
     // A hold with no deal known here: a plain row.
-    { ...base, id: 'h2', type: 'debit', amount: 5, peer: 'Held in Trust', peerPubkey: 'escrow_unknown', memo: '',
+    { ...base, id: 'h2', type: 'debit', amount_c: 500, peer: 'Held in Trust', peerPubkey: 'escrow_unknown', memo: '',
         held: { title: null, counterparty: null, toCounterparty: false } },
     // Beans from a member that names a listing: the "View Offer" link, as before.
-    { ...base, id: 'p1', type: 'credit', amount: 40, peer: 'Mia', peerPubkey: 'mia-key', memo: `Paid for ${LISTING} thanks`, held: null },
+    { ...base, id: 'p1', type: 'credit', amount_c: 4000, peer: 'Mia', peerPubkey: 'mia-key', memo: `Paid for ${LISTING} thanks`, held: null },
 ];
 
 const ledger = vi.hoisted(() => ({ rows: [] as any[], escrow: 0 }));
@@ -149,7 +150,7 @@ beforeEach(() => {
     pushed.length = 0;
     net.calls.length = 0;
     ledger.rows = ROWS;
-    ledger.escrow = 15;
+    ledger.escrow = 1500;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true, showcase: false }, checkedAt: new Date().toISOString() } }));
@@ -189,7 +190,8 @@ describe('the Ledger opens the deals behind what is held in trust (deals S6)', (
         expect(total?.tagName).toBe('BUTTON');
         expect(total?.getAttribute('role')).toBe('button');
         // Its name is what it shows, and the hint says where it goes.
-        expect(total?.textContent).toContain('15.0');
+        // 15 Beans held (1500 hundredths), written as every figure is ("15.0" before).
+        expect(total?.textContent).toBe('15HELD IN TRUST');
         expect(total?.textContent).toContain('HELD IN TRUST');
         expect(total?.getAttribute('data-hint')).toBe('Opens your deals in progress');
         expect(styleOf(total).minHeight).toBeGreaterThanOrEqual(44);

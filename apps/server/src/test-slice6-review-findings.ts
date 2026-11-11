@@ -45,6 +45,7 @@ import { ledger } from './engine/ledger.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -62,14 +63,17 @@ function keypair(): Identity {
     return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey };
 }
 
-function seedMember(callsign: string, balance = 0, extra: { status?: string } = {}): Identity {
+/** The story's figures are Beans; the node's are whole hundredths: `hc` turns one into the other at the door. */
+const hc = (beans: number) => Math.round(beans * 100);
+
+function seedMember(callsign: string, beans = 0, extra: { status?: string } = {}): Identity {
     const id = keypair();
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
         .run(id.pub, `${callsign}-${id.pub.slice(0, 6)}`, extra.status || 'active');
     setMemberPhoto(db, id.pub, AVATAR);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(id.pub, balance, ledger.getCurrentEpoch());
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
+        .run(id.pub, hc(beans), ledger.getCurrentEpoch());
     return id;
 }
 
@@ -81,9 +85,10 @@ async function send(method: string, path: string, body: unknown, signer?: Identi
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         const signPath = path.split('?')[0];
-        const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -131,24 +136,24 @@ async function main() {
         const active = seedMember('activeproposer');
         const before = { members: count('SELECT COUNT(*) c FROM members'), projects: count('SELECT COUNT(*) c FROM projects'), ops: count('SELECT COUNT(*) c FROM treasury_operators WHERE member_pubkey = ?', suspended.pub) };
 
-        const commons = await send('POST', '/api/commons/projects', { title: 'Suspended commons', description: 'x', requestedAmount: 10 }, suspended);
+        const commons = await send('POST', '/api/commons/projects', { title: 'Suspended commons', description: 'x', requestedAmount_c: hc(10) }, suspended);
         assert(commons.status === 403, `POST /api/commons/projects refuses a suspended member with 403 (got ${commons.status} ${commons.json?.error})`);
-        const crowd = await send('POST', '/api/crowdfund/projects', { title: 'Suspended crowdfund', description: 'x', goalAmount: 50, photos: [] }, suspended);
+        const crowd = await send('POST', '/api/crowdfund/projects', { title: 'Suspended crowdfund', description: 'x', goalAmount_c: hc(50), photos: [] }, suspended);
         assert(crowd.status === 403, `POST /api/crowdfund/projects refuses a suspended member with 403 (got ${crowd.status} ${crowd.json?.error})`);
         assert(count('SELECT COUNT(*) c FROM members') === before.members, 'no enterprise row was created');
         assert(count('SELECT COUNT(*) c FROM projects') === before.projects, 'no projects row was created');
         assert(count('SELECT COUNT(*) c FROM treasury_operators WHERE member_pubkey = ?', suspended.pub) === before.ops, 'no keeper binding was created');
 
         let threw = '';
-        try { createProject(suspended.pub, 'Engine suspended', 'x', 10); } catch (e: any) { threw = e.message; }
+        try { createProject(suspended.pub, 'Engine suspended', 'x', hc(10)); } catch (e: any) { threw = e.message; }
         assert(/active community members/.test(threw), `createProject throws for a suspended member (got "${threw}")`);
         threw = '';
-        try { createCrowdfundProject(crypto.randomUUID(), suspended.pub, 'Engine suspended crowdfund', 'x', [], 10, null); } catch (e: any) { threw = e.message; }
+        try { createCrowdfundProject(crypto.randomUUID(), suspended.pub, 'Engine suspended crowdfund', 'x', [], hc(10), null); } catch (e: any) { threw = e.message; }
         assert(/active community members/.test(threw), `createCrowdfundProject throws for a suspended member (got "${threw}")`);
 
-        const ok1 = await send('POST', '/api/commons/projects', { title: `Active commons ${active.pub.slice(0, 4)}`, description: 'x', requestedAmount: 10 }, active);
+        const ok1 = await send('POST', '/api/commons/projects', { title: `Active commons ${active.pub.slice(0, 4)}`, description: 'x', requestedAmount_c: hc(10) }, active);
         assert(ok1.status === 200 && ok1.json?.success, `an active member still proposes a commons project (got ${ok1.status} ${ok1.json?.error})`);
-        const ok2 = await send('POST', '/api/crowdfund/projects', { title: `Active crowdfund ${active.pub.slice(0, 4)}`, description: 'x', goalAmount: 50, photos: [] }, active);
+        const ok2 = await send('POST', '/api/crowdfund/projects', { title: `Active crowdfund ${active.pub.slice(0, 4)}`, description: 'x', goalAmount_c: hc(50), photos: [] }, active);
         assert(ok2.status === 200 && ok2.json?.success, `an active member still creates a crowdfund project (got ${ok2.status} ${ok2.json?.error})`);
     }
 
@@ -159,12 +164,12 @@ async function main() {
         const keeperA = seedMember('bakeryA', 500);
         const keeperB = seedMember('bakeryB', 500);
         reconcileLedgerFromDb();
-        const bakery = createTreasury(`Escrow Bakery ${seller.pub.slice(0, 4)}`, AVATAR, 200).publicKey;
+        const bakery = createTreasury(`Escrow Bakery ${seller.pub.slice(0, 4)}`, AVATAR, hc(200)).publicKey;
         adminAssignTreasuryOperator(bakery, keeperA.pub, 'admin');
         adminAssignTreasuryOperator(bakery, keeperB.pub, 'admin');
-        transfer('genesis', bakery, 100, 'seed bakery', 'direct', true);
-        createPost('offer', 'food', 'Bakery bread', 'bread', 5, 'fixed', bakery);
-        const need = createPost('need', 'work', 'Bake sourdough', 'loaves', 30, 'fixed', bakery)!;
+        transfer('genesis', bakery, hc(100), 'seed bakery', 'direct', true);
+        createPost('offer', 'food', 'Bakery bread', 'bread', hc(5), 'fixed', bakery);
+        const need = createPost('need', 'work', 'Bake sourdough', 'loaves', hc(30), 'fixed', bakery)!;
         const tx = requestPost(need.id, seller.pub)!;
 
         const REACHED = 'REACHED_PAST_KEEPER_CHECK';
@@ -207,7 +212,7 @@ async function main() {
         const ent = createTreasury(`Operator Yard ${lead.pub.slice(0, 4)}`, AVATAR, 0, { leadKeeperPubkey: lead.pub }).publicKey;
         adminAssignTreasuryOperator(ent, decisionSuspended.pub, 'admin');
         adminAssignTreasuryOperator(ent, switchedOff.pub, 'admin');
-        transfer('genesis', ent, 50, 'seed yard', 'direct', true);
+        transfer('genesis', ent, hc(50), 'seed yard', 'direct', true);
         ensureEnterpriseThread(ent);
         const threadMsg = crypto.randomUUID();
         db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp)
@@ -216,17 +221,17 @@ async function main() {
         adminSetOperator(switchedOff.pub, false);
 
         const snapshot = () => JSON.stringify({
-            ent: db.prepare('SELECT status, paused, lat, lng, working_capital_ceiling FROM members WHERE public_key = ?').get(ent),
+            ent: db.prepare('SELECT status, paused, lat, lng, working_capital_ceiling_c FROM members WHERE public_key = ?').get(ent),
             posts: count('SELECT COUNT(*) c FROM posts WHERE author_pubkey = ?', ent),
-            ops: db.prepare('SELECT member_pubkey, role, backing FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY member_pubkey').all(ent),
+            ops: db.prepare('SELECT member_pubkey, role, backing_c FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY member_pubkey').all(ent),
             pledges: count('SELECT COUNT(*) c FROM enterprise_pledges WHERE enterprise = ?', ent),
             proposals: count('SELECT COUNT(*) c FROM enterprise_succession_proposals WHERE enterprise_pubkey = ?', ent),
             msg: db.prepare('SELECT type, ciphertext FROM messages WHERE id = ?').get(threadMsg),
-            balance: (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(ent) as any)?.balance,
+            balance_c: (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(ent) as any)?.balance_c,
         });
         const routes: Array<[string, string, any]> = [
-            ['POST', `/api/treasury/${ent}/offer`, { title: 'x', category: 'food', credits: 1, photos: TEST_PHOTOS }],
-            ['POST', `/api/treasury/${ent}/need`, { title: 'x', category: 'food', credits: 1, photos: TEST_PHOTOS }],
+            ['POST', `/api/treasury/${ent}/offer`, { title: 'x', category: 'food', price_c: hc(1), photos: TEST_PHOTOS }],
+            ['POST', `/api/treasury/${ent}/need`, { title: 'x', category: 'food', price_c: hc(1), photos: TEST_PHOTOS }],
             ['POST', `/api/treasury/${ent}/approve`, { transactionId: 'nope' }],
             ['POST', `/api/treasury/${ent}/complete`, { transactionId: 'nope' }],
             ['POST', `/api/treasury/${ent}/reject`, { transactionId: 'nope' }],
@@ -238,7 +243,7 @@ async function main() {
             ['POST', `/api/enterprise/${ent}/wind-up/finalise`, {}],
             ['POST', `/api/enterprise/${ent}/location`, { lat: -28.5, lng: 153.5 }],
             ['DELETE', `/api/enterprise/${ent}/location`, {}],
-            ['POST', `/api/enterprise/${ent}/backing`, { amount: 5 }],
+            ['POST', `/api/enterprise/${ent}/backing`, { amount_c: hc(5) }],
             ['POST', `/api/enterprise/${ent}/keepers/requests/nope/approve`, {}],
             ['POST', `/api/enterprise/${ent}/keepers/requests/nope/decline`, {}],
             ['POST', `/api/enterprise/${ent}/succession/propose`, { candidatePubkey: lead.pub }],
@@ -303,7 +308,8 @@ async function main() {
         const signedReport = await send('POST', '/api/pricing-guide/report', { itemId: item.id, reportType: 'too_low', reporterPubkey: stranger.pub }, stranger);
         assert(signedReport.status === 200 && reporterOf(signedReport.json?.reportId) === stranger.pub, `a signed report is attributed to the signer (got ${signedReport.status} reporter=${reporterOf(signedReport.json?.reportId)})`);
         const badSig = await send('POST', '/api/pricing-guide/report', { itemId: item.id, reportType: 'other' }, undefined,
-            { 'X-Public-Key': subject.pub, 'X-Signature': 'AAAA', 'X-Timestamp': String(Date.now()), 'X-Nonce': crypto.randomUUID() });
+            // Signed for this node (format 2), so what is refused is the signature: with no host it is the old shape, 426 (CUT4).
+            { 'X-Public-Key': subject.pub, 'X-Signature': 'AAAA', 'X-Timestamp': String(Date.now()), 'X-Nonce': crypto.randomUUID(), [SIGNED_FOR_HEADER]: signedForHost() });
         assert(badSig.status === 403, `a report with a forged signature is refused, not stored as that member (got ${badSig.status})`);
 
         const conv = createConversation('dm', [subject.pub, friend.pub], subject.pub)!;
@@ -400,9 +406,7 @@ async function main() {
         db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(longAgo, lead.pub);
 
         // A paper ticket the lead signed three weeks ago, redeemed today by someone else.
-        const payload = JSON.stringify({ i: lead.pub, t: Date.now() - 21 * 86400000 });
-        const sig = crypto.sign(null, Buffer.from(payload), lead.priv).toString('base64');
-        const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
+        const ticketB64 = offlineTicket(lead.priv, lead.pub, { timestamp: Date.now() - 21 * 86400000 });
         const joiner = keypair();
         const res = await send('POST', '/api/invite/redeem-offline', { ticketB64, publicKey: joiner.pub, callsign: `joiner${joiner.pub.slice(0, 5)}` }, joiner);
         assert(res.status === 200 && res.json?.success, `fixture: the ticket redeems (got ${res.status} ${res.json?.error})`);

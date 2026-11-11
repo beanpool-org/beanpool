@@ -17,16 +17,9 @@ Members stay signed in to their apps. Anyone signed in to Settings signs in agai
 
 The image tag **latest** is the newest release. To stay on one version, set BEANPOOL_IMAGE_TAG in .env to a version number, such as 1.2.22, and change it when you choose to update. Updates can change what members see, so tell them before a big one.
 
+**One release at a time.** Each release opens a database that the release before it last started; 1.4.0 opens one from 1.2.36 or later. A server that skipped releases stops at start with one line in its log and changes nothing: start it once on the version that line names (for 1.4.0, ghcr.io/beanpool-org/beanpool-node:1.2.36), then on the new one. A restore of a backup that old is refused in the same words. Never start an older version on a database a newer one has started: to go back after an update, restore the copy of the data folder you made before it.
+
 **Blank listing photos after going back.** If you went back to an older version and then forward again, or restored an old backup, members' apps can keep listing photos that no longer open. To make every app read all the listings again over its next few syncs, run once: docker compose exec -u node beanpool-node node -e "require('better-sqlite3')('/data/state.db').prepare(\"DELETE FROM node_config WHERE key = 'photoKeysShape'\").run()" and then: docker compose restart beanpool-node
-
-**Going back to a version from before the open door's key file.** Newer versions keep the open door's key in data/open-join.key, not in the database. Older versions look for it only in the database. Without it, an older version makes a new key, and then every member who joined with a Google or Apple sign-in could join again as a new member. So before you go back to such a version, on the main server:
-
-- stop the server: docker compose stop beanpool-node
-- still on the newer image, run: docker compose run --rm --no-deps beanpool-node node dist/services/open-join-key.js --write-key-row
-- it copies the key back into the database and says how many sign-in records it did that for. If it says "Nothing was changed", do not go back yet: put the right open-join.key in the data folder first, as the message says;
-- then set BEANPOOL_IMAGE_TAG to the older version and run: docker compose up -d
-
-While the older version runs, the key is in the database again, so it is in every backup and copy, as it was before. The next update moves it out again by itself. A standby needs none of this: it holds no key.
 
 The repository's docker-compose.yml expects a Docker network called beanpool-shared. If the server will not start because it is missing, run once: docker network create beanpool-shared
 

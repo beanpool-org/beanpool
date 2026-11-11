@@ -3,6 +3,7 @@ import type { MemberItem } from './MembersModule';
 import { BranchPruneRefusedError, type BranchPruneFigures } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { beansFigure } from '../../lib/beans';
 
 export interface PruneBranchModalProps {
     rootMember: MemberItem | null | undefined;
@@ -15,8 +16,6 @@ export interface PruneBranchModalProps {
     onConfirm: (pubkey: string, code?: string) => Promise<void>;
     onClose: () => void;
 }
-
-const beans = (n: number) => Math.round(n * 100) / 100;
 
 export function PruneBranchModal({
     rootMember,
@@ -72,8 +71,10 @@ export function PruneBranchModal({
     }, [rootPubkey, attempt]);
     const retryFigures = useCallback(() => setAttempt((n) => n + 1), []);
     const figuresLoading = !!rootPubkey && !figures && !figuresError && !figuresRefusal;
-    const shown = (n: number | undefined) => (figures && typeof n === 'number' ? String(beans(n)) : figuresLoading ? '…' : '—');
-    const net = figures ? beans(figures.net) : null;
+    // The members count as it is; the three money figures are whole hundredths of a Bean (server branchPrunePreview's *_c), in words.
+    const shown = (n: number | undefined) => (figures && typeof n === 'number' ? String(n) : figuresLoading ? '…' : '—');
+    const shownBeans = (n: number | undefined) => (figures && typeof n === 'number' ? beansFigure(n) : figuresLoading ? '…' : '—');
+    const net = figures ? figures.net_c : null;
 
     const isMatch = confirmText.trim() === rootName.trim() && rootName.trim().length > 0;
 
@@ -174,7 +175,7 @@ export function PruneBranchModal({
                                 Bad Debt to Settle:
                             </span>
                             <span className="font-bold text-red-400 font-mono" id="prune-debt-written-off">
-                                {shown(figures?.badDebt)} 🫘 bad debt
+                                {shownBeans(figures?.badDebt_c)} 🫘 bad debt
                             </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
@@ -182,7 +183,7 @@ export function PruneBranchModal({
                                 Surplus Credit to Reclaim:
                             </span>
                             <span className="font-bold text-amber-400 font-mono" id="prune-credit-confiscated">
-                                {shown(figures?.surplus)} 🫘 credit
+                                {shownBeans(figures?.surplus_c)} 🫘 credit
                             </span>
                         </div>
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-nature-800/40">
@@ -191,7 +192,7 @@ export function PruneBranchModal({
                             </span>
                             <span className={`text-sm font-black font-mono ${net === null ? 'text-nature-400' : net >= 0 ? 'text-emerald-400' : 'text-red-400'}`} id="prune-net-impact">
                                 {net !== null && net > 0 ? '+' : ''}
-                                {shown(figures?.net)} 🫘
+                                {shownBeans(figures?.net_c)} 🫘
                             </span>
                         </div>
                     </div>

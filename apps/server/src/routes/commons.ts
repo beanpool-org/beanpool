@@ -39,9 +39,10 @@ import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { isServerFault, memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, carriesOldMoneyKey, requirePositiveHundredths } from '../money-body.js';
 import { readProjectDeadline } from './project-deadline.js';
 import { answerPotPaused } from '../engine/audit.js';
-import { isPastDeadline, word } from '@beanpool/core';
+import { isHundredths, isPastDeadline, word } from '@beanpool/core';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -49,7 +50,7 @@ export function createCommonsRoutes(deps: RouteDeps): Router {
 // ===================== COMMUNITY COMMONS =====================
 
 router.get('/api/commons/balance', async (ctx) => {
-    ctx.body = { balance: getCommonsBalance() };
+    ctx.body = { balance_c: getCommonsBalance() };
 });
 
 // Paying back a debt (community modes slice 5, design §4.2 (a)): a member sends Beans they hold to the Commons; an admin
@@ -58,12 +59,13 @@ router.post('/api/commons/pay', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
     // `requestId` (engine/money-requests.ts): the app's id for this one payment, so a retry is never paid twice.
-    const { amount, debtId, requestId } = (ctx as any).requestBody || {};
+    // `amount_c`: whole hundredths (payToCommons refuses anything else, 400).
+    const { amount_c, debtId, requestId } = (ctx as any).requestBody || {};
     try {
-        ctx.body = payToCommons(actor, amount, debtId, requestId);
+        ctx.body = payToCommons(actor, amount_c, debtId, requestId);
     } catch (e: any) {
         ctx.status = typeof e?.status === 'number' ? e.status : 400;
-        ctx.body = { error: e?.message || word('Could not pay the Commons'), ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
+        ctx.body = { error: e?.message || word('Could not pay the Commons'), ...(e?.code === REQUEST_ID_REUSED_CODE || e?.code === AMOUNT_C_REQUIRED ? { code: e.code } : {}) };
     }
 });
 
@@ -75,7 +77,7 @@ router.get('/api/commons/repayment', async (ctx) => {
     if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
     ctx.set('Cache-Control', 'no-store');
     const r = repaymentOf(actor.toLowerCase());
-    ctx.body = { repayment: r ? { debtId: r.id, amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
+    ctx.body = { repayment: r ? { debtId: r.id, amount_c: r.amount_c, repaid_c: r.repaid_c, left_c: r.amount_c - r.repaid_c } : null };
 });
 
 router.get('/api/commons/projects', async (ctx) => {
@@ -83,11 +85,18 @@ router.get('/api/commons/projects', async (ctx) => {
 });
 
 router.post('/api/commons/projects', async (ctx) => {
-    const { proposerPubkey, title, description, requestedAmount } = (ctx as any).requestBody || {};
+    const { proposerPubkey, title, description, requestedAmount_c: requestedAmount } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    // The amount asked is `requestedAmount_c`: an app from before whole hundredths sends it in Beans under its old name, refused with the code every money
+    // body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['requestedAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
         return;
     }
     if (!title || !requestedAmount) {
@@ -107,7 +116,7 @@ router.post('/api/commons/projects', async (ctx) => {
     }
     // A muted member (G3) proposes nothing other members read.
     if (respondIfMuted(ctx, actor)) return;
-    const project = createProject(actor, title, description || '', Number(requestedAmount));
+    const project = createProject(actor, title, description || '', requestedAmount);
     if (!project) {
         ctx.status = 400;
         ctx.body = { error: word('Failed — must be a registered member, title/amount required') };
@@ -117,11 +126,18 @@ router.post('/api/commons/projects', async (ctx) => {
 });
 
 router.post('/api/commons/projects/update', async (ctx) => {
-    const { proposerPubkey, projectId, title, description, requestedAmount } = (ctx as any).requestBody || {};
+    const { proposerPubkey, projectId, title, description, requestedAmount_c: requestedAmount } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    // The amount asked is `requestedAmount_c`: an app from before whole hundredths sends it in Beans under its old name,
+    // refused with the code every money body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['requestedAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
         return;
     }
     if (!projectId || !title || !requestedAmount) {
@@ -131,7 +147,7 @@ router.post('/api/commons/projects/update', async (ctx) => {
     }
     if (respondIfMuted(ctx, actor)) return;
 
-    const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
+    const success = updateProject(actor, projectId, title, description || '', requestedAmount);
     if (!success) {
         ctx.status = 400;
         ctx.body = { error: word('Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.') };
@@ -456,11 +472,19 @@ router.get('/api/crowdfund/projects/:id', async (ctx) => {
 });
 
 router.post('/api/crowdfund/projects', async (ctx) => {
-    const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
+    // The goal is whole hundredths, `goalAmount_c` (money-body.ts): an app from before them sends `goalAmount` in Beans, refused.
+    const { id, creatorPubkey, title, description, photos, goalAmount_c: goalAmount, deadlineAt } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    // The goal is `goalAmount_c`: an app from before whole hundredths sends it in Beans under its old name, refused with the code every money
+    // body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['goalAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
         return;
     }
     // A project's id is its enterprise's key, its account's and its escrow's (`escrow_<id>`), so the server makes it and
@@ -474,7 +498,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     }
     if (!title || !goalAmount) {
         ctx.status = 400;
-        ctx.body = { error: 'creatorPubkey, title, and goalAmount are required' };
+        ctx.body = { error: 'creatorPubkey, title, and goalAmount_c are required' };
         return;
     }
 
@@ -521,7 +545,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
     if (respondIfMuted(ctx, actor)) return;
-    if (!isAcceptableGoal(Number(goalAmount))) {
+    if (!isHundredths(goalAmount) || !isAcceptableGoal(goalAmount)) {
         ctx.status = 400;
         ctx.body = { error: GOAL_AMOUNT_ERROR };
         return;
@@ -533,7 +557,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
     try {
-        createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadline.deadline);
+        createCrowdfundProject(projectId, actor, title, description || '', photos || [], goalAmount, deadline.deadline);
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
@@ -547,16 +571,24 @@ router.post('/api/crowdfund/projects', async (ctx) => {
 });
 
 router.post('/api/crowdfund/projects/update', async (ctx) => {
-    const { id, creatorPubkey, title, description, photos, goalAmount, deadlineAt } = (ctx as any).requestBody || {};
+    // The goal is whole hundredths, `goalAmount_c` (money-body.ts): an app from before them sends `goalAmount` in Beans, refused.
+    const { id, creatorPubkey, title, description, photos, goalAmount_c: goalAmount, deadlineAt } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
         return;
     }
+    // The goal is `goalAmount_c`: an app from before whole hundredths sends it in Beans under its old name, refused with the code
+    // every money body's refusal carries (money-body.ts), not read as missing.
+    if (carriesOldMoneyKey((ctx as any).requestBody, ['goalAmount'])) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+        return;
+    }
     if (!id || !title || !goalAmount) {
         ctx.status = 400;
-        ctx.body = { error: 'id, creatorPubkey, title, and goalAmount are required' };
+        ctx.body = { error: 'id, creatorPubkey, title, and goalAmount_c are required' };
         return;
     }
 
@@ -595,7 +627,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
     try {
         // Its end date before the change: moved in the week after it, while its pledges are held, the backers are told.
         const endDateBefore = projectEndDate(id);
-        updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadline?.deadline);
+        updateCrowdfundProject(id, actor, title, description || '', photos || [], goalAmount, deadline?.deadline);
         noticeProjectEndDateMoved(id, endDateBefore, actor);
         const project = getCrowdfundProject(id);
         deps.broadcast?.({ type: 'project_updated', project });
@@ -633,23 +665,17 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
 
 router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
     const projectId = ctx.params.id;
-    const { fromPubkey, amount, memo } = (ctx as any).requestBody || {};
+    const { memo } = (ctx as any).requestBody || {};
     const actor = ctx.state.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
         ctx.body = { error: word('A signed request is required') };
         return;
     }
-    const parsedAmount = Number(amount);
-    
-    // SECURITY (SRV-8): require a positive, finite amount. A negative parsedAmount
-    // is truthy and previously slipped past `!parsedAmount`, relying on the
-    // transactions CHECK(amount > 0) to abort mid-transaction.
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-        ctx.status = 400;
-        ctx.body = { error: 'fromPubkey and a positive amount are required' };
-        return;
-    }
+    // SECURITY (SRV-8): whole hundredths above 0 (money-body.ts), before anything moves: a negative or a float never
+    // reaches the transactions CHECK (amount_c > 0).
+    const parsedAmount = requirePositiveHundredths(ctx, (ctx as any).requestBody);
+    if (parsedAmount === null) return;
 
     // Same defect as the ledger transfer route (#102): the guard here verified the
     // pledger's home balance and then pledged locally, so a visitor's pledge was minted

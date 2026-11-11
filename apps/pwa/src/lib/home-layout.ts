@@ -123,49 +123,16 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 /** A layout from anywhere, read by core (tolerant): version 2 keeps every well-formed instance; version 1 via translateV1. */
 export const readLayout = (raw: unknown): HomeLayoutV2 | null => frameReadHomeLayout(raw);
 
-/**
- * Whether a stored or answered value is a version-1 layout, and whether it named anything. Undefined for any other.
- * `empty`: it named no order and nothing hidden, as a not-yet-updated standby answers a version-2 row (review of #1697,
- * note b), so it says nothing of the member's choice.
- */
-export function layoutV1Of(raw: unknown): { empty: boolean } | undefined {
-    if (!isObj(raw)) return undefined;
-    const v1 = raw.v === 1 || (raw.v === undefined && (Array.isArray(raw.order) || Array.isArray(raw.hidden)));
-    if (!v1) return undefined;
-    const named = (l: unknown) => Array.isArray(l) && l.length > 0;
-    return { empty: !named(raw.order) && !named(raw.hidden) };
-}
-
 const dateOf = (l: HomeLayoutV2 | null) => (l?.updatedAt ? Date.parse(l.updatedAt) : -Infinity);
 
 /**
  * The account's copy or this browser's, the newer by `updatedAt`. `push`: this browser's is newer, so it is sent (an
- * edit made offline, or one whose save failed).
- *
- * A version-1 account copy (`accountV1`) never wins over this browser's on a tie, and an empty one never wins at all: a
- * not-yet-updated standby answers a version-2 row as an empty version-1 layout dated exactly like it (review of #1697,
- * note b). This browser's is drawn and not sent.
- *
- * With no copy here, an empty version-1 account copy is unknown, not "every version-1 card": the newcomer's list is drawn
- * (with the account's dismissal), and an edit made on it is this browser's only. `localOnlyOver` marks such a list with
- * that empty list's date: a version-2 answer dated at or after it is the account's real list (the primary back from a
- * standby) and wins over the edit, never the reverse (review of #1699, finding 2).
+ * edit made offline, or one whose save failed). On a tie the account's stands.
  */
-export function pickLayout(
-    account: HomeLayoutV2 | null, local: HomeLayoutV2 | null, accountV1?: { empty: boolean }, localOnlyOver?: string | null,
-): { layout: HomeLayoutV2 | null; push: boolean } {
-    if (!local) {
-        // A node from before the frame, an account never edited there: the starter set, as before Getting started (a node
-        // that old keeps no tour record either).
-        if (accountV1?.empty) return { layout: { ...STARTER_LAYOUT, dismissed: account?.dismissed ?? {} }, push: false };
-        return { layout: account, push: false };
-    }
+export function pickLayout(account: HomeLayoutV2 | null, local: HomeLayoutV2 | null): { layout: HomeLayoutV2 | null; push: boolean } {
+    if (!local) return { layout: account, push: false };
     if (!account) return { layout: local, push: true };
-    if (localOnlyOver != null && !accountV1 && dateOf(account) >= (localOnlyOver ? Date.parse(localOnlyOver) : -Infinity)) {
-        return { layout: account, push: false };
-    }
     if (dateOf(local) > dateOf(account)) return { layout: local, push: true };
-    if (accountV1 && (accountV1.empty || dateOf(local) === dateOf(account))) return { layout: local, push: false };
     return { layout: account, push: false };
 }
 
@@ -198,51 +165,6 @@ export function layoutPrint(l: HomeLayoutV2): string {
 
 /** Whether two layouts hold the same list, whatever their dates. */
 export const sameList = (a: HomeLayoutV2, b: HomeLayoutV2): boolean => layoutPrint(a) === layoutPrint(b);
-
-/** The most marked edits this browser remembers having sent (the latest ones). */
-export const MARK_SENT_MAX = 8;
-
-/** A marked edit this browser sent: its date and its list's {@link layoutPrint}. One kept by an older build has no print. */
-export interface MarkSent {
-    at: string;
-    print?: string;
-}
-
-/**
- * Whether a version-2 account answer is this browser's own save of an edit made on the unknown list, one it sent while
- * marked (`sent`): dated exactly as sent, or the same list dated at or before it. The node holds a date ahead of its own
- * clock to its now, so a browser whose clock runs ahead gets its save back dated earlier than it sent it, never later
- * (review of #1715, finding 1). Then the account's list is known, and it is this browser's: the mark goes and the dates
- * decide as usual, so a newer edit made while that save was out wins and is sent. Without this, a read that overtook the
- * save's answer carried the save back as "the account's real list" and the newer edit was lost unsent (review of #1701
- * confirmation, finding 2). Another device's list matches only if it is this same list, and then nothing is lost.
- */
-export function ownMarkedSave(account: HomeLayoutV2 | null, accountV1: { empty: boolean } | undefined, sent: readonly MarkSent[]): boolean {
-    if (!account?.updatedAt || accountV1) return false;
-    const at = Date.parse(account.updatedAt);
-    let print: string | undefined;
-    return sent.some(s => s.at === account.updatedAt || (!!s.print && at <= Date.parse(s.at) && s.print === (print ??= layoutPrint(account))));
-}
-
-/** `sent` with one more marked edit sent, the latest {@link MARK_SENT_MAX} kept. */
-export function rememberMarkSent(sent: readonly MarkSent[], l: HomeLayoutV2): MarkSent[] {
-    if (!l.updatedAt) return [...sent];
-    return [...sent.filter(s => s.at !== l.updatedAt), { at: l.updatedAt, print: layoutPrint(l) }].slice(-MARK_SENT_MAX);
-}
-
-/** The marked edits sent, as kept: a date alone (an older build's) or with its print; anything else is dropped. */
-export function readMarkSent(raw: unknown): MarkSent[] {
-    if (!Array.isArray(raw)) return [];
-    const out: MarkSent[] = [];
-    for (const x of raw) {
-        if (typeof x === 'string') {
-            if (x.length <= 40) out.push({ at: x });
-        } else if (isObj(x) && typeof x.at === 'string' && x.at.length <= 40) {
-            out.push(typeof x.print === 'string' && /^[0-9a-f]{16}$/.test(x.print) ? { at: x.at, print: x.print } : { at: x.at });
-        }
-    }
-    return out.slice(-MARK_SENT_MAX);
-}
 
 /**
  * Whether `find` is pinned for this member: on the global node, in their first 30 days (or while their join date is unknown),
@@ -471,8 +393,6 @@ export function searchEmptyLine(q: string, km: number | null): string {
     if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
     return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
-/** Arrange's line while a node before the frame can't keep the member's cards (§2.3). A word() key: shown through t(). */
-export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
 
 // ── The picker (§1.2) ─────────────────────────────────────────────────────────────────────────────────────────────
 

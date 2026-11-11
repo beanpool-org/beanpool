@@ -33,6 +33,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -73,7 +74,7 @@ async function child(): Promise<void> {
             for (const [key, name] of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active')`).run(key, name, a.owner, `INV-${name}`);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             grantNodeRole(a.owner, 'owner', 'owner:password');
             for (const key of a.admins) grantNodeRole(key, 'admin', 'owner:password');
@@ -127,7 +128,7 @@ async function child(): Promise<void> {
             const { grantNodeRole } = await import('./engine/node-roles.js');
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active')`).run(a.pubkey, a.callsign, a.invitedBy, `INV-${a.callsign}`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pubkey);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pubkey);
             grantNodeRole(a.pubkey, 'admin', 'owner:password');
             return true;
         },
@@ -186,7 +187,8 @@ async function signedCall(base: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -204,7 +206,7 @@ async function main(): Promise<void> {
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     const dir = (name: string) => path.join(root, name);
     const nodes: NodeProc[] = [];
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const [owen, ada, abe, mel] = ['Owen', 'Ada', 'Abe', 'Mel'].map(newId);
     const keysOf = (id: Id) => ({ publicKey: id.pk, privateKey: id.seedHex });

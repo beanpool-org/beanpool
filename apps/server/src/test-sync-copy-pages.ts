@@ -21,7 +21,7 @@
  *     one row alone, every page holds at least one row, and each big row arrives whole.
  *  5. One copy at a time (a second open is 409 busy), pages in order (a page skipped or asked again after the next is 409),
  *     a retry of the last page gets the same bytes, an unknown copy is 404, and every copy route wants the replication
- *     token or the admin password (401).
+ *     token (401); an old admin password is answered as no credential, the same words on every copy route, and moves nothing.
  *  6. A page's signature covers its copy id and number: one with either changed doesn't verify, and a page of another copy
  *     verifies but names that copy.
  *  7. Expiry: a copy no page is asked of closes, and the WAL it held truncates after (it could not while the copy was open);
@@ -54,13 +54,17 @@ import Database from 'better-sqlite3';
 import { publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the node's own self-signed certificate
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW = 'Copy-Pages-Main-Pw-5521!';
+/** What an older install's admin password looked like: no credential now (step 5 sends it). */
+const OLD_PW = 'Copy-Pages-Main-Pw-5521!';
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 /** M's page bounds, scaled down from 8 MB and 25,000 rows. */
 const PAGE_BYTES = 64 * 1024;
 const PAGE_ROWS = 200;
@@ -122,12 +126,6 @@ async function child(): Promise<void> {
         },
         /** The importer format this build reads (engine/sync.ts REPLICA_FORMAT), as its own puller sends it. */
         'replica-format': async () => (await import('./engine/sync.js')).REPLICA_FORMAT,
-        /** Whether copies take the replication token only, as the operator sets it in Settings. */
-        'token-only': async (a: { on: boolean }) => {
-            const { updateLocalConfig } = await import('./config/local-config.js');
-            updateLocalConfig({ replicationTokenOnly: a.on });
-            return true;
-        },
         /** This process's environment, live (the copy reads its bounds and times at each open); '' removes one. */
         'set-env': async (a: { vars: Record<string, string> }) => {
             for (const [k, v] of Object.entries(a.vars)) {
@@ -166,8 +164,9 @@ async function child(): Promise<void> {
             const member = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`);
             const { setMemberPhoto } = await import('@beanpool/engine');
             const stamp = db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?');
-            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`);
-            const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, 0.01, 'a flood', ?)`);
+            // Whole hundredths: each flood listing asks 1 Bean (100), each flood trade moves 0.01 (1).
+            const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 100, ?, ?, ?)`);
+            const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, 1, 'a flood', ?)`);
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
                     const u = crypto.randomUUID();
@@ -274,8 +273,8 @@ interface Answer { status: number; body: any }
 
 /**
  * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
- * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes
- * (takeover-test-harness.ts owner-session).
+ * The node has no admin password: `admin` is an owner's key session the node makes (takeover-test-harness.ts
+ * owner-session).
  */
 async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
@@ -284,7 +283,8 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -377,7 +377,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = {
-        ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', NODE_ENV: 'test',
+        NODE_ROLE: 'primary', NODE_ENV: 'test',
         SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
     };
     const gwen = newId('Gwen');
@@ -455,8 +455,8 @@ async function main(): Promise<void> {
         };
         built('Gwen sets a profile photo', await As(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee]) await join(who);
-        const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        const offer = async (who: Id, title: string, beans: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
@@ -510,11 +510,13 @@ async function main(): Promise<void> {
         assert(whole.pages.length > 10, `a whole copy of it takes many pages at ${PAGE_ROWS} rows or ${PAGE_BYTES / 1024} KB (${whole.pages.length})`);
         assert(differing.length === 0 && plainDiffering.length === 0,
             `its pages carry the whole payload's rows, category by category (${categories.length}) and plain table by table (${Object.keys(payload.plainTables ?? {}).length}): differing ${JSON.stringify([...differing, ...plainDiffering])}`);
-        assert(opening.stateHash === payload.stateHash && opening.commonsBalance === payload.commonsBalance
+        // The pot in whole hundredths under the format-15 name the payload carries it by (`commonsBalance_c`), and that name
+        // must be there: two missing figures would read as equal.
+        assert(opening.stateHash === payload.stateHash && typeof payload.commonsBalance_c === 'number' && opening.commonsBalance_c === payload.commonsBalance_c
             && JSON.stringify(opening.treasuryOperators) === JSON.stringify(payload.treasuryOperators)
             && JSON.stringify(opening.communitySettings) === JSON.stringify(payload.communitySettings)
             && JSON.stringify(opening.nodeProfile) === JSON.stringify(payload.nodeProfile) && opening.openJoinKeyId === payload.openJoinKeyId,
-            `its opening page carries the payload's listing hash, pot, keepers, settings and records (${opening.stateHash} / ${payload.stateHash})`);
+            `its opening page carries the payload's listing hash, pot, keepers, settings and records (${opening.stateHash} / ${payload.stateHash}; pot ${opening.commonsBalance_c} / ${payload.commonsBalance_c})`);
         assert(JSON.stringify(closing.tableHashes) !== undefined && JSON.stringify(Object.entries(closing.tableHashes?.tables ?? {}).sort())
             === JSON.stringify(Object.entries(payload.tableHashes?.tables ?? {}).sort()),
             `its last page carries the payload's table hashes (${Object.keys(closing.tableHashes?.tables ?? {}).length} tables)`);
@@ -527,7 +529,7 @@ async function main(): Promise<void> {
         // ── 2. Pages under writes hold the snapshot; the delta after carries the writes ──
         console.log('\n— 2. a copy\'s pages under writes on M hold the snapshot; the delta from its cursor carries the writes —');
         const before = await main.send('state');
-        const ledgerAtOpen = await main.send('rows', { sql: 'SELECT public_key, balance FROM accounts ORDER BY public_key' });
+        const ledgerAtOpen = await main.send('rows', { sql: 'SELECT public_key, balance_c FROM accounts ORDER BY public_key' });
         const during: { messages: string[]; members: string[] } = { messages: [], members: [] };
         let dealDuring = '';
         const deleted = lines[0];
@@ -568,7 +570,7 @@ async function main(): Promise<void> {
             && after.hashes.tables.accounts.hash !== before.hashes.tables.accounts.hash,
             `...not M's now: its lines, members and accounts have moved since (${after.hashes.tables.messages.rows} lines now, ${before.hashes.tables.messages.rows} at the open)`);
         assert(uOpen.stateHash === before.stateHash && uOpen.stateHash !== after.stateHash, `its listing hash is the open's (${uOpen.stateHash}; now ${after.stateHash})`);
-        const copiedLedger = (u.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance: a.balance })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
+        const copiedLedger = (u.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance_c: a.balance_c })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
         assert(JSON.stringify(copiedLedger) === JSON.stringify(ledgerAtOpen), `its accounts are the ledger at the open, balance for balance (${copiedLedger.length} accounts)`);
         const leaked = [
             ...(u.messages ?? []).filter((r: any) => String(r.id).startsWith('during-')).map((r: any) => r.id),
@@ -582,8 +584,8 @@ async function main(): Promise<void> {
         const d = merged(delta.pages);
         const dIds = new Set((d.messages ?? []).map((r: any) => r.id));
         const dKeys = new Set((d.members ?? []).map((r: any) => r.publicKey));
-        const ledgerNow = await main.send('rows', { sql: 'SELECT public_key, balance FROM accounts ORDER BY public_key' });
-        const deltaLedger = (d.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance: a.balance })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
+        const ledgerNow = await main.send('rows', { sql: 'SELECT public_key, balance_c FROM accounts ORDER BY public_key' });
+        const deltaLedger = (d.accounts ?? []).map((a: any) => ({ public_key: a.publicKey, balance_c: a.balance_c })).sort((a: any, b: any) => (a.public_key < b.public_key ? -1 : 1));
         assert(during.messages.every((id) => dIds.has(id)) && during.members.every((k) => dKeys.has(k)),
             `the delta copy from its cursor carries every line and member written during it (${during.messages.filter((id) => dIds.has(id)).length}/${during.messages.length}, ${during.members.filter((k) => dKeys.has(k)).length}/${during.members.length})`);
         assert((d.marketplaceTransactions ?? []).some((r: any) => r.id === dealDuring) && (d.transactions ?? []).length >= 1
@@ -685,18 +687,14 @@ async function main(): Promise<void> {
         const openNoToken = await open(undefined, {});
         assert(unknown.status === 404 && noToken.status === 401 && badToken.status === 401 && openNoToken.status === 401,
             `an unknown copy is 404, and a page or a copy without the replication token is 401 (${unknown.status}, ${noToken.status}, ${badToken.status}, ${openNoToken.status})`);
-        // A server with a replication token takes only the token until its operator says otherwise, on every copy route.
-        const byPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': PW });
-        const oldByPassword = await fetch(`${main.base}/api/local/admin/sync-snapshot`, { headers: { 'X-Admin-Password': PW } });
+        // Every copy route takes the replication token only: an old admin password is no credential on any of them.
+        const byPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': OLD_PW });
+        const oldByPassword = await fetch(`${main.base}/api/local/admin/sync-snapshot`, { headers: { 'X-Admin-Password': OLD_PW } });
         const oldPwText = await oldByPassword.text();
         assert(byPassword.status === 401 && oldByPassword.status === 401 && byPassword.text === oldPwText,
-            `the admin password is answered as the old routes answer it (${byPassword.status} ${byPassword.text.slice(0, 80)}; sync-snapshot ${oldByPassword.status} ${oldPwText.slice(0, 80)})`);
-        await main.send('token-only', { on: false });
-        const byPasswordNow = await get(o.page.copyId, 2, { 'X-Admin-Password': PW });
-        const wrongPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': `${PW}x` });
-        await main.send('token-only', { on: true });
-        assert(byPasswordNow.status === 200 && byPasswordNow.page?.n === 2 && wrongPassword.status === 401,
-            `with the token-only setting off, the admin password gets a page and a wrong one is 401 (${byPasswordNow.status}, ${wrongPassword.status} ${wrongPassword.text.slice(0, 80)})`);
+            `an old admin password is answered as the old routes answer it (${byPassword.status} ${byPassword.text.slice(0, 80)}; sync-snapshot ${oldByPassword.status} ${oldPwText.slice(0, 80)})`);
+        const p2 = await get(o.page.copyId, 2);
+        assert(p2.status === 200 && p2.page?.n === 2, `refused, it moved nothing: page 2 then comes to the token (${p2.status})`);
 
         // ── 6. What the signature covers ──
         console.log('\n— 6. a page\'s signature covers its copy id and its number —');

@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
 import * as api from './lib/api';
-import { isUserBlocked, resetBlocklistForTests, BLOCKLIST_STORAGE_KEY, LEGACY_BLOCKLIST_KEY } from './lib/blocklist';
+import { isUserBlocked, resetBlocklistForTests } from './lib/blocklist';
 
 const ME = 'a1'.repeat(32);
 const BO = 'b2'.repeat(32);
@@ -82,18 +82,5 @@ describe('The web app keeps no block list of its own: the community keeps it for
         expect(isUserBlocked(CY)).toBe(false);
         expect(api.addToBlockList).not.toHaveBeenCalled();
         expect(storedAboutBlocks()).toEqual([]);
-    });
-
-    it('the first sign-in with this build moves a list an older build kept here up to the account, then deletes the local key', async () => {
-        // The member's own key in an old list (a build from before let one in) is not moved up.
-        localStorage.setItem(BLOCKLIST_STORAGE_KEY, JSON.stringify([BO, ME, CY]));
-        localStorage.setItem(LEGACY_BLOCKLIST_KEY, JSON.stringify([BO, CY]));
-        vi.mocked(api.getBlockList).mockResolvedValue(listOf([]));
-        vi.mocked(api.addToBlockList).mockResolvedValue({ ...listOf([BO, CY]), added: [BO, CY] });
-        render(<App />);
-        await waitFor(() => expect(api.addToBlockList).toHaveBeenCalledWith([BO, CY]));
-        await waitFor(() => expect(storedAboutBlocks()).toEqual([]));
-        expect(isUserBlocked(BO) && isUserBlocked(CY)).toBe(true);
-        expect(api.addToBlockList).toHaveBeenCalledTimes(1);
     });
 });

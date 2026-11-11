@@ -2,10 +2,11 @@
  * Node sign-in, design step 7a (D8): owner automation tokens. Over REAL HTTPS through the real middleware; nothing here
  * contacts anything but the server it starts (the update check's GitHub lookup, which the sweep runs, is answered here).
  *
- *   1. Making one: an owner's key session (fresh), not a stale phone session (step-up), the password session (with its
- *      2FA code); never an admin, never a token. Shown once: the list carries no secret and no hash. Unknown scope,
- *      no name, an expiry in the past: refused.
- *   2. Using one: `Authorization: Bearer bp_<id>_<secret>`, with no 2FA code on a 2FA-on node, within its scope only.
+ *   1. Making one: an owner's key session (fresh), not a stale phone session (step-up), never an old admin password (the
+ *      node has none since 11 Nov 2026: in a header or the body it is no credential, and stores nothing), never an
+ *      admin, never a token. Shown once: the list carries no secret and no hash. Unknown scope, no name, an expiry in the
+ *      past: refused.
+ *   2. Using one: `Authorization: Bearer bp_<id>_<secret>`, with no other factor, within its scope only.
  *      read: GETs; backups: BACKUPS_SCOPE_ROUTES; admin: admin-level routes. Every admin route of every router is swept
  *      with each scope: read refuses every change, backups everything off its list, and the admin token is refused on
  *      every route an admin's key session is refused on (so on every owner-only route), and on the sign-in, session
@@ -26,18 +27,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
-import { updateLocalConfig, getLocalConfig, hashPassword, setBreakGlassMode, redactLocalConfig } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
+import { initStateEngine, seedGenesisMember, getNodeRoleBreakGlassHash } from './state-engine.js';
+import { getLocalConfig, redactLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } from './admin-auth.js';
 import { backdateAdminSessionForTests } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { db } from './db/db.js';
 import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle, issueAutomationToken } from './automation-tokens.js';
-import { TOKEN_NEEDS_KEY_CODE } from './routes/automation-tokens.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { signedRequestText, signedRequestBytes, SIGNED_FOR_HEADER } from '@beanpool/core';
 import { localFetch } from './keepalive-test-fetch.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -66,13 +66,12 @@ function quietly(cond: boolean, msg: string, failures: string[]): void {
     if (!cond) failures.push(msg);
 }
 
+/** What an older install's admin password looked like: no credential now. */
 const PW = 'AutomationTokens1!';
-const SECRET = generateTotpSecret();
 
 interface Reply { status: number; body: any; text: string; sessionId: string | null; setCookie: string[] }
 
 async function call(method: string, p: string, opts: { body?: unknown; headers?: Record<string, string> } = {}): Promise<Reply> {
-    forgetUsedTotpCodesForTests();
     const res = await localFetch(`${BASE}${p}`, {
         method,
         headers: { ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) },
@@ -88,8 +87,6 @@ async function call(method: string, p: string, opts: { body?: unknown; headers?:
 }
 const show = (r: Reply) => `${r.status} ${r.text.slice(0, 140)}`;
 const asSession = (id: string | null): Record<string, string> => ({ 'X-Admin-Session': id ?? '' });
-const asCookie = (id: string | null, csrf?: string): Record<string, string> =>
-    ({ Cookie: `admin_session=${id ?? ''}`, ...(csrf ? { 'X-CSRF-Token': csrf } : {}) });
 const bearer = (t: string): Record<string, string> => ({ Authorization: `Bearer ${t}` });
 
 interface Key { pub: string; priv: crypto.KeyObject }
@@ -100,7 +97,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
 }
@@ -114,7 +111,7 @@ function adminRoutes(): Array<[string, string]> {
         const src = fs.readFileSync(f, 'utf8');
         for (const m of src.matchAll(re)) {
             const p = m[2];
-            if (!(p.startsWith('/api/local/admin') || p.startsWith('/api/admin') || p === '/api/local/change-password')) continue;
+            if (!(p.startsWith('/api/local/admin') || p.startsWith('/api/admin'))) continue;
             out.set(`${m[1].toUpperCase()} ${p}`, [m[1].toUpperCase(), p]);
         }
     }
@@ -145,11 +142,8 @@ async function main(): Promise<void> {
     seedGenesisMember(owner.pub, 'Olive');
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'Adam', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(admin.pub);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pub);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin.pub);
     grantNodeRole(admin.pub, 'admin', owner.pub);
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: true, totpSecret: SECRET, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
-    setBreakGlassMode(false);
 
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
     const port = await startHttpsServer(0);
@@ -190,48 +184,25 @@ async function main(): Promise<void> {
         const byStale = await make(asSession(stale.sessionId), { name: 'x', scope: 'read' });
         assert(byStale.status === 403 && byStale.body?.code === 'step_up_required', `a stale phone session needs the step-up (${show(byStale)})`);
 
-        // Only an owner's key makes a token, never the admin password by any path, whatever the node's 2FA: so every token
-        // belongs to a person and stops when they are no longer an owner (PR #1540 deciding review, fix round 1).
+        // Only an owner's key makes a token, never an old admin password by any path: so every token belongs to a person and
+        // stops when they are no longer an owner (PR #1540 deciding review, fix round 1). The node has no admin password, so
+        // one in a header or the body is no credential at all.
         const stored = () => (getLocalConfig().automationTokens ?? []).length;
         const storedBefore = stored();
-        const needsKey = (r: Reply) => r.status === 403 && r.body?.code === TOKEN_NEEDS_KEY_CODE;
-        const code = () => { forgetUsedTotpCodesForTests(); return generateTotpCode(SECRET); };
-        const pw = await call('POST', '/api/local/admin/auth/password', { body: { password: PW, totpCode: code() } });
-        assert(pw.status === 200 && !!pw.sessionId, `the password signs in with its 2FA code (${show(pw)})`);
-        const byPw = await make(asCookie(pw.sessionId, pw.body?.csrfToken), { name: 'pw made', scope: 'read' });
-        assert(needsKey(byPw), `2FA on: the password session cannot make one (${show(byPw)})`);
-        const byHeader = await make({ 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, { name: 'pw made', scope: 'admin' });
-        assert(needsKey(byHeader), `2FA on: the password and its code in the headers cannot make one (${show(byHeader)})`);
-        const byBodyPw = await make({}, { name: 'pw made', scope: 'admin', password: PW, totpCode: code() });
-        assert(needsKey(byBodyPw), `2FA on: the password and its code in the body cannot make one (${show(byBodyPw)})`);
-        updateLocalConfig({ totpEnabled: false });
-        try {
-            const pwOff = await call('POST', '/api/local/admin/auth/password', { body: { password: PW } });
-            assert(pwOff.status === 200 && !!pwOff.sessionId, `2FA off: the password signs in alone (${show(pwOff)})`);
-            const byPwOff = await make(asCookie(pwOff.sessionId, pwOff.body?.csrfToken), { name: 'pw made', scope: 'admin' });
-            assert(byPwOff.status === 403 && ['totp_setup_required', TOKEN_NEEDS_KEY_CODE].includes(byPwOff.body?.code), `2FA off: the password session cannot make one (${show(byPwOff)})`);
-            const byHeaderOff = await make({ 'X-Admin-Password': PW }, { name: 'pw made', scope: 'admin' });
-            // Step 7c: with 2FA off the password per request is refused before the route runs, so the reason is exactly
-            // password_needs_2fa (the route's own TOKEN_NEEDS_KEY_CODE is not reached).
-            const refusedOff = (r: Reply) => r.status === 403 && r.body?.code === 'password_needs_2fa';
-            assert(refusedOff(byHeaderOff), `2FA off: the password in the header cannot make one (${show(byHeaderOff)})`);
-            const byBodyOff = await make({}, { name: 'pw made', scope: 'admin', password: PW });
-            assert(refusedOff(byBodyOff), `2FA off: the password in the body cannot make one (${show(byBodyOff)})`);
-        } finally {
-            updateLocalConfig({ totpEnabled: true });
-        }
+        const noCredential = (r: Reply) => r.status === 401 && r.body?.notSignedIn === true;
+        const byHeader = await make({ 'X-Admin-Password': PW }, { name: 'pw made', scope: 'admin' });
+        assert(noCredential(byHeader), `an old admin password in the header cannot make one: no credential (${show(byHeader)})`);
+        const byBodyPw = await make({}, { name: 'pw made', scope: 'admin', password: PW });
+        assert(noCredential(byBodyPw), `nor in the body (${show(byBodyPw)})`);
         assert(stored() === storedBefore, `no password path stored a token (${stored() - storedBefore} stored)`);
-        assert(/owner's key|owner key/i.test(byHeader.body?.error ?? ''), `and the answer says to make it with an owner's key (${byHeader.body?.error})`);
 
         const list = await call('GET', '/api/local/admin/automation-tokens', { headers: asSession(ownerS.sessionId) });
         assert(list.status === 200 && list.body?.tokens?.length === 3, `the list shows the three (${show(list)})`);
-        const listByPw = await call('GET', '/api/local/admin/automation-tokens', { headers: asCookie(pw.sessionId) });
-        assert(listByPw.status === 200 && listByPw.body?.tokens?.length === 3, `the password session lists them (${show(listByPw)})`);
         const spare = await make(asSession(ownerS.sessionId), { name: 'spare', scope: 'read' });
         assert(spare.status === 201, `the owner's key makes a spare (${spare.status})`);
         secrets.push(spare.body.token);
-        const revByPw = await call('POST', `/api/local/admin/automation-tokens/${spare.body.record.id}/revoke`, { headers: asCookie(pw.sessionId, pw.body?.csrfToken), body: {} });
-        assert(revByPw.status === 200, `the password session revokes it (${show(revByPw)})`);
+        const revByOwner = await call('POST', `/api/local/admin/automation-tokens/${spare.body.record.id}/revoke`, { headers: asSession(ownerS.sessionId), body: {} });
+        assert(revByOwner.status === 200, `the owner's key session revokes it (${show(revByOwner)})`);
         const spareAfter = await call('GET', '/api/local/admin/diagnostics', { headers: bearer(spare.body.token) });
         assert(spareAfter.status === 401, `and it is refused at once (${spareAfter.status})`);
 
@@ -251,9 +222,9 @@ async function main(): Promise<void> {
         assert(listByAdmin.status === 403, 'an admin cannot list them');
 
         // ── 2. Using one ──────────────────────────────────────────────────────────────────────────
-        console.log('── 2. A token works with no 2FA code, within its scope only ──');
+        console.log('── 2. A token works on its own, within its scope only ──');
         const diag = await call('GET', '/api/local/admin/diagnostics', { headers: bearer(READ) });
-        assert(diag.status === 200, `a read token reads, with no 2FA code on a 2FA-on node (${diag.status})`);
+        assert(diag.status === 200, `a read token reads, with no other factor (${diag.status})`);
         assert(!diag.setCookie.some(c => c.startsWith('admin_session=')), 'and is handed no session cookie');
         const bstat = await call('POST', '/api/local/admin/backup-status', { headers: bearer(BACKUPS), body: {} });
         assert(bstat.status === 200, `a backups token reads the backup status (${show(bstat)})`);
@@ -261,8 +232,6 @@ async function main(): Promise<void> {
         assert(snaps.status === 200, `and lists the snapshots (${show(snaps)})`);
         const adminOk = await call('GET', '/api/local/admin/reports', { headers: bearer(ADMIN) });
         assert(adminOk.status === 200, `an admin token reads the reports (${show(adminOk)})`);
-        const wrongCode = await call('GET', '/api/local/admin/diagnostics', { headers: { ...bearer(READ), 'X-Admin-TOTP': '000000' } });
-        assert(wrongCode.status === 200, 'a 2FA code sent with a token changes nothing: the token is the credential');
 
         const routes = adminRoutes();
         assert(routes.length > 150, `the sweep has every admin route of every router (${routes.length})`);
@@ -297,7 +266,7 @@ async function main(): Promise<void> {
             }
             const everyTokenRefused = lowered.startsWith('/api/local/admin/auth/') || lowered.startsWith('/api/local/admin/automation-tokens')
                 || lowered.startsWith('/api/local/admin/agent/')
-                || lowered.startsWith('/api/local/admin/2fa/') || lowered === '/api/local/admin/ws-ticket' || lowered === '/api/local/admin/csrf-token';
+                || lowered === '/api/local/admin/ws-ticket' || lowered === '/api/local/admin/csrf-token';
 
             if (!isRead(m) || everyTokenRefused) {
                 const r = await call(m, url, opts(bearer(READ)));
@@ -331,7 +300,7 @@ async function main(): Promise<void> {
         assert(publicSeen > 0, `${publicSeen} routes need no credential (sign-in steps): a token there opens no session and changes nothing`);
         assert(readFails.length === 0, `read token: every change refused, before the route runs (${readFails.length} not)`);
         assert(backupsFails.length === 0, `backups token: every route off its list refused (${backupsFails.length} not)`);
-        assert(refusedEvery.length === 0, `admin token: the sign-in, session, 2FA and token routes refused (${refusedEvery.length} not)`);
+        assert(refusedEvery.length === 0, `admin token: the sign-in, session and token routes refused (${refusedEvery.length} not)`);
         assert(ownerOnlySeen > 20 && adminFails.length === 0, `admin token: refused on all ${ownerOnlySeen} routes an admin's session is refused on (${adminFails.length} not)`);
         const askedGitHub = offMachine.filter(h => h.startsWith('api.github.com/'));
         assert(askedGitHub.length > 0 && askedGitHub.length === offMachine.length,
@@ -339,9 +308,10 @@ async function main(): Promise<void> {
 
         resetAdminRateLimit();
         // Named owner-only changes, with a fresh owner's step-up in hand: still refused to every token.
+        const ownerCodeBefore = getNodeRoleBreakGlassHash(owner.pub);
         for (const [m, p, b] of [
             ['POST', '/api/local/admin/node-roles', { pubkey: admin.pub, role: 'owner' }],
-            ['POST', '/api/local/admin/auth/break-glass-mode', { enabled: true }],
+            ['POST', '/api/local/admin/auth/break-glass/issue', { memberPubkey: owner.pub }],
             ['POST', '/api/local/admin/replication-token/generate', {}],
             ['POST', '/api/local/admin/restore', {}],
         ] as const) {
@@ -350,7 +320,8 @@ async function main(): Promise<void> {
                 assert(r.status === 403, `${p} refused to the ${t === READ ? 'read' : t === BACKUPS ? 'backups' : 'admin'} token (${r.status})`);
             }
         }
-        assert(getLocalConfig().totpEnabled === true && getLocalConfig().adminHash === hash, 'and the node\'s 2FA and password are as they were');
+        assert(getNodeRoleBreakGlassHash(owner.pub) === ownerCodeBefore && !db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").get(admin.pub),
+            "and nothing moved: the owner's break-glass code is as it was, and the admin is no owner");
 
         // Tokens go through the admin limiter like every admin request (ADMIN_RATE_LIMIT a minute, per source).
         resetAdminRateLimit();
@@ -417,8 +388,6 @@ async function main(): Promise<void> {
 
         // ── 4. Revoked, and never a session ───────────────────────────────────────────────────────
         console.log('── 4. Revoking; a token never opens a Settings session ──');
-        const pwSignIn = await call('POST', '/api/local/admin/auth/password', { headers: bearer(ADMIN), body: {} });
-        assert(pwSignIn.status !== 200 && !pwSignIn.sessionId, `the password sign-in takes no token (${pwSignIn.status})`);
         const who = await call('GET', '/api/local/admin/auth/session', { headers: bearer(ADMIN) });
         assert(who.body?.authenticated !== true && !who.sessionId, `the session check does not count a token as a Settings session (${show(who)})`);
         resetAutomationTokenUseThrottle();
@@ -433,8 +402,8 @@ async function main(): Promise<void> {
         assert(revByToken.status === 403, 'a token cannot revoke one');
 
         // ── 4b. Sign out everywhere: who can end whose sessions ──────────────────────────────────
-        // Anyone ends only their own sessions; an owner (a key session, or the password, which is owner level) may end
-        // an admin's. A token has no sessions of its own, so it ends nobody's: refused as every sign-in route refuses it.
+        // Anyone ends only their own sessions; an owner may end an admin's. A token has no sessions of its own, so it ends
+        // nobody's: refused as every sign-in route refuses it.
         console.log('── 4b. Sign out everywhere: who can end whose sessions ──');
         const REVOKE_ALL = '/api/local/admin/auth/revoke-all';
         const alive = async (s: Reply) => (await call('GET', '/api/local/admin/auth/session', { headers: asSession(s.sessionId) })).body?.authenticated === true;
@@ -462,8 +431,6 @@ async function main(): Promise<void> {
 
         const adminOnOwner = await call('POST', REVOKE_ALL, { headers: asSession(a1.sessionId), body: { memberPubkey: owner.pub } });
         assert(adminOnOwner.status === 403 && await alive(o1), `an admin cannot sign the owner out (${show(adminOnOwner)})`);
-        const pwNobody = await call('POST', REVOKE_ALL, { headers: { 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, body: {} });
-        assert(pwNobody.status === 400 && await alive(o1), `the password naming nobody signs nobody out (${show(pwNobody)})`);
         const ownerOnAdmin = await call('POST', REVOKE_ALL, { headers: asSession(o1.sessionId), body: { memberPubkey: admin.pub } });
         assert(ownerOnAdmin.status === 200 && ownerOnAdmin.body?.breakGlassCodeRetired === false, `an owner signs the admin out (${show(ownerOnAdmin)})`);
         assert(!(await alive(a1)) && await alive(o1), "the admin's session ended, the owner's did not");
@@ -472,9 +439,6 @@ async function main(): Promise<void> {
         const adminSelf = await call('POST', REVOKE_ALL, { headers: asSession(a2.sessionId), body: {} });
         assert(adminSelf.status === 200 && adminSelf.body?.memberPubkey === admin.pub && !(await alive(a2)) && await alive(o1),
             `an admin signs themselves out, and only themselves (${show(adminSelf)})`);
-        const a3 = await keySignIn(admin);
-        const pwOnAdmin = await call('POST', REVOKE_ALL, { headers: { 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, body: { memberPubkey: admin.pub } });
-        assert(pwOnAdmin.status === 200 && !(await alive(a3)) && await alive(o1), `the password, naming the admin, signs the admin out (${show(pwOnAdmin)})`);
 
         const a4 = await keySignIn(admin);
         const appOwnerNamingAdmin = await signedRevokeAll(owner, { memberPubkey: admin.pub });

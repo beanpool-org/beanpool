@@ -18,6 +18,7 @@ import {
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
 } from './doc.js';
+import { dealAmountFor, isHundredths } from '../../hundredths.js';
 
 export {
     LEND_MAX_DAYS_MAX,
@@ -35,21 +36,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const chars = (s: string) => [...s].length;
 
 /**
- * Total Beans fee for a loan, unrounded: the amount the node draws (apps/server/src/engine/escrow.ts, `post.credits * hours`
- * or `post.credits`), cents included, so a 0.4-Bean loan is never quoted as free.
- * - Free loan (0 or negative credits): 0 Beans
- * - Fixed price: one fee of `credits` Beans (regardless of duration/units)
- * - Daily price: `credits * units` Beans
- * - Weekly price: `credits * units` Beans
+ * A loan's fee in whole hundredths of a Bean: the amount the node holds for it (apps/server/src/engine/escrow.ts,
+ * dealAmountFor(post.price_c, units) or post.price_c), so a 0.40-Bean loan is never quoted as free.
+ * - Free loan (0, or anything but whole hundredths above 0): 0
+ * - Fixed price: one fee of `price_c` (regardless of duration/units)
+ * - Daily or weekly price: `price_c` times the units, truncated once to a hundredth (dealAmountFor)
  * Returns 0 if units is not a positive finite number for daily/weekly.
  */
-export function loanTotalBeans(credits: number, priceType: string | null | undefined, units: unknown): number {
-    if (typeof credits !== 'number' || !Number.isFinite(credits) || credits <= 0) return 0;
+export function loanTotal(price_c: number, priceType: string | null | undefined, units: unknown): number {
+    if (!isHundredths(price_c) || price_c <= 0) return 0;
     const type = priceType || 'fixed';
-    if (type === 'fixed') return credits;
+    if (type === 'fixed') return price_c;
     if (type === 'daily' || type === 'weekly') {
         if (typeof units !== 'number' || !Number.isFinite(units) || units <= 0) return 0;
-        return credits * units;
+        return dealAmountFor(price_c, units);
     }
     return 0;
 }

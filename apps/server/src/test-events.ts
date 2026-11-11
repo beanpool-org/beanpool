@@ -3,7 +3,7 @@
  *
  *  1. Create validates start (future), end (after start), pin, place name ≤ 80, note ≤ 1000, audience.
  *  2. End defaults to start + 2 hours.
- *  3. Reach is forced local; credits/category/price forced as for polls; pin and photos kept.
+ *  3. Reach is forced local; the price (price_c, whole hundredths)/category/price type forced as for polls; pin and photos kept.
  *  4. Cap of 5 upcoming events per author, with member, enterprise and group pools separate.
  *  5. RSVP upsert (going ↔ interested) and delete (not going), refused on cancelled/ended/non-group-member.
  *  6. Private note: host and Going only; never in a broadcast.
@@ -51,13 +51,15 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const HOUR = 60 * 60 * 1000;
 const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
     setMemberPhoto(db, pub, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
 
@@ -65,7 +67,7 @@ const broadcasts: any[] = [];
 const capture = (event: any) => { broadcasts.push(event); };
 
 function newEvent(author: string, extra: Record<string, unknown> = {}, lat = -28.55, lng = 153.5) {
-    return createPostEngine(capture, 'event', 'other', 'Working bee', 'Bring gloves', 50, 'hourly', author,
+    return createPostEngine(capture, 'event', 'other', 'Working bee', 'Bring gloves', hc(50), 'hourly', author,
         lat, lng, [PHOTO], true, undefined, true,
         { eventStartAt: inHours(24), eventPlaceName: 'The old bowls club', eventPrivateNote: 'Gate code 1234', reach: 'everywhere', ...extra } as any)!;
 }
@@ -137,12 +139,12 @@ async function main(): Promise<void> {
     // ── 2 & 3. Defaults and forced fields ────────────────────────────────────────────────────
     console.log('\n--- 2/3. End default, forced fields ---');
     const start = inHours(24);
-    const ev = createPostEngine(capture, 'event', 'food', 'Repair café', 'Fix things', 30, 'hourly', host, -28.55, 153.5, [PHOTO], true, undefined, true,
+    const ev = createPostEngine(capture, 'event', 'food', 'Repair café', 'Fix things', hc(30), 'hourly', host, -28.55, 153.5, [PHOTO], true, undefined, true,
         { eventStartAt: start, eventPlaceName: '  Bowls club  ', eventPrivateNote: 'Gate 1234', reach: 'everywhere' } as any)!;
     const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(ev.id) as any;
     assert(row.event_end_at === new Date(Date.parse(start) + 2 * HOUR).toISOString(), 'end time defaults to start + 2 hours');
     assert(row.reach === 'local' && row.reach_peers === null, "reach is forced to 'local' even when 'everywhere' is sent");
-    assert(row.credits === 0 && row.price_type === 'fixed' && row.category === 'community', 'credits 0, fixed price, community category are forced');
+    assert(row.price_c === 0 && row.price_type === 'fixed' && row.category === 'community', 'price 0, fixed price, community category are forced');
     assert(row.repeatable === 0 && row.cash_also_needed === 0, 'repeatable and cash-also-needed are forced off');
     assert(row.lat === -28.55 && row.lng === 153.5, 'the pin is kept (unlike polls)');
     assert((db.prepare('SELECT COUNT(*) c FROM post_photos WHERE post_id = ?').get(ev.id) as any).c === 1, 'photos are kept (unlike polls)');
@@ -209,7 +211,7 @@ async function main(): Promise<void> {
     // group" confirmed the group's event to someone who can't see it, an invite-only group's included.
     assertThrows(() => rsvpEvent(capture, groupEvents[0].id, stranger, 'going'), /^Event not found$/, 'a non-member cannot RSVP to a group-only event, and is told "Event not found"');
     assert(rsvpEvent(capture, groupEvents[0].id, groupie, 'going').post!.goingCount === 1, 'a group member can RSVP to a group-only event');
-    const offer = createPost('offer', 'food', 'Carrots', 'Fresh', 5, 'fixed', stranger, undefined, undefined, [PHOTO])!;
+    const offer = createPost('offer', 'food', 'Carrots', 'Fresh', hc(5), 'fixed', stranger, undefined, undefined, [PHOTO])!;
     assertThrows(() => rsvpEvent(capture, offer.id, goer, 'going'), /Event not found/, 'RSVP to a post that is not an event is refused');
 
     // The route: actor comes from auth, never the body.
@@ -328,7 +330,7 @@ async function main(): Promise<void> {
     const ev4 = newEvent(stranger);
     edited = updatePost(capture, ev4.id, stranger, { eventPlaceName: 'The hall' } as any)!;
     assert(edited.eventState === 'updated', 'a place-name change marks the event UPDATED');
-    assert(updatePost(capture, ev4.id, stranger, { credits: 99, reach: 'everywhere' } as any)!.credits === 0, 'an edit cannot give an event a price');
+    assert(updatePost(capture, ev4.id, stranger, { price_c: hc(99), reach: 'everywhere' } as any)!.price_c === 0, 'an edit cannot give an event a price');
     assert((db.prepare('SELECT reach FROM posts WHERE id = ?').get(ev4.id) as any).reach === 'local', 'an edit cannot widen reach');
     assertThrows(() => updatePost(capture, ev4.id, stranger, { lat: null, lng: null } as any), /needs a place on the map/, 'an edit cannot remove the pin');
     assertThrows(() => updatePost(capture, ev4.id, stranger, { eventEndAt: inHours(-5) } as any), /must end after it starts/, 'an edit cannot end before the start');

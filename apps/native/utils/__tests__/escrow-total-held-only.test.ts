@@ -63,10 +63,13 @@ afterAll(() => { (Module as any)._load = realLoad; });
 
 import { applyDelta, getDb, getEscrowTotal } from '../db';
 
-/** A deal as the node sends it in a sync (MarketplaceTransaction), this member the buyer unless said otherwise. */
-const deal = (id: string, status: string, credits: number, side: { buyer?: string; seller?: string } = {}) => ({
+/**
+ * A deal as the node sends it in a sync (MarketplaceTransaction), this member the buyer unless said otherwise: what it holds
+ * in whole hundredths of a Bean (`amount_c`), as getEscrowTotal answers it.
+ */
+const deal = (id: string, status: string, amount_c: number, side: { buyer?: string; seller?: string } = {}) => ({
     id, postId: `post-${id}`, buyerPublicKey: side.buyer ?? ME, sellerPublicKey: side.seller ?? ANA,
-    credits, status, createdAt: '2026-10-16T09:00:00.000Z',
+    amount_c, status, createdAt: '2026-10-16T09:00:00.000Z',
     completedAt: status === 'requested' || status === 'pending' ? null : '2026-10-16T10:00:00.000Z',
 });
 const sync = async (...marketplaceTransactions: ReturnType<typeof deal>[]) => {
@@ -83,47 +86,47 @@ describe("the Ledger's In Escrow is the Beans the node holds for this member", (
 
     it('a request nobody has approved yet holds nothing: 0', async () => {
         // The finding: a member whose Need someone offered on, or who asked for an Offer, saw its price as In Escrow.
-        await sync(deal('asked', 'requested', 40));
+        await sync(deal('asked', 'requested', 4000));
         expect(await getEscrowTotal(ME)).toBe(0);
     });
 
     it('approving the request moves its Beans into escrow: In Escrow is its amount', async () => {
-        await sync(deal('asked', 'requested', 40));
-        await sync(deal('asked', 'pending', 40));
-        expect(await getEscrowTotal(ME)).toBe(40);
+        await sync(deal('asked', 'requested', 4000));
+        await sync(deal('asked', 'pending', 4000));
+        expect(await getEscrowTotal(ME)).toBe(4000);
     });
 
     it('a one-step accept is held from the start, as on the node', async () => {
-        await sync(deal('took', 'pending', 12.5));
-        expect(await getEscrowTotal(ME)).toBe(12.5);
+        await sync(deal('took', 'pending', 1250));
+        expect(await getEscrowTotal(ME)).toBe(1250);
     });
 
     it('every state that leaves escrow, or never reached it, holds nothing', async () => {
         await sync(
-            deal('turned-down', 'rejected', 7),       // declined, or another member's request was approved first
-            deal('withdrawn', 'cancelled', 9),        // the buyer withdrew the request, or it expired unanswered
-            deal('released', 'completed', 11),        // the buyer released it, or a dispute released or split it
-            deal('refunded', 'cancelled', 13),        // cancelled after approval, or a dispute refunded it
+            deal('turned-down', 'rejected', 700),       // declined, or another member's request was approved first
+            deal('withdrawn', 'cancelled', 900),        // the buyer withdrew the request, or it expired unanswered
+            deal('released', 'completed', 1100),        // the buyer released it, or a dispute released or split it
+            deal('refunded', 'cancelled', 1300),        // cancelled after approval, or a dispute refunded it
         );
         expect(await getEscrowTotal(ME)).toBe(0);
     });
 
     it('a deal held from the other side is the buyer\'s escrow, not this member\'s', async () => {
-        await sync(deal('i-sell', 'pending', 30, { buyer: ANA, seller: ME }));
+        await sync(deal('i-sell', 'pending', 3000, { buyer: ANA, seller: ME }));
         expect(await getEscrowTotal(ME)).toBe(0);
-        expect(await getEscrowTotal(ANA)).toBe(30);
+        expect(await getEscrowTotal(ANA)).toBe(3000);
     });
 
     it('with deals in every state, In Escrow sums only the held ones', async () => {
         await sync(
-            deal('asked', 'requested', 40),
-            deal('held-1', 'pending', 15),
-            deal('held-2', 'pending', 2.25),
-            deal('turned-down', 'rejected', 7),
-            deal('withdrawn', 'cancelled', 9),
-            deal('released', 'completed', 11),
-            deal('i-sell', 'pending', 30, { buyer: ANA, seller: ME }),
+            deal('asked', 'requested', 4000),
+            deal('held-1', 'pending', 1500),
+            deal('held-2', 'pending', 225),
+            deal('turned-down', 'rejected', 700),
+            deal('withdrawn', 'cancelled', 900),
+            deal('released', 'completed', 1100),
+            deal('i-sell', 'pending', 3000, { buyer: ANA, seller: ME }),
         );
-        expect(await getEscrowTotal(ME)).toBe(17.25);
+        expect(await getEscrowTotal(ME)).toBe(1725);
     });
 });

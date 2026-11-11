@@ -10,7 +10,7 @@ import type { CommunityCard } from '@beanpool/core';
 
 const CARD: CommunityCard = {
     name: 'Castlemaine BeanPool', host: 'castlemaine.beanpool.org', members: 9, area: null, joining: 'requests',
-    askUrl: 'https://global.beanpool.org/?ask=castlemaine.beanpool.org', globalUrl: 'https://global.beanpool.org',
+    askUrl: 'https://castlemaine.beanpool.org/app?door=ask', globalUrl: 'https://global.beanpool.org',
 };
 const T = 'AbCdEfGhIjKlMnOpQrSt_-';
 const POST_ID = 'p-ladder';
@@ -49,7 +49,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe('the one-post peek in the browser', () => {
     it('reads the post unsigned with the ticket, and shows it under "A member of … shared this with you"', async () => {
         vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(DESKTOP);
-        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} />);
+        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} onAsked={() => {}} />);
         await screen.findByTestId('peek-page');
         const [url, init] = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/marketplace/posts/'))!;
         expect(url).toBe(`/api/marketplace/posts/${POST_ID}?peek=${T}`);
@@ -60,13 +60,21 @@ describe('the one-post peek in the browser', () => {
         expect(screen.getByTestId('peek-names-note').textContent).toBe('Names and faces appear when you join Castlemaine BeanPool.');
     });
 
-    it('its doors: the community\'s card (Ask to join, Already a member, Look around), I have an invite; no phone doors on a computer', async () => {
+    it('its doors on a computer (§2.3): Ask to join {name} · I have an invite · Already a member · 🌍 … first; no phone doors', async () => {
         vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(DESKTOP);
         const onWelcome = vi.fn();
-        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={onWelcome} />);
+        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={onWelcome} onAsked={() => {}} />);
         await screen.findByTestId('peek-page');
         await screen.findByTestId('community-card');
-        expect(screen.getByTestId('community-card-ask').getAttribute('href')).toBe(CARD.askUrl);
+        const ask = screen.getByTestId('community-card-ask');
+        expect(ask.tagName).toBe('BUTTON');
+        expect(ask.textContent).toBe('Ask to join Castlemaine BeanPool');
+        expect(screen.getByTestId('community-card-ask-note').textContent).toBe('Makes your account here and sends your request to Castlemaine BeanPool. Its members decide. No invite needed.');
+        const global = screen.getByTestId('community-card-global');
+        expect(global.textContent).toBe('🌍 Look around the global community first');
+        expect(global.getAttribute('href')).toBe('https://global.beanpool.org/?ask=castlemaine.beanpool.org');
+        const order = ['community-card-ask', 'peek-invite', 'community-card-signin', 'community-card-global'].map(id => screen.getByTestId(id));
+        for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.queryByTestId('peek-open-app')).toBeNull();
         expect(screen.queryByTestId('peek-get-app')).toBeNull();
         fireEvent.click(screen.getByTestId('peek-invite'));
@@ -75,20 +83,36 @@ describe('the one-post peek in the browser', () => {
         expect(onWelcome).toHaveBeenCalledWith('signin');
     });
 
-    it('on an Android phone: Open in the BeanPool app (falling back to Google Play with the peek in the referrer) and Get the app', async () => {
+    it('on an Android phone (§2.3): Open in the BeanPool app (falling back to Google Play with the peek in the referrer) · or ask here in your browser · I have an invite · Already a member · 🌍', async () => {
         vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ANDROID);
-        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} />);
+        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} onAsked={() => {}} />);
         await screen.findByTestId('peek-page');
+        await screen.findByTestId('community-card');
         const app = screen.getByTestId('peek-open-app').getAttribute('href')!;
         expect(app.startsWith('intent://peek?')).toBe(true);
         expect(app).toContain(`post=${POST_ID}&peek=${T}`);
         expect(app).toContain('scheme=beanpool;package=org.beanpool.pillar;');
-        const store = screen.getByTestId('peek-get-app').getAttribute('href')!;
+        const store = decodeURIComponent(/S\.browser_fallback_url=([^;]+);/.exec(app)![1]);
         expect(new URL(store).searchParams.get('referrer')).toBe(`peek=${T}&post=${POST_ID}&server=${window.location.origin}`);
+        // The intent falls back to the store by itself: no second store door on Android.
+        expect(screen.queryByTestId('peek-get-app')).toBeNull();
+        expect(screen.queryByTestId('community-card-ask-app')).toBeNull();
+        expect(screen.getByTestId('community-card-ask').textContent).toBe('or ask here in your browser');
+        expect(screen.getByTestId('community-card-global').textContent).toBe('🌍 Look around the global community');
+        const order = ['peek-open-app', 'community-card-ask', 'peek-invite', 'community-card-signin', 'community-card-global'].map(id => screen.getByTestId(id));
+        for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('on an iPhone: the app link has no fallback, so Get the app stays under it', async () => {
+        vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
+        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} onAsked={() => {}} />);
+        await screen.findByTestId('peek-page');
+        expect(screen.getByTestId('peek-open-app').getAttribute('href')!.startsWith('beanpool://peek?')).toBe(true);
+        expect(screen.getByTestId('peek-get-app')).toBeTruthy();
     });
 
     it('a link that opens nothing says so, with the same doors, and shows nothing of a post', async () => {
-        render(<PeekPage postId="p-other" ticket={T} onWelcome={() => {}} />);
+        render(<PeekPage postId="p-other" ticket={T} onWelcome={() => {}} onAsked={() => {}} />);
         await screen.findByTestId('peek-stopped');
         expect(screen.getByText('This link has stopped working. Ask the member who sent it for a new one.')).toBeTruthy();
         expect(screen.queryByText('Ladder to lend')).toBeNull();
@@ -116,7 +140,7 @@ describe('the one-post peek in the browser', () => {
     it('a community that couldn\'t be reached is never called a stopped link: it says so, with Try again and the doors', async () => {
         vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(DESKTOP);
         fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} />);
+        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} onAsked={() => {}} />);
         await screen.findByTestId('peek-unreachable');
         expect(screen.getByText("Can't reach that community right now. Check your connection and try again.")).toBeTruthy();
         expect(screen.queryByText('This link has stopped working. Ask the member who sent it for a new one.')).toBeNull();
@@ -129,7 +153,7 @@ describe('the one-post peek in the browser', () => {
     it('a 429 or a server error is the same: not a stopped link', async () => {
         for (const status of [429, 503]) {
             fetchMock.mockResolvedValueOnce(new Response('', { status }));
-            const { unmount } = render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} />);
+            const { unmount } = render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} onAsked={() => {}} />);
             await screen.findByTestId('peek-unreachable');
             expect(screen.queryByTestId('peek-stopped')).toBeNull();
             unmount();

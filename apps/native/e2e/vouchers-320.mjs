@@ -4,7 +4,8 @@
  * Vouchers on the phone (slice V2, DESIGN-invites-and-names-list-amend2-fable.md §5, Marty's §10 and §11) at the floor
  * (memory product-audience-small-screens: 320dp wide, the phone's text at 1.3×), in the light and the dark scheme, through
  * react-native-web in headless Chromium. What is drawn is the app's own code:
- * - components/VoucherCard.tsx from a card shaped as the node sends it (left 550, held 100, level 650): Their budget with
+ * - components/VoucherCard.tsx from a card shaped as the node sends it, every figure whole hundredths (left 1,134.56, held 100,
+ *   level 1,234.56: the card's widest figures): Their budget with
  *   Set budget to (quick levels and stepper), then See who they brought in, then Budget history (with the node's own actors);
  * - components/VouchersBlock.tsx, the block People → Invites renders for owners and committee admins, on People's padding;
  * - app/names-list.tsx, the whole screen, its list opened with a real key (only the opening and the node's answers are
@@ -126,6 +127,7 @@ const STUBS = {
         export const inviteThisPerson = async () => ({ ok: false, message: '' });
         export const invitesForEntry = () => [];
         export const boundInviteLine = () => '';
+        export const showsBoundInviteLine = () => false;
         export const inviteLink = () => '';
     `,
     // The names list's own module, as it is, but its opening (keys, pin, sealed history) and the node's answers: a list of
@@ -158,15 +160,18 @@ const STUBS = {
             notices: [], made: null, sentTo: [], toCheck: [],
         };
         const row = (over) => ({ memberPubkey: ZARA, callsign: 'zara', source: 'entry', entryId: ID.zara, madeBy: ME, madeByCallsign: 'Sally', madeAt: '2026-11-05T10:00:00Z',
-            stoppedAt: null, stopReason: null, left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 25,
-            passedOn: { amount: 50, people: 1, belowZero: 25 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over });
+            // The node's voucher row (engine/vouchers.ts voucherSummary): left, held, vouched and level keep their names and are whole
+            // hundredths, as writtenOff and passedOn's amount_c and belowZero are; the row's belowZero is a count of people.
+            stoppedAt: null, stopReason: null, left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 65000, belowZero: 1, writtenOff: 2500,
+            passedOn: { amount_c: 5000, people: 1, belowZero: 2500 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over });
         export const VOUCHER_BLOCK = {
             vouchers: [
                 row({}),
-                row({ memberPubkey: WREN, callsign: 'Wren', source: 'role', entryId: null, madeBy: 'migration:vouchers', madeByCallsign: null, left: 1500, held: 0, level: 1500,
-                    vouched: 0, peopleVouched: 0, belowZero: 0, writtenOff: 0, passedOn: { amount: 0, people: 0, belowZero: 0 }, invitesWithVouch: 0 }),
+                row({ memberPubkey: WREN, callsign: 'Wren', source: 'role', entryId: null, madeBy: 'migration:vouchers', madeByCallsign: null, left: 150000, held: 0, level: 150000,
+                    vouched: 0, peopleVouched: 0, belowZero: 0, writtenOff: 0, passedOn: { amount_c: 0, people: 0, belowZero: 0 }, invitesWithVouch: 0 }),
             ],
-            settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
+            // engine/vouchers.ts voucherSettings: the figures in whole hundredths, vouchesPerPerson a count.
+            settings: { voucherBudget: 100000, memberGift: 10000, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, vouchesPerPerson: 3, budgetMax: 200000 },
         };
         export const openNamesList = async () => ({ ok: true, value: OPENED });
         export const fetchNamesLog = async () => ({ ok: true, value: { log: [] } });
@@ -205,22 +210,25 @@ import { VouchersBlock } from ${REAL('components/VouchersBlock')};
 import NamesListScreen from ${REAL('app/names-list')};
 import { VOUCHER_BLOCK } from 'names-list';
 
-/** As engine/vouchers.ts budgetOf() reads it: 1,000 given, 350 vouched to 4 people, 100 held on one invite. */
+/**
+ * As engine/vouchers.ts voucherCard() sends it, every figure whole hundredths of a Bean: 350 vouched to 4 people, 100 held on
+ * one invite, 1,134.56 left of a level of 1,234.56 (the widest figures the card writes, for the 320 check).
+ */
 const NODE_CARD = {
     memberPubkey: 'd'.repeat(64), callsign: 'zara', source: 'entry', entryId: '1'.repeat(32), madeBy: 'a'.repeat(64), madeByCallsign: 'Sally',
     madeAt: '2026-11-05T10:00:00Z', stoppedAt: null, stopReason: null,
-    left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 25,
-    passedOn: { amount: 50, people: 1, belowZero: 25 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, canChange: true,
+    left: 113456, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 123456, belowZero: 1, writtenOff: 2500,
+    passedOn: { amount_c: 5000, people: 1, belowZero: 2500 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, canChange: true,
     history: [
-        { kind: 'grant', amount: 1000, actor: 'a'.repeat(64), actorCallsign: 'Sally', at: '2026-11-05T10:00:00Z' },
-        { kind: 'hold', amount: -100, actor: 'd'.repeat(64), actorCallsign: 'zara', at: '2026-11-05T11:00:00Z', for: 'invite', outcome: 'vouched', person: { memberPubkey: 'c'.repeat(64), callsign: 'sam' } },
-        { kind: 'return', amount: 75, actor: 'node', actorCallsign: null, at: '2026-11-06T09:00:00Z', for: 'invite', why: 'expired' },
-        { kind: 'grant', amount: 1000, actor: 'migration:vouchers', actorCallsign: null, at: '2026-11-01T10:00:00Z' },
-        { kind: 'top_up', amount: 500, actor: 'f'.repeat(64), actorCallsign: null, at: '2026-11-03T10:00:00Z' },
+        { kind: 'grant', amount_c: 100000, actor: 'a'.repeat(64), actorCallsign: 'Sally', at: '2026-11-05T10:00:00Z' },
+        { kind: 'hold', amount_c: -10000, actor: 'd'.repeat(64), actorCallsign: 'zara', at: '2026-11-05T11:00:00Z', for: 'invite', outcome: 'vouched', person: { memberPubkey: 'c'.repeat(64), callsign: 'sam' } },
+        { kind: 'return', amount_c: 7500, actor: 'node', actorCallsign: null, at: '2026-11-06T09:00:00Z', for: 'invite', why: 'expired' },
+        { kind: 'grant', amount_c: 100000, actor: 'migration:vouchers', actorCallsign: null, at: '2026-11-01T10:00:00Z' },
+        { kind: 'top_up', amount_c: 50000, actor: 'f'.repeat(64), actorCallsign: null, at: '2026-11-03T10:00:00Z' },
     ],
     people: [
-        { memberPubkey: 'c'.repeat(64), callsign: 'sam', joinedAt: '2026-11-02T12:00:00Z', amount: 100, raised: false, byInvite: true, belowZero: true, left: false, writtenOff: 0, vouchesForMe: false, trading: 'others' },
-        { memberPubkey: '8'.repeat(64), callsign: 'bob', joinedAt: '2026-11-03T12:00:00Z', amount: 75, raised: false, byInvite: true, belowZero: false, left: false, writtenOff: 0, vouchesForMe: false, trading: 'inside' },
+        { memberPubkey: 'c'.repeat(64), callsign: 'sam', joinedAt: '2026-11-02T12:00:00Z', amount_c: 10000, raised: false, byInvite: true, belowZero: true, left: false, writtenOff: 0, vouchesForMe: false, trading: 'others' },
+        { memberPubkey: '8'.repeat(64), callsign: 'bob', joinedAt: '2026-11-03T12:00:00Z', amount_c: 7500, raised: false, byInvite: true, belowZero: false, left: false, writtenOff: 0, vouchesForMe: false, trading: 'inside' },
     ],
 };
 
@@ -359,9 +367,9 @@ try {
     const press = async (name) => { await page.getByRole('button', { name, exact: true }).first().click(); await page.waitForTimeout(250); };
 
     for (const scheme of ['light', 'dark']) {
-        // 1. The card: Their budget, Passed on with its below-zero part, Set budget to (from 700: the nearest level to 650)
+        // 1. The card: Their budget, Passed on with its below-zero part, Set budget to (from 1,200: the nearest level to 1,234.56)
         await open(`view=card&scheme=${scheme}`);
-        await page.getByText('Set budget to: 700').waitFor();
+        await page.getByText('Set budget to: 1,200').waitFor();
         await measure(`vouchers-card-${scheme}`);
 
         // 2. See who they brought in
@@ -376,7 +384,7 @@ try {
 
         // 4. People → Invites: the Vouchers block People renders (components/VouchersBlock.tsx)
         await open(`view=block&scheme=${scheme}`);
-        await page.getByText('@zara · 550 of 650 left · 4 vouched · 1 below zero ›').waitFor();
+        await page.getByText('@zara · 550 left ›').waitFor();
         await measure(`vouchers-invites-block-${scheme}`);
 
         // 5. The names list: the voucher first with its tag, Make a voucher on Mary Smith's entry, the filter chips

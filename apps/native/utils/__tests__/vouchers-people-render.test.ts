@@ -142,15 +142,21 @@ const PEOPLE = {
 } as const;
 type Who = keyof typeof PEOPLE;
 
+/** A voucher's row as the node sends it: every figure whole hundredths of a Bean (left 55000 is 550 Beans). */
 const row = (pk: string, callsign: string, over: Record<string, unknown> = {}) => ({
     memberPubkey: pk, callsign, source: 'entry', entryId: '9'.repeat(32), madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-05T10:00:00Z',
-    stoppedAt: null, stopReason: null, left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 0,
-    passedOn: { amount: 0, people: 0, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over,
+    stoppedAt: null, stopReason: null, left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 65000, belowZero: 1, writtenOff: 0,
+    passedOn: { amount_c: 0, people: 0, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over,
 });
 /** The node's block, in the node's order (vouchersBlock() orders by callsign; here Wren before Jane's row to prove the phone keeps it). */
+const OWNER_ROW = row(key('a'), 'Sally', { source: 'role', noLimit: true, left: 0, held: 0, level: 0, vouched: 20000, peopleVouched: 2, belowZero: 0, vouchedLast30Days: 20000 });
+const WAITING = { entryId: '7'.repeat(32), level: 100000, vouchAmount: 2500, madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-09T10:00:00Z', expiresAt: '2026-12-09T10:00:00Z' };
 const BLOCK = {
-    vouchers: [row(key('b'), 'Wren', { source: 'role', left: 1500, held: 0, level: 1500, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
-    settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
+    vouchers: [OWNER_ROW, row(key('b'), 'Wren', { source: 'role', left: 150000, held: 0, level: 150000, vouched: 0, peopleVouched: 0, belowZero: 0 }), row(key('d'), 'jane')],
+    waiting: [WAITING],
+    // Whom "+ Make someone a voucher" offers (invites-vouching I5): an admin with no budget, and a name confirmed on the list.
+    candidates: { admins: [{ memberPubkey: key('9'), callsign: 'Kit' }], confirmed: [{ memberPubkey: key('8'), callsign: 'liz', entryId: '6'.repeat(32) }], adminsOffered: true },
+    settings: { voucherBudget: 100000, memberGift: 10000, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, vouchesPerPerson: 3, budgetMax: 200000 },
 };
 const COMMITTEE_ONLY = 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.';
 const ADMINS_ONLY = 'Only the community’s owners and admins can open the names list.';
@@ -214,17 +220,26 @@ describe('People → Invites: the Vouchers block, exactly as the node answers (�
             const b = block();
             expect(b).not.toBeNull();
             const rows = Array.from(b!.querySelectorAll('[data-testid="voucher-row"]')).map((r) => r.textContent);
-            expect(rows).toEqual([voucherRowText(BLOCK.vouchers[0]), voucherRowText(BLOCK.vouchers[1])]);
-            expect(rows).toEqual(['@Wren · 1500 of 1500 left · 0 vouched · 0 below zero ›', '@jane · 550 of 650 left · 4 vouched · 1 below zero ›']);
+            expect(rows).toEqual([voucherRowText(BLOCK.vouchers[1]), voucherRowText(BLOCK.vouchers[2])]);
+            expect(rows).toEqual(['@Wren · 1,500 left ›', '@jane · 550 left ›']);
             expect(b!.textContent).toContain('+ Make someone a voucher');
             // Above the invite form (§11: "at the TOP of that screen, above Invite someone").
             const heading = inviteHeading();
             expect(heading).not.toBeNull();
             expect(b!.compareDocumentPosition(heading!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-            // The last row opens the names list.
+            // The last row opens the sheet of whom the node offers (I5; it opened the names list before Marty's 10 Nov rule),
+            // in a full-screen modal kept inside the safe area, with the community's default budget to start from.
             const make = Array.from(b!.querySelectorAll('button')).find((x) => x.getAttribute('aria-label') === '+ Make someone a voucher');
             await act(async () => { (make as HTMLElement).click(); });
-            expect(nav.pushed).toEqual(['/names-list']);
+            await settle();
+            expect(nav.pushed).toEqual([]);
+            const safe = host.querySelector('[data-modal] [data-testid="make-voucher-modal"]');
+            expect(safe, 'the sheet sits in a SafeAreaView').not.toBeNull();
+            expect(safe!.getAttribute('data-safe-area')!.split(',')).toEqual(expect.arrayContaining(['top', 'bottom']));
+            expect(Array.from(safe!.querySelectorAll('[data-testid="make-voucher-admin-row"]')).map((r) => r.textContent)).toEqual(['@Kit']);
+            expect(Array.from(safe!.querySelectorAll('[data-testid="make-voucher-confirmed-row"]')).map((r) => r.textContent)).toEqual(['@liz']);
+            await act(async () => { (safe!.querySelector('[data-testid="make-voucher-admin-row"]') as HTMLElement).click(); });
+            expect(safe!.querySelector('[data-testid="make-voucher-budget"]')?.textContent).toContain('Budget: 1,000 Beans');
         });
     }
 
@@ -255,5 +270,66 @@ describe('People → Invites: the Vouchers block, exactly as the node answers (�
         expect(safe!.textContent).toContain('Their budget');
         expect(safe!.textContent).toContain('Set budget to: 700');
         expect(net.calls).toContain(`fetch ${NODE}/api/names/vouchers/${key('d')}`);
+    });
+});
+
+describe('People → Invites: the Vouchers block reshaped (invites-vouching I4)', () => {
+    const texts = (sel: string) => Array.from(host.querySelectorAll(sel)).map((r) => r.textContent);
+
+    it('owners are pinned first under one line "Owners · no limit", each row "@Sally · 2 vouched ›" with no budget words', async () => {
+        await renderAs('owner');
+        const b = block()!;
+        expect(b).not.toBeNull();
+        expect(texts('[data-testid="vouchers-owners-line"]')).toEqual(['Owners · no limit']);
+        expect(texts('[data-testid="voucher-owner-row"]')).toEqual(['@Sally · 2 vouched ›']);
+        expect(texts('[data-testid="voucher-owner-row"]')[0]).not.toMatch(/left|budget|of \d|below zero|limit/i);
+        // Pinned: the owners' line and row come before every other voucher's row.
+        const ownerRow = b.querySelector('[data-testid="voucher-owner-row"]')!;
+        const firstOther = b.querySelector('[data-testid="voucher-row"]')!;
+        expect(ownerRow.compareDocumentPosition(firstOther) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // The other rows say who and what is left, and nothing else.
+        expect(texts('[data-testid="voucher-row"]')).toEqual(['@Wren · 1,500 left ›', '@jane · 550 left ›']);
+    });
+
+    it('Waiting to join lists the promised budget from the node’s `waiting`, below the vouchers, the name on the phone until the list is open', async () => {
+        await renderAs('owner');
+        const b = block()!;
+        expect(texts('[data-testid="vouchers-waiting-heading"]')).toEqual(['Waiting to join']);
+        expect(texts('[data-testid="voucher-waiting-row"]')).toEqual(['Name on the phone · waiting to join · budget 1,000 ›']);
+        const lastVoucher = Array.from(b.querySelectorAll('[data-testid="voucher-row"]')).pop()!;
+        const waiting = b.querySelector('[data-testid="voucher-waiting-row"]')!;
+        expect(lastVoucher.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        // Nothing in the block is a balance, a code or a bare entry id.
+        expect(b.textContent).not.toMatch(/balance/i);
+        expect(b.textContent).not.toContain('7'.repeat(32));
+        // A waiting row opens the names list, where the entry's own line is.
+        await act(async () => { (waiting as HTMLElement).click(); });
+        expect(nav.pushed).toEqual(['/names-list']);
+    });
+
+    it('without a waiting invite, there is no Waiting to join section', async () => {
+        const noWaiting = { ...BLOCK, waiting: [] };
+        const node = fakeNode();
+        globalThis.fetch = (async (url: unknown, init?: { headers?: Record<string, string> }) => {
+            if (String(url) === `${NODE}/api/names/vouchers`) return new Response(JSON.stringify(noWaiting), { status: 200 });
+            return (node as any)(url, init);
+        }) as unknown as typeof fetch;
+        await renderAs('owner');
+        expect(block()).not.toBeNull();
+        expect(host.querySelector('[data-testid="vouchers-waiting-heading"]')).toBeNull();
+        expect(host.querySelector('[data-testid="voucher-waiting-row"]')).toBeNull();
+    });
+
+    it('a node from before I4 (no `waiting`, no owner flag) still draws: every voucher a "left" row, nothing waiting', async () => {
+        const old = { vouchers: BLOCK.vouchers.slice(1).map(({ ...r }) => r), settings: BLOCK.settings };
+        const node = fakeNode();
+        globalThis.fetch = (async (url: unknown, init?: { headers?: Record<string, string> }) => {
+            if (String(url) === `${NODE}/api/names/vouchers`) return new Response(JSON.stringify(old), { status: 200 });
+            return (node as any)(url, init);
+        }) as unknown as typeof fetch;
+        await renderAs('owner');
+        expect(texts('[data-testid="voucher-row"]')).toEqual(['@Wren · 1,500 left ›', '@jane · 550 left ›']);
+        expect(host.querySelector('[data-testid="vouchers-owners-line"]')).toBeNull();
+        expect(host.querySelector('[data-testid="vouchers-waiting-heading"]')).toBeNull();
     });
 });

@@ -34,6 +34,7 @@ import { db } from './db/db.js';
 import { createPost as createPostEngine, removePost, rsvpEvent } from './engine/posts.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -58,7 +59,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -73,9 +74,10 @@ async function signedFetch(method: 'GET' | 'POST' | 'PUT', path: string, body: u
         const nonce = crypto.randomBytes(16).toString('hex');
         // The middleware signs `ctx.path`, which does NOT include the query string — a client that signs
         // `?publicKey=…` too gets a 403 from a valid key, which is exactly what real clients do.
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

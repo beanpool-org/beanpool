@@ -19,6 +19,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { setMemberPhoto } from '@beanpool/engine';
 import sharp from 'sharp';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 const fails: string[] = [];
@@ -36,8 +37,8 @@ function newId(): Id {
 }
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
-    return { 'X-Public-Key': id.pk, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
+    return { 'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 let beforeCall: () => void = () => {};
 async function req(method: string, p: string, id?: Id, body?: any): Promise<{ status: number; body: any }> {
@@ -107,7 +108,7 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`).run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const readAuthOn = process.env.ENFORCE_READ_AUTH !== 'false';
@@ -173,7 +174,7 @@ async function main(): Promise<void> {
     // ── P2: no photo whose decode is a pixel bomb ──
     {
         const dan = member('FfDan');
-        const post = (photo: string) => req('POST', '/api/marketplace/posts', dan, { type: 'offer', category: 'food', title: 'Px', description: 'px', credits: 0, priceType: 'fixed', authorPublicKey: dan.pk, lat: -28.55, lng: 153.5, photos: [photo] });
+        const post = (photo: string) => req('POST', '/api/marketplace/posts', dan, { type: 'offer', category: 'food', title: 'Px', description: 'px', price_c: 0, priceType: 'fixed', authorPublicKey: dan.pk, lat: -28.55, lng: 153.5, photos: [photo] });
         const bomb = await post(du('image/png', bombPng(20000, 20000)));
         check('P2', bomb.status === 400, `a 20000x20000 PNG listing photo → 400 (got ${bomb.status})`);
         const wbomb = await post(du('image/webp', await webpLossless(16383, 16383)));
@@ -222,7 +223,7 @@ async function main(): Promise<void> {
         const gid = okGroup.body?.id ?? okGroup.body?.group?.id;
         const gp = await req('PATCH', `/api/groups/${gid}`, dan, { avatarUrl: bomb20k });
         check('B5', !!gid && gp.status === 400 && errorOf(gp) === tooBig(20000, 20000), `a group's new picture → 400 with the pixel sentence (made ${okGroup.status}, got ${gp.status} ${JSON.stringify(errorOf(gp))})`);
-        const cf = await req('POST', '/api/crowdfund/projects', dan, { creatorPubkey: dan.pk, title: 'Ff fund', description: 'd', goalAmount: 100, photos: [bomb20k] });
+        const cf = await req('POST', '/api/crowdfund/projects', dan, { creatorPubkey: dan.pk, title: 'Ff fund', description: 'd', goalAmount_c: 10000 /* 100 Beans */, photos: [bomb20k] });
         check('B5', cf.status === 400 && errorOf(cf) === tooBig(20000, 20000), `a crowdfund photo → 400 with the pixel sentence (got ${cf.status} ${JSON.stringify(errorOf(cf))})`);
         const ent = await req('POST', '/api/enterprise', dan, { name: 'Ff Enterprise', avatar: bomb20k, purpose: 'p' });
         check('B5', ent.status === 400 && errorOf(ent) === tooBig(20000, 20000), `an enterprise's photo → 400 with the pixel sentence (got ${ent.status} ${JSON.stringify(errorOf(ent))})`);

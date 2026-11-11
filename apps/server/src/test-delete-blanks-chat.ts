@@ -40,6 +40,7 @@ import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -85,7 +86,7 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
                     .run(key, name, a.gwen, `INV-${name}`);
                 setMemberPhoto(db, key, AVATAR);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             return true;
         },
@@ -287,7 +288,8 @@ async function api(base: string, method: 'GET' | 'POST', route: string, as: Id, 
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': as.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64'),
+        'X-Signature': signRequest(as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -371,7 +373,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. M ──
         console.log('\n— 1. the main server: Rhea writes in every kind of chat —');
-        const main = await spawnNode(SCRIPT, dir('main'), { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
+        const main = await spawnNode(SCRIPT, dir('main'), { NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy'], [dee.pk, 'Dee'], [eli.pk, 'Eli']] });
         const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS });
@@ -436,7 +438,7 @@ async function main(): Promise<void> {
         console.log('\n— 2. the standby S copies M —');
         fs.mkdirSync(dir('standby'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dir('standby'), { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(SCRIPT, dir('standby'), { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');
@@ -555,7 +557,7 @@ async function main(): Promise<void> {
         console.log('\n— 6. a new standby S2 copies M afterwards —');
         fs.mkdirSync(dir('standby2'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby2'), 'genesis.json'));
-        const standby2 = await spawnNode(SCRIPT, dir('standby2'), { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby2 = await spawnNode(SCRIPT, dir('standby2'), { NODE_ROLE: 'backup' });
         nodes.push(standby2);
         await standby2.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const copied = await standby2.send('resync');

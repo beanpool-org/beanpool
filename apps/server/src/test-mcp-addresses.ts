@@ -58,6 +58,7 @@ import { appAddressesReport } from './routes/app-addresses.js';
 import { nodePubkeyHex } from './services/registrar-client.js';
 import { loadOrCreateIdentity, setPrivateKeyForTests } from './p2p.js';
 import { AGENT_TOOLS } from './agent/tools.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -91,7 +92,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),
@@ -133,7 +134,7 @@ async function main(): Promise<void> {
     for (const [k, name] of [[owner2, 'Ottilie'], [owner3, 'Moss']] as const) {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'inv-test')`).run(k.pub, name, owner.pub);
-        db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
         grantNodeRole(k.pub, 'owner', 'SYSTEM');
     }
 

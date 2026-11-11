@@ -134,7 +134,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, ?, ?, 'TEST', 'active', 0)`)
             .run(id.pk, name, iso(Date.now() - 30 * DAY), owner.pk);
         setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         // A member who came in by the 12-words door just now (engine/probation.ts): a newer account's nonce share.
         if (opts.newcomer) {
             db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(iso(Date.now()), id.pk);

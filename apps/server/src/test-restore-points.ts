@@ -10,29 +10,26 @@
  *     kept, and that the server restarts.
  *  2. After the restart (a child on the same data dir, wired as index.ts is) everyone gets the critical announcement
  *     and the log keeps the line; once.
- *  3. Roll back from the interface: an admin 403, a password session without a code 401 totpRequired, an owner's
- *     computer session 403 phone_required, a phone unlock 91 s old 403 step_up_required, each with nothing changed; a
- *     current code brings back the planted row and the old key, after taking a point of its own first (which holds the
+ *  3. Roll back from the interface: an admin 403, an owner's computer session 403 phone_required, a phone unlock 91 s
+ *     old 403 step_up_required, each with nothing changed; a fresh phone unlock brings back the planted row, the old key
+ *     and the server's own local-config.json, after taking a point of its own first (which holds the
  *     restored database), and leaves the notice.
  *  4. No room, no restore: a point that cannot be written (a full disk, as the filesystem reports it (ENOSPC) and as
  *     the point's database copy does (better-sqlite3's SQLITE_FULL, from the VACUUM INTO); a file where the folder
  *     should be) refuses the restore in words, and nothing is replaced: the live database, the node key, no point, no
  *     leftovers.
  *  5. No route removes a point: every /api/local/admin/* route the node serves, with every credential (none, an admin's
- *     key session, an admin token, an owner's computer session, a stale and a fresh phone unlock, a password session,
- *     the password with a current code), and the point's name in every parameter and body field, leaves the folder
- *     byte for byte as it was.
+ *     key session, an admin token, an owner's computer session, a stale and a fresh phone unlock), and the point's name
+ *     in every parameter and body field, leaves the folder byte for byte as it was.
  *  6. Retention: snapshots/config keep:3 (with the owner's proof) and the hourly expiry leave a 1-day-old point and five
  *     within a week; a 31-day-old one goes, and an 8-day-old one past the newest five; past a week only the newest five stay.
- *  7. The code brake: wrong recovery codes from one source, each sent with the right password and an earlier 2FA session,
- *     are held by the source rule (429, reason 'source'), however often the password clears its own count. Its words
- *     are the take-over's: the recovery codes, never the admin password the owner typed right.
+ *  7. The code brake: wrong recovery codes from one source, each sent with an owner's key session, are held by the
+ *     source rule (429, reason 'source'). Its words are the take-over's: the recovery codes, never a password.
  *  S2b. Another community's locked file, opened with the uploader's own right code (design case 18 S2b, D1/D5), each row
  *     on its own child server:
- *     a. onto a lived-in server (an owner, an admin, a moderator, a member, a photo, 2FA on), with each credential that
- *        passes the gate (the password with an earlier 2FA session, a password session, the owner's computer session, a
- *        fresh phone hand-off, the password with a current code): 409 otherCommunity; node_roles, libp2p_key,
- *        genesis.json and local-config.json as they were (leaving out the 2FA step recorded on sign-in); no point, nothing left in the data folder;
+ *     a. onto a lived-in server (an owner, an admin, a moderator, a member, a photo), with each credential that
+ *        passes the gate (the owner's computer session, a fresh phone hand-off): 409 otherCommunity; node_roles,
+ *        libp2p_key, genesis.json and local-config.json as they were; no point, nothing left in the data folder;
  *     b. the same file with no take-over bundle inside: the same;
  *     c. "open with an owner's phone" there: 409, not 202; no file kept for the phone, no unlock started;
  *     d. onto a fresh server that was claimed (one owner, their own post, an enterprise): 200, the bundle applied, a
@@ -42,7 +39,7 @@
  *     h. a lived-in server whose genesis.json cannot be read: its own backup and the other community's are both 409,
  *        in their own words; nothing moved;
  *     i. the global profile, lived-in from its first sign-up: the other community's file is 409 there too.
- *  8. A plain archive naming a new owner, sent by the password with an earlier 2FA session, is refused 400 naming the
+ *  8. A plain archive naming a new owner, sent by an owner's key session, is refused 400 naming the
  *     command; no role moved, nothing extracted (#1984 confirmation 2, NON-BLOCKING 1: the last C6-shaped path).
  *
  * Run:
@@ -68,7 +65,6 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { localFetch } from './keepalive-test-fetch.js';
-import { pruneAuthAttempts } from './auth-rate-limit.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 // Unset: every section but S2b. s2b-a-i or s2b-b-h: that half of S2b alone (see the Run note above).
@@ -88,8 +84,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const sha = (b: Buffer | Uint8Array) => crypto.createHash('sha256').update(b).digest('hex');
-const MAIN_PW = 'Restore-Points-Main-Pw-7781!';
-const FRESH_PW = 'Restore-Points-Fresh-Pw-3302!';
 const PHOTO_KEY = 'posts/p-fresh/0-aabbccdd.jpg';
 
 /** Nothing leaves this machine: any request to a host that is not loopback fails at once, in the parent and every child. */
@@ -241,10 +235,8 @@ async function child(): Promise<void> {
         const { db } = await import('./db/db.js');
         const { ensureGenesis } = await import('./genesis.js');
         const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-        const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+        const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
         const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
         const { createSealedBackup } = await import('./services/sealed-backup.js');
         const { initTls } = await import('./services/tls.js');
@@ -254,16 +246,13 @@ async function child(): Promise<void> {
         initStateEngine();
         await ensureGenesis();
         fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-        const { hash, salt } = hashPassword(MAIN_PW);
-        updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
-        const tfa = turnOn2faForTests(MAIN_PW);
         const owner = edPublicKeyHex();
         seedGenesisMember(owner, 'Vera');
         const join = (callsign: string, treasury = false): string => {
             const pk = crypto.randomBytes(32).toString('hex');
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, is_treasury) VALUES (?, ?, ?, ?, 'TEST', ?)`)
                 .run(pk, callsign, new Date().toISOString(), owner, treasury ? 1 : 0);
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+            db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
             return pk;
         };
         if (scenario === 'lived-in') {
@@ -281,7 +270,8 @@ async function child(): Promise<void> {
             // Claimed and poked around in: the owner's own post and an enterprise, nobody else.
             db.prepare("UPDATE members SET avatar_ref = 'members/vera.jpg' WHERE public_key = ?").run(owner);
             try {
-                createPost('offer', 'general', "The owner's first post", 'Trying the server out', 1, 'fixed', owner);
+                // 1 Bean: the price is whole hundredths.
+                createPost('offer', 'general', "The owner's first post", 'Trying the server out', 100, 'fixed', owner);
                 result.post = (db.prepare('SELECT COUNT(*) AS n FROM posts WHERE author_pubkey = ?').get(owner) as { n: number }).n;
             } catch (e: any) { result.post = `ERR ${e?.message}`; }
             join('Vera & Co', true);
@@ -319,24 +309,12 @@ async function child(): Promise<void> {
             if (!ex.ok) throw new Error(`setup: no owner session: ${ex.error}`);
             return ex.sessionId!;
         };
-        const signIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
-        const tfaSession: string = signIn.json?.tfaSessionToken;
-        let clockOffsetMs = 0;
-        const realDateNow = Date.now;
-        Date.now = () => realDateNow() + clockOffsetMs;
-        const advancePastNextTotpStep = () => {
-            const stepMs = 30_000;
-            const current = Date.now();
-            const nextStepStart = (Math.floor(current / stepMs) + 1) * stepMs + 1000;
-            clockOffsetMs += (nextStepStart - current);
-        };
+        // The credentials that pass the restore's gate (an owner's, ownerOnly + requirePhoneStepUp). The node has no admin
+        // password (Marty, 11 Nov 2026): this list held the password with an earlier 2FA session, a password session and
+        // the password with a current code (in this 30-second step and the next) until then.
         const creds: Record<string, () => Record<string, string>> = {
-            'the password with an earlier 2FA session': () => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession }),
-            'a password session': () => ({ 'x-admin-session': createPasswordSession().sessionId }),
             "the owner's computer session": () => ({ 'x-admin-session': keySession(owner) }),
             'a fresh phone hand-off': () => ({ 'x-admin-session': keySession(owner, true) }),
-            'the password with a current code': () => tfa.headers(),
-            'the password with a current code in a later 30-second step': () => { advancePastNextTotpStep(); return tfa.headers(); },
         };
         // Read from the files, by a handle of its own: a server that took the file has closed its own.
         const state = () => {
@@ -351,7 +329,6 @@ async function child(): Promise<void> {
                 if (!b) return null;
                 try {
                     const c = JSON.parse(b.toString('utf8'));
-                    delete c.totpLastAcceptedStep;
                     return sha(Buffer.from(JSON.stringify(c)));
                 } catch {
                     return sha(b);
@@ -362,35 +339,34 @@ async function child(): Promise<void> {
         const otherFile = new Uint8Array(fs.readFileSync(process.env.TEST_OTHER_FILE!));
         const otherCode = process.env.TEST_OTHER_CODE!;
         const brief = (r: { status: number; json: any }) => ({ status: r.status, ...(r.json ?? {}) });
-        result.signIn = signIn.status;
         if (row.startsWith('a:')) {
             const before = state();
             const r = await call('POST', '/api/local/admin/restore', { ...creds[row.slice(2)](), 'X-Recovery-Code': otherCode }, otherFile);
             Object.assign(result, { answer: brief(r), before, after: state() });
         } else if (row === 'b') {
             const before = state();
-            const r = await call('POST', '/api/local/admin/restore', { ...creds['the password with an earlier 2FA session'](), 'X-Recovery-Code': otherCode },
+            const r = await call('POST', '/api/local/admin/restore', { ...creds["the owner's computer session"](), 'X-Recovery-Code': otherCode },
                 new Uint8Array(fs.readFileSync(process.env.TEST_OTHER_BARE!)));
             Object.assign(result, { answer: brief(r), before, after: state() });
         } else if (row === 'c') {
             const before = state();
             const r = await call('POST', '/api/local/admin/restore',
-                { ...creds['the password with an earlier 2FA session'](), 'X-Unlock-With': 'phone', 'X-Unlock-Server-Url': base }, otherFile);
+                { ...creds["the owner's computer session"](), 'X-Unlock-With': 'phone', 'X-Unlock-Server-Url': base }, otherFile);
             Object.assign(result, { answer: brief(r), before, after: state(),
                 pending: fs.readdirSync(dataDir).filter((f) => f.startsWith('uploaded-backup')) });
         } else if (row === 'd' || row === 'e' || row === 'e-suspended') {
             const before = state();
-            const r = await call('POST', '/api/local/admin/restore', { ...creds['the password with a current code'](), 'X-Recovery-Code': otherCode }, otherFile);
+            const r = await call('POST', '/api/local/admin/restore', { ...creds['a fresh phone hand-off'](), 'X-Recovery-Code': otherCode }, otherFile);
             let community: string | null = null;
             try { community = JSON.parse(read('genesis.json')!.toString('utf8')).communityId; } catch { /* unreadable */ }
             Object.assign(result, { answer: brief(r), before, after: state(), community });
         } else if (row === 'f') {
-            const r = await call('POST', '/api/local/admin/restore', { ...creds['the password with an earlier 2FA session'](), 'X-Recovery-Code': own.code }, new Uint8Array(ownFile!));
+            const r = await call('POST', '/api/local/admin/restore', { ...creds["the owner's computer session"](), 'X-Recovery-Code': own.code }, new Uint8Array(ownFile!));
             Object.assign(result, { answer: brief(r), after: state() });
         } else if (row === 'h-own' || row === 'h-other') {
             fs.writeFileSync(path.join(dataDir, 'genesis.json'), '{ this is not the community record');
             const before = state();
-            const r = await call('POST', '/api/local/admin/restore', { ...creds['the password with an earlier 2FA session'](),
+            const r = await call('POST', '/api/local/admin/restore', { ...creds["the owner's computer session"](),
                 'X-Recovery-Code': row === 'h-own' ? own.code : otherCode }, row === 'h-own' ? new Uint8Array(ownFile!) : otherFile);
             Object.assign(result, { answer: brief(r), before, after: state() });
         }
@@ -402,33 +378,32 @@ async function child(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { initTls } = await import('./services/tls.js');
     const httpsServer = await import('./https-server.js');
     const { setRestoreRestartForTests } = await import('./routes/backup.js');
     setRestoreRestartForTests(() => { /* the test inspects the data dir instead of restarting */ });
 
     initStateEngine();
-    let tfa: ReturnType<typeof turnOn2faForTests>;
+    // The fresh server's own owner, who restores onto it ('restore', 'full'). 'rollback' is the restored server after its
+    // restart: the main server's database, so the main server's owner (TEST_OWNER) rolls it back.
+    let freshOwner = '';
     if (scenario === 'restore' || scenario === 'full') {
-        // A server with its own community, its own node key, its own password and 2FA, its own member and photo.
+        // A server with its own community, its own node key, its own settings (local-config.json), its own owner (its
+        // genesis member) and photo.
         await ensureGenesis();
         fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-        const { hash, salt } = hashPassword(FRESH_PW);
-        updateLocalConfig({ adminHash: hash, salt });
-        tfa = turnOn2faForTests(FRESH_PW);
-        seedGenesisMember(crypto.randomBytes(32).toString('hex'), 'FreshServerRow');
+        updateLocalConfig({ callsign: 'FreshServerConfig' });
+        freshOwner = crypto.randomBytes(32).toString('hex');
+        seedGenesisMember(freshOwner, 'FreshServerRow');
         const photo = crypto.randomBytes(1800);
         fs.mkdirSync(path.dirname(path.join(dataDir, 'images', PHOTO_KEY)), { recursive: true });
         fs.writeFileSync(path.join(dataDir, 'images', PHOTO_KEY), photo);
         db.pragma('foreign_keys = OFF');
         db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, storage_key, sha256, bytes, mime) VALUES (?, NULL, 0, ?, ?, ?, 'image/jpeg')`)
             .run('p-fresh', PHOTO_KEY, sha(photo), photo.length);
-    } else {
-        // 'rollback': the restored server after its restart. It holds the main server's password; 2FA for this run.
-        tfa = turnOn2faForTests(MAIN_PW);
     }
     void seedGenesisMember; void grantNodeRole;
     await initTls();
@@ -447,7 +422,7 @@ async function child(): Promise<void> {
 
     if (scenario === 'restore') {
         const liveIno = fs.statSync(path.join(dataDir, 'images', PHOTO_KEY)).ino;
-        const r = await restore({ ...tfa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
+        const r = await restore({ ...ownerSessionHeaders(freshOwner), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
         result.status = r.status;
         result.body = r.body;
         const names = points();
@@ -480,21 +455,21 @@ async function child(): Promise<void> {
         const before = () => ({ key: sha(read('libp2p_key')!), callsigns: (db.prepare('SELECT callsign FROM members ORDER BY callsign').all() as any[]).map((r) => r.callsign) });
         result.before = before();
         failNextRestorePointForTests('ENOSPC');
-        const full = await restore({ ...tfa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
+        const full = await restore({ ...ownerSessionHeaders(freshOwner), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
         result.full = { status: full.status, body: full.body, after: before(), points: points(), leftovers: leftovers() };
         // A real full disk fails the point at its database copy, the VACUUM INTO, with better-sqlite3's SQLITE_FULL.
         failNextRestorePointForTests('SQLITE_FULL');
-        const sqliteFull = await restore({ ...tfa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
+        const sqliteFull = await restore({ ...ownerSessionHeaders(freshOwner), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
         result.sqliteFull = { status: sqliteFull.status, body: sqliteFull.body, after: before(), points: points(), leftovers: leftovers() };
         // A file where the restore points' folder should be: the filesystem itself refuses the point.
         fs.rmSync(pointsDir, { recursive: true, force: true });
         fs.writeFileSync(pointsDir, 'not a folder');
-        const blocked = await restore({ ...tfa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
+        const blocked = await restore({ ...ownerSessionHeaders(freshOwner), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE! });
         result.blocked = { status: blocked.status, body: blocked.body, after: before(), leftovers: leftovers(), stillAFile: fs.lstatSync(pointsDir).isFile() };
     }
 
     if (scenario === 'rollback') {
-        const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+        const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
         const owner = process.env.TEST_OWNER!;
         const admin = process.env.TEST_ADMIN!;
         const keySession = (pk: string, role: 'owner' | 'admin', phone = false): string => {
@@ -513,38 +488,50 @@ async function child(): Promise<void> {
             try { json = JSON.parse(text); } catch { /* not json */ }
             return { status: r.status, json };
         };
-        const listed = await call('GET', '/api/local/admin/restore-points', { 'x-admin-session': createPasswordSession().sessionId });
+        const listed = await call('GET', '/api/local/admin/restore-points', { 'x-admin-session': keySession(owner, 'owner') });
         result.listed = listed;
         const name = listed.json?.points?.[0]?.name;
         const state = () => ({ points: points(), key: sha(read('libp2p_key')!), callsigns: callsignsIn(path.join(dataDir, 'state.db')) });
         const before = state();
         result.before = before;
+        const configSha = () => { const b = read('local-config.json'); return b ? sha(b) : null; };
+        // The restored server's own local-config.json: the restore wrote the backup's recovery code record into it.
+        const configBefore = configSha();
         const stale = keySession(owner, 'owner', true);
         backdateAdminSessionForTests(stale, 91_000);
         const refusals: Record<string, unknown> = {};
         for (const [who, headers] of [
             ['admin', { 'x-admin-session': keySession(admin, 'admin') }],
-            ['password session, no code', { 'x-admin-session': createPasswordSession().sessionId }],
             ['computer', { 'x-admin-session': keySession(owner, 'owner') }],
             ['stale phone', { 'x-admin-session': stale }],
             ['no credential', {}],
         ] as Array<[string, Record<string, string>]>) {
             const r = await call('POST', '/api/local/admin/restore-points/roll-back', headers, { name });
-            refusals[who] = { status: r.status, code: r.json?.code, totpRequired: r.json?.totpRequired, error: r.json?.error, same: JSON.stringify(state()) === JSON.stringify(before) };
+            refusals[who] = { status: r.status, code: r.json?.code, error: r.json?.error, same: JSON.stringify(state()) === JSON.stringify(before) };
         }
         result.refusals = refusals;
-        const unknown = await call('POST', '/api/local/admin/restore-points/roll-back', { 'x-admin-session': createPasswordSession().sessionId },
-            { name: '2020-01-01T00-00-00.000Z-before-restore', code: tfa.code() });
+        const unknown = await call('POST', '/api/local/admin/restore-points/roll-back', { 'x-admin-session': keySession(owner, 'owner', true) },
+            { name: '2020-01-01T00-00-00.000Z-before-restore' });
         result.unknown = { status: unknown.status, error: unknown.json?.error };
-        const done = await call('POST', '/api/local/admin/restore-points/roll-back', { 'x-admin-session': createPasswordSession().sessionId }, { name, code: tfa.code() });
+        // The owner's phone, Manage pressed just now: the fresh proof a roll-back asks.
+        const done = await call('POST', '/api/local/admin/restore-points/roll-back', { 'x-admin-session': keySession(owner, 'owner', true) }, { name });
         result.done = done;
         result.after = { points: points(), key: sha(read('libp2p_key')!), callsigns: callsignsIn(path.join(dataDir, 'state.db')) };
         const own = points().find((n) => n.endsWith('-before-roll-back'));
         result.ownPointCallsigns = own ? callsignsIn(path.join(pointsDir, own, 'state.db')) : null;
         result.notices = fs.readdirSync(dataDir).filter((f) => f.startsWith('restore-notice-'))
             .map((f) => JSON.parse(fs.readFileSync(path.join(dataDir, f), 'utf8')));
-        const cfg = JSON.parse(read('local-config.json')!.toString('utf8'));
-        result.passwordIsFresh = (await import('./config/local-config.js')).verifyPassword(FRESH_PW, cfg.adminHash, cfg.salt);
+        // The server's own local-config.json, byte for byte as the point keeps it in its server files.
+        const unpacked = fs.mkdtempSync(path.join(os.tmpdir(), 'restore-point-tar-'));
+        let pointConfig: string | null;
+        try {
+            spawnSync('tar', ['-xzf', path.join(pointsDir, String(name), 'server-files.tar.gz'), '-C', unpacked]);
+            const f = path.join(unpacked, 'local-config.json');
+            pointConfig = fs.existsSync(f) ? sha(fs.readFileSync(f)) : null;
+        } finally {
+            fs.rmSync(unpacked, { recursive: true, force: true });
+        }
+        result.config = { before: configBefore, point: pointConfig, after: configSha() };
         result.leftovers = leftovers();
     }
     console.log('CHILD_RESULT ' + JSON.stringify(result));
@@ -586,10 +573,9 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
-    const { turnOn2faForTests, ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const { createSealedBackup } = await import('./services/sealed-backup.js');
     const snapshots = await import('./services/snapshot-scheduler.js');
@@ -602,15 +588,12 @@ async function main(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const { hash, salt } = hashPassword(MAIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
-    let tfa = turnOn2faForTests(MAIN_PW);
     const owner = crypto.randomBytes(32).toString('hex');
     const admin = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(owner, 'Olive');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(admin, 'Adam', new Date().toISOString(), owner, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
     grantNodeRole(admin, 'admin', owner);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run('ab'.repeat(32), 'RoundTripMarker', new Date().toISOString(), owner, 'TEST');
@@ -679,8 +662,6 @@ async function main(): Promise<void> {
             `3. the owner lists the restore point (${rb.listed?.status} ${JSON.stringify(rb.listed?.json).slice(0, 160)})`);
         const ref = rb.refusals ?? {};
         assert(ref['admin']?.status === 403 && ref['admin'].same, `3. an admin is refused, nothing changed (${JSON.stringify(ref['admin'])})`);
-        assert(ref['password session, no code']?.status === 401 && ref['password session, no code'].totpRequired === true && ref['password session, no code'].same,
-            `3. a password session without a code: 401 totpRequired, nothing changed (${JSON.stringify(ref['password session, no code'])})`);
         assert(ref['computer']?.status === 403 && ref['computer'].code === 'phone_required' && ref['computer'].same,
             `3. an owner's computer session: 403 phone_required, nothing changed (${JSON.stringify(ref['computer'])})`);
         assert(ref['stale phone']?.status === 403 && ref['stale phone'].code === 'step_up_required' && ref['stale phone'].same,
@@ -688,11 +669,12 @@ async function main(): Promise<void> {
         assert(ref['no credential']?.status === 401 && ref['no credential'].same, `3. no credential: 401 (${JSON.stringify(ref['no credential'])})`);
         assert(rb.unknown?.status === 404, `3. a point that is not there: 404 (${JSON.stringify(rb.unknown)})`);
         assert(rb.done?.status === 200 && rb.done.json?.success === true && rb.done.json?.rolledBackTo === name,
-            `3. with a current code the owner rolls back (${rb.done?.status} ${JSON.stringify(rb.done?.json).slice(0, 200)})`);
+            `3. from the phone, Manage pressed just now, the owner rolls back (${rb.done?.status} ${JSON.stringify(rb.done?.json).slice(0, 200)})`);
         assert(rb.after?.callsigns?.includes('FreshServerRow') && !rb.after.callsigns.includes('RoundTripMarker'),
             `3. the planted row is back, the backup's rows gone (${JSON.stringify(rb.after?.callsigns)})`);
         assert(rb.after?.key === rs.keyBefore, '3. the old node key is back');
-        assert(rb.passwordIsFresh === true, "3. and so is the server's own admin password (local-config.json from the point)");
+        assert(!!rb.config?.point && rb.config.after === rb.config.point && rb.config.before !== rb.config.point,
+            `3. and so is the server's own local-config.json, byte for byte as the point keeps it (the restore had changed it) (${JSON.stringify(rb.config)})`);
         const own = (rb.after?.points ?? []).filter((n: string) => n.endsWith('-before-roll-back'));
         assert(own.length === 1 && rb.after.points.includes(name) && rb.done.json?.restorePoint?.name === own[0],
             `3. it took a point of its own first, and the one it rolled back to is still there (${JSON.stringify(rb.after?.points)})`);
@@ -753,13 +735,11 @@ async function main(): Promise<void> {
             return { status: 0, text: String(e?.message || e), json: null };
         }
     }
-    const signIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
-    let tfaSession: string = signIn.json?.tfaSessionToken;
-    assert(signIn.status === 200 && typeof tfaSession === 'string', `setup: the password and a code sign in, with a 2FA session (${signIn.status})`);
-    const earlier2fa = (): Record<string, string> => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession });
+    // An owner's key session, as a computer's key sign-in opens one: it passes the restore's gate (sections 7 and 8).
+    const asOwner = (): Record<string, string> => ({ 'x-admin-session': keySession(owner, 'owner') });
 
     // ── 7. The code brake ──
-    console.log('\n── 7. wrong codes from one source, each with the right password, meet the source rule ──');
+    console.log('\n── 7. wrong codes from one source, each with an owner\'s key session, meet the source rule ──');
     {
         const core = await import('@beanpool/core');
         const wrongCode = (await core.createRecoveryCode(code.codeId)).code;
@@ -768,16 +748,16 @@ async function main(): Promise<void> {
         let held: any = null;
         const statuses: number[] = [];
         for (let i = 1; i <= 30; i++) {
-            // The password brake is kept between these requests: it is the one under test.
-            const r = await call('POST', '/api/local/admin/restore', { ...earlier2fa(), 'X-Recovery-Code': wrongCode }, undefined, bytes, true);
+            // The brake is kept between these requests: it is the one under test.
+            const r = await call('POST', '/api/local/admin/restore', { ...asOwner(), 'X-Recovery-Code': wrongCode }, undefined, bytes, true);
             statuses.push(r.status);
             if (r.status === 429) { heldAt = i; held = r.json; break; }
             if (r.status !== 403 || r.json?.wrongCode !== true) break;
         }
         assert(heldAt > 1 && held?.reason === 'source' && held?.passwordBackoff === true,
-            `7. held by the source rule after ${heldAt - 1} wrong codes, each sent with the right password (429, reason ${held?.reason}; ${statuses.join(',')})`);
+            `7. held by the source rule after ${heldAt - 1} wrong codes, each sent with an owner's key session (429, reason ${held?.reason}; ${statuses.join(',')})`);
         assert(/^Too many wrong recovery codes from your network\. Try again in \d+s\.$/.test(held?.error || '') && !/password/i.test(held?.error || ''),
-            `7. …and says it is the recovery codes, not the password (${held?.error})`);
+            `7. …and says it is the recovery codes, never a password (${held?.error})`);
     }
 
     // ── 5. No route removes a point ──
@@ -817,9 +797,7 @@ async function main(): Promise<void> {
             ['an admin automation token', () => adminToken],
             ['an owner key session (computer)', () => ({ 'x-admin-session': keySession(owner, 'owner') })],
             ['an owner key session (phone, 91 s)', () => { const s = keySession(owner, 'owner', true); backdateAdminSessionForTests(s, 91_000); return { 'x-admin-session': s }; }],
-            ['a password session', () => ({ 'x-admin-session': createPasswordSession().sessionId })],
             ['an owner key session (phone, just unlocked)', () => ({ 'x-admin-session': keySession(owner, 'owner', true) })],
-            ['the owner password with a code', () => tfa.headers()],
         ];
         const fill = (p: string) => p.replace(/:[A-Za-z]+/g, encodeURIComponent(name));
         const bait = {
@@ -832,28 +810,14 @@ async function main(): Promise<void> {
         let rolledBack = 0;
         const changedAfter: string[] = [];
         const pinChangedAfter: string[] = [];
-        let passwordRowRefused = 0;
         for (const [who, headers] of credentials) {
             for (const [m, p] of routes) {
                 // The roll-back with a proof that passes is the one route meant to add a point (row 3 runs it, in a child).
-                const proven = who.includes('just unlocked') || who.includes('with a code');
+                const proven = who.includes('just unlocked');
                 if (p === '/api/local/admin/restore-points/roll-back' && proven) { rolledBack++; continue; }
                 const h = headers();
-                const body = proven && m !== 'GET' ? { ...bait, code: tfa.code() } : bait;
                 const q = m === 'GET' || m === 'DELETE' ? `?name=${encodeURIComponent(name)}&path=${encodeURIComponent(`restore-points/${name}`)}` : '';
-                if (p === '/api/local/admin/2fa/disable') {
-                    pruneAuthAttempts(Date.now() + 61_000);
-                }
-                const res = await call(m, fill(p) + q, h, body);
-                if (p === '/api/local/admin/2fa/disable') {
-                    if (who === 'an owner key session (phone, just unlocked)') {
-                        assert(res.status === 200, `5. 2fa/disable with owner phone session must return 200 (got ${res.status} ${res.text})`);
-                    }
-                    // A proven 2fa/disable turns 2FA off: on again at once, so the routes after it, and the password-with-a-code
-                    // row, run with 2FA on, as on main.
-                    if (res.status === 200) tfa = turnOn2faForTests(MAIN_PW);
-                }
-                if (who.includes('password with a code') && res.status === 403 && String(res.text).includes('password_needs_2fa')) passwordRowRefused++;
+                await call(m, fill(p) + q, h, bait);
                 sent++;
                 const now = JSON.stringify(treeOf(pointsDir));
                 if (now !== JSON.stringify(before) && changedAfter.length < 5) changedAfter.push(`${who}: ${m} ${p}`);
@@ -863,20 +827,12 @@ async function main(): Promise<void> {
                 }
             }
         }
-        assert(sent > routes.length * credentials.length - credentials.length - 1 && rolledBack === 2,
-            `the sweep sent ${sent} requests (${routes.length} routes × ${credentials.length} credentials, the proven roll-back skipped twice)`);
+        assert(sent > routes.length * credentials.length - credentials.length - 1 && rolledBack === 1,
+            `the sweep sent ${sent} requests (${routes.length} routes × ${credentials.length} credentials, the proven roll-back skipped once)`);
         assert(JSON.stringify(treeOf(pointsDir)) === JSON.stringify(before) && changedAfter.length === 0,
             `5. the restore point is byte for byte as it was (${changedAfter.join(' | ') || 'no request changed it'})`);
-        assert(passwordRowRefused === 0, `5. the owner password with a code reaches every route: 2FA stays on through the sweep (${passwordRowRefused} refused as 'password_needs_2fa')`);
         assert(pinChangedAfter.length === 0, `5. (case 19 g) data/standby-main.json is byte for byte as it was after every request: no route writes or removes it (${pinChangedAfter.join(' | ') || 'none changed it'})`);
         unpinMainServerForTests(dataDir!);
-        // 2FA is back on after each proven 2fa/disable (above); turn it on once more and sign in again, so sections 6 and 8
-        // start with 2FA on and section 8's earlier2fa reads a fresh session.
-        tfa = turnOn2faForTests(MAIN_PW);
-        pruneAuthAttempts(Date.now() + 61_000);
-        const reSignIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
-        tfaSession = reSignIn.json?.tfaSessionToken;
-        assert(reSignIn.status === 200 && typeof tfaSession === 'string', `setup: 2FA re-enabled for sections 6 and 8 (${reSignIn.status})`);
     }
 
     // ── 6. Retention ──
@@ -898,8 +854,8 @@ async function main(): Promise<void> {
         const week = [2, 3, 4, 5, 6].map((h) => plant(now - h * 3_600_000));
         const eightDays = plant(now - 8 * DAY);
         const old = plant(now - 31 * DAY);
-        const cfg = await call('POST', '/api/local/admin/snapshots/config', { 'x-admin-session': createPasswordSession().sessionId }, { keep: 3, code: tfa.code() });
-        assert(cfg.status === 200 && cfg.json?.config?.keep === 3, `6. the owner sets snapshots keep:3, with a code (${cfg.status} ${cfg.text.slice(0, 120)})`);
+        const cfg = await call('POST', '/api/local/admin/snapshots/config', { 'x-admin-session': keySession(owner, 'owner', true) }, { keep: 3 });
+        assert(cfg.status === 200 && cfg.json?.config?.keep === 3, `6. the owner sets snapshots keep:3, from the phone (${cfg.status} ${cfg.text.slice(0, 120)})`);
         snapshots.expireSnapshots();
         const left = fs.readdirSync(pointsDir);
         assert(left.includes(oneDay), '6. keep:3 and the hourly expiry leave a 1-day-old point');
@@ -922,7 +878,7 @@ async function main(): Promise<void> {
     }
 
     // ── 8. The plain archive naming a new owner (last: on a server that takes it, it replaces this process's database) ──
-    console.log('\n── 8. a plain archive naming a new owner, by the password and an earlier 2FA session ──');
+    console.log('\n── 8. a plain archive naming a new owner, by an owner\'s key session ──');
     {
         const copy = path.join(work, 'mallory-state.db');
         db.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`);
@@ -935,7 +891,7 @@ async function main(): Promise<void> {
         const plain = makeTarGz([{ name: './state.db', content: fs.readFileSync(copy) }, { name: './node_config.json', content: Buffer.from('{}') }]);
         const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey, role').all());
         const rolesBefore = roles();
-        const r = await call('POST', '/api/local/admin/restore', earlier2fa(), undefined, plain);
+        const r = await call('POST', '/api/local/admin/restore', asOwner(), undefined, plain);
         assert(r.status === 400 && r.json?.notLocked === true && r.json?.command === 'beanpool restore --unlocked FILE'
             && r.json?.error === 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked. '
                 + 'An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE`. Nothing was changed.',
@@ -992,18 +948,14 @@ async function sectionS2b(work: string, childEnv: Record<string, string>, part: 
 
         if (part === 's2b-a-i') {
             for (const who of [
-                'the password with an earlier 2FA session',
-                'a password session',
                 "the owner's computer session",
                 'a fresh phone hand-off',
-                'the password with a current code',
-                'the password with a current code in a later 30-second step',
             ]) {
                 const r = row('lived-in', `a:${who}`);
-                assert(r.signIn === 200 && refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
+                assert(refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
                 assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${diffMoved(r)})`);
             }
-            const g = row('lived-in', 'a:the password with an earlier 2FA session', { NODE_PROFILE: 'global' });
+            const g = row('lived-in', "a:the owner's computer session", { NODE_PROFILE: 'global' });
             assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)}, ${diffMoved(g)})`);
         } else {
             const b = row('lived-in', 'b');

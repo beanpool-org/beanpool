@@ -94,18 +94,20 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
 
     it("the member's own Ledger reads Example Valley in preview: 85 Beans, floor −200, level 2, six rows with the held deal's, no Ʀ", async () => {
         const { sampleBalance, sampleTransactions } = await import('../../components/showcase/sample-screens');
-        const { memberLevel, SAMPLE_COMMUNITY: S } = await import('@beanpool/core');
+        const { beans, memberLevel, SAMPLE_COMMUNITY: S } = await import('@beanpool/core');
         const b = sampleBalance();
-        expect(b).toMatchObject({ balance: 85, floor: -200, frozen: false, activated: true, commons: 640, liveOffers: 1 });
-        expect(memberLevel(b)).toEqual({ index: 1, credit: 200 });
+        // Every figure whole hundredths of a Bean (`*_c`), as db.ts getBalance answers them: 85, −200 and 640 Beans.
+        expect(b).toMatchObject({ balance_c: 8500, floor_c: -20000, frozen: false, activated: true, commons_c: 64000, liveOffers: 1 });
+        expect(memberLevel(b)).toEqual({ index: 1, credit: 20000 });
         // The Levels card's figures are the sample's own, the ones the web's Ledger reads (one source in core).
-        expect(b).toMatchObject({ tierCredit: S.trust, earnedCredit: S.trust, qualifiedValue: S.valueTraded,
+        expect(b).toMatchObject({ tierCredit_c: beans(S.trust), earnedCredit_c: beans(S.trust), qualifiedValue_c: beans(S.valueTraded),
             avgRating: S.rating, reviewCount: S.reviews, trustStats: { uniquePartners: S.partners } });
         const rows = sampleTransactions();
         expect(rows).toHaveLength(6);
         for (const r of rows) {
             expect(r.id).toMatch(/^sample-/);
-            expect(r.amount).toBeGreaterThan(0);
+            expect(r.amount_c).toBeGreaterThan(0);
+            expect(Number.isSafeInteger(r.amount_c)).toBe(true);
             expect(r.peer).toMatch(/^(a neighbour|the Commons|the Example Valley Bakery)$/);
         }
         // No circulation fee row (a member at 85 Beans never pays one). The held deal's Beans went out to trust yesterday,
@@ -113,7 +115,7 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
         expect(rows.map(r => r.type)).toEqual(['credit', 'debit', 'debit', 'credit', 'credit', 'debit']);
         const held = S.deals.find(d => d.state === 'pending')!;
         expect(rows.filter(r => r.memo.startsWith('Held in trust'))).toEqual([
-            { id: 'sample-tx-bike-held', type: 'debit', amount: held.amount, peer: 'a neighbour', memo: `Held in trust · ${held.what}`, timestamp: 'yesterday' },
+            { id: 'sample-tx-bike-held', type: 'debit', amount_c: beans(held.amount), fee_c: 0, peer: 'a neighbour', memo: `Held in trust · ${held.what}`, timestamp: 'yesterday' },
         ]);
         expect(held.amount).toBe(S.inEscrow);
         expect(rows.some(r => /fee/i.test(r.memo))).toBe(false);

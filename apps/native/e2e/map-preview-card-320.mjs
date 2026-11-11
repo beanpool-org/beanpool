@@ -162,12 +162,19 @@ const ground = scheme === 'dark' ? '#242f3e' : '#e8eaed';
 const DAY = 86400000;
 const iso = (ms) => new Date(ms).toISOString();
 const now = Date.now();
+// Rows of the phone's copy (db.ts posts): price_c and author_energy_cycled (the author's tier credit) in whole hundredths,
+// so Kofi's 12,000 is an Elder's (core TIER_LEVELS starts Elder at 140000) and 700 a Steward's (from 60000).
 const CASES = {
     offer: { id: 'p-eggs', type: 'offer', status: 'active', title: 'Fresh duck eggs', category: 'food', repeatable: 1,
-        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 12000, credits: 5, price_type: 'fixed', photos: [] },
+        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 1200000, price_c: 500, price_type: 'fixed', photos: [] },
     need: { id: 'p-ladder', type: 'need', status: 'active', title: 'Borrow a long ladder for the gutters', category: 'tools',
-        author_pubkey: 'my-own-member-key', author_callsign: 'Kim', author_energy_cycled: 700, credits: 3, price_type: 'daily', photos: [],
+        author_pubkey: 'my-own-member-key', author_callsign: 'Kim', author_energy_cycled: 70000, price_c: 350, price_type: 'daily', photos: [],
         audience_scope: 'group', target_group_name: 'Mullum Gardeners' },
+    // Priced at 0 the card says Free in the price's place: no Beans sign, no figure, no unit (core listing-price.ts).
+    freeOffer: { id: 'p-lemons', type: 'offer', status: 'active', title: 'Windfall lemons, take what you like', category: 'food',
+        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 70000, price_c: 0, price_type: 'fixed', photos: [] },
+    freeNeed: { id: 'p-harvest', type: 'need', status: 'active', title: 'Invites to harvest any sort of spray free food', category: 'food',
+        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 70000, price_c: 0, price_type: 'hourly', photos: [] },
     going: { id: 'ev-twilight', type: 'event', status: 'active', title: 'Byron Bay Twilight Market - Every Saturday', category: 'events',
         author_pubkey: 'byron-key', author_callsign: 'Byron Markets', event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 5 * 3600000),
         event_state: 'scheduled', event_place_name: 'Railway Park, Jonson Street, Byron Bay', myRsvp: 'going', goingCount: 0, interestedCount: 0, photos: [] },
@@ -246,6 +253,7 @@ for (const scheme of ['light', 'dark']) {
                     buttonsInside: card.querySelectorAll('[role="button"]').length,
                     buttons: frame.querySelectorAll('[role="button"]').length,
                     text: card.innerText.split('\n').filter(Boolean),
+                    beanImages: Array.from(card.querySelectorAll('img')).filter((i) => i.getAttribute('aria-hidden') === 'true' || i.getAttribute('data-testid') === null).filter((i) => /bean/i.test(i.currentSrc || i.src) || i.src.startsWith('data:image/png')).length,
                 };
             }),
         };
@@ -261,6 +269,12 @@ for (const scheme of ['light', 'dark']) {
         if (c.closeSize[0] !== 28 || c.closeSize[1] !== 28 || Math.abs(c.closeTop - 8) > 0.5 || Math.abs(c.closeRight - 8) > 0.5) fail(`${c.id}: the ✕ is ${c.closeSize} at ${c.closeTop} / ${c.closeRight} from the corner`);
         if (c.headRight > c.closeLeft + 0.5) fail(`${c.id}: the first row runs under the ✕ (${c.headRight} > ${c.closeLeft})`);
         if (c.text.some(l => /View (event|Details|listing)/.test(l))) fail(`${c.id}: a View button's words are on the card`);
+        // A free listing reads "Free" on a line of its own, never "0" or "Free /Hr"; a priced one is left alone.
+        if (c.id.startsWith('free')) {
+            if (!c.text.includes('Free')) fail(`${c.id}: no "Free" price on the card [${c.text.join(' | ')}]`);
+            if (c.text.some(l => /^0(\D|$)|Free\s*\/|\/\s*(Hr|Dy|Wk|Mo)/i.test(l))) fail(`${c.id}: a figure or a unit is drawn beside Free [${c.text.join(' | ')}]`);
+            if (c.beanImages) fail(`${c.id}: the Beans sign is drawn beside Free`);
+        } else if (c.text.includes('Free')) fail(`${c.id}: a priced card says Free`);
         if (c.text.some(l => /(^|\D)0 (going|interested)/.test(l))) fail(`${c.id}: a zero count is drawn`);
         // The check must be able to fail: Marty's shot of 4 Nov read "👥 0 going".
         if (!/(^|\D)0 (going|interested)/.test('👥 0 going')) fail('the zero-count check cannot see a zero count');

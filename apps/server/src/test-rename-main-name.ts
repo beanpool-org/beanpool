@@ -14,9 +14,9 @@
  *     become one. A name the community then lets go (Release, Take offline) is no longer published, and is accepted
  *     through its hold as a former name is.
  *  4. Fresh proof for a claim whenever the node already publishes an address (design §6): refused with nothing asked of
- *     the address service, on each way a node publishes one; a computer's session is sent to the phone, and the password
- *     is asked for a current code. A first claim on a node with no address, or the same name again, stays plain, and a
- *     name that is no address label is refused before any proof is spent.
+ *     the address service, on each way a node publishes one; a computer's session is sent to the phone. A first claim on
+ *     a node with no address, or the same name again, stays plain, and a name that is no address label is refused before
+ *     any proof is spent.
  *  5. The members' notice: the soft words once, when the new name is live and the old one really keeps working; never
  *     while it waits, and never twice; no address in what is pushed. A live tunnel name with no token saved has no tunnel to
  *     keep, so it keeps the critical words.
@@ -158,11 +158,10 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { getLocalConfig, hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { setSecurityAlertHandler } = await import('./services/security-signal.js');
     const { audienceStanding, forgetOwnAddresses, primaryAddress, publishedAddresses, formerAddresses, ownerConfirmedAddresses } = await import('./engine/own-addresses.js');
     const { reconcile, tick } = await import('./services/public-address-agent.js');
@@ -176,9 +175,7 @@ async function main(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const PW = 'Rename-Main-Name-Pw-7741!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Mullumbimby', callsign: 'MULLUM' } as any);
+    updateLocalConfig({ communityName: 'Mullumbimby', callsign: 'MULLUM' } as any);
 
     // The owner: a real key, so a request signed for a host goes through the real signature middleware.
     const seed = new Uint8Array(crypto.randomBytes(32));
@@ -189,7 +186,7 @@ async function main(): Promise<void> {
     const memberKey = crypto.randomBytes(32).toString('hex');
     db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
         .run(memberKey, 'Mia', new Date().toISOString(), owner, 'TEST');
-    db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
+    db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
     putPushTokenRow(memberKey, 'ExponentPushToken[rename-main-name]', 'android');
 
     const session = (phone = false) => {
@@ -247,7 +244,21 @@ async function main(): Promise<void> {
 
     const notes: any[] = [];
     setSecurityAlertHandler((n) => { notes.push(n); });
-    const notices = () => db.prepare("SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid").all() as Array<{ title: string; body: string }>;
+    /**
+     * What the members were told, one row per telling. Every member told keeps their own copy, a phone or not (the bell,
+     * web notifications W0), so the table holds one row per member per telling: the tellings are Mia's rows (her phone is
+     * the one buzzed, the only rows before the bell), and every other member told must hold exactly the same. One who
+     * doesn't (told twice, told what Mia wasn't, told alone) answers the whole table instead, which fails every count here.
+     */
+    const notices = () => {
+        const rowsOf = (pk: string) => db.prepare("SELECT title, body FROM push_notices WHERE kind = 'community.notice' AND recipient = ? ORDER BY rowid")
+            .all(pk) as Array<{ title: string; body: string }>;
+        const told = (db.prepare("SELECT DISTINCT recipient FROM push_notices WHERE kind = 'community.notice'").all() as Array<{ recipient: string }>)
+            .map((r) => r.recipient);
+        const mia = rowsOf(memberKey);
+        const alike = told.every((pk) => JSON.stringify(rowsOf(pk)) === JSON.stringify(mia));
+        return alike ? mia : db.prepare("SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid").all() as Array<{ title: string; body: string }>;
+    };
     /** Forget everything of the scene before: a node as `scene` says, with what it holds at the address service. */
     const scene = (s: { cf?: string; env?: string; config?: Record<string, unknown>; names?: string[] } = {}) => {
         delete process.env.CF_RECORD_NAME;
@@ -395,17 +406,6 @@ async function main(): Promise<void> {
     scene({ cf: MULLUM });
     const noLabel = await post(CLAIM, computer(), { name: 'no', mode: 'tunnel' });
     assert(noLabel.status === 400, `a name that is no address label: 400 before any proof is spent (${noLabel.status} ${show(noLabel.json)})`);
-    {
-        const totp = turnOn2faForTests(PW);
-        scene({ cf: MULLUM });
-        const was = claimsAsked;
-        const noCode = await post(CLAIM, { 'X-Admin-Password': PW, 'X-Admin-TOTP': totp.code() }, { name: 'byron', mode: 'tunnel' });
-        assert(noCode.status === 200 && claimsAsked === was + 1, `the password with a current code goes through (${noCode.status} ${show(noCode.json)})`);
-        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
-        scene({ cf: MULLUM });
-        const noTwoFactor = await post(CLAIM, { 'X-Admin-Password': PW }, { name: 'byron', mode: 'tunnel' });
-        assert(noTwoFactor.status !== 200 && claimsAsked === was + 1, `the password alone with 2FA off fails closed: nothing asked of the address service (${noTwoFactor.status} ${show(noTwoFactor.json)})`);
-    }
 
     // ── 5 ──
     console.log('\n— 5. the members\' notice —');

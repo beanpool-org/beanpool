@@ -170,7 +170,8 @@ export function signedRequestText(f: RequestFields & { host: string }): string {
 
 /**
  * The text of an old-format request, bound to no community: `METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY`, signed as plain
- * UTF-8. Servers accept it only until the switch. Kept here so verifiers and tests of the old apps state it once.
+ * UTF-8. Servers from 1.4.0 refuse a request in this shape without checking it (426 app_too_old, CUT4). Kept here so
+ * tests of the old apps state it once.
  */
 export function unboundRequestText(f: RequestFields): string {
     return `${f.method}\n${f.path}\n${f.timestamp}\n${f.nonce}\n${f.body}`;

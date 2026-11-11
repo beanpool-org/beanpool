@@ -28,7 +28,6 @@ delete process.env.NODE_ROLE;
 delete process.env.NODE_PROFILE;
 delete process.env.EXPO_ACCESS_TOKEN;
 const ADMIN_PW = 'PushNoticesAdmin123!';
-process.env.ADMIN_PASSWORD = ADMIN_PW; // the announcement route is the operator's
 let ADMIN: Record<string, string> = {};
 
 import crypto from 'node:crypto';
@@ -40,6 +39,7 @@ import {
     PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, ed25519KeyOfPeerId, isPushNoticeKind, pushNoticeWords, verifyPushNotice,
     type PushNoticeKind,
 } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Everything this process prints, so section 5 can look for a push token in it.
 const printed: string[] = [];
@@ -83,7 +83,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -113,8 +114,6 @@ async function main() {
     // Absent on a tree without them: the checks that need them fail, and the rest still run.
     const notices: any = await import('./engine/push-notices.js').catch(() => null);
 
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     ADMIN = (await import('./admin-auth-test-harness.js')).ownerTokenHeaders('admin');
@@ -160,7 +159,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                     VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * DAY).toISOString(), owner.pk);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const ann = member('AnnSecretname'), bob = member('BobSecretname'), cat = member('CatSecretname');
@@ -223,19 +222,20 @@ async function main() {
         // The table and the senders agree: every kind is sent by someone, and nobody sends a kind that isn't in the table.
         const srcDir = path.dirname(fileURLToPath(import.meta.url));
         const named = new Set<string>();
-        const KIND = String.raw`(?:chat|group|market|trade|review|event|community|account|owner|decision)\.[a-z-]+`;
+        const KIND = String.raw`(?:chat|group|market|trade|review|event|community|account|owner|decision|join)\.[a-z-]+`;
         const walk = (dir: string) => {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) { if (entry.name !== 'node_modules') walk(full); continue; }
                 if (!entry.name.endsWith('.ts') || entry.name.startsWith('test-') || entry.name.includes('-harness') || entry.name === 'push-notices.ts') continue;
                 const text = fs.readFileSync(full, 'utf8');
-                for (const m of text.matchAll(/dispatchPushNotification\(([\s\S]*?)\);/g)) {
+                // Either entry: the dispatcher, or deliverPushNotices, the same send answering how many members were told.
+                for (const m of text.matchAll(/(?:dispatchPushNotification|deliverPushNotices)\(([\s\S]*?)\)(?:;|\.told)/g)) {
                     for (const k of m[1].matchAll(new RegExp(`'(${KIND})'`, 'g'))) named.add(k[1]);
                 }
                 // A kind on a line of its own (a table of kinds) counts only in a file that sends or types push notices, so a
                 // file name like 'community.key' in an unrelated list isn't read as a kind.
-                if (/dispatchPushNotification|PushNoticeKind|push-notices/.test(text)) {
+                if (/dispatchPushNotification|deliverPushNotices|PushNoticeKind|push-notices/.test(text)) {
                     for (const k of text.matchAll(new RegExp(`^\\s*'(${KIND})',?\\s*$`, 'gm'))) named.add(k[1]);
                     // A sender handed in as `push` (dispatchPushNotification by default, a spy in a suite): the kinds in a call
                     // to it, as in a call to the dispatcher itself. Never an array's .push.

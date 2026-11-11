@@ -145,28 +145,29 @@ const keepers = [
 function membersView(over: Record<string, unknown> = {}) {
     return {
         publicKey: ENT, name: NAME, purpose: 'Fixing things so they last.', lifecycle: 'ongoing', status: 'active', paused: false,
-        balance: 12, creditLine: 50, liveOffers: 3, earnedSurplus: 4, workingCapitalCeiling: null,
-        isLeadOrSoleKeeperOrAdmin: false, availableToBack: 0,
+        // Every figure whole hundredths of a Bean (`*_c`), as GET /api/treasury/:id sends them: 12 held, a credit line of 50.
+        balance_c: 1200, creditLine_c: 5000, liveOffers: 3, earnedSurplus_c: 400, workingCapitalCeiling_c: null,
+        isLeadOrSoleKeeperOrAdmin: false, availableToBack_c: 0,
         about: ABOUT, since: '2026-09-03T10:00:00.000Z', offerCategories: ['food', 'repairs'],
         shop: { id: SHOP_ID, category: 'tech', counts: { things: 3 }, name: NAME, ownerPublicKey: ENT, ownerName: NAME, enterprise: true, blurb: null, howToDeal: HOW, paused: false, backOn: null, openedAt: iso(Date.now()) },
         keepers,
         keeperRequests: [], keeperChanges: [], deferredClaims: [],
-        posts: [{ id: 'old-1', type: 'offer', category: 'repairs', title: 'Text-only listing', credits: 5, price_type: 'fixed', status: 'active' }],
+        posts: [{ id: 'old-1', type: 'offer', category: 'repairs', title: 'Text-only listing', price_c: 500, price_type: 'fixed', status: 'active' }],
         flow: [], pendingBids: [], activeDeals: [],
         ...over,
     };
 }
-/** What `author=` answers: its Offers with photos and stamps, and one Need. */
+/** What `author=` answers: its Offers with photos and stamps, and one Need; each price whole hundredths (price_c). */
 const LISTINGS = [
-    { id: 'p1', type: 'offer', category: 'repairs', title: 'Puncture fixed', credits: 5, priceType: 'fixed', status: 'active', featuredAt: '2026-10-21T00:00:00.000Z', shopId: SHOP_ID, photos: ['/api/marketplace/posts/p1/photos/0'] },
-    { id: 'p2', type: 'offer', category: 'electronics', title: 'Phone screen', credits: 30, priceType: 'fixed', status: 'active', featuredAt: '2026-10-22T00:00:00.000Z', shopId: SHOP_ID },
-    { id: 'p3', type: 'offer', category: 'repairs', title: 'Bike service', credits: 3, priceType: 'hourly', status: 'active', shopId: SHOP_ID },
-    { id: 'n1', type: 'need', category: 'tools', title: 'A workbench', credits: 0, priceType: 'fixed', status: 'active' },
+    { id: 'p1', type: 'offer', category: 'repairs', title: 'Puncture fixed', price_c: 500, priceType: 'fixed', status: 'active', featuredAt: '2026-10-21T00:00:00.000Z', shopId: SHOP_ID, photos: ['/api/marketplace/posts/p1/photos/0'] },
+    { id: 'p2', type: 'offer', category: 'electronics', title: 'Phone screen', price_c: 3000, priceType: 'fixed', status: 'active', featuredAt: '2026-10-22T00:00:00.000Z', shopId: SHOP_ID },
+    { id: 'p3', type: 'offer', category: 'repairs', title: 'Bike service', price_c: 300, priceType: 'hourly', status: 'active', shopId: SHOP_ID },
+    { id: 'n1', type: 'need', category: 'tools', title: 'A workbench', price_c: 0, priceType: 'fixed', status: 'active' },
 ];
 function community(over: Record<string, unknown> = {}, listings: unknown = LISTINGS): (name: string, args: unknown[]) => Promise<unknown> | undefined {
     const answers: Record<string, unknown> = {
         getTreasuryDetail: membersView(),
-        getBalance: { balance: 10, keeperOf: [] },
+        getBalance: { balance_c: 1000, keeperOf: [] },
         getEnterpriseThread: { conversation: null, messages: [], readOnly: false },
         getEnterpriseLedger: null,
         getEnterpriseDecisions: null,
@@ -328,7 +329,7 @@ for (const dark of [false, true]) {
         });
 
         it("a project keeps its goal card above About, says who runs it, and Message names its leader", async () => {
-            net.answer = community({ getTreasuryDetail: membersView({ name: 'Village Hall Roof', lifecycle: 'bounded', goalAmount: 500, currentAmount: 40 }) });
+            net.answer = community({ getTreasuryDetail: membersView({ name: 'Village Hall Roof', lifecycle: 'bounded', goalAmount_c: 50000, currentAmount_c: 4000 }) });
             params.now = { publicKey: ENT, name: 'Village Hall Roof' };
             await renderIn();
             expect(byId('shopfront-keepers')?.textContent).toContain('Run by');
@@ -351,7 +352,7 @@ for (const dark of [false, true]) {
             });
             afterEach(() => { vi.useRealTimers(); });
             const roof = (over: Record<string, unknown>) =>
-                community({ getTreasuryDetail: membersView({ name: 'Village Hall Roof', lifecycle: 'bounded', goalAmount: 500, currentAmount: 40, ...over }) });
+                community({ getTreasuryDetail: membersView({ name: 'Village Hall Roof', lifecycle: 'bounded', goalAmount_c: 50000, currentAmount_c: 4000, ...over }) });
 
             it('before its end date: if the goal isn’t reached by then, everyone’s Beans go back a week after it, in the goal card', async () => {
                 net.answer = roof({ deadlineAt: '2026-11-30T10:00:00.000Z' });
@@ -373,7 +374,7 @@ for (const dark of [false, true]) {
             });
 
             it('once the node has returned them: they went back, and nothing reads as still held', async () => {
-                net.answer = roof({ deadlineAt: '2026-11-10T10:00:00.000Z', currentAmount: 0, balance: 0, pledgesReturnedAt: '2026-11-17T10:00:30.000Z' });
+                net.answer = roof({ deadlineAt: '2026-11-10T10:00:00.000Z', currentAmount_c: 0, balance_c: 0, pledgesReturnedAt: '2026-11-17T10:00:30.000Z' });
                 await renderIn();
                 const line = byId('pledge-return-line');
                 expect(line?.textContent).toBe('The goal wasn’t reached by 10 Nov 2026, so everyone’s Beans went back on 17 Nov 2026.');
@@ -382,7 +383,7 @@ for (const dark of [false, true]) {
             });
 
             it('a project that reached its goal says nothing of it', async () => {
-                net.answer = roof({ deadlineAt: '2026-11-30T10:00:00.000Z', status: 'funded', currentAmount: 500 });
+                net.answer = roof({ deadlineAt: '2026-11-30T10:00:00.000Z', status: 'funded', currentAmount_c: 50000 });
                 await renderIn();
                 expect(byId('pledge-return-line')).toBeNull();
             });

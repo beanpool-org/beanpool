@@ -37,6 +37,8 @@ delete process.env.NODE_PROFILE;
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Boot-Drift-Count-Pw-5512!';
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The story's Beans as the node's whole hundredths (every balance and figure below is hundredths). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 interface World { owner: string; kai: string; lee: string; ola: string; pat: string; driftCo: string; evenCo: string; oweCo: string }
 
@@ -55,11 +57,12 @@ function guardFetch(): void {
 /** The stored rows the suite compares, read from the database only. */
 async function storedRows(w: World) {
     const { db } = await import('./db/db.js');
-    const row = (pk: string) => db.prepare('SELECT balance, last_demurrage_epoch AS lastRead FROM accounts WHERE public_key = ?').get(pk) as { balance: number; lastRead: number } | undefined;
+    const row = (pk: string) => db.prepare('SELECT balance_c, last_demurrage_epoch AS lastRead FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number; lastRead: number } | undefined;
     return {
         driftCo: row(w.driftCo), evenCo: row(w.evenCo), oweCo: row(w.oweCo), pat: row(w.pat),
-        commonsRow: row('COMMONS_POOL')?.balance ?? null,
-        sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+        commonsRow: row('COMMONS_POOL')?.balance_c ?? null,
+        sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
+        // The circulation charge's memo (engine/audit.ts): "Circulation fee (demurrage, <n>d)".
         fees: (db.prepare("SELECT COUNT(*) AS c FROM transactions WHERE memo LIKE 'Circulation fee%'").get() as { c: number }).c,
     };
 }
@@ -73,9 +76,9 @@ async function child(): Promise<void> {
                 INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days'), ?, ?, 'active', ?)`).run(pk, name, w.owner, `INV-${name}`, treasury);
             const keeper = (enterprise: string, pk: string, figure: number, released: boolean) => {
-                db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+                db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing_c)
                             VALUES (?, ?, 'keeper', ?, ?)`).run(enterprise, pk, w.owner, figure);
-                db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
+                db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at)
                             VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-80 days'), ?)`)
                     .run(crypto.randomUUID(), pk, enterprise, figure, released ? new Date(Date.now() - 70 * DAY_MS).toISOString() : null);
                 db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(pk);
@@ -83,8 +86,8 @@ async function child(): Promise<void> {
             // The day each account was last read: 60 days ago, as the ledger counts days (LedgerManager.getCurrentEpoch).
             const lastRead = Math.floor(Date.now() / DAY_MS) - 60;
             const account = (pk: string, balance: number) => db.prepare(`
-                INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)
-                ON CONFLICT(public_key) DO UPDATE SET balance = excluded.balance, last_demurrage_epoch = excluded.last_demurrage_epoch`).run(pk, balance, lastRead);
+                INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)
+                ON CONFLICT(public_key) DO UPDATE SET balance_c = excluded.balance_c, last_demurrage_epoch = excluded.last_demurrage_epoch`).run(pk, balance, lastRead);
             db.transaction(() => {
                 member(w.owner, 'Owen');
                 member(w.kai, 'Kai');
@@ -94,13 +97,13 @@ async function child(): Promise<void> {
                 member(w.driftCo, 'Drift Co', 1);
                 member(w.evenCo, 'Even Co', 1);
                 member(w.oweCo, 'Owe Co', 1);
-                keeper(w.driftCo, w.kai, 500, true);
-                keeper(w.evenCo, w.lee, 500, false);
-                keeper(w.oweCo, w.ola, 500, true);
-                account(w.driftCo, 1000);
-                account(w.evenCo, 1000);
-                account(w.oweCo, -300);
-                account(w.pat, -1700);
+                keeper(w.driftCo, w.kai, hc(500), true);
+                keeper(w.evenCo, w.lee, hc(500), false);
+                keeper(w.oweCo, w.ola, hc(500), true);
+                account(w.driftCo, hc(1000));
+                account(w.evenCo, hc(1000));
+                account(w.oweCo, -hc(300));
+                account(w.pat, -hc(1700));
             })();
             return storedRows(w);
         },
@@ -122,14 +125,14 @@ async function child(): Promise<void> {
             const { persistDecayAndCommons } = await import('./engine/audit.js');
             const inMemory = (pk: string) => {
                 const a = ledger.getAllAccounts().find((x) => x.id === pk);
-                return a ? { balance: a.balance, lastRead: a.lastDemurrageEpoch } : null;
+                return a ? { balance_c: a.balance_c, lastRead: a.lastDemurrageEpoch } : null;
             };
             const memory = { driftCo: inMemory(w.driftCo), evenCo: inMemory(w.evenCo), commons: se.getCommonsBalanceExact() };
             persistDecayAndCommons();
             const rows = await storedRows(w);
             const audit = se.runLedgerAudit();
             const drift = se.backingFigureDrift();
-            const read = (pk: string) => { const b = se.getBalance(pk); return { balance: b.balance, frozen: b.frozen }; };
+            const read = (pk: string) => { const b = se.getBalance(pk); return { balance_c: b.balance_c, frozen: b.frozen }; };
             // The confirmation dial as this node reads it: on by default, with no row (config/known-floor.ts).
             const { db } = await import('./db/db.js');
             const { confirmationDialOn, CONFIRMATION_DIAL_KEY } = await import('@beanpool/engine');
@@ -158,7 +161,7 @@ async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     const dataDir = path.join(root, 'node');
-    const env = { ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', NODE_ENV: 'test' };
+    const env = { NODE_ROLE: 'primary', NODE_ENV: 'test' };
     const w: World = {
         owner: newKey(), kai: newKey(), lee: newKey(), ola: newKey(), pat: newKey(),
         driftCo: newKey(), evenCo: newKey(), oweCo: newKey(),
@@ -171,8 +174,8 @@ async function main(): Promise<void> {
         const first = await spawnNode(SCRIPT, dataDir, env);
         nodes.push(first);
         const before = await first.send('setup', w as unknown as Record<string, unknown>);
-        require_(before.driftCo?.balance === 1000 && before.evenCo?.balance === 1000 && before.oweCo?.balance === -300
-            && before.commonsRow === 0 && Math.abs(before.sum) < 1e-9 && before.fees === 0,
+        require_(before.driftCo?.balance_c === hc(1000) && before.evenCo?.balance_c === hc(1000) && before.oweCo?.balance_c === -hc(300)
+            && before.commonsRow === 0 && before.sum === 0 && before.fees === 0,
             `Drift Co and Even Co hold 1,000 each, Owe Co owes 300, the pot is 0, the ledger sums to 0, no fee row (${j(before)})`);
         require_(before.driftCo.lastRead === before.evenCo.lastRead && before.driftCo.lastRead === Math.floor(Date.now() / DAY_MS) - 60,
             `both treasuries were last read 60 days ago (${before.driftCo.lastRead})`);
@@ -191,21 +194,21 @@ async function main(): Promise<void> {
             `the boot still counts: 2 enterprises (Drift Co, Owe Co), 1 of them spend-frozen (${bootLine?.[0] ?? 'no line'})`);
 
         const after = await second.send('look', w as unknown as Record<string, unknown>);
-        assert(after.memory.driftCo?.balance === 1000 && after.memory.evenCo?.balance === 1000,
+        assert(after.memory.driftCo?.balance_c === hc(1000) && after.memory.evenCo?.balance_c === hc(1000),
             `in memory after the boot, Drift Co and Even Co still hold exactly 1,000 (${j(after.memory)})`);
         assert(after.memory.driftCo?.lastRead === after.memory.evenCo?.lastRead,
             `the boot read Drift Co's account no more than its undrifted twin's: the same last-read day in memory (${after.memory.driftCo?.lastRead} vs ${after.memory.evenCo?.lastRead})`);
-        assert(after.rows.driftCo?.balance === 1000 && after.rows.evenCo?.balance === 1000 && after.rows.oweCo?.balance === -300 && after.rows.pat?.balance === -1700,
+        assert(after.rows.driftCo?.balance_c === hc(1000) && after.rows.evenCo?.balance_c === hc(1000) && after.rows.oweCo?.balance_c === -hc(300) && after.rows.pat?.balance_c === -hc(1700),
             `after the demurrage flush, the rows still hold 1,000, 1,000, -300 and -1,700 (${j(after.rows)})`);
         assert(after.rows.fees === 0, `no Circulation fee row was written (${after.rows.fees})`);
         assert(after.rows.commonsRow === before.commonsRow && after.memory.commons === before.commonsRow,
             `the Commons pot is unchanged: row ${after.rows.commonsRow}, in memory ${after.memory.commons}`);
-        assert(Math.abs(after.rows.sum - before.sum) < 1e-9 && after.audit.ok === true && Math.abs(after.audit.drift) < 1e-9,
+        assert(after.rows.sum === before.sum && after.audit.ok === true && after.audit.drift === 0,
             `the ledger's sum is unchanged and the audit passes (${after.rows.sum}; ${j(after.audit)})`);
         assert(after.drift.enterprises === 2 && after.drift.frozen === 1
             && after.balances.oweCo.frozen === true && after.balances.driftCo.frozen === false && after.balances.evenCo.frozen === false,
             `the count from stored rows agrees with getBalance once the boot is done: Owe Co spend-frozen, the others not (${j(after.drift)}; ${j(after.balances)})`);
-        assert(after.balances.driftCo.balance === 1000 && after.balances.evenCo.balance === 1000,
+        assert(after.balances.driftCo.balance_c === hc(1000) && after.balances.evenCo.balance_c === hc(1000),
             `and read through getBalance, both still hold 1,000 (${j(after.balances)})`);
         assert(after.dial.on === true && after.dial.row === null,
             `all of it on the confirmation dial's default, on with no row (${j(after.dial)})`);
@@ -219,7 +222,7 @@ async function main(): Promise<void> {
         assert(!/spend floors read their keepers' pledges only/.test(third.output()),
             'the boot says the counts once per change: the same 2 and 1 again, no line');
         const unchanged = await third.send('stored', w as unknown as Record<string, unknown>);
-        assert(unchanged.driftCo?.balance === 1000 && unchanged.evenCo?.balance === 1000 && unchanged.fees === 0,
+        assert(unchanged.driftCo?.balance_c === hc(1000) && unchanged.evenCo?.balance_c === hc(1000) && unchanged.fees === 0,
             `and still no Bean moved (${j(unchanged)})`);
         await third.send('release-even', w as unknown as Record<string, unknown>);
         await third.kill();

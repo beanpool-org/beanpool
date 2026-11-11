@@ -44,6 +44,7 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_') || k.startsWith('ALERTS_WEBHOOK_')) delete process.env[k];
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here; nothing else off this machine is reached.
 const realFetch = globalThis.fetch;
@@ -62,6 +63,8 @@ globalThis.fetch = (async (input: any, init?: any) => {
 }) as typeof fetch;
 
 let run = 0, passed = 0;
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 function assert(cond: unknown, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
@@ -78,10 +81,11 @@ function keypair(callsign: string): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -152,7 +156,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, ago(joinedDaysAgo * DAY), invitedBy.pubKeyHex, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         if (active) db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date().toISOString(), id.pubKeyHex);
         se.registerPushToken(id.pubKeyHex, id.token, 'android');
         return id;
@@ -250,8 +254,9 @@ async function main() {
 
     // ── 2. The pause ────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. The pause: every listed account paused, one vote, nobody removed');
-    db.prepare('UPDATE accounts SET balance = -40 WHERE public_key = ?').run(s1.a.pubKeyHex);
-    db.prepare('UPDATE accounts SET balance = -25 WHERE public_key = ?').run(s1.c.pubKeyHex);
+    // 40 and 25 Beans owed, in whole hundredths.
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(-40), s1.a.pubKeyHex);
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(hc(-25), s1.c.pubKeyHex);
     pushes.length = 0;
     const id1 = await pauseBranchNow(s1.root);
     const d1 = row(id1);
@@ -260,8 +265,8 @@ async function main() {
         `every listed account is paused; the established one and the admin are not (${s1.all.map(statusOf).join(',')} / ${statusOf(settled)} / ${statusOf(modInBranch)})`);
     assert(s1.all.every(i => statusOf(i) !== 'pruned'), 'nobody is removed by the pause');
     assert(d1.subject === null && d1.effect === 'remove_member' && d1.author_pubkey === 'SYSTEM' && d1.title === 'Remove these 4 accounts?'
-        && p1.rule === de.PAUSE_VOTE_RULE && p1.branch.length === 4 && p1.branchDebt === 65,
-        `one vote, its subject null, "${d1.title}", its list of ${p1.branch?.length} owing ${p1.branchDebt} Beans together`);
+        && p1.rule === de.PAUSE_VOTE_RULE && p1.branch.length === 4 && p1.branchDebt === hc(65),
+        `one vote, its subject null, "${d1.title}", its list of ${p1.branch?.length} owing ${p1.branchDebt} hundredths together`);
     assert(p1.established?.length === 1 && p1.established[0].name === 'SelSettled' && p1.root?.name === 'SelRoot',
         `the established account left off is named separately (${JSON.stringify(p1.established?.map((e: any) => e.name))})`);
     await new Promise(r => setTimeout(r, 300));
@@ -300,17 +305,18 @@ async function main() {
     // ── 4. Balances ─────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n4. Who reads the Beans each account owes');
     const asVoter = newOne.body?.decision?.params;
-    assert(asVoter?.branchDebt === 65 && asVoter.branch.find((e: any) => e.name === 'SelA')?.debt === 40,
+    // Each entry's figures are whole hundredths (balance_c, debt_c); the total keeps its name, branchDebt, in hundredths.
+    assert(asVoter?.branchDebt === hc(65) && asVoter.branch.find((e: any) => e.name === 'SelA')?.debt_c === hc(40),
         `a voter reads each account's debt and the total (${asVoter?.branchDebt})`);
     fresh();
     const asListed = (await signed('GET', `/api/commons/decisions/${id1}?draws=branch`, s1.a)).body?.decision?.params;
-    assert(asListed && asListed.branchDebt === undefined && asListed.branch.find((e: any) => e.name === 'SelA')?.debt === 40
-        && asListed.branch.find((e: any) => e.name === 'SelC')?.debt === undefined,
+    assert(asListed && asListed.branchDebt === undefined && asListed.branch.find((e: any) => e.name === 'SelA')?.debt_c === hc(40)
+        && asListed.branch.find((e: any) => e.name === 'SelC')?.debt_c === undefined && asListed.branch.find((e: any) => e.name === 'SelC')?.balance_c === undefined,
         'an account on the list reads its own, and not the others\' nor the total');
     const latecomer = seed('Latecomer', gen, 0);
     fresh();
     const asLate = (await signed('GET', `/api/commons/decisions/${id1}?draws=branch`, latecomer)).body?.decision?.params;
-    assert(asLate && asLate.branchDebt === undefined && asLate.branch.every((e: any) => e.debt === undefined && e.balance === undefined),
+    assert(asLate && asLate.branchDebt === undefined && asLate.branch.every((e: any) => e.debt_c === undefined && e.balance_c === undefined),
         'someone who may not vote on it reads no balance at all');
     db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(latecomer.pubKeyHex);
 

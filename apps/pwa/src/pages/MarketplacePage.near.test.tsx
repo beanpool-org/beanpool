@@ -31,7 +31,7 @@ const identity: BeanPoolIdentity = {
 };
 const offer = {
     id: 'offer-1', type: 'offer', category: 'services', title: 'Bicycle Repair', description: 'Fix gears',
-    credits: 20, priceType: 'fixed', status: 'active', active: true, lat: -28.6, lng: 153.4,
+    price_c: 2000, priceType: 'fixed', status: 'active', active: true, lat: -28.6, lng: 153.4,
     authorPublicKey: 'member-ada', authorCallsign: 'Ada', createdAt: '2026-09-16T00:00:00Z',
 };
 const GLOBAL = { profile: 'global', features: { beans: false, nearbyListings: { radiusKm: 250, max: 500 } } };
@@ -90,7 +90,7 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('on a by-area node, reads the nearest within the node\'s radius of the member\'s area, once, and shows the node\'s distance', async () => {

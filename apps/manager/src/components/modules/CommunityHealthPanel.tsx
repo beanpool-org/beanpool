@@ -6,6 +6,8 @@ import { buildAdminHeaders, getTfaSessionToken, resolveNodeApiUrl, passwordField
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { t as say, tn } from '../../lib/fresh-proof';
+import { isHundredths } from '@beanpool/core';
+import { beansText } from '../../lib/beans';
 
 /**
  * People & Safety → "Community health" (community modes slice 6; apps/server engine/community-health.ts).
@@ -21,7 +23,11 @@ import { t as say, tn } from '../../lib/fresh-proof';
  * Operator manual text: packages/beanpool-guide/operators/people/running-a-known-community.md.
  */
 
-type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number; newMembers?: NewMembers | null; needs?: NeedsThisMonth | null };
+/**
+ * The community's totals as the node sends them (server engine/community-health.ts communityTotals): the four money figures
+ * are whole hundredths of a Bean, in `*_c` fields; the rest are counts.
+ */
+type Totals = { beansInCirculation_c: number; sumOfCredit_c: number; sumOfDebt_c: number; membersInDebit: number; commonsPot_c: number; tradesThisMonth: number; newMembers?: NewMembers | null; needs?: NeedsThisMonth | null };
 export type FirstTradeWindow = { joined: number; firstListing: number; firstTrade: number | null; daysToFirstListing: number | null; daysFromListingToTrade: number | null };
 export type NewMembers = { beans: boolean; anyTrades: boolean; minGroup: number; last90Days: FirstTradeWindow; allTime: FirstTradeWindow };
 /**
@@ -105,11 +111,11 @@ export function readHealth(v: unknown): Health | null {
     const o = v as Partial<Health> | null;
     const t = o?.totals as Partial<Totals> | undefined;
     const s = o?.settings as Partial<Lines> | undefined;
-    if (!o || !t || !s || !num(t.sumOfCredit) || !num(t.sumOfDebt) || !num(t.membersInDebit) || !num(s.debtLinePct) || !num(s.quietDays)) return null;
+    if (!o || !t || !s || !isHundredths(t.sumOfCredit_c) || !isHundredths(t.sumOfDebt_c) || !num(t.membersInDebit) || !num(s.debtLinePct) || !num(s.quietDays)) return null;
     return {
         totals: {
-            beansInCirculation: num(t.beansInCirculation) ? t.beansInCirculation! : 0, sumOfCredit: t.sumOfCredit!, sumOfDebt: t.sumOfDebt!,
-            membersInDebit: t.membersInDebit!, commonsPot: num(t.commonsPot) ? t.commonsPot! : 0, tradesThisMonth: num(t.tradesThisMonth) ? t.tradesThisMonth! : 0,
+            beansInCirculation_c: isHundredths(t.beansInCirculation_c) ? t.beansInCirculation_c : 0, sumOfCredit_c: t.sumOfCredit_c, sumOfDebt_c: t.sumOfDebt_c,
+            membersInDebit: t.membersInDebit!, commonsPot_c: isHundredths(t.commonsPot_c) ? t.commonsPot_c : 0, tradesThisMonth: num(t.tradesThisMonth) ? t.tradesThisMonth! : 0,
             newMembers: readNewMembers(t.newMembers),
             needs: readNeeds(t.needs),
         },
@@ -121,7 +127,8 @@ export function readHealth(v: unknown): Health | null {
     };
 }
 
-const beans = (n: number) => `${Math.round(n).toLocaleString('en')} Beans`;
+/** Whole hundredths in words: 4925 → "49.25 Beans" (never rounded to a whole Bean). */
+const beans = (c: number) => beansText(c);
 
 const waited = (days: number | null) => (days === null ? say(W.heldBack) : days === 0 ? say(W.underADay) : tn(days, W.days.one, W.days.other));
 
@@ -288,11 +295,11 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
     const t = health.totals;
     const noBeans = t.newMembers?.beans === false;
     const rows: Array<[string, string]> = [
-        ['Beans in circulation', beans(t.beansInCirculation)],
-        ['Credit held (all balances above 0)', beans(t.sumOfCredit)],
-        ['Debt owed (all balances below 0)', beans(t.sumOfDebt)],
+        ['Beans in circulation', beans(t.beansInCirculation_c)],
+        ['Credit held (all balances above 0)', beans(t.sumOfCredit_c)],
+        ['Debt owed (all balances below 0)', beans(t.sumOfDebt_c)],
         ['Members in debit', t.membersInDebit.toLocaleString('en')],
-        ['Commons pot', beans(t.commonsPot)],
+        ['Commons pot', beans(t.commonsPot_c)],
         // No Beans, no trades: a 0 here would read as a measure (the part below says why there is none).
         ...(noBeans ? [] : [['Trades this month', t.tradesThisMonth.toLocaleString('en')] as [string, string]]),
     ];

@@ -105,6 +105,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { haversineKm } from '@beanpool/engine';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -212,7 +213,8 @@ async function call(method: Method, id: Id | null, urlPath: string, body?: unkno
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -227,8 +229,8 @@ async function call(method: Method, id: Id | null, urlPath: string, body?: unkno
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    return `pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 function openSocket(url: string): Promise<{ ws: WebSocket; raw: string[] }> {
     return new Promise((resolve, reject) => {
@@ -322,7 +324,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, ?, ?, 'seed', ?)`)
             .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('SentinelAlice');
@@ -390,10 +392,11 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET paused_by = ?, wind_up_initiated_by = ? WHERE public_key = ?').run(alice.pk, bob.pk, enterprise);
     // Bob backs it. A pledge is ledger history, which keeps the money switches on (node-profile lockToLedger), so only
     // where they are on already: the global node as it ships stays as it ships.
-    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount) VALUES ('pledge-sentinel', ?, ?, 5)").run(bob.pk, enterprise);
+    // Every figure whole hundredths (a pledge of 5 Beans, a goal of 100, a project asking 50).
+    if (MONEY_ON) db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-sentinel', ?, ?, 500)").run(bob.pk, enterprise);
     const crowdfund = newId().pk;
-    createCrowdfundProject(crowdfund, bob.pk, 'Sentinel roof fund', 'Sentinel roof for the hall', [TINY_PNG], 100, null);
-    const commonsProject = se.createProject(alice.pk, 'Sentinel community garden', 'Sentinel beds by the hall', 50)!;
+    createCrowdfundProject(crowdfund, bob.pk, 'Sentinel roof fund', 'Sentinel roof for the hall', [TINY_PNG], 10000, null);
+    const commonsProject = se.createProject(alice.pk, 'Sentinel community garden', 'Sentinel beds by the hall', 5000)!;
 
     // Posts spread over the world for the precision checks (§7): the antimeridian and both poles among them, and a
     // few sharing one area. Each with a place worked out to 7 decimals.
@@ -1098,8 +1101,8 @@ async function main(): Promise<void> {
             ['mt-pruned-pending', bobOffer.id, pruned.pk, bob.pk, 'pending'],     // it is buying from Bob
             ['mt-pruned-done', trade.id, pruned.pk, alice.pk, 'completed'],       // it bought from Alice
         ]) {
-            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-                        VALUES (?, ?, ?, ?, 1, ?, ?)`).run(id, postId, buyer, seller, status, new Date().toISOString());
+            db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
+                        VALUES (?, ?, ?, ?, 100, ?, ?)`).run(id, postId, buyer, seller, status, new Date().toISOString());
         }
         const tradeStatuses = () => (db.prepare("SELECT id, status FROM marketplace_transactions WHERE id LIKE 'mt-pruned-%' ORDER BY id").all() as { id: string; status: string }[])
             .map(r => `${r.id}=${r.status}`).join(' ');
@@ -1112,8 +1115,7 @@ async function main(): Promise<void> {
         const invitesForTheCard = process.env.NODE_PROFILE === 'global';
         if (invitesForTheCard) db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.invites', 'true');
         const code = se.generateInvite(bob.pk)!.code;
-        const ticketPayload = JSON.stringify({ i: bob.pk, t: Date.now() });
-        const ticketB64 = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), bob.priv).toString('base64') })).toString('base64');
+        const ticketB64 = offlineTicket(bob.priv, bob.pk);
         const noPerson = (r: Res, sent: string[] = []) => !leaks(r.text, sent).length && !r.text.includes('/api/avatar/') && !KEYED_FACE.test(r.text);
 
         // 11a. The review's walk: a name typed at the recovery lookup gives a key, as designed; that key opens nothing more.
@@ -1185,11 +1187,17 @@ async function main(): Promise<void> {
         const BAIT: Record<string, unknown> = {
             targetPubkey: alice.pk, friendPubkey: alice.pk, memberPubkey: alice.pk, toPubkey: alice.pk, to: alice.pk, candidate: alice.pk,
             id: offer.id, postId: offer.id, groupId: club.id, conversationId: 'conv-sentinel', messageId: 'msg-sentinel', decisionId: 'dec-sentinel',
-            projectId: crowdfund, treasury: enterprise, channelId: 'chan-sentinel', itemId: 'item_sentinel', amount: 1,
+            // A money figure as every money route takes one: whole hundredths, `amount_c` (1 Bean), so a write gets past the
+            // body check to the data it could hand back.
+            projectId: crowdfund, treasury: enterprise, channelId: 'chan-sentinel', itemId: 'item_sentinel', amount_c: 100,
         };
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // A member's own switch: past the body check to the member check.
+            'PUT /api/profile/privacy': { inviterShown: false },
+            // A find with a provider it verifies: past the provider check to the sign-in, which names the accounts it protects.
+            'POST /api/recovery/find': { provider: 'google', idToken: 'sentinel', nonce: 'sentinel' },
             // An assistant's call for the reports, which name members, and the owner switch turned off.
             'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
             'POST /api/local/admin/agent/switch': { allowed: false },
@@ -1209,7 +1217,7 @@ async function main(): Promise<void> {
                 disclosure: { epoch: 1, mk: Buffer.alloc(32, 7).toString('base64') } },
             // A line of the pruned account's DM, reported with a disclosure of the right shape: past the body checks to who may read it.
             'POST /api/messages/report': { messageId: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f', reason: 'Sentinel check',
-                disclosure: { v: 1, ciphertext: 'c2VudGluZWw=', nonce: 'x25519-xc20p-v2:AAAA', conversationId: 'sentinel', lineSig: null, words: 'Sentinel' } },
+                disclosure: { v: 1, ciphertext: 'c2VudGluZWw=', nonce: 'x25519-xc20p-v2:AAAA', conversationId: 'sentinel', words: 'Sentinel' } },
             // The pruned convenor: inviting Grid, changing Alice's role, renaming the group.
             'POST /api/groups/:id/members': { targetPubkey: grid.pk },
             'PATCH /api/groups/:id/members/:pubkey': { role: 'member' },
@@ -1236,6 +1244,11 @@ async function main(): Promise<void> {
             // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
             'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
             'POST /api/join/knock/cancel': {},
+            // "Tell me when they answer" (web push W1), past the shape checks to who may subscribe: a browser's real keys.
+            'POST /api/web-push': { subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/sentinel',
+                keys: { p256dh: (() => { const e = crypto.createECDH('prime256v1'); e.generateKeys(); return e.getPublicKey().toString('base64url'); })(),
+                    auth: crypto.randomBytes(16).toString('base64url') } } },
+            'DELETE /api/web-push': { subId: '0'.repeat(64) },
             // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
             'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
                 signedFor: 'localhost', signature: 'AAAA' },
@@ -1243,12 +1256,12 @@ async function main(): Promise<void> {
             'POST /api/local/admin/auth/pairing/:id/confirm': { code: '00' },
             // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most under How this
             // community works (the exception an owner's or an admin's, the dial an owner's).
-            'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
-            'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor: 5000, cap: 5000 }, join: 'members' } },
+            'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount_c: 500000 },
+            'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor_c: 500000, cap_c: 500000 }, join: 'members' } },
             // Advice to the owners about a Core setting (an owner's or an admin's): past the shape checks, it would leave a log line.
             'POST /api/local/admin/community-shape/advice': { setting: 'beans', advice: 'Sentinel advice' },
             // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
-            'POST /api/commons/pay': { amount: 1 },
+            'POST /api/commons/pay': { amount_c: 100 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
             'POST /api/names/debts/:id/work-off': { memberPubkey: alice.pk },
             // The Community health panel: the owner's two lines.
@@ -1259,7 +1272,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/directory/promise': { reports: true, notice: true, closingOn: null },
             // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
-                params: { to: alice.pk, amount: 1 } },
+                params: { to: alice.pk, amount_c: 100 } },
             'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
             // A removal juror's answer to their seat (slice J2b): past the body check to who may answer.
             'POST /api/commons/decisions/:id/jury/answer': { answer: 'step_aside' },
@@ -1337,25 +1350,23 @@ async function main(): Promise<void> {
             'GET /api/groups/:id/decisions', 'POST /api/groups/:id/decisions', 'GET /api/groups/:id/decisions/:decisionId',
             'POST /api/groups/:id/decisions/:decisionId/vote',
             'GET /api/home',
-            'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
+            'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'DELETE /api/invite/:code', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock', 'POST /api/join/knock/cancel',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
+            'GET /api/web-push/key', 'POST /api/web-push', 'DELETE /api/web-push',
             'POST /api/invite/asks', 'GET /api/invite/asks', 'GET /api/invite/asks/mine', 'POST /api/invite/asks/:id/withdraw', 'POST /api/invite/asks/:id/send', 'POST /api/invite/asks/:id/no',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
             'GET /api/local/claim', 'POST /api/local/claim',
-            'POST /api/local/admin/2fa/backup-codes', 'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
-            'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements',
+            'POST /api/local/admin/announcements',
             'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/check', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',
             'GET /api/local/admin/app-versions',
-            'POST /api/local/admin/auth/break-glass-mode',
-            'GET /api/local/admin/auth/break-glass-status', 'POST /api/local/admin/auth/break-glass/enrol', 'POST /api/local/admin/auth/break-glass/issue',
-            'GET /api/local/admin/auth/break-glass/status', 'POST /api/local/admin/auth/challenge', 'GET /api/local/admin/auth/challenge/:challengeId',
+            'POST /api/local/admin/auth/break-glass/enrol', 'POST /api/local/admin/auth/break-glass/issue',
+            'POST /api/local/admin/auth/challenge', 'GET /api/local/admin/auth/challenge/:challengeId',
             'POST /api/local/admin/auth/enrol', 'POST /api/local/admin/auth/exchange', 'POST /api/local/admin/auth/logout',
             'POST /api/local/admin/auth/pairing', 'GET /api/local/admin/auth/pairing/:id', 'POST /api/local/admin/auth/pairing/:id/approve',
-            'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait', 'POST /api/local/admin/auth/password',
-            'GET /api/local/admin/auth/password-retirement', 'POST /api/local/admin/auth/retire-password',
+            'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait',
             'POST /api/local/admin/auth/revoke-all',
             'GET /api/local/admin/auth/session', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/backup',
             'POST /api/local/admin/backup-config', 'GET /api/local/admin/backup-enroll', 'POST /api/local/admin/backup-status',
@@ -1393,7 +1404,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/public-address/update', 'GET /api/local/admin/pulse/channels', 'POST /api/local/admin/pulse/channels',
             'POST /api/local/admin/pulse/channels/remove', 'POST /api/local/admin/replication-access', 'POST /api/local/admin/replication-config/get',
             'POST /api/local/admin/replication-config/save', 'POST /api/local/admin/replication-resync', 'POST /api/local/admin/replication-token/clear',
-            'POST /api/local/admin/replication-token/generate', 'POST /api/local/admin/replication-token/mode',
+            'POST /api/local/admin/replication-token/generate',
             'POST /api/local/admin/replication-token/status', 'GET /api/local/admin/reports', 'POST /api/local/admin/reports/:id/action', 'GET /api/local/admin/reports/:id/message',
             'POST /api/local/admin/reports/:id/dismiss', 'POST /api/local/admin/restore', 'POST /api/local/admin/restore/phone/wait',
             'GET /api/local/admin/restore-points', 'POST /api/local/admin/restore-points/roll-back',
@@ -1420,10 +1431,10 @@ async function main(): Promise<void> {
             'POST /api/local/admin/users/:pubkey/prune', 'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
             'POST /api/local/admin/users/:pubkey/tier', 'GET /api/local/admin/web-visits',
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
-            'POST /api/local/change-password', 'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',
+            'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',
             'POST /api/local/connectors/connect', 'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect',
             'POST /api/local/connectors/remove', 'GET /api/local/dashboard', 'POST /api/local/federation/links/ceiling',
-            'GET /api/local/status', 'POST /api/local/update-identity', 'POST /api/local/verify-password',
+            'GET /api/local/status', 'POST /api/local/update-identity',
             'GET /api/map/enterprises',
             'POST /api/marketplace/polls/close', 'GET /api/marketplace/polls/next-start', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
             // A post shared outside (front doors S6, routes/peek.ts): the read opens only with a ticket (test-peek-ticket).
@@ -1437,6 +1448,7 @@ async function main(): Promise<void> {
             'POST /api/marketplace/posts/update', 'GET /api/marketplace/transactions', 'POST /api/marketplace/transactions/approve',
             'POST /api/marketplace/transactions/cancel', 'POST /api/marketplace/transactions/cancel-request',
             'POST /api/marketplace/transactions/complete', 'POST /api/marketplace/transactions/reject',
+            'POST /api/marketplace/standing/:id/stop', 'POST /api/marketplace/standing/:id/extend',
             'POST /api/member/channels', 'POST /api/member/channels/:id', 'POST /api/member/channels/:id/delete',
             'POST /api/member/channels/:id/disconnect-oauth', 'POST /api/member/channels/:id/verify-oauth',
             'POST /api/member/pulse/channels/:id/dismiss-nudge', 'POST /api/member/pulse/items/:id/delete', 'POST /api/member/pulse/items/:id/mute',
@@ -1450,7 +1462,7 @@ async function main(): Promise<void> {
             'POST /api/messages/send',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
-            'POST /api/names/entries/:id/invite', 'GET /api/names/invites',
+            'POST /api/names/entries/:id/invite', 'DELETE /api/names/entries/:id/invite', 'GET /api/names/invites',
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
             'GET /api/names/health', 'GET /api/names/health/exceptions', 'GET /api/names/health/log', 'POST /api/names/health/settings',
@@ -1462,7 +1474,7 @@ async function main(): Promise<void> {
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',
-            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
+            'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push', 'GET /api/notices/push/:id', 'POST /api/notices/push/seen', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/collect', 'POST /api/pair/confirm', 'POST /api/pair/init', 'POST /api/pair/offer', 'GET /api/pair/poll',
             'POST /api/pair/saved', 'POST /api/pair/send', 'POST /api/pair/transfer',
             'POST /api/peek', 'GET /api/peek/mine', 'POST /api/peek/stop',
@@ -1470,7 +1482,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',
             'POST /api/pricing-guide/reports/:id/status',
-            'GET /api/profile/:publicKey', 'POST /api/profile/update',
+            'GET /api/profile/:publicKey', 'POST /api/profile/update', 'GET /api/profile/privacy', 'PUT /api/profile/privacy',
             'GET /api/pulse/daily', 'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
@@ -1481,6 +1493,8 @@ async function main(): Promise<void> {
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
             'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
+            // A restore that finds the account from the sign-in alone (routes/recovery-collect.ts, design S0).
+            'POST /api/recovery/find-nonce', 'POST /api/recovery/find',
             'POST /api/reports',
             // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
             'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',
@@ -1893,7 +1907,7 @@ async function main(): Promise<void> {
                     `${who}: ${p} is for members, refused members_only naming the global community (${r.status} ${r.text.slice(0, 80)})`);
             }
             const pot = await call('GET', id, '/api/commons/balance');
-            assert(pot.status === 200 && typeof pot.body?.balance === 'number', `${who}: the Commons pot, a total, stays public (${pot.status})`);
+            assert(pot.status === 200 && Number.isSafeInteger(pot.body?.balance_c), `${who}: the Commons pot, a total, stays public (${pot.status})`);
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
             assert(face.status === 404 && face.headers.get('content-type') !== 'image/png', `${who}: a face asked by a member's key alone is refused, 404 (${face.status})`);
             const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');

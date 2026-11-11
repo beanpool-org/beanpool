@@ -6,7 +6,8 @@
  *
  * Node-shaped fixtures: engine/vouchers.ts budgetOf() returns `level = left + held`, and every landed vouch lowers it. A
  * voucher given 1,000 who vouched 350 and holds 100 reads left 550, held 100, level 650: a level off the 100-step grid,
- * which core's isBudgetLevel (the node's own check on "set to") refuses.
+ * which core's isBudgetLevel (the node's own check on "set to") refuses. Every figure is whole hundredths of a Bean, as the
+ * node sends them (DESIGN-atomic-beans-fable.md M2): left 55000 is 550 Beans, and a history line's figure is `amount_c`.
  *
  * The screens themselves, with the node's answers for each role, are in vouchers-people-render.test.ts (People → Invites)
  * and vouchers-names-list-render.test.ts (the names list).
@@ -21,7 +22,7 @@ import {
 } from '../names-list';
 import {
     lowestBudgetLevel, nearestBudgetLevel, budgetLevelUp, budgetLevelDown, acceptsBudgetLevel, voucherActorWords, historyLineWords,
-    voucherCardSubtitle, canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers,
+    voucherCardSubtitle, canMakeVoucher, ownerOnlyVoucherTargets, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers,
 } from '../voucher-rules';
 import { voucherRowText } from '../../components/VouchersBlock';
 import { VoucherCard } from '../../components/VoucherCard';
@@ -85,25 +86,26 @@ const NODE_CARD: VoucherCardData = {
     madeAt: '2026-11-05T10:00:00Z',
     stoppedAt: null,
     stopReason: null,
-    left: 550,
-    held: 100,
+    left: 55000,
+    held: 10000,
     heldInvites: 1,
-    vouched: 350,
+    vouched: 35000,
+    vouchedLast30Days: 10000,
     peopleVouched: 4,
-    level: 650,
+    level: 65000,
     belowZero: 1,
     writtenOff: 0,
-    passedOn: { amount: 50, people: 1, belowZero: 25 },
+    passedOn: { amount_c: 5000, people: 1, belowZero: 2500 },
     invitesWithVouch: 5,
     trading: { withOthers: 2, insideOnly: 1 },
     canChange: true,
     history: [
-        { kind: 'grant', amount: 1000, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' },
-        { kind: 'hold', amount: -100, actor: 'a1'.repeat(32), actorCallsign: 'jane', at: '2026-11-05T11:00:00Z', for: 'invite', outcome: 'held', inviteMadeAt: '2026-11-05T11:00:00Z' },
+        { kind: 'grant', amount_c: 100000, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' },
+        { kind: 'hold', amount_c: -10000, actor: 'a1'.repeat(32), actorCallsign: 'jane', at: '2026-11-05T11:00:00Z', for: 'invite', outcome: 'held', inviteMadeAt: '2026-11-05T11:00:00Z' },
     ],
     people: [
         {
-            memberPubkey: 'c3'.repeat(32), callsign: 'sam', joinedAt: '2026-11-02T12:00:00Z', amount: 100, raised: false, byInvite: true,
+            memberPubkey: 'c3'.repeat(32), callsign: 'sam', joinedAt: '2026-11-02T12:00:00Z', amount_c: 10000, raised: false, byInvite: true,
             belowZero: true, left: false, writtenOff: 0, vouchesForMe: false, trading: 'others',
         },
     ],
@@ -146,9 +148,9 @@ const setButton = () => container.querySelector('button[aria-label^="Set budget 
 
 describe('budget levels: only what the node takes (core isBudgetLevel, ≥ held, ≤ 2,000)', () => {
     it('every level the stepper can reach, from every card the node can send, is one the node accepts', () => {
-        // Every held and level the node can send in steps of 25 (the vouch presets are 25, 50, 75 and 100).
-        for (let held = 0; held <= 2000; held += 25) {
-            for (let level = held; level <= 2000; level += 25) {
+        // Every held and level the node can send in steps of 25 Beans (the vouch presets are 25, 50, 75 and 100), in hundredths.
+        for (let held = 0; held <= 200000; held += 2500) {
+            for (let level = held; level <= 200000; level += 2500) {
                 const start = nearestBudgetLevel(level, held);
                 const seen = [start];
                 for (let l: number | null = budgetLevelUp(start, held); l !== null; l = budgetLevelUp(l, held)) seen.push(l);
@@ -163,46 +165,52 @@ describe('budget levels: only what the node takes (core isBudgetLevel, ≥ held,
     });
 
     it('starts from the nearest level, never the card’s own off-grid level', () => {
-        expect(nearestBudgetLevel(650, 100)).toBe(700);
-        expect(nearestBudgetLevel(625, 0)).toBe(600);
-        expect(nearestBudgetLevel(1000, 100)).toBe(1000);
-        expect(nearestBudgetLevel(75, 75)).toBe(100);
-        expect(nearestBudgetLevel(150, 125)).toBe(200); // 150 rounds to 200, and 100 would be below what's held
-        expect(nearestBudgetLevel(2050, 0)).toBe(2000);
-        expect(nearestBudgetLevel(null)).toBe(1000);
-        expect(lowestBudgetLevel(125)).toBe(200);
-        expect(lowestBudgetLevel(0)).toBe(100);
+        expect(nearestBudgetLevel(65000, 10000)).toBe(70000);
+        expect(nearestBudgetLevel(62500, 0)).toBe(60000);
+        expect(nearestBudgetLevel(100000, 10000)).toBe(100000);
+        expect(nearestBudgetLevel(7500, 7500)).toBe(10000);
+        expect(nearestBudgetLevel(15000, 12500)).toBe(20000); // 150 rounds to 200, and 100 would be below what's held
+        expect(nearestBudgetLevel(205000, 0)).toBe(200000);
+        expect(nearestBudgetLevel(null)).toBe(100000);
+        expect(lowestBudgetLevel(12500)).toBe(20000);
+        expect(lowestBudgetLevel(0)).toBe(10000);
+        // A level one hundredth off the grid is off it (the grid is whole hundredths, not whole Beans).
+        expect(nearestBudgetLevel(64999, 0)).toBe(60000);
+        expect(lowestBudgetLevel(10001)).toBe(20000);
     });
 
     it('steps to the next level on the grid and stops at the floor and the ceiling', () => {
-        expect(budgetLevelUp(650, 100)).toBe(700);
-        expect(budgetLevelDown(650, 100)).toBe(600);
-        expect(budgetLevelUp(700, 100)).toBe(800);
-        expect(budgetLevelDown(200, 125)).toBeNull();
-        expect(budgetLevelDown(100, 0)).toBeNull();
-        expect(budgetLevelUp(2000, 0)).toBeNull();
-        expect(acceptsBudgetLevel(650, 100)).toBe(false);
-        expect(acceptsBudgetLevel(100, 125)).toBe(false);
-        expect(acceptsBudgetLevel(200, 125)).toBe(true);
-        expect(acceptsBudgetLevel(2100, 0)).toBe(false);
+        expect(budgetLevelUp(65000, 10000)).toBe(70000);
+        expect(budgetLevelDown(65000, 10000)).toBe(60000);
+        expect(budgetLevelUp(70000, 10000)).toBe(80000);
+        expect(budgetLevelDown(20000, 12500)).toBeNull();
+        expect(budgetLevelDown(10000, 0)).toBeNull();
+        expect(budgetLevelUp(200000, 0)).toBeNull();
+        expect(acceptsBudgetLevel(65000, 10000)).toBe(false);
+        expect(acceptsBudgetLevel(10000, 12500)).toBe(false);
+        expect(acceptsBudgetLevel(20000, 12500)).toBe(true);
+        expect(acceptsBudgetLevel(210000, 0)).toBe(false);
+        // 100 Beans is 10000 hundredths: the old whole-Bean figure 100 is one Bean, off the grid and never sent.
+        expect(acceptsBudgetLevel(100, 0)).toBe(false);
     });
 });
 
 describe('the voucher card from a card shaped as the node sends it (§5, §10)', () => {
     it('Set budget to starts at 700 for a 650 card, steps on the grid, and posts a level the node takes', async () => {
-        mockFetch.mockResolvedValue(answer(200, { ...NODE_CARD, left: 700, level: 800, changed: true }));
+        mockFetch.mockResolvedValue(answer(200, { ...NODE_CARD, left: 70000, level: 80000, changed: true }));
         await renderCard({ initialCard: NODE_CARD });
         expect(stepperValue()).toBe('700');
         await press(button('Increase by 100'));
         expect(stepperValue()).toBe('800');
         await press(setButton());
-        expect(postedLevels()).toEqual([800]);
+        // The level the node takes, in whole hundredths: 800 Beans.
+        expect(postedLevels()).toEqual([80000]);
         expect(postedLevels().every((l) => isBudgetLevel(l) && l >= NODE_CARD.held)).toBe(true);
     });
 
     it('stepping down stops at the lowest level the node takes for what is held, and never posts an off-grid level', async () => {
         mockFetch.mockResolvedValue(answer(409, { code: 'below_held', error: 'never asked' }));
-        await renderCard({ initialCard: { ...NODE_CARD, held: 125, left: 525, level: 650 } });
+        await renderCard({ initialCard: { ...NODE_CARD, held: 12500, left: 52500, level: 65000 } });
         expect(stepperValue()).toBe('700');
         for (let i = 0; i < 10; i++) {
             const down = button('Decrease by 100');
@@ -212,21 +220,21 @@ describe('the voucher card from a card shaped as the node sends it (§5, §10)',
         expect(stepperValue()).toBe('200');
         expect(button('Decrease by 100')?.disabled).toBe(true);
         await press(setButton());
-        expect(postedLevels()).toEqual([200]);
+        expect(postedLevels()).toEqual([20000]);
     });
 
     it('a quick level the node would refuse is not offered (below what is held)', async () => {
-        await renderCard({ initialCard: { ...NODE_CARD, held: 600, left: 50, level: 650, heldInvites: 6 } });
+        await renderCard({ initialCard: { ...NODE_CARD, held: 60000, left: 5000, level: 65000, heldInvites: 6 } });
         expect(button('500')?.disabled).toBe(true);
-        expect(button('1000')?.disabled).toBeFalsy();
+        expect(button('1,000')?.disabled).toBeFalsy();
         expect(stepperValue()).toBe('700');
     });
 
     it('the Set button waits while the level is the one the voucher already has (the node would write nothing)', async () => {
-        await renderCard({ initialCard: { ...NODE_CARD, left: 900, held: 100, vouched: 0, level: 1000 } });
+        await renderCard({ initialCard: { ...NODE_CARD, left: 90000, held: 10000, vouched: 0, level: 100000 } });
         expect(stepperValue()).toBe('1000');
         expect(setButton()?.disabled).toBe(true);
-        await press(button('1500'));
+        await press(button('1,500'));
         expect(setButton()?.disabled).toBeFalsy();
     });
 
@@ -234,16 +242,20 @@ describe('the voucher card from a card shaped as the node sends it (§5, §10)',
         await renderCard({ initialCard: NODE_CARD });
         const text = container.textContent ?? '';
         expect(text).toContain('550 of 650 left');
-        expect(text).toContain('Vouched 350 to 4 people who joined');
+        // The numbers first (invites-vouching I4): the headline is the card's first line, before the budget.
+        expect(text).toContain('Vouched 350 to 4 people · 100 in the last 30 days · 1 below zero · written off 0');
+        expect(container.querySelector('[data-testid="voucher-budget-card"]')?.firstElementChild?.getAttribute('data-testid')).toBe('voucher-headline');
+        expect(text).not.toContain('people who joined');
         expect(text).toContain('Held 100 on 1 invite not used yet');
         expect(text).toContain('Invites sent with a vouch: 5');
-        expect(text).toContain('1 of 4 below zero · written off 0');
         expect(text).toContain('Trading: 2 with others · 1 inside only');
         expect(container.querySelector('[data-testid="set-budget-control"]')?.textContent).toContain('550 left · 100 held');
         expect(text).not.toMatch(/[A-HJ-NP-Za-km-z1-9]{20,}/);
         expect(text).not.toMatch(/balance/i);
         // Every figure on the card is one of the node's own numbers for this budget (or a level to pick), never a balance.
-        const own = new Set(['550', '650', '350', '4', '100', '1', '5', '0', '2', '50', '25', '500', '1000', '1500', '2000', '700']);
+        // ('30' is the headline's fixed window, "in the last 30 days": a length of time, not a figure from the node.) A level
+        // of 1,000 Beans and more is grouped as every Beans figure is (core formatHundredths, as on the web).
+        const own = new Set(['550', '650', '350', '4', '100', '1', '5', '0', '2', '50', '25', '500', '1,000', '1,500', '2,000', '700', '30']);
         const figures = Array.from(container.querySelectorAll('span')).flatMap((el) => (el.textContent ?? '').replace(/\d{1,2} (Nov|Oct)/g, '').match(/\d[\d,]*/g) ?? []);
         expect(figures.filter((f) => !own.has(f))).toEqual([]);
     });
@@ -253,7 +265,7 @@ describe('the voucher card from a card shaped as the node sends it (§5, §10)',
         // send it (engine/vouchers.ts passedOnOf), so that assertion encoded the regression. It now asserts the node's number.
         await renderCard({ initialCard: NODE_CARD });
         expect(container.textContent).toContain('Passed on: 50 of their 350 to 1 person · 25 of it below zero');
-        await renderCard({ initialCard: { ...NODE_CARD, passedOn: { amount: 120, people: 3, belowZero: 0 } } });
+        await renderCard({ initialCard: { ...NODE_CARD, passedOn: { amount_c: 12000, people: 3, belowZero: 0 } } });
         expect(container.textContent).toContain('Passed on: 120 of their 350 to 3 people · 0 of it below zero');
     });
 
@@ -279,21 +291,22 @@ describe('the voucher card from a card shaped as the node sends it (§5, §10)',
         const card: VoucherCardData = {
             ...NODE_CARD,
             history: [
-                { kind: 'grant', amount: 1000, actor: 'node:claim', actorCallsign: null, at: '2026-11-01T10:00:00Z' },
-                { kind: 'top_up', amount: 500, actor: 'server:recover', actorCallsign: null, at: '2026-11-02T10:00:00Z' },
-                { kind: 'grant', amount: 1000, actor: 'migration:vouchers', actorCallsign: null, at: '2026-11-03T10:00:00Z' },
-                { kind: 'lower', amount: -200, actor: gone, actorCallsign: null, at: '2026-11-04T10:00:00Z' },
-                { kind: 'stop', amount: -300, actor: 'SYSTEM', actorCallsign: null, at: '2026-11-04T11:00:00Z' },
-                { kind: 'return', amount: 100, actor: 'node', actorCallsign: null, at: '2026-11-04T12:00:00Z', for: 'invite', why: 'expired' },
-                { kind: 'top_up', amount: 100, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' },
+                { kind: 'grant', amount_c: 100000, actor: 'node:claim', actorCallsign: null, at: '2026-11-01T10:00:00Z' },
+                { kind: 'top_up', amount_c: 50000, actor: 'server:recover', actorCallsign: null, at: '2026-11-02T10:00:00Z' },
+                { kind: 'grant', amount_c: 100000, actor: 'migration:vouchers', actorCallsign: null, at: '2026-11-03T10:00:00Z' },
+                { kind: 'lower', amount_c: -20000, actor: gone, actorCallsign: null, at: '2026-11-04T10:00:00Z' },
+                { kind: 'stop', amount_c: -30000, actor: 'SYSTEM', actorCallsign: null, at: '2026-11-04T11:00:00Z' },
+                { kind: 'return', amount_c: 10000, actor: 'node', actorCallsign: null, at: '2026-11-04T12:00:00Z', for: 'invite', why: 'expired' },
+                { kind: 'top_up', amount_c: 10000, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' },
             ],
         };
         await renderCard({ initialCard: card });
         await press(button('Budget history ›'));
         const history = container.querySelector('[data-testid="budget-history-section"]')?.textContent ?? '';
-        expect(history).toContain('+1000 budget, made a voucher by the community’s first owner, 1 Nov');
+        // Figures from whole hundredths (formatHundredths): 1,000 is grouped, as on the web.
+        expect(history).toContain('+1,000 budget, made a voucher by the community’s first owner, 1 Nov');
         expect(history).toContain('+500 top-up by the server’s shell, 2 Nov');
-        expect(history).toContain('+1000 budget, made a voucher by BeanPool, when vouchers started, 3 Nov');
+        expect(history).toContain('+1,000 budget, made a voucher by BeanPool, when vouchers started, 3 Nov');
         expect(history).toContain('−200 lower by someone who has left, 4 Nov');
         expect(history).toContain('Budget stopped by the community’s server, 4 Nov');
         expect(history).toContain('+100 back, invite expired, 4 Nov');
@@ -316,12 +329,12 @@ describe('the voucher card from a card shaped as the node sends it (§5, §10)',
     });
 
     it('keeps the controls after a budget is set (the node’s card carries no canChange)', async () => {
-        const { canChange: _drop, ...noCanChange } = { ...NODE_CARD, left: 1400, level: 1500, changed: true };
+        const { canChange: _drop, ...noCanChange } = { ...NODE_CARD, left: 140000, level: 150000, changed: true };
         mockFetch.mockResolvedValueOnce(answer(200, noCanChange));
         await renderCard({ initialCard: NODE_CARD });
-        await press(button('1500'));
+        await press(button('1,500'));
         await press(setButton());
-        expect(container.textContent).toContain('Budget set to 1500 Beans.');
+        expect(container.textContent).toContain('Budget set to 1,500 Beans.');
         expect(container.querySelector('[data-testid="set-budget-control"]')).not.toBeNull();
         expect(stepperValue()).toBe('1500');
     });
@@ -349,6 +362,31 @@ describe('the rules the screens call', () => {
         expect(canMakeVoucher(entry({}), true, null)).toBe(false);
     });
 
+    it('canMakeVoucher: not on an admin’s entry for a viewer who is not an owner (the node answers 403 owner_only); an owner may (review, 10 Nov; I5)', () => {
+        const admins = [
+            { pubkey: ME, role: 'owner' }, { pubkey: 'pk_alice', role: 'admin' }, { pubkey: 'pk_wren', role: 'admin' }, { pubkey: 'pk_sally', role: 'owner' },
+        ];
+        const committeeAdmin = ownerOnlyVoucherTargets(admins, false);
+        const owner = ownerOnlyVoucherTargets(admins, true);
+        // Alice is an admin (entry() confirms pk_alice): a committee admin is not offered Make, an owner is.
+        expect(canMakeVoucher(entry({}), true, ME, committeeAdmin)).toBe(false);
+        expect(canMakeVoucher(entry({}), true, ME, owner)).toBe(true);
+        // A member who is no admin is offered to both, and the rule never lets a non-committee viewer in.
+        expect(canMakeVoucher(entry({ confirmation: confirmation({ memberPubkey: 'pk_bea' }) }), true, ME, committeeAdmin)).toBe(true);
+        expect(canMakeVoucher(entry({}), false, ME, owner)).toBe(false);
+        // The other checks still hold with the set given.
+        expect(canMakeVoucher(entry({ confirmation: confirmation({ status: 'awaiting_second', memberPubkey: 'pk_bea' }) }), true, ME, committeeAdmin)).toBe(false);
+        expect(canMakeVoucher(entry({ voucher: summary({ memberPubkey: 'pk_bea' }), confirmation: confirmation({ memberPubkey: 'pk_bea' }) }), true, ME, committeeAdmin)).toBe(false);
+    });
+
+    it('ownerOnlyVoucherTargets: the admins, for anyone who is not an owner; nobody for an owner; owners are never in it', () => {
+        const admins = [{ pubkey: 'pk_sally', role: 'owner' }, { pubkey: 'pk_alice', role: 'admin' }, { pubkey: 'pk_wren', role: 'admin' }];
+        expect([...ownerOnlyVoucherTargets(admins, false)].sort()).toEqual(['pk_alice', 'pk_wren']);
+        expect(ownerOnlyVoucherTargets(admins, true).size).toBe(0);
+        expect(ownerOnlyVoucherTargets(null, false).size).toBe(0);
+        expect(ownerOnlyVoucherTargets(undefined, false).size).toBe(0);
+    });
+
     it('voucherCallsignFor: the confirmation’s callsign, the community’s, the entry’s name', () => {
         const callsignOf = (pk: string) => (pk === 'pk_charlie' ? 'charlie' : '');
         expect(voucherCallsignFor(entry({ confirmation: confirmation({ callsign: 'alice' }) }), callsignOf)).toBe('alice');
@@ -373,7 +411,11 @@ describe('the rules the screens call', () => {
         expect(voucherActorWords({ actor: 'migration:vouchers', actorCallsign: null })).toBe('BeanPool, when vouchers started');
         expect(voucherActorWords({ actor: 'f'.repeat(64), actorCallsign: null })).toBe('someone who has left');
         expect(voucherActorWords({ actor: 'f'.repeat(64), actorCallsign: 'wren' })).toBe('@wren');
-        expect(historyLineWords({ kind: 'mystery', amount: 5, actor: 'node:claim', actorCallsign: null, at: '2026-11-05T10:00:00Z' })).toBe('Budget changed by the community’s first owner, 5 Nov');
+        expect(historyLineWords({ kind: 'mystery', amount_c: 500, actor: 'node:claim', actorCallsign: null, at: '2026-11-05T10:00:00Z' })).toBe('Budget changed by the community’s first owner, 5 Nov');
+        // A line's figure is whole hundredths: a part of a Bean shows its hundredths; a figure that isn't one is no number.
+        expect(historyLineWords({ kind: 'top_up', amount_c: 4925, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' })).toBe('+49.25 top-up by @marty, 5 Nov');
+        expect(historyLineWords({ kind: 'top_up', amount_c: 1, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' })).toBe('+0.01 top-up by @marty, 5 Nov');
+        expect(historyLineWords({ kind: 'top_up', amount_c: 12.5, actor: 'b2'.repeat(32), actorCallsign: 'marty', at: '2026-11-05T10:00:00Z' })).not.toMatch(/12/);
     });
 
     it('voucherCardSubtitle: a seconded confirmation names both admins; a role budget says so', () => {
@@ -381,13 +423,22 @@ describe('the rules the screens call', () => {
         const nameOf = (pk: string) => ({ pk_marty: 'marty', pk_wren: 'wren' } as Record<string, string>)[pk] ?? '';
         expect(voucherCardSubtitle(NODE_CARD, conf, nameOf)).toBe('@jane: confirmed by @marty and @wren, 4 Nov · made a voucher by @marty, 5 Nov');
         expect(voucherCardSubtitle({ ...NODE_CARD, source: 'role', madeBy: 'migration:vouchers', madeByCallsign: null }, null)).toBe('@jane · made a voucher by role');
+        // An admin an owner made a voucher (I5: source 'role', made by that owner) names the owner, as the web and manager do.
+        expect(voucherCardSubtitle({ ...NODE_CARD, source: 'role', madeBy: 'pk_marty', madeByCallsign: 'marty' }, null)).toBe('@jane · made a voucher by @marty, 5 Nov');
         // Someone else's confirmation (not this member's) is never shown as theirs.
         expect(voucherCardSubtitle(NODE_CARD, confirmation({ memberPubkey: 'pk_other' }), nameOf)).toBe('@jane · made a voucher by @marty, 5 Nov');
     });
 
     it('the Vouchers block row, from the node’s numbers (§11)', () => {
-        expect(voucherRowText(NODE_CARD)).toBe('@jane · 550 of 650 left · 4 vouched · 1 below zero ›');
-        expect(voucherRowText({ ...NODE_CARD, left: 1450, level: 1500, peopleVouched: 0, belowZero: 0 })).toBe('@jane · 1450 of 1500 left · 0 vouched · 0 below zero ›');
+        // Rows say only what matters (I4): who and what is left; an owner's says who and how many they vouched, no budget words.
+        expect(voucherRowText(NODE_CARD)).toBe('@jane · 550 left ›');
+        expect(voucherRowText({ ...NODE_CARD, left: 145000 })).toBe('@jane · 1,450 left ›');
+        // The figures this check pins (DESIGN-atomic-beans-fable.md M2): a hundredth, a Bean, a part, and a whole figure.
+        expect(voucherRowText({ ...NODE_CARD, left: 1 })).toBe('@jane · 0.01 left ›');
+        expect(voucherRowText({ ...NODE_CARD, left: 100 })).toBe('@jane · 1 left ›');
+        expect(voucherRowText({ ...NODE_CARD, left: 4925 })).toBe('@jane · 49.25 left ›');
+        expect(voucherRowText({ ...NODE_CARD, left: 50000 })).toBe('@jane · 500 left ›');
+        expect(voucherRowText({ ...NODE_CARD, noLimit: true })).toBe('@jane · 4 vouched ›');
     });
 });
 
@@ -419,10 +470,12 @@ describe('the names list puts vouchers first (§10), on entries sealed with a re
 
     it('Make a voucher posts the amount picked', async () => {
         mockFetch.mockResolvedValueOnce(answer(201, NODE_CARD));
-        const res = await makeNamesVoucher('https://community.test', identity, 'e'.repeat(32), 1100);
+        const res = await makeNamesVoucher('https://community.test', identity, 'e'.repeat(32), 110000);
         expect(res.ok).toBe(true);
         const [url, init] = mockFetch.mock.calls[0];
         expect(String(url)).toBe('https://community.test/api/names/vouchers');
-        expect(JSON.parse((init as { body: string }).body)).toEqual({ entryId: 'e'.repeat(32), amount: 1100 });
+        // The budget is `amount_c`, whole hundredths (engine/vouchers.ts makeVoucher): the node refuses the old `amount`
+        // with 400 amount_c_required, so the old `{ entryId, amount: 1100 }` this pinned was never made.
+        expect(JSON.parse((init as { body: string }).body)).toEqual({ entryId: 'e'.repeat(32), amount_c: 110000 });
     });
 });

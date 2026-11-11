@@ -33,6 +33,7 @@ import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { CIRCLE_WORDS_FIXED, setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -94,7 +95,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 30 * 86_400_000).toISOString(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 const pushToken = (id: Id) => `ExponentPushToken[${id.pk.slice(0, 20)}]`;
@@ -114,7 +115,8 @@ async function call(method: 'GET' | 'POST' | 'DELETE', id: Id | null, urlPath: s
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -343,7 +345,7 @@ async function main(): Promise<void> {
     const talkRow = (listed.body?.conversations ?? []).find((c: any) => c.id === circle.id);
     assert(talkRow?.type === 'group_thread' && talkRow?.groupKind === 'circle', `its Talk row says it is a circle, so an app can show its name in the reader's language (got ${JSON.stringify(talkRow ?? null)})`);
     const lateOffer = await call('POST', ana, '/api/marketplace/posts', { type: 'offer', category: 'general', title: 'Offer after the close', description: 'An offer posted after the circle closed.',
-        credits: 0, priceType: 'fixed', authorPublicKey: ana.pk, audienceScope: 'group', targetGroupId: circle.id, photos: TEST_PHOTOS });
+        price_c: 0, priceType: 'fixed', authorPublicKey: ana.pk, audienceScope: 'group', targetGroupId: circle.id, photos: TEST_PHOTOS });
     assert(lateOffer.status === 400 && lateOffer.body?.error === PLACE_CIRCLE_CLOSED_TO_POSTS, `a post to it hears the circle finished, not that anyone voted (got ${lateOffer.status} ${JSON.stringify(lateOffer.body)})`);
     assert(!(await call('GET', ana, '/api/global/home?lat=10.5&lng=76.2')).body?.circle, 'the Find card lets it go');
     // Retiring and clearing the flags are one write: a circle marked retired is never looked at again, so flags left on it
@@ -537,7 +539,8 @@ async function patch(id: Id, urlPath: string, body: unknown): Promise<number> {
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`PATCH\n${urlPath}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'PATCH', path: urlPath, timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
     return (await localFetch(`${BASE}${urlPath}`, { method: 'PATCH', headers, body: raw })).status;
 }

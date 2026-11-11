@@ -1,3 +1,4 @@
+import { inviteFolds } from '@beanpool/core';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -22,7 +23,7 @@ vi.mock('../lib/api', async (importOriginal) => {
 // The node's /api/community/info, read once per page load. By default it says nothing about invites, as every node
 // before the switch.
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 // The QR code spy: verifies what value is encoded.
 vi.mock('qrcode.react', () => ({ QRCodeSVG: vi.fn(() => null) }));
@@ -35,13 +36,14 @@ import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
 const info = (features: Record<string, boolean>, profile: 'local' | 'global' = 'global') =>
-    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile, features });
+    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile, features });
 const GLOBAL = info({ beans: false, openJoin: true, guestListingsOnly: true, decisions: false, invites: false });
 const WORDS = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
 
 beforeEach(() => {
+    inviteFolds.clear();
     vi.clearAllMocks();
-    vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} }) as never);
+    vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} }) as never);
     localStorage.clear();
 });
 
@@ -104,7 +106,7 @@ describe('the Invites page where the node takes no invites (the global node)', (
             await waitFor(() => expect(screen.getByText(/Bring someone here/)).toBeInTheDocument());
             expect(screen.queryByRole('button', { name: /Generate New Invite/ })).toBeNull();
             expect(screen.queryByText(/Invite Someone/)).toBeNull();
-            expect(screen.queryByPlaceholderText(/Who is this invite for/)).toBeNull();
+            expect(screen.queryByPlaceholderText(/A note for you/)).toBeNull();
             expect(screen.queryByText(/INV-OLD1-CODE/)).toBeNull();
             expect(screen.queryByRole('button', { name: /Tree/ })).toBeNull();
             expect(screen.getByText(window.location.origin)).toBeInTheDocument();
@@ -157,6 +159,7 @@ describe('the Invites page everywhere else: as before', () => {
             render(<InvitePage identity={IDENTITY} />);
             await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
             expect(await screen.findByRole('button', { name: /Generate New Invite/ })).toBeInTheDocument();
+            fireEvent.click(await screen.findByTestId('invites-pending-fold'));
             expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
             expect(screen.queryByText(/Bring someone here/)).toBeNull();

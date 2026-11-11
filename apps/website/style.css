@@ -682,27 +682,33 @@ a.logo { min-height: 44px; }
     margin-bottom: auto;
 }
 
-/* Official Store Badges with White Ring */
+/* The store badges: Apple's and Google's OWN artwork (assets/app-store-badge.svg, assets/google-play-badge.svg), byte for
+   byte, shown with <img>. Both programmes forbid redrawing, recolouring, cropping, tilting or animating a badge, so nothing
+   here touches the picture: no opacity, no hover movement, no glow. Both 40px tall (Apple's minimum), the width each file's
+   own shape gives (auto, so nothing is stretched), a quarter of the height (10px) clear round each as the link's padding,
+   Apple's first. The two wrap onto two lines at phone width instead of shrinking. */
 .hero-store-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.65rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     width: 100%;
 }
 .hero-store-badge {
-    display: flex;
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-    opacity: 0.95;
-}
-.hero-store-badge svg {
-    width: 100%;
-    height: 42px;
     display: block;
+    flex-shrink: 0;
+    padding: 10px;
+    line-height: 0;
+    border-radius: 10px;
 }
-.hero-store-badge:hover {
-    opacity: 1;
-    transform: translateY(-2px);
-    filter: drop-shadow(0 8px 20px rgba(var(--rgb-accent), 0.3));
+.hero-store-badge img {
+    display: block;
+    height: 40px;
+    width: auto;
+    max-width: none; /* a narrow column wraps the badges onto another line; it never squeezes a picture out of shape */
+}
+.hero-store-badge:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
 }
 
 /* ======================== HERO PRINCIPLES BANNER ======================== */
@@ -1731,6 +1737,10 @@ footer {
     .store-badges {
         justify-content: center;
     }
+    /* the card's words are centred here, so the badges are */
+    .hero-store-grid {
+        justify-content: center;
+    }
     .feature-highlight {
         flex-direction: column;
         text-align: center;
@@ -2041,8 +2051,6 @@ footer {
     .hero-header { margin-bottom: 1.5rem; }
     .hero-subtitle { font-size: 1rem; }
     .hero-actions-grid { grid-template-columns: 1fr; }
-    .hero-store-grid { grid-template-columns: 1fr; justify-items: center; }
-    .hero-store-badge svg { width: 180px; height: 53px; }
     .hero-cta-card, .not-card { padding: 1.2rem 1rem; }
     .feature-card { padding: 1.35rem 1.1rem; }
     .cta-card { padding: 2rem 0.75rem; }

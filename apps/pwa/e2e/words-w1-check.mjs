@@ -68,18 +68,18 @@ const MESSAGES = {
     'conv-trade': [
         line('m1', 'member-charlie', 'Is the loaf still free?'),
         line('m2', ME, 'Yes, come by Saturday', { metadata: JSON.stringify({ replyToId: 'm1' }) }),
-        line('m3', 'SYSTEM', '', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount: 3, postId: 'post-2' }) }),
+        line('m3', 'SYSTEM', '', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount_c: 300, postId: 'post-2' }) }),
     ],
 };
 const TXS = [
-    { id: 'tx-held', postId: 'post-2', postTitle: 'Sourdough loaf', buyerPublicKey: ME, buyerCallsign: 'You', sellerPublicKey: 'member-charlie', sellerCallsign: 'Charlie', credits: 3, status: 'pending', createdAt: iso(-26 * HOUR) },
-    { id: 'tx-done', postId: 'post-3', postTitle: 'Ladder', buyerPublicKey: ME, buyerCallsign: 'You', sellerPublicKey: 'member-bob', sellerCallsign: 'Bob', credits: 5, status: 'completed', createdAt: iso(-50 * HOUR), completedAt: iso(-49 * HOUR), ratedByBuyer: false, ratedBySeller: false },
+    { id: 'tx-held', postId: 'post-2', postTitle: 'Sourdough loaf', buyerPublicKey: ME, buyerCallsign: 'You', sellerPublicKey: 'member-charlie', sellerCallsign: 'Charlie', amount_c: 300, status: 'pending', createdAt: iso(-26 * HOUR) },
+    { id: 'tx-done', postId: 'post-3', postTitle: 'Ladder', buyerPublicKey: ME, buyerCallsign: 'You', sellerPublicKey: 'member-bob', sellerCallsign: 'Bob', amount_c: 500, status: 'completed', createdAt: iso(-50 * HOUR), completedAt: iso(-49 * HOUR), ratedByBuyer: false, ratedBySeller: false },
 ];
 const FEED = [
     { id: 1, eventType: 'member_joined', actorPubkey: 'member-bob', actorCallsign: 'Bob', createdAt: iso(-HOUR) },
-    { id: 2, eventType: 'trade_completed', actorPubkey: 'member-sam', actorCallsign: 'Sam', targetPubkey: 'member-bea', targetCallsign: 'Bea', metadata: { postId: 'post-2', postTitle: 'Bike repair', credits: 12 }, createdAt: iso(-2 * HOUR) },
+    { id: 2, eventType: 'trade_completed', actorPubkey: 'member-sam', actorCallsign: 'Sam', targetPubkey: 'member-bea', targetCallsign: 'Bea', metadata: { postId: 'post-2', postTitle: 'Bike repair', amount_c: 1200 }, createdAt: iso(-2 * HOUR) },
     { id: 3, eventType: 'rating_given', actorPubkey: 'member-rae', actorCallsign: 'Rae', targetPubkey: 'member-tia', targetCallsign: 'Tia', metadata: { stars: 4, comment: 'Fast and friendly' }, createdAt: iso(-3 * HOUR) },
-    { id: 4, eventType: 'post_created', actorPubkey: 'member-damo', actorCallsign: 'Damo', metadata: { postId: 'post-1', title: 'Record fair', credits: 5 }, createdAt: iso(-26 * HOUR) },
+    { id: 4, eventType: 'post_created', actorPubkey: 'member-damo', actorCallsign: 'Damo', metadata: { postId: 'post-1', title: 'Record fair', price_c: 500 }, createdAt: iso(-26 * HOUR) },
 ];
 const pulseItem = (over) => ({ id: 'pi-1', ownerPubkey: ME, url: 'https://youtube.com/watch?v=1', platform: 'youtube', category: 'food', title: 'Seed saving at the hall',
     thumbnailUrl: null, callsign: 'GreenThumb', avatarUrl: 'bundled://leaf', source: 'user', isVerified: true, publishedAt: iso(-3 * HOUR), ...over });
@@ -219,7 +219,6 @@ async function main() {
                 const run = `${screen} ${lang}`;
                 const context = await browser.newContext({ viewport: { width: 320, height: 568 }, reducedMotion: 'reduce', colorScheme: 'light' });
                 await context.addInitScript(() => {
-                    localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                     localStorage.setItem('beanpool-theme-mode', 'light');
                 });
                 await context.route((url) => url.origin !== origin, (route) => route.abort());

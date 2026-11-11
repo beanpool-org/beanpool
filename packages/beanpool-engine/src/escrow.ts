@@ -15,7 +15,8 @@ export interface MarketplaceTransaction {
     buyerCallsign: string;
     sellerPublicKey: string;
     sellerCallsign: string;
-    credits: number;
+    /** The deal's price, whole hundredths of a Bean (0 for a free listing). */
+    amount_c: number;
     hours?: number;
     status: 'requested' | 'pending' | 'completed' | 'cancelled' | 'rejected' | string;
     createdAt: string;
@@ -29,8 +30,53 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /**
+     * A period of a standing deal (DESIGN-standing-deals-fable §2.3; DESIGN-standing-deals-upfront-fable §1): which one and
+     * its number, each a finished deal paid at its start; on the standing deal's CURRENT row only (the period last paid), its
+     * phase, the Beans per period, its unit, how many periods (null: until stopped), its start, when the node next acts on it
+     * (the next period's start, or its next try while short), since when the period now due is unpaid, and whether either
+     * side has tapped Stop.
+     */
+    standingId?: string;
+    periodNo?: number;
+    standingPhase?: 'paid' | 'short' | 'ended';
+    /** The Beans per period, whole hundredths of a Bean. */
+    standingBeans_c?: number;
+    standingUnit?: 'week' | 'month';
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string;
+    standingStopped?: boolean;
+    standingStartsAt?: string;
+    /** Since when the period now due is unpaid (phase short): its start; its grace ends half that period later (@beanpool/core standingGraceEndsAt). */
+    standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.
+}
+
+/** A row's standing-deal fields (the reads join its standing deal only where this row is its current period). */
+function standingFields(r: any): Partial<MarketplaceTransaction> {
+    if (!r.standing_id) return {};
+    const out: Partial<MarketplaceTransaction> = { standingId: r.standing_id, periodNo: r.period_no ?? undefined };
+    if (r.sdPhase) {
+        out.standingPhase = r.sdPhase;
+        out.standingBeans_c = r.sdBeans;
+        out.standingUnit = r.sdUnit;
+        out.standingMaxPeriods = r.sdMax ?? null;
+        out.standingNextDueAt = r.sdNextDueAt;
+        out.standingStopped = !!r.sdStoppedAt;
+        out.standingStartsAt = r.sdStartsAt;
+        out.standingShortSince = r.sdShortSince ?? null;
+        if (r.sdPhase === 'ended') {
+            out.standingEndedReason = r.sdEndedReason ?? null;
+            out.standingStoppedBy = r.sdStoppedBy ?? null;
+            out.standingEndedAt = r.sdEndedAt ?? null;
+        }
+    }
+    return out;
 }
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
@@ -52,9 +98,13 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
                p.repeatable as postRepeatable, p.lendable as postLendable,
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
-               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
+               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
+               sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
+               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
+               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id
         LEFT JOIN members m1 ON mt.buyer_pubkey = m1.public_key
         LEFT JOIN members m2 ON mt.seller_pubkey = m2.public_key
         WHERE mt.id = ?
@@ -79,7 +129,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         buyerCallsign: r.buyerCallsign,
         sellerPublicKey: r.seller_pubkey,
         sellerCallsign: r.sellerCallsign,
-        credits: r.credits,
+        amount_c: r.amount_c,
         hours: r.hours ?? undefined,
         status: r.status,
         createdAt: r.created_at,
@@ -93,6 +143,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         postAuthorPublicKey: r.postAuthorPublicKey ?? undefined,
         postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
         postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+        ...standingFields(r),
     };
 }
 
@@ -108,9 +159,13 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
                p.repeatable as postRepeatable, p.lendable as postLendable,
                COALESCE(p.active, 0) = 1 as postLive, m1.callsign as buyerCallsign, m2.callsign as sellerCallsign,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.buyer_pubkey) as ratedByBuyer,
-               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller
+               EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = mt.seller_pubkey) as ratedBySeller,
+               sd.phase as sdPhase, sd.beans_per_period_c as sdBeans, sd.period_unit as sdUnit, sd.max_periods as sdMax,
+               sd.next_due_at as sdNextDueAt, sd.stopped_at as sdStoppedAt, sd.starts_at as sdStartsAt, sd.short_since as sdShortSince,
+               sd.ended_reason as sdEndedReason, sd.stopped_by as sdStoppedBy, sd.ended_at as sdEndedAt
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
+        LEFT JOIN standing_deals sd ON sd.id = mt.standing_id AND sd.current_tx_id = mt.id
         LEFT JOIN members m1 ON mt.buyer_pubkey = m1.public_key
         LEFT JOIN members m2 ON mt.seller_pubkey = m2.public_key
         WHERE (mt.buyer_pubkey = ? OR mt.seller_pubkey = ?)
@@ -147,7 +202,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             buyerCallsign: r.buyerCallsign,
             sellerPublicKey: r.seller_pubkey,
             sellerCallsign: r.sellerCallsign,
-            credits: r.credits,
+            amount_c: r.amount_c,
             hours: r.hours ?? undefined,
             status: r.status,
             createdAt: r.created_at,
@@ -161,6 +216,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             postAuthorPublicKey: r.postAuthorPublicKey ?? undefined,
             postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
             postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+        ...standingFields(r),
         };
     });
 }

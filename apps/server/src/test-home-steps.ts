@@ -25,6 +25,7 @@ import { db } from './db/db.js';
 import { setMemberArea } from './engine/member-area.js';
 import { setNodeRole, standbyWritesNothing } from './config/node-role.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -62,10 +63,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: 
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -130,7 +132,7 @@ async function main() {
     assert(stepsPhotoCleared?.photo === true, 'photo remains true after clearing avatar (never un-ticks)');
 
     // 2c. FirstPost: create offer post -> true, persisted in step_post; delete post -> remains true
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, origin_node)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
                 VALUES ('post-step-test', 'offer', 'food', 'Fresh basil', 'Grown at home', 5, ?, 1, 'active', NULL)`).run(alice.pubKeyHex);
     const stepsPost = await getHomeSteps(alice);
     assert(stepsPost?.firstPost === true, 'firstPost is true after creating post');
@@ -228,7 +230,7 @@ async function main() {
     // 5a. Young local member who completed all local steps: card stays while young (14 days)
     const grace = makeMember('GraceLocalYoung');
     // Complete local steps: firstOffer, photo, interests, invited
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, origin_node)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
                 VALUES ('post-grace-local', 'offer', 'food', 'Sourdough', 'Baked fresh', 5, ?, 1, 'active', NULL)`).run(grace.pubKeyHex);
     setMemberPhoto(db, grace.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     setMemberPreferences(grace.pubKeyHex, { interests: ['food', 'garden'] });
@@ -251,7 +253,7 @@ async function main() {
     assert(heidiStepsUndone !== undefined, 'local first-steps card stays after 14 days while steps are undone');
 
     // Once older member finishes all local steps: card ends
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, origin_node)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
                 VALUES ('post-heidi-local', 'offer', 'food', 'Jam', 'Sweet strawberry jam', 3, ?, 1, 'active', NULL)`).run(heidi.pubKeyHex);
     setMemberPhoto(db, heidi.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     setMemberPreferences(heidi.pubKeyHex, { interests: ['food'] });

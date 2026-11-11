@@ -148,8 +148,16 @@ export const PUSH_NOTICE_KINDS = {
     // notifyKnockReceived). People, whose Invites list holds the request. The asker's "answered" notice is no push: their
     // phone posts it from its own background check (apps/native utils/sync-notices.ts), since no community has their token.
     'community.knock': { body: word('Someone asked to join your community.'), tab: 'people' },
+    // To the member whose link shared outside a request to join came with (server engine/knocks.ts notifyKnockReceived,
+    // shared-listing door A3), instead of the plain one: no name and no listing. Its details open their Shared outside,
+    // where that link's row counts who asked. The listing's author is told nothing.
+    'community.knock-shared': { body: word('Someone asked to join after a listing you shared.'), tab: 'settings' },
     // To a member whose ask to invite someone was answered (server engine/invite-asks.ts). Never the code, the reason or a name.
     'community.invite-ask': { body: word('An admin answered your ask to invite someone.'), tab: 'people' },
+    // To the browser that asked to join and tapped "Tell me when they answer" on the waiting page, when a member says yes (server
+    // engine/knocks.ts approveKnock; web push W1). A decline sends nothing: it reads as waiting, by design. Home: the waiting
+    // page, which reads the request's own status and offers Join.
+    'join.answered': { body: word('A community answered your request to join.'), tab: 'home' },
     'account.recovery-started': { body: word("Someone is trying to recover your account. If this isn't you, open BeanPool and stop it."), tab: 'settings' },
     'account.restored': { body: word("Your account was just restored on another device. If that wasn't you, open BeanPool now."), tab: 'settings' },
     // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a

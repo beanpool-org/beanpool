@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, tn, formatNumber, formatDate, VOUCHER_BUDGET_MAX } from '@beanpool/core';
+import { t, tn, beans, formatHundredths, formatDate, voucherCardHeadline, VOUCHER_BUDGET_MAX, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
     fetchVoucherCard, setVoucherBudget, stopNamesVoucher,
@@ -9,7 +9,7 @@ import {
 } from '../utils/names-list';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    acceptsBudgetLevel, nearestBudgetLevel, budgetLevelUp, budgetLevelDown, historyLineWords, voucherCardSubtitle,
+    acceptsBudgetLevel, nearestBudgetLevel, budgetLevelUp, budgetLevelDown, historyLineWords, voucherCardSubtitle, passedOnAmountOf, personVouchedOf,
 } from '../utils/voucher-rules';
 
 export interface VoucherCardProps {
@@ -25,7 +25,8 @@ export interface VoucherCardProps {
     onVoucherUpdated?: (updated: VoucherCardData) => void;
 }
 
-const QUICK_LEVELS = [500, 1000, 1500, 2000] as const;
+/** The quick levels, 500 to 2,000 Beans, in whole hundredths as every budget figure is (core beans()). */
+const QUICK_LEVELS: readonly number[] = [beans(500), beans(1000), beans(1500), beans(2000)];
 
 function dateWords(iso: string | null | undefined, pattern: 'day-month' | 'day-month-year'): string {
     const d = iso ? new Date(iso) : null;
@@ -79,10 +80,10 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
         try {
             const res = await setVoucherBudget(anchorUrl, identity, card.memberPubkey, targetLevel);
             if (res.ok) {
-                setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true }));
+                setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true, canStop: prev?.canStop }));
                 setTargetLevel(nearestBudgetLevel(res.value.level, res.value.held));
                 onVoucherUpdated?.(res.value);
-                setNotice(t('Budget set to {level} Beans.', { level: formatNumber(targetLevel) }));
+                setNotice(t('Budget set to {level} Beans.', { level: formatHundredths(targetLevel) }));
             } else {
                 setError(res.message);
             }
@@ -108,7 +109,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         try {
                             const res = await stopNamesVoucher(anchorUrl, identity, card.memberPubkey);
                             if (res.ok) {
-                                setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true }));
+                                setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true, canStop: prev?.canStop }));
                                 onVoucherUpdated?.(res.value);
                                 setNotice(t('Budget stopped.'));
                             } else {
@@ -145,6 +146,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
             padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default,
             backgroundColor: colors.surface.card, gap: 8,
         },
+        headline: { fontSize: 15, lineHeight: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 8 },
         boxHeader: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5, color: colors.text.secondary, textTransform: 'uppercase', marginBottom: 2 },
         boxLine: { fontSize: 15, lineHeight: 22, color: colors.text.body },
 
@@ -277,25 +279,22 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
 
                 {/* Their budget card */}
                 <View style={styles.box} testID="voucher-budget-card">
+                    {/* The numbers first (invites-vouching I4): "Vouched 350 to 4 people · 100 in the last 30 days · 1 below zero · written off 0". */}
+                    <Text style={styles.headline} maxFontSizeMultiplier={1.3} testID="voucher-headline">{voucherCardHeadline(card)}</Text>
                     <Text style={styles.boxHeader}>{t('Their budget')}</Text>
+                    {/* An owner vouches with no limit (Marty, 9 Nov): no budget figure, no held line, no set-to. */}
                     <Text style={styles.boxLine}>
-                        {t('{left} of {budget} left', { left: formatNumber(card.left), budget: formatNumber(card.level) })}
+                        {card.noLimit
+                            ? t(VOUCH_PRESET_WORDS.noLimit)
+                            : t('{left} of {budget} left', { left: formatHundredths(card.left), budget: formatHundredths(card.level) })}
                     </Text>
-                    <Text style={styles.boxLine}>
-                        {tn(card.peopleVouched, 'Vouched {amount} to {n} person who joined', 'Vouched {amount} to {n} people who joined', { amount: formatNumber(card.vouched) })}
-                    </Text>
-                    <Text style={styles.boxLine}>
-                        {tn(card.heldInvites, 'Held {amount} on {n} invite not used yet', 'Held {amount} on {n} invites not used yet', { amount: formatNumber(card.held) })}
-                    </Text>
+                    {!card.noLimit && (
+                        <Text style={styles.boxLine}>
+                            {tn(card.heldInvites, 'Held {amount} on {n} invite not used yet', 'Held {amount} on {n} invites not used yet', { amount: formatHundredths(card.held) })}
+                        </Text>
+                    )}
                     <Text style={styles.boxLine}>
                         {tn(card.invitesWithVouch, 'Invites sent with a vouch: {n}', 'Invites sent with a vouch: {n}')}
-                    </Text>
-                    <Text style={styles.boxLine}>
-                        {t('{belowZero} of {total} below zero · written off {writtenOff}', {
-                            belowZero: card.belowZero,
-                            total: card.peopleVouched,
-                            writtenOff: formatNumber(card.writtenOff),
-                        })}
                     </Text>
                     <Text style={styles.boxLine}>
                         {t('Trading: {others} with others · {inside} inside only', {
@@ -304,21 +303,21 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         })}
                     </Text>
                     <Text style={styles.boxLine}>
-                        {card.passedOn && card.passedOn.amount > 0
+                        {(passedOnAmountOf(card.passedOn) ?? 0) > 0
                             ? tn(card.passedOn.people, 'Passed on: {amount} of their {vouched} to {n} person · {belowZero} of it below zero', 'Passed on: {amount} of their {vouched} to {n} people · {belowZero} of it below zero', {
-                                amount: formatNumber(card.passedOn.amount),
-                                vouched: formatNumber(card.vouched),
-                                belowZero: formatNumber(card.passedOn.belowZero ?? 0),
+                                amount: formatHundredths(passedOnAmountOf(card.passedOn)),
+                                vouched: formatHundredths(card.vouched),
+                                belowZero: formatHundredths(card.passedOn.belowZero ?? 0),
                             })
                             : t('Passed on: 0')}
                     </Text>
 
                     {/* Set budget to control (§10) */}
-                    {card.canChange && !card.stoppedAt && (
+                    {card.canChange && !card.stoppedAt && !card.noLimit && (
                         <View style={styles.controlSection} testID="set-budget-control">
                             <Text style={styles.controlTitle}>{t('Set budget to')}</Text>
                             <Text style={styles.controlHint}>
-                                {t('{left} left · {held} held', { left: formatNumber(card.left), held: formatNumber(card.held) })}
+                                {t('{left} left · {held} held', { left: formatHundredths(card.left), held: formatHundredths(card.held) })}
                             </Text>
 
                             <View style={styles.levelsRow}>
@@ -332,10 +331,10 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                             onPress={() => setTargetLevel(lvl)}
                                             disabled={disabled || busy}
                                             accessibilityRole="button"
-                                            accessibilityLabel={formatNumber(lvl)}
+                                            accessibilityLabel={formatHundredths(lvl)}
                                         >
                                             <Text style={[styles.levelBtnText, active && styles.levelBtnTextActive]}>
-                                                {formatNumber(lvl)}
+                                                {formatHundredths(lvl)}
                                             </Text>
                                         </Pressable>
                                     );
@@ -353,7 +352,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                     <Text style={styles.stepperBtnText}>−</Text>
                                 </Pressable>
                                 <Text style={styles.stepperValue}>
-                                    {t('Set budget to: {level}', { level: formatNumber(targetLevel) })}
+                                    {t('Set budget to: {level}', { level: formatHundredths(targetLevel) })}
                                 </Text>
                                 <Pressable
                                     style={[styles.stepperBtn, (stepUp === null || busy) && styles.disabled]}
@@ -372,10 +371,10 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                 disabled={busy || !canSet}
                                 accessibilityRole="button"
                                 accessibilityState={{ disabled: busy || !canSet, busy }}
-                                accessibilityLabel={t('Set budget to {level}', { level: formatNumber(targetLevel) })}
+                                accessibilityLabel={t('Set budget to {level}', { level: formatHundredths(targetLevel) })}
                             >
                                 <Text style={styles.actionBtnText}>
-                                    {t('Set budget to {level}', { level: formatNumber(targetLevel) })}
+                                    {t('Set budget to {level}', { level: formatHundredths(targetLevel) })}
                                 </Text>
                             </Pressable>
                         </View>
@@ -391,7 +390,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         <Text style={styles.toggleBtnText}>{t('See who they brought in ›')}</Text>
                     </Pressable>
 
-                    {card.canChange && card.source === 'entry' && !card.stoppedAt && (
+                    {card.canStop === true && !card.stoppedAt && (
                         <Pressable
                             style={[styles.dangerBtn, busy && styles.disabled]}
                             onPress={handleStopVoucher}
@@ -428,13 +427,13 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                                     ? t('@{name} · joined {date} · {amount} vouched · {trading} · below zero', {
                                                         name: p.callsign,
                                                         date: dateStr,
-                                                        amount: formatNumber(p.amount),
+                                                        amount: formatHundredths(personVouchedOf(p)),
                                                         trading: tradingText,
                                                     })
                                                     : t('@{name} · joined {date} · {amount} vouched · {trading}', {
                                                         name: p.callsign,
                                                         date: dateStr,
-                                                        amount: formatNumber(p.amount),
+                                                        amount: formatHundredths(personVouchedOf(p)),
                                                         trading: tradingText,
                                                     })}
                                             </Text>

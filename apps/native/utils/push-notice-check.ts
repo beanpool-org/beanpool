@@ -248,7 +248,7 @@ function vaultNoticeType(data: unknown): VaultNoticeType | null {
  * community.knock push does; an answer to this phone's own request opens Find a community, where its invite is. Only
  * this app posts a notice of its own, so nothing from outside reaches these.
  */
-const LOCAL_NOTICE_ROUTES = { 'admin-knocks': '/(tabs)/people?view=invites', 'knock-answer': '/find-community' } as const satisfies Record<string, NoticeRoute>;
+const LOCAL_NOTICE_ROUTES = { 'admin-knocks': '/(tabs)/people?view=invites&from=notice', 'knock-answer': '/find-community' } as const satisfies Record<string, NoticeRoute>;
 
 /** The route for the app's own notice's type, or null for any other. */
 function localNoticeRoute(data: unknown): NoticeRoute | null {
@@ -513,7 +513,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites' | '/find-community'
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
@@ -528,7 +528,9 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     chats: '/(tabs)/chats',
     settings: '/(tabs)/settings',
     // A request to join (community.knock, the People tab's only kind): Invites, where it is listed with Invite and Not now.
-    people: '/(tabs)/people?view=invites',
+    // `from=notice` tells Invites a notice brought them: if another owner or admin has answered since, it says so
+    // instead of showing nothing (components/WantsToJoin.tsx).
+    people: '/(tabs)/people?view=invites&from=notice',
 };
 
 /**
@@ -556,6 +558,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Commons, Decide, where the case, who brought it and the member's reply sit side by side.
     if (d.screen === 'decide') return '/(tabs)/projects?section=decide';
     if (d.screen === 'settings') return '/(tabs)/settings';
+    // Someone asked to join after a listing this member shared (community.knock-shared, shared-listing door A3): their
+    // Shared outside, where that link's row counts who asked.
+    if (d.screen === 'shared-outside') return '/shared-outside';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }

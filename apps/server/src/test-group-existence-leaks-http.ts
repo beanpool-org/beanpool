@@ -41,7 +41,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'GroupLeaksHttp123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -57,11 +56,11 @@ import { eventGoingPubkeys } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -87,7 +86,7 @@ function makeMember(name: string): Id {
         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(id.pk, name);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     transfer('genesis', id.pk, 100, `seed ${name}`, 'direct', true);
     // An offer on the books, so the covenant is never what refuses a trade below.
     createPost('offer', 'other', `${name}'s offer`, 'on the books', 5, 'fixed', id.pk);
@@ -102,9 +101,10 @@ async function call(method: string, path: string, id: Id | null, body?: unknown)
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.key).toString('base64');
+        headers['X-Signature'] = signRequest(id.key, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -118,7 +118,6 @@ const show = (r: Res) => `${r.status} ${r.text.slice(0, 160)}`;
 
 async function main(): Promise<void> {
     console.log("Nothing tells someone outside an invite-only group that it, or anything in it, exists (over HTTP)\n");
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

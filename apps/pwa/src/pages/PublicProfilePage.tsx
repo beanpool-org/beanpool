@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    addFriendApi, submitRating, getPublicChannels, getMyVouching,
+    addFriendApi, submitRating, getPublicChannels, getMyVouching, getTrustProfile,
     type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo, type PublicCreatorChannel, type MyVouching
 } from '../lib/api';
 import * as api from '../lib/api';
@@ -10,20 +10,22 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, VOUCH_MAX, VOUCH_PRESET_WORDS, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, vouchMaxFor, type QuizResult, formatHundredths } from '@beanpool/core';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
-import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
+import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { marked, readsOwn, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, freePriceWords } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
+import { InvitedByCard } from '../components/InvitedByCard';
+import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -39,11 +41,17 @@ interface Props {
      * (App.tsx's one profile overlay), so this is where an enterprise is told apart, and no Trust Profile is drawn for it.
      */
     onOpenTreasury?: (pubkey: string) => void;
+    /** Opens another member's profile in this overlay: a profile's inviter, or someone in its Brought in list (I3). */
+    onOpenProfile?: (pubkey: string) => void;
 }
 
-export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab, onOpenTreasury }: Props) {
+export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab, onOpenTreasury, onOpenProfile }: Props) {
     // Beans live in a local community here (preview or read-only): the trust card's slot carries the line (§1 row 9).
-    const beansMarked = marked(useFeatureMode('beans'));
+    const beansMode = useFeatureMode('beans');
+    const beansMarked = marked(beansMode);
+    // Who invited them, and whom they brought in (I3), from the trust profile the server tailors to this reader. Beans-gated as
+    // the phone's trust panel is (its inviter line sits there): where Beans are off, neither app draws it.
+    const [invite, setInvite] = useState<{ vouchedInBy: any; broughtIn?: number; voucherButton?: unknown; for: string } | null>(null);
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -85,8 +93,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const openTreasury = useRef(onOpenTreasury);
     openTreasury.current = onOpenTreasury;
     const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
-    /** Said where they block while blocks wait in this browser because their list on the community is full (lib/blocklist). */
-    const [blocklistFullNote, setBlocklistFullNote] = useState(() => getBlocklistFullNote());
     const [isBlocking, setIsBlocking] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
 
@@ -106,10 +112,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
     useEffect(() => {
         setIsBlocked(isUserBlocked(pubkey));
-        setBlocklistFullNote(getBlocklistFullNote());
         const unsub = onBlocklistUpdated(() => {
             setIsBlocked(isUserBlocked(pubkey));
-            setBlocklistFullNote(getBlocklistFullNote());
         });
         return unsub;
     }, [pubkey]);
@@ -230,7 +234,16 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         return () => { cancelled = true; };
     }, [pubkey, identity.publicKey, isSelf]);
 
-    const [raisePrompt, setRaisePrompt] = useState<{ prior: number; newTotal: number; amount: number } | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        setInvite(null);
+        if (beansMode !== 'live') return;
+        getTrustProfile(pubkey)
+            .then((tp: any) => { if (!cancelled && tp) setInvite({ vouchedInBy: tp.vouchedInBy ?? null, broughtIn: tp.broughtIn, voucherButton: tp.voucherButton, for: pubkey }); })
+            .catch(() => null);
+        return () => { cancelled = true; };
+    }, [pubkey, beansMode]);
+
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
 
     const myPriorVouch = useMemo(() => {
@@ -238,14 +251,16 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         let sum = 0;
         for (const h of myVouching.history) {
             if (h.person?.memberPubkey === pubkey && (h.for === 'profile' || h.outcome === 'vouched')) {
-                sum += Math.abs(h.amount);
+                sum += Math.abs(h.amount_c);
             }
         }
         return sum;
     }, [myVouching, pubkey]);
     const effectivePriorVouch = nodePriorVouch ?? myPriorVouch;
     const isRaise = effectivePriorVouch > 0;
-    const atMax = effectivePriorVouch >= VOUCH_MAX;
+    // One voucher's vouches for one person: 100, or 500 for an owner (core vouchMaxFor; the node's noLimit, Marty 9 Nov).
+    const pairMax = vouchMaxFor(myVouching?.noLimit === true);
+    const atMax = effectivePriorVouch >= pairMax;
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
@@ -430,6 +445,14 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                 </div>
 
+                {/* Invited by, and Brought in n people (I3): the phone's lines, from the same words. */}
+                {invite && invite.for === pubkey && (
+                    <InvitedByCard vouchedInBy={invite.vouchedInBy} broughtIn={invite.broughtIn} isSelf={isSelf} targetPubkey={pubkey} onOpenProfile={onOpenProfile} />
+                )}
+
+                {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only. */}
+                {!isSelf && invite && invite.for === pubkey && <ProfileVoucherButton button={invite.voucherButton} memberPubkey={pubkey} />}
+
                 {/* Vouch for @sam (V3 §9) */}
                 {!isSelf && myVouching?.voucher && (!atMax || !!vouchSuccess || !!vouchRefusal) && (
                     <div className="mx-4 mt-4 p-4 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm" data-testid="profile-vouch">
@@ -443,22 +466,19 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 {isRaise && (
                                     <p className="m-0 mb-3 text-xs text-nature-600 dark:text-nature-300">
                                         {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
-                                            prior: effectivePriorVouch,
+                                            prior: formatHundredths(effectivePriorVouch),
                                             name: profile?.callsign || '',
-                                            max: VOUCH_MAX,
+                                            max: formatHundredths(pairMax),
                                         })}
                                     </p>
                                 )}
                                 <VouchPresetChoice
                                     value={profileVouchPreset}
-                                    onChange={(val) => {
-                                        setProfileVouchPreset(val);
-                                        setRaisePrompt(null);
-                                    }}
+                                    onChange={setProfileVouchPreset}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
-                                    priorVouch={effectivePriorVouch}
-                                    personName={profile?.callsign || ''}
+                                    noLimit={myVouching.noLimit === true}
+                                    raiseFrom={isRaise ? effectivePriorVouch : undefined}
                                 />
                             </>
                         )}
@@ -472,56 +492,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 {vouchSuccess}
                             </p>
                         )}
-                        {raisePrompt && (
-                            <div className="mt-3 p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50 dark:bg-nature-950 space-y-2" data-testid="profile-vouch-raise-confirm">
-                                <p className="m-0 text-sm font-bold text-nature-950 dark:text-white">
-                                    {t(VOUCH_PRESET_WORDS.raiseConfirmQuestion, {
-                                        prior: raisePrompt.prior,
-                                        name: profile?.callsign || '',
-                                        newTotal: raisePrompt.newTotal,
-                                    })}
-                                </p>
-                                <div className="flex gap-2 justify-end">
-                                    <button
-                                        type="button"
-                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-700 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-800 cursor-pointer"
-                                        onClick={() => setRaisePrompt(null)}
-                                        data-testid="profile-vouch-raise-cancel"
-                                    >
-                                        {t('Cancel')}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold border-0 bg-bp-commit-fill text-bp-commit-on cursor-pointer font-bold"
-                                        onClick={async () => {
-                                            const amount = raisePrompt.amount;
-                                            setRaisePrompt(null);
-                                            setVouchBusy(true);
-                                            setVouchRefusal(null);
-                                            setVouchSuccess(null);
-                                            try {
-                                                const res = await api.vouchForMember(pubkey, amount, true);
-                                                // The node's new total is what you have vouched now: the heading and the greyed presets follow it.
-                                                if (typeof res?.total === 'number' && res.total > 0) setNodePriorVouch(res.total);
-                                                setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res?.total }));
-                                                setProfileVouchPreset(null);
-                                                void getMyVouching().then(setMyVouching).catch(() => {});
-                                            } catch (e: any) {
-                                                if (typeof e?.prior === 'number' && e.prior > 0) setNodePriorVouch(e.prior);
-                                                setProfileVouchPreset(null);
-                                                const msg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : t('Could not vouch.');
-                                                setVouchRefusal(msg);
-                                            } finally {
-                                                setVouchBusy(false);
-                                            }
-                                        }}
-                                        data-testid="profile-vouch-raise-submit"
-                                    >
-                                        {t(VOUCH_PRESET_WORDS.raise)}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                         {!atMax && (
                             <button
                                 type="button"
@@ -531,27 +501,22 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     setVouchBusy(true);
                                     setVouchRefusal(null);
                                     setVouchSuccess(null);
-                                    setRaisePrompt(null);
                                     try {
-                                        const res = await api.vouchForMember(pubkey, profileVouchPreset, isRaise);
+                                        // A raise posts the total it ends at, a first vouch its amount; the node lands the difference.
+                                        const res = await api.vouchForMember(pubkey, isRaise ? { raiseTo: profileVouchPreset } : { vouchAmount: profileVouchPreset });
                                         // The node's new total is what you have vouched now: the heading and the greyed presets follow it.
                                         if (typeof res?.total === 'number' && res.total > 0) setNodePriorVouch(res.total);
                                         setVouchSuccess(isRaise
-                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res?.total })
-                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || '', amount: profileVouchPreset }));
+                                            ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: formatHundredths(res?.total) })
+                                            : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || '', amount: formatHundredths(profileVouchPreset) }));
                                         setProfileVouchPreset(null);
                                         void getMyVouching().then(setMyVouching).catch(() => {});
                                     } catch (err: any) {
-                                        // The node's figure for your earlier vouch, when it sent one (`already_vouched`, `over_max`).
-                                        // Without it nothing is guessed: the node's own sentence is shown, and no raise is offered.
+                                        // The node's figure for your earlier vouch, when it sent one (`already_vouched`, `raise_not_above`):
+                                        // the card follows it, so a screen that took a raise for a first vouch becomes the raise card.
+                                        // Without it nothing is guessed: the node's own sentence is shown.
                                         const prior = typeof err?.prior === 'number' && err.prior > 0 ? err.prior : null;
                                         if (prior !== null) setNodePriorVouch(prior);
-                                        if (!isRaise && err?.code === 'already_vouched' && prior !== null) {
-                                            if (prior + profileVouchPreset <= VOUCH_MAX) {
-                                                setRaisePrompt({ prior, newTotal: prior + profileVouchPreset, amount: profileVouchPreset });
-                                                return;
-                                            }
-                                        }
                                         // After any refusal, the selection goes back to what was in effect before the press (null):
                                         setProfileVouchPreset(null);
                                         const msg = typeof err?.message === 'string' && err.message ? err.message : typeof err?.error === 'string' && err.error ? err.error : t('Could not vouch.');
@@ -732,12 +697,12 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name ? tierWords(balanceInfo.tier.name) : t('Member')}</h4>
-                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{tn(Math.round(balanceInfo.earnedCredit || 0), '{n} trust points', '{n} trust points')}</p>
+                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{tn((balanceInfo.earnedCredit_c || 0) / 100, '{n} trust points', '{n} trust points', { n: formatHundredths(balanceInfo.earnedCredit_c || 0) })}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">
                             <div className="text-right">
-                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-[15px]">{balanceInfo.balance >= 0 ? '+' : ''}{formatNumber(balanceInfo.balance, 1)}</span>
+                                <span className="font-black text-emerald-600 dark:text-emerald-400 text-[15px]">{balanceInfo.balance_c >= 0 ? '+' : ''}{formatHundredths(balanceInfo.balance_c)}</span>
                                 <p className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">{t('Beans')}</p>
                             </div>
                             <svg className="w-5 h-5 text-nature-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1017,8 +982,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     {/* A price is Beans: none where Beans are marked (the line above says where they live). */}
                                                                     {!beansMarked && (
                                                                         <div className="flex items-center gap-1" data-testid="profile-listing-price">
-                                                                            <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
+                                                                            {/* Priced at 0 it reads Free, with no Beans mark: core listing-price.ts, as on every card. */}
+                                                                            {freePriceWords(p.price_c, p.type) ? <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{freePriceWords(p.price_c, p.type)}</span> : <>
+                                                                            <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{typeof p.price_c === 'number' ? formatHundredths(p.price_c) : '?'}</span>
                                                                             <span className="text-[10px]">🫘</span>
+                                                                            </>}
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -1155,11 +1123,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         <p className="text-center text-xs text-nature-500 dark:text-nature-400 max-w-xs mt-1 leading-relaxed">
                             {t('Blocking will instantly hide their content from your feed and notify moderation.')}
                         </p>
-                        {blocklistFullNote && (
-                            <p role="status" className="text-center text-xs font-semibold text-nature-700 dark:text-nature-300 max-w-xs leading-relaxed">
-                                {blocklistFullNote}
-                            </p>
-                        )}
                     </div>
                 )}
             </div>

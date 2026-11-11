@@ -1,17 +1,20 @@
 /**
  * Test Suite: Fable's security review of authentication, 2026-10-01 (scratch/reviews/FABLE-sec-auth.md).
  *
- * 1. MEDIUM 1. A break-glass code enrols a new admin key and does nothing else, whatever the mode (docs/admin-surface.md
- *    §2.2). On main it was a second owner password on every admin route while break-glass mode was off (the default):
- *    node-roles read and granted with it. Now any other route answers it as a wrong password, braked as one. The code is
- *    stored as salted scrypt; an old unsalted SHA-256 row is rewritten at boot, or on its code's next use.
+ * 1. MEDIUM 1. A break-glass code enrols a new admin key and does nothing else (docs/admin-surface.md §2.2). On main it
+ *    was a second owner password on every admin route while break-glass mode was off (the default): node-roles read and
+ *    granted with it. Now no other route reads it, in any header: the answer is the one for a request with no credential,
+ *    and nothing is checked, so nothing is braked. On the enrol routes a wrong one is braked, and the right one still
+ *    enrols from a held address. The code is stored as salted scrypt; an old unsalted SHA-256 row is rewritten at boot,
+ *    or on its code's next use. (The node has no admin password and no break-glass mode since 11 Nov 2026: an old
+ *    password enrols nothing.)
  * 2. MEDIUM 2 was a brake on the 2FA code at key sign-in. Since decision D2 (2026-10-03) a key sign-in is not asked
- *    for the code at all (the phone's unlock is the key's second factor), so there is nothing to brake: with 2FA on, an
- *    owner's, an admin's and a moderator's key sign in with no code, a stray code is not looked at, a signature by
- *    another key opens nothing, and the password alone is still asked for the code.
+ *    for a code at all (the phone's unlock is the key's second factor), and the node has no server 2FA now (it was the
+ *    admin password's): an owner's, an admin's and a moderator's key sign in with no code, a stray code is not looked
+ *    at, and a signature by another key opens nothing.
  * 3. LOW 4. An invite redeem, or an offline-ticket redeem, must be signed by the key it registers. On main anyone
- *    holding a code registered any key, unsigned, under a name of their choosing. A real join (old app or new) still
- *    works.
+ *    holding a code registered any key, unsigned, under a name of their choosing. A current app's join works; an old
+ *    app's (the old format, bound to no community) is refused, 426 app_too_old, and joins nobody (the cutover, CUT4).
  *
  * The real servers, on the tunnel-origin port: the client connects from loopback (a trusted local proxy), so
  * CF-Connecting-IP names the client, as cloudflared does.
@@ -30,15 +33,14 @@ import { initStateEngine, grantNodeRole, getNodeRoleBreakGlassHash, setNodeRoleB
 import { startHttpServer } from './http-server.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword, isBreakGlassMode, setBreakGlassMode, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
+import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
 import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, verifyBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { limiterKeyForIp } from './client-ip.js';
 import { SOURCE_FREE_FAILURES, sourceClosedUntil } from './password-brake.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
-import { pairingMessage } from './settings-signin-pairing.js';
+import { adminSigninFields, settingsSigninFields, signedHeaders } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -46,7 +48,10 @@ function assert(cond: unknown, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
+/** What an older install's admin password looked like: no credential now. */
 const PW = 'Followups-1001-Password!';
+/** This community's one name (BEANPOOL_ADDRESSES above): what its members' apps sign for. */
+const HOME = 'home.test';
 const viaTunnel = (ip: string) => ({ 'cf-connecting-ip': ip, 'x-forwarded-for': ip });
 let ipSeq = 10;
 const freshIp = () => `198.51.100.${ipSeq++}`;
@@ -54,7 +59,6 @@ let BASE = '';
 
 interface Reply { status: number; headers: Headers; json: any; text: string }
 async function req(path: string, opts: { method?: string; headers?: Record<string, string>; body?: unknown; raw?: string } = {}): Promise<Reply> {
-    forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
     const raw = opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined);
     const r = await fetch(`${BASE}${path}`, {
         method: opts.method || 'GET',
@@ -74,7 +78,7 @@ function member(callsign: string): Key {
     const priv = new Uint8Array(crypto.randomBytes(32));
     const pub = Buffer.from(ed25519.getPublicKey(priv)).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return { pub, priv, callsign };
 }
 function stranger(callsign: string): Key {
@@ -83,7 +87,10 @@ function stranger(callsign: string): Key {
 }
 const signText = (k: Key, text: string) => Buffer.from(ed25519.sign(Buffer.from(text, 'utf-8'), k.priv)).toString('base64');
 
-/** An old-format signed POST (METHOD\nPATH\nTS\nNONCE\nBODY), as the phone app has signed every request since its first release. */
+/**
+ * An old-format signed POST (METHOD\nPATH\nTS\nNONCE\nBODY), naming no community, as every app before request binding
+ * signed one: refused since the cutover (1.4.0), 426 app_too_old.
+ */
 function unboundHeaders(k: Key, path: string, raw: string, at = Date.now()): Record<string, string> {
     const ts = String(at);
     const nonce = crypto.randomBytes(16).toString('hex');
@@ -98,20 +105,17 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     console.log('— 1. a break-glass code enrols a key, and does nothing else —');
     resetAdminAuthTarpit();
     const pwHeaders = { 'x-admin-password': PW };
-    // Step 7c: with the node's 2FA off, the password alone enrols nothing and changes no code; with 2FA on, the password and a
-    // code do. The owner already holds the role, and re-enrolling them keeps their code (#1531), so the code is made the way
-    // Settings makes it, naming the owner. 2FA goes off again after, so the checks below run on a node with 2FA off, as before.
+    // The node has no admin password: an old one on the enrol route enrols nothing and changes no code. The owner already
+    // holds the role, and re-enrolling them keeps their code (#1531), so the code is made the way Settings makes it, naming
+    // the owner, with the owner's fresh proof (the phone's Manage hand-off, just unlocked).
     const hashBefore = getNodeRoleBreakGlassHash(owner.pub);
     const aloneEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
-    assert(aloneEnrol.status === 403 && aloneEnrol.json?.code === 'password_needs_2fa' && !aloneEnrol.json?.breakGlassCode && getNodeRoleBreakGlassHash(owner.pub) === hashBefore,
-        `with 2FA off the password alone enrols nothing and changes no code (${show(aloneEnrol)})`);
-    const twoFa = turnOn2faForTests(PW);
-    const twoFaOff = () => updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
+    assert(aloneEnrol.status === 401 && aloneEnrol.json?.notSignedIn === true && !aloneEnrol.json?.breakGlassCode && getNodeRoleBreakGlassHash(owner.pub) === hashBefore,
+        `an old admin password enrols nothing and changes no code (${show(aloneEnrol)})`);
     resetAdminAuthTarpit();
-    const enrolled = await req('/api/local/admin/auth/break-glass/issue', { method: 'POST', headers: { ...twoFa.headers(), ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub } });
-    twoFaOff();
+    const enrolled = await req('/api/local/admin/auth/break-glass/issue', { method: 'POST', headers: { ...ownerPhoneSessionHeaders(owner.pub), ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub } });
     const code: string = enrolled.json?.breakGlassCode;
-    assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the password makes the owner a code (${enrolled.status})`);
+    assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the owner makes themselves a code from the phone (${enrolled.status})`);
 
     // Stored salted and slow, not as the code's plain SHA-256.
     const stored = getNodeRoleBreakGlassHash(owner.pub) ?? '';
@@ -121,35 +125,38 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     const helper = member('BgHelper');
     const target = member('BgTarget');
     const before = rolesSnapshot();
-    const modeBefore = isBreakGlassMode();
     const X = freshIp();
-    const asCode = (h: 'x-admin-password' | 'x-break-glass-code') => ({ [h]: code, ...viaTunnel(X) });
+    const asCode = (h: 'x-admin-password' | 'x-break-glass-code', value: string = code) => ({ [h]: value, ...viaTunnel(X) });
     const attempts: [string, () => Promise<Reply>][] = [
         ['GET node-roles (as x-admin-password)', () => req('/api/local/admin/node-roles', { headers: asCode('x-admin-password') })],
         ['POST node-roles granting a moderator (as x-admin-password)', () => req('/api/local/admin/node-roles', { method: 'POST', headers: asCode('x-admin-password'), body: { pubkey: target.pub, role: 'moderator' } })],
         ['GET node-roles (as x-break-glass-code)', () => req('/api/local/admin/node-roles', { headers: asCode('x-break-glass-code') })],
         ['GET diagnostics', () => req('/api/local/admin/diagnostics', { headers: asCode('x-admin-password') })],
-        ['POST break-glass-mode on', () => req('/api/local/admin/auth/break-glass-mode', { method: 'POST', headers: asCode('x-admin-password'), body: { enabled: true } })],
     ];
     const answers: Reply[] = [];
     for (const [what, send] of attempts) {
         const r = await send();
         answers.push(r);
-        assert(r.status === 401 && r.json?.error === 'Invalid password', `the code on ${what} is refused as a wrong password (${show(r)})`);
+        assert(r.status === 401 && r.json?.notSignedIn === true, `the code on ${what} is not read: the answer to no credential (${show(r)})`);
     }
-    assert(rolesSnapshot() === before && roleOf(target.pub) === null && isBreakGlassMode() === modeBefore,
-        `…and moves nothing: no role granted, break-glass mode unchanged (${roleOf(target.pub)}, ${isBreakGlassMode()})`);
+    assert(rolesSnapshot() === before && roleOf(target.pub) === null, `…and moves nothing: no role granted (${roleOf(target.pub)})`);
     const wrongPw = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': 'not-the-password', ...viaTunnel(freshIp()) } });
-    assert(wrongPw.status === answers[0].status && wrongPw.text === answers[3].text, `the same answer as a wrong password (${show(wrongPw)})`);
-    // The brake counts it: X has sent five, so one more is checked and then X waits.
+    assert(wrongPw.status === answers[0].status && wrongPw.text === answers[3].text, `the same answer as any other value, or none (${show(wrongPw)})`);
+    assert(sourceClosedUntil(limiterKeyForIp(X)) <= Date.now(), 'nothing was checked, so nothing was braked: that address is not held');
+    // On the enrol routes the brake counts each wrong one: X sends five, so one more is checked and then X waits.
     // The sixth closes the address, and the server then holds its reply about as long as the closure lasts: a seventh sent after
     // that reply can arrive once the closure is over (2.08 s after it opened, in run 41391269443). So it goes while the sixth is held.
-    const sixthSent = req('/api/local/admin/node-roles', { headers: asCode('x-admin-password') });
+    // Not code-shaped, so none of them takes the one check a held address still has for a real code (below).
+    const enrolWrong = () => req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code', 'not-a-code'), body: { memberPubkey: target.pub, role: 'admin' } });
+    const firstFive: number[] = [];
+    for (let i = 0; i < SOURCE_FREE_FAILURES; i++) firstFive.push((await enrolWrong()).status);
+    const sixthSent = enrolWrong();
     for (let i = 0; i < 500 && sourceClosedUntil(limiterKeyForIp(X)) <= Date.now(); i++) await new Promise((done) => setTimeout(done, 10));
-    const seventh = await req('/api/local/admin/node-roles', { headers: asCode('x-admin-password') });
+    const seventh = await enrolWrong();
     const sixth = await sixthSent;
-    assert(SOURCE_FREE_FAILURES === 5 && sixth.status === 401 && seventh.status === 429 && seventh.json?.passwordBackoff === true,
-        `the password brake counts each one: the ${SOURCE_FREE_FAILURES + 1}th is checked and then that address waits (${sixth.status}, ${seventh.status})`);
+    assert(SOURCE_FREE_FAILURES === 5 && firstFive.every((st) => st === 401) && sixth.status === 401 && seventh.status === 429 && seventh.json?.passwordBackoff === true
+        && roleOf(target.pub) === null,
+        `on the enrol route the brake counts each wrong one: the ${SOURCE_FREE_FAILURES + 1}th is checked and then that address waits (${firstFive.join(',')}; ${sixth.status}, ${seventh.status})`);
 
     // The enrol route takes it, as the docs say: from a clean address, and from the braked one too.
     const enrolByCode = await req('/api/local/admin/auth/break-glass/enrol', {
@@ -158,36 +165,8 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     assert(enrolByCode.status === 200 && enrolByCode.json?.alertEmitted === true && roleOf(helper.pub) === 'admin',
         `on the enrol route the code enrols a new admin key, with the public alert (${show(enrolByCode)})`);
     const other = member('BgFromBraked');
-    const fromBraked = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-admin-password'), body: { memberPubkey: other.pub, role: 'admin' } });
+    const fromBraked = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: asCode('x-break-glass-code'), body: { memberPubkey: other.pub, role: 'admin' } });
     assert(fromBraked.status === 200 && roleOf(other.pub) === 'admin', `and from the braked address too, on the enrol route (${show(fromBraked)})`);
-
-    // Break-glass mode, turned on as the docs say (an owner, here with the password) and off again with a key session.
-    // Step 7c: the password needs 2FA on and a code to turn it on; the rest of the mode's checks run with 2FA off again.
-    const twoFaForMode = turnOn2faForTests(PW);
-    resetAdminAuthTarpit();
-    const on = await req('/api/local/admin/auth/break-glass-mode', { method: 'POST', headers: { ...twoFaForMode.headers(), ...viaTunnel(freshIp()) }, body: { enabled: true } });
-    twoFaOff();
-    assert(on.status === 200 && isBreakGlassMode() === true, `the owner turns break-glass mode on with the password, as before (${show(on)})`);
-    const pwElsewhere = await req('/api/local/admin/node-roles', { headers: { ...pwHeaders, ...viaTunnel(freshIp()) } });
-    const codeElsewhere = await req('/api/local/admin/node-roles', { headers: { 'x-admin-password': code, ...viaTunnel(freshIp()) } });
-    assert(pwElsewhere.status === 403 && pwElsewhere.json?.breakGlassMode === true && codeElsewhere.status === 403,
-        `in the mode, the password and the code reach no other route (${pwElsewhere.status}, ${codeElsewhere.status})`);
-    const inMode1 = member('BgInMode1'), inMode2 = member('BgInMode2');
-    // Step 7c: in the mode, with 2FA off, the password alone no longer enrols (it did); the password and a code do. The
-    // break-glass code is the recovery factor itself and still enrols alone.
-    const pwAloneEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode1.pub, role: 'admin' } });
-    assert(pwAloneEnrol.status === 403 && pwAloneEnrol.json?.code === 'password_needs_2fa' && roleOf(inMode1.pub) === null,
-        `in the mode, with 2FA off, the password alone enrols no key (${show(pwAloneEnrol)})`);
-    const twoFaInMode = turnOn2faForTests(PW);
-    resetAdminAuthTarpit();
-    const pwEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...twoFaInMode.headers(), ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode1.pub, role: 'admin' } });
-    twoFaOff();
-    const codeEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': code, ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode2.pub, role: 'admin' } });
-    assert(pwEnrol.status === 200 && codeEnrol.status === 200 && pwEnrol.json?.alertEmitted === true && roleOf(inMode2.pub) === 'admin',
-        `and both still enrol a key there, with the alert (the password with a code) (${pwEnrol.status}, ${codeEnrol.status})`);
-    const session = await keySession(owner, freshIp());
-    const off = await req('/api/local/admin/auth/break-glass-mode', { method: 'POST', headers: { 'x-admin-session': session ?? '', ...viaTunnel(freshIp()) }, body: { enabled: false } });
-    assert(session && off.status === 200 && isBreakGlassMode() === false, `the owner's key session turns it off (${show(off)})`);
 
     // An old unsalted row: rewritten at boot (break-glass-code.ts upgradeBreakGlassHashes) ...
     const legacyOwner = member('LegacyOwner');
@@ -218,12 +197,12 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     assert(lateUse.status === 200, `and keeps working after (${show(lateUse)})`);
 }
 
-/** A key sign-in, signing the challenge's own text (the old form, accepted until the switch). */
+/** A key sign-in as the app makes it: format 2 over the challenge id, for this community's name. */
 async function signIn(k: Key, ip: string, totpCode?: string, challenge?: { challengeId: string; challenge: string }): Promise<Reply> {
     const c = challenge ?? (await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(ip) })).json;
     return req('/api/local/admin/auth/verify-challenge', {
         method: 'POST', headers: viaTunnel(ip),
-        body: { challengeId: c.challengeId, memberPubkey: k.pub, signature: signText(k, c.challenge), ...(totpCode ? { totpCode } : {}) },
+        body: { challengeId: c.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, c.challengeId, HOME), ...(totpCode ? { totpCode } : {}) },
     });
 }
 async function keySession(k: Key, ip: string, totpCode?: string): Promise<string | null> {
@@ -234,19 +213,12 @@ async function keySession(k: Key, ip: string, totpCode?: string): Promise<string
 }
 
 async function part2KeySignin2fa(owner: Key): Promise<void> {
-    // Decision D2 (2026-10-03): the node's 2FA code is the password's second factor; a key's is the phone's own unlock.
-    // So a key sign-in is not asked for the code and there is no code to guess or brake; the password still is.
-    console.log('\n— 2. with 2FA on, a key sign-in asks for no code; the password still does —');
+    // Decision D2 (2026-10-03): a key's second factor is the phone's own unlock, so a key sign-in is not asked for a code
+    // and there is no code to guess or brake. The node's 2FA was the admin password's, and went with it (11 Nov 2026).
+    console.log('\n— 2. a key sign-in asks for no code —');
     resetAdminAuthTarpit();
-    const secret = generateTotpSecret();
-    updateLocalConfig({ totpEnabled: true, totpSecret: secret, totpBackupCodesHashes: [] } as any);
-    const right = () => generateTotpCode(secret);
-    const wrong = () => {
-        for (let n = 0; ; n++) {
-            const c = String((Number(right()) + 123457 + n * 7919) % 1_000_000).padStart(6, '0');
-            if (!verifyTotpCode(c, secret)) return c;
-        }
-    };
+    /** A six-digit code an older app might still send: nothing checks it. */
+    const stray = (n: number) => String((123457 + n * 7919) % 1_000_000).padStart(6, '0');
     const X = freshIp();
 
     const plain = await signIn(owner, X);
@@ -254,7 +226,7 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
         `an owner's key signs in with no code (${show(plain)})`);
     // An older app that still sends a code, even a wrong one, many times over: the code is not looked at, nothing is held.
     const many: number[] = [];
-    for (let i = 0; i < 8; i++) many.push((await signIn(owner, X, wrong())).status);
+    for (let i = 0; i < 8; i++) many.push((await signIn(owner, X, stray(i))).status);
     assert(many.every((s) => s === 200), `eight sign-ins carrying a wrong code all sign in: no code is checked, no brake (${many.join(',')})`);
 
     const bob = member('BobAdmin2fa');
@@ -270,7 +242,7 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
     const c = (await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(X) })).json;
     const forged = await req('/api/local/admin/auth/verify-challenge', {
         method: 'POST', headers: viaTunnel(X),
-        body: { challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(bob, c.challenge) },
+        body: { challengeId: c.challengeId, memberPubkey: owner.pub, ...adminSigninFields(bob.priv, c.challengeId, HOME) },
     });
     assert(forged.status !== 200 && !forged.json?.handshakeToken && forged.json?.totpRequired === undefined,
         `a signature by another key opens nothing (${show(forged)})`);
@@ -280,21 +252,9 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
     const qr = await req(`/api/local/admin/auth/pairing/${pairing.pairingId}/approve`, {
         method: 'POST', headers: viaTunnel(freshIp()),
         // As the app sends it (confirm: true, so it shows the two digits); an approval without it is refused (426).
-        body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', pairing.pairingId, pairing.shortCode)), confirm: true },
+        body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', pairing.pairingId, pairing.shortCode, HOME), confirm: true },
     });
     assert(qr.status === 200, `the QR sign-in approves with no code (${show(qr)})`);
-
-    // The password path is exactly as before: the password alone opens nothing, the password and a code do.
-    resetAdminAuthTarpit();
-    const pwOnly = await req('/api/local/admin/auth/password', { method: 'POST', headers: viaTunnel(freshIp()), body: { password: PW } });
-    assert(pwOnly.status === 401 && pwOnly.json?.totpRequired === true && !(pwOnly.headers.get('set-cookie') || '').includes('admin_session='),
-        `the password alone is still asked for the code (${show(pwOnly)})`);
-    const pwWrong = await req('/api/local/admin/auth/password', { method: 'POST', headers: viaTunnel(freshIp()), body: { password: PW, totpCode: wrong() } });
-    assert(pwWrong.status === 401 && !(pwWrong.headers.get('set-cookie') || '').includes('admin_session='), `the password and a wrong code open nothing (${show(pwWrong)})`);
-    const pwRight = await req('/api/local/admin/auth/password', { method: 'POST', headers: viaTunnel(freshIp()), body: { password: PW, totpCode: right() } });
-    assert(pwRight.status === 200 && (pwRight.headers.get('set-cookie') || '').includes('admin_session='), `the password and the right code sign in (${show(pwRight)})`);
-
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
     resetAdminAuthTarpit();
 }
 
@@ -310,7 +270,13 @@ async function part3Redeem(owner: Key): Promise<void> {
         const raw = JSON.stringify(body);
         return req(path, { method: 'POST', raw, headers: { ...headers, ...viaTunnel(freshIp()) } });
     };
-    const signedBy = (k: Key, path: string, body: unknown) => {
+    /** Signed by `k` as a current app signs it: format 2, for this community. */
+    const signedBy = (k: Key, path: string, body: unknown, at = Date.now()) => {
+        const raw = JSON.stringify(body);
+        return req(path, { method: 'POST', raw, headers: { ...signedHeaders({ publicKeyHex: k.pub, key: k.priv, method: 'POST', path, body: raw, host: HOME, timestamp: at }), ...viaTunnel(freshIp()) } });
+    };
+    /** Signed by `k` as an app from before request binding signed it: the old format, naming no community. */
+    const oldSignedBy = (k: Key, path: string, body: unknown) => {
         const raw = JSON.stringify(body);
         return req(path, { method: 'POST', raw, headers: { ...unboundHeaders(k, path, raw), ...viaTunnel(freshIp()) } });
     };
@@ -332,19 +298,23 @@ async function part3Redeem(owner: Key): Promise<void> {
     // Signed by the key, but by a phone whose clock is ten minutes out: the verifier's own answer, not "unsigned".
     const skewed = stranger('SkewedClock');
     const skewedCode = generateInvite(owner.pub)!.code;
-    const skewedRaw = JSON.stringify({ code: skewedCode, publicKey: skewed.pub, callsign: skewed.callsign });
-    const skewedJoin = await req('/api/invite/redeem', { method: 'POST', raw: skewedRaw, headers: { ...unboundHeaders(skewed, '/api/invite/redeem', skewedRaw, Date.now() - 10 * 60_000), ...viaTunnel(freshIp()) } });
+    const skewedJoin = await signedBy(skewed, '/api/invite/redeem', { code: skewedCode, publicKey: skewed.pub, callsign: skewed.callsign }, Date.now() - 10 * 60_000);
     assert(skewedJoin.status === 401 && /timestamp/i.test(skewedJoin.json?.error ?? '') && skewedJoin.json?.code !== 'redeem_unsigned' && !hasRow(skewed.pub) && codeUser(skewedCode) === null,
         `a redeem signed with a clock ten minutes out is refused with the verifier's answer, and nobody joins (${show(skewedJoin)})`);
 
-    // A real join: the phone app's old-format signature (every version in the stores), and a current app's.
+    // An old app's join: its redeem signed in the old format, bound to no community. Refused as too old (the cutover,
+    // 1.4.0, CUT4), before the code or the ticket is looked at: nobody joins and the code stays unused.
     const oldApp = stranger('OldApp');
-    const oldJoin = await signedBy(oldApp, '/api/invite/redeem', { code, publicKey: oldApp.pub, callsign: oldApp.callsign });
-    assert(oldJoin.status === 200 && oldJoin.json?.success === true && hasRow(oldApp.pub) && codeUser(code) === oldApp.pub,
-        `an old app's signed redeem joins, and uses the code (${show(oldJoin)})`);
+    const oldJoin = await oldSignedBy(oldApp, '/api/invite/redeem', { code, publicKey: oldApp.pub, callsign: oldApp.callsign });
+    assert(oldJoin.status === 426 && oldJoin.json?.code === 'app_too_old' && /too old/.test(oldJoin.json?.error ?? '') && !hasRow(oldApp.pub) && codeUser(code) === null,
+        `an old app's signed redeem is refused, 426 app_too_old: nobody joins, the code unused (${show(oldJoin)})`);
     const tj = stranger('TicketJoiner');
-    const tjJoin = await signedBy(tj, '/api/invite/redeem-offline', { ticketB64: ticketOf(owner), publicKey: tj.pub, callsign: tj.callsign });
-    assert(tjJoin.status === 200 && hasRow(tj.pub), `an old app's signed offline-ticket redeem joins (${show(tjJoin)})`);
+    const tjOld = await oldSignedBy(tj, '/api/invite/redeem-offline', { ticketB64: ticketOf(owner), publicKey: tj.pub, callsign: tj.callsign });
+    assert(tjOld.status === 426 && tjOld.json?.code === 'app_too_old' && !hasRow(tj.pub), `so is an old app's signed offline-ticket redeem (${show(tjOld)})`);
+    // A real join: the same code, redeemed by a current app (format 2, for this community).
+    const realJoin = await signedBy(oldApp, '/api/invite/redeem', { code, publicKey: oldApp.pub, callsign: oldApp.callsign });
+    assert(realJoin.status === 200 && realJoin.json?.success === true && hasRow(oldApp.pub) && codeUser(code) === oldApp.pub,
+        `the same person's redeem from a current app joins, and uses the code (${show(realJoin)})`);
 
     const core = await import('@beanpool/core');
     const bound = async (k: Key, host: string, path: string, body: unknown) => {
@@ -367,9 +337,6 @@ async function main(): Promise<void> {
     await initTls();
     initStateEngine();
     setTrustConfigForTests(undefined);
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
-    setBreakGlassMode(false);
     updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 120 } });
     const httpPort = await startHttpServer(0);
     await startHttpsServer(0);

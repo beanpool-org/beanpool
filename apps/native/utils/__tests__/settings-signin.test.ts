@@ -28,13 +28,12 @@ import { sign as memberKeySign } from '@noble/ed25519';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { buildSettingsSigninQr, settingsSigninText, signedRequestBytes, utf8Bytes } from '@beanpool/core';
 import {
-    readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest, signinMessage,
+    readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest,
     approveComputerSignin, declineComputerSignin, formatShortCode,
     SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
     AGENT_QUESTION, AGENT_WARNING, agentLines,
     DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
 } from '../settings-signin';
-import { rememberRequestSigning, resetRequestSigningForTests } from '../request-signing-version';
 
 // The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
 // (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
@@ -174,8 +173,6 @@ describe('asking the node about the pairing', () => {
 describe('the approval request', () => {
     const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
 
-    beforeEach(() => resetRequestSigningForTests());
-
     it('signs 0xFF ‖ beanpool-settings-signin/2 for the host it is sent to, and says which host (signedFor)', async () => {
         const { url, init } = await buildSigninRequest('approve', qr, identity);
         expect(url).toBe(`https://mullum.beanpool.org/api/local/admin/auth/pairing/${ID}/approve`);
@@ -184,17 +181,8 @@ describe('the approval request', () => {
         const body = JSON.parse(init.body as string);
         expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: true });
         expect(signedBy(body.signature, signedRequestBytes(settingsSigninText('mullum.beanpool.org', 'approve', ID, 'K7F3QX')))).toBe(true);
-        // Not the old unbound text, which any community could relay.
-        expect(signedBy(body.signature, utf8Bytes(signinMessage('approve', qr)))).toBe(false);
-    });
-
-    it('signs exactly beanpool-settings-signin:v1:approve:<id>:<code> with the member key for a node older than request binding', async () => {
-        rememberRequestSigning('https://mullum.beanpool.org', 1);
-        const { init } = await buildSigninRequest('approve', qr, identity);
-        const body = JSON.parse(init.body as string);
-        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), confirm: true });
-        expect(signinMessage('approve', qr)).toBe(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`);
-        expect(signedBy(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`))).toBe(true);
+        // Not the old unbound text (before request binding), which any community could relay: no build signs it now.
+        expect(signedBy(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`))).toBe(false);
     });
 
     it('carries the 2FA code on an approval only, trimmed', async () => {

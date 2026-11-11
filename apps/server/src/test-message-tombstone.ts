@@ -3,7 +3,7 @@
  *
  * Verifies:
  * 1. Standard tombstoning of messages:
- *    - Strips mentions, reactions, replyToId from metadata while preserving custom fields.
+ *    - Strips mentions, reactions, replyToId and the sealed listing reference (about) from metadata while preserving custom fields.
  *    - Sets removed = true, removedBy, and removedAt in metadata.
  *    - Base64 encodes the marker text into ciphertext and sets nonce = 'plaintext-v1'.
  *    - Updates type = 'removed' on the message DB row.
@@ -52,6 +52,8 @@ function main() {
         mentions: [memberBob],
         reactions: { '👍': [memberBob] },
         replyToId: 'msg_000',
+        // The listing a line is about, sealed beside its words (core chat-about.ts): it goes with the line.
+        about: { ciphertext: 'sealed_about_bytes', nonce: 'sealed_about_nonce' },
         customField: 'preserved_val',
     });
 
@@ -80,6 +82,8 @@ function main() {
     assert(parsedMeta1.mentions === undefined, 'metadata.mentions stripped');
     assert(parsedMeta1.reactions === undefined, 'metadata.reactions stripped');
     assert(parsedMeta1.replyToId === undefined, 'metadata.replyToId stripped');
+    assert(parsedMeta1.about === undefined, 'metadata.about (the sealed listing reference) stripped');
+    assert(!result1.metadata.includes('sealed_about_bytes'), 'no sealed listing bytes are left in the stored metadata');
     assert(parsedMeta1.customField === 'preserved_val', 'custom metadata fields preserved');
 
     // Check DB state

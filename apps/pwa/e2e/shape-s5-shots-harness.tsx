@@ -18,7 +18,7 @@ const sampleFeatures: CommunityShapeFeatures = {
     knocks: true,
     privatePreview: true,
     beans: true,
-    knownFloor: 1000,
+    knownFloor: 100000,
     dmRequests: true,
     decisions: true,
     probation: true,

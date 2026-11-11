@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -84,7 +85,7 @@ async function child(): Promise<void> {
             for (const [name, pk] of Object.entries(a.members)) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
                             VALUES (?, ?, ?, ?, 'TEST', 'active', ?)`).run(pk, name, new Date(Date.now() - 30 * DAY_MS).toISOString(), a.invitedBy, new Date().toISOString());
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             return true;
         },
@@ -231,7 +232,8 @@ async function signedGet(port: number, id: Id, route: string): Promise<{ status:
     const res = await fetch(`https://127.0.0.1:${port}${route}`, {
         headers: {
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${route}\n${ts}\n${nonce}\n`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'GET', path: route, timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -251,7 +253,8 @@ async function signedPost(port: number, id: Id, route: string, body: unknown): P
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'POST', path: route, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -304,7 +307,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A global main server; members watch places; the mirror sees Mullumbimby ──
         console.log('\n— 1. a global main server; members watch places, and the mirror tells Wes and Quinn about Mullumbimby —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', ...ENV });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', ...ENV });
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         await main.send('members', {
@@ -339,7 +342,7 @@ async function main(): Promise<void> {
         await main.send('reseal');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...ENV });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...ENV });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pulled = await standby.send('pull');
@@ -427,7 +430,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...ENV });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...ENV });
         nodes.push(standby);
         require_(standby.ready.role === 'primary', 'it is the main server');
 

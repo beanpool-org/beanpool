@@ -110,7 +110,7 @@ export async function runPagedCopyChild(extra: Record<string, (args: any) => Pro
             const cursor = (db.prepare(`SELECT last_synced_at AS c FROM sync_cursors WHERE peer_id = 'backup:primary'`).get() as { c: string } | undefined)?.c ?? null;
             return {
                 tables, format: cfg('replica_format'), cursor,
-                ledgerSum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+                ledgerSum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
             };
         },
         /**
@@ -156,7 +156,7 @@ export async function runPagedCopyChild(extra: Record<string, (args: any) => Pro
                 for (let i = 0; i < a.n; i++) {
                     const id = `flood-${crypto.randomUUID()}`;
                     if (a.kind === 'posts') {
-                        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
+                        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
                             .run(id, `Flood ${i}`, a.author, now(), now());
                     } else {
                         const words = a.kind === 'messages' ? Buffer.from(`line ${i}`) : crypto.randomBytes(1500);

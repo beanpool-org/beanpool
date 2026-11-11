@@ -46,7 +46,7 @@ function world({ noCode = false }: { noCode?: boolean } = {}) {
     const reads: string[][] = [];
     const removes: string[] = [];
     const home: HomeEvent = {
-        id: 'home-1', type: 'offer', category: 'food', title: 'Tomatoes', credits: 20, priceType: 'fixed', authorPublicKey: publicKey, audienceScope: 'public',
+        id: 'home-1', type: 'offer', category: 'food', title: 'Tomatoes', price_c: 2000, priceType: 'fixed', authorPublicKey: publicKey, audienceScope: 'public',
         lat: -28.68731, lng: 153.52219, photos: [], status: 'active', active: true,
     };
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -187,6 +187,9 @@ describe('a phone and a browser on one account', () => {
         expect(w.creates()).toBe(1);
         expect(browser.pairs()[0].copyId).toBe(phone.pairs()[0].copyId);
         expect(browser.pairs()[0].sent).not.toBe('');
+        // The copy's price goes as words in whole hundredths (the node keeps it as '2000 fixed'), never as an old Beans figure.
+        expect(w.bodies.find((b) => b?.shownPrice)?.shownPrice).toEqual({ price_c: 2000, per: 'fixed' });
+        expect(JSON.stringify(w.bodies)).not.toMatch(/"credits"|"beans"/);
 
         w.home.title = 'Ripe tomatoes';
         await browser.tendCopies(identity);

@@ -42,7 +42,7 @@ function member(pk: string, joinedDaysAgo: number) {
 }
 function trade(buyer: string, seller: string, credits: number, atDaysAgo = 40) {
     const at = daysAgo(atDaysAgo);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at, completed_at, updated_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, updated_at)
         VALUES (?, 'wash-bg-post', ?, ?, ?, 1, 'completed', ?, ?, ?)`).run(`wash-bg-${tradeN++}`, buyer, seller, credits, at, at, at);
 }
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));

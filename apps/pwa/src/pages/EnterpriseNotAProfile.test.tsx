@@ -33,7 +33,6 @@ vi.mock('../lib/blocklist', () => ({
     blockUser: vi.fn(async () => true),
     unblockUser: vi.fn(async () => true),
     onBlocklistUpdated: vi.fn(() => () => {}),
-    getBlocklistFullNote: vi.fn(() => null),
 }));
 
 const ME = { publicKey: 'member-ana', privateKey: 'k', callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as any;
@@ -201,11 +200,15 @@ describe('every door on the web lands on the enterprise page', () => {
         // App.tsx (above) sends to the one profile overlay. App's mobile header row (AppHeader.tsx, out of App.tsx for
         // PR #2478) hands App's onOpenProfile to that own-profile button, as App.tsx did. The Market's listing card is NOT
         // one (Marty, 4 Nov 2026): a tap anywhere on a small card opens its listing, never its owner's profile.
+        // A profile's inviter and the people in its Brought in list (slice I3, as the phone's InvitedByCard): InvitedByCard
+        // opens them by key through onOpenProfile, and PublicProfilePage only hands it App's onOpenProfile (checked below),
+        // so the tap lands in the same one overlay.
         expect(doors.sort()).toEqual([
             path.join('components', 'ActivityWaterfall.tsx'),
             path.join('components', 'AppHeader.tsx'),
             path.join('components', 'EventCard.tsx'),
             path.join('components', 'HeaderControls.tsx'),
+            path.join('components', 'InvitedByCard.tsx'),
             path.join('components', 'MessageRequests.tsx'),
             path.join('components', 'PollCard.tsx'),
             path.join('components', 'PostAuthorTrust.tsx'),
@@ -213,10 +216,19 @@ describe('every door on the web lands on the enterprise page', () => {
             path.join('pages', 'MarketplacePage.tsx'),
             path.join('pages', 'MessagesPage.tsx'),
             path.join('pages', 'PeoplePage.tsx'),
+            path.join('pages', 'PublicProfilePage.tsx'),
             path.join('pages', 'PulsePage.tsx'),
             path.join('pages', 'ShopDetailPage.tsx'),
             path.join('pages', 'TreasuryDetailPage.tsx'),
         ].sort());
+        // The profile opens no one by key itself: past its props, its one onOpenProfile is the one it hands InvitedByCard.
+        const profile = fs.readFileSync(path.join(root, 'pages', 'PublicProfilePage.tsx'), 'utf8');
+        const uses = [...profile.matchAll(/[^\n]*\bonOpenProfile\b[^\n]*/g)].map((m) => m[0].trim());
+        const handed = uses.filter((u) => /onOpenProfile=\{onOpenProfile\}/.test(u));
+        expect(handed.length).toBe(1);
+        expect(handed[0]).toMatch(/^<InvitedByCard\b/);
+        const rest = uses.filter((u) => !handed.includes(u));
+        for (const u of rest) expect(u, u).toMatch(/^(onOpenProfile\?: \(pubkey: string\) => void;|export function PublicProfilePage\(\{[^}]*\bonOpenProfile \}: Props\) \{)$/);
     });
 });
 

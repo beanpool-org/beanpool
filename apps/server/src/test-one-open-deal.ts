@@ -35,6 +35,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -51,7 +52,8 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 200)}`;
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
+/** The story's Beans as the node's whole hundredths (every balance, price and hold here is hundredths: exact, no rounding). */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -63,14 +65,14 @@ function makeMember(name: string, beans: number, opts: { treasury?: boolean } = 
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'TEST', 'active', ?)`).run(id.pk, name, opts.treasury ? 1 : 0);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
-    if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    if (beans > 0) transfer('genesis', id.pk, hc(beans), `seed ${name}`, 'direct', true);
     return id;
 }
 
 /** A listed Offer of their own, so the contribution gate lets them take one up. */
 function listSomething(id: Id): void {
-    createPost('offer', 'general', `${id.name}'s jam`, 'A jar of plum jam', 5, 'fixed', id.pk);
+    createPost('offer', 'general', `${id.name}'s jam`, 'A jar of plum jam', hc(5), 'fixed', id.pk);
 }
 
 async function call(id: Id, path: string, body: Record<string, unknown>): Promise<Res> {
@@ -81,7 +83,8 @@ async function call(id: Id, path: string, body: Record<string, unknown>): Promis
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: bodyString }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -101,23 +104,23 @@ const isDealOpen = (r: Res, txId: string) => r.status === 409 && r.body?.code ==
 
 /** Every account's balance on disk, and the Commons pot in memory: what a refusal must leave exactly as it was. */
 function ledgerSnapshot(): string {
-    const rows = db.prepare(`SELECT public_key, balance FROM accounts WHERE public_key != 'COMMONS_POOL' ORDER BY public_key`).all() as { public_key: string; balance: number }[];
-    return JSON.stringify([...rows.map(r => [r.public_key, r4(r.balance)]), ['COMMONS', r4(getCommonsBalanceExact())]]);
+    const rows = db.prepare(`SELECT public_key, balance_c FROM accounts WHERE public_key != 'COMMONS_POOL' ORDER BY public_key`).all() as { public_key: string; balance_c: number }[];
+    return JSON.stringify([...rows.map(r => [r.public_key, r.balance_c]), ['COMMONS', getCommonsBalanceExact()]]);
 }
 function nodeTotal(): number {
-    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
-    return r4(accounts + getCommonsBalanceExact());
+    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    return accounts + getCommonsBalanceExact();
 }
 function assertConserved(step: string): void {
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.drift) < 0.0001 && Math.abs(nodeTotal()) < 0.0001,
+    assert(audit.ok && audit.drift === 0 && nodeTotal() === 0,
         `${step}: the node's Beans are conserved (audit ${audit.ok ? 'ok' : 'FAILED'}, drift ${audit.drift}, total ${nodeTotal()})`);
 }
 const dealsOf = (postId: string, buyer: string, seller?: string) => (seller
     ? db.prepare(`SELECT id, status FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ? AND seller_pubkey = ? ORDER BY created_at`).all(postId, buyer, seller)
     : db.prepare(`SELECT id, status FROM marketplace_transactions WHERE post_id = ? AND buyer_pubkey = ? ORDER BY created_at`).all(postId, buyer)) as { id: string; status: string }[];
-const escrowHolds = (txIds: string[]) => txIds.map(id => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(`escrow_${id}`) as any)?.balance ?? 0));
-const memoryBalance = (pk: string) => r4(ledger.getAccount(pk).balance);
+const escrowHolds = (txIds: string[]) => txIds.map(id => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(`escrow_${id}`) as { balance_c: number } | undefined)?.balance_c ?? 0);
+const memoryBalance = (pk: string) => ledger.getAccount(pk).balance_c;
 
 /**
  * A refused step, measured for being plain: a hand-moved row (the ledger never told) is out of memory before, and stays out
@@ -126,12 +129,12 @@ const memoryBalance = (pk: string) => r4(ledger.getAccount(pk).balance);
  */
 async function refusedPlainly<T>(probe: Id, step: () => Promise<T>): Promise<{ result: T; plain: boolean }> {
     const before = memoryBalance(probe.pk);
-    db.prepare('UPDATE accounts SET balance = balance + 7 WHERE public_key = ?').run(probe.pk);
+    db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(hc(7), probe.pk);
     try {
         const result = await step();
         return { result, plain: memoryBalance(probe.pk) === before };
     } finally {
-        db.prepare('UPDATE accounts SET balance = balance - 7 WHERE public_key = ?').run(probe.pk);
+        db.prepare('UPDATE accounts SET balance_c = balance_c - ? WHERE public_key = ?').run(hc(7), probe.pk);
     }
 }
 
@@ -154,7 +157,7 @@ async function main(): Promise<void> {
 
     // ── 1. A recurring Offer, taken up twice ──────────────────────────────────────────────────────────────────────────
     console.log('\n--- 1. A recurring Offer taken up twice by the same member ---');
-    const course = createPost('offer', 'education', 'Pottery course', 'Six weeks on the wheel', 45, 'fixed', damo.pk, undefined, undefined, undefined, true)!;
+    const course = createPost('offer', 'education', 'Pottery course', 'Six weeks on the wheel', hc(45), 'fixed', damo.pk, undefined, undefined, undefined, true)!;
     const first = await accept(marty, course.id);
     const firstId = first.body?.transaction?.id as string;
     assert(first.status === 200 && first.body?.transaction?.status === 'pending', `the first accept holds 45 Beans in trust (${show(first)})`);
@@ -167,7 +170,7 @@ async function main(): Promise<void> {
     assert(plain, 'the refusal is plain: no rollback, so memory was not resynced from the rows');
     assert(JSON.stringify(dealsOf(course.id, marty.pk)) === JSON.stringify([{ id: firstId, status: 'pending' }]),
         `one deal for the member on the listing, still held (${JSON.stringify(dealsOf(course.id, marty.pk))})`);
-    assert(JSON.stringify(escrowHolds([firstId])) === JSON.stringify([45]) && ledgerSnapshot() === held,
+    assert(JSON.stringify(escrowHolds([firstId])) === JSON.stringify([hc(45)]) && ledgerSnapshot() === held,
         'one hold of 45 Beans, and every balance exactly as before the refusal');
     assertConserved('after the refused second accept');
 
@@ -216,7 +219,7 @@ async function main(): Promise<void> {
 
     // ── 5. A one-off Offer, as before ─────────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 5. A one-off Offer is as it was ---');
-    const bowl = createPost('offer', 'household', 'Wheel-thrown bowl', 'One glazed bowl', 10, 'fixed', damo.pk)!;
+    const bowl = createPost('offer', 'household', 'Wheel-thrown bowl', 'One glazed bowl', hc(10), 'fixed', damo.pk)!;
     const taken = await accept(marty, bowl.id);
     const takenId = taken.body?.transaction?.id as string;
     assert(taken.status === 200 && taken.body?.transaction?.status === 'pending', `a one-off Offer is taken (${show(taken)})`);
@@ -234,7 +237,7 @@ async function main(): Promise<void> {
 
     // ── 6. A recurring Need ───────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 6. A recurring Need ---');
-    const stall = createPost('need', 'labour', 'Help at the market stall', 'Saturday mornings, setting up', 20, 'fixed', kofi.pk, undefined, undefined, undefined, true)!;
+    const stall = createPost('need', 'labour', 'Help at the market stall', 'Saturday mornings, setting up', hc(20), 'fixed', kofi.pk, undefined, undefined, undefined, true)!;
     const offered = await ask(hana, stall.id);
     const offeredId = offered.body?.transaction?.id as string;
     const offeredAgain = await ask(hana, stall.id);
@@ -267,9 +270,9 @@ async function main(): Promise<void> {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(farm.pk, k.pk);
         db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.pk);
     }
-    db.prepare('UPDATE members SET earned_surplus = 30 WHERE public_key = ?').run(farm.pk);
+    db.prepare('UPDATE members SET earned_surplus_c = ? WHERE public_key = ?').run(hc(30), farm.pk);
     listSomething(farm);
-    const books = createPost('offer', 'services', 'Bookkeeping', 'The month\'s books, done', 30, 'fixed', keeper.pk, undefined, undefined, undefined, true)!;
+    const books = createPost('offer', 'services', 'Bookkeeping', 'The month\'s books, done', hc(30), 'fixed', keeper.pk, undefined, undefined, undefined, true)!;
     const wages = () => (db.prepare('SELECT COUNT(*) c FROM deferred_wage_claims WHERE enterprise_pubkey = ?').get(farm.pk) as { c: number }).c;
     let farmDeal: { id: string; status: string } | null = null;
     try { farmDeal = acceptPost(books.id, farm.pk, undefined, { authSigner: otherKeeper.pk }); } catch (e: any) { console.error(e?.message); }

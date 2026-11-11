@@ -133,7 +133,7 @@ async function main(): Promise<void> {
 
     // ---------- 6. activated is derived from the first post, and idempotent ----------
     const mkPostBy = (id: string, author: string, at: string) => db.prepare(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status)
          VALUES (?, 'offer', 'general', ?, '', 0, ?, ?, 'active')`
     ).run(id, id, author, at);
     mkPostBy('p1', first, new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString());

@@ -20,7 +20,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'FirstTrade123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -31,7 +30,6 @@ import { consumeHandshakeToken, mintHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { registerMemberInternal } from './engine/members.js';
@@ -39,6 +37,7 @@ import { communityTotals } from './engine/community-health.js';
 import { FIRST_TRADE_PEOPLE_SQL, firstTradeFunnel } from './engine/time-to-first-trade.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -62,7 +61,7 @@ function addMember(joinedDaysAgo: number, opts: { status?: string; visitor?: boo
 
 function addPost(author: string, daysAgo: number, opts: { type?: string; originNode?: string; shownFrom?: string; createdVia?: string; createdBy?: string; status?: string; audience?: string } = {}): string {
     const id = `post-${++n}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, created_by, audience_scope)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, created_by, audience_scope)
                 VALUES (?, ?, 'general', ?, '', 5, ?, ?, ?, 1, ?, ?, ?, ?, ?)`)
         .run(id, opts.type ?? 'offer', id, author, ago(daysAgo), opts.status ?? 'active', opts.originNode ?? null, opts.shownFrom ?? null, opts.createdVia ?? null, opts.createdBy ?? null, opts.audience ?? 'public');
     return id;
@@ -71,7 +70,7 @@ function addPost(author: string, daysAgo: number, opts: { type?: string; originN
 function addDeal(postId: string, buyer: string, seller: string, daysAgo: number, status = 'completed', dispute: string | null = null): void {
     // Every ending writes completed_at, a cancelled deal's and a rejected one's too (engine/escrow.ts).
     const ended = status === 'requested' || status === 'pending' ? null : ago(daysAgo);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, dispute_resolution)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, dispute_resolution)
                 VALUES (?, ?, ?, ?, 5, ?, ?, ?, ?)`).run(`deal-${++n}`, postId, buyer, seller, status, ago(daysAgo + 1), ended, dispute);
 }
 
@@ -90,7 +89,6 @@ const all = () => firstTradeFunnel(NOW).allTime;
 
 async function main(): Promise<void> {
     console.log('Time to a first trade\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const base = `https://localhost:${await startHttpsServer(0)}`;
@@ -104,7 +102,8 @@ async function main(): Promise<void> {
         const nonce = crypto.randomBytes(16).toString('hex');
         return {
             'X-Public-Key': pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), priv).toString('base64'),
+            'X-Signature': signRequest(priv, { method: 'GET', path, timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         };
     };
     const reset = () => { resetGatewayRateLimit(); resetAdminRateLimit(); resetAdminAuthTarpit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -303,7 +302,7 @@ async function main(): Promise<void> {
         for (let i = 0; i < 5; i++) {
             const m = addMember(100);
             db.prepare("UPDATE members SET joined_at = '2026-01-10 08:00:00' WHERE public_key = ?").run(m);
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status) VALUES (?, 'offer', 'general', 't', '', 5, ?, '2026-01-12T14:00:00.000Z', 'active')`).run(`old-${++n}`, m);
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status) VALUES (?, 'offer', 'general', 't', '', 5, ?, '2026-01-12T14:00:00.000Z', 'active')`).run(`old-${++n}`, m);
         }
         assert(all().daysToFirstListing === 2, `an older row's "YYYY-MM-DD HH:MM:SS" date reads as UTC, whatever the server's time zone (${all().daysToFirstListing})`);
         if (zone === undefined) delete process.env.TZ; else process.env.TZ = zone;

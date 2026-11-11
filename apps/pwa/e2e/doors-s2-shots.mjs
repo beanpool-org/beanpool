@@ -60,6 +60,10 @@ for (const theme of ['light', 'dark']) {
         // The list read after the refusal: the row has gone, and the sentence is still there.
         await page.getByTestId('wants-to-join-k1').waitFor({ state: 'detached' });
     });
+    // A notice that someone asked to join, tapped after another owner answered: the lines (after); opened any other way, the
+    // page stays quiet, which is what the notice used to land on (before).
+    await shot('empty-from-notice', 'view=empty&notice=1', theme, page => page.getByTestId('wants-to-join-nobody').waitFor());
+    await shot('empty-quiet', 'view=empty', theme, page => page.waitForTimeout(300));
     await shot('find-rows', 'view=find', theme, page => page.getByTestId('home-find-asked-ask').waitFor());
     await shot('ask-form', 'view=find', theme, async page => {
         await page.getByTestId('home-find-asked-ask').waitFor();

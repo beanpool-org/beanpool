@@ -25,6 +25,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { t, tn, word } from '@beanpool/core';
 import { keyLineWords, twoSentences } from './key-lines';
+import { joinHeading, ownCommunityAddress } from '../lib/join-names';
 import { Sentence } from './Sentence';
 import {
     clearUnsentPendingJoin,
@@ -168,6 +169,13 @@ interface Props {
      * the sign-in only lets the member in, so the door promises no locked copy and no way back, as Safety Backup then says.
      */
     keepsNoCopies?: boolean;
+    /**
+     * This page is the app's own global community (WelcomePage's info read, lib/global-entry.ts isAppsGlobal): the first screen
+     * says "Join the global community". Anywhere else it says "Join {name}".
+     */
+    appsGlobal?: boolean;
+    /** This community's own name, from its public card (WelcomePage reads it): `null` for none, and the first screen then says its address. */
+    communityName?: string | null;
     /** Solves the door work. A Web Worker on this origin (lib/door-work.ts); swappable in tests. */
     solveWork?: DoorWorkSolver;
 }
@@ -360,8 +368,11 @@ export function WordsWorkLine({ work }: { work: WordsWorkState }) {
 
 export function WebJoin({
     onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn, start, onLobby,
-    wordsDoor = false, keepsNoCopies = false, solveWork,
+    wordsDoor = false, keepsNoCopies = false, appsGlobal = false, communityName = null, solveWork,
 }: Props) {
+    // Which community the first screen joins (join names N1): the global community's own words at ours, else "Join {name}",
+    // the name being this community's own, or the address this page is served from where it has none.
+    const joinsAs = communityName ?? ownCommunityAddress();
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [showWords, setShowWords] = useState(false);
     const wordsId = useId();
@@ -1345,7 +1356,7 @@ export function WebJoin({
         case 'lobby':
             body = (
                 <>
-                    <h3 style={heading}>{t('Join BeanPool')}</h3>
+                    <h3 dir="auto" style={{ ...heading, overflowWrap: 'anywhere' }}>{joinHeading(appsGlobal, joinsAs)}</h3>
                     <p style={lede}>
                         {t('Post what you can offer and what you need, and talk with the people here. {joinTakes}', { joinTakes: joinTakes(wordsOpen) })}
                     </p>

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { inviteFolds } from '@beanpool/core';
 
 /**
  * Who may invite (the door, community modes slice 1; config/door.ts on the server): a community may choose that only
@@ -21,7 +22,7 @@ vi.mock('../lib/api', async (importOriginal) => {
     };
 });
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
@@ -35,7 +36,7 @@ import {
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
 const info = (features: Record<string, unknown>, profile: 'local' | 'global' = 'local') =>
-    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile, features }) as unknown as CommunityInfo;
+    ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile, features }) as unknown as CommunityInfo;
 const ADMINS = info({ beans: true, knocks: true, invites: true, door: 'admins' });
 const ADMINS_NO_KNOCKS = info({ beans: true, knocks: false, invites: true, door: 'admins' });
 const MEMBERS = info({ beans: true, knocks: true, invites: true, door: 'members' });
@@ -46,6 +47,7 @@ const WORDS = 'In this community only its admins invite people. Ask an admin to 
 beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    inviteFolds.clear();
 });
 
 describe('node-invites: the door', () => {
@@ -124,9 +126,10 @@ describe('the Invites page where only admins invite', () => {
         expect(screen.getByRole('button', { name: "Share this community's link" })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Generate New Invite/ })).toBeNull();
         expect(screen.queryByText(/Invite Someone/)).toBeNull();
-        expect(screen.queryByPlaceholderText(/Who is this invite for/)).toBeNull();
+        expect(screen.queryByPlaceholderText(/A note for you/)).toBeNull();
         // The tabs, the tree and the member's still-valid codes stay; only the generator goes.
         expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
+        fireEvent.click(await screen.findByTestId('invites-pending-fold'));
         expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
         expect(screen.getByText(/Codes you made earlier still work until they lapse/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /Tree/ }));
@@ -141,6 +144,7 @@ describe('the Invites page where only admins invite', () => {
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(ADMINS);
         render(<InvitePage identity={IDENTITY} />);
         await waitFor(() => expect(screen.getByText(adminsOnlyText(true))).toBeInTheDocument());
+        fireEvent.click(await screen.findByTestId('invites-pending-fold'));
         expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
         expect(screen.queryByText(/BP-OFFLINE-OLD/i)).toBeNull();
     });
@@ -218,7 +222,8 @@ describe('the Invites page where any member invites: as before, and no role is a
             render(<InvitePage identity={IDENTITY} />);
             await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
             expect(await screen.findByRole('button', { name: /Generate New Invite/ })).toBeInTheDocument();
-            expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
+            fireEvent.click(await screen.findByTestId('invites-pending-fold'));
+        expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
             expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
             expect(screen.queryByText(/only its admins invite/)).toBeNull();
             expect(request).not.toHaveBeenCalledWith('GET', '/api/node-admin/me');
@@ -258,5 +263,6 @@ describe('the Invites page for a member whose account is paused', () => {
         expect(buildOfflineInviteCode).not.toHaveBeenCalled();
         expect(localStorage.getItem(`bp_offline_invites_${IDENTITY.publicKey}`)).toBeNull();
         expect(screen.queryByText(/Share this code with someone you trust/)).toBeNull();
+        expect(screen.queryByTestId('invite-made-card')).toBeNull();
     });
 });

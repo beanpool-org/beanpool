@@ -77,7 +77,7 @@ export function OwnAddressCard({ activeNode, enabled, onChanged, refreshSignal =
         if (!enabled) return;
         setLoading(true);
         try {
-            // Null: the node offers no such answer (an admin's 403, an older server), so the card is not drawn.
+            // Null: the node offers no such answer (an admin's 403), so the card is not drawn.
             setStatus(await getTlsStatus(activeNode.url, credential, getTfaSessionToken(activeNode.id)));
             setLoadError(null);
         } catch (e) {

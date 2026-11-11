@@ -2,25 +2,24 @@
 // group line's pattern (engine/group-chat-report.ts): one row in abuse_reports, target_message_id naming the line and
 // disclosure holding what the reporter handed over. core's dm-line-report.ts says what that is and what it proves.
 //
-// The node never opens the line and holds no key for it. Its one check is the sender's signature, made when a report is
-// taken and again when a moderator reads it, from what is stored, so a stored flag can't stand in for it.
+// The node never opens the line and holds no key for it. Its one check is the sender's signature, which a format-4 line
+// carries in its ciphertext column beside the sealed bytes (core dm-crypto.ts), checked when a report is taken and again
+// when a moderator reads it, from what is stored, so a stored flag can't stand in for it.
 //
 // What a report stands on:
 // - A signature that verifies needs no row. The sealed line is kept as handed over, with the report, so a sender who edits
 //   or deletes the line, or cancels the request, takes back nothing once it is reported, nor from a copy the reporter still
 //   holds. An app holding only the tombstone has nothing to hand over: Report on a request then blocks, and reports the
 //   person (POST /api/reports) with no line. S2.5's lines, which no node keeps, report the same way.
-// - With none, the line must be the node's own encrypted row, and the node's copy is what is kept: a reporter's bytes that
-//   nobody signed are never filed as the line. The node's copy with a signature that fails reads as such.
+// - A handed line whose signature doesn't verify: the line must be the node's own encrypted row, and the node's copy is
+//   what is kept, so a reporter's bytes their sender never signed are never filed as the line. The node's copy with a
+//   signature that fails reads as such.
 //
 // Who may report a line: the other person in a direct conversation it is in, and only that line. Anything else answers as
 // an id nobody has (GROUP_LINE_REPORT_NOT_FOUND), a conversation they are not in included.
 
 import crypto from 'node:crypto';
-import {
-    DM_LINE_DISCLOSURE_KIND, DM_LINE_SIG_KEY, dmLineDisclosureOf, dmLineKind, dmLineSigInMetadata, dmLineSigOf, dmLineSignedBy,
-    type DmLineDisclosure,
-} from '@beanpool/core';
+import { DM_LINE_DISCLOSURE_KIND, dmLineDisclosureOf, dmLineKind, dmLineSigOf, dmLineSignedBy, type DmLineDisclosure } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { verifiedFormerKeysReader } from './key-succession.js';
@@ -93,16 +92,15 @@ export function checkDmLineReport(reporter: string, body: { messageId?: unknown;
     const formerKeysOf = verifiedFormerKeysReader();
     const to = { conversationId, metadata: row?.metadata, recipients: keysOf(formerKeysOf, reporter), messageId: id };
     const signers = keysOf(formerKeysOf, other);
-    const handedSigned = dmLineSignedBy(handed, handed.lineSig, to, signers);
-    const stored = kind === 'encrypted' ? { ciphertext: row!.ciphertext, nonce: row!.nonce as string, lineSig: dmLineSigInMetadata(row!.metadata) } : null;
+    const handedSigned = dmLineSignedBy(handed, to, signers);
+    const stored = kind === 'encrypted' ? { ciphertext: row!.ciphertext, nonce: row!.nonce as string } : null;
     const sealed = handedSigned ? handed : stored;
     if (!sealed) throw notFound();
-    const signed = handedSigned ?? dmLineSignedBy(sealed, sealed.lineSig, to, signers);
+    const signed = handedSigned ?? dmLineSignedBy(sealed, to, signers);
     return {
         messageId: id, authorPubkey: other, reason,
         disclosure: {
-            v: 1, ciphertext: sealed.ciphertext, nonce: sealed.nonce, conversationId: signed?.conversationId ?? conversationId,
-            lineSig: sealed.lineSig, words: handed.words,
+            v: 1, ciphertext: sealed.ciphertext, nonce: sealed.nonce, conversationId: signed?.conversationId ?? conversationId, words: handed.words,
         },
     };
 }
@@ -136,8 +134,9 @@ export interface ReportedDmLine {
     /** The key whose signature verified, or null. */
     signer: string | null;
     /**
-     * 'verified': that key signed this sealed line, to the reporter. 'unsigned': it has no signature (an app from before
-     * them). 'unverified': the node's copy has one that doesn't verify.
+     * 'verified': that key signed this sealed line, to the reporter. 'unsigned': it carries no signature in its column (a line
+     * of a format before 4, sent before the 1.4.0 cutover: whatever a 1.3.x app sent beside it is not read). 'unverified': it
+     * carries one that doesn't verify.
      */
     signature: 'verified' | 'unsigned' | 'unverified';
     /** Always the reporter's own account of the line: nothing here proves the words. */
@@ -160,36 +159,17 @@ export function openReportedDmLine(reportId: string): ReportedDmLine | null {
     if (!handed) return null;
     const row = lineRow(report.target_message_id);
     const formerKeysOf = verifiedFormerKeysReader();
-    const signed = dmLineSignedBy(handed, handed.lineSig, {
+    const signed = dmLineSignedBy(handed, {
         conversationId: handed.conversationId, metadata: row?.metadata, recipients: keysOf(formerKeysOf, report.reporter_pubkey), messageId: report.target_message_id,
     }, keysOf(formerKeysOf, report.target_pubkey));
+    const lineSig = dmLineSigOf(handed.ciphertext);
     const member = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(report.target_pubkey) as { callsign: string | null } | undefined;
     const gone = !row || row.type === 'removed';
     return {
-        kind: 'dm', id: report.target_message_id, sentAt: row?.timestamp ?? null, signedAt: signed ? handed.lineSig?.at ?? null : null,
+        kind: 'dm', id: report.target_message_id, sentAt: row?.timestamp ?? null, signedAt: signed ? lineSig?.at ?? null : null,
         authorPubkey: report.target_pubkey, authorCallsign: member?.callsign ?? null, signer: signed?.signer ?? null,
-        signature: signed ? 'verified' : handed.lineSig ? 'unverified' : 'unsigned',
+        signature: signed ? 'verified' : lineSig ? 'unverified' : 'unsigned',
         words: { state: 'reported', text: handed.words }, photo: row?.type === 'image',
         line: gone ? 'gone' : row.ciphertext === handed.ciphertext && row.nonce === handed.nonce ? 'same' : 'changed',
     };
-}
-
-/**
- * A DM line's metadata once it is edited: the new sealed bytes' signature in place of the old one, which covers bytes the
- * line no longer has. An app from before signatures sends none, so the line goes on with none, and reports as unsigned
- * rather than as a signature that fails. `sent` is what the edit route took.
- */
-export function metadataAfterDmEdit(stored: string | null, sent: unknown): string | null {
-    let meta: Record<string, unknown> = {};
-    try {
-        const parsed = stored ? JSON.parse(stored) : {};
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return stored;
-        meta = parsed;
-    } catch {
-        return stored;
-    }
-    const lineSig = dmLineSigOf((sent as Record<string, unknown> | null | undefined)?.[DM_LINE_SIG_KEY]);
-    if (lineSig) meta[DM_LINE_SIG_KEY] = lineSig;
-    else delete meta[DM_LINE_SIG_KEY];
-    return Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
 }

@@ -33,6 +33,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, runNodeChild, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -64,7 +65,7 @@ async function child(): Promise<void> {
             for (const [key, name] of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`).run(key, name, a.genesis, `INV-${name}`);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             return true;
         },
@@ -121,7 +122,7 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`).run(a.key, a.name, a.genesis, `INV-${a.name}`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.key);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.key);
             return true;
         },
         /** An unblock and a block again, or an unblock alone, in one and the same millisecond. */
@@ -191,14 +192,15 @@ function newId(name: string): Id {
     return { pk: (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex'), priv: privateKey, name };
 }
 
-/** A member's signed request to a node's real HTTPS server (the format before request binding, which every node still takes). */
+/** A member's signed request to a node's real HTTPS server (format 2, through signed-request-test-helper.ts). */
 async function signedCall(base: string, method: 'GET' | 'POST', route: string, id: Id, body?: unknown): Promise<{ status: number; body: any }> {
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: route, timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -224,12 +226,12 @@ async function main(): Promise<void> {
 
     try {
         console.log('\n— 1. Ann blocks Bo and Cy on the main server; the standby copies it —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, genesis: gwen.pk, members: [ann, bo, cy, dee, eve].map(m => [m.pk, m.name]) });
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         await main.send('block', { owner: ann.pk, keys: [bo.pk, cy.pk] });

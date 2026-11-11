@@ -37,7 +37,7 @@ const keepers = [
 ];
 const card = (over: Record<string, unknown> = {}) => ({
     id: 'd1', authorPubkey: 'a'.repeat(64), title: 'Pay Cat for the oven', description: 'Cat fixed the oven door.', effect: 'pay_out',
-    subject: 'c'.repeat(64), params: { amount: 40 }, status: 'open', opensAt: new Date().toISOString(),
+    subject: 'c'.repeat(64), params: { amount_c: 4000 }, status: 'open', opensAt: new Date().toISOString(),
     closesAt: new Date(Date.now() + 3 * 86400_000 + 60_000).toISOString(), tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 },
     myVote: null, ...over,
 });
@@ -83,7 +83,7 @@ describe("an enterprise's Decisions in the pseudo-locale", () => {
         });
         vi.mocked(api.voteEnterpriseDecision).mockRejectedValue(new Error(''));
         await showIn('xx');
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="ongoing" />);
         const block = await screen.findByTestId('enterprise-decisions');
         expect(within(block).getByRole('heading', { level: 3 }).textContent).toBe(xx('DECISIONS'));
         expect(within(block).getByText(xx("Votes among this enterprise's keepers. More than half must vote. 7 days, or sooner once the answer can't change."))).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("an enterprise's Decisions in the pseudo-locale", () => {
     it("a project's block names its leader and collaborators", async () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [card({ effect: 'remove_keeper' })] as never, canPropose: false, rollSize: 6 });
         await showIn('xx');
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="bounded" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="bounded" />);
         expect(await screen.findByText(xx("Votes among this project's leader and collaborators. More than half must vote. 7 days, or sooner once the answer can't change."))).toBeInTheDocument();
         expect(bypassing(document.body, { others: KEEPERS_WORDS })).toEqual([]);
     });
@@ -112,7 +112,7 @@ describe("an enterprise's Decisions in the pseudo-locale", () => {
         vi.mocked(api.getEnterpriseDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 3 });
         vi.mocked(api.proposeEnterpriseDecision).mockRejectedValue(new Error(''));
         await showIn('xx');
-        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} earnedSurplus={100} lifecycle="ongoing" />);
+        render(<EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} earnedSurplus={10000} lifecycle="ongoing" />);
         fireEvent.click(await screen.findByRole('button', { name: xx('Propose a vote') }));
         const form = screen.getByTestId('propose-scoped-decision');
         expect(within(form).getByRole('heading', { level: 4 }).textContent).toBe(xx('Propose a vote'));
@@ -180,7 +180,7 @@ describe("a chat group's Decisions in the pseudo-locale", () => {
 });
 
 const treasury = (over: Partial<Treasury> = {}): Treasury => ({
-    publicKey: 'ent-1', name: 'Bindarrabi Bakery', callsign: 'bakery', balance: 120, creditLine: 0, liveOffers: 1,
+    publicKey: 'ent-1', name: 'Bindarrabi Bakery', callsign: 'bakery', balance_c: 12000, creditLine_c: 0, liveOffers: 1,
     purpose: 'Bread for the valley, baked at dawn.', keepers: [{ publicKey: 'a', callsign: 'Ann' }, { publicKey: 'b', callsign: 'Bob' }],
     lifecycle: 'ongoing', status: 'active', ...over,
 } as Treasury);
@@ -193,15 +193,15 @@ describe("an enterprise's card in the pseudo-locale", () => {
         await showIn('xx');
         render(
             <div>
-                <EnterpriseCard treasury={treasury({ earnedSurplus: 30 })} />
-                <EnterpriseCard treasury={treasury({ publicKey: 'e2', balance: -1, liveOffers: 3, keepers: [], callsign: undefined, purpose: null })} />
-                <EnterpriseCard treasury={treasury({ publicKey: 'e3', name: 'Seed library', lifecycle: 'bounded', goalAmount: 500, currentAmount: 120, deadlineAt: inDays(5) })} />
-                <EnterpriseCard treasury={treasury({ publicKey: 'e4', name: 'Seed library', lifecycle: 'bounded', goalAmount: 500, currentAmount: 500, status: 'funded' })} />
-                <EnterpriseCard treasury={treasury({ publicKey: 'e5', paused: true, balance: 0 })} />
+                <EnterpriseCard treasury={treasury({ earnedSurplus_c: 3000 })} />
+                <EnterpriseCard treasury={treasury({ publicKey: 'e2', balance_c: -100, liveOffers: 3, keepers: [], callsign: undefined, purpose: null })} />
+                <EnterpriseCard treasury={treasury({ publicKey: 'e3', name: 'Seed library', lifecycle: 'bounded', goalAmount_c: 50000, currentAmount_c: 12000, deadlineAt: inDays(5) })} />
+                <EnterpriseCard treasury={treasury({ publicKey: 'e4', name: 'Seed library', lifecycle: 'bounded', goalAmount_c: 50000, currentAmount_c: 50000, status: 'funded' })} />
+                <EnterpriseCard treasury={treasury({ publicKey: 'e5', paused: true, balance_c: 0 })} />
                 <EnterpriseCard treasury={treasury({ publicKey: 'e6', status: 'winding_up' })} />
                 <EnterpriseCard treasury={treasury({ publicKey: 'e7', status: 'completed' })} />
-                <EnterpriseCard treasury={treasury({ publicKey: 'e8', name: 'Seed library', goalAmount: 500, currentAmount: 20, deadlineAt: new Date(Date.now() - 3 * 86400_000).toISOString() })} />
-                <EnterpriseCard treasury={treasury({ publicKey: 'e9', name: 'Seed library', goalAmount: 500, currentAmount: 20, deadlineAt: new Date(Date.now() - 3600_000).toISOString() })} />
+                <EnterpriseCard treasury={treasury({ publicKey: 'e8', name: 'Seed library', goalAmount_c: 50000, currentAmount_c: 2000, deadlineAt: new Date(Date.now() - 3 * 86400_000).toISOString() })} />
+                <EnterpriseCard treasury={treasury({ publicKey: 'e9', name: 'Seed library', goalAmount_c: 50000, currentAmount_c: 2000, deadlineAt: new Date(Date.now() - 3600_000).toISOString() })} />
             </div>,
         );
         // The line under the name: the handle as its keepers wrote it, then two facts, each a whole sentence.
@@ -281,8 +281,8 @@ describe('the same components in English', () => {
         });
         render(
             <div>
-                <EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={120} lifecycle="ongoing" />
-                <EnterpriseCard treasury={treasury({ lifecycle: 'bounded', goalAmount: 500, currentAmount: 120, deadlineAt: inDays(2), balance: 2.5 })} />
+                <EnterpriseDecisions treasuryKey="ent" myPubkey={ME} keepers={keepers} balance={12000} lifecycle="ongoing" />
+                <EnterpriseCard treasury={treasury({ lifecycle: 'bounded', goalAmount_c: 50000, currentAmount_c: 12000, deadlineAt: inDays(2), balance_c: 250 })} />
                 <EnterpriseLocationPicker treasury={{ publicKey: 'ent-1', lat: -28.549, lng: 153.501 }} onLocationSaved={vi.fn()} onClose={vi.fn()} />
             </div>,
         );
@@ -295,7 +295,7 @@ describe('the same components in English', () => {
         fireEvent.click(within(block).getByRole('button', { name: 'Propose a vote' }));
         expect(screen.getByText('It holds 120 Beans now.')).toBeInTheDocument();
         expect(screen.getByText('@bakery · 1 live offer · 2 keepers')).toBeInTheDocument();
-        expect(screen.getByText('We owe them 2.5 beans of work')).toBeInTheDocument();
+        expect(screen.getByText('We owe them 2.50 beans of work')).toBeInTheDocument();
         expect(screen.getByText('2 days left', { exact: false }).textContent).toBe('⏳ 2 days left');
         expect(screen.getByText('raised of 500 🫘', { exact: false }).textContent).toBe('120 🫘 raised of 500 🫘');
         expect(screen.getByText('🌱 Project')).toBeInTheDocument();
@@ -308,7 +308,7 @@ describe('the same components in English', () => {
         vi.mocked(api.getGroupDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 4, onRoll: true, closedAt: null });
         render(
             <div>
-                <EnterpriseCard treasury={treasury({ balance: 1 })} />
+                <EnterpriseCard treasury={treasury({ balance_c: 100 })} />
                 <GroupDecisions groupId="grp" myPubkey="ada" people={people} joinPolicy="open" />
             </div>,
         );

@@ -49,9 +49,6 @@ export async function startPhonePairing(now = Date.now): Promise<PairingStart> {
             const ttlMs = typeof body.ttlMs === 'number' && body.ttlMs > 0 ? body.ttlMs : 120_000;
             return { kind: 'ok', pairing: { pairingId: body.pairingId, shortCode: body.shortCode, ttlMs, expiresAt: now() + ttlMs } };
         }
-        if (res.status === 404) {
-            return { kind: 'error', message: "This node doesn't offer phone sign-in yet. Use the admin password." };
-        }
         return { kind: 'error', message: typeof body.error === 'string' ? body.error : `The node did not answer (${res.status}).` };
     } catch {
         return { kind: 'error', message: 'Could not reach the node.' };

@@ -11,6 +11,7 @@ import { generateIdentity, loadIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, t
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import * as gate from '../lib/visitor-lobby-gate';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
+import { resetOwnCommunityCardOnce } from '../lib/join-names';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { saveRadiusSettings, clearRadiusSettings } from '../lib/geo';
 import * as sync from '../lib/sync';
@@ -86,6 +87,8 @@ const VISITOR_READS_EXACT = new Set([
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
     // Home in one read: public only with the visitors' view on (HOME_READ_EXACT), as here.
     '/api/home',
+    // The community's public card: the Join card names the community it joins (PUBLIC_READ_EXACT).
+    '/api/community/card',
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/,
@@ -98,7 +101,7 @@ const VISITOR_READS_PATTERNS = [
 const visitorMayRead = (path: string) => VISITOR_READS_EXACT.has(path) || VISITOR_READS_PATTERNS.some(re => re.test(path));
 
 const GLOBAL = {
-    memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global',
+    memberCount: 3, postCount: 4, transactionCount: 0, commonsBalance_c: 0, profile: 'global',
     features: { openJoin: true, guestListingsOnly: true, beans: false },
 };
 const LOCAL = { ...GLOBAL, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };
@@ -214,6 +217,7 @@ beforeEach(() => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetCapturedAuthReturn();
     resetCommunityInfoOnce();
+    resetOwnCommunityCardOnce();
     clearRadiusSettings();
     sessionStorage.clear();
     markers.length = 0;

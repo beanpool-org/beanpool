@@ -28,9 +28,9 @@ const OUT_DIR = path.join(PWA_DIR, 'e2e', 'shots');
 /** The longest name the registrar gives: one label of 32 characters (apps/registrar NAME_RE), with no hyphen to break at. */
 const NEW_HOST = 'thecommunityofmullumbimbygardens.beanpool.org';
 const INFO = {
-    moved: { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, addresses: [NEW_HOST], primaryAddress: NEW_HOST, formerAddresses: ['localhost'] },
+    moved: { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, addresses: [NEW_HOST], primaryAddress: NEW_HOST, formerAddresses: ['localhost'] },
     // Opened at the current address: this page's host is the primary one.
-    current: { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, addresses: ['localhost'], primaryAddress: 'localhost', formerAddresses: ['oldname.beanpool.org'] },
+    current: { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, addresses: ['localhost'], primaryAddress: 'localhost', formerAddresses: ['oldname.beanpool.org'] },
 };
 
 const CASES = [

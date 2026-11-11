@@ -34,10 +34,12 @@
  * Vouchers (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §2 to §5, Marty's §9 to §11). Every writer is
  * an owner's or a credit-committee admin's (403 `committee_only` for any other admin), with Beans on (403
  * `profile_no_beans`), and never their own budget (403 `own_budget`):
- *   GET    /api/names/vouchers                      → { vouchers: [row], settings } (the vouchers block: owners and committee)
- *   POST   /api/names/vouchers                      { entryId, amount? } → 201 card: a confirmed entry's member made a voucher
- *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange } (any owner or admin; logged)
- *   DELETE /api/names/vouchers/:member              → card: Stop vouching (a list budget; 409 role_voucher for a role's)
+ *   GET    /api/names/vouchers                      → { vouchers: [row], waiting, candidates: { admins, confirmed }, settings }
+ *                                                     (the vouchers block: owners and committee)
+ *   POST   /api/names/vouchers                      { entryId, amount_c? } → 201 card: a confirmed entry's member made a voucher;
+ *                                                   { memberPubkey, amount_c? } → 201 card: an admin made one by an owner (I5)
+ *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange, canStop } (any owner or admin; logged)
+ *   DELETE /api/names/vouchers/:member              → card: Stop vouching (409 role_voucher for an owner's; an admin's by an owner)
  *   POST   /api/names/vouchers/:member/budget       { level } → card + changed: set the budget to a level (100 to 2,000)
  *   POST   /api/names/vouchers/settings             { voucherBudget } → settings (an owner); `memberGift` is a Core setting,
  *                                                     refused here whole (400 moved_to_community_shape): Core settings change it
@@ -58,6 +60,7 @@ import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
 import { getMember, isVisitorKey, generateInvite, broadcast, dispatchPushNotification } from '../state-engine.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { revokeEntryInvite } from '../engine/invites.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
@@ -193,12 +196,14 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.
     // Body `{ vouchAmount?, voucherLevel? }` (amend3 §2, Marty's Q1): a vouch preset from the maker's budget, held now, as on
     // any invite; and a voucher budget (an owner or committee admin, 100 to 2,000) the joiner is given once confirmed.
+    // One live invite per entry (invites-vouching I2): with one out, 409 `invite_out` (its maker's callsign and days left),
+    // unless `replace: true` from its maker or an owner, which revokes it in the new invite's transaction.
     router.post('/api/names/entries/:id/invite', async (ctx) => {
         const actor = admin(ctx);
         if (!actor) return;
         try {
             const body = ((ctx as any).requestBody && typeof (ctx as any).requestBody === 'object' ? (ctx as any).requestBody : {}) as Record<string, unknown>;
-            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id), body.vouchAmount, body.voucherLevel);
+            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id), body.vouchAmount, body.voucherLevel, body.replace);
             if (!invite) return answer(ctx, 403, word('Only registered members can generate invites'), 'not_member');
             ctx.status = 201;
             ctx.body = { success: true, invite };
@@ -207,6 +212,9 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
             respond(ctx, e);
         }
     });
+    // The live invite on an entry revoked from the entry's line (invites-vouching I2): its maker or an owner. Bound invites
+    // reach no admin as a code, so the entry names it (engine/invites.ts revokeEntryInvite).
+    router.delete('/api/names/entries/:id/invite', (ctx) => asAdmin(ctx, (actor) => revokeEntryInvite(actor, ctx.params.id)));
     router.get('/api/names/invites', (ctx) => asAdmin(ctx, () => ({ invites: readBoundInvites() })));
 
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
@@ -252,7 +260,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     // Vouchers (engine/vouchers.ts). The block is the committee's: an admin who isn't on it reads a voucher's card only.
     router.get('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor) => {
         if (!isOnCreditCommittee(actor)) throw new VoucherError(403, 'committee_only', VOUCHER_WORDS.committeeOnly);
-        return vouchersBlock();
+        return vouchersBlock(actor);
     }));
     // Making a voucher, setting a budget and stopping one each tell the voucher (§10.2), as `tell` does above.
     router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body, tell), 201));

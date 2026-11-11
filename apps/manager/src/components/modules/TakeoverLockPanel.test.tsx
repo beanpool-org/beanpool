@@ -153,7 +153,7 @@ describe('TakeoverLockPanel — the status', () => {
         expect(screen.getByTestId('takeover-state')).not.toHaveTextContent('Locked.');
     });
 
-    it('the node cannot be read: says so; an old node says it is too old', async () => {
+    it('the node cannot be read: says so, and a 404 is read the same way', async () => {
         mockNode({ [statusRoute]: { status: 500, json: { error: 'boom' } }, [backupRoute]: { status: 500, json: {} } });
         const { unmount } = render(<TakeoverLockPanel activeNode={node} />);
         await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent('Could not read who can unlock this community: boom.'));
@@ -162,7 +162,7 @@ describe('TakeoverLockPanel — the status', () => {
         unmount();
         mockNode({ [backupRoute]: { json: {} } }); // no status route at all
         render(<TakeoverLockPanel activeNode={node} />);
-        await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent('too old'));
+        await waitFor(() => expect(screen.getByTestId('takeover-state')).toHaveTextContent('Could not read who can unlock this community: Not found.'));
     });
 
     it('standby: says to make the code on the main server, and shows no code actions', async () => {

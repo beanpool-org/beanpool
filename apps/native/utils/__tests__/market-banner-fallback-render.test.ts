@@ -150,17 +150,17 @@ const JAM_PHOTO = `${NODE}/api/marketplace/posts/p-jam/photos/0?v=1791608803169&
 const POSTS = [
     {
         id: 'p-bread', type: 'offer', status: 'active', title: 'Sourdough from the bakery', description: 'Daily', category: 'food',
-        author_pubkey: 'bakery-key', author_callsign: 'Valley Bakery', author_energy_cycled: 0, credits: 5, price_type: 'fixed',
+        author_pubkey: 'bakery-key', author_callsign: 'Valley Bakery', author_energy_cycled: 0, price_c: 500, price_type: 'fixed',
         photos: [], authorBannerUrl: BANNER, created_at: iso(now - 60_000),
     },
     {
         id: 'p-jam', type: 'offer', status: 'active', title: 'Plum jam jars', description: 'Homemade', category: 'food',
-        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 0, credits: 3, price_type: 'fixed',
+        author_pubkey: 'kofi-key', author_callsign: 'Kofi', author_energy_cycled: 0, price_c: 300, price_type: 'fixed',
         photos: [JAM_PHOTO], created_at: iso(now - 120_000),
     },
     {
         id: 'p-ladder', type: 'need', status: 'active', title: 'Borrow a long ladder', description: 'Gutters', category: 'tools',
-        author_pubkey: 'mia-key', author_callsign: 'Mia', author_energy_cycled: 0, credits: 2, price_type: 'fixed',
+        author_pubkey: 'mia-key', author_callsign: 'Mia', author_energy_cycled: 0, price_c: 200, price_type: 'fixed',
         photos: [], created_at: iso(now - 180_000),
     },
 ];
@@ -259,8 +259,8 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
 
 describe("Home's Market row: a banner that will not load gives way to the tile", () => {
     const items: HomeMarketItem[] = [
-        { id: 'h-bread', type: 'offer', title: 'Sourdough from the bakery', category: 'food', credits: 5, photoUrl: null, bannerUrl: '/api/shops/shop-1/photo?v=ref1&k=Yq' },
-        { id: 'h-tools', type: 'need', title: 'Borrow a long ladder', category: 'tools', credits: 2, photoUrl: null },
+        { id: 'h-bread', type: 'offer', title: 'Sourdough from the bakery', category: 'food', price_c: 500, photoUrl: null, bannerUrl: '/api/shops/shop-1/photo?v=ref1&k=Yq' },
+        { id: 'h-tools', type: 'need', title: 'Borrow a long ladder', category: 'tools', price_c: 200, photoUrl: null },
     ];
     const body = (list = items) => createElement(MarketBody, { items: list, examples: false, nodeUrl: NODE, showsBeans: true, colors: lightColors, onSeeAll: () => {} });
     const row = (id: string) => host.querySelector(`[data-testid="home-market-${id}"]`) as HTMLElement;
@@ -285,7 +285,7 @@ describe("Home's Market row: a banner that will not load gives way to the tile",
 
     it("steps a listing's own photo down: the small copy, once more past every cache, then the photo's own URL, then the tile", async () => {
         const photoUrl = '/api/marketplace/posts/h-jam/photos/0?v=1&k=Kk';
-        await show(body([{ id: 'h-jam', type: 'offer', title: 'Plum jam jars', category: 'food', credits: 3, photoUrl }]));
+        await show(body([{ id: 'h-jam', type: 'offer', title: 'Plum jam jars', category: 'food', price_c: 300, photoUrl }]));
         const picture = () => row('h-jam').querySelector<HTMLImageElement>('img[data-src]');
         expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}&size=thumb2`);
         await failToLoad(picture());

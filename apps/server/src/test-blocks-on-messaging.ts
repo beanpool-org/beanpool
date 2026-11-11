@@ -36,7 +36,6 @@ delete process.env.ENFORCE_WS_AUTH;
 const READ_AUTH_OFF = process.env.ENFORCE_READ_AUTH === 'false';
 if (process.env.BLOCKS_OPEN_NODE) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 const PW = 'BlocksOnMessagingPass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -57,7 +56,6 @@ import { wrapCreatePost } from './post-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { registerVisitor } from './engine/members.js';
@@ -67,6 +65,7 @@ import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import { sweepOrphanedImageObjects } from './engine/storage-health.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -79,6 +78,8 @@ function attempt<T>(fn: () => T): T | undefined {
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const DAY = 86_400_000;
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hundredthsOf = (beans: number) => Math.round(beans * 100);
 
 let BASE = '';
 
@@ -120,7 +121,7 @@ function member(name: string, made?: Id): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active', 0)`)
         .run(id.pk, name, owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     putPushTokenRow(id.pk, tokenOf(id), 'android');
     return id;
 }
@@ -134,7 +135,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -152,8 +154,8 @@ type Sock = { ws: WebSocket; events: any[] };
 function socket(id: Id): Promise<Sock> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const s: Sock = { ws, events: [] };
@@ -174,7 +176,6 @@ const dm = (conversationId: string, author: Id, extra: Record<string, unknown> =
 
 async function main(): Promise<void> {
     console.log('\n=== Blocking stops messages and notifications on the node ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -528,9 +529,9 @@ async function main(): Promise<void> {
     // ── 7. a deal request ───────────────────────────────────────────────────────────────────────
     console.log('── 7. a deal request ──');
     // A Need asks its author to have listed an Offer first, and the Beans to pay for it.
-    const jars = attempt(() => createPost('offer', 'goods', 'Spare jars', 'A box of them', 1, 'fixed', ann.pk));
-    attempt(() => transfer('genesis', ann.pk, 10, 'Seed grant', 'direct', true));
-    const need = attempt(() => createPost('need', 'goods', 'A lift to town', 'Thursday morning', 1, 'fixed', ann.pk));
+    const jars = attempt(() => createPost('offer', 'goods', 'Spare jars', 'A box of them', hundredthsOf(1), 'fixed', ann.pk));
+    attempt(() => transfer('genesis', ann.pk, hundredthsOf(10), 'Seed grant', 'direct', true));
+    const need = attempt(() => createPost('need', 'goods', 'A lift to town', 'Thursday morning', hundredthsOf(1), 'fixed', ann.pk));
     pushes.length = 0;
     const boReq = attempt(() => requestPost(need!.id, bo.pk));
     await sleep(50);
@@ -543,10 +544,11 @@ async function main(): Promise<void> {
     // NON-BLOCKING): from Bo they push her nothing. The trade itself is as it was: the Beans go into escrow and come back,
     // and the deal's SYSTEM lines are written in their chat as for anyone. Cy, whom she never blocked, is the control.
     for (const who of [bo, cy]) {
-        attempt(() => createPost('offer', 'goods', `${who.name}'s spare seeds`, 'A packet', 1, 'fixed', who.pk));
-        attempt(() => transfer('genesis', who.pk, 5, 'Seed grant', 'direct', true));
+        attempt(() => createPost('offer', 'goods', `${who.name}'s spare seeds`, 'A packet', hundredthsOf(1), 'fixed', who.pk));
+        attempt(() => transfer('genesis', who.pk, hundredthsOf(5), 'Seed grant', 'direct', true));
     }
-    const balanceOf = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
+    /** A member's balance row, whole hundredths. */
+    const balanceOf = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance_c;
     const systemLinesWith = (id: Id) => (db.prepare(`SELECT COUNT(*) AS n FROM messages m
         JOIN conversation_participants a ON a.conversation_id = m.conversation_id AND a.public_key = ?
         JOIN conversation_participants b ON b.conversation_id = m.conversation_id AND b.public_key = ?
@@ -562,7 +564,7 @@ async function main(): Promise<void> {
     };
     const boDeal = await acceptAndCancel(bo);
     const cyDeal = await acceptAndCancel(cy);
-    assert(boDeal.acc.status === 200 && boDeal.can.status === 200 && boDeal.held === boDeal.bal - 1 && boDeal.after === boDeal.bal && boDeal.lines === 2,
+    assert(boDeal.acc.status === 200 && boDeal.can.status === 200 && boDeal.held === boDeal.bal - hundredthsOf(1) && boDeal.after === boDeal.bal && boDeal.lines === 2,
         `Bo's accept and cancel go through as anyone's: escrowed, refunded, two SYSTEM lines (${show(boDeal.acc)}; ${boDeal.bal}→${boDeal.held}→${boDeal.after}; ${boDeal.lines})`);
     assert(boDeal.kinds.length === 0, `and push Ann nothing (${JSON.stringify(boDeal.kinds)})`);
     assert(cyDeal.acc.status === 200 && cyDeal.can.status === 200 && cyDeal.lines === 2
@@ -582,10 +584,10 @@ async function main(): Promise<void> {
     // ── 8. a listing addressed to her ───────────────────────────────────────────────────────────
     console.log('── 8. a listing addressed to her ──');
     let refused = '';
-    try { createPost('offer', 'goods', 'For you', 'words', 1, 'fixed', bo.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }); }
+    try { createPost('offer', 'goods', 'For you', 'words', hundredthsOf(1), 'fixed', bo.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }); }
     catch (e: any) { refused = e?.message ?? String(e); }
     assert(refused === 'Target member not found or pruned', `Bo's listing addressed to Ann is refused as one to someone who isn't here (${refused || 'made'})`);
-    const cyDirect = attempt(() => createPost('offer', 'goods', 'For you', 'words', 1, 'fixed', cy.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }));
+    const cyDirect = attempt(() => createPost('offer', 'goods', 'For you', 'words', hundredthsOf(1), 'fixed', cy.pk, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: ann.pk }));
     assert(!!cyDirect, "Cy's is made");
 
     // ── 9. a member of another community ────────────────────────────────────────────────────────

@@ -53,7 +53,7 @@ const HOME_ANSWER_WITH_SHAPE: HomeAnswer = {
             members: 12,
             joined7d: 3,
             tradesThisMonth: 10,
-            commonsPot: 1500,
+            commonsPot_c: 150000,
             listings: 5,
             eventsSoon: 1,
         },
@@ -64,7 +64,7 @@ const HOME_ANSWER_WITH_SHAPE: HomeAnswer = {
         decisions: true,
         invites: true,
         door: 'members',
-        knownFloor: 1000,
+        knownFloor: 100000,
     },
 } as unknown as HomeAnswer;
 

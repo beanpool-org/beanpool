@@ -21,6 +21,7 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -47,9 +48,10 @@ async function get(path: string, id?: Id): Promise<{ status: number; body: any }
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        const canonical = { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -82,7 +84,7 @@ async function main() {
             `INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
              VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`
         ).run(id.pubKeyHex, callsign);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
 

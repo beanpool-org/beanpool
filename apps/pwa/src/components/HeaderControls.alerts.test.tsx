@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import * as api from '../lib/api';
 import * as sync from '../lib/sync';
 import { HeaderControls, HeaderTitle } from './HeaderControls';
-import { NeedsYouIcons } from './NeedsYouIcons';
+import { goToNoticeTarget, NeedsYouIcons } from './NeedsYouIcons';
+import { BELL_PAGE_EVENT, type BellNotice } from '@beanpool/core';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
 import { freshHomeForHeader, recordHomeAnswer, resetHomeStoreForTests } from '../lib/home-store';
@@ -41,7 +42,7 @@ const makeHomeAnswer = (items: NeedsItem[] = []) => ({
 });
 
 /**
- * App's mobile header row as MobileHeader (AppHeader.tsx) composes it: the tab's name with the needs-you icons beside it
+ * App's mobile header row as MobileHeader (AppHeader.tsx) composes it: the tab's name with the bell beside it
  * (HeaderTitle's `end`), the map's logo where there is no name (`title` null), then the pill.
  */
 function HeaderRow({ title = 'Commons', activeTab, onNavigate, className }: {
@@ -101,434 +102,163 @@ function stubRowLayout(layout: { slot: number; middleRight?: number; logoRight?:
     });
 }
 
-describe('HeaderControls needs-you alert icons', () => {
+const INVITE: NeedsItem = { kind: 'invite', count: 1, accent: false, label: "You're invited to join Garden Club", target: { to: 'invite', id: 'group-garden' } };
+const DEAL: NeedsItem = { kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you', target: { to: 'deal', postId: 'p1', txId: 't1' } };
+const VOTE: NeedsItem = { kind: 'vote', count: 1, accent: true, label: 'Vote closes tomorrow', target: { to: 'decide' } };
+const MESSAGE: NeedsItem = { kind: 'message', count: 1, accent: false, label: 'Unread message from Ana', target: { to: 'chat', conversationId: 'dm-ana' } };
+const GROUP: NeedsItem = { kind: 'group', count: 3, accent: false, label: '3 new lines in Choir', target: { to: 'chat', conversationId: 'grp-choir' } };
+
+const notice = (id: string, over: Partial<BellNotice> = {}): BellNotice => ({
+    id, kind: 'chat.message', title: '💬 New Message', body: 'Maya sent you a message',
+    data: { screen: 'chat', conversationId: 'dm-maya' }, sentAt: Math.floor(Date.now() / 1000) - 120, seenAt: null, ...over,
+});
+
+/** The bell's socket events, as lib/sync hands them to the page (the server's push_notice and push_notices_seen). */
+function catchBellEvents() {
+    return (event: { type: string; id?: unknown; kind?: unknown; ids?: unknown }) =>
+        act(() => { window.dispatchEvent(new CustomEvent(BELL_PAGE_EVENT, { detail: event })); });
+}
+
+const settle = () => act(async () => { await new Promise(r => setTimeout(r, 30)); });
+const bellButton = () => screen.getByTestId('header-bell');
+const openSheet = () => { fireEvent.click(bellButton()); return screen.getByRole('dialog'); };
+
+describe('The bell takes the needs-you row: what needs you sits at the top of its sheet', () => {
+    beforeEach(() => {
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([]);
+    });
     afterEach(() => {
         vi.unstubAllGlobals();
+        vi.useRealTimers();
     });
 
-    it('an invite → the envelope shows with its accessible name and opens the invitation', async () => {
+    it('an invite → the bell shows a dot, its sheet names the invitation, and a tap opens it', async () => {
         const onNavigate = vi.fn();
-        const inviteItem: NeedsItem = {
-            kind: 'invite',
-            count: 1,
-            accent: false,
-            label: "You're invited to join Garden Club",
-            target: { to: 'invite', id: 'group-garden' },
-        };
-
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-1"',
-            answer: makeHomeAnswer([inviteItem]) as any,
-        });
-
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-1"', answer: makeHomeAnswer([INVITE]) as any });
         render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
 
-        const envelope = await screen.findByRole('button', { name: "You're invited to join Garden Club" });
-        expect(envelope).toBeInTheDocument();
-        expect(envelope.querySelector('[data-kind="invite"]') || envelope.getAttribute('data-kind')).toBeTruthy();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(bellButton()).toHaveAccessibleName('Notifications: 1 thing needs you');
+        // No icon of its own in the header: the bell is the one control there.
+        expect(within(screen.getByTestId('header-needs-icons')).getAllByRole('button')).toHaveLength(1);
 
-        fireEvent.click(envelope);
+        const sheet = openSheet();
+        const line = within(sheet).getByRole('button', { name: "You're invited to join Garden Club" });
+        expect(line.querySelector('[data-kind="invite"]')).toBeTruthy();
+        fireEvent.click(line);
         expect(onNavigate).toHaveBeenCalledWith('group', 'group-garden');
+        expect(screen.queryByRole('dialog')).toBeNull();
     });
 
-    it('nothing pending → no icons', async () => {
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-empty"',
-            answer: makeHomeAnswer([]) as any,
-        });
-
+    it('nothing pending and nothing new → a plain bell, and its sheet says so and how long notices keep', async () => {
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-empty"', answer: makeHomeAnswer([]) as any });
         render(<HeaderRow />);
+        await settle();
 
-        // Allow any background loads to complete
-        await act(async () => {
-            await new Promise(r => setTimeout(r, 50));
-        });
-
-        // Only the standard 3 pill buttons should be present (profile, help, settings)
-        expect(screen.queryByTestId('header-needs-icons')).toBeNull();
-        expect(screen.queryByRole('button', { name: /invited|deal|vote|unread|new lines/i })).toBeNull();
+        expect(bellButton()).toHaveAccessibleName('Notifications');
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(screen.queryByTestId('bell-dot')).toBeNull();
+        const sheet = openSheet();
+        expect(within(sheet).getByTestId('needs-sheet-empty')).toHaveTextContent('Nothing new.');
+        expect(within(sheet).getByTestId('needs-sheet-lifetime')).toHaveTextContent('Older notices are gone after 7 days.');
+        expect(within(sheet).queryByRole('button', { name: /invited|deal|vote|unread|new lines/i })).toBeNull();
     });
 
-    it('each other icon you add → shows + routes', async () => {
+    it('every kind of need → a line of the sheet, in priority order, each opening its place', async () => {
         const onNavigate = vi.fn();
-        const dealItem: NeedsItem = {
-            kind: 'deal',
-            count: 1,
-            accent: true,
-            label: 'A deal is waiting for you',
-            target: { to: 'deal', postId: 'post-123', txId: 'tx-456' },
-        };
-        const voteItem: NeedsItem = {
-            kind: 'vote',
-            count: 1,
-            accent: true,
-            label: 'Vote closes tomorrow',
-            target: { to: 'decide' },
-        };
-        const messageItem: NeedsItem = {
-            kind: 'message',
-            count: 1,
-            accent: false,
-            label: 'Unread message from Ana',
-            target: { to: 'chat', conversationId: 'dm-ana' },
-        };
-        const groupItem: NeedsItem = {
-            kind: 'group',
-            count: 1,
-            accent: false,
-            label: '3 new lines in Choir',
-            target: { to: 'chat', conversationId: 'grp-choir' },
-        };
-
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-all"',
-            answer: makeHomeAnswer([dealItem, voteItem, messageItem, groupItem]) as any,
-        });
-
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-all"', answer: makeHomeAnswer([MESSAGE, GROUP, VOTE, DEAL]) as any });
         render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
 
-        // 1. Deal
-        const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
-        expect(dealBtn).toBeInTheDocument();
-        fireEvent.click(dealBtn);
-        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-123', 'tx-456');
+        const lines = () => within(openSheet()).getAllByRole('button').filter(b => b.dataset.kind);
+        expect(lines().map(b => b.dataset.kind)).toEqual(['deal', 'vote', 'message', 'group']);
+        const routes: Array<[string, unknown[]]> = [
+            ['A deal is waiting for you', ['marketplace', 'p1', 't1']], ['Vote closes tomorrow', ['projects']],
+            ['Unread message from Ana', ['messages', 'dm-ana']], ['3 new lines in Choir', ['messages', 'grp-choir']],
+        ];
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        for (const [name, args] of routes) {
+            fireEvent.click(within(openSheet()).getByRole('button', { name }));
+            expect(onNavigate).toHaveBeenLastCalledWith(...args);
+        }
+    });
 
-        // 2. Vote
-        const voteBtn = screen.getByRole('button', { name: 'Vote closes tomorrow' });
-        expect(voteBtn).toBeInTheDocument();
-        fireEvent.click(voteBtn);
-        expect(onNavigate).toHaveBeenCalledWith('projects');
+    it('"N people asked to join" in the sheet opens Invites as a notice\'s visit; "N asked for an invite" as an ordinary one (#3003)', async () => {
+        const onNavigate = vi.fn();
+        const KNOCK: NeedsItem = { kind: 'knock', count: 2, accent: true, label: '2 people asked to join', target: { to: 'people' } };
+        const ASK: NeedsItem = { kind: 'ask', count: 1, accent: true, label: '1 person asked for an invite', target: { to: 'people' } };
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-people"', answer: makeHomeAnswer([KNOCK, ASK]) as any });
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
 
-        // 3. Message
-        const msgBtn = screen.getByRole('button', { name: 'Unread message from Ana' });
-        expect(msgBtn).toBeInTheDocument();
-        fireEvent.click(msgBtn);
-        expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-ana');
-
-        // 4. Group
-        const grpBtn = screen.getByRole('button', { name: '3 new lines in Choir' });
-        expect(grpBtn).toBeInTheDocument();
-        fireEvent.click(grpBtn);
-        expect(onNavigate).toHaveBeenCalledWith('messages', 'grp-choir');
+        const line = (kind: string) => within(openSheet()).getAllByRole('button').find(b => b.dataset.kind === kind)!;
+        fireEvent.click(line('knock'));
+        expect(onNavigate).toHaveBeenLastCalledWith('people-invites', 'asked');
+        fireEvent.click(line('ask'));
+        expect(onNavigate).toHaveBeenLastCalledWith('people-invites');
     });
 
     it('one home fetch shared with Home', async () => {
-        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-shared"',
-            answer: makeHomeAnswer([{
-                kind: 'invite',
-                count: 1,
-                accent: false,
-                label: "You're invited to join Garden Club",
-                target: { to: 'invite', id: 'group-garden' },
-            }]) as any,
-        });
-
-        // Render Home page and the header row on Home tab together
+        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-shared"', answer: makeHomeAnswer([INVITE]) as any });
         render(
             <div>
                 <HeaderRow title="Home" activeTab="home" />
                 <HomePage identity={ME} onNavigate={() => {}} />
             </div>
         );
-
-        // Wait for Home page to load
         await screen.findByTestId('home-card-community');
-
-        // Header controls alert icon shows the envelope!
-        const headerIcons = await screen.findByTestId('header-needs-icons');
-        const headerEnvelope = within(headerIcons).getByRole('button', { name: "You're invited to join Garden Club" });
-        expect(headerEnvelope).toBeInTheDocument();
-
-        // Exactly one getHome fetch was made, shared between Home and HeaderControls!
+        await settle();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+        expect(within(openSheet()).getByRole('button', { name: "You're invited to join Garden Club" })).toBeInTheDocument();
         expect(getHomeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('collapses into ••• when width is narrow and opens Needs you sheet', async () => {
-        const onNavigate = vi.fn();
-        const dealItem: NeedsItem = {
-            kind: 'deal',
-            count: 1,
-            accent: true,
-            label: 'A deal is waiting for you',
-            target: { to: 'deal', postId: 'post-1', txId: 'tx-1' },
-        };
-        const voteItem: NeedsItem = {
-            kind: 'vote',
-            count: 1,
-            accent: true,
-            label: 'Vote closes tomorrow',
-            target: { to: 'decide' },
-        };
-        const msgItem: NeedsItem = {
-            kind: 'message',
-            count: 1,
-            accent: false,
-            label: 'Unread message from Ana',
-            target: { to: 'chat', conversationId: 'dm-ana' },
-        };
-        const grpItem: NeedsItem = {
-            kind: 'group',
-            count: 1,
-            accent: false,
-            label: '2 new lines in Choir',
-            target: { to: 'chat', conversationId: 'grp-choir' },
-        };
-
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-all"',
-            answer: makeHomeAnswer([dealItem, voteItem, msgItem, grpItem]) as any,
-        });
-
-        // The row leaves the slot 88 px beside the title: two 44 px slots, one icon and •••.
-        stubRowLayout({ slot: 88 });
-
-        render(<HeaderRow onNavigate={onNavigate} />);
-
-        // With 88px room, 2 slots: highest priority (deal) + more (3 more things need you)
-        const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
-        expect(dealBtn).toBeInTheDocument();
-
-        const moreBtn = screen.getByRole('button', { name: '3 more things need you' });
-        expect(moreBtn).toBeInTheDocument();
-        // Tap targets floor: 44 px tall, matching pill and tour-check
-        expect(moreBtn.className).toContain('h-[44px]');
-
-        // Clicking more opens the dialog sheet (focusing opener first as real user click)
-        moreBtn.focus();
-        fireEvent.click(moreBtn);
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toBeInTheDocument();
-        expect(dialog).toHaveAttribute('aria-modal', 'true');
-        expect(dialog).toHaveAttribute('aria-labelledby', 'needs-sheet-title');
-
-        // Escape closes the dialog and returns focus to opener
-        fireEvent.keyDown(dialog, { key: 'Escape' });
-        expect(screen.queryByRole('dialog')).toBeNull();
-        expect(document.activeElement).toBe(moreBtn);
-
-        // Reopen to test item selection
-        moreBtn.focus();
-        fireEvent.click(moreBtn);
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-
-        // Clicking an item in the sheet navigates and closes sheet
-        const sheetMsg = screen.getByRole('button', { name: 'Unread message from Ana' });
-        fireEvent.click(sheetMsg);
-        expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-ana');
-        expect(screen.queryByTestId('needs-sheet')).toBeNull();
-    });
-
-    // The slot measures its own width (the phone's onLayout) whenever the row lays it out again: a window resized or turned
-    // is a new width for it, and the old header-width breakpoints (and their max-width strings) are gone.
-    it('responds dynamically to header and window resize events', async () => {
-        const dealItem: NeedsItem = {
-            kind: 'deal',
-            count: 1,
-            accent: true,
-            label: 'A deal is waiting for you',
-            target: { to: 'deal', postId: 'post-1', txId: 'tx-1' },
-        };
-        const voteItem: NeedsItem = {
-            kind: 'vote',
-            count: 1,
-            accent: true,
-            label: 'Vote closes tomorrow',
-            target: { to: 'decide' },
-        };
-
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-resize"',
-            answer: makeHomeAnswer([dealItem, voteItem]) as any,
-        });
-
-        // Wide: the slot has its two 44 px slots.
-        const layout = { slot: 88 };
-        const relayout = stubRowLayout(layout);
-
-        render(<HeaderRow />);
-
-        const iconsContainer = await screen.findByTestId('header-needs-icons');
-        expect(iconsContainer).toBeInTheDocument();
-        // Initially wide: all items show
-        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-        expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
-        expect(screen.queryByTestId('header-needs-more')).toBeNull();
-
-        // A narrow window (320 px): the row leaves the slot one slot
-        layout.slot = 46;
+    it('a slot under 44 px draws the small bell; under 28 px, on the map at 320 px where the logo meets the pill, none', async () => {
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-map"', answer: makeHomeAnswer([INVITE]) as any });
+        const relayout = stubRowLayout({ slot: 36 });
+        const { unmount } = render(<HeaderRow />);
+        await settle();
         relayout();
-        expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
-        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
-        expect(screen.queryByTestId('header-needs-vote')).toBeNull();
+        expect(bellButton().style.width).toBe('28px');
+        unmount();
 
-        // Back up to a wide window
-        layout.slot = 88;
-        relayout();
-        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-        expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
-        expect(screen.queryByTestId('header-needs-more')).toBeNull();
-
-        // And again, without a ratchet: what is drawn never narrows the slot
-        layout.slot = 46;
-        relayout();
-        expect(screen.getByTestId('header-needs-more')).toBeInTheDocument();
-
-        layout.slot = 88;
-        relayout();
-        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-        expect(screen.getByTestId('header-needs-vote')).toBeInTheDocument();
-        expect(screen.queryByTestId('header-needs-more')).toBeNull();
-    });
-
-    it('collapses to a single count chip if even ••• does not fit beside title', async () => {
-        const inviteItem: NeedsItem = {
-            kind: 'invite',
-            count: 1,
-            accent: false,
-            label: "You're invited to join Garden Club",
-            target: { to: 'invite', id: 'group-garden' },
-        };
-        const dealItem: NeedsItem = {
-            kind: 'deal',
-            count: 1,
-            accent: true,
-            label: 'A deal is waiting for you',
-            target: { to: 'deal', postId: 'post-1', txId: 'tx-1' },
-        };
-
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-chip"',
-            answer: makeHomeAnswer([dealItem, inviteItem]) as any,
-        });
-
-        // 320px header where "Commons" title leaves only 35px (< 44px)
-        stubRowLayout({ slot: 35 });
-
-        render(<HeaderRow />);
-
-        // When room is < 44px, it must collapse to a single count chip, not cut title
-        const chip = await screen.findByTestId('header-needs-chip');
-        expect(chip).toBeInTheDocument();
-        expect(screen.queryByTestId('header-needs-more')).toBeNull();
-        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
-
-        // Clicking the count chip opens the dialog sheet
-        chip.focus();
-        fireEvent.click(chip);
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-    });
-
-    it('on Map tab: icons stay out of logo box, and HeaderControls has z-[5] below logo', async () => {
-        const inviteItem: NeedsItem = {
-            kind: 'invite',
-            count: 1,
-            accent: false,
-            label: "You're invited to join Garden Club",
-            target: { to: 'invite', id: 'group-garden' },
-        };
-
-        vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-map"',
-            answer: makeHomeAnswer([inviteItem]) as any,
-        });
-
-        // At 320px, Map tab logo right edge is at 247px, pill left (the row's middle's right) is at 208px (overlap)
-        const relayout = stubRowLayout({ slot: 88, middleRight: 208, logoRight: 247 });
-
+        const relayoutMap = stubRowLayout({ slot: 88, middleRight: 208, logoRight: 247 });
         render(<HeaderRow title={null} activeTab="map" />);
-
-        // Layering: the pill (HeaderControls) must have z-[5] and NOT z-10, under the logo's z-10
         const pill = screen.getByTestId('header-pill');
         expect(pill.className).toContain('z-[5]');
         expect(pill.className).not.toContain('z-10');
-
-        // At 320px on map tab, logo meets pill, so icons must be hidden (0 slots): the slot's max-width is 0, and the
-        // browser's next layout tells its observer so
-        await act(async () => {
-            await new Promise(r => setTimeout(r, 60));
-        });
-        relayout();
+        await settle();
+        relayoutMap();
         expect(document.querySelector<HTMLElement>('[data-needs-slot]')!.style.maxWidth).toBe('0px');
-        expect(screen.queryByTestId('header-needs-invite')).toBeNull();
-        expect(screen.queryByTestId('header-needs-chip')).toBeNull();
+        expect(screen.queryByTestId('header-bell')).toBeNull();
     });
 
     it('away from Home: refreshes on activeTab changes and sync activity, clearing dealt-with needs', async () => {
         vi.useFakeTimers();
-        try {
-            let syncListener: ((data?: unknown) => void) | null = null;
-            vi.spyOn(sync, 'onSyncActivity').mockImplementation((cb) => {
-                // (The listener is told which run it is in now, SyncRunInfo; this test hands it a doorbell's own data.)
-                syncListener = cb as (data?: unknown) => void;
-                return () => { syncListener = null; };
-            });
+        let syncListener: ((data?: unknown) => void) | null = null;
+        vi.spyOn(sync, 'onSyncActivity').mockImplementation((cb) => {
+            syncListener = cb as (data?: unknown) => void;
+            return () => { syncListener = null; };
+        });
+        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-1"', answer: makeHomeAnswer([INVITE]) as any });
+        const { rerender } = render(<HeaderRow title="Chat" activeTab="messages" />);
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+        expect(getHomeSpy).toHaveBeenCalledTimes(1);
 
-            const inviteItem: NeedsItem = {
-                kind: 'invite',
-                count: 1,
-                accent: false,
-                label: "You're invited to join Garden Club",
-                target: { to: 'invite', id: 'group-garden' },
-            };
-
-            const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({
-                notModified: false,
-                etag: 'W/"home-1"',
-                answer: makeHomeAnswer([inviteItem]) as any,
-            });
-
-            const { rerender } = render(<HeaderRow title="Chat" activeTab="messages" />);
-
-            // Wait for initial render and promise resolution
-            await act(async () => {
-                await Promise.resolve();
-            });
-
-            // Invite button shows initially away from Home
-            const inviteBtn = screen.getByTestId('header-needs-invite');
-            expect(inviteBtn).toBeInTheDocument();
-            expect(getHomeSpy).toHaveBeenCalledTimes(1);
-
-            // User accepted the invite or dealt with it, server now has empty needs
-            getHomeSpy.mockResolvedValue({
-                notModified: false,
-                etag: 'W/"home-empty"',
-                answer: makeHomeAnswer([]) as any,
-            });
-
-            // Simulating invite update event clears cache via forgetHomeForHeader
-            act(() => {
-                syncListener?.({
-                    type: 'group_member_updated',
-                    member: { memberPubkey: ME.publicKey },
-                });
-            });
-
-            // Tab change (e.g. going to commons) triggers refresh via gate
-            await act(async () => {
-                rerender(<HeaderRow title="Commons" activeTab="commons" />);
-                // Advance past NODE_MIN_GAP_MS
-                vi.advanceTimersByTime(16_000);
-            });
-
-            // Needs are refreshed: invite is cleared
-            expect(screen.queryByTestId('header-needs-invite')).toBeNull();
-        } finally {
-            vi.useRealTimers();
-        }
+        getHomeSpy.mockResolvedValue({ notModified: false, etag: 'W/"home-empty"', answer: makeHomeAnswer([]) as any });
+        act(() => { syncListener?.({ type: 'group_member_updated', member: { memberPubkey: ME.publicKey } }); });
+        await act(async () => {
+            rerender(<HeaderRow title="Commons" activeTab="commons" />);
+            vi.advanceTimersByTime(16_000);
+        });
+        expect(screen.queryByTestId('bell-dot')).toBeNull();
     });
 
     // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2): a new listing by
-    // someone else changes nothing in "your groups" or this row, so the run it asks for (lib/sync-coordinator SyncScope
+    // someone else changes nothing in "your groups" or the needs, so the run it asks for (lib/sync-coordinator SyncScope
     // 'listings') leaves this listener out; a group or a chat bell still runs it.
     it('listens to sync activity as a chats reader, so a run asked for only by new listings leaves it out', async () => {
         const options: Array<unknown> = [];
@@ -540,118 +270,40 @@ describe('HeaderControls needs-you alert icons', () => {
         for (const o of options) expect(o).toEqual({ chats: true });
     });
 
-    it('wide screens: shows icons in sidebar with rounded-lg styling, and hidden header sends no duplicate read', async () => {
-        const inviteItem: NeedsItem = {
-            kind: 'invite',
-            count: 1,
-            accent: false,
-            label: "You're invited to join Garden Club",
-            target: { to: 'invite', id: 'group-garden' },
-        };
-
-        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({
-            notModified: false,
-            etag: 'W/"home-wide"',
-            answer: makeHomeAnswer([inviteItem]) as any,
-        });
-
+    it('wide screens: the bell in the side bar with rounded-lg styling, and the hidden header sends no duplicate read', async () => {
+        const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-wide"', answer: makeHomeAnswer([INVITE]) as any });
+        const getBell = vi.mocked(api.getBellNotices);
         const originalWidth = window.innerWidth;
         window.innerWidth = 1024;
         try {
             render(
                 <div>
-                    {/* Wide sidebar footer */}
                     <div data-testid="sidebar-footer">
-                        <NeedsYouIcons
-                            identityPubkey={ME.publicKey}
-                            activeTab="messages"
-                            variant="sidebar"
-                        />
+                        <NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" variant="sidebar" />
                     </div>
-                    {/* Mobile header (md:hidden), with its own icons beside the title */}
                     <HeaderRow className="md:hidden" title="Chat" activeTab="messages" />
                 </div>
             );
-
-            // Wait for items to settle
-            const sidebarEnvelope = await screen.findByTestId('header-needs-invite');
-            expect(sidebarEnvelope).toBeInTheDocument();
-            // Sidebar buttons have rounded-lg matching SidebarControls
-            expect(sidebarEnvelope.className).toContain('rounded-lg');
-
-            // Exactly ONE getHome read was sent across both components
+            await settle();
+            const sideBell = screen.getByTestId('sidebar-bell');
+            expect(sideBell.className).toContain('rounded-lg');
+            expect(within(sideBell).getByTestId('bell-dot')).toBeInTheDocument();
             expect(getHomeSpy).toHaveBeenCalledTimes(1);
+            expect(getBell).toHaveBeenCalledTimes(1);
         } finally {
             window.innerWidth = originalWidth;
         }
-    });
-});
-
-/**
- * Round 3 of the deciding review (6113c9ad): what the count chip says, and when a tab change away from Home asks the node.
- * The header's slot is measured as the phone's row is (onLayout): its own width, from a ResizeObserver; here that width is
- * given (jsdom lays nothing out).
- */
-describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
-    const DEAL: NeedsItem = { kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you', target: { to: 'deal', postId: 'p1', txId: 't1' } };
-    const VOTE: NeedsItem = { kind: 'vote', count: 1, accent: true, label: 'Vote closes tomorrow', target: { to: 'decide' } };
-    const MESSAGE: NeedsItem = { kind: 'message', count: 1, accent: false, label: 'Unread message from Ana', target: { to: 'chat', conversationId: 'dm-ana' } };
-    const GROUP: NeedsItem = { kind: 'group', count: 3, accent: false, label: '3 new lines in Choir', target: { to: 'chat', conversationId: 'grp-choir' } };
-
-    /** The slot is `width` px wide; every observer hears of it at once, as the browser's first layout does. */
-    function slotWidth(width: number) {
-        vi.stubGlobal('ResizeObserver', class {
-            constructor(private cb: ResizeObserverCallback) {}
-            observe(target: Element) { this.cb([{ target, contentRect: target.getBoundingClientRect() } as ResizeObserverEntry], this as unknown as ResizeObserver); }
-            unobserve() {}
-            disconnect() {}
-        });
-        vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-            const w = (this as HTMLElement).dataset.needsSlot !== undefined ? width : 0;
-            return { width: w, height: 44, top: 0, left: 0, right: w, bottom: 44, x: 0, y: 0, toJSON() {} } as DOMRect;
-        });
-    }
-
-    afterEach(() => {
-        vi.unstubAllGlobals();
-        vi.useRealTimers();
-    });
-
-    it('the count chip, when it is all there is room for, says how many things need you: the number it draws', async () => {
-        slotWidth(30);
-        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, GROUP]) as any, ME.publicKey);
-        render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
-
-        const chip = await screen.findByTestId('header-needs-chip');
-        // Three kinds (the three lines of the sheet it opens), not the five the counts add up to, and not "3 more".
-        expect(chip).toHaveAccessibleName('3 things need you');
-        expect(chip.textContent).toBe('3');
-        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
-    });
-
-    it('a lone •••, with no icon beside it, says how many things need you, not how many more', async () => {
-        slotWidth(44);
-        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE]) as any, ME.publicKey);
-        render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
-
-        const more = await screen.findByTestId('header-needs-more');
-        expect(more).toHaveAccessibleName('2 things need you');
     });
 
     it("away from Home, a tab change asks the node once Home's answer is older than the phone's 15 s: a need dealt with goes", async () => {
         vi.useFakeTimers();
         const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: null, answer: makeHomeAnswer([]) as any });
-        // Home's own read, as the member left Home with a deal and an unread message.
         recordHomeAnswer(makeHomeAnswer([DEAL, MESSAGE]) as any, ME.publicKey);
-
         const { rerender } = render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
         await act(async () => { await Promise.resolve(); });
-        // Home's answer is a moment old: drawn from, and nothing asked.
-        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
-        expect(screen.getByTestId('header-needs-message')).toBeInTheDocument();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
         expect(getHomeSpy).not.toHaveBeenCalled();
 
-        // 20 s later, Market: the phone would have read its deals and messages again on this page change.
         await act(async () => { vi.advanceTimersByTime(20_000); });
         await act(async () => {
             rerender(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="marketplace" />);
@@ -660,26 +312,20 @@ describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
         await act(async () => { await Promise.resolve(); });
         expect(getHomeSpy).toHaveBeenCalledTimes(1);
         expect(getHomeSpy).toHaveBeenCalledWith({ cards: ['needs'] });
-        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
-        expect(screen.queryByTestId('header-needs-message')).toBeNull();
-
-        // The header's own read is the header's: it never stands in for Home's answer, which is still Home's own (and
-        // still under two minutes old, for Home).
+        expect(screen.queryByTestId('bell-dot')).toBeNull();
         expect(freshHomeForHeader(ME.publicKey)?.cards?.needs?.items.map(i => i.kind)).toEqual(['deal', 'message']);
     });
 
-    // Deciding review on 65302617: when nothing needs the member the node leaves the needs card OUT (home-answer.ts), it
-    // never sends needs: { items: [] }. That answer is an empty list, as the phone reads it: the last icon goes.
-    it('the node\'s answer with no needs card (nothing needs you) clears the last icon, away from Home', async () => {
+    // Deciding review on 65302617: when nothing needs the member the node leaves the needs card OUT (home-answer.ts).
+    it('the node\'s answer with no needs card (nothing needs you) clears the last need, away from Home', async () => {
         vi.useFakeTimers();
         const none = makeHomeAnswer([]) as any;
         delete none.cards.needs;
         const getHomeSpy = vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: null, answer: none });
         recordHomeAnswer(makeHomeAnswer([DEAL]) as any, ME.publicKey);
-
         const { rerender } = render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" />);
         await act(async () => { await Promise.resolve(); });
-        expect(screen.getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
 
         await act(async () => { vi.advanceTimersByTime(20_000); });
         await act(async () => {
@@ -688,23 +334,253 @@ describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
         });
         await act(async () => { await Promise.resolve(); });
         expect(getHomeSpy).toHaveBeenCalledTimes(1);
-        expect(screen.queryByTestId('header-needs-deal')).toBeNull();
+        expect(screen.queryByTestId('bell-dot')).toBeNull();
     });
 
-    it("a tap on an icon or a line of the sheet forgets Home's copy: that need is about to change", async () => {
-        slotWidth(88);
+    it("a tap on a line of the sheet forgets Home's copy: that need is about to change", async () => {
         const onNavigate = vi.fn();
         recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, MESSAGE]) as any, ME.publicKey);
         render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" onNavigate={onNavigate} />);
-
-        fireEvent.click(await screen.findByTestId('header-needs-deal'));
-        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p1', 't1');
-        expect(freshHomeForHeader(ME.publicKey)).toBeNull();
-
-        recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, MESSAGE]) as any, ME.publicKey);
-        fireEvent.click(await screen.findByTestId('header-needs-more'));
-        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Vote closes tomorrow' }));
+        await settle();
+        fireEvent.click(within(openSheet()).getByRole('button', { name: 'Vote closes tomorrow' }));
         expect(onNavigate).toHaveBeenCalledWith('projects');
         expect(freshHomeForHeader(ME.publicKey)).toBeNull();
+    });
+});
+
+/**
+ * W0's own checks (DESIGN-web-notifications-fable.md §3): the count is the notices not yet opened; a row's tap opens its
+ * thing and marks it; opening the chat marks its rows (the node does, and tells the sockets); opening the sheet marks
+ * nothing. Damo: "once it's clicked (and only once it's clicked) should it disappear".
+ */
+describe('The bell: what happened, until it is opened', () => {
+    beforeEach(() => {
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([]) as any });
+    });
+
+    it('the count is the notices not yet opened, never more than 99+', async () => {
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2'), notice('n3')]);
+        const { unmount } = render(<HeaderRow />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('3');
+        expect(bellButton()).toHaveAccessibleName('Notifications: 3 new');
+        expect(screen.getByTestId('bell-count').className).toContain('bg-bp-danger-fill');
+        unmount();
+
+        vi.mocked(api.getBellNotices).mockResolvedValue(Array.from({ length: 100 }, (_, i) => notice(`m${i}`)));
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('99+');
+    });
+
+    it('opening the sheet marks nothing: the rows and the count stay, with their real words', async () => {
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { kind: 'market.request', title: '🤝 Request', body: 'Ben asked for your jam', data: { screen: 'post', postId: 'p-jam' } })]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        render(<HeaderRow />);
+        await settle();
+        const sheet = openSheet();
+        const rows = within(sheet).getAllByTestId('bell-notice');
+        expect(rows.map(r => r.dataset.noticeId)).toEqual(['n1', 'n2']);
+        expect(rows[0]).toHaveTextContent('Maya sent you a message');
+        expect(rows[0]).toHaveTextContent('2 minutes ago');
+        expect(rows[1]).toHaveTextContent('Ben asked for your jam');
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+        await settle();
+        expect(mark).not.toHaveBeenCalled();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+    });
+
+    it('a row tap opens its thing and marks it, and only it', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { data: { screen: 'post', postId: 'p-jam', txId: 'tx-9' }, kind: 'market.request' })]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-maya');
+        expect(mark).toHaveBeenCalledWith(['n1']);
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+        fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        expect(onNavigate).toHaveBeenLastCalledWith('marketplace', 'p-jam', 'tx-9');
+        expect(mark).toHaveBeenLastCalledWith(['n2']);
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+    });
+
+    it("a row's ✕ clears it without opening it: off the list and the count, marked on the node, the sheet stays open", async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { title: '🤝 Request', body: 'Ben asked for your jam' })]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        const clearAll = vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(2);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        const sheet = openSheet();
+        const x = within(sheet).getAllByRole('button', { name: 'Clear this notice' });
+        expect(x).toHaveLength(2);
+        // The touch floor: 44 px square, and a button of its own (a button inside a button is not valid).
+        expect(x[0].className).toContain('min-w-[44px]');
+        expect(x[0].className).toContain('min-h-[44px]');
+        expect(x[0].closest('[data-testid="bell-notice"]')).toBeNull();
+        fireEvent.click(x[1]);
+        expect(mark).toHaveBeenCalledTimes(1);
+        expect(mark).toHaveBeenCalledWith(['n2']);
+        expect(clearAll).not.toHaveBeenCalled();
+        expect(onNavigate).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        expect(within(screen.getByRole('dialog')).getAllByTestId('bell-notice').map(r => r.dataset.noticeId)).toEqual(['n1']);
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear this notice' }));
+        expect(mark).toHaveBeenLastCalledWith(['n1']);
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(within(screen.getByRole('dialog')).getByTestId('needs-sheet-empty')).toBeInTheDocument();
+    });
+
+    it('"Clear all" clears every notice in one request, and leaves "Needs you" alone', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([INVITE, DEAL]) as any });
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2'), notice('n3')]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        const clearAll = vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(3);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('3');
+        const sheet = openSheet();
+        expect(within(sheet).getByTestId('needs-sheet-needs')).toBeInTheDocument();
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Clear all' }));
+        expect(clearAll).toHaveBeenCalledTimes(1);
+        expect(mark).not.toHaveBeenCalled();
+        expect(onNavigate).not.toHaveBeenCalled();
+        // The three notices are gone, the count with them; the two open things are still there, and the bell is a dot again.
+        const after = screen.getByRole('dialog');
+        expect(within(after).queryAllByTestId('bell-notice')).toHaveLength(0);
+        expect(within(after).queryByTestId('bell-clear-all')).toBeNull();
+        expect(within(after).getByTestId('header-needs-invite')).toBeInTheDocument();
+        expect(within(after).getByTestId('header-needs-deal')).toBeInTheDocument();
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+    });
+
+    // DESIGN-standing-deals-upfront-amend-fable §2, as the node's Home answer writes them (routes/home-answer.ts, U1).
+    const PAYER_LINE: NeedsItem = { kind: 'deal', count: 1, accent: true, label: 'Vehicle Storage: 50 Beans 3 days overdue · until 24 Nov', target: { to: 'deal', postId: 'p-storage', txId: 'sd-m1' } };
+    const PAYEE_LINE: NeedsItem = { kind: 'deal', count: 1, accent: false, label: "Marty's 50 Beans for Vehicle Storage: 3 days overdue · we try until 24 Nov · you can stop it now", target: { to: 'deal', postId: 'p-storage', txId: 'sd-m1' } };
+
+    it("a short standing deal (U2): the payer's line is amber and counts; neither ✕ nor Clear all removes it; it opens the deal", async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-sd"', answer: makeHomeAnswer([PAYER_LINE]) as any });
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2')]);
+        vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        vi.spyOn(api, 'clearAllBellNotices').mockResolvedValue(2);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        const sheet = openSheet();
+        const line = within(sheet).getByRole('button', { name: /Vehicle Storage: 50 Beans 3 days overdue · until 24 Nov/ });
+        expect(line.querySelector('.text-bp-ink-warning')).toBeTruthy();
+        // ✕ is on the notices only.
+        expect(within(sheet).getAllByRole('button', { name: 'Clear this notice' })).toHaveLength(2);
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Clear all' }));
+        await settle();
+        const after = screen.getByRole('dialog');
+        expect(within(after).queryAllByTestId('bell-notice')).toHaveLength(0);
+        expect(within(after).getByRole('button', { name: /Vehicle Storage: 50 Beans 3 days overdue/ })).toBeInTheDocument();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+        fireEvent.click(within(after).getByRole('button', { name: /Vehicle Storage: 50 Beans 3 days overdue/ }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p-storage', 'sd-m1');
+    });
+
+    it("the payee's line is listed in the sheet, calm, and not counted: no dot for it alone (the step is the payer's)", async () => {
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-sd2"', answer: makeHomeAnswer([PAYEE_LINE]) as any });
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.queryByTestId('bell-dot')).toBeNull();
+        const sheet = openSheet();
+        const line = within(sheet).getByRole('button', { name: /Marty's 50 Beans for Vehicle Storage: 3 days overdue/ });
+        expect(line.querySelector('.text-bp-ink-warning')).toBeNull();
+        expect(line.textContent).not.toMatch(/short|balance/i);
+    });
+
+    it('no notices, no "Clear all": the sheet offers it only with something to clear', async () => {
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([]);
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-0"', answer: makeHomeAnswer([INVITE]) as any });
+        render(<HeaderRow />);
+        await settle();
+        const sheet = openSheet();
+        expect(within(sheet).queryByRole('button', { name: 'Clear all' })).toBeNull();
+        expect(within(sheet).getByTestId('header-needs-invite')).toBeInTheDocument();
+    });
+
+    it('a clear the node did not take: the list is read again and the rows come back', async () => {
+        const getBell = vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2')]);
+        vi.spyOn(api, 'clearAllBellNotices').mockRejectedValue(new Error('offline'));
+        vi.spyOn(api, 'markBellNoticesSeen').mockRejectedValue(new Error('offline'));
+        render(<HeaderRow />);
+        await settle();
+        fireEvent.click(within(openSheet()).getByRole('button', { name: 'Clear all' }));
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        const reads = getBell.mock.calls.length;
+        await settle();
+        expect(getBell.mock.calls.length).toBeGreaterThan(reads);
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+        fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Clear this notice' })[0]);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+    });
+
+    it('opening the chat marks its rows: the node tells the sockets which, and the count follows on every open app', async () => {
+        const fire = catchBellEvents();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { data: { screen: 'chat', conversationId: 'dm-ben' } })]);
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+        fire({ type: 'push_notices_seen', ids: ['n1'] });
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+        expect(within(openSheet()).getAllByTestId('bell-notice').map(r => r.dataset.noticeId)).toEqual(['n2']);
+    });
+
+    it('a notice kept for the member: the bell reads its list again and the count goes up', async () => {
+        const fire = catchBellEvents();
+        const getBell = vi.spyOn(api, 'getBellNotices').mockResolvedValue([]);
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        getBell.mockResolvedValue([notice('n9')]);
+        fire({ type: 'push_notice', id: 'n9', kind: 'chat.message' });
+        await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+    });
+
+    it('a node from before the bell (its read refused) leaves a plain bell, and the needs still show', async () => {
+        vi.spyOn(api, 'getBellNotices').mockRejectedValue(new Error('404'));
+        vi.mocked(api.getHome).mockResolvedValue({ notModified: false, etag: 'W/"h"', answer: makeHomeAnswer([INVITE]) as any });
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.queryByTestId('bell-count')).toBeNull();
+        expect(screen.getByTestId('bell-dot')).toBeInTheDocument();
+    });
+});
+
+describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => {
+    it('a chat, a post (with its deal), an enterprise, a group, an invitation, Decide, Settings; else its kind\'s tab', () => {
+        const nav = vi.fn();
+        const cases: Array<[string, Record<string, unknown>, unknown[]]> = [
+            ['chat.message', { screen: 'chat', conversationId: 'c1' }, ['messages', 'c1']],
+            ['market.request', { screen: 'post', postId: 'p1', txId: 't1' }, ['marketplace', 'p1', 't1']],
+            ['market.request', { screen: 'post', postId: 'p1' }, ['marketplace', 'p1', undefined]],
+            ['enterprise.vote', { screen: 'enterprise', publicKey: 'e'.repeat(64) }, ['enterprise', 'e'.repeat(64)]],
+            ['group.vote', { screen: 'group', groupId: 'g1' }, ['group', 'g1']],
+            ['group.invite', { screen: 'invite', groupId: 'g2' }, ['group', 'g2']],
+            ['community.removal-vote', { screen: 'decide' }, ['projects']],
+            ['account.recovery-started', { screen: 'settings' }, ['settings']],
+            ['chat.message', { screen: 'requests' }, ['messages']],
+            // A request to join: Invites as a notice's visit (the phone's from=notice, #3003); an answered invite-ask: Invites.
+            ['community.knock', {}, ['people-invites', 'asked']],
+            ['community.invite-ask', {}, ['people-invites']],
+            ['market.request', {}, ['marketplace']],
+            ['not.a.kind', {}, ['home']],
+            ['chat.message', { screen: 'chat', conversationId: 42 }, ['messages']],
+        ];
+        for (const [kind, data, args] of cases) {
+            nav.mockClear();
+            goToNoticeTarget(kind, data, nav);
+            expect(nav).toHaveBeenCalledWith(...args);
+        }
     });
 });

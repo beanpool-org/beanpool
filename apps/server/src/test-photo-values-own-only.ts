@@ -28,6 +28,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { AVATAR_FORMAT_ERROR } from './engine/avatar.js';
 import { POST_PHOTO_FORMAT_ERROR } from './engine/posts.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 const fails: string[] = [];
@@ -37,6 +38,8 @@ function check(id: string, cond: boolean, msg: string): void {
 }
 let BASE = '';
 const DAY = 86400_000;
+/** The story's figures are Beans; money in a body is whole hundredths (`*_c`). The pricing guide keeps whole Beans (`priceBeans`). */
+const hc = (beans: number) => Math.round(beans * 100);
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 type Id = { pk: string; privateKey: crypto.KeyObject };
 function newId(): Id {
@@ -45,8 +48,8 @@ function newId(): Id {
 }
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
-    return { 'X-Public-Key': id.pk, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
+    return { 'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 let beforeCall: () => void = () => {};
 async function req(method: string, p: string, id?: Id, body?: any, extraHeaders?: Record<string, string>): Promise<{ status: number; body: any }> {
@@ -89,7 +92,7 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`).run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
 
@@ -154,7 +157,7 @@ async function main(): Promise<void> {
             creatorPubkey: alice.pk,
             title: 'Crowdfund Out',
             description: 'desc',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             photos: [url],
         });
         check('crowdfund-outside-photos', res.status === 400 && errorOf(res) === AVATAR_FORMAT_ERROR, `crowdfund create refuses outside photos url ${url} → 400 (got ${res.status} ${JSON.stringify(res.body)})`);
@@ -163,7 +166,7 @@ async function main(): Promise<void> {
         creatorPubkey: alice.pk,
         title: 'Crowdfund Ok',
         description: 'desc',
-        goalAmount: 100,
+        goalAmount_c: hc(100),
         photos: [TINY_PNG],
     });
     const cfId = cfOk.body?.project?.id;
@@ -172,7 +175,7 @@ async function main(): Promise<void> {
         creatorPubkey: alice.pk,
         title: 'Crowdfund Abs',
         description: 'desc',
-        goalAmount: 100,
+        goalAmount_c: hc(100),
         photos: [`${BASE}/api/avatar/${alice.pk}`],
     });
     check('crowdfund-abs', cfAbs.status === 200 && !!cfAbs.body?.project?.id, `crowdfund create accepts absolute own photo URL → 200 (got ${cfAbs.status})`);
@@ -181,7 +184,7 @@ async function main(): Promise<void> {
             const resUp = await req('POST', '/api/crowdfund/projects/update', alice, {
                 id: cfId,
                 title: 'Crowdfund Ok',
-                goalAmount: 100,
+                goalAmount_c: hc(100),
                 photos: [url],
             });
             check('crowdfund-update-outside', resUp.status === 400 && errorOf(resUp) === AVATAR_FORMAT_ERROR, `crowdfund update refuses outside photos url ${url} → 400 (got ${resUp.status} ${JSON.stringify(resUp.body)})`);
@@ -189,21 +192,21 @@ async function main(): Promise<void> {
         const cfUpData = await req('POST', '/api/crowdfund/projects/update', alice, {
             id: cfId,
             title: 'Crowdfund Ok',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             photos: [TINY_PNG],
         });
         check('crowdfund-update-data', cfUpData.status === 200, `crowdfund update accepts data: PNG → 200 (got ${cfUpData.status})`);
         const cfUpSelf = await req('POST', '/api/crowdfund/projects/update', alice, {
             id: cfId,
             title: 'Crowdfund Ok',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             photos: [`/api/avatar/${alice.pk}`],
         });
         check('crowdfund-update-self', cfUpSelf.status === 200, `crowdfund update accepts own photo path → 200 (got ${cfUpSelf.status})`);
         const cfUpSelfAbs = await req('POST', '/api/crowdfund/projects/update', alice, {
             id: cfId,
             title: 'Crowdfund Ok',
-            goalAmount: 100,
+            goalAmount_c: hc(100),
             photos: [`${BASE}/api/avatar/${alice.pk}`],
         });
         check('crowdfund-update-self-abs', cfUpSelfAbs.status === 200, `crowdfund update accepts absolute own photo URL → 200 (got ${cfUpSelfAbs.status})`);
@@ -280,7 +283,7 @@ async function main(): Promise<void> {
             category: 'goods',
             title: 'Offer Out',
             description: 'desc',
-            credits: 10,
+            price_c: hc(10),
             priceType: 'fixed',
             authorPublicKey: alice.pk,
             photos: [url],
@@ -292,7 +295,7 @@ async function main(): Promise<void> {
         category: 'food',
         title: 'Offer Ok',
         description: 'desc',
-        credits: 0,
+        price_c: 0,
         priceType: 'fixed',
         authorPublicKey: alice.pk,
         lat: -28.55,

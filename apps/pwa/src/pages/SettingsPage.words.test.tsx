@@ -43,7 +43,7 @@ vi.mock('../lib/api', async () => {
 });
 vi.mock('../lib/blocklist', async () => {
     const actual = await vi.importActual('../lib/blocklist');
-    return { ...actual, loadBlocklist: vi.fn(async () => ['blocked-pk-0000000000000000']), getBlocklistFullNote: vi.fn(() => null) };
+    return { ...actual, loadBlocklist: vi.fn(async () => ['blocked-pk-0000000000000000']) };
 });
 // Your area draws only on a community that syncs listings by area: the row and its screen once the limits are answered.
 vi.mock('../lib/member-area', async () => {

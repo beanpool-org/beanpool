@@ -4,18 +4,17 @@
  * scratch/global-node/DESIGN-owner-delete-fable.md §2, §5, §9 S1, and its amendment 1).
  *
  * Over the real HTTPS server, through every middleware a node runs:
- *  1. The removed routes (factory reset, snapshot delete, the legacy settings page and its script) answer 404 to the
- *     owner's password (with a code), a password session, an owner's key session from a computer and from the phone, an
- *     admin's key session, an admin-scope automation token and no credential; local-config.json and the snapshot are as
- *     they were. The Dockerfile puts no legacy page in the image.
+ *  1. The removed routes (factory reset, snapshot delete, the legacy settings page and its script) answer 404 to an
+ *     owner's key session from a computer and from the phone, an admin's key session, an admin-scope automation token
+ *     and no credential; local-config.json and the snapshot are as they were. The Dockerfile puts no legacy page in the
+ *     image. (The node has no admin password: an owner's strongest credential is the phone's Manage hand-off.)
  *  2. Every OWNER ONLY row: an admin's key session is refused 403 in words, an admin-scope token 403 token_not_allowed,
  *     the live state as it was; an owner gets past the gate.
- *  3. Every OWNER + FRESH PROOF row: a password session with no code 401 totpRequired, with a current code passes and the
- *     code is spent (sent again: 401); a phone hand-off whose unlock is 91 s old 403 step_up_required, a fresh one passes;
+ *  3. Every OWNER + FRESH PROOF row: a phone hand-off whose unlock is 91 s old 403 step_up_required, a fresh one passes;
  *     a computer's key session 403 phone_required; an admin 403; an admin token 403 token_not_allowed. Removing or
  *     re-pointing an off-box destination is held on each refusal, and so is removing an app address (B6, a row here
- *     since HTTPS S4; section 2 has the owner-only certificates' state in its place). In break-glass mode the password and an earlier 2FA
- *     session enrol no owner key; a current code does. Re-keying an owner or admin (making the code and binding it) asks
+ *     since HTTPS S4; section 2 has the owner-only certificates' state in its place). A mistyped request is refused on
+ *     its own terms and changes nothing (3-NB1, 3-NB2). Re-keying an owner or admin (making the code and binding it) asks
  *     the same, and each refusal leaves their key, status and role as they were; cancelling, and a member's or a
  *     moderator's re-key, ask nothing more. Removing or suspending an owner (pruning, offboarding, a branch with one in
  *     it, an emergency suspension, one through a report, cutting short one's removal) asks the same, and each refusal
@@ -30,8 +29,8 @@
  *     level; a pairing code of another key is 409 pairOnShell; another server's address and token save, the pin as it
  *     was), so a file that key signed restores nothing (409 signerNotPinned, the phone way too), and a file naming the
  *     main server that it never signed is refused as altered; standby-main.json byte for byte as it was throughout.
- *  4. With the node's 2FA off: a password session is held at the 2FA setup card; a key session's proof refuses, never
- *     passes; the helper itself refuses a password caller (fail closed).
+ *  4. The fresh proof fails closed: the helper itself refuses an owner caller that is no key session, and any
+ *     automation token, the backups scope included.
  *  5. The snapshot keep floor (keep 1 or 2 refused, the config as it was; 3 taken); a snapshot taken by hand (an admin,
  *     an admin or backups token, the owner's button) never pushes out a scheduled one, and the manual ones keep their own
  *     newest 3; the off-box retention floor (7 days, and a stored lower row read as 7); the standby's copy schedule
@@ -106,11 +105,11 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig, getLocalConfig, getGatewayConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig, getGatewayConfig } = await import('./config/local-config.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
     const { resetAdminAuthTarpit, requireFreshProof } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
-    const { turnOn2faForTests, ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
     const snapshots: any = await import('./services/snapshot-scheduler.js');
     const { createSnapshot, listSnapshots, getAutoSnapshotConfig } = snapshots;
     const offbox: any = await import('./services/offbox-backups.js');
@@ -131,9 +130,6 @@ async function main(): Promise<void> {
     await ensureGenesis();
     // A node key, so a recovery code can be made (A11).
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const PW = 'Owner-Delete-Gates-Pw-5512!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, breakGlassMode: false } as any);
 
     const pubkey = () => crypto.randomBytes(32).toString('hex');
     const owner = pubkey();
@@ -145,12 +141,12 @@ async function main(): Promise<void> {
         const callsign = `${name}${++added}`;
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
         return pk;
     };
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(admin, 'Adam', new Date().toISOString(), owner, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
     grantNodeRole(admin, 'admin', owner);
 
     /** A key session: a computer's ("Sign in with your phone"), or the phone's Manage hand-off (its 15-minute idle limit). */
@@ -193,9 +189,6 @@ async function main(): Promise<void> {
     /** Refused in words: a 403 whose error is a sentence. */
     const inWords = (r: { status: number; json: any }) => r.status === 403 && typeof r.json?.error === 'string' && r.json.error.length > 20;
 
-    // 2FA on for sections 1-3: the password path is a real owner's, with an authenticator.
-    let tfa = turnOn2faForTests(PW);
-    const pwSession = (): Record<string, string> => ({ 'x-admin-session': createPasswordSession().sessionId });
     const localConfigBytes = () => fs.readFileSync(path.join(dataDir!, 'local-config.json'));
 
     try {
@@ -210,8 +203,6 @@ async function main(): Promise<void> {
             ['GET', '/settings.js', undefined],
         ];
         const credentials: Array<[string, () => Record<string, string>]> = [
-            ['the owner password with a code', () => tfa.headers()],
-            ['a password session', pwSession],
             ['an owner key session (computer)', () => asComputer],
             ['an owner key session (phone, just unlocked)', asPhone],
             ['an admin key session', () => asAdmin],
@@ -225,13 +216,11 @@ async function main(): Promise<void> {
                 assert(r.status === 404, `${method} ${route}, ${who}: 404 (${short(r)})`);
             }
         }
-        // The password with a code spends codes and makes 2FA sessions, which local-config.json does not hold; a reset would
-        // have dropped the password hash, the 2FA and the callsign from it.
+        // A reset would have dropped the callsign, the owners' automation tokens and every setting from it.
         const configAfter = JSON.parse(localConfigBytes().toString('utf8'));
         const configWas = JSON.parse(configBefore.toString('utf8'));
-        assert(configAfter.adminHash === configWas.adminHash && configAfter.totpSecret === configWas.totpSecret
-            && configAfter.totpEnabled === true && configAfter.salt === configWas.salt,
-            'local-config.json still holds the password, its salt and the 2FA (nothing reset)');
+        assert(JSON.stringify(configAfter) === JSON.stringify(configWas) && Array.isArray(configAfter.automationTokens) && configAfter.automationTokens.length > 0,
+            'local-config.json is as it was, the owner\'s automation token in it (nothing reset)');
         assert(listSnapshots().some((s: any) => s.name === snap.name) && fs.existsSync(path.join(dataDir!, 'snapshots', snap.name)),
             'the snapshot is still there');
         // Nor does the image carry the legacy page (#1984 review N1): a node serves public/, and the Dockerfile copies nothing
@@ -315,7 +304,7 @@ async function main(): Promise<void> {
         }
 
         // ── 3. OWNER + FRESH PROOF ────────────────────────────────────────────────────────────────────────────────
-        console.log('\n── 3. owner + fresh proof: a current code, or Manage pressed within 90 seconds ──');
+        console.log('\n── 3. owner + fresh proof: Manage pressed on the phone within 90 seconds ──');
         const madeFirst = await call('POST', '/api/local/admin/takeover/recovery-code', asComputer, {});
         assert(madeFirst.status === 200 && typeof madeFirst.json?.code === 'string',
             `the FIRST recovery code stays plain: a computer's owner session makes it (${madeFirst.status})`);
@@ -325,7 +314,7 @@ async function main(): Promise<void> {
         assert(sameClaim.status !== 401 && sameClaim.status !== 403, `claiming the name already held asks no proof (${short(sameClaim)})`);
         updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
 
-        type Row = { what: string; method: string; route: string; body: (pw: boolean) => Record<string, unknown>; ok: (r: any) => boolean;
+        type Row = { what: string; method: string; route: string; body: () => Record<string, unknown>; ok: (r: any) => boolean;
             keyOnly?: boolean; before?: () => void; held?: () => boolean };
         // An off-box destination set in Settings, put back as it was before each request of its rows (#1984 review N5).
         const gatesDest = { name: 'Gates store', endpoint: 'https://gates.example.invalid', bucket: 'gates-bucket', region: 'auto', prefix: 'g1',
@@ -358,11 +347,9 @@ async function main(): Promise<void> {
             // Members' apps signing for it are refused after it (B6); an own IP or domain is removed here (HTTPS S4).
             { what: 'remove an app address (B6, HTTPS S4)', method: 'POST', route: '/api/local/admin/app-addresses/remove', body: () => ({ address: APP_ADDRESS }),
                 before: putAppAddressBack, ok: (r) => r.status === 200 && !appAddressHeld(), held: appAddressHeld },
-            { what: 'break-glass mode (C5)', method: 'POST', route: '/api/local/admin/auth/break-glass-mode', body: () => ({ enabled: false }),
-                ok: (r) => r.status === 200 && r.json?.breakGlassMode === false },
             { what: 'enrol an admin key (C6)', method: 'POST', route: '/api/local/admin/auth/enrol', body: () => ({ memberPubkey: addMember('Enrolee'), role: 'admin' }),
                 ok: (r) => r.status === 200 && r.json?.role === 'admin' },
-            { what: 'make a break-glass code (C7)', method: 'POST', route: '/api/local/admin/auth/break-glass/issue', body: (pw) => (pw ? { memberPubkey: owner } : {}),
+            { what: 'make a break-glass code (C7)', method: 'POST', route: '/api/local/admin/auth/break-glass/issue', body: () => ({}),
                 ok: (r) => r.status === 200 && typeof r.json?.breakGlassCode === 'string' },
             { what: 'grant admin (C8)', method: 'POST', route: '/api/local/admin/node-roles', body: () => ({ pubkey: addMember('Granted'), role: 'admin' }),
                 ok: (r) => r.status === 200 },
@@ -384,174 +371,133 @@ async function main(): Promise<void> {
                 ok: (r) => r.status === 200 && getLocalConfig().backupPrimaryUrl === 'https://elsewhere.example.invalid',
                 held: () => getLocalConfig().backupPrimaryUrl === 'https://main.example.invalid' },
         ];
-        // The 4-hour 2FA session a password sign-in hands out is no fresh proof.
-        const signIn = await call('POST', '/api/local/verify-password', {}, { password: PW, totpCode: tfa.code() });
-        const tfaSession: string = signIn.json?.tfaSessionToken;
-        assert(signIn.status === 200 && typeof tfaSession === 'string', `setup: the password and a code sign in, with a 2FA session (${signIn.status})`);
         for (const row of fresh) {
             console.log(`  · ${row.what}`);
-            const send = (headers: Record<string, string>, extra: Record<string, unknown> = {}, pw = false) => {
+            const send = (headers: Record<string, string>) => {
                 row.before?.();
-                return call(row.method, row.route, headers, { ...row.body(pw), ...extra });
+                return call(row.method, row.route, headers, row.body());
             };
             /** A row whose state can be read back: as it was after a refusal. */
             const held = (r: { status: number }, who: string) => {
                 if (row.held) assert(row.held(), `${row.what}, ${who}: nothing changed (${r.status})`);
             };
-            if (!row.keyOnly) {
-                const noCode = await send(pwSession(), {}, true);
-                assert(noCode.status === 401 && noCode.json?.totpRequired === true, `${row.what}: a password session without a code → 401 totpRequired (${short(noCode)})`);
-                held(noCode, 'a password session without a code');
-                const viaTfaSession = await send({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }, {}, true);
-                assert(viaTfaSession.status === 401 && viaTfaSession.json?.totpRequired === true,
-                    `${row.what}: the password with an earlier 2FA session and no code → 401 totpRequired (${short(viaTfaSession)})`);
-                held(viaTfaSession, 'the password with an earlier 2FA session');
-                const code = tfa.code();
-                const withCode = await send(pwSession(), { code }, true);
-                assert(row.ok(withCode), `${row.what}: with a current code it goes through (${short(withCode)})`);
-                const spent = await send(pwSession(), { code }, true);
-                assert(spent.status === 401, `${row.what}: the same code again is spent → 401 (${short(spent)})`);
-                held(spent, 'a spent code');
-            } else {
-                const pw = await send(pwSession(), { code: tfa.code() }, true);
-                assert(pw.status === 403, `${row.what}: the password never does it, whatever the code (${short(pw)})`);
-            }
             const stale = await send(asStalePhone());
             assert(stale.status === 403 && stale.json?.code === 'step_up_required', `${row.what}: Manage pressed 91 s ago → 403 step_up_required (${short(stale)})`);
             held(stale, 'Manage pressed 91 s ago');
             const phone = await send(asPhone());
             assert(row.ok(phone), `${row.what}: Manage pressed just now goes through (${short(phone)})`);
-            const computer = await send(asComputer, { code: tfa.code() });
+            const computer = await send(asComputer);
             assert(computer.status === 403 && computer.json?.code === 'phone_required', `${row.what}: a computer's session is sent to the phone → 403 phone_required (${short(computer)})`);
             held(computer, "a computer's session");
-            const byAdmin = await send(asAdmin, { code: tfa.code() });
+            const byAdmin = await send(asAdmin);
             // A role change by an admin goes to the engine as it always has, which refuses it (it grants only on a node with
             // no acting owner): 400 "Only an owner may grant …". Every other row: 403.
             assert(byAdmin.status === 403 || (byAdmin.status === 400 && /only an owner/i.test(byAdmin.json?.error || '')),
                 `${row.what}: an admin is refused (${short(byAdmin)})`);
             held(byAdmin, 'an admin');
-            const byToken = await send(asToken, { code: tfa.code() });
+            const byToken = await send(asToken);
             assert(byToken.status === 403 && (byToken.json?.code === 'token_not_allowed' || row.keyOnly === true),
                 `${row.what}: an admin token → 403 token_not_allowed (${short(byToken)})`);
             held(byToken, 'an admin token');
         }
         if (storedDest()) offbox.updateOffboxSettings({ removeId: storedDest().id });
 
-        // ── 3-NB1. A request the route refuses on its own terms spends no code (#2002 confirmation review, NB1) ──
-        console.log('\n── 3-NB1. a mistyped request spends no code: the proof is checked last ──');
+        // ── 3-NB1. A request the route refuses on its own terms changes nothing (#2002 confirmation review, NB1) ──
+        // The fresh proof is the phone's Manage hand-off, which a refusal never spends: each request below sends a fresh one.
+        console.log('\n── 3-NB1. a mistyped request is refused on its own terms, nothing changed; the right one goes through ──');
         {
             resetAdminAuthTarpit();
             https.resetAdminRateLimit();
             updateLocalConfig({ backupPrimaryUrl: 'https://main.example.invalid' } as any);
-            const code2 = tfa.code();
-            const withPassword = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { primaryUrl: 'https://elsewhere.example.invalid', primaryPassword: 'pasted by mistake', code: code2 });
+            const withPassword = await call('POST', '/api/local/admin/replication-config/save', asPhone(), { primaryUrl: 'https://elsewhere.example.invalid', primaryPassword: 'pasted by mistake' });
             assert(withPassword.status === 400 && getLocalConfig().backupPrimaryUrl === 'https://main.example.invalid',
                 `3-NB1. the copy source with the main server's password pasted → 400, unchanged (${short(withPassword)})`);
-            const noUrl = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { code: code2 });
+            const noUrl = await call('POST', '/api/local/admin/replication-config/save', asPhone(), {});
             assert(noUrl.status === 400 && getLocalConfig().backupPrimaryUrl === 'https://main.example.invalid',
                 `3-NB1. the copy source with no primaryUrl → 400, unchanged (${short(noUrl)})`);
-            const saved = await call('POST', '/api/local/admin/replication-config/save', pwSession(), { primaryUrl: 'https://elsewhere.example.invalid', code: code2 });
+            const saved = await call('POST', '/api/local/admin/replication-config/save', asPhone(), { primaryUrl: 'https://elsewhere.example.invalid' });
             assert(saved.status === 200 && getLocalConfig().backupPrimaryUrl === 'https://elsewhere.example.invalid',
-                `3-NB1. …and the same code still saves it: it was not spent (${short(saved)})`);
+                `3-NB1. …and the right request saves it (${short(saved)})`);
         }
 
-        // ── 3-NB2. The same on every other route that asks a code: its own checks first (the proof-order sweep) ──
-        // Each: the mistyped request with a current code → 4xx, nothing changed; then the SAME code (no tfa.code() between,
-        // which forgets spent codes) goes through, so the refusal did not spend it.
-        console.log('\n── 3-NB2. the proof-order sweep: a mistyped request spends no code on any route that asks one ──');
+        // ── 3-NB2. The same on every other route that asks the fresh proof: its own checks, nothing changed ──
+        // Each: the mistyped request from the phone, Manage pressed just now → 4xx, nothing changed; then the right one goes through.
+        console.log('\n── 3-NB2. a mistyped request changes nothing on any route that asks the fresh proof ──');
         {
             resetAdminAuthTarpit();
             https.resetAdminRateLimit();
-            const modeNow = async () => (await call('GET', '/api/local/admin/auth/break-glass-status', pwSession())).json?.breakGlassMode;
-            const modeBefore = await modeNow();
-            let code = tfa.code();
-            const notBoolean = await call('POST', '/api/local/admin/auth/break-glass-mode', pwSession(), { enabled: 'off', code });
-            assert(notBoolean.status === 400 && (await modeNow()) === modeBefore,
-                `3-NB2. break-glass mode with enabled not a boolean → 400, unchanged (${short(notBoolean)})`);
-            const modeSet = await call('POST', '/api/local/admin/auth/break-glass-mode', pwSession(), { enabled: false, code });
-            assert(modeSet.status === 200 && modeSet.json?.breakGlassMode === false, `3-NB2. …and the same code still sets it: it was not spent (${short(modeSet)})`);
-
             const gatewayBefore = JSON.stringify(getGatewayConfig());
-            code = tfa.code();
-            const shutsMeOut = await call('POST', '/api/local/admin/gateway', pwSession(), { adminIpAllowlist: ['203.0.113.9'], code });
+            const shutsMeOut = await call('POST', '/api/local/admin/gateway', asPhone(), { adminIpAllowlist: ['203.0.113.9'] });
             assert(shutsMeOut.status === 400 && JSON.stringify(getGatewayConfig()) === gatewayBefore,
                 `3-NB2. a gateway allow-list without the caller's own address → 400, unchanged (${short(shutsMeOut)})`);
-            const gatewaySet = await call('POST', '/api/local/admin/gateway', pwSession(), { adminIpAllowlist: [], code });
-            assert(gatewaySet.status === 200, `3-NB2. …and the same code still saves the gateway: it was not spent (${short(gatewaySet)})`);
+            const gatewaySet = await call('POST', '/api/local/admin/gateway', asPhone(), { adminIpAllowlist: [] });
+            assert(gatewaySet.status === 200, `3-NB2. …and the right one saves the gateway (${short(gatewaySet)})`);
 
-            code = tfa.code();
-            const nobody = await call('POST', '/api/local/admin/auth/break-glass/issue', pwSession(), { code });
-            assert(nobody.status === 400 && /memberPubkey/.test(nobody.json?.error || '') && !nobody.json?.breakGlassCode,
-                `3-NB2. a break-glass code for nobody named → 400, none made (${short(nobody)})`);
-            const misspelt = await call('POST', '/api/local/admin/auth/break-glass/issue', pwSession(), { memberPubkey: 'not a key', code });
-            assert(misspelt.status === 400 && !misspelt.json?.breakGlassCode, `3-NB2. a break-glass code for a misspelt key → 400, none made (${short(misspelt)})`);
-            const issued = await call('POST', '/api/local/admin/auth/break-glass/issue', pwSession(), { memberPubkey: owner, code });
+            const misspelt = await call('POST', '/api/local/admin/auth/break-glass/issue', asPhone(), { memberPubkey: 'not a key' });
+            assert(inWords(misspelt) && /its own owner/.test(misspelt.json?.error || '') && !misspelt.json?.breakGlassCode,
+                `3-NB2. a break-glass code for another key (a misspelt one) → 403 in words: each owner makes their own; none made (${short(misspelt)})`);
+            const issued = await call('POST', '/api/local/admin/auth/break-glass/issue', asPhone(), {});
             assert(issued.status === 200 && typeof issued.json?.breakGlassCode === 'string',
-                `3-NB2. …and the same code still makes it: it was not spent (${short(issued)})`);
+                `3-NB2. …and the owner's own makes it (${short(issued)})`);
 
             putDestBack();
             const offboxBefore = JSON.stringify(readOffboxSettings());
             const keptDays: number = readOffboxSettings().retentionDays;
-            code = tfa.code();
-            const underFloorDays = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(), { retentionDays: MIN_OFFBOX_RETENTION_DAYS - 1, code });
+            const underFloorDays = await call('POST', '/api/local/admin/offbox-backups/settings', asPhone(), { retentionDays: MIN_OFFBOX_RETENTION_DAYS - 1 });
             assert(underFloorDays.status === 400 && JSON.stringify(readOffboxSettings()) === offboxBefore,
                 `3-NB2. off-box retention under the floor → 400, unchanged (${short(underFloorDays)})`);
-            const unknownDest = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(), { removeId: 'd-00000000', code });
+            const unknownDest = await call('POST', '/api/local/admin/offbox-backups/settings', asPhone(), { removeId: 'd-00000000' });
             assert(unknownDest.status === 400 && JSON.stringify(readOffboxSettings()) === offboxBefore && destHeld(),
                 `3-NB2. removing an off-box destination by an unknown id → 400, unchanged (${short(unknownDest)})`);
-            const unusable = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(),
-                { destination: { ...gatesDest, id: storedDest()?.id, endpoint: 'not a url' }, code });
+            const unusable = await call('POST', '/api/local/admin/offbox-backups/settings', asPhone(),
+                { destination: { ...gatesDest, id: storedDest()?.id, endpoint: 'not a url' } });
             assert(unusable.status === 400 && JSON.stringify(readOffboxSettings()) === offboxBefore && destHeld(),
                 `3-NB2. re-pointing an off-box destination at an unusable endpoint → 400, unchanged (${short(unusable)})`);
-            const shortened = await call('POST', '/api/local/admin/offbox-backups/settings', pwSession(), { retentionDays: keptDays - 1, code });
+            const shortened = await call('POST', '/api/local/admin/offbox-backups/settings', asPhone(), { retentionDays: keptDays - 1 });
             assert(shortened.status === 200 && readOffboxSettings().retentionDays === keptDays - 1,
-                `3-NB2. …and the same code still shortens it: it was not spent (${short(shortened)})`);
+                `3-NB2. …and the right one shortens it (${short(shortened)})`);
             // Back as it was: §5 reads the retention the rows above left.
             offbox.updateOffboxSettings({ retentionDays: keptDays, removeId: storedDest().id });
 
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
             const addressBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
-            code = tfa.code();
-            const badLabel = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'not a name!', code });
+            const badLabel = await call('POST', '/api/local/admin/public-address/release-name', asPhone(), { name: 'not a name!' });
             assert(badLabel.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === addressBefore,
                 `3-NB2. releasing a name that is no address label → 400, unchanged (${short(badLabel)})`);
-            const stored = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'oldvale', code });
+            const stored = await call('POST', '/api/local/admin/public-address/release-name', asPhone(), { name: 'oldvale' });
             assert(stored.status === 409 && JSON.stringify((getNodeConfig() as any).publicAddress) === addressBefore,
                 `3-NB2. releasing this community's own stored address → 409, unchanged (${short(stored)})`);
-            // Past the proof with the same code: the address service is asked, and the stub holds nothing for this key.
-            const asked = await call('POST', '/api/local/admin/public-address/release-name', pwSession(), { name: 'sparevale', code });
+            // Past the proof: the address service is asked, and the stub holds nothing for this key.
+            const asked = await call('POST', '/api/local/admin/public-address/release-name', asPhone(), { name: 'sparevale' });
             assert(asked.status === 409 && /does not say this community holds/.test(asked.json?.error || ''),
-                `3-NB2. …and the same code still reaches the address service: it was not spent (${short(asked)})`);
+                `3-NB2. …and the right one reaches the address service (${short(asked)})`);
 
             // Enrol with a misspelt role, on a key that already holds admin (so the proof is asked): #2018 review NB2.
             const heldAdmin = addMember('Misspelt');
             grantNodeRole(heldAdmin, 'admin', owner);
             const roleNow = () => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(heldAdmin) as any)?.role ?? null;
-            code = tfa.code();
-            const badRole = await call('POST', '/api/local/admin/auth/enrol', pwSession(), { memberPubkey: heldAdmin, role: 'Admin', code });
+            const badRole = await call('POST', '/api/local/admin/auth/enrol', asPhone(), { memberPubkey: heldAdmin, role: 'Admin' });
             assert(badRole.status === 400 && /role must be/i.test(badRole.json?.error || '') && roleNow() === 'admin',
                 `3-NB2. enrol with a misspelt role on an admin's key → 400, still an admin (${short(badRole)})`);
-            const goodRole = await call('POST', '/api/local/admin/auth/enrol', pwSession(), { memberPubkey: heldAdmin, role: 'moderator', code });
-            assert(goodRole.status !== 401 && goodRole.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodRole)})`);
+            const goodRole = await call('POST', '/api/local/admin/auth/enrol', asPhone(), { memberPubkey: heldAdmin, role: 'moderator' });
+            assert(goodRole.status !== 401 && goodRole.status !== 403, `3-NB2. …and the right one gets past the proof (${short(goodRole)})`);
 
             // Claim over a different live name with a name that is no address label: #2018 review NB3.
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
             const liveBefore = JSON.stringify((getNodeConfig() as any).publicAddress);
-            code = tfa.code();
-            const badClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'new_vale', mode: 'tunnel', code });
+            const badClaim = await call('POST', '/api/local/admin/public-address/claim', asPhone(), { name: 'new_vale', mode: 'tunnel' });
             assert(badClaim.status === 400 && JSON.stringify((getNodeConfig() as any).publicAddress) === liveBefore,
                 `3-NB2. claiming over the live name with a name that is no address label → 400, unchanged (${short(badClaim)})`);
-            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', pwSession(), { name: 'newvale', mode: 'tunnel', code });
-            assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the same code still gets past the proof: it was not spent (${short(goodClaim)})`);
+            const goodClaim = await call('POST', '/api/local/admin/public-address/claim', asPhone(), { name: 'newvale', mode: 'tunnel' });
+            assert(goodClaim.status !== 401 && goodClaim.status !== 403, `3-NB2. …and the right one gets past the proof (${short(goodClaim)})`);
             updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
 
             // Removing an app address that is not on the list (HTTPS S4).
             putAppAddressBack();
-            code = tfa.code();
-            const notListed = await call('POST', '/api/local/admin/app-addresses/remove', pwSession(), { address: 'never.example.invalid', code });
+            const notListed = await call('POST', '/api/local/admin/app-addresses/remove', asPhone(), { address: 'never.example.invalid' });
             assert(notListed.status === 404 && appAddressHeld(), `3-NB2. removing an app address that is not on the list → 404, unchanged (${short(notListed)})`);
-            const removedListed = await call('POST', '/api/local/admin/app-addresses/remove', pwSession(), { address: APP_ADDRESS, code });
-            assert(removedListed.status === 200 && !appAddressHeld(), `3-NB2. …and the same code still removes one that is: it was not spent (${short(removedListed)})`);
+            const removedListed = await call('POST', '/api/local/admin/app-addresses/remove', asPhone(), { address: APP_ADDRESS });
+            assert(removedListed.status === 200 && !appAddressHeld(), `3-NB2. …and one that is comes off (${short(removedListed)})`);
 
             // A report's pause of an owner with a reason too short (removal by vote S1): the reason is checked before the
             // proof, as the emergency route checks it (#2018 NB1). The owner is lifted again after, role and all.
@@ -561,15 +507,14 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, 'gates suite', 'pending', ?)`)
                 .run(orderReport, admin, pauseTarget, new Date().toISOString());
             const pauseTargetStatus = () => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pauseTarget) as any)?.status;
-            code = tfa.code();
-            const shortReason = await call('POST', `/api/local/admin/reports/${orderReport}/action`, pwSession(), { suspendUser: true, reason: 'too short', code });
+            const shortReason = await call('POST', `/api/local/admin/reports/${orderReport}/action`, asPhone(), { suspendUser: true, reason: 'too short' });
             assert(shortReason.status === 400 && /at least 10 characters/.test(shortReason.json?.error || '') && pauseTargetStatus() === 'active',
                 `3-NB2. a report's pause of an owner with a reason too short → 400, still active (${short(shortReason)})`);
-            const pausedByReport = await call('POST', `/api/local/admin/reports/${orderReport}/action`, pwSession(),
-                { suspendUser: true, reason: 'Threats made in the market chat', code });
+            const pausedByReport = await call('POST', `/api/local/admin/reports/${orderReport}/action`, asPhone(),
+                { suspendUser: true, reason: 'Threats made in the market chat' });
             assert(pausedByReport.status === 200 && pauseTargetStatus() === 'disabled',
-                `3-NB2. …and the same code still pauses them: it was not spent (${short(pausedByReport)})`);
-            const liftedAgain = await call('POST', `/api/local/admin/users/${pauseTarget}/status`, pwSession(), { status: 'active' });
+                `3-NB2. …and with a reason long enough it pauses them (${short(pausedByReport)})`);
+            const liftedAgain = await call('POST', `/api/local/admin/users/${pauseTarget}/status`, asPhone(), { status: 'active' });
             const roleAgain = (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pauseTarget) as any)?.role;
             assert(liftedAgain.status === 200 && pauseTargetStatus() === 'active' && roleAgain === 'owner', `3-NB2. (lifted again, an owner again) (${short(liftedAgain)})`);
             // And no owner more for the sections after, which ask about the only owner.
@@ -604,8 +549,6 @@ async function main(): Promise<void> {
                 // Every credential, the fresh phone hand-off (Manage within 90 s) first: the strongest a stolen phone holds.
                 const creds: Array<[string, () => Record<string, string>, () => Record<string, unknown>, boolean]> = [
                     ['a fresh phone hand-off', asPhone, () => ({}), true],
-                    ['the password with a current code', pwSession, () => ({ code: tfa.code() }), true],
-                    ['the password with an earlier 2FA session', () => ({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }), () => ({}), false],
                     ["the owner's computer session", () => asComputer, () => ({}), false],
                     ['Manage pressed 91 s ago', asStalePhone, () => ({}), false],
                     ['an admin', () => asAdmin, () => ({}), false],
@@ -651,7 +594,6 @@ async function main(): Promise<void> {
                 };
                 for (const [who, headers] of [
                     ['a fresh phone hand-off', asPhone()],
-                    ['the password with an earlier 2FA session', { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }],
                     ['a fresh phone hand-off, opened with the phone', { ...asPhone(), 'X-Unlock-With': 'phone' }],
                 ] as Array<[string, Record<string, string>]>) {
                     const r = await upload(forged, headers);
@@ -674,40 +616,21 @@ async function main(): Promise<void> {
                 setNodeRole(roleWas);
             }
         }
-        // Break-glass mode changes none of that for an owner key (C6, #1984 review B2): the password with an earlier 2FA
-        // session is the stolen session the row is for, on either enrolment route. The owner recovering sends a current code.
-        updateLocalConfig({ breakGlassMode: true } as any);
-        const lockdownOwners: string[] = [];
-        try {
-            for (const route of ['/api/local/admin/auth/enrol', '/api/local/admin/auth/break-glass/enrol']) {
-                const target = addMember('Lockdown');
-                const r = await call('POST', route, { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession }, { memberPubkey: target, role: 'owner' });
-                assert(r.status === 401 && r.json?.totpRequired === true && nodeRoleOf(target) === null,
-                    `break-glass mode, ${route}: the password with an earlier 2FA session and no code → 401, no role (${short(r)}; role ${nodeRoleOf(target)})`);
-                const recovering = addMember('Recovering');
-                const withCode = await call('POST', route, { 'X-Admin-Password': PW, 'X-Admin-TOTP': tfa.code() }, { memberPubkey: recovering, role: 'owner' });
-                if (nodeRoleOf(recovering) === 'owner') lockdownOwners.push(recovering);
-                assert(withCode.status === 200 && nodeRoleOf(recovering) === 'owner',
-                    `break-glass mode, ${route}: the password with a current code (the owner recovering) → 200, an owner key (${short(withCode)})`);
-            }
-        } finally {
-            updateLocalConfig({ breakGlassMode: false } as any);
-            for (const pk of lockdownOwners) revokeNodeRole(pk, 'owner', owner);
-        }
-        // Taking a role: the DELETE carries its code as X-Fresh-Proof.
+        // Taking a role (C8): the DELETE asks the same fresh proof.
         const revokee = addMember('Revokee');
         grantNodeRole(revokee, 'admin', owner);
-        const revokeNoCode = await call('DELETE', `/api/local/admin/node-roles/${revokee}/admin`, pwSession());
-        assert(revokeNoCode.status === 401, `taking admin (C8), a password session without a code → 401 (${short(revokeNoCode)})`);
         const revokeComputer = await call('DELETE', `/api/local/admin/node-roles/${revokee}/admin`, asComputer);
-        assert(revokeComputer.status === 403 && revokeComputer.json?.code === 'phone_required', `taking admin from a computer → 403 phone_required (${short(revokeComputer)})`);
-        const revokeCode = await call('DELETE', `/api/local/admin/node-roles/${revokee}/admin`, { ...pwSession(), 'x-fresh-proof': tfa.code() });
-        assert(revokeCode.status === 200, `taking admin with a current code in X-Fresh-Proof → 200 (${short(revokeCode)})`);
+        assert(revokeComputer.status === 403 && revokeComputer.json?.code === 'phone_required' && nodeRoleOf(revokee) === 'admin',
+            `taking admin from a computer → 403 phone_required, still an admin (${short(revokeComputer)})`);
+        const revokeStale = await call('DELETE', `/api/local/admin/node-roles/${revokee}/admin`, asStalePhone());
+        assert(revokeStale.status === 403 && revokeStale.json?.code === 'step_up_required' && nodeRoleOf(revokee) === 'admin',
+            `taking admin, Manage pressed 91 s ago → 403 step_up_required, still an admin (${short(revokeStale)})`);
+        const revokePhone = await call('DELETE', `/api/local/admin/node-roles/${revokee}/admin`, asPhone());
+        assert(revokePhone.status === 200 && nodeRoleOf(revokee) === null, `taking admin, Manage pressed just now → 200 (${short(revokePhone)})`);
 
         // Re-keying an owner or admin moves their role to the new key (#1984 confirmation R1): making the code (which holds
-        // their key and suspends them) and binding it ask the same fresh proof. issue-code takes the code in its body;
-        // complete's `code` is the re-key code, so there the fresh code is X-Fresh-Proof. On every refusal the target's key
-        // is not held, their status and role are as they were, and no new key holds a role.
+        // their key and suspends them) and binding it ask the same fresh proof. On every refusal the target's key is not
+        // held, their status and role are as they were, and no new key holds a role.
         console.log('\n── 3b. re-keying an owner or admin asks the fresh proof; a member or moderator as before ──');
         const rekeyRoute = (pk: string, step: string) => `/api/local/admin/members/${pk}/rekey/${step}`;
         const keyHeld = (pk: string) => !!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending'").get(pk);
@@ -718,49 +641,44 @@ async function main(): Promise<void> {
         const wrongMatches = (pk: string) => (db.prepare("SELECT wrong_matches FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending'").get(pk) as any)?.wrong_matches ?? 0;
         const coOwners: string[] = [];
         const coOwner = (name: string): string => { const pk = addMember(name); grantNodeRole(pk, 'owner', owner); coOwners.push(pk); return pk; };
-        const earlier2fa = (): Record<string, string> => ({ 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfaSession });
-        const askedForCode = (r: any) => r.status === 401 && r.json?.totpRequired === true;
+        const phoneRequired = (r: any) => r.status === 403 && r.json?.code === 'phone_required';
         type Refusal = [string, () => Record<string, string>, (r: any) => boolean];
-        const refusals = (proofHeader: string | null): Refusal[] => [
-            ['a password session without a code', pwSession, askedForCode],
-            ['the password with an earlier 2FA session and no code', earlier2fa, askedForCode],
-            ["a co-owner's computer session, with a code", () => ({ ...asComputer, ...(proofHeader ? { [proofHeader]: tfa.code() } : {}) }),
-                (r) => r.status === 403 && r.json?.code === 'phone_required'],
+        const refusals = (): Refusal[] => [
+            ["a co-owner's computer session", () => asComputer, phoneRequired],
             ['Manage pressed 91 s ago', asStalePhone, (r) => r.status === 403 && r.json?.code === 'step_up_required'],
             ['an admin', () => asAdmin, inWords],
             ['an admin token', () => asToken, (r) => r.status === 403],
         ];
         const cy = coOwner('Cy');
-        for (const [who, headers, refused] of refusals(null)) {
-            // The computer's row sends its code in the body, as the owner's own would.
-            const r = await call('POST', rekeyRoute(cy, 'issue-code'), headers(), who.includes('computer') ? { code: tfa.code() } : {});
+        for (const [who, headers, refused] of refusals()) {
+            const r = await call('POST', rekeyRoute(cy, 'issue-code'), headers(), {});
             assert(refused(r), `re-key an owner (issue-code), ${who}: refused (${short(r)})`);
             assert(!keyHeld(cy) && statusOf(cy) === 'active' && roleRow(cy) === 'owner' && nodeRoleOf(cy) === 'owner' && pendingCode(cy) === null,
                 `re-key an owner (issue-code), ${who}: their key not held, still active, still an owner, no code (${statusOf(cy)}, ${roleRow(cy)})`);
         }
         const ada = addMember('Ada');
         grantNodeRole(ada, 'admin', owner);
-        const adaRefused = await call('POST', rekeyRoute(ada, 'issue-code'), earlier2fa(), {});
-        assert(askedForCode(adaRefused) && !keyHeld(ada) && statusOf(ada) === 'active' && roleRow(ada) === 'admin',
-            `re-key an admin (issue-code), the password with an earlier 2FA session and no code → 401, nothing changed (${short(adaRefused)})`);
-        const cyIssued = await call('POST', rekeyRoute(cy, 'issue-code'), pwSession(), { code: tfa.code() });
+        const adaRefused = await call('POST', rekeyRoute(ada, 'issue-code'), asComputer, {});
+        assert(phoneRequired(adaRefused) && !keyHeld(ada) && statusOf(ada) === 'active' && roleRow(ada) === 'admin',
+            `re-key an admin (issue-code), an owner's computer session → 403 phone_required, nothing changed (${short(adaRefused)})`);
+        const cyIssued = await call('POST', rekeyRoute(cy, 'issue-code'), asPhone(), {});
         const rkCode: string = cyIssued.json?.code;
         assert(cyIssued.status === 200 && typeof rkCode === 'string' && keyHeld(cy) && pendingCode(cy) === rkCode,
-            `re-key an owner (issue-code), the password with a current code → 200, the code made (${short(cyIssued)})`);
+            `re-key an owner (issue-code), Manage pressed just now → 200, the code made (${short(cyIssued)})`);
         const newCy = pubkey();
-        for (const [who, headers, refused] of refusals('x-fresh-proof')) {
+        for (const [who, headers, refused] of refusals()) {
             const r = await call('POST', rekeyRoute(cy, 'complete'), headers(), { code: rkCode, newPubkey: newCy });
             assert(refused(r), `re-key an owner (complete), ${who}: refused (${short(r)})`);
             assert(roleRow(cy) === 'owner' && roleRow(newCy) === null && statusOf(newCy) === null && pendingCode(cy) === rkCode,
                 `re-key an owner (complete), ${who}: the role stays on their key, the new key is nobody, the code still waits (${roleRow(cy)}, ${roleRow(newCy)})`);
         }
         // By the number on their phone too, and a refused bind counts no wrong number against the code.
-        const byMatch = await call('POST', rekeyRoute(cy, 'complete'), earlier2fa(), { code: rkCode, match: '42' });
-        assert(askedForCode(byMatch) && wrongMatches(cy) === 0 && pendingCode(cy) === rkCode,
-            `re-key an owner (complete by the number), the password with an earlier 2FA session → 401, no try counted (${short(byMatch)})`);
-        const bound = await call('POST', rekeyRoute(cy, 'complete'), { ...pwSession(), 'x-fresh-proof': tfa.code() }, { code: rkCode, newPubkey: newCy });
+        const byMatch = await call('POST', rekeyRoute(cy, 'complete'), asComputer, { code: rkCode, match: '42' });
+        assert(phoneRequired(byMatch) && wrongMatches(cy) === 0 && pendingCode(cy) === rkCode,
+            `re-key an owner (complete by the number), an owner's computer session → 403 phone_required, no try counted (${short(byMatch)})`);
+        const bound = await call('POST', rekeyRoute(cy, 'complete'), asPhone(), { code: rkCode, newPubkey: newCy });
         assert(bound.status === 200 && roleRow(newCy) === 'owner' && nodeRoleOf(newCy) === 'owner' && roleRow(cy) === null,
-            `re-key an owner (complete), a current code in X-Fresh-Proof → 200, the owner role on the new key (${short(bound)})`);
+            `re-key an owner (complete), Manage pressed just now → 200, the owner role on the new key (${short(bound)})`);
         coOwners.push(newCy);
         // The real owner on their phone, Manage pressed just now: both steps go through.
         const dee = coOwner('Dee');
@@ -776,14 +694,14 @@ async function main(): Promise<void> {
         const eveCancel = await call('POST', rekeyRoute(eve, 'cancel'), asComputer, {});
         assert(eveIssued.status === 200 && eveCancel.status === 200 && !keyHeld(eve) && statusOf(eve) === 'active' && nodeRoleOf(eve) === 'owner',
             `cancelling an owner's re-key code from a computer still goes through, and gives back (${short(eveCancel)})`);
-        // A member's or a moderator's re-key asks nothing more: an admin's computer, and the password with its 2FA session.
+        // A member's or a moderator's re-key asks nothing more: an admin's computer, and an owner's.
         const mo = addMember('Mo');
         const mod = addMember('Moddy');
         grantNodeRole(mod, 'moderator', owner);
         for (const [what, target, headers, roleAfter] of [
             ['a member, by an admin', mo, () => asAdmin, null],
             ['a moderator, by an admin', mod, () => asAdmin, 'moderator'],
-            ['a member, by the password with an earlier 2FA session', addMember('Mae'), earlier2fa, null],
+            ["a member, by an owner's computer", addMember('Mae'), () => asComputer, null],
         ] as Array<[string, string, () => Record<string, string>, string | null]>) {
             const i = await call('POST', rekeyRoute(target, 'issue-code'), headers(), {});
             const nk = pubkey();
@@ -800,10 +718,10 @@ async function main(): Promise<void> {
         const heldAside = (pk: string) => (db.prepare('SELECT role FROM suspended_node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
         const intact = (pk: string) => statusOf(pk) === 'active' && roleRow(pk) === 'owner' && heldAside(pk) === null;
         // Olive alone is an owner here: a stolen session still can't suspend the only owner, nor can the proof.
-        const soleStolen = await call('POST', `/api/local/admin/users/${owner}/suspend`, earlier2fa(), { reason: 'stolen session' });
-        assert(soleStolen.status === 401 && intact(owner), `suspend the only owner, the password with an earlier 2FA session → 401, still an owner (${short(soleStolen)})`);
-        const soleProof = await call('POST', `/api/local/admin/users/${owner}/suspend`, pwSession(), { reason: 'with a code', code: tfa.code() });
-        assert(soleProof.status === 400 && intact(owner), `suspend the only owner, with a current code → 400, still an owner (${short(soleProof)})`);
+        const soleStolen = await call('POST', `/api/local/admin/users/${owner}/suspend`, asComputer, { reason: 'stolen session' });
+        assert(phoneRequired(soleStolen) && intact(owner), `suspend the only owner, a computer's session → 403 phone_required, still an owner (${short(soleStolen)})`);
+        const soleProof = await call('POST', `/api/local/admin/users/${owner}/suspend`, asPhone(), { reason: 'with the proof' });
+        assert(soleProof.status === 400 && intact(owner), `suspend the only owner, Manage pressed just now → 400, still an owner (${short(soleProof)})`);
         const reportOn = (pk: string): string => {
             const id = `rpt-${crypto.randomBytes(6).toString('hex')}`;
             db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)`)
@@ -812,8 +730,8 @@ async function main(): Promise<void> {
         };
         // Nor through a report (the deciding review of #1992, NB 2): it would take her role with no vote to give it back.
         const oliveRow = db.prepare('SELECT * FROM node_roles WHERE member_pubkey = ?').get(owner) as Record<string, unknown>;
-        const soleReport = await call('POST', `/api/local/admin/reports/${reportOn(owner)}/action`, pwSession(), { suspendUser: true, code: tfa.code() });
-        assert(soleReport.status === 400 && intact(owner), `suspend the only owner through a report, with a current code → 400, still an owner (${short(soleReport)})`);
+        const soleReport = await call('POST', `/api/local/admin/reports/${reportOn(owner)}/action`, asPhone(), { suspendUser: true });
+        assert(soleReport.status === 400 && intact(owner), `suspend the only owner through a report, Manage pressed just now → 400, still an owner (${short(soleReport)})`);
         if (!intact(owner)) {
             // A server without that guard took the only owner's role: it is put back as it was, so the run goes on and
             // reports every row after this one, not the sessions it ended.
@@ -821,16 +739,15 @@ async function main(): Promise<void> {
             const cols = Object.keys(oliveRow);
             db.prepare(`INSERT OR REPLACE INTO node_roles (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => oliveRow[c]));
         }
-        // A short reason spends no code (#2018 review NB1): it is checked before the proof, and the same code then suspends.
+        // A short reason is refused on its own terms (#2018 review NB1), and one long enough then suspends.
         {
             const shortReasonOwner = coOwner('ShortReason');
-            const code = tfa.code();
-            const tooShort = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, pwSession(), { reason: 'stolen', code });
+            const tooShort = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, asPhone(), { reason: 'stolen' });
             assert(tooShort.status === 400 && /at least 10 characters/.test(tooShort.json?.error || '') && intact(shortReasonOwner),
                 `3c-NB1. emergency-suspend an owner with a 6-character reason → 400, still an active owner (${short(tooShort)})`);
-            const longEnough = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, pwSession(), { reason: 'a reason members can read', code });
+            const longEnough = await call('POST', `/api/local/admin/users/${shortReasonOwner}/suspend`, asPhone(), { reason: 'a reason members can read' });
             assert(longEnough.status === 200 && statusOf(shortReasonOwner) !== 'active',
-                `3c-NB1. …and the same code still suspends: it was not spent (${short(longEnough)})`);
+                `3c-NB1. …and with a reason long enough it suspends (${short(longEnough)})`);
         }
         /** A branch whose root is a member, with an owner invited by them. */
         const ownerInBranch = (): [string, string] => {
@@ -860,28 +777,15 @@ async function main(): Promise<void> {
         for (const row of removals) {
             console.log(`  · ${row.what}`);
             const [target, ownerKey] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
-            for (const [who, headers, refused] of refusals('x-fresh-proof')) {
-                // The computer's row also sends a code in the body, as the owner's own would.
-                const r = await row.send(target, headers(), who.includes('computer') ? { code: tfa.code() } : {});
+            for (const [who, headers, refused] of refusals()) {
+                const r = await row.send(target, headers());
                 assert(refused(r), `${row.what}, ${who}: refused (${short(r)})`);
                 assert(intact(ownerKey) && (target === ownerKey || statusOf(target) === 'active'),
                     `${row.what}, ${who}: nothing changed, still an active owner (${statusOf(ownerKey)}, ${roleRow(ownerKey)}, held ${heldAside(ownerKey)})`);
             }
-            const code = tfa.code();
-            const withCode = await row.send(target, pwSession(), { code });
-            assert(withCode.status === 200 && row.done(target) && roleRow(ownerKey) === null,
-                `${row.what}, a password session with a current code → 200, done (${short(withCode)}; ${statusOf(target)}, role ${roleRow(ownerKey)})`);
-            // Again, on another owner: the code is spent; the phone with Manage pressed just now, or the code as X-Fresh-Proof.
-            const [target2, ownerKey2] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
-            const spent = await row.send(target2, pwSession(), { code });
-            assert(spent.status === 401 && intact(ownerKey2), `${row.what}, the same code again → 401, nothing changed (${short(spent)})`);
-            const phone = await row.send(target2, asPhone());
-            assert(phone.status === 200 && row.done(target2) && roleRow(ownerKey2) === null,
-                `${row.what}, Manage pressed just now → 200, done (${short(phone)})`);
-            const [target3, ownerKey3] = row.target ? row.target() : (() => { const pk = coOwner('Removee'); return [pk, pk] as [string, string]; })();
-            const header = await row.send(target3, { ...pwSession(), 'x-fresh-proof': tfa.code() });
-            assert(header.status === 200 && row.done(target3) && roleRow(ownerKey3) === null,
-                `${row.what}, a current code in X-Fresh-Proof → 200, done (${short(header)})`);
+            const phone = await row.send(target, asPhone());
+            assert(phone.status === 200 && row.done(target) && roleRow(ownerKey) === null,
+                `${row.what}, Manage pressed just now → 200, done (${short(phone)}; ${statusOf(target)}, role ${roleRow(ownerKey)})`);
         }
         // An owner whose key waits on a re-key code is still an owner (the deciding review of #1992, BLOCKING 1): the code
         // made them 'suspended', and an emergency suspension may be made over it. Every credential above is refused, and
@@ -892,7 +796,7 @@ async function main(): Promise<void> {
         const waitsOnCode = (pk: string) => statusOf(pk) === 'suspended' && keyHeld(pk) && roleRow(pk) === 'owner' && heldAside(pk) === null && keepVotesOn(pk) === 0;
         const rekeyingOwner = async (): Promise<string> => {
             const pk = coOwner('Rekeyee');
-            const issued = await call('POST', rekeyRoute(pk, 'issue-code'), pwSession(), { code: tfa.code() });
+            const issued = await call('POST', rekeyRoute(pk, 'issue-code'), asPhone(), {});
             assert(issued.status === 200 && waitsOnCode(pk), `setup: a co-owner given a re-key code waits on it, still holding the owner row (${short(issued)}; ${statusOf(pk)}, ${roleRow(pk)})`);
             return pk;
         };
@@ -900,18 +804,14 @@ async function main(): Promise<void> {
             call('POST', `/api/local/admin/users/${pk}/suspend`, headers, { reason: 'gates suite', ...extra });
         const suspendedAside = (pk: string) => statusOf(pk) === 'disabled' && roleRow(pk) === null && heldAside(pk) === 'owner' && keepVotesOn(pk) === 1;
         // One owner per credential, so each is measured on an owner still waiting on the code.
-        for (const [who, headers, refused] of refusals('x-fresh-proof')) {
+        for (const [who, headers, refused] of refusals()) {
             const rekeyee = await rekeyingOwner();
-            const r = await suspendOwner(rekeyee, headers(), who.includes('computer') ? { code: tfa.code() } : {});
+            const r = await suspendOwner(rekeyee, headers());
             assert(refused(r), `emergency-suspend an owner whose key waits on a re-key code, ${who}: refused (${short(r)})`);
             assert(waitsOnCode(rekeyee), `emergency-suspend an owner whose key waits on a re-key code, ${who}: nothing held aside, no vote, the role on their key (${statusOf(rekeyee)}, ${roleRow(rekeyee)}, held ${heldAside(rekeyee)}, votes ${keepVotesOn(rekeyee)})`);
             // Their code cancelled, so they are an active owner again, whose role the end of this section takes back.
             if (waitsOnCode(rekeyee)) cancelRekeyCode(rekeyee, owner);
         }
-        const rekeyee = await rekeyingOwner();
-        const rekeyeeProof = await suspendOwner(rekeyee, pwSession(), { code: tfa.code() });
-        assert(rekeyeeProof.status === 200 && suspendedAside(rekeyee),
-            `emergency-suspend an owner whose key waits on a re-key code, a password session with a current code → 200, the role held aside, a vote open (${short(rekeyeeProof)})`);
         const rekeyee2 = await rekeyingOwner();
         const rekeyeePhone = await suspendOwner(rekeyee2, asPhone());
         assert(rekeyeePhone.status === 200 && suspendedAside(rekeyee2),
@@ -930,31 +830,21 @@ async function main(): Promise<void> {
         const removalRan = (id: string, pk: string) => decisionStatus(id) === 'executed' && statusOf(pk) === 'pruned' && heldAside(pk) === null && roleRow(pk) === null;
         const [graceId, gracedOwner] = ownerInGrace();
         assert(inGrace(graceId, gracedOwner), `setup: an owner's removal waits in its grace window, the role held aside (${decisionStatus(graceId)}, ${statusOf(gracedOwner)})`);
-        for (const [who, headers, refused] of refusals('x-fresh-proof')) {
-            const r = await accelerate(graceId, headers(), who.includes('computer') ? { code: tfa.code() } : {});
+        for (const [who, headers, refused] of refusals()) {
+            const r = await accelerate(graceId, headers());
             assert(refused(r), `cut short an owner's removal, ${who}: refused (${short(r)})`);
             assert(inGrace(graceId, gracedOwner), `cut short an owner's removal, ${who}: still in its grace window (${decisionStatus(graceId)}, ${statusOf(gracedOwner)}, held ${heldAside(gracedOwner)})`);
         }
-        const graceCode = tfa.code();
-        const graceWithCode = await accelerate(graceId, pwSession(), { code: graceCode });
-        assert(graceWithCode.status === 200 && removalRan(graceId, gracedOwner),
-            `cut short an owner's removal, a password session with a current code → 200, removed (${short(graceWithCode)}; ${decisionStatus(graceId)}, ${statusOf(gracedOwner)})`);
-        const [graceId2, gracedOwner2] = ownerInGrace();
-        const graceSpent = await accelerate(graceId2, pwSession(), { code: graceCode });
-        assert(graceSpent.status === 401 && inGrace(graceId2, gracedOwner2), `cut short an owner's removal, the same code again → 401, still in its grace window (${short(graceSpent)})`);
-        const gracePhone = await accelerate(graceId2, asPhone());
-        assert(gracePhone.status === 200 && removalRan(graceId2, gracedOwner2), `cut short an owner's removal, Manage pressed just now → 200, removed (${short(gracePhone)})`);
-        const [graceId3, gracedOwner3] = ownerInGrace();
-        const graceHeader = await accelerate(graceId3, { ...pwSession(), 'x-fresh-proof': tfa.code() });
-        assert(graceHeader.status === 200 && removalRan(graceId3, gracedOwner3), `cut short an owner's removal, a current code in X-Fresh-Proof → 200, removed (${short(graceHeader)})`);
+        const gracePhone = await accelerate(graceId, asPhone());
+        assert(gracePhone.status === 200 && removalRan(graceId, gracedOwner),
+            `cut short an owner's removal, Manage pressed just now → 200, removed (${short(gracePhone)}; ${decisionStatus(graceId)}, ${statusOf(gracedOwner)})`);
 
-        // An admin or a member as target: the step-up, as before. The password with an earlier 2FA session, an owner's
-        // computer, an admin's computer: no code asked.
+        // An admin or a member as target: the step-up, as before. An owner's computer, an admin's computer: no proof asked.
         const asked = (r: any) => r.status === 401 || r.json?.code === 'phone_required' || r.json?.code === 'step_up_required';
         setSwitchOverride('decisions', false);
         for (const [what, make, send, done] of [
-            ['prune an admin, the password with an earlier 2FA session', () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
-                (t: string) => call('POST', `/api/local/admin/users/${t}/prune`, earlier2fa(), {}), (t: string) => statusOf(t) === 'pruned'],
+            ["prune an admin, an owner's computer", () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
+                (t: string) => call('POST', `/api/local/admin/users/${t}/prune`, asComputer, {}), (t: string) => statusOf(t) === 'pruned'],
             ["suspend an admin, an owner's computer", () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
                 (t: string) => call('POST', `/api/local/admin/users/${t}/suspend`, asComputer, { reason: 'gates suite' }), (t: string) => statusOf(t) !== 'active' && heldAside(t) === 'admin'],
             ["offboard an admin, an owner's computer", () => { const pk = addMember('Adminee'); grantNodeRole(pk, 'admin', owner); return pk; },
@@ -998,20 +888,16 @@ async function main(): Promise<void> {
             console.log(`  · ${what}`);
             const before = snapCfg();
             for (const [who, headers, refused] of [
-                ...refusals(null).filter(([w]) => !w.includes('admin')),
+                ...refusals().filter(([w]) => !w.includes('admin')),
                 ['an admin', () => asAdmin, inWords],
                 ['an admin token', () => asToken, (r: any) => r.status === 403 && r.json?.code === 'token_not_allowed'],
             ] as Refusal[]) {
-                const r = await call('POST', configRoute, headers(), { ...change, ...(who.includes('computer') ? { code: tfa.code() } : {}) });
+                const r = await call('POST', configRoute, headers(), change);
                 assert(refused(r), `${what}, ${who}: refused (${short(r)})`);
                 assert(snapCfg() === before, `${what}, ${who}: the config as it was`);
             }
-            const code = tfa.code();
-            const withCode = await call('POST', configRoute, pwSession(), { ...change, code });
-            assert(withCode.status === 200 && done(), `${what}, a password session with a current code → 200 (${short(withCode)}; ${snapCfg()})`);
-            const spentBefore = snapCfg();
-            const spent = await call('POST', configRoute, pwSession(), { ...again, ...(again.enabled === false ? { keep: 6 } : {}), code });
-            assert(spent.status === 401 && snapCfg() === spentBefore, `${what}, the same code again → 401, unchanged (${short(spent)})`);
+            const fromPhone = await call('POST', configRoute, asPhone(), change);
+            assert(fromPhone.status === 200 && done(), `${what}, Manage pressed just now → 200 (${short(fromPhone)}; ${snapCfg()})`);
             if (again.enabled === false) {
                 const on = await call('POST', configRoute, asComputer, { enabled: true });
                 assert(on.status === 200 && getAutoSnapshotConfig().enabled === true, `turning scheduled snapshots back on from a computer: no proof asked (${short(on)})`);
@@ -1074,20 +960,15 @@ async function main(): Promise<void> {
             }
             assert(fromComputer.status === 403 && fromComputer.json?.code === 'phone_required' && snapCfg() === before,
                 `${what}, from a computer: the proof is asked, the config as it was (${short(fromComputer)}; ${snapCfg()})`);
-            const noCode = await call('POST', configRoute, pwSession(), change);
-            assert(noCode.status === 401 && noCode.json?.totpRequired === true && snapCfg() === before,
-                `${what}, a password session with no code: asked for one (${short(noCode)})`);
+            const stale = await call('POST', configRoute, asStalePhone(), change);
+            assert(stale.status === 403 && stale.json?.code === 'step_up_required' && snapCfg() === before,
+                `${what}, Manage pressed 91 s ago: asked again, the config as it was (${short(stale)})`);
             if (!apply) continue;
-            const withCode = await call('POST', configRoute, pwSession(), { ...change, code: tfa.code() });
-            assert(withCode.status === 200 && cfgIs(change), `${what}, with a current code → 200 (${short(withCode)}; ${snapCfg()})`);
+            const fromPhone = await call('POST', configRoute, asPhone(), change);
+            assert(fromPhone.status === 200 && cfgIs(change), `${what}, Manage pressed just now → 200 (${short(fromPhone)}; ${snapCfg()})`);
         }
         const restore = await call('POST', configRoute, asPhone(), { enabled: true, intervalHours: 24, keep: 8 });
         assert(restore.status === 200 && cfgIs({ enabled: true, intervalHours: 24, keep: 8 }), `back to daily, keep 8 (${short(restore)})`);
-        // Retiring the password is a key session's alone: the phone, unlocked within 90 seconds. Last, as it ends the password.
-        const retireStale = await call('POST', '/api/local/admin/auth/retire-password', asStalePhone(), { acceptOneOwner: true });
-        assert(retireStale.status === 403 && retireStale.json?.code === 'step_up_required', `retire the password (C4), Manage 91 s ago → 403 step_up_required (${short(retireStale)})`);
-        const retireComputer = await call('POST', '/api/local/admin/auth/retire-password', asComputer, { acceptOneOwner: true });
-        assert(retireComputer.status === 403 && retireComputer.json?.code === 'phone_required', `retire the password from a computer → 403 phone_required (${short(retireComputer)})`);
 
         // ── 5. floors and guards ──────────────────────────────────────────────────────────────────────────────────
         console.log('\n── 5. the snapshot keep floor, the off-box retention floor, the gateway allow-list ──');
@@ -1196,29 +1077,17 @@ async function main(): Promise<void> {
         assert(reach.status === 200, `and the owner still reaches Settings (${short(reach)})`);
         await call('POST', '/api/local/admin/gateway', asPhone(), { adminIpAllowlist: [] });
 
-        // ── 4. 2FA off: fail closed ───────────────────────────────────────────────────────────────────────────────
-        console.log('\n── 4. with the node\'s 2FA off, no proof passes for want of one ──');
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
-        const held = await call('POST', '/api/local/admin/auth/break-glass-mode', pwSession(), { enabled: false, code: '123456' });
-        assert(held.status === 403 && held.json?.code === 'totp_setup_required', `a password session is held at the 2FA setup card (${short(held)})`);
-        const computerOff = await call('POST', '/api/local/admin/auth/break-glass-mode', asComputer, { enabled: false, code: '123456' });
-        assert(computerOff.status === 403 && computerOff.json?.code === 'phone_required', `a computer's key session sending a code is still refused (${short(computerOff)})`);
-        const staleOff = await call('POST', '/api/local/admin/auth/break-glass-mode', asStalePhone(), { enabled: false });
-        assert(staleOff.status === 403 && staleOff.json?.code === 'step_up_required', `a stale phone session is still refused (${short(staleOff)})`);
+        // ── 4. fail closed ────────────────────────────────────────────────────────────────────────────────────────
+        console.log('\n── 4. the fresh proof fails closed: only an owner key session from the phone passes it ──');
+        // An owner caller that is no key session (what the password's session was), sending a code as the password did.
         const ctx: any = { state: { adminRole: 'owner', isPasswordSession: true }, status: 200, body: null };
         const helper = typeof requireFreshProof === 'function' ? await requireFreshProof(ctx, '123456', 'test the helper') : true;
-        assert(helper === false && ctx.status === 403 && ctx.body?.code === 'fresh_proof_needs_2fa',
-            `requireFreshProof refuses a password caller when 2FA is off, where requireCurrentSecondFactor would pass (${ctx.status} ${ctx.body?.code})`);
+        assert(helper === false && ctx.status === 403 && !ctx.body?.code && /only an owner/i.test(ctx.body?.error || ''),
+            `requireFreshProof refuses an owner caller that is no key session, whatever code it sends (${ctx.status} ${JSON.stringify(ctx.body)})`);
         const tokenCtx: any = { state: { adminRole: 'owner', automationTokenId: 't', tokenOwnerRoute: true }, status: 200, body: null };
         assert(typeof requireFreshProof === 'function' && (await requireFreshProof(tokenCtx, '123456', 'x')) === false && tokenCtx.body?.code === 'token_not_allowed',
             'and any automation token, the backups scope included');
 
-        // Last: retiring the password with Manage pressed just now goes through (it needs the owner's break-glass code).
-        tfa = turnOn2faForTests(PW);
-        const issued = await call('POST', '/api/local/admin/auth/break-glass/issue', asPhone(), {});
-        assert(issued.status === 200, `setup: the owner makes their break-glass code (${short(issued)})`);
-        const retire = await call('POST', '/api/local/admin/auth/retire-password', asPhone(), { acceptOneOwner: true });
-        assert(retire.status === 200 && retire.json?.passwordRetired === true, `retire the password (C4), Manage pressed just now → 200 (${short(retire)})`);
         assert(!!getNodeConfig(), 'the node still answers');
     } finally {
         registrar.close();

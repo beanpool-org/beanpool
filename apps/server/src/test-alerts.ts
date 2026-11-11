@@ -188,7 +188,7 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
@@ -209,9 +209,7 @@ async function main(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const PW = 'Alerts-Main-Pw-5512!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Alert Test Commons' });
+    updateLocalConfig({ communityName: 'Alert Test Commons' });
 
     const pubkey = () => crypto.randomBytes(32).toString('hex');
     const owner = pubkey();
@@ -223,7 +221,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[admin, CALLSIGNS[1]], [moderator, CALLSIGNS[2]], [member, CALLSIGNS[3]]]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);

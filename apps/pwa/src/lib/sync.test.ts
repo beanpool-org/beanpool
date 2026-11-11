@@ -173,7 +173,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
 
         // Simulate server sending snapshot (standard server behavior on connect)
         socket.onmessage({
-            data: JSON.stringify({ type: 'state_snapshot', memberCount: 5, postCount: 2, commonsBalance: 100 })
+            data: JSON.stringify({ type: 'state_snapshot', memberCount: 5, postCount: 2, commonsBalance_c: 10000 })
         });
 
         expect(getWatchdogArmedForTest()).toBe(false);
@@ -632,7 +632,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         visitorRead(null);
         await vi.advanceTimersByTimeAsync(10);
 
-        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan&nr=1']);
+        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan&nr=1&bell=1']);
     });
 
     it('reopening for a member who has just joined starts afresh: at once, and syncing at once', async () => {
@@ -943,7 +943,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         await waitForNewSocket(lobby, 1_000);
         const signed = wsInstance;
         expect(signed).not.toBe(lobby);
-        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me&nr=1');
+        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me&nr=1&bell=1');
         signed.readyState = 1;
         signed.onopen();
         await vi.advanceTimersByTimeAsync(150);

@@ -24,7 +24,7 @@ import { anchorUrl } from '../utils/node-post';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import { payTheCommons, fetchMyRepayment, confirmCommonsPayment, unanswered, parseBeans, debtCodeOk, oneAtATime, REPAYMENT_COPY, DEBT_UNREACHABLE, PAY_UNANSWERED_RETRY, type CommonsPayment, type Repayment } from '../utils/names-debts';
 import { REPAYMENT_LINES, linkLeftWords, paidWords, payConfirmWords, repaymentLineWords } from '../components/repayment-lines';
-import { formatNumber, t } from '@beanpool/core';
+import { formatHundredths, hundredthsAsDecimalText, t } from '@beanpool/core';
 import type { ConfirmedPayment } from '../utils/payment-request';
 
 export { ErrorBoundary };
@@ -36,8 +36,9 @@ export default function PayCommonsScreen() {
     const params = useLocalSearchParams<{ code?: string; amount?: string }>();
     const linkCode = typeof params.code === 'string' ? params.code.trim().toLowerCase() : '';
     // What was left on the debt when the admin shared the link (a work-off may have lowered it since): for that code only.
+    // Whole hundredths (the link writes Beans, "179.50"; parseBeans reads them), prefilled as the same plain figure.
     const linkLeft = linkCode && typeof params.amount === 'string' ? parseBeans(params.amount) : null;
-    const [amount, setAmount] = useState(linkLeft !== null ? String(linkLeft) : '');
+    const [amount, setAmount] = useState(linkLeft !== null ? hundredthsAsDecimalText(linkLeft) : '');
     const [code, setCode] = useState(typeof params.code === 'string' ? params.code : '');
     const [error, setError] = useState<string | null>(null);
     const [paid, setPaid] = useState<{ words: string; ref: string | null } | null>(null);
@@ -75,20 +76,21 @@ export default function PayCommonsScreen() {
         DeviceEventEmitter.emit('transaction_completed');
         const forDebt = !!payment.body.debtId;
         // names-debts.ts REPAYMENT_COPY.paid, in the member's language (components/repayment-lines.ts).
-        setPaid({ words: paidWords(r.value.amount, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt), ref: forDebt ? null : r.value.transactionId });
+        setPaid({ words: paidWords(r.value.amount_c, r.value.transactionId, forDebt, r.value, !forDebt && !!myDebt), ref: forDebt ? null : r.value.transactionId });
     });
 
     const pay = () => {
         if (held) { send(held); return; }
         setError(null);
-        const beans = parseBeans(amount);
-        if (beans === null) { setError(REPAYMENT_COPY.badAmount); return; }
+        // Whole hundredths of a Bean, read as typed in the member's language (core parseHundredths): "12.50" is 1250.
+        const amount_c = parseBeans(amount);
+        if (amount_c === null) { setError(REPAYMENT_COPY.badAmount); return; }
         const debt = code.trim();
         if (debt && !debtCodeOk(debt)) { setError(REPAYMENT_COPY.badCode); return; }
         const shared = debt && debt.toLowerCase() === linkCode ? linkLeft : null;
-        Alert.alert(t(REPAYMENT_LINES.payTitle), payConfirmWords(beans, !!debt, shared, !debt && !!myDebt), [
+        Alert.alert(t(REPAYMENT_LINES.payTitle), payConfirmWords(amount_c, !!debt, shared, !debt && !!myDebt), [
             { text: t('Cancel'), style: 'cancel' },
-            { text: t('Pay'), onPress: () => send(confirmCommonsPayment(beans, debt || undefined)) },
+            { text: t('Pay'), onPress: () => send(confirmCommonsPayment(amount_c, debt || undefined)) },
         ]);
     };
 
@@ -122,7 +124,7 @@ export default function PayCommonsScreen() {
                         {linkLeft !== null && code.trim().toLowerCase() === linkCode ? <Text style={styles.body}>{linkLeftWords(linkLeft)}</Text> : null}
                         <Text style={styles.label}>{t('BEANS')}</Text>
                         <TextInput
-                            style={styles.input} value={amount} onChangeText={edit(setAmount)} keyboardType="decimal-pad" placeholder={t('For example {amount}', { amount: formatNumber(12.5, 2) })}
+                            style={styles.input} value={amount} onChangeText={edit(setAmount)} keyboardType="decimal-pad" placeholder={t('For example {amount}', { amount: formatHundredths(1250) })}
                             placeholderTextColor={colors.text.muted} accessibilityLabel={t('How many Beans')} maxLength={12} editable={!busy}
                         />
                         <Text style={styles.label}>{t('PAY-BACK CODE (IF YOU HAVE ONE)')}</Text>

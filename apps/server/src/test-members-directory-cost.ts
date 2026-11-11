@@ -28,6 +28,7 @@ delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_READ_AUTH;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -46,10 +47,11 @@ function keypair(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -65,14 +67,12 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine, getMembers, listNodeRoles } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { withAreaDistances } = await import('./engine/member-area.js');
     const { isSelfAvatarUrl } = await import('@beanpool/core');
     const { setMemberPhoto } = await import('@beanpool/engine');
     const { withAvatarKey } = await import('./avatar-test-url.js');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -120,7 +120,7 @@ async function main() {
     };
 
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status,
-                                   profile_updated_at, earned_credit, archetype, is_treasury, is_visitor, area_lat, area_lng)
+                                   profile_updated_at, earned_credit_c, archetype, is_treasury, is_visitor, area_lat, area_lng)
                                VALUES (@pk, @callsign, @joined, NULL, 'TEST', @status, @profile, @earned, @archetype,
                                    @treasury, @visitor, @lat, @lng)`);
     // A photo goes in by its one writer (member_photos, and the row's avatar_ref), as a profile save puts it there.
@@ -142,10 +142,12 @@ async function main() {
     db.transaction(() => {
         // Inserted newest-joined first, so rowid order is not join order.
         row(reader.pubKeyHex, 'Reader', { joined: '2026-06-01T00:00:00.000Z', lat: -28.5, lng: 153.5 });
-        row(elder, 'Elder', { joined: '2026-01-01T00:00:00.000Z', earned: 1400, archetype: 'gardener', lat: -28.6, lng: 153.6 });
+        // 1,400 Beans of earned credit: whole hundredths in earned_credit_c.
+        row(elder, 'Elder', { joined: '2026-01-01T00:00:00.000Z', earned: 140000, archetype: 'gardener', lat: -28.6, lng: 153.6 });
         row(admin, 'Admin', { joined: '2026-02-01T00:00:00.000Z', avatar: photo, profile: '2026-05-05T05:05:05.555Z',
             lat: 51.5, lng: -0.1 });
-        row(keypair().pubKeyHex, 'Bundled', { avatar: 'bundled://avatars/fox.png', earned: null });
+        // earned_credit_c is NOT NULL (whole hundredths, default 0): a row holding no earned credit holds 0 (checked below).
+        row(keypair().pubKeyHex, 'Bundled', { avatar: 'bundled://avatars/fox.png', earned: 0 });
         row(keypair().pubKeyHex, 'SelfRef', { avatar: '/api/avatar/abc?size=thumb', archetype: '' });
         row(keypair().pubKeyHex, 'Pruned', { status: 'pruned', profile: '2026-09-01T00:00:00.000Z' });
         row(keypair().pubKeyHex, 'Treasury', { treasury: 1 });
@@ -161,6 +163,14 @@ async function main() {
         row(keypair().pubKeyHex, 'Oldest', { joined: '2024-01-01T00:00:00.000Z' });
         db.prepare(`INSERT INTO node_roles (member_pubkey, role) VALUES (?, 'admin')`).run(admin);
     })();
+
+    // Before whole hundredths a members row could hold NULL earned credit (the old REAL column): earned_credit_c can't.
+    let nullEarned = '';
+    try {
+        insert.run({ pk: keypair().pubKeyHex, callsign: 'NullEarned', joined: '2026-03-01T00:00:00.000Z', status: 'active', profile: null, earned: null,
+            archetype: null, treasury: 0, visitor: 0, lat: null, lng: null });
+    } catch (e: any) { nullEarned = String(e?.message); }
+    assert(/NOT NULL constraint failed: members\.earned_credit_c/.test(nullEarned), `a row with no earned credit is refused: earned_credit_c is NOT NULL (${nullEarned || 'it was stored'})`);
 
     const cursors: [string, string][] = [
         ['the full directory', ''],

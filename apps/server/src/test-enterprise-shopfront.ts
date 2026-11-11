@@ -51,7 +51,6 @@ delete process.env.ENFORCE_WS_AUTH;
 /** The run with read auth opted out (VARIANTS): the detail's own gate answers a non-member, not the read gate. */
 const OPEN_READS = process.env.ENFORCE_READ_AUTH === 'false';
 if (!OPEN_READS) delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ShopfrontPass123!';
 
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
@@ -62,7 +61,6 @@ import {
     purgeMemberSelf, pauseEnterprise, resumeEnterprise,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { setMemberPhoto, guestPost } from '@beanpool/engine';
 import { tierForCredit } from '@beanpool/core';
@@ -72,6 +70,7 @@ import { TEST_PHOTOS } from './post-test-helper.js';
 import { ledger } from './engine/ledger.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -98,7 +97,7 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor)
                 VALUES (?, ?, ?, ?, 'TEST', 'active', ?)`).run(id.pk, name, WEEK_AGO(), owner.pk, opts.visitor ? 1 : 0);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 
@@ -113,7 +112,8 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -166,7 +166,6 @@ const featurePath = (id: string) => `/api/marketplace/posts/${id}/feature`;
 
 async function main(): Promise<void> {
     console.log(`\n=== The enterprise shopfront's data (E2)${OPEN_READS ? ', read auth opted out' : ''} ===\n`);
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -299,7 +298,7 @@ async function main(): Promise<void> {
     // A field sent back as it was stored is no change, though the form sends it trimmed and the row holds it as it was
     // written (#2391 review): a crowdfund's description keeps its textarea's newline as its purpose (db.ts
     // createCrowdfundProject), and a row an older seed filled keeps an About past 600 that nobody here wrote.
-    const cfTrail = (await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Trail Sentinel', description: 'Fix bikes for the street.\n', goalAmount: 100 })).body?.project?.id ?? '';
+    const cfTrail = (await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Trail Sentinel', description: 'Fix bikes for the street.\n', goalAmount_c: 10000 })).body?.project?.id ?? '';
     if (!cfTrail) throw new Error('setup: Lou could not start the crowdfund with a trailing newline');
     adminAssignTreasuryOperator(cfTrail, kit.pk, 'admin');
     const trailStored = faceOf(cfTrail);
@@ -336,8 +335,8 @@ async function main(): Promise<void> {
     // …/update) and a Commons proposal's (POST /api/commons/projects, …/update). What it is for is its purpose, so its
     // About starts empty; an edit leaves the keepers' About as they wrote it, and its chat follows the rename.
     const story = `We mend what breaks. ${'Tyres, chains and spokes. '.repeat(40)}`.trim(); // past About's 600, within a purpose
-    const cfMade = await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Wheels Sentinel', description: story, goalAmount: 500 });
-    const proposed = await call('POST', lou, '/api/commons/projects', { proposerPubkey: lou.pk, title: 'Lou Commons Sentinel', description: 'A shared tool shed for the street.', requestedAmount: 50 });
+    const cfMade = await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Wheels Sentinel', description: story, goalAmount_c: 50000 });
+    const proposed = await call('POST', lou, '/api/commons/projects', { proposerPubkey: lou.pk, title: 'Lou Commons Sentinel', description: 'A shared tool shed for the street.', requestedAmount_c: 5000 /* 50 Beans */ });
     const cf: string = cfMade.body?.project?.id ?? '';
     const cp: string = proposed.body?.project?.id ?? '';
     if (!cf || !cp) throw new Error(`setup: Lou could not start a crowdfund and a Commons proposal: ${show(cfMade)} | ${show(proposed)}`);
@@ -347,8 +346,8 @@ async function main(): Promise<void> {
     const ownAbout = "Our own About, in the keepers' words.";
     const setAbout = [await call('PUT', lou, profilePath(cf), { about: ownAbout }), await call('PUT', lou, profilePath(cp), { about: ownAbout })];
     const threadsBefore = [await call('GET', lou, `/api/treasury/${cf}/thread`), await call('GET', lou, `/api/treasury/${cp}/thread`)]; // opened under the names they have now
-    const cfEdit = await call('POST', lou, '/api/crowdfund/projects/update', { id: cf, creatorPubkey: lou.pk, title: 'Lou Spokes Sentinel', description: `${story} (edited)`, goalAmount: 500 });
-    const cpEdit = await call('POST', lou, '/api/commons/projects/update', { proposerPubkey: lou.pk, projectId: cp, title: 'Lou Shed Sentinel', description: 'A shared tool shed for two streets.', requestedAmount: 50 });
+    const cfEdit = await call('POST', lou, '/api/crowdfund/projects/update', { id: cf, creatorPubkey: lou.pk, title: 'Lou Spokes Sentinel', description: `${story} (edited)`, goalAmount_c: 50000 });
+    const cpEdit = await call('POST', lou, '/api/commons/projects/update', { proposerPubkey: lou.pk, projectId: cp, title: 'Lou Shed Sentinel', description: 'A shared tool shed for two streets.', requestedAmount_c: 5000 /* 50 Beans */ });
     const edited = [await call('GET', max, `/api/treasury/${cf}`), await call('GET', max, `/api/treasury/${cp}`)];
     assert(setAbout.every(r => r.status === 200) && cfEdit.status === 200 && cpEdit.status === 200
         && faceOf(cf).purpose === `${story} (edited)` && faceOf(cp).purpose === 'A shared tool shed for two streets.'
@@ -364,13 +363,13 @@ async function main(): Promise<void> {
     // ── 4. the detail ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. the detail: the shopfront\'s data, members only ──');
     const memberOffer = async (who: Id, category: string, title: string, extra: Record<string, unknown> = {}): Promise<string> => {
-        const r = await call('POST', who, '/api/marketplace/posts', { type: 'offer', category, title, description: `${title}.`, credits: 0,
+        const r = await call('POST', who, '/api/marketplace/posts', { type: 'offer', category, title, description: `${title}.`, price_c: 0,
             authorPublicKey: who.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra });
         if (r.status !== 200 || !r.body?.post?.id) throw new Error(`setup: ${who.name} could not post ${title}: ${show(r)}`);
         return r.body.post.id;
     };
     const entOffer = async (by: Id, category: string, title: string, extra: Record<string, unknown> = {}): Promise<string> => {
-        const r = await call('POST', by, `/api/treasury/${ent}/offer`, { category, title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra });
+        const r = await call('POST', by, `/api/treasury/${ent}/offer`, { category, title, price_c: 0, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS, ...extra });
         if (r.status !== 200 || !(r.body?.post?.id ?? r.body?.id)) throw new Error(`setup: ${by.name} could not post ${title} for the enterprise: ${show(r)}`);
         return r.body?.post?.id ?? r.body?.id;
     };
@@ -379,17 +378,17 @@ async function main(): Promise<void> {
     await memberOffer(rae, 'tools', 'Rake');
     const seeds = await memberOffer(rae, 'garden', 'Seeds');
     await call('POST', rae, '/api/marketplace/posts/pause', { postId: seeds, authorPublicKey: rae.pk });
-    await call('POST', rae, '/api/marketplace/posts', { type: 'need', category: 'transport', title: 'A lift', description: 'To town.', credits: 0, authorPublicKey: rae.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
+    await call('POST', rae, '/api/marketplace/posts', { type: 'need', category: 'transport', title: 'A lift', description: 'To town.', price_c: 0, authorPublicKey: rae.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     await memberOffer(rae, 'art', 'A portrait for Max', { audienceScope: 'direct', targetPubkey: max.pk });
     const ended = await memberOffer(rae, 'music', 'Old guitar');
     await call('POST', rae, '/api/marketplace/posts/remove', { id: ended, authorPublicKey: rae.pk });
     await memberOffer(lou, 'repairs', 'Puncture fixed');
     await entOffer(lou, 'electronics', 'Phone screen', { shopId: entShop });
     // Rae's record: one completed deal, rated 4; Lou's tier from a grant.
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
                 VALUES (?, ?, ?, ?, 0, 'completed', ?)`).run(crypto.randomUUID(), honey, max.pk, rae.pk, new Date().toISOString());
     db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment) VALUES (?, ?, ?, 'provider', 4, '')`).run(crypto.randomUUID(), rae.pk, max.pk);
-    db.prepare('UPDATE members SET earned_credit = 300 WHERE public_key = ?').run(lou.pk);
+    db.prepare('UPDATE members SET earned_credit_c = 30000 WHERE public_key = ?').run(lou.pk); // 300 Beans, whole hundredths
 
     const detail = await call('GET', max, `/api/treasury/${ent}`);
     const keeperOf = (r: Res, pk: string) => (r.body?.keepers ?? []).find((k: any) => k.publicKey === pk);
@@ -465,7 +464,7 @@ async function main(): Promise<void> {
     const maxShop: string = (await call('PUT', max, '/api/shops/mine', {})).body?.shop?.id ?? '';
     const lamp = await memberOffer(max, 'home', 'Lamp', { shopId: maxShop });
     const chair = await memberOffer(max, 'home', 'Chair');
-    const needR = await call('POST', max, '/api/marketplace/posts', { type: 'need', category: 'home', title: 'A ladder', description: 'For a day.', credits: 0, authorPublicKey: max.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
+    const needR = await call('POST', max, '/api/marketplace/posts', { type: 'need', category: 'home', title: 'A ladder', description: 'For a day.', price_c: 0, authorPublicKey: max.pk, lat: MULLUM.lat, lng: MULLUM.lng, photos: TEST_PHOTOS });
     const ladderNeed: string = needR.body?.post?.id ?? '';
     const fLamp = await call('PUT', max, featurePath(lamp), { featured: true });
     assert(fLamp.status === 200 && typeof fLamp.body?.featuredAt === 'string' && featuredAtOf(lamp) === fLamp.body.featuredAt,
@@ -572,7 +571,7 @@ async function main(): Promise<void> {
     const otherShop = shopIdOf(other);
     setMemberPhoto(db, other, png(60, 90, 120));
     const otherOffer = async (title: string): Promise<string> => {
-        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop, photos: TEST_PHOTOS });
+        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, price_c: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop, photos: TEST_PHOTOS });
         if (r.status !== 200 || !(r.body?.post?.id ?? r.body?.id)) throw new Error(`setup: Ida could not post ${title} for her enterprise: ${show(r)}`);
         return r.body?.post?.id ?? r.body?.id;
     };

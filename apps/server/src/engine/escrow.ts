@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, formatHundredths, halves, loanDays, shareOf, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -11,8 +11,10 @@ import { assertLocalSettlement, assertTradableHere } from '../federation-settlem
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
-import { isDealQuantity, DEAL_QUANTITY_ERROR } from './post-fields.js';
+import { isDealQuantity, DEAL_QUANTITY_ERROR, dealAmountFor, quantityHundredths } from './post-fields.js';
 import { hasBlocked } from './member-blocks.js';
+import { checkStandingStart, firstPeriodOf, insertStandingDeal, type CheckedStandingStart, type StandingStart } from './standing-deals.js';
+import type { KeptNoticePushOptions } from './kept-notices.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -32,7 +34,8 @@ type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbel
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind,
+    rehearsal?: boolean, options?: KeptNoticePushOptions) => void;
 
 export interface EscrowCallbacks {
     broadcast: BroadcastFn;
@@ -40,7 +43,8 @@ export interface EscrowCallbacks {
     ensureTransactionConversation: EnsureConvFn;
     injectSystemMessage: SystemMsgFn;
     dispatchPushNotification: PushFn;
-    getBalance: (publicKey: string) => any;
+    /** The balance answer (state-engine.ts BalanceAnswer): every money field whole hundredths, `*_c`. */
+    getBalance: (publicKey: string) => { balance_c: number; floor_c: number; usableFloor_c: number };
     floorLockedError: (publicKey: string, postBalance: number) => Error;
     SystemMessageType: any;
     canOperateTreasury: (operator: string, treasury: string) => boolean;
@@ -65,7 +69,7 @@ export function recordDeferredWageClaim(
     if (existing) return existing.id;
     const id = crypto.randomUUID();
     db.prepare(`
-        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at)
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(id, enterprisePubkey, keeperPubkey, postId || null, transactionId || null, amount);
     return id;
@@ -422,6 +426,9 @@ export function requestPost(
     const underWay = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND buyer_pubkey=? AND seller_pubkey=? AND status='pending' ORDER BY created_at DESC LIMIT 1`)
         .get(post.id, isOffer ? requesterPublicKey : post.author_pubkey, isOffer ? post.author_pubkey : requesterPublicKey) as { id: string } | undefined;
     if (underWay) throw dealOpen(underWay.id);
+    // A standing deal between the two still running on it, between its periods too (engine/standing-deals.ts).
+    const standingUnderWay = liveStandingOn(post.id, isOffer ? requesterPublicKey : post.author_pubkey, isOffer ? post.author_pubkey : requesterPublicKey);
+    if (standingUnderWay) throw dealOpen(standingUnderWay);
     if (isOffer) {
         if (!hasListedOffer(db, requesterPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     }
@@ -440,7 +447,7 @@ export function requestPost(
     const keptHours = post.price_type !== 'fixed' || (lendable && hours != null) ? hours : undefined;
 
     const requester = getMember(db, requesterPublicKey);
-    const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
+    const finalCredits = post.price_type !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
     assertDealAmount(finalCredits);
 
     const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
@@ -450,7 +457,7 @@ export function requestPost(
     // #143 step 4 fallout: a PULLED listing is on this board but belongs to a peer. Raw row here, so the
     // column name rather than the mapped field. The payee is the other side of the same swap as the payer.
     assertTradableHere({ originNode: post.origin_node }, isOffer ? post.author_pubkey : requesterPublicKey);
-    const { balance, floor, usableFloor: uFloor } = cb.getBalance(payerPubkey);
+    const { balance_c: balance, floor_c: floor, usableFloor_c: uFloor } = cb.getBalance(payerPubkey);
     if (balance - finalCredits < floor) throw new Error(word('Insufficient balance to request this post.'));
     if (balance - finalCredits < uFloor) throw cb.floorLockedError(payerPubkey, balance - finalCredits);
 
@@ -473,13 +480,13 @@ export function requestPost(
         buyerCallsign,
         sellerPublicKey,
         sellerCallsign,
-        credits: finalCredits,
+        amount_c: finalCredits,
         hours: keptHours,
         status: 'requested',
         createdAt: new Date().toISOString()
     };
 
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'requested', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.amount_c, tx.hours ?? null, tx.createdAt);
 
     cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
@@ -499,25 +506,216 @@ export function requestPost(
     return tx;
 }
 
-export function approvePostRequest(
-    cb: EscrowCallbacks,
-    transactionId: string,
-    authorPublicKey: string,
-    opts?: { authSigner?: string }
-): MarketplaceTransaction | null {
-    assertFeatureOn('escrow');
-    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
-    if (!row) return null;
+/** Who pays and who is paid on a hold, and the rules the pay of a keeper of the paying enterprise falls under (Rules 5, 6). */
+export interface HoldParties {
+    payer: string;
+    payee: string;
+    isEnterprisePayer: boolean;
+    isPayeeKeeper: boolean;
+}
 
-    const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
-    if (!post || post.type === 'poll' || post.type === 'event') return null;
+/**
+ * A refusal that means the payer's Beans can't cover the hold right now (the floor, a credit line frozen, an enterprise's
+ * Rules 5 and 6), as opposed to one that means the deal can't go on at all. Only the standing deal's scheduled payment asks
+ * (engine/standing-deals.ts): it tries a short payer again until the period's grace ends (DESIGN-standing-deals-upfront).
+ */
+export function isShortRefusal(e: unknown): boolean {
+    return !!(e && typeof e === 'object' && (e as any).holdShort === true);
+}
+const short = <E extends Error>(e: E): E => Object.assign(e, { holdShort: true });
+
+/**
+ * Whether the payer can fund `amount` now: the keeper-pay rules when the payee keeps the paying enterprise (Rules 5 and 6,
+ * docs/the-commons.md §2.4, a refusal recording a deferred wage claim, as it always did), else the floor and the usable
+ * floor. The one copy of these checks, for every hold (acceptPost, approvePostRequest, the standing deal's scheduled hold).
+ * Every refusal it throws is a short one (isShortRefusal).
+ */
+function assertHoldFunded(cb: EscrowCallbacks, p: HoldParties, amount: number, opts: {
+    payerName: string;
+    insufficient: string;
+    claim: { postId: string; transactionId?: string } | null;
+}): void {
+    const { balance_c: balance, floor_c: floor, usableFloor_c: uFloor } = cb.getBalance(p.payer);
+    if (p.isPayeeKeeper) {
+        const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(p.payer) as any;
+        const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
+        const name = opts.payerName;
+
+        // Rule 5: credit buys inputs, profit pays people (docs/the-commons.md §2.4).
+        // An enterprise may borrow from the community to buy things. It may NOT borrow
+        // from the community to pay itself. Keepers eat last: paid only while
+        // balance - amount >= 0. NEVER into credit.
+        if (balance - amount < 0) {
+            if (opts.claim) recordDeferredWageClaim(p.payer, p.payee, amount, opts.claim.postId, opts.claim.transactionId);
+            const msg = balance <= 0
+                ? `${name} is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`
+                : `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
+            const err: any = new Error(msg);
+            err.status = 403;
+            err.statusCode = 403;
+            throw short(err);
+        }
+
+        // Rule 6: keeper pay is capped by EARNED SURPLUS (docs/the-commons.md §2.4).
+        // A positive balance is not profit: grants, pledges and gifts raise balance
+        // but cannot become wages.
+        if (amount > earnedSurplus) {
+            if (opts.claim) recordDeferredWageClaim(p.payer, p.payee, amount, opts.claim.postId, opts.claim.transactionId);
+            const msg = `${name} has insufficient earned surplus (${formatHundredths(earnedSurplus, 'en')} Beans) to pay keeper wages (${formatHundredths(amount, 'en')} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
+            const err: any = new Error(msg);
+            err.status = 403;
+            err.statusCode = 403;
+            throw short(err);
+        }
+    } else {
+        if (balance - amount < floor) throw short(new Error(opts.insufficient));
+        if (balance - amount < uFloor) throw short(cb.floorLockedError(p.payer, balance - amount));
+    }
+}
+
+/** A deal row to hold Beans for: a new one (acceptPost) or a request approved. */
+export interface HoldOpening {
+    txId: string;
+    postId: string;
+    parties: HoldParties;
+    amount_c: number;
+    hours?: number | null;
+    memo: string;
+    /** The ledger row's auth columns (an enterprise's keeper). */
+    auth?: { signer: string; payload?: string };
+    /** A new row to write ('insert'), or a request to move on to held ('approve'). */
+    row: 'insert' | 'approve';
+    createdAt: string;
+    /** The listing comes off the board under this deal (one deal at a time): the words when it is no longer there. */
+    takeListing: { gone: string } | null;
+}
+
+/**
+ * Hold a deal's Beans: the one copy of the hold for every door that holds (acceptPost, approvePostRequest; a standing deal
+ * holds nothing, payStandingPeriod). INSIDE the caller's conservingTransaction: any throw here unwinds the row, the
+ * listing and the ledger together. The payer's Beans go into the deal's own escrow account through transfer(), fee-exempt
+ * (the 1.5% is taken at the release), which checks the payer's floor again; a keeper's pay comes off the enterprise's earned
+ * surplus with it (Rule 6).
+ */
+export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
+    if (h.row === 'approve') {
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(h.txId);
+        if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
+    }
+
+    if (h.takeListing) {
+        // Off the board under this deal.
+        const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`)
+            .run(h.parties.payer, h.createdAt, h.txId, h.postId);
+        if (updated.changes === 0) throw new Error(h.takeListing.gone);
+
+        db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
+          .run(h.postId, h.txId);
+    }
+
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${h.txId}`);
+
+    const escrowResult = cb.transfer(h.parties.payer, `escrow_${h.txId}`, h.amount_c, h.memo, 'escrow', true, h.auth);
+    if (!escrowResult) {
+        throw short(new Error(h.row === 'approve'
+            ? word('Failed to lock funds in escrow')
+            : word('Failed to lock funds in escrow — insufficient balance or ledger error')));
+    }
+
+    if (h.parties.isPayeeKeeper) {
+        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
+            .run(h.amount_c, h.parties.payer);
+    }
+
+    if (h.row === 'insert') {
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`)
+            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount_c, h.hours ?? null, h.createdAt);
+    }
+}
+
+/** One period of a standing deal to pay: a new row (the take-up of an Offer, every later period) or a Need's request approved. */
+export interface StandingPayment {
+    txId: string;
+    postId: string;
+    parties: HoldParties;
+    standingId: string;
+    periodNo: number;
+    amount_c: number;
+    memo: string;
+    /** The ledger row's auth columns: the authorisation's signer and `standing:<id>:<n>`. */
+    auth: { signer: string; payload: string };
+    /** A new row to write ('insert'), or a Need's request to move on to paid ('approve'). */
+    row: 'insert' | 'approve';
+    paidAt: string;
+    /** A one-off listing is off the board under the standing deal's latest period while it runs. */
+    takeListing: boolean;
+}
+
+/**
+ * Pay one period of a standing deal, at its start (DESIGN-standing-deals-upfront-fable §1): the period's row written
+ * `completed` (completed_at its created_at, standing_id, period_no; the UNIQUE (standing_id, period_no) index refuses a
+ * second), and ONE ledger row, transfer(payer, payee, amount, memo, 'escrow', not exempt): the one combination that takes
+ * the 1.5% to the Commons, as every release does, and re-checks the payer's usable floor and the enterprise floor itself.
+ * Nothing is held in trust and no escrow account is made. A refused transfer throws a short refusal (isShortRefusal).
+ * INSIDE the caller's conservingTransaction: any throw unwinds the row, the listing and the ledger together. Returns what a
+ * release returns, for afterRelease.
+ */
+export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { releaseResult: any; releaseCredits: number } {
+    if (p.row === 'approve') {
+        // The helper's request becomes period 1, paid now; when they asked (created_at) stays as it was.
+        const res = db.prepare(`UPDATE marketplace_transactions SET status='completed', completed_at=?, amount_c=?, hours=NULL, standing_id=?, period_no=?
+                                WHERE id=? AND status='requested'`).run(p.paidAt, p.amount_c, p.standingId, p.periodNo, p.txId);
+        if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
+    } else {
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, standing_id, period_no)
+                    VALUES (?, ?, ?, ?, ?, NULL, 'completed', ?, ?, ?, ?)`)
+            .run(p.txId, p.postId, p.parties.payer, p.parties.payee, p.amount_c, p.paidAt, p.paidAt, p.standingId, p.periodNo);
+    }
+    if (p.takeListing) {
+        // A one-off listing stays off the board under the standing deal's latest period (design §3): taken at the first,
+        // moved on to each later one, back when the standing deal ends (standing-deals.ts listingBack).
+        const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=COALESCE(accepted_at, ?), pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                                    WHERE id=? AND (status='active' OR (status='pending' AND pending_transaction_id IN (SELECT id FROM marketplace_transactions WHERE standing_id = ?)))`)
+            .run(p.parties.payer, p.paidAt, p.txId, p.postId, p.standingId);
+        if (updated.changes === 0) throw new Error(word('Post is no longer available'));
+        db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
+            .run(p.postId, p.txId);
+    }
+    const releaseResult = cb.transfer(p.parties.payer, p.parties.payee, p.amount_c, p.memo, 'escrow', false, p.auth);
+    if (!releaseResult) throw short(new Error(word('Insufficient balance to accept this offer')));
+    return { releaseResult, releaseCredits: p.amount_c };
+}
+
+/** A request's deal as approvePostRequest's checks read it: a requested row, or a standing deal's next period on a Need. */
+export interface RequestDeal {
+    id: string;
+    post_id: string;
+    buyer_pubkey: string;
+    seller_pubkey: string;
+    amount_c: number;
+}
+
+/**
+ * Every check approvePostRequest makes before it holds, once the request's row and its listing are read: the one copy, run
+ * again by a standing deal's scheduled hold on a Need (`scheduled`, engine/standing-deals.ts; DESIGN-standing-deals-fable §0:
+ * a scheduled hold re-runs every guard). Scheduled, the payee may be on holiday (§2.5) and a one-off listing already under
+ * the standing deal is still its own. Returns who pays and who is paid; throws the refusal (isShortRefusal for one that
+ * means the payer is short), or null when the caller is not the listing's author (the route's 400).
+ */
+export function requestHoldChecks(
+    cb: EscrowCallbacks,
+    row: RequestDeal,
+    post: any,
+    authorPublicKey: string,
+    opts: { authSigner?: string; scheduled?: { standingId: string }; standing?: boolean },
+): (HoldParties & { oneAtATime: boolean }) | null {
     assertNoDealOnCopy(post.shown_from_host);
 
     const isOffer = post.type === 'offer';
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
     if (post.hidden_by_reports_at) throw postHiddenNoNewDeal();
-    assertDealRowAmount(row.credits, 'requested');
+    assertDealRowAmount(row.amount_c, 'requested');
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
@@ -537,7 +735,8 @@ export function approvePostRequest(
     // Approving locks the requester's Beans into escrow: never on the word of a re-keyed phone's old key.
     assertNodeMember(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
-    if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
+    // A standing deal's payee may go on holiday while it runs (DESIGN-standing-deals-fable §2.5): its payer may not.
+    if (opts.scheduled ? isOnHoliday(row.buyer_pubkey) : (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey))) {
         throw new Error(word('Trading is paused while a member is in holiday mode.'));
     }
 
@@ -587,87 +786,86 @@ export function approvePostRequest(
         db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
             .get(row.buyer_pubkey, row.seller_pubkey)
     );
-
-    const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
-
-    if (isPayeeKeeper) {
-        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
-        const earnedSurplus = Number(trow?.earned_surplus) || 0;
-        const name = buyerMember?.callsign || 'This enterprise';
-
-        // Rule 5: credit buys inputs, profit pays people (docs/the-commons.md §2.4).
-        // An enterprise may borrow from the community to buy things. It may NOT borrow
-        // from the community to pay itself. Keepers eat last: paid only while
-        // balance - amount >= 0. NEVER into credit.
-        if (balance - row.credits < 0) {
-            recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, row.credits, row.post_id, transactionId);
-            const msg = balance <= 0
-                ? `${name} is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`
-                : `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
-            const err: any = new Error(msg);
-            err.status = 403;
-            err.statusCode = 403;
-            throw err;
-        }
-
-        // Rule 6: keeper pay is capped by EARNED SURPLUS (docs/the-commons.md §2.4).
-        // A positive balance is not profit: grants, pledges and gifts raise balance
-        // but cannot become wages.
-        if (row.credits > earnedSurplus) {
-            recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, row.credits, row.post_id, transactionId);
-            const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay keeper wages (${row.credits} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
-            const err: any = new Error(msg);
-            err.status = 403;
-            err.statusCode = 403;
-            throw err;
-        }
-    } else {
-        if (balance - row.credits < floor) throw new Error(word('Buyer has insufficient balance to cover escrow'));
-        if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
+    // A standing deal never pays a keeper of the enterprise that pays it (DESIGN-standing-deals-fable §1.5): Rules 5 and 6
+    // are a person's yes each time, not a schedule's.
+    if ((opts.standing || opts.scheduled) && isPayeeKeeper) {
+        throw Object.assign(new Error(standingLines.keeperPayee()), { status: 403, statusCode: 403, code: 'standing_keeper' });
     }
+    const parties: HoldParties = { payer: row.buyer_pubkey, payee: row.seller_pubkey, isEnterprisePayer, isPayeeKeeper };
+
+    assertHoldFunded(cb, parties, row.amount_c, {
+        payerName: buyerMember?.callsign || 'This enterprise',
+        insufficient: word('Buyer has insufficient balance to cover escrow'),
+        claim: opts.scheduled ? null : { postId: row.post_id, transactionId: row.id },
+    });
 
     // One deal at a time (a one-off listing, or a lendable Offer): refused here, before the escrow opens, when the listing
-    // is no longer on the board, rather than by the update below, inside it (a throw there unwinds the ledger).
+    // is no longer on the board, rather than by the update below, inside it (a throw there unwinds the ledger). A standing
+    // deal's later period: a one-off listing it holds is still its own.
     const oneAtATime = oneDealAtATime(post);
-    if (oneAtATime && post.status !== 'active') {
+    if (oneAtATime && post.status !== 'active' && !(opts.scheduled && listingHeldByStanding(post, opts.scheduled.standingId))) {
         throw post.lendable === 1 && post.status === 'pending' ? loanOut() : new Error(word('Post is no longer available'));
     }
-    const waitingBorrowers = oneAtATime && post.lendable === 1
+    return { ...parties, oneAtATime };
+}
+
+/** A one-off listing taken off the board by one of this standing deal's periods (its raw row). */
+function listingHeldByStanding(post: any, standingId: string): boolean {
+    const pendingTx = post.pending_transaction_id ?? post.pendingTransactionId;
+    if (post.status !== 'pending' || !pendingTx) return false;
+    return !!db.prepare('SELECT 1 FROM marketplace_transactions WHERE id = ? AND standing_id = ?').get(pendingTx, standingId);
+}
+
+export function approvePostRequest(
+    cb: EscrowCallbacks,
+    transactionId: string,
+    authorPublicKey: string,
+    opts?: { authSigner?: string; standing?: StandingStart }
+): MarketplaceTransaction | null {
+    assertFeatureOn('escrow');
+    const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='requested'").get(transactionId) as any;
+    if (!row) return null;
+
+    const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
+    if (!post || post.type === 'poll' || post.type === 'event') return null;
+
+    // A standing deal on a Need (DESIGN-standing-deals-upfront-fable §1): the author pays, and signs as they approve. What
+    // they signed must be this listing, this helper and its price per period; the period's Beans are what is paid. Read
+    // after the checks that say the request is not this caller's to approve, as for any approval.
+    assertNoDealOnCopy(post.shown_from_host);
+    if ((post.type === 'offer' ? row.seller_pubkey : row.buyer_pubkey) !== authorPublicKey) return null;
+    const standing = opts?.standing
+        ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.price_type, price: post.price_c, payer: row.buyer_pubkey, payee: row.seller_pubkey, signer: opts.authSigner })
+        : null;
+    const deal: RequestDeal = standing ? { ...row, amount_c: standing.auth.beansPerPeriod_c } : row;
+
+    const parties = requestHoldChecks(cb, deal, post, authorPublicKey, { authSigner: opts?.authSigner, standing: !!standing });
+    if (!parties) return null;
+    const waitingBorrowers = parties.oneAtATime && post.lendable === 1
         ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND id!=? AND status='requested'`).all(post.id, row.id) as Array<{ buyer_pubkey: string }>
         : [];
 
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
+    if (standing) {
+        // A standing deal on a Need: the author pays the helper the first period now, nothing held (design §1).
+        const tx = startStanding(cb, standing, { txId: row.id, row: 'approve', post, parties, actor: authorPublicKey });
+        tellWaitingBorrowers(cb, waitingBorrowers, authorPublicKey, post);
+        return tx;
+    }
 
     cb.conservingTransaction(() => {
-        const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
-        if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
-
-        if (oneAtATime) {
-            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);
-            if (updated.changes === 0) throw new Error(word('Post is no longer available'));
-
-            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
-              .run(post.id, row.id);
-        }
-
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${row.id}`);
-
-        // Only attribute authSigner when the debited account is the enterprise itself (Need listings)
-        const escrowResult = cb.transfer(
-            row.buyer_pubkey,
-            `escrow_${row.id}`,
-            row.credits,
-            `Escrow hold for approved deal ${row.post_id}`,
-            'escrow',
-            true,
-            (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
-        );
-        if (!escrowResult) throw new Error(word('Failed to lock funds in escrow'));
-
-        if (isPayeeKeeper) {
-            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                .run(row.credits, row.buyer_pubkey);
-        }
+        openHold(cb, {
+            txId: row.id,
+            postId: post.id,
+            parties,
+            amount_c: deal.amount_c,
+            memo: `Escrow hold for approved deal ${row.post_id}`,
+            // Only attribute authSigner when the debited account is the enterprise itself (Need listings).
+            auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
+            row: 'approve',
+            createdAt: new Date().toISOString(),
+            takeListing: parties.oneAtATime ? { gone: word('Post is no longer available') } : null,
+        });
     });
 
     const tx = getMarketplaceTransaction(db, transactionId)!;
@@ -676,7 +874,7 @@ export function approvePostRequest(
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
-            amount: row.credits,
+            amount_c: deal.amount_c,
             postId: post.id,
             transactionId: row.id,
             actorPubkey: authorPublicKey,
@@ -687,6 +885,7 @@ export function approvePostRequest(
         console.warn('[Marketplace] ESCROW_FUNDED system message failed:', e);
     }
 
+    const isOffer = post.type === 'offer';
     const requesterPubkey = isOffer ? row.buyer_pubkey : row.seller_pubkey;
     cb.dispatchPushNotification(
         [requesterPubkey],
@@ -765,26 +964,28 @@ export function cancelPostRequest(
     return tx;
 }
 
-export function acceptPost(
-    cb: EscrowCallbacks,
-    postId: string,
-    buyerPublicKey: string,
-    hours?: number,
-    opts?: { authSigner?: string }
-): MarketplaceTransaction {
-    assertFeatureOn('escrow');
+/** The buyer's own standing, at every door that holds their Beans for an Offer (acceptPost, a standing deal's next period). */
+export function assertBuyerMayTrade(buyerPublicKey: string): void {
     assertMemberActive(buyerPublicKey);
     assertNodeMember(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
-    const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
-    // As requestPost: a group or direct post this caller can't see is an id nobody has.
-    if (!post || marketplacePostOutOfSight(post, buyerPublicKey)
-        || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
-        // A lendable Offer that is out says so, to anyone who may see it (as requestPost).
-        const out = post ? null : db.prepare("SELECT * FROM posts WHERE id = ? AND lendable = 1 AND status = 'pending' AND active = 1").get(postId) as any;
-        if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
-        throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
-    }
+}
+
+/**
+ * Every check acceptPost makes of an Offer and its buyer before it holds, once the post is found and in the buyer's sight:
+ * the one copy, run again by a standing deal's scheduled hold on an Offer (`scheduled`, engine/standing-deals.ts;
+ * DESIGN-standing-deals-fable §0: a scheduled hold re-runs every guard acceptPost runs). Scheduled, the payee may be on
+ * holiday (§2.5), and the open-deal rule is the standing deal itself. `price` works the amount out at the point acceptPost
+ * always did (after the open-deal and contribution checks, so their words come first). Returns who pays and who is paid;
+ * throws the refusal (isShortRefusal for one that means the payer is short).
+ */
+export function offerHoldChecks(
+    cb: EscrowCallbacks,
+    post: any,
+    buyerPublicKey: string,
+    price: () => number,
+    opts: { authSigner?: string; scheduled?: { standingId: string }; standing?: boolean },
+): HoldParties & { amount_c: number; buyerCallsign?: string } {
     assertNoDealOnCopy(post.shownFromHost);
     // A lendable Offer is asked for: the lender says yes first (requestPost, then approvePostRequest). Refused here, to anyone
     // who may see it, before anything is held, whoever they are: a member the lender has blocked is told the same words, and
@@ -826,7 +1027,8 @@ export function acceptPost(
         }
     }
     if (post.authorPublicKey === buyerPublicKey) throw new Error(word('Cannot accept your own post'));
-    if (isOnHoliday(post.authorPublicKey)) throw new Error(word('This member is away (holiday mode) and not trading right now.'));
+    // A standing deal's payee may go on holiday while it runs (DESIGN-standing-deals-fable §2.5).
+    if (!opts.scheduled && isOnHoliday(post.authorPublicKey)) throw new Error(word('This member is away (holiday mode) and not trading right now.'));
 
     const author = getMember(db, post.authorPublicKey);
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
@@ -843,20 +1045,18 @@ export function acceptPost(
     // One open deal per member per listing: refused before the member's own checks below (a second deal's quantity, its
     // balance), which would name the wrong reason, and before the keeper-pay branch, which records a deferred wage claim as
     // it refuses. Outside conservingTransaction: a refusal is plain, never a rollback and ledger resync (and nothing between
-    // here and the hold yields, so no second accept can run in between).
-    const openDeal = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND buyer_pubkey=? AND status IN ('requested','pending') ORDER BY created_at DESC LIMIT 1`).get(post.id, buyerPublicKey) as { id: string } | undefined;
-    if (openDeal) throw dealOpen(openDeal.id);
+    // here and the hold yields, so no second accept can run in between). A standing deal still running on it is one too,
+    // between its periods as well (engine/standing-deals.ts); its own scheduled hold is the deal itself.
+    if (!opts.scheduled) {
+        const openDeal = db.prepare(`SELECT id FROM marketplace_transactions WHERE post_id=? AND buyer_pubkey=? AND status IN ('requested','pending') ORDER BY created_at DESC LIMIT 1`).get(post.id, buyerPublicKey) as { id: string } | undefined;
+        if (openDeal) throw dealOpen(openDeal.id);
+        const live = liveStandingOn(post.id, buyerPublicKey);
+        if (live) throw dealOpen(live);
+    }
 
     if (!hasListedOffer(db, buyerPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
 
-    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
-    if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
-        throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
-    }
-    const keptHours = post.priceType !== 'fixed' ? hours : undefined;
-
-    const buyer = getMember(db, buyerPublicKey);
-    const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
+    const finalCredits = price();
     assertDealAmount(finalCredits);
 
     // #102: a visitor's beans live on their home ledger, so this node cannot fund escrow for them.
@@ -883,36 +1083,69 @@ export function acceptPost(
         db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
             .get(buyerPublicKey, post.authorPublicKey)
     );
+    // A standing deal never pays a keeper of the enterprise that pays it (DESIGN-standing-deals-fable §1.5).
+    if ((opts.standing || opts.scheduled) && isPayeeKeeper) {
+        throw Object.assign(new Error(standingLines.keeperPayee()), { status: 403, statusCode: 403, code: 'standing_keeper' });
+    }
+    const parties: HoldParties = { payer: buyerPublicKey, payee: post.authorPublicKey, isEnterprisePayer, isPayeeKeeper };
 
-    const { balance, floor, usableFloor: uFloor } = cb.getBalance(buyerPublicKey);
+    assertHoldFunded(cb, parties, finalCredits, {
+        payerName: buyerMember?.callsign || 'This enterprise',
+        insufficient: word('Insufficient balance to accept this offer'),
+        claim: opts.scheduled ? null : { postId: post.id },
+    });
+    return { ...parties, amount_c: finalCredits, buyerCallsign: buyerMember?.callsign };
+}
 
-    if (isPayeeKeeper) {
-        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(buyerPublicKey) as any;
-        const earnedSurplus = Number(trow?.earned_surplus) || 0;
-        const name = buyerMember?.callsign || 'This enterprise';
+/** The standing deal still running (any phase but ended) that `payer` has on a listing: its current period's row, or its id. */
+export function liveStandingOn(postId: string, payer: string, payee?: string): string | null {
+    const sd = (payee
+        ? db.prepare(`SELECT id, current_tx_id FROM standing_deals WHERE post_id = ? AND payer_pubkey = ? AND payee_pubkey = ? AND phase != 'ended' LIMIT 1`).get(postId, payer, payee)
+        : db.prepare(`SELECT id, current_tx_id FROM standing_deals WHERE post_id = ? AND payer_pubkey = ? AND phase != 'ended' LIMIT 1`).get(postId, payer)) as
+        { id: string; current_tx_id: string | null } | undefined;
+    return sd ? (sd.current_tx_id ?? sd.id) : null;
+}
 
-        if (balance - finalCredits < 0) {
-            recordDeferredWageClaim(buyerPublicKey, post.authorPublicKey, finalCredits, post.id);
-            const msg = balance <= 0
-                ? `${name} is in deficit and cannot borrow to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`
-                : `${name} cannot borrow into credit to pay its keepers — credit buys inputs, but keepers can only be paid from profit.`;
-            const err: any = new Error(msg);
-            err.status = 403;
-            err.statusCode = 403;
-            throw err;
+export function acceptPost(
+    cb: EscrowCallbacks,
+    postId: string,
+    buyerPublicKey: string,
+    hours?: number,
+    opts?: { authSigner?: string; standing?: StandingStart }
+): MarketplaceTransaction {
+    assertFeatureOn('escrow');
+    assertBuyerMayTrade(buyerPublicKey);
+    const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
+    // As requestPost: a group or direct post this caller can't see is an id nobody has.
+    if (!post || marketplacePostOutOfSight(post, buyerPublicKey)
+        || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
+        // A lendable Offer that is out says so, to anyone who may see it (as requestPost).
+        const out = post ? null : db.prepare("SELECT * FROM posts WHERE id = ? AND lendable = 1 AND status = 'pending' AND active = 1").get(postId) as any;
+        if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
+        throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
+    }
+
+    // A standing deal (DESIGN-standing-deals-upfront-fable; Marty, 10 Nov 2026): a listing priced per week or per month,
+    // taken up with the payer's signed authorisation. What they signed must be this listing, its author and its price per
+    // period; the first period is paid now, and the period is the deal's quantity. Without `standing` the accept is today's.
+    const standing = opts?.standing
+        ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.priceType, price: post.price_c, payer: buyerPublicKey, payee: post.authorPublicKey, signer: opts.authSigner })
+        : null;
+
+    let keptHours: number | undefined;
+    const parties = offerHoldChecks(cb, post, buyerPublicKey, () => {
+        if (standing) return standing.auth.beansPerPeriod_c;
+        if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
+        if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
+            throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
         }
-
-        if (finalCredits > earnedSurplus) {
-            recordDeferredWageClaim(buyerPublicKey, post.authorPublicKey, finalCredits, post.id);
-            const msg = `${name} has insufficient earned surplus (${earnedSurplus} Beans) to pay keeper wages (${finalCredits} Beans) — grants and pledges cannot become wages, only genuine trading profit.`;
-            const err: any = new Error(msg);
-            err.status = 403;
-            err.statusCode = 403;
-            throw err;
-        }
-    } else {
-        if (balance - finalCredits < floor) throw new Error(word('Insufficient balance to accept this offer'));
-        if (balance - finalCredits < uFloor) throw cb.floorLockedError(buyerPublicKey, balance - finalCredits);
+        keptHours = post.priceType !== 'fixed' ? hours : undefined;
+        return post.priceType !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
+    }, { authSigner: opts?.authSigner, standing: !!standing });
+    const finalCredits = parties.amount_c;
+    if (standing) {
+        cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
+        return startStanding(cb, standing, { txId: crypto.randomUUID(), row: 'insert', post, parties: { ...parties, oneAtATime: !post.repeatable }, actor: buyerPublicKey });
     }
 
     const tx: MarketplaceTransaction = {
@@ -920,55 +1153,39 @@ export function acceptPost(
         postId: post.id,
         postTitle: post.title,
         buyerPublicKey,
-        buyerCallsign: buyer?.callsign || 'Anonymous',
+        buyerCallsign: parties.buyerCallsign || 'Anonymous',
         sellerPublicKey: post.authorPublicKey,
         sellerCallsign: post.authorCallsign,
-        credits: finalCredits,
+        amount_c: finalCredits,
         hours: keptHours,
         status: 'pending',
         createdAt: new Date().toISOString()
     };
 
-    const oneAtATime = !post.repeatable;
-
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
 
     cb.conservingTransaction(() => {
-        if (oneAtATime) {
-            const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(buyerPublicKey, tx.createdAt, tx.id, post.id);
-            if (updated.changes === 0) throw new Error(word('Post is no longer available — it is already committed to another deal'));
-
-            db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
-              .run(post.id, tx.id);
-        }
-
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(`escrow_${tx.id}`);
-
-        const escrowResult = cb.transfer(
-            buyerPublicKey,
-            `escrow_${tx.id}`,
-            finalCredits,
-            `Escrow hold for offer ${post.id}`,
-            'escrow',
-            true,
-            (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
-        );
-        if (!escrowResult) throw new Error(word('Failed to lock funds in escrow — insufficient balance or ledger error'));
-
-        if (isPayeeKeeper) {
-            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                .run(finalCredits, buyerPublicKey);
-        }
-
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`).run(tx.id, tx.postId, tx.buyerPublicKey, tx.sellerPublicKey, tx.credits, tx.hours ?? null, tx.createdAt);
+        openHold(cb, {
+            txId: tx.id,
+            postId: post.id,
+            parties,
+            amount_c: finalCredits,
+            hours: keptHours,
+            memo: `Escrow hold for offer ${post.id}`,
+            auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
+            row: 'insert',
+            createdAt: tx.createdAt,
+            takeListing: !post.repeatable ? { gone: word('Post is no longer available — it is already committed to another deal') } : null,
+        });
     });
+    const held = tx;
 
     // The listing is now pending on everyone's board: the others get a bare doorbell to re-fetch it.
-    cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
+    cb.broadcast({ type: 'post_accepted', postId: post.id, transaction: held }, tradeRecipients(cb, held), { othersGetDoorbell: true });
 
     try {
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
-            amount: finalCredits,
+            amount_c: finalCredits,
             postId: post.id,
             transactionId: tx.id,
             actorPubkey: buyerPublicKey,
@@ -987,12 +1204,149 @@ export function acceptPost(
         hasBlocked(post.authorPublicKey, buyerPublicKey) || !repeatDealPushDue(post.id, buyerPublicKey, tx.id) ? [] : [post.authorPublicKey],
         buyerPublicKey,
         '🛒 Offer Accepted',
-        `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
+        `${tx.buyerCallsign || 'A member'} accepted "${post.title}" — ${formatHundredths(finalCredits, 'en')} Beans are now in escrow.`,
         { screen: 'post', postId: post.id, txId: tx.id },
         'marketplace',
         'market.request'
     );
 
+    return held;
+}
+
+/**
+ * A standing deal taken up (acceptPost on an Offer, approvePostRequest on a Need): its row and its first period paid to the
+ * payee now, in one conservingTransaction (DESIGN-standing-deals-upfront-fable §1), then what a release does after its
+ * commit, with the payee's push saying what came in. Nothing is held, so there is no escrow line and no hold's push.
+ */
+function startStanding(cb: EscrowCallbacks, v: CheckedStandingStart, d: {
+    txId: string; row: 'insert' | 'approve'; post: any; parties: HoldParties & { oneAtATime: boolean }; actor: string;
+}): MarketplaceTransaction {
+    const title = String(d.post.title || '');
+    const first = firstPeriodOf(v, title);
+    let paid: { releaseResult: any; releaseCredits: number } | null = null;
+    cb.conservingTransaction(() => {
+        insertStandingDeal(v, d.txId);
+        paid = payStandingPeriod(cb, {
+            txId: d.txId, postId: d.post.id, parties: d.parties, standingId: v.auth.standingId, ...first,
+            row: d.row, paidAt: new Date().toISOString(), takeListing: d.parties.oneAtATime,
+        });
+    });
+    const row = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(d.txId) as any;
+    const payerName = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(v.payer) as { callsign?: string } | undefined)?.callsign || 'A member';
+    return afterRelease(cb, row, d.post, paid!, d.actor, {
+        title: standingLines.noticeTitle(), body: standingLines.paidIn(v.auth.unit, v.auth.beansPerPeriod_c, title, payerName, 1),
+    });
+}
+
+/**
+ * Release a held deal to its payee (completePostTransaction). INSIDE the caller's conservingTransaction. The row goes from
+ * pending to completed, exactly one row or it throws (a second release of the same deal, from any door, finds none);
+ * `adjust` then runs (a deal struck for a time and confirmed for another: the top-up or the refund) and returns what is
+ * released; the payee is paid that, less the 1.5% to the Commons (the one transfer here that is not fee-exempt); and the
+ * listing comes off the board for good, or back on it for a repeatable one or a loan.
+ */
+export function releaseHeld(cb: EscrowCallbacks, row: any, post: any, opts: {
+    completedAt: string;
+    amount_c: number;
+    authSigner?: string;
+    adjust?: () => number;
+}): { releaseResult: any; releaseCredits: number } {
+    const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(opts.completedAt, row.id);
+    if (updateRes.changes !== 1) throw new Error(word('Deal was already completed or cancelled'));
+
+    const releaseCredits = opts.adjust ? opts.adjust() : opts.amount_c;
+
+    // The 1.5% community fee is charged HERE — the seller receives (amount − fee), the fee goes to
+    // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
+    // settles to a real member's account. Cross-node settlement handles its own fee separately
+    // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
+    const releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts.authSigner ? { signer: opts.authSigner } : undefined);
+    if (!releaseResult) throw new Error(word('Failed to release escrow funds'));
+
+    if (post) {
+        if (!backOnBoardAfterDeal(post)) {
+            db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(opts.completedAt, opts.completedAt, row.post_id);
+        } else {
+            // Repeatable, or a loan that is back. Not a listing a prune cancelled under an open trade (adminPruneUser): it
+            // stays down.
+            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(opts.completedAt, row.post_id);
+        }
+    }
+    return { releaseResult, releaseCredits };
+}
+
+/**
+ * After a release's commit: the enterprise's earned surplus and the sweeps (Rules 6 and 7, docs/the-commons.md §2.4), the
+ * live event, the activity feed, the chat line and the payee's push. The one copy, for completePostTransaction and each
+ * period a standing deal pays (engine/standing-deals.ts; `actor` 'SYSTEM' from the tick: none of it needs a signer), whose
+ * push says what came in (`push`), or none (null: a period covered in its grace, told by its own notice).
+ */
+export function afterRelease(cb: EscrowCallbacks, row: any, post: any, released: { releaseResult: any; releaseCredits: number }, actor: string,
+    push?: { title: string; body: string } | null): MarketplaceTransaction {
+    const { releaseResult, releaseCredits } = released;
+    // Rule 6 & 7: Earned surplus tracking, deferred wage claims, and working capital ceiling sweep (docs/the-commons.md §2.4).
+    const sellerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(row.seller_pubkey) as any;
+    if (sellerMember?.is_treasury === 1) {
+        const isBuyerKeeper = Boolean(
+            db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                .get(row.seller_pubkey, row.buyer_pubkey)
+        );
+        // Rule 6: Only genuine external sales count toward earned surplus (exclude wash trades with own keepers)
+        if (!isBuyerKeeper) {
+            db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
+                .run(releaseCredits, row.seller_pubkey);
+        }
+        // Process any deferred wage claims now that the enterprise has earned surplus and balance
+        if (cb.processDeferredWageClaims) {
+            cb.processDeferredWageClaims(row.seller_pubkey);
+        }
+        // Sweep any surplus above the working capital ceiling to Commons
+        if (cb.sweepEnterpriseCeiling) {
+            cb.sweepEnterpriseCeiling(row.seller_pubkey);
+        }
+    }
+
+    const tx = getMarketplaceTransaction(db, row.id)!;
+    // The listing's status and the members' activity feed change for everyone: a bare doorbell for the others.
+    cb.broadcast({ type: 'transaction_completed', transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
+    try {
+        recordActivity('trade_completed', row.seller_pubkey, row.buyer_pubkey, {
+            postId: row.post_id,
+            postTitle: post?.title,
+            amount_c: releaseCredits,
+        });
+    } catch (e) {
+        console.warn('[ActivityFeed] Could not record trade_completed:', e);
+    }
+
+    const netPayout = releaseCredits - (releaseResult?.fee_c ?? 0);
+    try {
+        cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_RELEASED, {
+            amount_c: netPayout,
+            grossAmount_c: releaseCredits,
+            fee_c: releaseResult?.fee_c ?? 0,
+            postId: row.post_id,
+            transactionId: row.id,
+            actorPubkey: actor,
+            buyerPubkey: row.buyer_pubkey,
+            sellerPubkey: row.seller_pubkey,
+            txHash: releaseResult?.id
+        }, row.buyer_pubkey, row.seller_pubkey);
+    } catch (e) {
+        console.warn('[Marketplace] ESCROW_RELEASED system message failed:', e);
+    }
+
+    if (push !== null) {
+        cb.dispatchPushNotification(
+            [row.seller_pubkey],
+            actor,
+            push?.title ?? '🎉 Deal Completed!',
+            push?.body ?? `Payment of ${formatHundredths(netPayout, 'en')} Beans was released for "${post?.title || 'your post'}"`,
+            { screen: 'post', postId: row.post_id, txId: row.id },
+            'escrow',
+            'trade.update'
+        );
+    }
     return tx;
 }
 
@@ -1004,7 +1358,7 @@ export function completePostTransaction(
     opts?: { authSigner?: string }
 ): MarketplaceTransaction & { alreadyCompleted?: boolean } | null {
     const row = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='pending'").get(transactionId) as any;
-    
+
     if (!row) {
         const completedRow = db.prepare("SELECT * FROM marketplace_transactions WHERE id=? AND status='completed'").get(transactionId) as any;
         if (completedRow && completedRow.buyer_pubkey === confirmerPublicKey) {
@@ -1015,7 +1369,7 @@ export function completePostTransaction(
         }
         return null;
     }
-    
+
     if (row.buyer_pubkey !== confirmerPublicKey) return null;
     assertNodeMember(confirmerPublicKey);
 
@@ -1066,8 +1420,8 @@ export function completePostTransaction(
     // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
     // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
     // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
-    // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, or an old row that never stored them) pays
-    // what it holds, whatever hours are confirmed.
+    // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, or an old row that never stored them) pays what
+    // it holds, whatever hours are confirmed.
     const bookedHours = Number(row.hours);
     // A loan for one fee (a Free loan included) keeps its days on the deal to say when it is due back, not to price it: it
     // pays what it holds, whatever days are confirmed, as every deal on a fixed price does. The listing's price and its
@@ -1081,25 +1435,28 @@ export function completePostTransaction(
     if (finalHours != null && !isDealQuantity(finalHours)) {
         throw new Error(DEAL_QUANTITY_ERROR.replace(/^The quantity/, 'The final quantity'));
     }
-    assertDealRowAmount(row.credits, 'pending');
+    assertDealRowAmount(row.amount_c, 'pending');
     const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
     // Each refusal below names the way out that works in the only states that reach it (#1445 re-review, measured):
     // a booked quantity outside 0.01–10000 is itself refused as a final quantity, and neither app can confirm a per-unit
     // deal with none, so only the cancel works there; a row whose credits were set near the largest number by hand can't
     // be completed or cancelled (its escrow holds what was really paid), and only a moderator's removal clears it.
-    let releaseCredits = row.credits;
+    let releaseCredits = row.amount_c;
     if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
         // The rate must be one the row really holds (#1445 review, BLOCKING 2): its booked quantity a real one (a row from
         // before POST_HOURS_MIN, or written by hand, may hold 5e-324, and then credits / hours had rounded to a whole
         // number of Beans, or to 0), the rate finite, and the rate times the booked quantity the credits again. Otherwise
         // nothing is paid at it: a wrong amount would move for good.
-        const rate = row.credits / bookedHours;
-        const roundTrips = Number.isFinite(rate) && Math.abs(rate * bookedHours - row.credits) <= 1e-9 * Math.max(1, row.credits);
-        if (!isDealQuantity(bookedHours) || !roundTrips) {
+        // Whole hundredths: what was held times the confirmed quantity over the booked one, truncated once (the buyer keeps
+        // a part below a hundredth). Both quantities counted in hundredths of a unit, so nothing here is a float.
+        if (!isDealQuantity(bookedHours)) {
             throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. `
                 + 'Cancel the deal, and the Beans held for it go back.');
         }
-        releaseCredits = rate * finalHours;
+        // A product past what a number holds exactly (a hand-edited row near the largest amount) is no amount at all: NaN,
+        // so the refusal below says what happened, never shareOf's RangeError surfacing as "Escrow release failed".
+        const confirmed = quantityHundredths(finalHours);
+        releaseCredits = Number.isSafeInteger(row.amount_c * confirmed) ? shareOf(row.amount_c, confirmed, quantityHundredths(bookedHours)) : NaN;
     }
     // A row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits near the
     // largest number). Its escrow holds what was really paid, which can't cover what the row says, so a cancel is refused
@@ -1113,150 +1470,76 @@ export function completePostTransaction(
     }
 
     const completedAt = new Date().toISOString();
-    let releaseResult: any = null;
+    let released: { releaseResult: any; releaseCredits: number } = { releaseResult: null, releaseCredits };
 
     cb.conservingTransaction(() => {
-        const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
-        if (updateRes.changes === 0) throw new Error(word('Deal was already completed or cancelled'));
-
-        if (isHourly && releaseCredits !== row.credits) {
-            const diff = releaseCredits - row.credits;
-            if (diff > 0) {
-                const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
-                const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
-                const isPayeeKeeper = isEnterprisePayer && Boolean(
-                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
-                        .get(row.buyer_pubkey, row.seller_pubkey)
-                );
-                const { balance, floor, usableFloor: uFloor } = cb.getBalance(row.buyer_pubkey);
-                if (isPayeeKeeper) {
-                    const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
-                    const earnedSurplus = Number(trow?.earned_surplus) || 0;
-                    if (balance - diff < 0 || diff > earnedSurplus) {
-                        // Extra hours cannot be funded from balance or earned surplus.
-                        // Record deferred wage claim for the difference (diff), release the base hold
-                        // (row.credits) already secured in escrow to the keeper, and avoid stranding funds.
-                        recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
-                        releaseCredits = row.credits;
+        released = releaseHeld(cb, row, post, {
+            completedAt,
+            amount_c: releaseCredits,
+            authSigner: opts?.authSigner,
+            adjust: !(isHourly && releaseCredits !== row.amount_c) ? undefined : () => {
+                const diff = releaseCredits - row.amount_c;
+                if (diff > 0) {
+                    const buyerMember = db.prepare('SELECT is_treasury, callsign FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+                    const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+                    const isPayeeKeeper = isEnterprisePayer && Boolean(
+                        db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                            .get(row.buyer_pubkey, row.seller_pubkey)
+                    );
+                    const { balance_c: balance, floor_c: floor, usableFloor_c: uFloor } = cb.getBalance(row.buyer_pubkey);
+                    if (isPayeeKeeper) {
+                        const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
+                        const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
+                        if (balance - diff < 0 || diff > earnedSurplus) {
+                            // Extra hours cannot be funded from balance or earned surplus.
+                            // Record deferred wage claim for the difference (diff), release the base hold
+                            // (row.amount_c) already secured in escrow to the keeper, and avoid stranding funds.
+                            recordDeferredWageClaim(row.buyer_pubkey, row.seller_pubkey, diff, row.post_id, transactionId);
+                            releaseCredits = row.amount_c;
+                        } else {
+                            db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
+                                .run(diff, row.buyer_pubkey);
+                            // THROW, don't ignore. The release below pays the seller `releaseCredits`, which is
+                            // the base hold PLUS this top-up. If the top-up silently fails the escrow is short by
+                            // `diff` and the seller is paid beans that were never held — the escrow ends at -diff
+                            // and the node stops summing to zero. We are inside the enclosing conservingTransaction,
+                            // so a throw unwinds the status update, the earned_surplus debit and the ledger together.
+                            const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                            if (!toppedUp) throw new Error(word('Failed to top up escrow for the extra hours'));
+                        }
                     } else {
-                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                            .run(diff, row.buyer_pubkey);
-                        // THROW, don't ignore. The release below pays the seller `releaseCredits`, which is
-                        // the base hold PLUS this top-up. If the top-up silently fails the escrow is short by
-                        // `diff` and the seller is paid beans that were never held — the escrow ends at -diff
-                        // and the node stops summing to zero. We are inside the enclosing conservingTransaction,
-                        // so a throw unwinds the status update, the earned_surplus debit and the ledger together.
+                        if (balance - diff < floor) throw new Error(word('Insufficient balance to cover extra hours'));
+                        if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
+                        // Same reasoning as the keeper branch above: an ignored failure here pays the seller out
+                        // of an escrow that never received the top-up. The floor checks on the two lines above
+                        // are a pre-flight, not the authority — `transfer()` re-checks and can still refuse.
                         const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
                         if (!toppedUp) throw new Error(word('Failed to top up escrow for the extra hours'));
                     }
-                } else {
-                    if (balance - diff < floor) throw new Error(word('Insufficient balance to cover extra hours'));
-                    if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
-                    // Same reasoning as the keeper branch above: an ignored failure here pays the seller out
-                    // of an escrow that never received the top-up. The floor checks on the two lines above
-                    // are a pre-flight, not the authority — `transfer()` re-checks and can still refuse.
-                    const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-                    if (!toppedUp) throw new Error(word('Failed to top up escrow for the extra hours'));
+                } else if (diff < 0) {
+                    const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
+                    const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
+                    const isPayeeKeeper = isEnterprisePayer && Boolean(
+                        db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+                            .get(row.buyer_pubkey, row.seller_pubkey)
+                    );
+                    if (isPayeeKeeper) {
+                        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
+                            .run(Math.abs(diff), row.buyer_pubkey);
+                    }
+                    // The mirror case, and it was ignored too: fewer hours than booked, so the unearned part goes back
+                    // to the buyer before the rest is released. A silent failure here strands `|diff|` in an escrow
+                    // that the release then closes, and the buyer never sees their change.
+                    const refunded = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
+                    if (!refunded) throw new Error(word('Failed to refund the unearned escrow hours'));
                 }
-            } else if (diff < 0) {
-                const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
-                const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
-                const isPayeeKeeper = isEnterprisePayer && Boolean(
-                    db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
-                        .get(row.buyer_pubkey, row.seller_pubkey)
-                );
-                if (isPayeeKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-                        .run(Math.abs(diff), row.buyer_pubkey);
-                }
-                // The mirror case, and it was ignored too: fewer hours than booked, so the unearned part goes back
-                // to the buyer before the rest is released. A silent failure here strands `|diff|` in an escrow
-                // that the release then closes, and the buyer never sees their change.
-                const refunded = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-                if (!refunded) throw new Error(word('Failed to refund the unearned escrow hours'));
-            }
-            db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
-        }
-
-        // The 1.5% community fee is charged HERE — the seller receives (amount − fee), the fee goes to
-        // the Commons. Holds, adjustments and refunds stay exempt; this is the one transfer where value
-        // settles to a real member's account. Cross-node settlement handles its own fee separately
-        // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
-        releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-        if (!releaseResult) throw new Error(word('Failed to release escrow funds'));
-
-        if (post && !backOnBoardAfterDeal(post)) {
-            db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
-        } else if (post) {
-            // Repeatable, or a loan that is back. Not a listing a prune cancelled under an open trade (adminPruneUser): it
-            // stays down.
-            db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
-        }
+                db.prepare(`UPDATE marketplace_transactions SET amount_c=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
+                return releaseCredits;
+            },
+        });
     });
 
-    // Rule 6 & 7: Earned surplus tracking, deferred wage claims, and working capital ceiling sweep (docs/the-commons.md §2.4).
-    const sellerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(row.seller_pubkey) as any;
-    if (sellerMember?.is_treasury === 1) {
-        const isBuyerKeeper = Boolean(
-            db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
-                .get(row.seller_pubkey, row.buyer_pubkey)
-        );
-        // Rule 6: Only genuine external sales count toward earned surplus (exclude wash trades with own keepers)
-        if (!isBuyerKeeper) {
-            db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-                .run(releaseCredits, row.seller_pubkey);
-        }
-        // Process any deferred wage claims now that the enterprise has earned surplus and balance
-        if (cb.processDeferredWageClaims) {
-            cb.processDeferredWageClaims(row.seller_pubkey);
-        }
-        // Sweep any surplus above the working capital ceiling to Commons
-        if (cb.sweepEnterpriseCeiling) {
-            cb.sweepEnterpriseCeiling(row.seller_pubkey);
-        }
-    }
-
-    const tx = getMarketplaceTransaction(db, transactionId)!;
-    // The listing's status and the members' activity feed change for everyone: a bare doorbell for the others.
-    cb.broadcast({ type: 'transaction_completed', transaction: tx }, tradeRecipients(cb, tx), { othersGetDoorbell: true });
-    try {
-        recordActivity('trade_completed', row.seller_pubkey, row.buyer_pubkey, {
-            postId: row.post_id,
-            postTitle: post?.title,
-            credits: releaseCredits,
-        });
-    } catch (e) {
-        console.warn('[ActivityFeed] Could not record trade_completed:', e);
-    }
-
-    const netPayout = releaseCredits - (releaseResult?.taxFee ?? 0);
-    try {
-        cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_RELEASED, {
-            amount: netPayout,
-            grossAmount: releaseCredits,
-            fee: releaseResult?.taxFee ?? 0,
-            postId: row.post_id,
-            transactionId: row.id,
-            actorPubkey: confirmerPublicKey,
-            buyerPubkey: row.buyer_pubkey,
-            sellerPubkey: row.seller_pubkey,
-            txHash: releaseResult?.id
-        }, row.buyer_pubkey, row.seller_pubkey);
-    } catch (e) {
-        console.warn('[Marketplace] ESCROW_RELEASED system message failed:', e);
-    }
-
-    cb.dispatchPushNotification(
-        [row.seller_pubkey],
-        confirmerPublicKey,
-        '🎉 Deal Completed!',
-        `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
-        { screen: 'post', postId: row.post_id, txId: row.id },
-        'escrow',
-        'trade.update'
-    );
-
-    return tx;
+    return afterRelease(cb, row, post, released, confirmerPublicKey);
 }
 
 export function cancelPostTransaction(
@@ -1268,7 +1551,7 @@ export function cancelPostTransaction(
     if (!row) return null;
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
     assertNodeMember(cancellerPublicKey);
-    assertDealRowAmount(row.credits, 'pending');
+    assertDealRowAmount(row.amount_c, 'pending');
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
@@ -1278,7 +1561,7 @@ export function cancelPostTransaction(
         const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
         if (updateRes.changes === 0) throw new Error(word('Deal was already completed or cancelled'));
 
-        const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.credits, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
+        const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.amount_c, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
         if (!refundResult) throw new Error(word('Failed to refund escrow funds'));
 
         const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
@@ -1291,8 +1574,8 @@ export function cancelPostTransaction(
                     .get(row.buyer_pubkey, row.seller_pubkey)
             );
             if (isPayeeKeeper) {
-                db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-                    .run(row.credits, row.buyer_pubkey);
+                db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
+                    .run(row.amount_c, row.buyer_pubkey);
             }
         }
 
@@ -1309,7 +1592,7 @@ export function cancelPostTransaction(
 
     try {
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_CANCELLED, {
-            amount: row.credits,
+            amount_c: row.amount_c,
             postId: row.post_id,
             transactionId: row.id,
             actorPubkey: cancellerPublicKey,
@@ -1387,7 +1670,7 @@ export function resolveEscrowDispute(
     if (!row) {
         throw new Error('Transaction not found or not in pending escrow');
     }
-    assertDealRowAmount(row.credits, 'pending');
+    assertDealRowAmount(row.amount_c, 'pending');
 
     assertNotPartyToDispute(row, adminSigner.trim());
 
@@ -1406,18 +1689,13 @@ export function resolveEscrowDispute(
     let sellerShare = 0;
 
     if (action === 'release_to_seller') {
-        sellerShare = row.credits;
+        sellerShare = row.amount_c;
     } else if (action === 'refund_to_buyer') {
-        buyerShare = row.credits;
+        buyerShare = row.amount_c;
     } else if (action === 'split') {
-        // The seller's half is the EXACT remainder, not a second independent rounding. Rounding both to 2dp
-        // could make them sum to more than the escrow holds: at row.credits = 12.345 (an hourly deal is not
-        // a round number of cents) the old arithmetic gave 6.17 + 6.18 = 12.35, so a split paid out half a
-        // cent that nobody put in. Under the escrow floor that no longer mints beans — the second transfer
-        // is refused and the arbitration throws — which would be a working dispute turning into an error.
-        // So fix the arithmetic: round the buyer's half for legibility, and give the seller what is left.
-        buyerShare = Math.round((row.credits / 2) * 100) / 100;
-        sellerShare = row.credits - buyerShare;
+        // Whole hundredths (core halves): the buyer's half truncated, the seller's the rest, so the two always drain the
+        // escrow exactly: 1235 → 617 + 618, 1 → 0 + 1. Never a second rounding that could pay out what nobody put in.
+        [buyerShare, sellerShare] = halves(row.amount_c);
     }
 
     cb.conservingTransaction(() => {
@@ -1451,7 +1729,7 @@ export function resolveEscrowDispute(
                         .get(row.seller_pubkey, row.buyer_pubkey)
                 );
                 if (!isBuyerKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                         .run(sellerShare, row.seller_pubkey);
                 }
             }
@@ -1483,8 +1761,8 @@ export function resolveEscrowDispute(
                         .get(row.buyer_pubkey, row.seller_pubkey)
                 );
                 if (isPayeeKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
-                        .run(row.credits, row.buyer_pubkey);
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
+                        .run(row.amount_c, row.buyer_pubkey);
                 }
             }
 
@@ -1527,7 +1805,7 @@ export function resolveEscrowDispute(
                             .get(row.seller_pubkey, row.buyer_pubkey)
                     );
                     if (!isBuyerKeeper) {
-                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                        db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                             .run(sellerShare, row.seller_pubkey);
                     }
                 }
@@ -1541,7 +1819,7 @@ export function resolveEscrowDispute(
                         .get(row.buyer_pubkey, row.seller_pubkey)
                 );
                 if (isPayeeKeeper) {
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) + ? WHERE public_key = ?')
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) + ? WHERE public_key = ?')
                         .run(buyerShare, row.buyer_pubkey);
                 }
             }
@@ -1577,7 +1855,7 @@ export function resolveEscrowDispute(
             postTitle: post?.title,
             transactionId: row.id,
             resolution: action,
-            credits: row.credits,
+            amount_c: row.amount_c,
             counterpartyPubkey: row.seller_pubkey,
             counterpartyCallsign: sellerMember?.callsign || 'counterparty',
             role: 'buyer',
@@ -1589,7 +1867,7 @@ export function resolveEscrowDispute(
             postTitle: post?.title,
             transactionId: row.id,
             resolution: action,
-            credits: row.credits,
+            amount_c: row.amount_c,
             counterpartyPubkey: row.buyer_pubkey,
             counterpartyCallsign: buyerMember?.callsign || 'counterparty',
             role: 'seller',
@@ -1606,7 +1884,7 @@ export function resolveEscrowDispute(
             postId: row.post_id,
             transactionId: row.id,
             resolution: action,
-            amount: row.credits,
+            amount_c: row.amount_c,
             resolvedByName: resolverName,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,

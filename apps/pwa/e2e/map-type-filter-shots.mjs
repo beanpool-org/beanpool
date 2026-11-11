@@ -27,16 +27,16 @@ fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
 const HOUR = 3600_000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
-const base = { description: '', credits: 5, priceType: 'fixed', authorCallsign: 'Bea', createdAt: iso(-5 * HOUR), active: true, status: 'active', repeatable: true, photos: [] };
+const base = { description: '', price_c: 500, priceType: 'fixed', authorCallsign: 'Bea', createdAt: iso(-5 * HOUR), active: true, status: 'active', repeatable: true, photos: [] };
 const at = (n) => ({ lat: -28.64 - n * 0.006, lng: 153.5 + n * 0.008 });
 const POSTS = [
     { ...base, id: 'p1', type: 'offer', category: 'food', title: 'A dozen eggs', authorPublicKey: 'pk-bea', ...at(1) },
     { ...base, id: 'p2', type: 'offer', category: 'tools', title: 'Ladder to lend', authorPublicKey: 'pk-bea', ...at(3) },
     { ...base, id: 'p3', type: 'need', category: 'food', title: 'A lift to the market', authorPublicKey: 'pk-cal', ...at(5) },
     { ...base, id: 'p4', type: 'offer', category: 'garden', title: 'Seedlings', authorPublicKey: 'pk-cal', ...at(7) },
-    { ...base, id: 'e1', type: 'event', category: 'community', title: 'Repair café', authorPublicKey: 'pk-hazel', credits: 0, repeatable: false,
+    { ...base, id: 'e1', type: 'event', category: 'community', title: 'Repair café', authorPublicKey: 'pk-hazel', price_c: 0, repeatable: false,
       eventStartAt: iso(2 * HOUR), eventState: 'scheduled', goingCount: 2, interestedCount: 1, myRsvp: null, ...at(2) },
-    { ...base, id: 'e2', type: 'event', category: 'community', title: 'Working bee', authorPublicKey: 'pk-hazel', credits: 0, repeatable: false,
+    { ...base, id: 'e2', type: 'event', category: 'community', title: 'Working bee', authorPublicKey: 'pk-hazel', price_c: 0, repeatable: false,
       eventStartAt: iso(20 * 24 * HOUR), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null, ...at(6) },
 ];
 const ENTERPRISES = [{ publicKey: 'ent-1', name: 'Tool Shed', callsign: 'Shed', avatar: '🔧', ...at(4), paused: false, status: 'active' }];
@@ -57,7 +57,7 @@ function answer(pathname, search) {
     if (pathname === '/api/node/config') return { readAuthRequired: false };
     if (pathname === '/api/node/info') return { callsign: 'Harness', peerNodes: [] };
     if (pathname === '/api/federation/peers/reachable') return { peers: [] };
-    if (pathname.startsWith('/api/ledger/balance')) return { balance: 240, isBlockedFromTrading: false };
+    if (pathname.startsWith('/api/ledger/balance')) return { balance_c: 24000, isBlockedFromTrading: false };
     return undefined;
 }
 
@@ -143,7 +143,7 @@ try {
         for (const theme of ['light', 'dark']) {
             const context = await browser.newContext({ viewport: { width: view.width, height: view.height }, colorScheme: theme, reducedMotion: 'reduce' });
             await context.addInitScript(([mode]) => {
-                try { localStorage.setItem('beanpool-theme-mode', mode); localStorage.setItem('beanpool-theme-default-light-v1', 'done'); } catch { /* the default theme */ }
+                try { localStorage.setItem('beanpool-theme-mode', mode); } catch { /* the default theme */ }
             }, [theme]);
             await context.route('**/*', async (route) => {
                 const url = new URL(route.request().url());

@@ -57,7 +57,7 @@ if (fs.existsSync(envPath)) {
 scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
+import { localConfigRestoredNotice } from './config/local-config.js';
 import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls } from './services/tls.js';
 import { startAcmeScheduler } from './services/acme/schedule.js';
@@ -71,7 +71,8 @@ import { registerFederationHandler, federatedReceiptStatus } from './federation-
 import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
+import { initStateEngine, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
+import { refuseUnopenableDatabase } from './db/db.js';
 import { startRecoverNoticeWatch, RECOVER_ACTOR } from './recover-command.js';
 import { startRestoreNoticeWatch } from './services/restore-points.js';
 import { logger } from './logger.js';
@@ -91,6 +92,7 @@ import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot, settleTakeoverBeforeDatabaseBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { noteUnfindableSignInCopiesAtBoot } from './engine/recovery-find.js';
 import { installPushTokenSealAtBoot } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
@@ -119,6 +121,10 @@ const PORT_P2P_WS = process.env.PORT_P2P_WS?.trim()
 async function main() {
     console.log('\n🫘  BeanPool Node starting...\n');
 
+    // Step 0.4: the database's gate (db/schema-gate.ts), before any step below can write to it (the logger writes its lines
+    // to system_logs): a file this release may not open is refused in one line, as it was.
+    refuseUnopenableDatabase();
+
     // Step 0.5: the data dir's files before anything reads them: a crash's temp files removed, key files made 0600,
     // local-config.json's last good copy written when it has none (boot-file-safety.ts).
     secureDataDirAtBoot(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'));
@@ -127,9 +133,6 @@ async function main() {
     const genesis = await ensureGenesis();
     console.log(`✅ Community: ${genesis.communityId}`);
     console.log(`   Genesis hash: ${genesis.genesisHash}\n`);
-
-    // Step 2: Admin password (an existing node keeps its own or takes a rotated one; a new install makes none)
-    initAdminPassword();
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();
@@ -159,7 +162,6 @@ async function main() {
     if (restored) {
         logger.security('SYS', `local-config.json was unreadable (${restored.why}): this server started from its last good copy, local-config.json.bak. Check the address and settings.` + (restored.brokenCopy ? ` The broken file is kept as ${restored.brokenCopy}.` : ''));
     }
-    migrateAdminConversations();
     // Step 2.505: which server a standby copies (services/standby-main.ts): a standby from before the pin takes its main
     // server's key from its own record, once, before connectors.json loses its `mirror` links (connector-manager.ts) and
     // before a take-over step reads it. Unpaired otherwise, and loud (standby.unpaired). And `beanpool pair`'s pickup.
@@ -186,7 +188,7 @@ async function main() {
         remember: noteRestoredCopy,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
-    // (it asks whether there is an owner). Never throws: the admin password works as before either way.
+    // (it asks whether there is an owner). Never throws: without a code, `beanpool recover` on the server still adds an owner.
     initClaimCode();
 
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else
@@ -209,6 +211,9 @@ async function main() {
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
     // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And the count of sign-in copies not yet findable by sign-in, for a server that became the main one at this boot
+    // (engine/recovery-find.ts). Does nothing when the role did not change.
+    noteUnfindableSignInCopiesAtBoot({ standby: getNodeRole() === 'backup' });
     // And members' push tokens, locked with a key from the same file (services/push-token-seal.ts): the server that took
     // over opens the rows it copied with the key the take-over brought, and removes, with one line, any it can't open.
     // Does nothing when the role did not change.

@@ -31,6 +31,7 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -59,7 +60,8 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method: 'GET', path, timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -73,7 +75,8 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, { method: 'GET', path, timestamp: ts, nonce }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -203,7 +206,7 @@ async function main() {
     const alice: Id = { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'alice', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(alice.pubKeyHex);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(alice.pubKeyHex);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(alice.pubKeyHex);
 
     const checkInfo = async (want: 'local' | 'global', label: string) => {
         for (const [who, id] of [['unsigned', undefined], ['signed member', alice]] as const) {
@@ -214,8 +217,8 @@ async function main() {
                 `${label}, ${who}: features are exactly what this build does on ${want} (got ${JSON.stringify(r.body.features)})`);
             const b = r.body;
             assert(typeof b.memberCount === 'number' && typeof b.postCount === 'number' && typeof b.transactionCount === 'number'
-                && typeof b.commonsBalance === 'number' && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
-                `${label}, ${who}: every field from before is still there, same types`);
+                && Number.isInteger(b.commonsBalance_c) && typeof b.currency?.type === 'string' && typeof b.currency?.value === 'string',
+                `${label}, ${who}: every field from before is still there, same types (the Commons pot as commonsBalance_c, whole hundredths)`);
         }
     };
     await checkInfo('local', 'NODE_PROFILE unset');

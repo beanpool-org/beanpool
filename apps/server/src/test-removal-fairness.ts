@@ -4,7 +4,8 @@
  * covers the rest.
  *
  * Boots the real server; every request goes over HTTPS through the real signature middleware and real admin sessions (an
- * admin's key session, and the password with a 2FA code). Expo is answered here: nothing leaves this machine.
+ * admin's key session, and an owner's; the node has no admin password). Expo is answered here: nothing leaves this
+ * machine.
  *
  *  1. The push. When a pause opens its vote, everyone who may vote on it gets one push (`decision.removal`), and the
  *     member it is about gets their own (`account.removal-vote`), which comes through with their chat alerts off. Not the
@@ -13,8 +14,8 @@
  *     screen shows each kind's fixed words; nothing that leaves names the member, the admin or the case, and the details
  *     only open Commons, Decide. The member is told at once on the web too: a kept notice, read when the web app opens.
  *     A pause through a report pushes the same. With votes off a pause opens no vote and pushes nothing of the kind.
- *  2. The proposer is named on the card: the admin who paused, by name and never by key; an owner with the server's
- *     password, as such; a member's own proposal from before, by name. Another Decision names nobody.
+ *  2. The proposer is named on the card: the admin who paused, by name and never by key; an owner who paused, by name
+ *     too; a member's own proposal from before, by name. Another Decision names nobody.
  *  3. The right of reply: the member (paused) replies, signed, and everyone who reads the vote sees it beside the case;
  *     they can change it; nobody else can write it; empty, too long, or once the vote has closed is refused; the words go
  *     nowhere but the vote (no push, no notice, no log line). Votes off: 404 feature_off. A member who deletes their
@@ -26,13 +27,13 @@
  *     characters; only a removal vote; only an admin, and never the admin the vote is about, whose role is back once it
  *     closes (another admin can). A closed vote's case too, from the admin list's past removals.
  *  5. The member reports the case as a false accusation: a report about whoever brought it, in Reports; the answer names
- *     nobody; once while it waits; only the member; a password's case names nobody to report. A member who already had a
+ *     nobody; once while it waits; only the member. A member who already had a
  *     report waiting about that admin (the retaliation it is for) has the case added to it, and the owners are told.
  *  6. The cool-down: whoever brought a vote on removing someone that ended without removing them (No, too few voting, or
  *     stopped before it closed) can't pause them again for 90 days, by the route or through a report, and nothing is
  *     written; another admin can; a removal the community passed and an admin halted in its grace window doesn't count;
  *     after 90 days it lifts; with votes off it doesn't apply.
- *  7. The upgrade: a decisions table from before gains the eight columns, every row kept.
+ *  7. (The upgrade of a decisions table from before 1.2.32 went with the 1.4.0 gate: db/schema-gate.ts.)
  *  8. A reply that harms someone is taken down (the deciding review of #2585): an owner or admin takes it down with a public
  *     reason; never a moderator, a member, a short reason, a vote with no reply, nor twice. Its words are gone from every
  *     read: Decide's list and the vote itself (to a voter, the member it names, and the member), a member's open app, Home,
@@ -56,10 +57,9 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import Database from 'better-sqlite3';
 import WebSocket from 'ws';
 import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, reportKind } from '@beanpool/core';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here, so every push is measured without leaving this machine; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -93,10 +93,11 @@ function keypair(callsign: string): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -127,7 +128,7 @@ async function unsigned(method: 'GET' | 'POST', p: string, payload?: unknown): P
     return answerOf(await fetch(`${BASE}${p}`, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, ...(body ? { body } : {}) }));
 }
 
-/** An admin route under `session`'s headers (a key session, or the password with a 2FA code). */
+/** An admin route under `session`'s headers (a key session). */
 async function admin(p: string, session: Record<string, string>, payload?: unknown): Promise<Answer> {
     return answerOf(await fetch(`${BASE}${p}`, {
         method: 'POST',
@@ -140,8 +141,8 @@ async function admin(p: string, session: Record<string, string>, payload?: unkno
 function memberSocket(id: Id): Promise<{ ws: WebSocket; raw: string[] }> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const raw: string[] = [];
@@ -158,7 +159,6 @@ async function settle(done: () => boolean): Promise<void> {
     await new Promise(r => setTimeout(r, 100));
 }
 
-const ADMIN_PW = 'Removal-Fairness-Admin-Pw-47!';
 const DAY = 24 * 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const DAVE_CASE = 'Took deposits for repairs and never came back, three times';
@@ -172,11 +172,9 @@ async function main() {
     const de = await import('./decisions-engine.js');
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { db, addRemovalCaseColumns, REMOVAL_CASE_COLUMNS } = await import('./db/db.js');
-    const { createTableText } = await import('./db/table-rules.js');
+    const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { completeRekey, issueRekeyCode } = await import('./engine/member-wizards.js');
@@ -188,9 +186,6 @@ async function main() {
 
     await initTls();
     se.initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    const twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
@@ -203,7 +198,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, opts.joinedAt ?? ago(30 * DAY), gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         se.transfer('genesis', id.pubKeyHex, 20, `seed ${callsign}`, 'direct', true);
         if (opts.token !== false) se.registerPushToken(id.pubKeyHex, id.token, 'android');
         return id;
@@ -217,7 +212,7 @@ async function main() {
     const voters = ['VoterVi', 'VoterWu', 'VoterXo', 'VoterYa', 'VoterZed'].map(n => seed(n));
     const [vi] = voters;
     const dave = seed('DaveDoe');     // the member a pause's vote is about
-    const erin = seed('ErinEast');    // paused with the server's password
+    const erin = seed('ErinEast');    // paused by an owner, Gwen
     const finn = seed('FinnFox');     // a removal a member proposed before proposing one closed
     const gus = seed('GusGrey');      // a removal the community passed, halted in its grace window
     const hal = seed('HalHill');      // votes off
@@ -243,7 +238,6 @@ async function main() {
     const adaSession = sessionOf(ada);
     const abeSession = sessionOf(abe);
     const gwenSession = ownerSessionHeaders(gen.pubKeyHex);
-    const password = () => twoFa.headers();
     const fresh = () => { resetAdminAuthTarpit(); resetAdminRateLimit(); resetGatewayRateLimit(); };
     const statusOf = (id: Id) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(id.pubKeyHex) as { status: string }).status;
     const row = (decisionId: string): any => db.prepare('SELECT * FROM decisions WHERE id = ?').get(decisionId);
@@ -316,13 +310,17 @@ async function main() {
         `Dave's details open Decide too, without the case or who brought it (${daveDetails.status})`);
     const strangersRead = await signed('GET', `/api/notices/push/${toDave[0]?.data?.i}`, vi);
     assert(strangersRead.status === 404, `Vi can't read Dave's notice (${strangersRead.status})`);
-    // On the web, which has no push: a kept notice the web app reads when it opens.
+    // On the web, which has no push: a kept notice the web app reads when it opens. Dave's details read above is his phone's
+    // tap on the push (only a tap reads them), which opened it: the kept copy is marked seen with its row on the bell, so the
+    // web app doesn't show him the same alert again (web notifications W0, review of #3006). The full list still holds it.
     fresh();
-    const kept = await signed('GET', '/api/notices?unseen=1', dave);
+    const kept = await signed('GET', '/api/notices', dave);
     const keptNotice = (kept.body?.notices ?? []).find((n: any) => n.title === de.REMOVAL_VOTE_NOTICE_TITLE);
     assert(kept.status === 200 && !!keptNotice && keptNotice.body.includes(row(daveVote).closes_at.slice(0, 10))
         && !kept.text.includes(DAVE_CASE) && !kept.text.includes(ada.callsign),
         `Dave is told on the web too: a kept notice says a vote on his account runs until it closes, without the case (${kept.status} ${keptNotice?.body})`);
+    assert(daveDetails.body?.data?.noticeId === keptNotice?.id && typeof keptNotice?.seenAt === 'string',
+        `his push's details name that kept copy, and his phone's tap marked it seen (${daveDetails.body?.data?.noticeId} ${keptNotice?.id} ${keptNotice?.seenAt})`);
     const viKept = await signed('GET', '/api/notices?unseen=1', vi);
     assert(!(viKept.body?.notices ?? []).some((n: any) => n.title === de.REMOVAL_VOTE_NOTICE_TITLE), "no such notice is kept for a voter");
 
@@ -353,11 +351,11 @@ async function main() {
     const { pausedByName: _name, ...withoutName } = bare.params;
     assert(de.publicDecision({ ...bare, params: withoutName }).proposer?.name === ada.callsign, 'a pause vote with no recorded name names the admin by their name now');
     fresh();
-    const erinPaused = await admin(`/api/local/admin/users/${erin.pubKeyHex}/suspend`, password(), { reason: 'Threatened a member in a direct message' });
+    const erinPaused = await admin(`/api/local/admin/users/${erin.pubKeyHex}/suspend`, gwenSession, { reason: 'Threatened a member in a direct message' });
     const erinVote = erinPaused.body?.decision?.id as string;
     const erinCard = await cardFor(vi, erinVote);
-    assert(erinPaused.status === 200 && erinCard.card?.proposer?.kind === 'password' && erinCard.card.proposer.name === null,
-        `a pause made with the server's password is named as an owner's, with no name (${erinPaused.status} ${JSON.stringify(erinCard.card?.proposer)})`);
+    assert(erinPaused.status === 200 && erinCard.card?.proposer?.kind === 'admin' && erinCard.card.proposer.name === gen.callsign && !erinCard.text.includes(gen.pubKeyHex),
+        `a pause an owner made is named by name too, never by key: every pause names a person (${erinPaused.status} ${JSON.stringify(erinCard.card?.proposer)})`);
     const finnVote = fixture.removalProposedFromBefore({
         authorPubkey: tia.pubKeyHex, title: 'Remove Finn the thief', description: 'Finn stole from the tool library, everyone knows it', subject: finn.pubKeyHex,
     }).id as string;
@@ -521,11 +519,10 @@ async function main() {
         && (db.prepare('SELECT COUNT(*) AS n FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?').get(dave.pubKeyHex, ada.pubKeyHex) as any).n === 1,
         `once while it waits: a repeat files nothing new (${twice.status})`);
     const byOther = await signed('POST', `/api/commons/decisions/${daveVote}/report`, vi, {});
-    const pwCase = await signed('POST', `/api/commons/decisions/${erinVote}/report`, erin, {});
     const notCase = await signed('POST', `/api/commons/decisions/${freeze.id}/report`, voters[4], {});
     const unsignedReport = await unsigned('POST', `/api/commons/decisions/${daveVote}/report`, {});
-    assert(byOther.status === 403 && pwCase.status === 409 && notCase.status === 404 && unsignedReport.status === 401,
-        `only the member: a voter 403; a password's case names nobody 409; not a removal 404; unsigned 401 (${byOther.status} ${pwCase.status} ${notCase.status} ${unsignedReport.status})`);
+    assert(byOther.status === 403 && notCase.status === 404 && unsignedReport.status === 401,
+        `only the member: a voter 403; not a removal 404; unsigned 401 (${byOther.status} ${notCase.status} ${unsignedReport.status})`);
     // The retaliation the report is for: Kit reported Abe first, about something else, and then Abe paused Kit. The queue
     // keeps one report a member has pending about one person, so the case goes on the one waiting, after its own words.
     const kit = seed('KitKane');
@@ -601,14 +598,14 @@ async function main() {
     assert(lifted.status === 200 && row(abeVote).status === 'admin_halted' && statusOf(dave) === 'active', `Abe lifts it by hand (${lifted.status})`);
     const abeAgain = await pause(abeSession, dave, 'And another complaint about the bike repairs');
     assert(abeAgain.status === 403 && abeAgain.body?.code === de.REMOVAL_COOL_DOWN_CODE, `a vote stopped before it closed counts: Abe waits too (${abeAgain.status})`);
-    // The password: a vote too few voted on (unresolved) holds the password back, and Ada is another proposer.
+    // An owner's own case: a vote too few voted on (unresolved) holds Gwen back, and Ada is another proposer.
     voteAndClose(erinVote, null);
     assert(row(erinVote).status === 'unresolved' && statusOf(erin) === 'active', `too few vote on Erin's: unresolved, and she is back (${row(erinVote).status})`);
     fresh();
-    const pwAgain = await admin(`/api/local/admin/users/${erin.pubKeyHex}/suspend`, password(), { reason: 'Threatened a member again this week' });
-    assert(pwAgain.status === 403 && pwAgain.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(erin) === 'active',
-        `the server's password waits on Erin (${pwAgain.status})`);
-    age(erinVote, 31); // a month on, as above: the password's cool-down still holds, and another admin may
+    const gwenOnErin = await admin(`/api/local/admin/users/${erin.pubKeyHex}/suspend`, gwenSession, { reason: 'Threatened a member again this week' });
+    assert(gwenOnErin.status === 403 && gwenOnErin.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(erin) === 'active',
+        `Gwen, the owner who brought it, waits on Erin (${gwenOnErin.status})`);
+    age(erinVote, 31); // a month on, as above: Gwen's cool-down still holds, and another admin may
     const adaOnErin = await pause(adaSession, erin, 'Threatened a member again this week');
     assert(adaOnErin.status === 200, `Ada, another proposer, can (${adaOnErin.status})`);
     fresh();
@@ -658,28 +655,6 @@ async function main() {
     }
     fresh();
     await admin(`/api/local/admin/users/${hal.pubKeyHex}/status`, adaSession, { status: 'active' });
-
-    // ── 7. The upgrade ──────────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n7. The upgrade');
-    const schemaSql = fs.readFileSync(new URL('./db/schema.sql', import.meta.url), 'utf8');
-    const newColumns = new Set(REMOVAL_CASE_COLUMNS.map(([c]) => c));
-    const olderTable = createTableText(schemaSql, 'decisions')!.split('\n')
-        .filter(l => !newColumns.has(l.trim().split(/\s+/)[0]) && !l.trim().startsWith('--')).join('\n');
-    const older = new Database(':memory:');
-    older.pragma('foreign_keys = OFF'); // as db.ts runs it
-    older.exec(olderTable);
-    older.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, closes_at)
-        VALUES ('old-1', 'SYSTEM', 'Remove Old?', 'An admin paused Old.', 'member', 'remove_member', 'pk-old', '{"rule":2}', '1m1v', 'open', '2026-11-01T00:00:00.000Z')`).run();
-    const hadBefore = (older.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name);
-    const added = addRemovalCaseColumns(older);
-    const hasAfter = (older.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name);
-    const oldRow = older.prepare('SELECT * FROM decisions WHERE id = ?').get('old-1') as any;
-    assert(!hadBefore.some(c => newColumns.has(c)) && added === newColumns.size && [...newColumns].every(c => hasAfter.includes(c)),
-        `a table from before gains the ${newColumns.size} columns (${added} added)`);
-    assert(oldRow?.title === 'Remove Old?' && oldRow.status === 'open' && oldRow.subject_reply === null && oldRow.case_hidden_at === null && oldRow.reply_hidden_at === null,
-        'its rows are kept, NULL in each');
-    assert(addRemovalCaseColumns(older) === 0, 'a second boot adds nothing');
-    older.close();
 
     // ── 8. A reply taken down ───────────────────────────────────────────────────────────────────────────────────────
     console.log('\n8. A reply that harms someone is taken down, with a public reason');
@@ -767,10 +742,14 @@ async function main() {
         && toKai[0].body === PUSH_NOTICE_KINDS['account.reply-taken-down'].body && expo.every(m => m.to === kai.token),
         `Kai gets one push, account.reply-taken-down, with its fixed words; nobody else is pushed (${expo.map(kindOf).join(', ')})`);
     fresh();
+    // The details read is his phone's tap: it marks the kept copy it names (`noticeId`, an id of his own and nothing else),
+    // so the full list holds it, seen (web notifications W0, review of #3006).
     const kaiPushDetails = await signed('GET', `/api/notices/push/${toKai[0]?.data?.i}`, kai);
-    const kaiKept = await signed('GET', '/api/notices?unseen=1', kai);
+    const kaiKept = await signed('GET', '/api/notices', kai);
     const keptTakeDown = (kaiKept.body?.notices ?? []).find((n: any) => n.title === de.REPLY_TAKEN_DOWN_NOTICE_TITLE);
-    assert(kaiPushDetails.status === 200 && kaiPushDetails.body?.data?.screen === 'decide' && Object.keys(kaiPushDetails.body.data).length === 1 && !!keptTakeDown
+    assert(kaiPushDetails.status === 200 && kaiPushDetails.body?.data?.screen === 'decide'
+        && Object.keys(kaiPushDetails.body.data).sort().join(',') === 'noticeId,screen' && kaiPushDetails.body.data.noticeId === keptTakeDown?.id
+        && typeof keptTakeDown?.seenAt === 'string'
         && ![TAKE_DOWN_WHY, abe.callsign, ...DOXX].some(w => kaiPushDetails.text.includes(w) || kaiKept.text.includes(w)),
         `its details open Decide, and the web app keeps him a notice; neither says why or who (${kaiPushDetails.status} ${keptTakeDown?.body})`);
     // Kai can't put it back: not by writing another, open or closed, nor can it be taken down twice.
@@ -787,7 +766,7 @@ async function main() {
     assert(row(kaiVote).status === 'unresolved' && kaiClosed.card?.subjectReply === null && kaiClosed.card?.replyHiddenReason === TAKE_DOWN_WHY
         && !holdsWords(kaiClosed.text) && kaiAfterClose.status === 409 && row(kaiVote).subject_reply === null,
         `the vote closes (${row(kaiVote).status}): the closed card reads the reason, and the reply stays down (${kaiAfterClose.status})`);
-    // A closed vote's reply comes down too, from the admins' list of closed votes: here by an owner with the server's password.
+    // A closed vote's reply comes down too, from the admins' list of closed votes: here by an owner, Gwen.
     const lia = seed('LiaLane');
     const LIA_REPLY = 'Ring Erin on 0400 111 222 and ask her what she did.';
     const liaVote = (await pause(adaSession, lia, 'Took a deposit for a market stall and kept it')).body?.decision?.id as string;
@@ -795,15 +774,15 @@ async function main() {
     const liaReplied = await signed('POST', `/api/commons/decisions/${liaVote}/reply`, lia, { reply: LIA_REPLY });
     voteAndClose(liaVote, false);
     fresh();
-    const closedList = await admin('/api/local/admin/decisions', password());
+    const closedList = await admin('/api/local/admin/decisions', gwenSession);
     const liaListed = (closedList.body?.pastRemovals ?? []).find((d: any) => d.id === liaVote);
     fresh();
-    const liaDown = await admin(`/api/local/admin/decisions/${liaVote}/hide-reply`, password(), { reason: "It gave another member's phone number" });
+    const liaDown = await admin(`/api/local/admin/decisions/${liaVote}/hide-reply`, gwenSession, { reason: "It gave another member's phone number" });
     const liaCard = await cardFor(vi, liaVote);
     assert(liaReplied.status === 200 && row(liaVote).status === 'failed' && liaListed?.subjectReply === LIA_REPLY && liaDown.status === 200
-        && row(liaVote).reply_hidden_by === 'owner:password' && row(liaVote).subject_reply === null
+        && row(liaVote).reply_hidden_by === gen.pubKeyHex && row(liaVote).subject_reply === null
         && liaCard.card?.subjectReply === null && !liaCard.text.includes('0400 111 222'),
-        `a closed vote's reply, listed with the closed votes, comes down too: by an owner with the password (${liaDown.status} ${liaDown.text.slice(0, 120)})`);
+        `a closed vote's reply, listed with the closed votes, comes down too: by an owner (${liaDown.status} ${liaDown.text.slice(0, 120)})`);
     // On a standby, both are refused with its JSON answer, before anything is written.
     let onStandby: Answer[];
     setNodeRole('backup');

@@ -65,6 +65,7 @@ import type { AgentGrant } from './agent/tools.js';
 import { AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import { scrubServerFaults } from './routes/member-error-text.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let PORT = 0;
@@ -110,7 +111,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),
@@ -339,7 +340,7 @@ async function main(): Promise<void> {
     setMemberPhoto(db, owner.pub, AVATAR);
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, 'Ottilie', 'active', ?, ?, 'inv-test')`).run(owner2.pub, longAgo, owner.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(owner2.pub);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(owner2.pub);
     setMemberPhoto(db, owner2.pub, AVATAR);
     grantNodeRole(owner2.pub, 'owner', 'SYSTEM');
     const setGateway = (over: Record<string, unknown>) => updateLocalConfig({ gateway: { ...(getLocalConfig().gateway ?? {}), ...over } as any });

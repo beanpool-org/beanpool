@@ -9,8 +9,9 @@
  *      expiry, single use, wrong key, non-admin refused, role revoked between request and use,
  *      role CHANGED between request and use (session takes the live role), demoted mid-session,
  *      no actor from the body, and the node's own TOTP still applies on top.
- *   4. The hand-off's session locks after 15 minutes idle (PHONE_HANDOFF_IDLE_TTL_MS), through the exchange and an
- *      older app's GET /settings?token=; a session made any other way keeps the 2-hour idle limit.
+ *   4. The hand-off's session locks after 15 minutes idle (PHONE_HANDOFF_IDLE_TTL_MS), through the exchange; the query
+ *      form GET /settings?token= of phones before 1.2.57 signs nobody in (cutover N2, audit E4); a session made any other
+ *      way keeps the 2-hour idle limit.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -28,9 +29,9 @@ import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { db } from './db/db.js';
 import { REKEY_OWN_KEY } from './engine/member-wizards.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
-import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
+import { updateLocalConfig } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
-import { generateTotpSecret, generateTotpCode } from './totp.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -51,7 +52,7 @@ const signText = (who: Identity, text: string) => crypto.sign(null, Buffer.from(
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 /** A member-signed GET, exactly as the native app's signedGet sends it (the query is not signed). */
@@ -62,7 +63,8 @@ async function signedGet(path: string, signer?: Identity): Promise<{ status: num
         const nonce = crypto.randomBytes(16).toString('hex');
         const signPath = path.split('?')[0];
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = signText(signer, `GET\n${signPath}\n${ts}\n${nonce}\n`);
+        headers['X-Signature'] = signRequest(signer.priv, { method: 'GET', path: signPath, timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -89,7 +91,7 @@ async function requestLink(signer: Identity, claimedPubkey = signer.pub, totpCod
     return postJson('/api/local/admin/auth/verify-challenge', {
         challengeId: chal.body.challengeId,
         memberPubkey: claimedPubkey,
-        signature: signText(signer, chal.body.challenge),
+        ...adminSigninFields(signer.priv, chal.body.challengeId, undefined, 'base64'),
         ...(totpCode ? { totpCode } : {}),
     });
 }
@@ -124,7 +126,7 @@ async function main() {
     grantNodeRole(owner.pub, 'owner', 'SYSTEM');
     grantNodeRole(owner2.pub, 'owner', owner.pub);
     grantNodeRole(admin.pub, 'admin', owner.pub);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'Handoff Test' } as any);
+    updateLocalConfig({ communityName: 'Handoff Test' });
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -151,7 +153,8 @@ async function main() {
         const nonce = crypto.randomBytes(16).toString('hex');
         const twice: Record<string, string> = {
             Accept: 'application/json', 'X-Public-Key': owner.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': signText(owner, `GET\n/api/node-admin/me\n${ts}\n${nonce}\n`),
+            'X-Signature': signRequest(owner.priv, { method: 'GET', path: '/api/node-admin/me', timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         };
         const first = await fetch(`${BASE}/api/node-admin/me`, { headers: twice });
         const firstBody = await first.json().catch(() => null) as any;
@@ -211,10 +214,10 @@ async function main() {
         const info = await sessionInfo(ex.sessionId!);
         assert(info.authenticated === true && info.isKeySession === true, 'the session is a key session');
         assert(info.memberPubkey === admin.pub && info.role === 'admin', 'the session acts as the member who signed');
-        const tfaWithSession = await fetch(`${BASE}/api/local/admin/2fa/status`, { headers: { Cookie: `admin_session=${ex.sessionId}` } });
-        assert(tfaWithSession.status === 200, `/settings can read its 2FA status under the key session (got ${tfaWithSession.status})`);
-        const tfaBogus = await fetch(`${BASE}/api/local/admin/2fa/status`, { headers: { Cookie: 'admin_session=deadbeef' } });
-        assert(tfaBogus.status === 401, `…but not with a made-up session (got ${tfaBogus.status})`);
+        const readWithSession = await fetch(`${BASE}/api/local/admin/node-roles`, { headers: { Cookie: `admin_session=${ex.sessionId}` } });
+        assert(readWithSession.status === 200, `/settings can read the roles under the key session (got ${readWithSession.status})`);
+        const readBogus = await fetch(`${BASE}/api/local/admin/node-roles`, { headers: { Cookie: 'admin_session=deadbeef' } });
+        assert(readBogus.status === 401, `…but not with a made-up session (got ${readBogus.status})`);
 
         // Single use.
         const replay = await exchange(link.body.handshakeToken);
@@ -268,12 +271,12 @@ async function main() {
         grantNodeRole(owner2.pub, 'owner', owner.pub);
         const o2 = await exchange((await requestLink(owner2)).body.handshakeToken);
         const csrf = o2.body.csrfToken;
-        const asOwner = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: false },
+        const asOwner = await postJson('/api/local/admin/auth/break-glass/issue', {},
             { Cookie: `admin_session=${o2.sessionId}`, 'X-CSRF-Token': csrf });
-        assert(asOwner.status === 200, `an owner session can use an owner-only route (got ${asOwner.status})`);
+        assert(asOwner.status === 200 && typeof asOwner.body?.breakGlassCode === 'string', `an owner session can use an owner-only route (got ${asOwner.status})`);
         revokeNodeRole(owner2.pub, 'owner', owner.pub);
         grantNodeRole(owner2.pub, 'admin', owner.pub);
-        const asDemoted = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: false },
+        const asDemoted = await postJson('/api/local/admin/auth/break-glass/issue', {},
             { Cookie: `admin_session=${o2.sessionId}`, 'X-CSRF-Token': csrf });
         assert(asDemoted.status === 403, `after demotion the same session is refused the owner-only route (got ${asDemoted.status})`);
 
@@ -288,36 +291,33 @@ async function main() {
             { Cookie: `admin_session=${spoofed.sessionId}`, 'X-CSRF-Token': spoofed.body.csrfToken });
         assert(enrolAsOwner.status === 403, 'an admin session cannot act as owner whatever the body says');
 
-        // The node's 2FA code is the password's second factor, not a key's (decision D2, 2026-10-03): the phone's own
-        // unlock is the key's. With 2FA on, a key sign-in asks for no code, from an owner, an admin or a moderator.
-        const secret = generateTotpSecret();
-        updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
+        // A key's second factor is the phone's own unlock (decision D2, 2026-10-03): a key sign-in asks for no code, from an
+        // owner, an admin or a moderator (the node has no server 2FA).
         const moderator = keypair();
         seedMember(moderator.pub, 'hoModerator');
         grantNodeRole(moderator.pub, 'moderator', admin.pub);
         for (const [who, k, role] of [['an owner', owner, 'owner'], ['an admin', admin, 'admin'], ['a moderator', moderator, 'moderator']] as const) {
             const noCode = await requestLink(k);
             assert(noCode.status === 200 && typeof noCode.body.handshakeToken === 'string' && noCode.body.totpRequired === undefined && noCode.body.role === role,
-                `with 2FA on, ${who}'s correctly signed request gets a link without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
+                `${who}'s correctly signed request gets a link without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
             const ex = await exchange(noCode.body.handshakeToken);
             assert(ex.status === 200 && !!ex.sessionId && (await sessionInfo(ex.sessionId!)).role === role, `…and ${who}'s link opens a ${role} session`);
         }
         // An old app that still sends a code: the code is not looked at, right or wrong.
-        const staleCode = await requestLink(owner, owner.pub, '000000' === generateTotpCode(secret) ? '111111' : '000000');
+        const staleCode = await requestLink(owner, owner.pub, '000000');
         assert(staleCode.status === 200 && typeof staleCode.body.handshakeToken === 'string', 'a code sent by an older app is ignored');
-        // Without the key there is still nothing: 2FA on or off, a signature by another key, or none, gets no link.
+        // Without the key there is still nothing: a signature by another key, or none, gets no link.
         const forged = await requestLink(member, owner.pub);
         assert(forged.status !== 200 && !forged.body.handshakeToken && forged.body.totpRequired === undefined,
-            `with 2FA on, a request for the owner signed by another key gets no link and is not asked for a code (got ${forged.status})`);
+            `a request for the owner signed by another key gets no link and is not asked for a code (got ${forged.status})`);
         const chalNoSig = await postJson('/api/local/admin/auth/challenge', {});
         const noSig = await postJson('/api/local/admin/auth/verify-challenge', { challengeId: chalNoSig.body.challengeId, memberPubkey: owner.pub, signature: '' });
         assert(noSig.status !== 200 && !noSig.body.handshakeToken, `an unsigned request gets no link (got ${noSig.status})`);
         revokeNodeRole(moderator.pub, 'moderator', admin.pub);
-        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
 
         // Sanity: the direct API agrees about the wrong-key case (no HTTP in between).
         const c = createAdminChallenge();
-        const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(member, c.challenge) });
+        const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, ...adminSigninFields(member.priv, c.challengeId, undefined, 'base64') });
         assert(direct.ok === false && !direct.handshakeToken, 'verifyAndSolveChallenge refuses a signature from another key');
     }
 
@@ -342,14 +342,17 @@ async function main() {
         const after = await sessionInfo(ex.sessionId!);
         assert(after.authenticated === false, 'and the node no longer accepts the cookie');
 
-        // An older app's GET /settings?token=… is the same hand-off.
+        // The query form GET /settings?token=… of phones before 1.2.57 is gone (cutover N2, audit E4): it signs nobody in,
+        // and the token it carried is still unspent, so the hand-off that exists redeems it with the same 15 minutes.
         const legacyLink = await requestLink(admin);
         const legacy = await fetch(`${BASE}/settings?token=${legacyLink.body.handshakeToken}`, { redirect: 'manual' });
         const legacyId = (legacy.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
-        assert(legacy.status === 302 && !!legacyId, `GET /settings?token= signs in (got ${legacy.status})`);
+        assert(legacy.status !== 302 && !legacyId, `GET /settings?token= signs nobody in (got ${legacy.status}, cookie ${legacyId ? 'set' : 'none'})`);
+        const afterQuery = await exchange(legacyLink.body.handshakeToken);
+        assert(afterQuery.status === 200 && !!afterQuery.sessionId, `the token is unspent: the exchange still redeems it (got ${afterQuery.status})`);
         const tl = Date.now();
-        assert(validateAdminSession(legacyId!, tl + 14 * MIN).valid === true, 'GET /settings?token=: still signed in at 14 minutes');
-        assert(validateAdminSession(legacyId!, tl + 14 * MIN + 16 * MIN).valid === false, 'GET /settings?token=: signed out after 16 minutes unused');
+        assert(validateAdminSession(afterQuery.sessionId!, tl + 14 * MIN).valid === true, 'that hand-off: still signed in at 14 minutes');
+        assert(validateAdminSession(afterQuery.sessionId!, tl + 14 * MIN + 16 * MIN).valid === false, 'that hand-off: signed out after 16 minutes unused');
 
         // Any other sign-in (the desktop "Sign in with your phone" pairing redeems with no option) keeps 2 hours.
         const direct = consumeHandshakeToken((await requestLink(admin)).body.handshakeToken);
@@ -368,11 +371,12 @@ async function main() {
         assert(replaced.status === 200 && !!replacedId && replacedId !== held1.sessionId && validateAdminSession(replacedId!).valid === true,
             `a second hand-off from the same browser signs in (got ${replaced.status})`);
         assert(validateAdminSession(held1.sessionId!).valid === false, '/exchange: the session the browser held is ended');
+        // A token in the query from that browser is not a hand-off: no new session, and the one it holds is not ended.
         const legacy2 = await fetch(`${BASE}/settings?token=${(await requestLink(admin)).body.handshakeToken}`,
             { redirect: 'manual', headers: { Cookie: `admin_session=${replacedId}` } });
         const legacy2Id = (legacy2.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
-        assert(legacy2.status === 302 && !!legacy2Id && validateAdminSession(legacy2Id!).valid === true, `GET /settings?token= from that browser signs in (got ${legacy2.status})`);
-        assert(validateAdminSession(replacedId!).valid === false, 'GET /settings?token=: the session the browser held is ended');
+        assert(legacy2.status !== 302 && !legacy2Id, `GET /settings?token= from that browser signs nobody in (got ${legacy2.status})`);
+        assert(validateAdminSession(replacedId!).valid === true, 'GET /settings?token=: the session the browser held is untouched');
     }
 
     // ── 5. Owner-only changes from the phone need a recent unlock (decision D2's step-up, 2026-10-03) ──
@@ -403,8 +407,9 @@ async function main() {
         const revokeStale = await fetch(`${BASE}/api/local/admin/node-roles/${otherOwner.pub}/owner`, { method: 'DELETE', headers: as(phone) });
         assert(revokeStale.status === 403 && ((await revokeStale.json()) as any).code === 'step_up_required', `so does taking another owner's role (got ${revokeStale.status})`);
         revokeNodeRole(otherOwner.pub, 'owner', owner.pub);
-        const tfaStale = await postJson('/api/local/admin/2fa/setup', {}, as(phone));
-        assert(tfaStale.status === 403 && tfaStale.body.code === 'step_up_required', `so does any other owner-only change, e.g. 2FA setup (got ${tfaStale.status})`);
+        const codeStale = await postJson('/api/local/admin/auth/break-glass/issue', {}, as(phone));
+        assert(codeStale.status === 403 && codeStale.body.code === 'step_up_required' && !codeStale.body.breakGlassCode,
+            `so does any other owner-only change, e.g. making a break-glass code (got ${codeStale.status})`);
         // Everything else goes on as before: an owner's everyday work, and reading Settings.
         const modStale = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'moderator' }, as(phone));
         assert(modStale.status === 200, `a moderator grant (not owner-only) still works (got ${modStale.status})`);
@@ -425,8 +430,8 @@ async function main() {
         assert(computer.ok === true, 'a computer session opens');
         backdateAdminSessionForTests(computer.sessionId!, 6 * 60_000);
         const asComputer = { Cookie: `admin_session=${computer.sessionId}`, 'X-CSRF-Token': computer.csrfToken! };
-        const tfaComputer = await postJson('/api/local/admin/2fa/setup', {}, asComputer);
-        assert(tfaComputer.status === 200, `a computer's session six minutes on is not asked for an owner-only change, e.g. 2FA setup (got ${tfaComputer.status} ${JSON.stringify(tfaComputer.body).slice(0, 120)})`);
+        const clearComputer = await postJson('/api/local/admin/replication-token/clear', {}, asComputer);
+        assert(clearComputer.status === 200, `a computer's session six minutes on is not asked for an owner-only change, e.g. clearing the replication token (got ${clearComputer.status} ${JSON.stringify(clearComputer.body).slice(0, 120)})`);
         const grantComputer = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, asComputer);
         assert(grantComputer.status === 403 && grantComputer.body?.code === 'phone_required'
             && !db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").get(target.pub),
@@ -465,12 +470,8 @@ async function main() {
             `revoking an admin asks and keeps the role (got ${revokeAdminRes.status} ${JSON.stringify(revokeAdminBody)})`);
         const enrolAdmin = await postJson('/api/local/admin/auth/enrol', { memberPubkey: member.pub, role: 'admin' }, as(stale));
         assert(isStepUp(enrolAdmin) && roleOf(member.pub) === null, `enrolling an admin key asks and grants nothing (got ${enrolAdmin.status} ${JSON.stringify(enrolAdmin.body)})`);
-        const bgOn = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: true }, as(stale));
-        assert(isStepUp(bgOn) && getLocalConfig().breakGlassMode !== true, `turning break-glass mode on asks and changes nothing (got ${bgOn.status} ${JSON.stringify(bgOn.body)})`);
-        updateLocalConfig({ breakGlassMode: true } as any);
-        const bgOff = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: false }, as(stale));
-        assert(isStepUp(bgOff) && getLocalConfig().breakGlassMode === true, `turning it off asks too (got ${bgOff.status} ${JSON.stringify(bgOff.body)})`);
-        updateLocalConfig({ breakGlassMode: false } as any);
+        const bgCode = await postJson('/api/local/admin/auth/break-glass/issue', {}, as(stale));
+        assert(isStepUp(bgCode) && !bgCode.body?.breakGlassCode, `making a break-glass code asks and makes none (got ${bgCode.status} ${JSON.stringify(bgCode.body)})`);
 
         // Manage again: each goes through.
         const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
@@ -480,10 +481,8 @@ async function main() {
         assert(freshRevoke.status === 200 && roleOf(anAdmin.pub) === null, `…revoking an admin works (got ${freshRevoke.status})`);
         const freshEnrol = await postJson('/api/local/admin/auth/enrol', { memberPubkey: member.pub, role: 'admin' }, as(fresh));
         assert(freshEnrol.status === 200 && roleOf(member.pub) === 'admin', `…enrolling an admin key works (got ${freshEnrol.status} ${JSON.stringify(freshEnrol.body)})`);
-        const freshBgOn = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: true }, as(fresh));
-        assert(freshBgOn.status === 200 && freshBgOn.body.breakGlassMode === true, `…break-glass mode on works (got ${freshBgOn.status})`);
-        const freshBgOff = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: false }, as(fresh));
-        assert(freshBgOff.status === 200 && freshBgOff.body.breakGlassMode === false, `…and off (got ${freshBgOff.status})`);
+        const freshCode = await postJson('/api/local/admin/auth/break-glass/issue', {}, as(fresh));
+        assert(freshCode.status === 200 && typeof freshCode.body?.breakGlassCode === 'string', `…making a break-glass code works (got ${freshCode.status})`);
         revokeNodeRole(member.pub, 'admin', owner.pub);
         revokeNodeRole(coOwner.pub, 'admin', owner.pub);
 
@@ -841,7 +840,8 @@ async function main() {
             const nonce = crypto.randomBytes(16).toString('hex');
             return postJson('/api/member/re-enroll', JSON.parse(bodyString), {
                 'X-Public-Key': nk.pub,
-                'X-Signature': signText(nk, `POST\n/api/member/re-enroll\n${ts}\n${nonce}\n${bodyString}`),
+                'X-Signature': signRequest(nk.priv, { method: 'POST', path: '/api/member/re-enroll', timestamp: ts, nonce, body: bodyString }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             });
@@ -947,7 +947,8 @@ async function main() {
             const nonce = crypto.randomBytes(16).toString('hex');
             return postJson('/api/member/re-enroll', JSON.parse(bodyString), {
                 'X-Public-Key': nk.pub,
-                'X-Signature': signText(nk, `POST\n/api/member/re-enroll\n${ts}\n${nonce}\n${bodyString}`),
+                'X-Signature': signRequest(nk.priv, { method: 'POST', path: '/api/member/re-enroll', timestamp: ts, nonce, body: bodyString }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             });

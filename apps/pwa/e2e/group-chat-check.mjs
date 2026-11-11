@@ -116,7 +116,6 @@ async function openAs(browser, origin, identity, theme = 'light') {
     await context.addInitScript((mode) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
     }, theme);

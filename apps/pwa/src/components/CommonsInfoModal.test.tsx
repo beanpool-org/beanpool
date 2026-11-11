@@ -10,7 +10,7 @@ describe('CommonsInfoModal', () => {
 
     it('renders modal dialog with accessible tabs, touch targets, and focus ring classes', () => {
         const onClose = vi.fn();
-        render(<CommonsInfoModal isOpen={true} onClose={onClose} commonsBalance={123.45} />);
+        render(<CommonsInfoModal isOpen={true} onClose={onClose} commonsBalance={12345} />);
 
         const dialog = screen.getByRole('dialog');
         expect(dialog).toBeInTheDocument();

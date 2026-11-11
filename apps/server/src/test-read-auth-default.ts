@@ -29,6 +29,7 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 import { lockedDm } from './dm-test-payload.js'; // no engine import: safe to hoist
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -46,9 +47,10 @@ async function get(path: string, id?: Id): Promise<{ status: number; error?: str
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        const canonical = { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -75,7 +77,7 @@ async function main() {
         const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(pubKeyHex, callsign);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
     };
     const alice = member('alice');
@@ -86,7 +88,7 @@ async function main() {
     if (!conv) throw new Error('setup: could not create the DM');
     const line = lockedDm(); // a DM goes in encrypted
     sendMessage(conv.id, alice.pubKeyHex, line.ciphertext, line.nonce);
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
+    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('tx-read-auth-default', alice.pubKeyHex, bob.pubKeyHex, 1, 'private memo', new Date().toISOString());
 
     const privateReads: Array<[string, string]> = [

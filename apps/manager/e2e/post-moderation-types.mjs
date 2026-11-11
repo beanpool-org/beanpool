@@ -44,8 +44,8 @@ const owner = (n) => ({ authorCallsign: `Member ${n}`, authorPublicKey: `pk-${n}
 
 /** What the posts screen is shown: one of each type, two copies, and the two posts the fixtures' assistant took down. */
 const POSTS = [
-    { id: 'post-e2e-offer', type: 'offer', title: 'Split firewood, one trailer load', category: 'tools', price: 45, ...owner(1) },
-    { id: 'post-e2e-need', type: 'need', title: 'A hand moving a fridge', category: 'labour', price: 0, ...owner(2) },
+    { id: 'post-e2e-offer', type: 'offer', title: 'Split firewood, one trailer load', category: 'tools', price_c: 4500, ...owner(1) },
+    { id: 'post-e2e-need', type: 'need', title: 'A hand moving a fridge', category: 'labour', price_c: 0, ...owner(2) },
     { id: 'post-e2e-event', type: 'event', title: 'Seed swap at the hall', category: 'garden', ...owner(3) },
     { id: 'post-e2e-poll', type: 'poll', title: 'Which night suits the market?', category: 'general', ...owner(4) },
     { id: 'post-e2e-copy-event', type: 'event', title: 'Harvest picnic in the next town', category: 'food', shownCopy: true, authorCallsign: '', createdAt: '2026-11-02T04:10:00.000Z' },
@@ -70,7 +70,7 @@ async function openAs(browser, origin, { role, width, textScale, colorScheme }) 
     const opened = await openSettings(browser, origin, {
         width, textScale, colorScheme, signedIn: false, handoffRole: role, screen: { tab: 'people' }, hash: `#handoff=${'ab'.repeat(16)}`,
         overrides: {
-            '/api/local/admin/data': (json) => ({ ...json, posts: POSTS }),
+            '/api/local/admin/data/posts': (json) => ({ ...json, posts: POSTS }),
             '/api/local/admin/agent/takedowns': withTakedowns,
         },
     });

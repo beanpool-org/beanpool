@@ -53,6 +53,7 @@ import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, faceUrlsIn, listingPhotoUrlsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
 } from './takeover-parity-compare.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -62,6 +63,8 @@ const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Parity-Main-Pw-4471!';
 const PW_STANDBY = 'Parity-Standby-Pw-902!';
 const NEIGHBOUR_URL = 'https://neighbours.example';
+/** The story's figures are Beans; every money field on the wire is whole hundredths (`*_c`): `hc` turns one into the other. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 /**
  * Every difference between the promoted standby and its twin on main today, by the design's gap id (§2). The suite
@@ -160,6 +163,18 @@ async function child(): Promise<void> {
             await flushTakeoverChecks();
             return { code: made.code };
         },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
+        },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
             const { updateLocalConfig } = await import('./config/local-config.js');
@@ -256,10 +271,10 @@ async function child(): Promise<void> {
          * An old bug's drift, as a raw write, so the community can accept a non-zero audit baseline (the test node's -9.82
          * kind). The in-memory ledger is re-read after it, as db.ts's raw writes do.
          */
-        drift: async (a: { publicKey: string; amount: number }) => {
+        drift: async (a: { publicKey: string; amount_c: number }) => {
             const { db } = await import('./db/db.js');
             const { reconcileLedgerFromDb } = await import('./state-engine.js');
-            db.prepare('UPDATE accounts SET balance = balance + ? WHERE public_key = ?').run(a.amount, a.publicKey);
+            db.prepare('UPDATE accounts SET balance_c = balance_c + ? WHERE public_key = ?').run(a.amount_c, a.publicKey);
             reconcileLedgerFromDb();
             return true;
         },
@@ -304,7 +319,7 @@ function newId(name: string): Id {
 interface Answer { status: number; body: any }
 
 /**
- * A call to a node's real HTTPS server: signed by `as` (the format before request binding, which every node still takes;
+ * A call to a node's real HTTPS server: signed by `as` (format 2, through signed-request-test-helper.ts;
  * the signature covers the path, never the query), with the admin password in `admin`, or neither.
  */
 async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
@@ -315,7 +330,8 @@ async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', ro
         const nonce = crypto.randomBytes(16).toString('hex');
         const signedPath = route.split('?')[0];
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${signedPath}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: signedPath, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -344,7 +360,7 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const gwen = newId('Gwen');
     const [ann, bo, cy, dee, kip, rex] = ['Ann', 'Bo', 'Cy', 'Dee', 'Kip', 'Rex'].map(newId);
     const [eve, fay] = ['Eve', 'Fay'].map(newId);
@@ -382,9 +398,10 @@ async function main(): Promise<void> {
         // memoised for 10 s, so the suite passed whenever the memo still predated its first trade and failed when a slow run let it expire.
         // The check is right; these fixture members are older than a fortnight, as the members of a real community who trade are.
         require_(await main.send('backdate-members', { publicKeys: [gwen, ann, bo, cy, dee, kip, rex].map((w) => w.pk), days: 20 }) === 7, 'M: the seven members joined twenty days ago');
-        const offer = async (who: Id, title: string, credits: number, extra: Record<string, unknown> = {}) =>
+        // The story's prices are Beans; a listing's price on the wire is whole hundredths, `price_c`.
+        const offer = async (who: Id, title: string, beans: number, extra: Record<string, unknown> = {}) =>
             built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-                type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed',
+                type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed',
                 authorPublicKey: who.pk, photos: [TINY_PNG], ...extra,
             })).post;
         const deal = async (buyer: Id, seller: Id, postId: string, finish: boolean) => {
@@ -398,7 +415,7 @@ async function main(): Promise<void> {
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
         const annOffer = await offer(ann, 'Honey', 20);
         await deal(gwen, ann, annOffer.id, true);
-        built('Ann gives Bo 5 Beans', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount: 5, memo: 'for the seedlings' }));
+        built('Ann gives Bo 5 Beans', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount_c: hc(5), memo: 'for the seedlings' }));
         const boOffer = await offer(bo, 'Seedlings', 3);
         const cyOffer = await offer(cy, 'Bike repair', 6, { repeatable: true });
         await offer(dee, 'Firewood', 5);
@@ -426,7 +443,7 @@ async function main(): Promise<void> {
         })).post;
         built('Dee is going', await S_(dee, `/api/marketplace/posts/${event.id}/rsvp`, { status: 'going' }));
         built('Rex blocks Kip', await S_(rex, '/api/blocks', { targetPubkey: kip.pk }));
-        built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
+        built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount_c: hc(0.1) })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
 
         // ── 2. S, and its first copy ──
@@ -459,7 +476,7 @@ async function main(): Promise<void> {
         // ── 3. More of the community, then a delta ──
         console.log('\n— 3. more of the community, then a delta —');
         for (const who of [eve, fay, hal, lou]) await join(who);
-        built('Ann, who held Beans at the first copy, gives Bo 2', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount: 2, memo: 'for the compost' }));
+        built('Ann, who held Beans at the first copy, gives Bo 2', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount_c: hc(2), memo: 'for the compost' }));
         await pull('the new members');
         for (const who of [cy, hal]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
         const knitters = built('Hal starts a group on his own', await S_(hal, '/api/groups', { name: 'Knitters', description: 'Anyone who knits' }));
@@ -472,7 +489,7 @@ async function main(): Promise<void> {
         // An anonymous poll with a typed Other: its answers travel in the poll's row, with no voter and no time (schema.sql
         // poll_answers), and the twin compares them like any table.
         const otherPoll = built('Bo posts a poll with a typed Other', await S_(bo, '/api/marketplace/posts', {
-            type: 'poll', title: 'What is missing?', description: 'Tell us', authorPublicKey: bo.pk, credits: 0, pollOptions: ['Buses', 'Beans'], pollOther: true,
+            type: 'poll', title: 'What is missing?', description: 'Tell us', authorPublicKey: bo.pk, price_c: 0, pollOptions: ['Buses', 'Beans'], pollOther: true,
         })).post;
         built('Eve types an answer', await S_(eve, `/api/marketplace/posts/${otherPoll.id}/vote`, {
             optionId: otherPoll.pollOptions.find((o: { other?: boolean }) => o.other).id, otherWords: 'A bus on Sundays',
@@ -481,20 +498,20 @@ async function main(): Promise<void> {
         // the one back and removes the other, and the standby must lose them as the main server did.
         const isOther = (o: { other?: boolean }) => o.other === true;
         const takenBack = built('Cy posts an open vote with a typed Other', await S_(cy, '/api/marketplace/posts', {
-            type: 'poll', title: 'Which Saturday?', description: 'Tell us', authorPublicKey: cy.pk, credits: 0, pollOptions: ['First', 'Second'], pollOther: true, pollOpenVote: true,
+            type: 'poll', title: 'Which Saturday?', description: 'Tell us', authorPublicKey: cy.pk, price_c: 0, pollOptions: ['First', 'Second'], pollOther: true, pollOpenVote: true,
         })).post;
         built('Eve types an answer on it', await S_(eve, `/api/marketplace/posts/${takenBack.id}/vote`, { optionId: takenBack.pollOptions.find(isOther).id, otherWords: 'The one after' }));
         const removedPoll = built('Dee posts a poll with a typed Other', await S_(dee, '/api/marketplace/posts', {
-            type: 'poll', title: 'Which hall?', description: 'Tell us', authorPublicKey: dee.pk, credits: 0, pollOptions: ['Old', 'New'], pollOther: true, pollOpenVote: true,
+            type: 'poll', title: 'Which hall?', description: 'Tell us', authorPublicKey: dee.pk, price_c: 0, pollOptions: ['Old', 'New'], pollOther: true, pollOpenVote: true,
         })).post;
         built('Eve types an answer on that', await S_(eve, `/api/marketplace/posts/${removedPoll.id}/vote`, { optionId: removedPoll.pollOptions.find(isOther).id, otherWords: 'The barn' }));
         // A line a delta swaps for another, and a group's poll with a report of its line, which its convenor deletes.
         const rewritten = built('Hal posts an open vote with a typed Other', await S_(hal, '/api/marketplace/posts', {
-            type: 'poll', title: 'Which yarn?', description: 'Tell us', authorPublicKey: hal.pk, credits: 0, pollOptions: ['Wool', 'Cotton'], pollOther: true, pollOpenVote: true,
+            type: 'poll', title: 'Which yarn?', description: 'Tell us', authorPublicKey: hal.pk, price_c: 0, pollOptions: ['Wool', 'Cotton'], pollOther: true, pollOpenVote: true,
         })).post;
         built('Eve types an answer on it too', await S_(eve, `/api/marketplace/posts/${rewritten.id}/vote`, { optionId: rewritten.pollOptions.find(isOther).id, otherWords: 'The first draft' }));
         const groupPoll = built('Ann posts a poll to the Gardeners', await S_(ann, '/api/marketplace/posts', {
-            type: 'poll', title: 'Which bed?', description: 'Tell us', authorPublicKey: ann.pk, credits: 0, pollOptions: ['North', 'South'], pollOther: true, pollOpenVote: true,
+            type: 'poll', title: 'Which bed?', description: 'Tell us', authorPublicKey: ann.pk, price_c: 0, pollOptions: ['North', 'South'], pollOther: true, pollOpenVote: true,
             audienceScope: 'group', targetGroupId: groupId,
         })).post;
         built('Bo types an answer on it', await S_(bo, `/api/marketplace/posts/${groupPoll.id}/vote`, { optionId: groupPoll.pollOptions.find(isOther).id, otherWords: 'The gate bed' }));
@@ -511,20 +528,20 @@ async function main(): Promise<void> {
         built('the admin freezes Fay\'s credit', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
         const tuneUp = await offer(kip, 'Tune-up', 10, { repeatable: true });
         const tuneUpDeal = await deal(cy, kip, tuneUp.id, true);
-        built('Kip pledges backing to Probe Co', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount: 2 }));
+        built('Kip pledges backing to Probe Co', await S_(kip, `/api/treasury/${probe.publicKey}/pledge`, { type: 'backing', amount_c: hc(2) }));
         // Probe Co hiring its own keeper while it holds nothing: refused, and the wage is owed (engine/escrow.ts isPayeeKeeper).
         built('Cy lists an offer for Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Bike check', description: 'At the workshop', credits: 3, category: 'tools', photos: [TINY_PNG],
+            title: 'Bike check', description: 'At the workshop', price_c: hc(3), category: 'tools', photos: [TINY_PNG],
         }));
         const job = built('and a job it needs done', await S_(cy, `/api/treasury/${probe.publicKey}/need`, {
-            title: 'Workshop tidy', description: 'Sort the parts bins', credits: 2, category: 'tools', photos: [TINY_PNG],
+            title: 'Workshop tidy', description: 'Sort the parts bins', price_c: hc(2), category: 'tools', photos: [TINY_PNG],
         }));
         const bid = built('Kip offers to do it', await S_(kip, '/api/marketplace/posts/request', { postId: (job.post ?? job).id, buyerPublicKey: kip.pk })).transaction;
         const wage = await S_(cy, `/api/treasury/${probe.publicKey}/approve`, { transactionId: bid.id });
         require_(wage.status === 403 && /only be paid from profit/.test(wage.body?.error ?? ''),
             `M: Cy approves it for Probe Co, which holds nothing: refused, and Kip's wage is owed (${brief(wage)})`);
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
-        const seed = built('Eve starts a project with a goal', await S_(eve, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100 }));
+        const seed = built('Eve starts a project with a goal', await S_(eve, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount_c: hc(100) }));
         // Group chats 2b: where a membership's keys begin (group_members.from_epoch) and a refused wrap beside the one that
         // replaced it (group_key_wraps.rejected_at), each travelling in a delta.
         built('Cy joins the Gardeners with no epoch (an old app): his keys begin at epoch 2', await S_(cy, `/api/groups/${groupId}/join`));
@@ -540,14 +557,14 @@ async function main(): Promise<void> {
         console.log('\n— 4. more, then a whole copy —');
         built("the admin takes Lou's badge back, which the last pull copied", await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Newcomer' }));
         built('Hal, its lead and only member, leaves Knitters: it has no lead now', await api(m, 'DELETE', `/api/groups/${knittersId}/members/${hal.pk}`, { as: hal }));
-        built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 2 }));
+        built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount_c: hc(2) }));
         const wind = built('Dee starts an enterprise, Wind Co', await S_(dee, '/api/treasury', { name: 'Wind Co', purpose: 'Closing down soon' }));
         built('Dee starts winding it up', await S_(dee, `/api/treasury/${wind.publicKey}/wind-up/initiate`));
         const unusedInvite = built('Gwen makes an invite nobody uses yet', await S_(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
         built('the admin issues Lou a re-key code he has not used', await A(`/api/local/admin/members/${lou.pk}/rekey/issue-code`, {}));
         const peer = await main.send('cache-peer-listing', {
             peerId: '12D3KooWParityNeighbourPeer0000000000000000000000',
-            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', credits: 2,
+            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', price_c: hc(2),
                 priceType: 'fixed', authorPublicKey: newId('Nia').pk, authorCallsign: 'Nia', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         });
         require_(peer.cached === 1, `M: a linked community's listing is in the cache (${JSON.stringify(peer)})`);
@@ -632,7 +649,8 @@ async function main(): Promise<void> {
 
         // ── 7. The take-over ──
         console.log('\n— 7. the standby takes over with the recovery code —');
-        const standbyOwner: Record<string, string> = await standby.send('owner-session'); // step 7c, as above
+        await standby.send('standby-owner', { owner: gwen.pk });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk }); // step 7c, as above
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const fetchesS0 = await standby.send('fetches'); // what it refused while it copied, before it restarts itself
@@ -752,12 +770,12 @@ async function main(): Promise<void> {
 
         await both('accept a listing from before the take-over', postAs(kip, '/api/marketplace/posts/request', { postId: cyOffer.id, buyerPublicKey: kip.pk }));
         await both('a keeper posts for the enterprise', postAs(kip, `/api/treasury/${probe.publicKey}/offer`, {
-            title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools', photos: [TINY_PNG],
+            title: 'Puncture kits', description: 'Made in the workshop', price_c: hc(2), category: 'tools', photos: [TINY_PNG],
         }));
         await both("request a holiday member's listing", postAs(eve, '/api/marketplace/posts/request', { postId: boOffer.id, buyerPublicKey: eve.pk }));
         await both('a member edits their card', postAs(hal, '/api/profile/update', { bio: 'Knits on Sundays, mends on Mondays' }));
         await both("a frozen member's poll", postAs(fay, '/api/marketplace/posts', {
-            type: 'poll', title: 'Picnic date?', description: 'Pick one', authorPublicKey: fay.pk, credits: 0,
+            type: 'poll', title: 'Picnic date?', description: 'Pick one', authorPublicKey: fay.pk, price_c: 0,
             pollOptions: ['Saturday', 'Sunday'],
         }));
         await both('approve the pending request', postAs(dee, '/api/marketplace/transactions/approve', { transactionId: pending.id, authorPublicKey: dee.pk }));

@@ -8,7 +8,7 @@ import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getBalance, getMembers, getMemberCards, getTransactions, sendTransfer, saveHomePreferences, getMyVouching } from '../lib/api';
-import { addDateWords, setLanguage } from '@beanpool/core';
+import { addDateWords, formatHundredths, setLanguage } from '@beanpool/core';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers } from '../lib/blocklist';
@@ -99,7 +99,7 @@ describe('LedgerPage for a guest', () => {
 describe('LedgerPage at 320px with 1.3x text', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 0, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 0, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
     });
 
     it('lets the level heading wrap so its "You\'re here" badge stays inside the card', async () => {
@@ -163,7 +163,7 @@ describe('levels a member has not reached yet', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 0, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 0, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
     });
 
     it('shows every level on the shelf without a lock, faded or grey', async () => {
@@ -185,7 +185,8 @@ describe('levels a member has not reached yet', () => {
             expect(screen.getByTestId('level-detail-heading').children[2], name).toHaveTextContent(badge);
             expect(detail.textContent, name).not.toMatch(LOCK);
             expect(greyed(detail), name).toEqual([]);
-            if (name !== 'Newcomer') expect(detail.textContent, name).toMatch(/Reach \d+ trust \(\d+ to go\)/);
+            // Figures as formatHundredths writes them: thousands grouped, never a count of hundredths ("100000").
+            if (name !== 'Newcomer') expect(detail.textContent, name).toMatch(/Reach \d{1,3}(,\d{3})* trust \(\d{1,3}(,\d{3})* to go\)/);
         }
     });
 });
@@ -194,11 +195,11 @@ describe('a line of Beans from someone the member has blocked', () => {
     const BO = 'b'.repeat(64);
     const CY = 'c'.repeat(64);
     const line = (id: string, from: string, to: string, memo: string) =>
-        ({ id, from, to, amount: 3, taxFee: 0, memo, timestamp: '2026-10-01T10:00:00.000Z' });
+        ({ id, from, to, amount_c: 300, fee_c: 0, memo, timestamp: '2026-10-01T10:00:00.000Z' });
 
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 5, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 500, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         vi.mocked(getBlockedUsers).mockReturnValue([BO]);
     });
 
@@ -237,7 +238,7 @@ describe('a line of Beans from someone the member has blocked', () => {
 describe('the Send picker when the node is too busy to send the members list', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 5, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 500, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         vi.mocked(getBlockedUsers).mockReturnValue([]);
     });
 
@@ -271,7 +272,7 @@ describe('the Ledger with members on demand (review of #1861, N1)', () => {
     const DANA = 'd'.repeat(64);
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 5, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 500, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         vi.mocked(getBlockedUsers).mockReturnValue([]);
     });
     afterEach(() => { info.value = { profile: 'local', features: {} }; });
@@ -367,14 +368,14 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
     beforeEach(() => {
         vi.clearAllMocks();
         info.value = { profile: 'global', features: { beans: false, showcase: true } };
-        vi.mocked(getBalance).mockResolvedValue({ balance: 4321, earnedCredit: 9, floor: -50, commonsBalance: 7, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
-        vi.mocked(getTransactions).mockResolvedValue([{ id: 'own-tx', from: 'someone', to: 'viewer-pubkey', amount: 77, memo: 'My own line', timestamp: '2026-10-15T00:00:00.000Z' }]);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 432100, earnedCredit_c: 900, floor_c: -5000, commonsBalance_c: 700, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getTransactions).mockResolvedValue([{ id: 'own-tx', from: 'someone', to: 'viewer-pubkey', amount_c: 7700, memo: 'My own line', timestamp: '2026-10-15T00:00:00.000Z' }]);
     });
     afterEach(() => { info.value = { profile: 'local', features: {} }; });
 
     it("reads no balance, transactions or members, polls nothing and takes up no socket nudge; the reader's own name never shows", async () => {
         render(<LedgerPage identity={identity} isMember={true} preview />);
-        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85B');
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
         await act(async () => { await new Promise(r => setTimeout(r, 20)); });
@@ -390,12 +391,12 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
     it("turns live (BeanID's flip): the sample goes at once, and the member's own balance and rows are read and shown", async () => {
         reader.value = { beans: true };
         const { rerender } = render(<LedgerPage identity={identity} isMember={true} preview />);
-        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85B');
         rerender(<LedgerPage identity={identity} isMember={true} />);
         // Before the member's own land: never Example Valley's 85 Beans or name as theirs.
-        expect(screen.queryByTestId('ledger-balance')?.textContent ?? '').not.toContain('85.0');
+        expect(screen.queryByTestId('ledger-balance')?.textContent ?? '').not.toContain('85');
         expect(screen.queryByText('an example member')).toBeNull();
-        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4,321B'));
         expect(getBalance).toHaveBeenCalledWith('viewer-pubkey');
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         expect(screen.getByText('My own line')).toBeInTheDocument();
@@ -406,9 +407,9 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
     it("turns to preview while the member's own are on screen: Example Valley's at once, never the member's own under the marker", async () => {
         reader.value = { beans: true };
         const { rerender } = render(<LedgerPage identity={identity} isMember={true} />);
-        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4,321B'));
         rerender(<LedgerPage identity={identity} isMember={true} preview />);
-        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85B');
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         expect(screen.queryByText('My own line')).toBeNull();
         expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
@@ -447,19 +448,20 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
 // brackets), its colours are the chip roles (no raw hex, so it reads as a card in dark), and at or under the 200 Beans
 // fee-free line it says so in words instead of "−0.000 /mo" and "≈ 0.00% /mo".
 describe('the Wallet\'s Community Circulation box', () => {
-    const walletWith = async (balance: number) => {
-        vi.mocked(getBalance).mockResolvedValue({ balance, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+    /** The Wallet for a balance of `balance_c` whole hundredths, the figure written as every figure is (formatHundredths). */
+    const walletWith = async (balance_c: number) => {
+        vi.mocked(getBalance).mockResolvedValue({ balance_c, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         render(<LedgerPage identity={identity} isMember={true} />);
-        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${balance.toFixed(1)}B`));
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent(`+${formatHundredths(balance_c)}B`));
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         return screen.getByTestId('ledger-circulation');
     };
 
     beforeEach(() => { vi.clearAllMocks(); });
 
-    for (const balance of [85, 200]) {
-        it(`at ${balance} Beans says in words that nothing goes to the Commons, with no amount or rate`, async () => {
-            const box = await walletWith(balance);
+    for (const balance_c of [8500, 20000]) {
+        it(`at ${balance_c / 100} Beans says in words that nothing goes to the Commons, with no amount or rate`, async () => {
+            const box = await walletWith(balance_c);
             expect(box).toHaveTextContent('Nothing goes to the Commons while you hold 200 Beans or less.');
             expect(within(box).queryByTestId('ledger-circulation-amount')).toBeNull();
             expect(box.textContent).not.toMatch(/0\.00|%/);
@@ -468,20 +470,20 @@ describe('the Wallet\'s Community Circulation box', () => {
 
     it('over 200 Beans shows the month\'s amount to 2 decimals and the share of the balance', async () => {
         // 750: 300 at 1 % + 250 at 1.5 % = 6.75 a month, 0.90 % of the balance.
-        const box = await walletWith(750);
+        const box = await walletWith(75000);
         expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−6.75');
         expect(box).toHaveTextContent('about 0.90% of your balance');
         expect(box.textContent).not.toMatch(/Nothing goes/);
     });
 
     it('is drawn from the colour library: ok chip roles, warn above 1000, no inline colour', async () => {
-        const box = await walletWith(750);
+        const box = await walletWith(75000);
         expect(box).toHaveClass('bg-bp-chip-ok-tint', 'text-bp-chip-ok-ink');
         expect([box, ...Array.from(box.querySelectorAll<HTMLElement>('*'))].map(el => el.getAttribute('style')).filter(Boolean)).toEqual([]);
     });
 
     it('turns to the warn roles above 1000 Beans', async () => {
-        const box = await walletWith(1500);
+        const box = await walletWith(150000);
         expect(box).toHaveClass('bg-bp-chip-warn-tint', 'text-bp-chip-warn-ink');
         expect(within(box).getByTestId('ledger-circulation-amount')).toHaveTextContent('−20.50');
     });
@@ -492,7 +494,7 @@ describe('the Wallet\'s Community Circulation box', () => {
 describe('the Levels words: true on global, and Send Beans on both', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 20, earnedCredit: 9, floor: -50, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 2000, earnedCredit_c: 900, floor_c: -5000, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
     });
     afterEach(() => { info.value = { profile: 'local', features: {} }; });
 
@@ -533,7 +535,7 @@ describe('the Ledger before the node has said what Beans are here', () => {
     let answer: (v: Record<string, unknown>) => void = () => {};
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 4321, floor: -50, commonsBalance: 7, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 432100, floor_c: -5000, commonsBalance_c: 700, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         // One answer for every caller, as the real communityInfoOnce gives: held back until the test sends it.
         const held = new Promise<Record<string, unknown>>((r) => { answer = r; });
         vi.mocked(communityInfoOnce).mockImplementation(() => held as any);
@@ -555,7 +557,7 @@ describe('the Ledger before the node has said what Beans are here', () => {
         // App now knows: Beans are a preview.
         rerender(<LedgerPage identity={identity} isMember={true} preview />);
         await act(async () => { await new Promise(r => setTimeout(r, 20)); });
-        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85.0B');
+        expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+85B');
         expect(getBalance).not.toHaveBeenCalled();
         expect(getTransactions).not.toHaveBeenCalled();
     });
@@ -565,7 +567,7 @@ describe('the Ledger before the node has said what Beans are here', () => {
         await act(async () => { await new Promise(r => setTimeout(r, 20)); });
         expect(getBalance).not.toHaveBeenCalled();
         await act(async () => { answer({ profile: 'local', features: {} }); });
-        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+        await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4,321B'));
         expect(getBalance).toHaveBeenCalledTimes(1);
         expect(getTransactions).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('status')?.textContent ?? '').not.toContain('Loading your ledger');
@@ -610,7 +612,7 @@ describe('the Ledger before the node has said what Beans are here', () => {
             await act(async () => {
                 secondAnswer({ profile: 'local', features: {} });
             });
-            await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4321.0B'));
+            await waitFor(() => expect(screen.getByTestId('ledger-balance')).toHaveTextContent('+4,321B'));
             expect(getBalance).toHaveBeenCalledTimes(1);
             expect(screen.queryByRole('status')?.textContent ?? '').not.toContain('Loading your ledger');
         } finally {
@@ -623,7 +625,7 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
     const DANA = 'd'.repeat(64);
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(getBalance).mockResolvedValue({ balance: 100, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBalance).mockResolvedValue({ balance_c: 10000, earnedCredit_c: 200, floor_c: 0, commonsBalance_c: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
         vi.mocked(getBlockedUsers).mockReturnValue([]);
         vi.mocked(getMembers).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana' }] as any);
         vi.mocked(sendTransfer).mockResolvedValue({} as any);
@@ -654,16 +656,16 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         expect(box.value).toBe('12,5');
     });
 
-    it('fr "12,5": the confirmation reads 12,50 B and 12.5 Beans are sent', async () => {
+    it('fr "12,5": the confirmation reads 12,50 B and 12.5 Beans are sent, as whole hundredths (1250)', async () => {
         expect(await typeIn('fr', '12,5')).toContain('12,50 B');
         await confirm();
-        expect(sendTransfer).toHaveBeenCalledWith('viewer-pubkey', DANA, 12.5, '');
+        expect(sendTransfer).toHaveBeenCalledWith('viewer-pubkey', DANA, 1250, '');
     });
 
-    it('en "12.5" exactly as before: 12.50 B shown, 12.5 sent', async () => {
+    it('en "12.5" exactly as before: 12.50 B shown, 12.5 Beans sent as 1250 hundredths', async () => {
         expect(await typeIn('en', '12.5')).toContain('12.50 B');
         await confirm();
-        expect(sendTransfer).toHaveBeenCalledWith('viewer-pubkey', DANA, 12.5, '');
+        expect(sendTransfer).toHaveBeenCalledWith('viewer-pubkey', DANA, 1250, '');
     });
 
     it('fr "1.000" could be a thousand or one: no confirmation line, nothing sent, and words that say why', async () => {
@@ -673,32 +675,32 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         expect(screen.getByText('Type the amount without thousands separators, like 1000,5.')).toBeInTheDocument();
     });
 
-    it('en "1.234" still gets the cents guard\'s words, and nothing is sent', async () => {
+    it('en "1.234": a third decimal is refused in words (core parseHundredths, never rounded), and nothing is sent', async () => {
         await typeIn('en', '1.234');
         await confirm();
         expect(sendTransfer).not.toHaveBeenCalled();
-        expect(screen.getByText('The amount is a number of Beans above 0, to the cent.')).toBeInTheDocument();
+        expect(screen.getByText('Type at most 2 decimals, like 12.5.')).toBeInTheDocument();
     });
 
     it('renders budget history modal without raw enum words or 64-hex keys', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
             history: [
                 {
                     kind: 'grant',
-                    amount: 1000,
+                    amount_c: 100000,
                     actor: 'owner-pk-'.padEnd(64, '0'),
                     actorCallsign: 'marty',
                     at: '2026-11-05T00:00:00.000Z',
                 },
                 {
                     kind: 'hold',
-                    amount: -100,
+                    amount_c: -10000,
                     actor: 'me-pk-'.padEnd(64, '0'),
                     actorCallsign: 'ana',
                     at: '2026-11-05T01:00:00.000Z',
@@ -706,7 +708,7 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
                 },
                 {
                     kind: 'return',
-                    amount: 100,
+                    amount_c: 10000,
                     actor: 'node',
                     actorCallsign: null,
                     at: '2026-11-05T02:00:00.000Z',
@@ -715,7 +717,7 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
                 },
                 {
                     kind: 'top_up',
-                    amount: 500,
+                    amount_c: 50000,
                     actor: 'admin-pk-'.padEnd(64, '0'),
                     actorCallsign: 'damo',
                     at: '2026-11-05T03:00:00.000Z',

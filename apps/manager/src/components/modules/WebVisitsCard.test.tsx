@@ -97,10 +97,10 @@ describe('WebVisitsCard', () => {
         expect(await screen.findByTestId('web-visits-empty')).toBeInTheDocument();
     });
 
-    it("says so when the node's build does not count visits yet", async () => {
-        vi.mocked(nodeClient.fetchWebVisits).mockRejectedValue(new Error("This node's build doesn't count web app visits yet. Update it to see them."));
+    it("says what the node's refusal was, and draws no numbers", async () => {
+        vi.mocked(nodeClient.fetchWebVisits).mockRejectedValue(new Error('HTTP 404: Not Found'));
         render(<WebVisitsCard node={node} />);
-        expect(await screen.findByRole('alert')).toHaveTextContent(/doesn't count web app visits yet/);
+        expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 404: Not Found');
         expect(screen.queryByTestId('web-visits-today')).toBeNull();
     });
 

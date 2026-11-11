@@ -12,7 +12,7 @@ import {
     getAllMembers, getAllProfiles, getMember, getAdminMembersPage, parseAdminMemberPageKey, getAdminMemberCounts, type Member,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
-    adminSetCreditFrozen, adminSetElder, adminSetTier,
+    adminSetCreditFrozen, adminSetTier,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
@@ -50,7 +50,7 @@ import {
     type OwnerOnlyAdminAction, type PauseRefusal,
 } from '../decisions-engine.js';
 import {
-    getLocalConfig, verifyPasswordAsync,
+    getLocalConfig,
     getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
@@ -68,10 +68,10 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, appStoreCheckDisabled, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, TOKEN_REFUSED_CODE, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
-import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
+import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
@@ -91,13 +91,10 @@ import {
     enrolAdminOwnerKey,
     issueBreakGlassCode,
     retireBreakGlassCode,
-    createPasswordSession,
     setAdminSessionCookie,
     clearAdminSessionCookie,
     ADMIN_SESSION_COOKIE,
-    endPasswordSessions,
 } from '../admin-key-auth.js';
-import { isBreakGlassMode, setBreakGlassMode, isPasswordRetired, updateLocalConfig, removeFirstPasswordFile } from '../config/local-config.js';
 import {
     issueRekeyCode,
     cancelRekeyCode,
@@ -131,11 +128,11 @@ export function createAdminRoutes(deps: RouteDeps): Router {
     const { checkAdminAuth, activeConnections, calculateAnalytics } = deps;
 
 // ===================== WS TICKET ENDPOINT =====================
-// Issues short-lived single-use ticket for WebSocket authentication to avoid exposing
-// admin passwords in URL query strings (which browser console & proxy logs capture).
+// Issues short-lived single-use ticket for WebSocket authentication, so no session id travels in a URL (which browser
+// console & proxy logs capture).
 router.post('/api/local/admin/ws-ticket', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    // Bound to the session this request rides (none for the password itself): the log socket ends with it.
+    // Bound to the session this request rides: the log socket ends with it.
     const ticket = issueWsTicket((ctx.state as any)?.adminSessionId);
     if (!ticket) {
         ctx.status = 401;
@@ -146,15 +143,20 @@ router.post('/api/local/admin/ws-ticket', async (ctx) => {
 });
 
 // ===================== CSRF TOKEN ENDPOINT =====================
-// #133: Clients call this with their password to receive a short-lived CSRF token.
-// The token must be sent as X-CSRF-Token on subsequent admin state-mutation requests.
-// This provides defence-in-depth beyond the X-Admin-Password header.
+// #133: A signed-in session calls this to receive a short-lived CSRF token, sent as X-CSRF-Token on its later admin
+// state-mutation requests (defence-in-depth beyond the SameSite cookie).
 
 router.post('/api/local/admin/csrf-token', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    // For the session this request rides, and no other (admin-auth.ts, CSRF TOKEN STORE); a password caller's token is
-    // for password callers.
-    const token = issueCsrfToken((ctx.state as any)?.adminSessionId || PASSWORD_CSRF_BINDING);
+    // For the session this request rides, and no other (admin-auth.ts, CSRF TOKEN STORE). Only a session reaches here: a
+    // token is refused on this route (automation-tokens.ts isRefusedToEveryToken), a break-glass code opens enrolment only.
+    const sessionId = (ctx.state as any)?.adminSessionId;
+    if (typeof sessionId !== 'string' || !sessionId) {
+        ctx.status = 401;
+        ctx.body = { error: 'Not signed in: no admin session was sent', sessionExpired: true, notSignedIn: true };
+        return;
+    }
+    const token = issueCsrfToken(sessionId);
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
 });
@@ -163,7 +165,7 @@ router.post('/api/local/admin/csrf-token', async (ctx) => {
 // Implements docs/admin-surface.md §2 (all):
 // Signed challenge auth for phone & desktop QR flow, single-use 60s handshake tokens,
 // browser sessions (2h idle / 12h hard), instant revocation via session_epoch,
-// break-glass mode gating, and per-owner break-glass enrolment.
+// and per-owner break-glass enrolment.
 
 /**
  * POST /api/local/admin/auth/challenge
@@ -285,51 +287,6 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
     };
 });
 
-/**
- * POST /api/local/admin/auth/password — Settings' password sign-in. Body: { password, totpCode? }.
- *
- * The password (and, with 2FA on, a code) is checked once, exactly as checkAdminAuth checks it on any route (the brake,
- * the tarpit, break-glass mode, which refuses it here), and exchanged for an admin session: the httpOnly, SameSite
- * strict admin_session cookie and a CSRF token bound to it, as a key sign-in gets. The browser keeps no copy of the
- * password, in web storage or anywhere else (Fable's web review, M1): the members' web app shares this origin, so
- * anything stored there is one script away. A session the browser already held is ended. Answers the role (owner),
- * the CSRF token and the session's limits; never the session's id.
- */
-router.post('/api/local/admin/auth/password', async (ctx) => {
-    ctx.set('Cache-Control', 'no-store');
-    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
-    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    if (typeof body.password !== 'string' || !body.password.trim()) {
-        ctx.status = 400;
-        ctx.body = { error: 'Enter the admin password' };
-        return;
-    }
-    // opensSession: this session is held to the 2FA setup card while the node's 2FA is off (admin-auth.ts step 7c).
-    if (!(await checkAdminPasswordAuth(ctx as any, { opensSession: true }))) return;
-    // checkAdminAuth hands a header client a 2FA session for its next requests (X-Admin-2FA-Session); this sign-in's
-    // next requests ride the cookie, so it is not handed out.
-    const tfa = (ctx.state as any)?.tfaSessionToken;
-    if (tfa) {
-        revoke2faSession(tfa);
-        delete (ctx.state as any).tfaSessionToken;
-    }
-    const held = ctx.cookies.get(ADMIN_SESSION_COOKIE);
-    if (held) revokeAdminSession(held);
-    const session = createPasswordSession();
-    setAdminSessionCookie(ctx, session.sessionId);
-    ctx.set('X-CSRF-Token', session.csrfToken);
-    logger.security('AUTH', 'Successful administrative login.');
-    ctx.body = {
-        success: true,
-        role: 'owner',
-        // With the node's 2FA off this session opens only the 2FA setup card (admin-auth.ts TOTP_SETUP_ROUTES).
-        totpSetupRequired: passwordSessionNeedsTotpSetup(),
-        csrfToken: session.csrfToken,
-        hardExpiresAt: session.hardExpiresAt,
-        idleExpiresAt: session.idleExpiresAt,
-    };
-});
-
 // "Sign me out everywhere" from the app: its own nonces, within a 60-second window (engine/member-signature.ts).
 const revocationNonces = new NonceStore(60_000);
 
@@ -338,8 +295,7 @@ const revocationNonces = new NonceStore(60_000);
  * Revoke all web sessions for a member by bumping session_epoch in SQLite. Who can end whose:
  *   - a key session (owner, admin, moderator) or the app's signed request: the caller's own; the signed request always
  *     the signer's, whatever the body names;
- *   - an owner's key session, or the password: another member's too, named in the body (from the phone, after its
- *     unlock again); the password naming nobody is refused (400), as it has no sessions of its own;
+ *   - an owner's key session: another member's too, named in the body (from the phone, after its unlock again);
  *   - an automation token: nobody's (403 token_not_allowed, as on every sign-in route).
  * test-automation-tokens section 4b measures each over HTTP.
  */
@@ -349,7 +305,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     // The caller's own key, from their authentication alone (a key session, or the app's signature), never the body.
     let selfPubkey = '';
 
-    // Check if called with an active admin session or password auth
+    // Check if called with an active admin session
     const isAuthed = await checkAdminAuth(ctx as any);
     // An automation token has no sessions of its own, so it signs out nobody: checkAdminAuth refuses it here as on every
     // sign-in route (403 token_not_allowed), and that answer stands rather than falling through to the app's signature.
@@ -366,12 +322,6 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // Signing someone else out everywhere is owner-only (above): from the phone it asks for its unlock again. Ending
         // your own sessions is not asked.
         if (targetPubkey && targetPubkey !== callerPubkey && !requirePhoneStepUp(ctx)) return;
-        // The password is nobody's own session: it signs out only the member it names, never one picked for it.
-        if (!targetPubkey && !callerPubkey) {
-            ctx.status = 400;
-            ctx.body = { error: 'Name the member to sign out everywhere (memberPubkey)' };
-            return;
-        }
         targetPubkey = targetPubkey || callerPubkey;
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
@@ -379,7 +329,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // provenKeySpelling). The signature check forgives case, so as sent, a key in capitals was the row an old door
         // stored under that spelling, and "sign me out everywhere" ended that row's sessions instead of the member's.
         // Verified as every signed request is (engine/member-signature.ts): signed for this community (421 for
-        // another's, 426 for the old format after the switch), and the nonce spent only once all of that holds.
+        // another's, 426 for the old format, unchecked: CUT4), and the nonce spent only once all of that holds.
         const pubKeyHex = provenKeySpelling(ctx.get('X-Public-Key'));
         const signatureBase64 = ctx.get('X-Signature');
         if (pubKeyHex && signatureBase64 && nodeRoleOf(pubKeyHex)) {
@@ -426,7 +376,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     const newEpoch = revokeAllMemberSessions(targetPubkey);
     // An owner signing out their OWN sessions everywhere (a key session naming itself or nobody, or the app's signed
     // request) also retires their break-glass code (#1531), so a code a stolen session made does not outlive it. Signing
-    // someone else out leaves their code alone, as does the password, which is nobody's own session.
+    // someone else out leaves their code alone.
     const breakGlassCodeRetired = !!selfPubkey && selfPubkey === targetPubkey && nodeRoleOf(targetPubkey) === 'owner'
         && retireBreakGlassCode(targetPubkey);
     clearAdminSessionCookie(ctx);
@@ -453,19 +403,6 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
 
     if (sessionToken) {
         const res = validateAdminSession(sessionToken);
-        if (res.valid && res.session?.kind === 'password') {
-            ctx.body = {
-                authenticated: true,
-                isKeySession: false,
-                isPasswordSession: true,
-                memberPubkey: null,
-                role: 'owner',
-                totpSetupRequired: passwordSessionNeedsTotpSetup(),
-                hardExpiresAt: res.session.hardExpiresAt,
-                idleExpiresAt: res.session.idleExpiresAt,
-            };
-            return;
-        }
         if (res.valid && res.session) {
             ctx.body = {
                 authenticated: true,
@@ -477,27 +414,6 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
                 sessionEpoch: res.session.sessionEpoch,
                 hardExpiresAt: res.session.hardExpiresAt,
                 idleExpiresAt: res.session.idleExpiresAt,
-            };
-            return;
-        }
-    }
-
-    // Check if authenticated via password
-    const hasPasswordCreds =
-        (typeof ctx.get === 'function' && (ctx.get('x-admin-password') || ctx.get('x-break-glass-code'))) ||
-        ctx.request?.headers?.['x-admin-password'] ||
-        ctx.headers?.['x-admin-password'] ||
-        ctx.request?.headers?.['x-break-glass-code'] ||
-        ctx.headers?.['x-break-glass-code'];
-
-    if (hasPasswordCreds) {
-        const ok = await checkAdminAuth(ctx as any);
-        if (ok) {
-            ctx.body = {
-                authenticated: true,
-                isKeySession: !!(ctx.state as any)?.isKeySession,
-                memberPubkey: (ctx.state as any)?.actor || null,
-                role: (ctx.state as any)?.adminRole || 'owner',
             };
             return;
         }
@@ -529,7 +445,7 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * POST /api/local/admin/auth/enrol
  * POST /api/local/admin/auth/break-glass/enrol
  * Enrols a member key and generates a unique per-owner break-glass code.
- * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
+ * With the break-glass/enrol route, the only routes an owner's break-glass code opens (admin-auth.ts).
  */
 /**
  * Whether a role change needs an owner (engine/node-roles.ts): it names 'owner' or 'admin', or its target holds owner or
@@ -542,9 +458,7 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * moves their role to the new key (rekeyProof). An owner: the fresh proof every time (design case 18, C6 and C8), so a
  * stolen session can't give a key of its own an owner's or admin's role (enrol, node-roles, re-key), or take one away
  * with a role change. Removing (pruning, offboarding) or suspending an owner asks it too (ownerRemovalProof; #1984
- * confirmation N-1, Marty 15 Oct). In break-glass mode too (#1984 review B2): the password
- * and an earlier 2FA session are the stolen session C6 is for, and the owner recovering sends a current code with the
- * password. Anyone else (an admin, a break-glass code) is
+ * confirmation N-1, Marty 15 Oct). Anyone else (an admin, a break-glass code) is
  * asked what they were asked before, the phone step-up, and the engine decides as it always has: it refuses them unless
  * the node has no acting owner (grantNodeRole's bootstrap, #1006), and a break-glass code is the owners' recovery factor
  * itself.
@@ -597,7 +511,7 @@ async function ownerRemovalProof(ctx: any, action: OwnerOnlyAdminAction, target:
 /**
  * The pause tripwire's proof (removal by vote S4, design §3.4; decisions-engine.ts pauseChainRefusal): an admin with
  * OPEN_PAUSES_BEFORE_PROOF pauses whose votes are still open makes another only with an owner's fresh proof, the one the
- * owner-only routes ask (requireFreshProof). An owner, or the password, gives it; it stands for the proof pausing an owner
+ * owner-only routes ask (requireFreshProof). An owner gives it; it stands for the proof pausing an owner
  * asks too (ownerRemovalProof), so a code is never asked twice. An admin who is no owner can't give it, and is refused in
  * the engine's words. Asked only once nothing else refuses the pause. Answers and returns false when refused.
  */
@@ -643,7 +557,7 @@ const handleEnrol = async (ctx: any) => {
     }
 
     const callerRole = (ctx.state as any)?.adminRole;
-    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth || (isBreakGlassMode() && !(ctx.state as any)?.isKeySession);
+    const isBreakGlass = !!(ctx.state as any)?.isBreakGlassAuth;
     const requestedRole = body.role || 'owner';
     // The role's value before the proof, as the node-roles route checks it: a misspelt role must not spend a code (#2018 NB2).
     if (requestedRole !== 'owner' && requestedRole !== 'admin' && requestedRole !== 'moderator') {
@@ -652,7 +566,7 @@ const handleEnrol = async (ctx: any) => {
         return;
     }
 
-    // Enrol never bootstraps an owner: an owner key comes from an owner, the password, or break-glass,
+    // Enrol never bootstraps an owner: an owner key comes from an owner or a break-glass code,
     // full stop. The node-roles route DOES bootstrap, and #1006 was the two disagreeing about whether a
     // node whose sole owner is suspended has an owner. They cannot disagree again: both reach
     // `grantNodeRole`, and `nodeHasOwner()` answers that question once, inside it.
@@ -668,10 +582,10 @@ const handleEnrol = async (ctx: any) => {
     try {
         const res = enrolAdminOwnerKey({
             targetPubkey,
-            actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
+            actorPubkey: (ctx.state as any)?.actor,
             isBreakGlass,
             role: requestedRole,
-            madeBy: (ctx.state as any)?.isKeySession ? 'key-session' : isBreakGlass ? 'break-glass' : 'password',
+            madeBy: isBreakGlass ? 'break-glass' : 'key-session',
         });
         ctx.body = {
             success: true,
@@ -695,10 +609,8 @@ router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
 /**
  * POST /api/local/admin/auth/break-glass/issue
  * Settings' "Make a break-glass code": a new code for an owner, shown once; the owner's earlier code stops working.
- * Owners only. A key session makes one for its own key and nobody else's. The password (an owner with no key behind it)
- * names the owner in `memberPubkey`, which must hold the owner role already: this grants nothing. A break-glass code is
- * a wrong password here (admin-auth.ts opens only the enrol routes to it), and break-glass mode closes it to the
- * password, as it does every route but enrolment.
+ * Owners only, signed in with their own key: a key session makes one for its own key and nobody else's. A break-glass
+ * code does not reach this route (admin-auth.ts opens only the enrol routes to it).
  */
 router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
     // First, so a refusal is never cached either (#1531).
@@ -707,34 +619,23 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    let target: string;
-    if (state.isKeySession) {
-        target = state.actor;
-        if (body.memberPubkey && body.memberPubkey !== target) {
-            ctx.status = 403;
-            ctx.body = { error: 'A break-glass code is made by its own owner: sign in with that owner\'s key' };
-            return;
-        }
-    } else {
-        target = typeof body.memberPubkey === 'string' ? body.memberPubkey : '';
-        if (!target) {
-            ctx.status = 400;
-            ctx.body = { error: 'memberPubkey is required: name the owner the code is for' };
-            return;
-        }
-        if (!isMemberKeySpelling(target)) {
-            ctx.status = 400;
-            ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
-            return;
-        }
+    if (!state.isKeySession) {
+        ctx.status = 403;
+        ctx.body = { error: 'A break-glass code is made by its own owner: sign in with that owner\'s key' };
+        return;
+    }
+    const target: string = state.actor;
+    if (body.memberPubkey && body.memberPubkey !== target) {
+        ctx.status = 403;
+        ctx.body = { error: 'A break-glass code is made by its own owner: sign in with that owner\'s key' };
+        return;
     }
     // A break-glass code is a full owner credential for one enrolment: the fresh proof every time (design case 18, C7).
     // Last, after the checks of the request itself: a current code is spent when it is checked (#2002 NB1). Whether the
     // named key holds the owner role is the engine's answer, after it.
     if (!(await requireFreshProof(ctx, body.code, 'make a break-glass code'))) return;
     try {
-        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
-            state.isKeySession ? 'key-session' : 'password');
+        const code = issueBreakGlassCode(target, 'their own key session', 'key-session');
         ctx.body = {
             success: true,
             memberPubkey: target,
@@ -745,148 +646,6 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
         ctx.status = Number(e?.status) || 400;
         ctx.body = { error: e?.message || 'Could not make a break-glass code' };
     }
-});
-
-/**
- * POST /api/local/admin/auth/break-glass-mode
- * Toggles break-glass mode on or off.
- */
-router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if ((ctx.state as any)?.adminRole !== 'owner') {
-        ctx.status = 403;
-        ctx.body = { error: 'Only node owners can toggle break-glass mode' };
-        return;
-    }
-    // On, the password reaches key enrolment only, so a password-only co-owner is shut out of Settings: the fresh proof
-    // every time (design case 18, C5).
-    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    if (typeof body.enabled !== 'boolean') {
-        ctx.status = 400;
-        ctx.body = { error: 'enabled (boolean) is required' };
-        return;
-    }
-    // After the check of the request: a current code is spent when it is checked (#2002 NB1).
-    if (!(await requireFreshProof(ctx, body.code, 'turn break-glass mode on or off'))) return;
-    setBreakGlassMode(body.enabled);
-    ctx.body = { success: true, breakGlassMode: isBreakGlassMode() };
-});
-
-/**
- * GET /api/local/admin/auth/break-glass-status: whether break-glass mode is on, for a signed-in admin only (public-routes
- * audit SEC-PUB-08: it was one bit to anyone, and no app reads it).
- */
-router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = { breakGlassMode: isBreakGlassMode() };
-});
-router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = { breakGlassMode: isBreakGlassMode() };
-});
-
-// ===================== RETIRE THE ADMIN PASSWORD (node sign-in design step 10, D1(c), D6) =====================
-
-/** The owners whose role acts now (a visitor's old row or a suspended owner is not one). */
-function actingOwners() {
-    return listNodeRoles().filter(r => r.role === 'owner' && nodeRoleOf(r.member_pubkey) === 'owner');
-}
-
-/** What Access & Security's "Retire the admin password" card shows. */
-function passwordRetirementView(callerPubkey: string | null) {
-    const retired = getLocalConfig().passwordRetired || null;
-    const owners = actingOwners();
-    return {
-        passwordRetired: !!retired,
-        retiredAt: retired?.at ?? null,
-        retiredByCallsign: retired?.byCallsign ?? null,
-        owners: owners.length,
-        // The caller's own break-glass code: retiring needs one (below). Null for a caller with no key (the password).
-        hasBreakGlassCode: callerPubkey ? !!owners.find(o => o.member_pubkey === callerPubkey)?.has_break_glass : null,
-    };
-}
-
-/**
- * GET /api/local/admin/auth/password-retirement — owners only.
- */
-router.get('/api/local/admin/auth/password-retirement', async (ctx) => {
-    ctx.set('Cache-Control', 'no-store');
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can see whether the admin password is retired')) return;
-    const state = ctx.state as any;
-    ctx.body = passwordRetirementView(state.isKeySession ? state.actor : null);
-});
-
-/**
- * POST /api/local/admin/auth/retire-password { acceptOneOwner?: true } — retires the admin password for good.
- * An owner signed in with their own key only (never the password itself, never a token), with the phone step-up of every
- * owner-only change. Refused while the caller has no break-glass code: with the password gone it is how an owner whose
- * phone is lost gets back in without the server's shell, and Settings makes one in a tap (step 3). Refused with one owner
- * unless the owner ticks "I accept one owner" (D6), which is logged. Then: the hash, the salt and the 2FA that guarded the
- * password are deleted, passwordRetired records when and by whom, every password session ends now (and the log sockets
- * they opened), the first-password file goes, a SECURITY line is logged and the community gets a critical announcement.
- * No route sets a password again; ADMIN_PASSWORD in .env is ignored on every later start (initAdminPassword).
- */
-router.post('/api/local/admin/auth/retire-password', async (ctx) => {
-    ctx.set('Cache-Control', 'no-store');
-    if (!(await checkAdminAuth(ctx as any))) return;
-    const state = ctx.state as any;
-    if (!state.isKeySession || state.adminRole !== 'owner') {
-        ctx.status = 403;
-        ctx.body = {
-            error: 'Only an owner signed in with their own key (Manage in the app, or "Sign in with your phone" on a computer) can retire the admin password',
-            code: 'owner_key_required',
-        };
-        return;
-    }
-    // Every password holder is shut out for good: Manage pressed within the last 90 seconds (design case 18, C4).
-    if (!(await requireFreshProof(ctx, undefined, 'retire the admin password'))) return;
-    if (isPasswordRetired()) {
-        ctx.status = 409;
-        ctx.body = { error: 'The admin password is already retired', code: 'password_retired', ...passwordRetirementView(state.actor) };
-        return;
-    }
-    const owners = actingOwners();
-    const me = owners.find(o => o.member_pubkey === state.actor);
-    if (!me?.has_break_glass) {
-        ctx.status = 409;
-        ctx.body = {
-            error: 'Make your break-glass code first (Access & Security, Break-glass code) and keep it somewhere safe: once the password is gone, it is how you get back in if your phone is lost.',
-            code: 'break_glass_code_needed',
-        };
-        return;
-    }
-    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const oneOwner = owners.length < 2;
-    if (oneOwner && body.acceptOneOwner !== true) {
-        ctx.status = 409;
-        ctx.body = {
-            error: 'This community has one owner. Add a second owner first, or tick "I accept one owner": if your phone and your 12 words are both lost, only your break-glass code or "beanpool recover" on the server get you back in.',
-            code: 'one_owner',
-            owners: owners.length,
-        };
-        return;
-    }
-    const at = Date.now();
-    const callsign = me.callsign || null;
-    updateLocalConfig({
-        adminHash: null, salt: null,
-        totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [],
-        passwordRetired: { at, by: state.actor, byCallsign: callsign, acceptedOneOwner: oneOwner },
-    });
-    removeFirstPasswordFile('The admin password was retired');
-    const ended = endPasswordSessions();
-    const who = `${callsign || 'an owner'} (${String(state.actor).slice(0, 12)}…)`;
-    logger.security('AUTH', `The admin password was retired for good by ${who}${oneOwner ? ', who accepted being the only owner' : ''}; ${ended} password session(s) ended`);
-    noteSecurityEvent({
-        key: 'sec.keys',
-        detail: `The admin password was retired for good, by an owner; ${ended} password session${ended === 1 ? '' : 's'} ended. Owners now sign in with their keys.`,
-        actor: String(state.actor), actorRole: 'owner', high: true,
-    });
-    adminBroadcastAnnouncement('Admin Password Retired',
-        `${callsign || 'An owner'} retired this community's admin password. Settings now opens only with an owner's or admin's phone. If you did not expect this, tell your community's owners.`,
-        'critical');
-    ctx.body = { success: true, ...passwordRetirementView(state.actor), acceptedOneOwner: oneOwner, endedSessions: ended };
 });
 
 // ===================== LEDGER AUDIT ENDPOINTS =====================
@@ -954,8 +713,10 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
             };
             return;
         }
-        const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
-        const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
+        // Whole hundredths (every balance was a number, asked just above): the baseline is the integer as text, read back
+        // exactly by LedgerAudit; the note says it in Beans.
+        const normalizedBaseline = String(result.sumBalances);
+        const note = `[${new Date().toISOString()}] rebaselined at ${hundredthsAsDecimalText(result.sumBalances)} Beans (drift was ${hundredthsAsDecimalText(result.drift)}): ${sanitizedReason}`;
         // Wrap both writes in a transaction so baseline and note are always consistent.
         db.transaction(() => {
             db.prepare(`INSERT INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(normalizedBaseline);
@@ -1004,13 +765,13 @@ router.post('/api/local/admin/stranded-escrows/:escrowId/write-off', async (ctx)
     }
     // The log redacts anything shaped like a 64-hex key, so a key session's actor goes in short, as on the other
     // admin lines here. The full signer is on the ledger row's auth_signer, which `transactionId` points to.
-    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount} Beans (Commons ${result.commonsBefore} → ${result.commonsAfter})`, {
+    logger.info('ADMIN', `Wrote off stranded ${result.escrowId} from the Commons: ${result.amount_c} hundredths (Commons ${result.commonsBefore_c} → ${result.commonsAfter_c})`, {
         escrowId: result.escrowId,
         tradeId: result.tradeId,
-        amount: result.amount,
+        amount_c: result.amount_c,
         transactionId: result.transactionId,
-        commonsBefore: result.commonsBefore,
-        commonsAfter: result.commonsAfter,
+        commonsBefore_c: result.commonsBefore_c,
+        commonsAfter_c: result.commonsAfter_c,
         actor: /^[0-9a-f]{64}$/i.test(actor) ? actor.substring(0, 12) : actor,
         memo: result.memo,
     });
@@ -2069,7 +1830,7 @@ router.post('/api/local/admin/users/:pubkey/elder', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     const grant = body.grant !== false; // default: grant
     try {
-        adminSetElder(ctx.params.pubkey, grant);
+        adminSetTier(ctx.params.pubkey, grant ? 'Elder' : 'Newcomer');
         logger.info('ADMIN', `${grant ? 'Granted' : 'Revoked'} Elder for ${ctx.params.pubkey.substring(0, 12)}`);
         ctx.body = { success: true, granted: grant };
     } catch (e: any) {
@@ -2682,8 +2443,8 @@ router.post('/api/local/admin/commons/projects', async (ctx) => {
             description: p.description,
             proposerPubkey: p.creator_pubkey,
             proposerCallsign: member?.callsign || 'Unknown',
-            requestedAmount: p.goal_amount,
-            currentAmount: p.current_amount,
+            requestedAmount: p.goal_amount_c,
+            currentAmount: p.current_amount_c,
             status: (p.status || 'ACTIVE').toLowerCase(),
             createdAt: p.created_at,
             photos: p.photos,
@@ -2891,7 +2652,9 @@ router.get('/api/local/admin/node-roles', async (ctx) => {
 router.post('/api/local/admin/node-roles', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
-    const targetPubkey = body.pubkey || body.publicKey || body.member_pubkey;
+    // One spelling, `pubkey`, the manager's (node-client.ts grantNodeRoleApi): the `publicKey` / `member_pubkey`
+    // aliases a pre-14-Sep manager sent went in the cutover (1.4.0, audit E3).
+    const targetPubkey = body.pubkey;
     const role = body.role;
 
     // Never read actor from request body or headers (interim rule: docs/admin-surface.md §2).

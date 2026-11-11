@@ -19,6 +19,7 @@ import {
     webLastCommunityLine, WEB_VAULT_COPY_LINE,
 } from './delete-here';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { hearNodeVersionForTests, resetNodeVersionGateForTests } from './node-version-gate';
 
 const KEY = 'a'.repeat(64);
 const CASTLEMAINE = 'https://castlemaine.beanpool.org';
@@ -50,6 +51,7 @@ function pageNodeAnswers(answer: Answer, sent: RequestInit[] = []) {
 
 beforeEach(() => {
     localStorage.clear();
+    resetNodeVersionGateForTests();
 });
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -202,6 +204,8 @@ type PurgeAnswer = 'ok' | 'already' | 'refused' | 'not-json' | 'odd' | 'not-ok' 
 
 function purgeAnswers(answer: PurgeAnswer) {
     const sent: string[] = [];
+    // Castlemaine has said it runs 1.4.0 (lib/node-version-gate.ts): the purge is all this stub answers.
+    hearNodeVersionForTests(CASTLEMAINE);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         if (init?.method !== 'POST' || !url.endsWith('/api/member/purge')) throw new Error(`No request expected: ${url}`);

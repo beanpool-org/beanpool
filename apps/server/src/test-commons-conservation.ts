@@ -47,8 +47,12 @@ function throws(fn: () => unknown, re: RegExp, msg: string) {
     assert(re.test(m), `${msg} (got "${m}")`);
 }
 
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
-const bal = (k: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key=?').get(k) as any)?.balance ?? 0);
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into hundredths,
+ * and every balance, the pot and the node's total are read as the integers they are, so each check is an exact `===`.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const bal = (k: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key=?').get(k) as any)?.balance_c ?? 0;
 
 /**
  * The whole node, as one number.
@@ -59,9 +63,9 @@ const bal = (k: string) => r4((db.prepare('SELECT balance FROM accounts WHERE pu
  */
 const nodeTotal = () => {
     const accounts = (db.prepare(
-        `SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
+        `SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`,
     ).get() as any).t;
-    return r4(accounts + getCommonsBalanceExact());
+    return accounts + getCommonsBalanceExact();
 };
 
 /**
@@ -77,18 +81,19 @@ const nodeTotal = () => {
  */
 const reboot = () => {
     setCommonsBalance(0);
-    const row = db.prepare("SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'").get() as any;
-    if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+    const row = db.prepare("SELECT balance_c FROM accounts WHERE public_key='COMMONS_POOL'").get() as any;
+    if (row && typeof row.balance_c === 'number') setCommonsBalance(row.balance_c);
     reconcileLedgerFromDb();
 };
 
+/** `balance` is the story's Beans. */
 function makeMember(callsign: string, balance: number, opts?: { treasury?: boolean }): string {
     const pk = crypto.randomBytes(32).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, is_treasury)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
         .run(pk, callsign, opts?.treasury ? 1 : 0);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
+        .run(pk, hc(balance), ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
@@ -102,16 +107,16 @@ function main() {
     const before = nodeTotal();
     const commonsBefore = getCommonsBalanceExact();
 
-    const swept = moveToCommons(treasury, 40, 'Surplus swept to Commons');
+    const swept = moveToCommons(treasury, hc(40), 'Surplus swept to Commons');
     assert(!!swept, 'a treasury may sweep surplus into the Commons');
-    assert(bal(treasury) === 60, 'the treasury is debited');
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'and the Commons POT actually receives it');
+    assert(bal(treasury) === hc(60), 'the treasury is debited');
+    assert(getCommonsBalanceExact() === commonsBefore + hc(40), 'and the Commons POT actually receives it');
     assert(nodeTotal() === before, `and the node still sums to the same total (${before})`);
 
     reboot();
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'the credit SURVIVES a restart');
+    assert(getCommonsBalanceExact() === commonsBefore + hc(40), 'the credit SURVIVES a restart');
     assert(nodeTotal() === before, 'and the total is unchanged across the restart');
-    assert(bal(treasury) === 60, 'with the treasury still debited, not silently restored');
+    assert(bal(treasury) === hc(60), 'with the treasury still debited, not silently restored');
 
     // A sweep is recorded, so it is auditable rather than a bare balance change.
     const sweepTxn = db.prepare(
@@ -122,15 +127,15 @@ function main() {
     // ── 2. A treasury cannot sweep itself into debt ───────────────────────────────────────────────
     const t2 = makeMember('Small Treasury', 5, { treasury: true });
     const beforeOverdraw = nodeTotal();
-    assert(moveToCommons(t2, 50, 'too much') === null, 'sweeping more than it holds is refused');
-    assert(bal(t2) === 5, 'the treasury is untouched by the refusal');
+    assert(moveToCommons(t2, hc(50), 'too much') === null, 'sweeping more than it holds is refused');
+    assert(bal(t2) === hc(5), 'the treasury is untouched by the refusal');
     assert(nodeTotal() === beforeOverdraw, 'and nothing moved anywhere');
 
     // ── 3. An ordinary member still cannot use this path ──────────────────────────────────────────
     // Member-facing debits belong in transfer(), where the send gate and floor policy live. Widening
     // moveToCommons to treasuries must not have widened it to everyone.
     const ordinary = makeMember('Ordinary Member', 100);
-    throws(() => moveToCommons(ordinary, 10, 'nope'), /synthetic accounts and treasuries only/,
+    throws(() => moveToCommons(ordinary, hc(10), 'nope'), /synthetic accounts and treasuries only/,
         'an ordinary member is refused — this is not a back door around the send gate');
 
     // ── 4. Pruning a member in CREDIT conserves value (#124) ──────────────────────────────────────
@@ -140,7 +145,7 @@ function main() {
     adminPruneUser(rich, COMMUNITY_DECISION_ACTOR);
 
     assert(bal(rich) === 0, 'the pruned member ends at zero');
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBeforePrune + 200),
+    assert(getCommonsBalanceExact() === commonsBeforePrune + hc(200),
         'and the community RECLAIMS the surplus rather than it vanishing');
     assert(nodeTotal() === beforePrune, 'the node still sums to the same total');
     reboot();
@@ -154,7 +159,7 @@ function main() {
     adminPruneUser(debtor, COMMUNITY_DECISION_ACTOR);
 
     assert(bal(debtor) === 0, 'the debt is settled and the member ends at zero');
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBeforeDebt - 120),
+    assert(getCommonsBalanceExact() === commonsBeforeDebt - hc(120),
         'and the COMMUNITY absorbs it — the write-off is funded, not minted');
     assert(nodeTotal() === beforeDebt, 'so the node total does not move: no beans created');
     reboot();
@@ -164,7 +169,7 @@ function main() {
     // docs/commons-pool-transparency.md's Solvency Rule: a prune must ALWAYS balance the books. That
     // document names an empty pot as a threat to balance, not a reason to refuse — so the pot goes negative
     // and says so, rather than the prune failing or beans being minted.
-    setCommonsBalance(10);
+    setCommonsBalance(hc(10));
     persistCommonsBalance();
     reconcileLedgerFromDb();
     const bigDebtor = makeMember('Deep Debt', -500);
@@ -179,14 +184,14 @@ function main() {
     assert(nodeTotal() === beforeBig, 'and so does the total');
 
     // ── 7. payFromCommons refuses an unfunded draw unless a deficit is explicitly allowed ─────────
-    setCommonsBalance(10);
+    setCommonsBalance(hc(10));
     persistCommonsBalance();
     const payee = makeMember('Payee', 0);
     const beforePay = nodeTotal();
-    assert(payFromCommons(payee, 50, 'unfunded') === null,
+    assert(payFromCommons(payee, hc(50), 'unfunded') === null,
         'an ordinary draw beyond the pot is refused — the Commons does not quietly overdraw');
     assert(bal(payee) === 0 && nodeTotal() === beforePay, 'and nothing moved');
-    assert(!!payFromCommons(payee, 50, 'write-off', { allowDeficit: true }),
+    assert(!!payFromCommons(payee, hc(50), 'write-off', { allowDeficit: true }),
         'while an explicit allowDeficit draw succeeds, for the Solvency Rule');
     assert(nodeTotal() === beforePay, 'and even that conserves value');
 
@@ -195,7 +200,7 @@ function main() {
     // COMMONS_BALANCE global, which these primitives also mutate — so a throw in a later statement leaves
     // memory and rows disagreeing, and the next flush writes the phantom value over the rolled-back row,
     // making it durable. `conservingTransaction` exists for that, and this asserts both halves.
-    setCommonsBalance(25);
+    setCommonsBalance(hc(25));
     persistCommonsBalance();
     reconcileLedgerFromDb();
     const t3 = makeMember('Rollback Treasury', 50, { treasury: true });
@@ -203,20 +208,20 @@ function main() {
     const commonsAtStart = getCommonsBalanceExact();
 
     throws(() => conservingTransaction(() => {
-        moveToCommons(t3, 30, 'swept — then a later statement fails');
+        moveToCommons(t3, hc(30), 'swept — then a later statement fails');
         throw new Error('a later statement failed');
     }), /a later statement failed/, 'the failure propagates rather than being swallowed');
 
-    assert(bal(t3) === 50, 'the treasury ROW is rolled back by SQLite');
-    assert(r4(ledger.getAccount(t3).balance) === 50, 'and the IN-MEMORY balance is rolled back with it');
-    assert(r4(getCommonsBalanceExact()) === r4(commonsAtStart),
+    assert(bal(t3) === hc(50), 'the treasury ROW is rolled back by SQLite');
+    assert(ledger.getAccount(t3).balance_c === hc(50), 'and the IN-MEMORY balance is rolled back with it');
+    assert(getCommonsBalanceExact() === commonsAtStart,
         'and the Commons global is restored, not left ahead of the rows');
     assert(nodeTotal() === beforeRollback, 'so conservation survives the failure');
 
     // The damaging part is what the NEXT flush writes. A stale global becomes durable here or nowhere.
     persistCommonsBalance();
     reboot();
-    assert(r4(getCommonsBalanceExact()) === r4(commonsAtStart),
+    assert(getCommonsBalanceExact() === commonsAtStart,
         'and the next flush cannot make the phantom credit durable');
     assert(nodeTotal() === beforeRollback, 'with the node total still intact across the restart');
 
@@ -225,8 +230,8 @@ function main() {
     // more statements afterwards, so a failure in either is the reachable case. A trigger makes the posts
     // cancellation abort — the last statement in the transaction, and the one furthest from the ledger move.
     const stubborn = makeMember('Cannot Be Pruned', -75);
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
-                VALUES ('post-prune-fail', 'offer', 'food', 'Eggs', '', 1, ?, 'active')`).run(stubborn);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
+                VALUES ('post-prune-fail', 'offer', 'food', 'Eggs', '', ?, ?, 'active')`).run(hc(1), stubborn);
     db.exec(`CREATE TRIGGER t_fail_posts BEFORE UPDATE ON posts
              BEGIN SELECT RAISE(ABORT, 'simulated failure after the ledger move'); END;`);
     const beforeFailedPrune = nodeTotal();
@@ -235,9 +240,9 @@ function main() {
     throws(() => adminPruneUser(stubborn, COMMUNITY_DECISION_ACTOR), /simulated failure/, 'a prune that fails late reports it');
     db.exec('DROP TRIGGER t_fail_posts');
 
-    assert(bal(stubborn) === -75, 'the member keeps their debt — the write-off was rolled back');
-    assert(r4(ledger.getAccount(stubborn).balance) === -75, 'in memory as well as in the row');
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBeforeFailedPrune),
+    assert(bal(stubborn) === -hc(75), 'the member keeps their debt — the write-off was rolled back');
+    assert(ledger.getAccount(stubborn).balance_c === -hc(75), 'in memory as well as in the row');
+    assert(getCommonsBalanceExact() === commonsBeforeFailedPrune,
         'the Commons was NOT charged for a write-off that did not happen');
     assert(nodeTotal() === beforeFailedPrune, 'and no beans were created by the half-completed prune');
     const stillActive = (db.prepare('SELECT status FROM members WHERE public_key=?').get(stubborn) as any)?.status;
@@ -266,12 +271,13 @@ function main() {
     reconcileLedgerFromDb();   // last reconcile: from here on, the decay queue must survive
 
     // Touching the account is what applies it — in memory only, with the row left stale.
-    const decayedTo = ledger.getAccount(decayer).balance;
-    assert(decayedTo < 500, `reading the account applied demurrage lazily (500 → ${r4(decayedTo)})`);
-    assert(bal(decayer) === 500, 'and the ROW is still stale, so memory and rows disagree at this point');
+    const decayedTo = ledger.getAccount(decayer).balance_c;
+    assert(decayedTo < hc(500) && Number.isSafeInteger(decayedTo),
+        `reading the account applied demurrage lazily, truncated once to whole hundredths (50000 → ${decayedTo} hundredths)`);
+    assert(bal(decayer) === hc(500), 'and the ROW is still stale, so memory and rows disagree at this point');
 
     throws(() => conservingTransaction(() => {
-        moveToCommons(t4, 10, 'a sweep that fails, with decay pending');
+        moveToCommons(t4, hc(10), 'a sweep that fails, with decay pending');
         throw new Error('a later statement failed');
     }), /a later statement failed/, 'the failure propagates');
 
@@ -280,7 +286,7 @@ function main() {
     reboot();
     assert(nodeTotal() === baseline,
         `no beans were minted by the pending decay (expected ${baseline}, got ${nodeTotal()})`);
-    assert(bal(t4) === 50, 'the failed sweep left the treasury alone');
+    assert(bal(t4) === hc(50), 'the failed sweep left the treasury alone');
 
     console.log(`\n${passed}/${run} direct-call checks passed.`);
 }
@@ -312,9 +318,10 @@ async function routeChecks() {
     if (!layer) throw new Error('The sweep route is not mounted — this test is looking at the wrong path');
 
     /** Invoke the mounted handler with a hand-built ctx, the way Koa would. */
-    const sweep = async (treasury: string, actor: string, amount: unknown) => {
+    /** `amount_c` is the body's whole hundredths (`hc(40)` for 40 Beans). */
+    const sweep = async (treasury: string, actor: string, amount_c: unknown) => {
         const ctx: any = {
-            params: { treasury }, state: { actor }, requestBody: { amount },
+            params: { treasury }, state: { actor }, requestBody: { amount_c },
             status: 200, body: undefined,
         };
         await layer.stack[layer.stack.length - 1](ctx, async () => {});
@@ -329,19 +336,19 @@ async function routeChecks() {
     const before = nodeTotal();
     const commonsBefore = getCommonsBalanceExact();
 
-    const ok = await sweep(treasury, keeper, 40);
+    const ok = await sweep(treasury, keeper, hc(40));
     assert(ok.status === 200 && ok.body?.success === true, 'a keeper can sweep surplus through the route');
-    assert(bal(treasury) === 60, 'the treasury is debited');
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'the Commons POT receives it');
+    assert(bal(treasury) === hc(60), 'the treasury is debited');
+    assert(getCommonsBalanceExact() === commonsBefore + hc(40), 'the Commons POT receives it');
     assert(nodeTotal() === before, 'and the route conserves value — no beans destroyed');
     reboot();
-    assert(r4(getCommonsBalanceExact()) === r4(commonsBefore + 40), 'which survives a restart');
+    assert(getCommonsBalanceExact() === commonsBefore + hc(40), 'which survives a restart');
     assert(nodeTotal() === before, 'still summing to the same total');
 
     // Overdraw: refused with a message, and nothing moved.
-    const over = await sweep(treasury, keeper, 500);
+    const over = await sweep(treasury, keeper, hc(500));
     assert(over.status === 400, 'sweeping more than the treasury holds is refused');
-    assert(bal(treasury) === 60 && nodeTotal() === before, 'and nothing moved on the refusal');
+    assert(bal(treasury) === hc(60) && nodeTotal() === before, 'and nothing moved on the refusal');
 
     const zero = await sweep(treasury, keeper, 0);
     assert(zero.status === 400, 'a zero sweep is refused');
@@ -349,20 +356,20 @@ async function routeChecks() {
     // A stranger is not a keeper. Seeded at zero deliberately: `nodeTotal()` is compared against `before`
     // below, and a fixture that mints itself 50 beans mid-suite breaks that comparison rather than the code.
     const stranger = makeMember('Stranger', 0);
-    const denied = await sweep(treasury, stranger, 10);
+    const denied = await sweep(treasury, stranger, hc(10));
     assert(denied.status === 403, 'a non-keeper is refused');
 
     // Suspended parties cannot move value — the check that moving off transfer() dropped.
     db.prepare("UPDATE members SET status='disabled' WHERE public_key=?").run(treasury);
-    const closed = await sweep(treasury, keeper, 10);
+    const closed = await sweep(treasury, keeper, hc(10));
     assert(closed.status === 403, 'a keeper cannot sweep a DISABLED enterprise');
-    assert(bal(treasury) === 60, 'and its funds are untouched');
+    assert(bal(treasury) === hc(60), 'and its funds are untouched');
     db.prepare("UPDATE members SET status='active' WHERE public_key=?").run(treasury);
 
     db.prepare("UPDATE members SET status='disabled' WHERE public_key=?").run(keeper);
-    const suspended = await sweep(treasury, keeper, 10);
+    const suspended = await sweep(treasury, keeper, hc(10));
     assert(suspended.status === 403, 'and a DISABLED keeper cannot sweep a live one');
-    assert(bal(treasury) === 60 && nodeTotal() === before, 'with the books unchanged throughout');
+    assert(bal(treasury) === hc(60) && nodeTotal() === before, 'with the books unchanged throughout');
     db.prepare("UPDATE members SET status='active' WHERE public_key=?").run(keeper);
 
     // ── The BLAST RADIUS of that gate ─────────────────────────────────────────────────────────────

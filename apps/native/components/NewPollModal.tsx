@@ -47,9 +47,11 @@ interface NewPollModalProps {
     visible: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    /** The Modal has actually been shown (utils/screen-presented.ts: a refused one never fires it). */
+    onShow?: () => void;
 }
 
-export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps) {
+export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollModalProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
@@ -142,7 +144,8 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                 category: 'community',
                 title: cleanQuestion,
                 description: description.trim(),
-                credits: 0,
+                // A poll is never priced: 0 hundredths of a Bean.
+                price_c: 0,
                 price_type: 'fixed',
                 author_pubkey: identity.publicKey,
                 created_at: new Date().toISOString(),
@@ -177,6 +180,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             animationType="slide"
             presentationStyle="pageSheet"
             onRequestClose={onClose}
+            onShow={onShow}
         >
             <KeyboardAvoidingView
                 style={{ flex: 1 }}

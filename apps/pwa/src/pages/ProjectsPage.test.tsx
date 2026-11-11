@@ -23,7 +23,7 @@ vi.mock('../components/ReportModal', () => ({
 // The node's /api/community/info, read once per page load. By default it says nothing about Decisions, as every node
 // before the switch: every test above the votes-off block runs as it always has.
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { sampleTreasuries } from '../components/ShowcasePreviews';
@@ -34,11 +34,11 @@ const mockTreasuries: Treasury[] = [
         name: 'Community Garden Solar Irrigation',
         callsign: 'garden-solar',
         purpose: 'Installing solar-powered automated water pumps and drip irrigation lines for community plots.',
-        balance: 150,
-        creditLine: 0,
+        balance_c: 15000,
+        creditLine_c: 0,
         liveOffers: 1,
-        goalAmount: 500,
-        currentAmount: 150,
+        goalAmount_c: 50000,
+        currentAmount_c: 15000,
         deadlineAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
         lifecycle: 'bounded',
         status: 'active',
@@ -49,11 +49,11 @@ const mockTreasuries: Treasury[] = [
         name: 'My Own Tool Library Project',
         callsign: 'tool-library',
         purpose: 'Purchasing shared carpentry tools for the community workshop.',
-        balance: 0,
-        creditLine: 0,
+        balance_c: 0,
+        creditLine_c: 0,
         liveOffers: 0,
-        goalAmount: 300,
-        currentAmount: 0,
+        goalAmount_c: 30000,
+        currentAmount_c: 0,
         deadlineAt: null,
         lifecycle: 'bounded',
         status: 'active',
@@ -66,10 +66,10 @@ const mockTreasuryDetail: any = {
     name: 'Community Garden Solar Irrigation',
     callsign: 'garden-solar',
     purpose: 'Installing solar-powered automated water pumps and drip irrigation lines for community plots.',
-    balance: 150,
-    creditLine: 0,
-    goalAmount: 500,
-    currentAmount: 150,
+    balance_c: 15000,
+    creditLine_c: 0,
+    goalAmount_c: 50000,
+    currentAmount_c: 15000,
     deadlineAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
     lifecycle: 'bounded',
     status: 'active',
@@ -91,10 +91,10 @@ const mockTreasuryDetail: any = {
 };
 
 const mockBalance: BalanceInfo = {
-    balance: 100,
-    floor: -500,
-    commonsBalance: 250,
-    earnedCredit: 12,
+    balance_c: 10000,
+    floor_c: -50000,
+    commonsBalance_c: 25000,
+    earnedCredit_c: 1200,
     callsign: 'CharlieBacker',
     keeperOf: ['treasury-mine'],
     tier: 'contributor' as any,
@@ -125,7 +125,7 @@ vi.mock('../lib/api', () => ({
     treasuryPostNeed: vi.fn(async () => ({ success: true })),
     deleteCrowdfundProject: vi.fn(async () => ({ success: true })),
     getDecisions: vi.fn(async () => ({ decisions: [], myPoolVoting: { voiceCredits: 9.6, hasCompletedTrade: true } })),
-    getCommonsBalance: vi.fn(async () => ({ balance: 250 })),
+    getCommonsBalance: vi.fn(async () => ({ balance_c: 25000 })),
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(async () => []),
     getYourGroups: vi.fn(async () => ({ items: [] })),
@@ -351,7 +351,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
     });
 
     it('gates Propose on the node\'s rule: a node admin with no earned credit may propose', async () => {
-        vi.mocked(getBalance).mockResolvedValueOnce({ ...mockBalance, earnedCredit: 0 });
+        vi.mocked(getBalance).mockResolvedValueOnce({ ...mockBalance, earnedCredit_c: 0 });
         vi.mocked(getDecisions).mockResolvedValueOnce({ decisions: [], myPoolVoting: null, canPropose: true });
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(getDecisions).toHaveBeenCalled());
@@ -655,9 +655,9 @@ describe('ProjectsPage: an enterprise photo goes through the crop step and a can
 describe('ProjectsPage where the node has no formal Decisions (the global node)', () => {
     // The node's info is read once per page load and every caller shares it (lib/visitor-lobby-gate): the page and the
     // own-data guard (lib/features readsOwn) both ask, so each test's info stands for the whole page load.
-    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} }) as never); });
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} }) as never); });
     const globalInfo = {
-        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global' as const,
         features: { beans: false, openJoin: true, guestListingsOnly: true, decisions: false },
     };
     const sectionTabs = () => within(screen.getByTestId('commons-section-tabs')).getAllByRole('button').map(b => b.textContent);
@@ -799,7 +799,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 });
 
 describe('Commons with members on demand (review of #1861, N1)', () => {
-    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, features: {} };
     beforeEach(() => { vi.clearAllMocks(); });
     afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never); });
 
@@ -824,7 +824,7 @@ describe('Commons with members on demand (review of #1861, N1)', () => {
 });
 
 describe('Commons on global with previews AND members on demand (where #1853 meets #1861)', () => {
-    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, features: {} };
     // The worldwide community as it answers: every showcase feature off, previews on, people asked for, not read whole.
     const globalInfo = {
         ...localInfo, profile: 'global' as const,
@@ -874,7 +874,7 @@ describe('Commons on global with previews AND members on demand (where #1853 mee
 });
 
 describe('the Commons on global: Example Valley\'s cards are the real ones, once each, marked, only in the preview (review of #2063, B2)', () => {
-    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, features: {} };
     const globalInfo = {
         ...localInfo, profile: 'global' as const,
         features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },
@@ -937,7 +937,7 @@ describe('the Commons on global: Example Valley\'s cards are the real ones, once
 });
 
 describe('the Commons reads nothing of the reader\'s where its features are in preview (global previews audit, P3)', () => {
-    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local' as const, features: {} };
     const globalInfo = {
         ...localInfo, profile: 'global' as const,
         features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true },

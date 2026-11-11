@@ -396,7 +396,7 @@ try {
                 if (url.includes('/api/recovery/community-copy/status')) {
                     return json({ kept: ac.kept, since: ac.kept ? SINCE : null, offered: true, unopenable: ac.cantOpen ? { since: SINCE, reason: ac.cantOpen } : null });
                 }
-                if (url.includes('/api/community/info')) return json({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', recoveryCopies: 'server' });
+                if (url.includes('/api/community/info')) return json({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', recoveryCopies: 'server' });
                 if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
                 return route.continue();
             });
@@ -505,7 +505,7 @@ try {
                 const url = route.request().url();
                 if (url.includes('/api/recovery/shares/status')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enrolledSso: rc.enrolled }) });
                 if (url.includes('/api/community/info')) {
-                    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', recoveryCopies: 'none' }) });
+                    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', recoveryCopies: 'none' }) });
                 }
                 if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
                 return route.continue();

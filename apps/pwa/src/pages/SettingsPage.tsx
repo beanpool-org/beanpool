@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, t, tn } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn } from '@beanpool/core';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -16,7 +16,7 @@ import {
     webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, WEB_VAULT_COPY_LINE, type WebDeletePlan,
 } from '../lib/delete-here';
 import {
-    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, getProfilePrivacy, setProfilePrivacy, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
@@ -63,7 +63,7 @@ import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPo
 import { MemberGuide } from '../components/MemberGuide';
 import { BoldWords } from '../components/BoldWords';
 import { Sentence } from '../components/Sentence';
-import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
+import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
 import { WEB_COPY_CLEARS_LINE, anotherCopyMade, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
 
@@ -306,6 +306,34 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity.publicKey]);
 
+    // "Show who invited me to other members" (I3; server members.inviter_shown): on unless turned off, served to you alone.
+    // null until the node says; where invites are off nobody was invited, so it isn't asked and the row isn't shown.
+    const [inviterShown, setInviterShown] = useState<boolean | null>(null);
+    const [inviterShownError, setInviterShownError] = useState<string | null>(null);
+    const invitesHere = communityInfo?.features?.invites !== false;
+    useEffect(() => {
+        let cancelled = false;
+        setInviterShown(null);
+        if (!invitesHere) return;
+        getProfilePrivacy()
+            .then(body => { if (!cancelled && typeof body?.inviterShown === 'boolean') setInviterShown(body.inviterShown); })
+            .catch(() => { });
+        return () => { cancelled = true; };
+    }, [identity.publicKey, invitesHere]);
+
+    const handleToggleInviterShown = async () => {
+        if (inviterShown === null) return;
+        const next = !inviterShown;
+        setInviterShown(next);
+        setInviterShownError(null);
+        try {
+            await setProfilePrivacy(next);
+        } catch (e: any) {
+            setInviterShown(!next);
+            setInviterShownError(e?.message || t('Your community could not save that. Try again.'));
+        }
+    };
+
     const handleToggleShowAsConnection = async () => {
         if (showAsConnection === null) return;
         const next = !showAsConnection;
@@ -437,8 +465,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [blockedActionError, setBlockedActionError] = useState<string | null>(null);
     /** The key being unblocked, or 'all' for Unblock All, while the community answers. */
     const [blockedBusy, setBlockedBusy] = useState<string | null>(null);
-    /** Said while blocks wait in this browser because the list on the community is full (lib/blocklist). */
-    const [blockedFullNote, setBlockedFullNote] = useState<string | null>(null);
     const blockedNames = useRef(new Map<string, string>());
     /**
      * Blocked members who are still your friends. A block does not end a friendship (guide settings/blocking.md), and the
@@ -453,7 +479,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
     const showBlockedList = async (pubkeys: string[]) => {
         const shown = ++blockedShown.current;
-        setBlockedFullNote(getBlocklistFullNote());
         const items = await Promise.all(pubkeys.map(async (pk) => {
             let callsign = blockedNames.current.get(pk) ?? (pk.length > 16 ? `${pk.slice(0, 8)}...${pk.slice(-6)}` : pk);
             if (!blockedNames.current.has(pk)) {
@@ -755,9 +780,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
-                localStorage.removeItem('bp_geo_settings');
-                localStorage.removeItem('bp_peer_prefs');
-                localStorage.removeItem('beanpool-privacy-tier');
 
                 setSuccess(t('Cache cleared. Resynced & reloading application...'));
                 setTimeout(() => {
@@ -1235,6 +1257,22 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             checked={showAsConnection}
                                             onChange={handleToggleShowAsConnection}
                                             label={t('Show me as a connection in common')}
+                                            activeBgClass="bg-accent border-accent"
+                                            inactiveBgClass="bg-bg-hover border-border-primary"
+                                        />
+                                    </div>
+                                )}
+                                {inviterShown !== null && (
+                                    <div className="p-4 flex items-center justify-between gap-3" data-testid="show-inviter">
+                                        <span className="min-w-0">
+                                            <span className="block text-text-primary font-bold text-[15px]">🌱 <>{showInviterSwitchWords().label}</></span>
+                                            <span className="block text-text-muted text-[12px] mt-0.5">{showInviterSwitchWords().hint}</span>
+                                            {inviterShownError && <span role="alert" className="block text-text-primary text-[12px] mt-1 font-semibold">{inviterShownError}</span>}
+                                        </span>
+                                        <ToggleSwitch
+                                            checked={inviterShown}
+                                            onChange={handleToggleInviterShown}
+                                            label={showInviterSwitchWords().label}
                                             activeBgClass="bg-accent border-accent"
                                             inactiveBgClass="bg-bg-hover border-border-primary"
                                         />
@@ -1864,9 +1902,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         )}
                         {blockedActionError && (
                             <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-300 leading-relaxed">{blockedActionError}</p>
-                        )}
-                        {blockedFullNote && (
-                            <p role="status" className="mb-4 text-xs font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">{blockedFullNote}</p>
                         )}
 
                         {loadingBlockedList ? (

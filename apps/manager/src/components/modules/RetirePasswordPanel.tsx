@@ -58,8 +58,7 @@ export function RetirePasswordPanel({ activeNode, viewer = { kind: 'password' } 
                 setState(data as PasswordRetirement);
                 setLoadMessage('');
             } else {
-                // An older node has no such route: say nothing is known rather than offering a button that 404s.
-                setLoadMessage(res.status === 404 ? 'This server is too old to retire its password. Update it first.' : (data.error || `HTTP ${res.status}`));
+                setLoadMessage(data.error || `HTTP ${res.status}`);
             }
         } catch (e: unknown) {
             setLoadMessage(e instanceof Error ? e.message : String(e));

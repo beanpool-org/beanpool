@@ -16,7 +16,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'MarketplaceListPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -24,13 +23,13 @@ import {
     initStateEngine, seedGenesisMember, createTreasury, createPost, adminAssignTreasuryOperator,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { openShop, setShopPhoto } from './engine/shops.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { ledger } from './engine/ledger.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -53,7 +52,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, WEEK_AGO(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, ledger.getCurrentEpoch());
     return id;
 }
 
@@ -68,7 +67,8 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -81,7 +81,7 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
 
 function insertPhotolessPost(id: string, authorPubkey: string, title: string, category = 'food', credits = 5) {
     db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, status, active, created_at, updated_at)
+        INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, status, active, created_at, updated_at)
         VALUES (?, 'offer', ?, ?, 'A test offer', ?, 'fixed', ?, 'active', 1, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(id, category, title, credits, authorPubkey);
 }
@@ -91,7 +91,6 @@ const OTHER_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB
 
 async function main(): Promise<void> {
     console.log('\n=== test-marketplace-list: Pictures S6 enterprise banner on cards ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

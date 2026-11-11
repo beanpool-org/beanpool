@@ -53,7 +53,7 @@ vi.mock('expo-secure-store', () => ({
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
 }));
 
-import { copyIdOf as copyIdByKey, copyPriceLine, eventCopyOf, makeCopyKeeper, repeatPatternFor, roundToArea, type CopyPair, type CopyStore } from '@beanpool/core';
+import { copyIdOf as copyIdByKey, copyPriceLine, eventCopyOf, makeCopyKeeper, repeatPatternFor, roundToArea, sealDmLine, type CopyPair, type CopyStore } from '@beanpool/core';
 import { memberSigner } from '../crypto';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
@@ -1141,7 +1141,7 @@ describe('an in-person event shown on the global community (the phone against tw
 /** An Offer or a Need on the home community, as the app posts one: the member's answer. */
 async function listingAtHome(me: BeanPoolIdentity, title: string, extra: Record<string, unknown> = {}): Promise<HomeEvent> {
     const res = await signedPost(local.url, '/api/marketplace/posts', {
-        id: randomUUID(), type: 'offer', category: 'food', title, description: `About ${title}`, authorPublicKey: me.publicKey, credits: 20, ...PIN, photos: [PNG], ...extra,
+        id: randomUUID(), type: 'offer', category: 'food', title, description: `About ${title}`, authorPublicKey: me.publicKey, price_c: 2000, ...PIN, photos: [PNG], ...extra,
     }, me);
     const answer = await res.json() as { post?: HomeEvent; error?: string };
     expect(answer.error, title).toBeUndefined();
@@ -1199,7 +1199,12 @@ describe('the door on a copy (the phone against two real nodes, slice GD)', () =
         const conv: string = open.conversation?.id ?? open.id;
         const counts = async () => (await signedGet(global_.url, '/api/me/unread', me)).json() as Promise<{ unread: number; requests: number }>;
         expect(conv).toBeTruthy();
-        const line = () => signedPost(global_.url, '/api/messages/send', { conversationId: conv, authorPubkey: reader.publicKey, ciphertext: randomBytes(32).toString('base64'), nonce: `x25519-xc20p-v2:${randomBytes(24).toString('base64')}` }, reader);
+        // A real line, sealed and signed by the reader to the member (format 4), as the app sends one: the node refuses any other form.
+        const line = () => {
+            const id = randomUUID();
+            const sealed = sealDmLine('Is the sourdough still going?', { myEdPrivHex: reader.privateKey, peerEdPubHex: me.publicKey, conversationId: conv }, { senderPubHex: reader.publicKey, messageId: id });
+            return signedPost(global_.url, '/api/messages/send', { conversationId: conv, authorPubkey: reader.publicKey, id, ...sealed }, reader);
+        };
         expect(await counts()).toMatchObject({ unread: 0, requests: 0 });
         expect((await line()).status).toBe(200);
         expect(await counts()).toMatchObject({ unread: 0, requests: 1 });
@@ -1258,23 +1263,26 @@ describe('the door on a copy (the phone against two real nodes, slice GD)', () =
 describe('an Offer or a Need shown on the global community (the phone against two real nodes)', () => {
     it('the tick: the same key, 0 Beans, the price as words, the rounded point, its photos; home hears nothing of it', async () => {
         const me = await memberOfBoth('Robin Offers');
-        const home = await listingAtHome(me, 'Sourdough loaves', { credits: 20 });
+        const home = await listingAtHome(me, 'Sourdough loaves', { price_c: 2000 });
         const asked = await local.control<string[]>('requests');
         const fromPhone = phoneToLocal.length;
 
         expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
 
         const row = await copyRow(await copyIdOf(home.id, me));
-        expect(row).toMatchObject({ author_pubkey: me.publicKey, type: 'offer', title: 'Sourdough loaves', credits: 0, price_type: 'fixed', shown_price: '20 fixed', status: 'active', photo_count: 1,
+        expect(row).toMatchObject({ author_pubkey: me.publicKey, type: 'offer', title: 'Sourdough loaves', price_c: 0, price_type: 'fixed', shown_price: '2000 fixed', status: 'active', photo_count: 1,
             shown_from_host: HOST, shown_from_post_id: home.id, reach: 'local', repeatable: 0 });
         expect(row.lat).toBe(roundToArea(PIN.lat));
         expect(row.lng).toBe(roundToArea(PIN.lng));
         expect(await hashes(global_, row.id)).toEqual(await hashes(local, home.id));
-        expect(JSON.stringify(copyFields(home, me.publicKey))).not.toMatch(/153\.52219|credits/);
+        // The price goes as words only (shownPrice, whole hundredths and its unit): nothing else of the copy carries a price.
+        const { shownPrice, ...unpriced } = copyFields(home, me.publicKey);
+        expect(shownPrice).toEqual({ price_c: 2000, per: 'fixed' });
+        expect(JSON.stringify(unpriced)).not.toMatch(/153\.52219|price_c/);
 
         // A visitor reads nobody, and the line is the directory's and the price's words.
         const read = await (await realFetch(`${global_.url}/api/marketplace/posts?id=${row.id}`)).json() as any[];
-        expect(read[0]).toMatchObject({ authorPublicKey: 'hidden', shownCopy: true, shownFrom: { name: 'Mullumbimby', door: 'ask', host: HOST }, shownPrice: '20 fixed', credits: 0 });
+        expect(read[0]).toMatchObject({ authorPublicKey: 'hidden', shownCopy: true, shownFrom: { name: 'Mullumbimby', door: 'ask', host: HOST }, shownPrice: '2000 fixed', price_c: 0 });
         expect(copyPriceLine(eventCopyOf(read[0])!)).toBe("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
 
         // Home hears the phone and nobody else: its photos, and the one read a listing's tick needs (is it on the board?).
@@ -1288,29 +1296,29 @@ describe('an Offer or a Need shown on the global community (the phone against tw
 
     it('a Need, and a lendable Offer as an Offer: the price and its unit, and nothing of the loan', async () => {
         const me = await memberOfBoth('Noor Lends');
-        const loan = await listingAtHome(me, 'Post-hole digger', { credits: 3, priceType: 'daily', lendable: true, lendMaxDays: 7, lendTerms: 'Ring 0400 000 000', replacementValue: '50 dollars' });
+        const loan = await listingAtHome(me, 'Post-hole digger', { price_c: 300, priceType: 'daily', lendable: true, lendMaxDays: 7, lendTerms: 'Ring 0400 000 000', replacementValue: '50 dollars' });
         expect((loan as { lendable?: boolean }).lendable).toBe(true);
         expect(await showOnGlobal(loan, local.url, me, deps())).toBe('shown');
         const copy = await copyRow(await copyIdOf(loan.id, me));
-        expect(copy).toMatchObject({ shown_price: '3 daily', credits: 0, lend_terms: null, replacement_value: null });
+        expect(copy).toMatchObject({ shown_price: '300 daily', price_c: 0, lend_terms: null, replacement_value: null });
         expect(copy.lendable ?? 0).toBe(0);
-        const need = await listingAtHome(me, 'Help moving a piano', { type: 'need', credits: 5, priceType: 'hourly' });
+        const need = await listingAtHome(me, 'Help moving a piano', { type: 'need', price_c: 500, priceType: 'hourly' });
         expect(await showOnGlobal(need, local.url, me, deps())).toBe('shown');
         const needCopy = await copyRow(await copyIdOf(need.id, me));
-        expect(needCopy).toMatchObject({ type: 'need', shown_price: '5 hourly', credits: 0 });
+        expect(needCopy).toMatchObject({ type: 'need', shown_price: '500 hourly', price_c: 0 });
         const read = await (await realFetch(`${global_.url}/api/marketplace/posts?id=${needCopy.id}`)).json() as any[];
         expect(copyPriceLine(eventCopyOf(read[0])!)).toBe("5 Beans an hour in Mullumbimby · You can't answer this until Mullumbimby welcomes you.");
     }, START_MS);
 
     it('an edit at home follows: its words, its price, and a tend then finds nothing owed', async () => {
         const me = await memberOfBoth('Tam Edits');
-        const home = await listingAtHome(me, 'Rye loaves', { credits: 20, freeTags: ['wombat'] });
+        const home = await listingAtHome(me, 'Rye loaves', { price_c: 2000, freeTags: ['wombat'] });
         await showOnGlobal(home, local.url, me, deps());
         const id = await copyIdOf(home.id, me);
-        await editAtHome(me, home.id, { title: 'Rye loaves, fresh', category: 'tools', credits: 25, priceType: 'hourly', lat: -28.91234, lng: 153.11111, freeTags: [] });
+        await editAtHome(me, home.id, { title: 'Rye loaves, fresh', category: 'tools', price_c: 2500, priceType: 'hourly', lat: -28.91234, lng: 153.11111, freeTags: [] });
         await tendCopies(me, deps());
         const row = await copyRow(id);
-        expect(row).toMatchObject({ title: 'Rye loaves, fresh', category: 'tools', shown_price: '25 hourly', credits: 0, lat: -28.9, lng: 153.1 });
+        expect(row).toMatchObject({ title: 'Rye loaves, fresh', category: 'tools', shown_price: '2500 hourly', price_c: 0, lat: -28.9, lng: 153.1 });
         expect(row.free_tags ?? '').not.toContain('wombat');
         await tendCopies(me, deps());
         expect((await copyRow(id)).updated_at).toBe(row.updated_at);
@@ -1392,7 +1400,7 @@ describe('an Offer or a Need shown on the global community (the phone against tw
         expect(result).toBe('shown-no-name');
         expect(copyResultLine(result)).toBe("Your community isn't in the directory, so this shows there without its name.");
         const id = await copyIdOf(home.id, me);
-        expect(await copyRow(id)).toMatchObject({ shown_from_host: '', shown_from_post_id: null, shown_price: '20 fixed' });
+        expect(await copyRow(id)).toMatchObject({ shown_from_host: '', shown_from_post_id: null, shown_price: '2000 fixed' });
         const read = await (await realFetch(`${global_.url}/api/marketplace/posts?id=${id}`)).json() as any[];
         expect(copyPriceLine(eventCopyOf(read[0])!)).toBe("20 Beans in another community · You can't buy or take this here.");
     }, START_MS);

@@ -96,7 +96,6 @@ async function openMember(browser, origin, identity) {
     await context.addInitScript(() => {
         try {
             localStorage.setItem('beanpool-theme-mode', 'light');
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
     });

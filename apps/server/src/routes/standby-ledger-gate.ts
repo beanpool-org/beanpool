@@ -25,6 +25,9 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     // out), and turning a request down; and an enterprise's, taken by a keeper.
     /^\/api\/marketplace\/posts\/(accept|request)\/?$/,
     /^\/api\/marketplace\/transactions\/(approve|reject|cancel-request|complete|cancel)\/?$/,
+    // A standing deal's Stop and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's
+    // payments.
+    /^\/api\/marketplace\/standing\/[^/]+\/(stop|extend)\/?$/,
     /^\/api\/(treasury|enterprise)\/[^/]+\/(approve|complete|reject)\/?$/,
     // An enterprise's sweep to the Commons, a pledge to it (a crowdfund's moves Beans), and its wind-up's final sweep.
     /^\/api\/(treasury|enterprise)\/[^/]+\/(sweep|pledge|wind-up\/finalise)\/?$/,
@@ -81,6 +84,10 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/local\/admin\/members\/[^/]+\/request-limit\/undo\/?$/,
     // A recovery fragment released: the log of which fragments left the community.
     /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
+    // A restore that finds the account from the sign-in (engine/recovery-find.ts): a find makes copies findable in the main
+    // server's rows and leads only to a release, so it is refused before the provider's sheet opens. A collect by its hold
+    // shares /api/recovery/collect with a collect by name, which a standby still opens; that one refuses in its handler.
+    /^\/api\/recovery\/find(-nonce)?\/?$/,
     // A link's commissioning ceiling.
     /^\/api\/local\/federation\/links\/ceiling\/?$/,
     // Members' devices and conveniences (design G4): a phone registered or removed, a leave statement, a chat muted or

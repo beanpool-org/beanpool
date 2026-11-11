@@ -6,7 +6,7 @@ import path from 'node:path';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
-import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage } from '@beanpool/core';
+import { SAVE_SEARCH_BUTTON, livePostChange, setLanguage, chatAboutDrafts } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
 import { epochEndsInAnotherTab } from '../lib/another-tab';
@@ -60,7 +60,7 @@ const identity: BeanPoolIdentity = {
 
 const posts = [{
     id: 'post-1', title: 'Bicycle Repair', description: 'Fix gears', type: 'offer', category: 'services',
-    credits: 20, status: 'active', authorPublicKey: 'member-david', authorCallsign: 'David',
+    price_c: 2000, status: 'active', authorPublicKey: 'member-david', authorCallsign: 'David',
     createdAt: '2026-09-15T00:00:00Z',
 }];
 
@@ -73,7 +73,7 @@ describe('MarketplacePage: the viewer balance is a member-only request', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('never asks for the balance of a guest', async () => {
@@ -109,7 +109,7 @@ describe("MarketplacePage: a saved search's See more on Home fills the search (C
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('opens with the words in the search box, once, and the list narrowed to them', async () => {
@@ -186,7 +186,7 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
     const HOUR = 60 * 60 * 1000;
     const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
     const event = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
-        id, type: 'event', category: 'community', title, description: 'Bring gloves', credits: 0, priceType: 'fixed',
+        id, type: 'event', category: 'community', title, description: 'Bring gloves', price_c: 0, priceType: 'fixed',
         status: 'active', active: true, authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: new Date().toISOString(),
         lat: -28.55, lng: 153.5, eventStartAt: inHours(30), eventPlaceName: 'Bindarrabi Hall', eventState: 'scheduled',
         goingCount: 7, interestedCount: 3, myRsvp: null, ...extra,
@@ -203,7 +203,7 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('asks the node for events, shows them as event cards, and leaves out ended ones', async () => {
@@ -361,7 +361,7 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.spyOn(api, 'getMyEvents').mockResolvedValue([mine('ev-1', 'Working bee')] as any);
     });
 
@@ -446,7 +446,7 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
 describe('MarketplacePage: Card View gives tiles their own height', () => {
     const poll = {
         id: 'poll-1', type: 'poll', category: 'community', title: 'Where should the tool shed go?',
-        description: 'North gate or south barn?', credits: 0, priceType: 'fixed', status: 'active', active: true,
+        description: 'North gate or south barn?', price_c: 0, priceType: 'fixed', status: 'active', active: true,
         authorPublicKey: 'member-ada', authorCallsign: 'Ada', createdAt: '2026-09-16T00:00:00Z',
         pollOptions: [
             { id: 'o1', text: 'It is Amazing and we should start on it this weekend', votes: 2, percentage: 50 },
@@ -459,7 +459,7 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
     // One tile with a photo and a long description, one with neither: the two extremes of a tile's own height.
     const chainsaw = {
         id: 'post-2', title: 'Chainsaw', description: 'A very long description. '.repeat(20), type: 'offer',
-        category: 'tools', credits: 5, status: 'active', authorPublicKey: 'member-eve', authorCallsign: 'Eve',
+        category: 'tools', price_c: 500, status: 'active', authorPublicKey: 'member-eve', authorCallsign: 'Eve',
         createdAt: '2026-09-14T00:00:00Z', photos: ['/assets/bean.png'],
     };
 
@@ -469,7 +469,7 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     /** The clickable grid cell around a listing, and the card inside it. */
@@ -580,7 +580,7 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
 // lib/sync.ts routes it.
 describe('MarketplacePage: a listing pushed over the live feed', () => {
     const pushed = (extra: Record<string, unknown> = {}) => ({
-        id: 'post-9', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag of them', credits: 5,
+        id: 'post-9', type: 'offer', category: 'food', title: 'Spare lemons', description: 'A bag of them', price_c: 500,
         priceType: 'fixed', authorPublicKey: 'member-erin', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
         updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
         ...extra,
@@ -598,7 +598,7 @@ describe('MarketplacePage: a listing pushed over the live feed', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('a new listing appears without asking the node for the list again', async () => {
@@ -690,7 +690,7 @@ describe('MarketplacePage: links in a post stay plain text (G11-e)', () => {
     const DESCRIPTION = 'Claim yours: https://phish.example/win or <a href="https://phish.example/x">here</a>';
     const linkPost = {
         id: 'post-link', title: TITLE, description: DESCRIPTION, type: 'offer', category: 'services',
-        credits: 5, status: 'active', active: true, authorPublicKey: 'member-eve', authorCallsign: 'Eve',
+        price_c: 500, status: 'active', active: true, authorPublicKey: 'member-eve', authorCallsign: 'Eve',
         createdAt: '2026-09-15T00:00:00Z',
     };
     const phishLinks = (root: ParentNode) =>
@@ -702,7 +702,7 @@ describe('MarketplacePage: links in a post stay plain text (G11-e)', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('in every board view, a URL, a www. address and an <a> tag are text, never a link', async () => {
@@ -733,7 +733,7 @@ describe('MarketplacePage: a local community refuses its listings to a non-membe
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     });
 
     it('shows the members-only card with a link to the global community, and no error box', async () => {
@@ -752,7 +752,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         description: 'Weekly advice and garden walkthrough',
         type: 'offer',
         category: 'services',
-        credits: 45,
+        price_c: 4500,
         priceType: 'fixed',
         status: 'active',
         repeatable: true,
@@ -767,7 +767,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         description: 'Runs well',
         type: 'offer',
         category: 'goods',
-        credits: 30,
+        price_c: 3000,
         priceType: 'fixed',
         status: 'pending',
         repeatable: false,
@@ -783,7 +783,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         description: 'Two panels down',
         type: 'need',
         category: 'services',
-        credits: 20,
+        price_c: 2000,
         priceType: 'fixed',
         status: 'pending',
         repeatable: false,
@@ -804,7 +804,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
     });
 
     it('recurring Offer + my pending tx shows the trust hold panel with Release, the new payer words, and hides Accept', async () => {
@@ -812,7 +812,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
             id: 'tx-damo',
             postId: 'post-rec',
             postTitle: 'Gardening Mentorship',
-            credits: 45,
+            amount_c: 4500,
             status: 'pending',
             buyerPublicKey: identity.publicKey,
             buyerCallsign: identity.callsign,
@@ -848,7 +848,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
     // Deciding review on 9bf7d11d, finding 1: the link opens the deals sheet from the listing page itself.
     it('"All your deals ›" on the listing page opens Your deals there', async () => {
         const myPendingTx: api.MarketplaceTransaction = {
-            id: 'tx-damo', postId: 'post-rec', postTitle: 'Gardening Mentorship', credits: 45, status: 'pending',
+            id: 'tx-damo', postId: 'post-rec', postTitle: 'Gardening Mentorship', amount_c: 4500, status: 'pending',
             buyerPublicKey: identity.publicKey, buyerCallsign: identity.callsign, sellerPublicKey: 'damo-pk', sellerCallsign: 'Damo',
             createdAt: '2026-10-24T10:00:00.000Z',
         };
@@ -862,7 +862,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
     // Finding 2: on a Need the author pays, and is never told they "took this up".
     it("a Need's author, who pays, sees Release but not \"You took this up\"", async () => {
         const needTx: api.MarketplaceTransaction = {
-            id: 'tx-myneed', postId: 'post-myneed', postTitle: 'Fix my fence', credits: 20, status: 'pending',
+            id: 'tx-myneed', postId: 'post-myneed', postTitle: 'Fix my fence', amount_c: 2000, status: 'pending',
             buyerPublicKey: identity.publicKey, buyerCallsign: identity.callsign, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper',
             createdAt: '2026-10-24T10:00:00.000Z',
         };
@@ -886,7 +886,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
             id: 'tx-stranger',
             postId: 'post-rec',
             postTitle: 'Gardening Mentorship',
-            credits: 45,
+            amount_c: 4500,
             status: 'pending',
             buyerPublicKey: 'stranger-pk',
             buyerCallsign: 'Stranger',
@@ -922,7 +922,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
             id: 'tx-oneoff',
             postId: 'post-oneoff',
             postTitle: 'Old Lawn Mower',
-            credits: 30,
+            amount_c: 3000,
             status: 'pending',
             buyerPublicKey: identity.publicKey,
             buyerCallsign: identity.callsign,
@@ -971,7 +971,7 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         description: 'Open to all',
         type: 'offer',
         category: 'goods',
-        credits: 10,
+        price_c: 1000,
         status: 'active',
         active: true,
         authorPublicKey: 'author-pubkey',
@@ -986,7 +986,7 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         description: 'For group only',
         type: 'offer',
         category: 'goods',
-        credits: 10,
+        price_c: 1000,
         status: 'active',
         active: true,
         authorPublicKey: 'author-pubkey',
@@ -1002,7 +1002,7 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         description: 'For one person',
         type: 'offer',
         category: 'goods',
-        credits: 10,
+        price_c: 1000,
         status: 'active',
         active: true,
         authorPublicKey: 'author-pubkey',
@@ -1018,7 +1018,7 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
         vi.stubGlobal('fetch', async (url: string) => {
             const path = url.replace(/^https?:\/\/[^/]+/, '');
             if (path === '/api/shops/mine') {
@@ -1171,11 +1171,11 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     const ENT = 'farm-co-pk';
     const at = '2026-10-24T10:00:00.000Z';
     const listing = (over: Record<string, unknown>) => ({
-        id: 'p', title: 'Listing', description: 'Words', type: 'offer', category: 'services', credits: 45, priceType: 'fixed',
+        id: 'p', title: 'Listing', description: 'Words', type: 'offer', category: 'services', price_c: 4500, priceType: 'fixed',
         status: 'active', repeatable: false, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', createdAt: at, photos: ['/p.jpg'], ...over,
     });
     const deal = (over: Partial<api.MarketplaceTransaction>): api.MarketplaceTransaction => ({
-        id: 'tx', postId: 'p', postTitle: 'Listing', credits: 45, status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Guest',
+        id: 'tx', postId: 'p', postTitle: 'Listing', amount_c: 4500, status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Guest',
         sellerPublicKey: 'damo-pk', sellerCallsign: 'Damo', createdAt: at, ...over,
     });
     let feed: any[] = [];
@@ -1192,7 +1192,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         vi.spyOn(api, 'getTreasury').mockResolvedValue(null);
         vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-        vi.spyOn(api, 'getBalance').mockImplementation(async () => ({ balance: 100, isBlockedFromTrading: false, keeperOf }) as any);
+        vi.spyOn(api, 'getBalance').mockImplementation(async () => ({ balance_c: 10000, isBlockedFromTrading: false, keeperOf }) as any);
         vi.spyOn(api, 'getMemberRatings').mockResolvedValue({ ratings: [], average: 0, count: 0 } as any);
         // As the node answers (GET /api/marketplace/transactions): of one status when asked, its 50 newest.
         vi.spyOn(api, 'getMyMarketplaceTransactions').mockImplementation(async (pk: string, status?: string) => (pk === ENT
@@ -1225,7 +1225,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it("one-off Need, payee (helping, approved): \"You're helping with this\", the payer named, Cancel, never Release", async () => {
         await open(listing({ title: 'Fix the fence', type: 'need', status: 'pending', authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk', pendingTransactionId: 'tx' }),
-            [deal({ credits: 20, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+            [deal({ amount_c: 2000, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
         expect(await screen.findByText("You're helping with this · 20 Beans held for you")).toBeInTheDocument();
         expect(screen.getByText('⏳ Pending Release by Kofi')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
@@ -1235,14 +1235,14 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it('repeatable Need, payee: the same, and the listing stays on the board with nothing to take up again', async () => {
         await open(listing({ title: 'Stall help', type: 'need', repeatable: true, authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk' }),
-            [deal({ credits: 20, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+            [deal({ amount_c: 2000, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
         expect(await screen.findByText("You're helping with this · 20 Beans held for you")).toBeInTheDocument();
         noTakeUp();
     });
 
     it('free Need, payee (helping, approved): no Beans held, never "0 Beans held for you"', async () => {
-        await open(listing({ title: 'Carry chairs', type: 'need', credits: 0, status: 'pending', authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk', pendingTransactionId: 'tx' }),
-            [deal({ credits: 0, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+        await open(listing({ title: 'Carry chairs', type: 'need', price_c: 0, status: 'pending', authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk', pendingTransactionId: 'tx' }),
+            [deal({ amount_c: 0, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
         expect(await screen.findByText("You're helping with this · no Beans held")).toBeInTheDocument();
         expect(screen.queryByText(/0 Beans held/)).not.toBeInTheDocument();
     });
@@ -1261,7 +1261,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         const tapIt = async () => { fireEvent.click(await screen.findByRole('button', { name: '✋ I can do this' })); return screen.findByText('I can do this'); };
 
         it('a priced Need: the heading, the amount and the name, who agrees and when the Beans are yours, and no fee line', async () => {
-            await open(listing({ title: 'Dig a bed', type: 'need', credits: 40, ...SAM }), []);
+            await open(listing({ title: 'Dig a bed', type: 'need', price_c: 4000, ...SAM }), []);
             expect(await tapIt()).toBeInTheDocument();
             expect(screen.getByText("You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.")).toBeInTheDocument();
             expect(screen.queryByText(/Offer to Fulfill/)).not.toBeInTheDocument();
@@ -1270,7 +1270,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         });
 
         it('priced by the hour: the total follows the hours typed, and no usable hours means no sentence rather than a wrong amount', async () => {
-            await open(listing({ title: 'Dig a bed', type: 'need', credits: 20, priceType: 'hourly', ...SAM }), []);
+            await open(listing({ title: 'Dig a bed', type: 'need', price_c: 2000, priceType: 'hourly', ...SAM }), []);
             await tapIt();
             expect(screen.getByText("You'd do it for 20 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.")).toBeInTheDocument();
             const hours = screen.getByRole('textbox');
@@ -1294,20 +1294,20 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         });
 
         it('a free Need says it is free, and never "0 Beans" or Beans that will not come', async () => {
-            await open(listing({ title: 'Carry chairs', type: 'need', credits: 0, ...SAM }), []);
+            await open(listing({ title: 'Carry chairs', type: 'need', price_c: 0, ...SAM }), []);
             await tapIt();
             expect(screen.getByText("You'd do it for free. Sam agrees, you do it, and Sam confirms.")).toBeInTheDocument();
             expect(screen.queryByText(/0 Beans|0 B\b|free listing/)).not.toBeInTheDocument();
         });
 
         it('a Need with no name on it says the person who asked, not a made-up name', async () => {
-            await open(listing({ title: 'Dig a bed', type: 'need', credits: 40, authorPublicKey: 'sam-pk', authorCallsign: '' }), []);
+            await open(listing({ title: 'Dig a bed', type: 'need', price_c: 4000, authorPublicKey: 'sam-pk', authorCallsign: '' }), []);
             await tapIt();
             expect(screen.getByText("You'd do it for 40 Beans. The person who asked agrees, you do it, they confirm, and the Beans are yours.")).toBeInTheDocument();
         });
 
         it('an Offer keeps its own words', async () => {
-            await open(listing({ title: 'Lawn mower', credits: 45 }), []);
+            await open(listing({ title: 'Lawn mower', price_c: 4500 }), []);
             fireEvent.click(await screen.findByRole('button', { name: /Accept Offer/ }));
             expect(await screen.findByText('Accept this Offer?')).toBeInTheDocument();
             expect(screen.getByText(/By proceeding, you commit 45 B/)).toBeInTheDocument();
@@ -1315,15 +1315,15 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         });
 
         it('the helper whose request is waiting reads the fee on the deal: the Beans, the 1.5% and what is theirs net', async () => {
-            await open(listing({ title: 'Dig a bed', type: 'need', repeatable: true, credits: 20, ...SAM }),
-                [deal({ status: 'requested', credits: 20, buyerPublicKey: 'sam-pk', buyerCallsign: 'Sam', sellerPublicKey: ME })]);
+            await open(listing({ title: 'Dig a bed', type: 'need', repeatable: true, price_c: 2000, ...SAM }),
+                [deal({ status: 'requested', amount_c: 2000, buyerPublicKey: 'sam-pk', buyerCallsign: 'Sam', sellerPublicKey: ME })]);
             const card = (await screen.findByText('Offer Pending Approval')).parentElement!;
             expect(card).toHaveTextContent('You have requested to earn 20 credits (19.70 net after 1.5% transaction fee) (100% community owned) for fulfilling this need.');
         });
 
         it('a free request has no fee line to read', async () => {
-            await open(listing({ title: 'Carry chairs', type: 'need', repeatable: true, credits: 0, ...SAM }),
-                [deal({ status: 'requested', credits: 0, buyerPublicKey: 'sam-pk', buyerCallsign: 'Sam', sellerPublicKey: ME })]);
+            await open(listing({ title: 'Carry chairs', type: 'need', repeatable: true, price_c: 0, ...SAM }),
+                [deal({ status: 'requested', amount_c: 0, buyerPublicKey: 'sam-pk', buyerCallsign: 'Sam', sellerPublicKey: ME })]);
             const card = (await screen.findByText('Offer Pending Approval')).parentElement!;
             expect(card).not.toHaveTextContent(/1\.5%|transaction fee/);
         });
@@ -1372,7 +1372,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     it('the author of a recurring Offer with two deals under way: one row each, the payer named, Cancel each, no Release', async () => {
         await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
             deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, createdAt: '2026-10-24T10:00:00.000Z' }),
-            deal({ id: 'tx-b', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, credits: 30, createdAt: '2026-10-26T10:00:00.000Z' }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, amount_c: 3000, createdAt: '2026-10-26T10:00:00.000Z' }),
         ]);
         const rows = await screen.findByTestId('deals-under-way');
         expect(within(rows).getByText('Deals under way: 2')).toBeInTheDocument();
@@ -1397,6 +1397,19 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.click(within(screen.getByTestId('deal-row-tx-a')).getByRole('button', { name: 'Message Marty' }));
         await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-1'));
         expect(chat).toHaveBeenCalledWith('dm', [ME, 'marty-pk'], ME, undefined, 'p');
+        // The chat opens with this listing above its composer (core chat-about.ts).
+        expect(chatAboutDrafts.get('conv-1')).toMatchObject({ postId: 'p', title: 'Pottery course', kind: 'offer' });
+    });
+
+    it("Message on a listing leaves its title and price in the chat's chip, for the next message", async () => {
+        chatAboutDrafts.clear();
+        vi.spyOn(api, 'createConversationApi').mockResolvedValue({ conversation: { id: 'conv-9' } } as any);
+        const onNavigate = vi.fn();
+        await open(listing({ title: 'Pottery course', price_c: 4500 }), [], { onNavigate });
+        fireEvent.click(await screen.findByRole('button', { name: /💬/ }));
+        await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-9'));
+        expect(chatAboutDrafts.get('conv-9')).toMatchObject({ postId: 'p', title: 'Pottery course', kind: 'offer', price: '45 Beans' });
+        chatAboutDrafts.clear();
     });
 
     // R1 (engine/request-limits.ts): reports cleared the member's message requests; every screen that starts a chat words the refusal.
@@ -1448,7 +1461,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     it("a Need's author, who pays: their row has Release and Cancel, and Release names the deal", async () => {
         const done = vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);
         await open(listing({ title: 'Fix the fence', type: 'need', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }),
-            [deal({ id: 'tx-h', credits: 20, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
+            [deal({ id: 'tx-h', amount_c: 2000, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
         const row = await screen.findByTestId('deal-row-tx-h');
         expect(within(row).getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
         fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
@@ -1458,8 +1471,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it("a daily Need's author changing 3 days to 5 on their row: the 100 Beans that will go, not the 60 held, then released for 5", async () => {
         const done = vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);
-        await open(listing({ title: 'Pick the olives', type: 'need', repeatable: true, priceType: 'daily', credits: 20, authorPublicKey: ME, authorCallsign: 'Guest' }),
-            [deal({ id: 'tx-d', credits: 60, hours: 3, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
+        await open(listing({ title: 'Pick the olives', type: 'need', repeatable: true, priceType: 'daily', price_c: 2000, authorPublicKey: ME, authorCallsign: 'Guest' }),
+            [deal({ id: 'tx-d', amount_c: 6000, hours: 3, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
         const row = await screen.findByTestId('deal-row-tx-d');
         fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
         const line = within(row).getByTestId('release-line-tx-d');
@@ -1475,8 +1488,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     });
 
     it("one who took up an hourly Offer: the panel's total is the deal's own rate for the hours typed", async () => {
-        await open(listing({ title: 'Garden help', priceType: 'hourly', credits: 15, status: 'pending', pendingTransactionId: 'tx-g' }),
-            [deal({ id: 'tx-g', credits: 30, hours: 2 })]);
+        await open(listing({ title: 'Garden help', priceType: 'hourly', price_c: 1500, status: 'pending', pendingTransactionId: 'tx-g' }),
+            [deal({ id: 'tx-g', amount_c: 3000, hours: 2 })]);
         fireEvent.click(await screen.findByRole('button', { name: /Release Credits/ }));
         // Opened at the 2 hours the deal was struck for, as each row and the phone open it (it opened at 1: 15 B).
         expect(screen.getByRole('textbox')).toHaveValue('2');
@@ -1555,8 +1568,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);
             vi.spyOn(api, 'cancelMarketplaceTransaction').mockResolvedValue({ success: true } as any);
             vi.spyOn(window, 'confirm').mockReturnValue(true);
-            const fence = listing({ title: 'Fix the fence', type: 'need', status: 'pending', pendingTransactionId: 'tx-h', authorPublicKey: ME, authorCallsign: 'Guest', credits: 20 });
-            const held = deal({ id: 'tx-h', credits: 20, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' });
+            const fence = listing({ title: 'Fix the fence', type: 'need', status: 'pending', pendingTransactionId: 'tx-h', authorPublicKey: ME, authorCallsign: 'Guest', price_c: 2000 });
+            const held = deal({ id: 'tx-h', amount_c: 2000, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' });
             // Opened by its link, which the app then clears (App.tsx, onPostOpened): nothing re-selects the listing after.
             const view = await open(fence, [held]);
             view.rerender(<MarketplacePage identity={identity} isMember={true} transactions={[held]} />);
@@ -1587,20 +1600,20 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     });
 
     it('a lender with a free loan out: the row says no Beans are held, never "0 Beans held"', async () => {
-        await open(listing({ title: 'Ladder', lendable: true, credits: 0, status: 'pending', authorPublicKey: ME, authorCallsign: 'Guest', pendingTransactionId: 'tx-l' }),
-            [deal({ id: 'tx-l', credits: 0, buyerPublicKey: 'mo-pk', buyerCallsign: 'Mo', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+        await open(listing({ title: 'Ladder', lendable: true, price_c: 0, status: 'pending', authorPublicKey: ME, authorCallsign: 'Guest', pendingTransactionId: 'tx-l' }),
+            [deal({ id: 'tx-l', amount_c: 0, buyerPublicKey: 'mo-pk', buyerCallsign: 'Mo', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
         const row = await screen.findByTestId('deal-row-tx-l');
         expect(within(row).getByText('Mo · no Beans held · since 24 Oct')).toBeInTheDocument();
         expect(screen.queryByText(/0 Beans held/)).not.toBeInTheDocument();
     });
 
     // ── Keepers ──────────────────────────────────────────────────────────────────────────────────────────────────
-    const farmNeed = listing({ title: 'Mend the polytunnel', type: 'need', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', credits: 20 });
-    const farmOffer = listing({ title: 'Dozen eggs', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', credits: 6 });
+    const farmNeed = listing({ title: 'Mend the polytunnel', type: 'need', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', price_c: 2000 });
+    const farmOffer = listing({ title: 'Dozen eggs', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', price_c: 600 });
 
     it("a keeper of the enterprise on its Need: the enterprise's deal (read for it), Release at its door, no Cancel, no Offer to fulfil", async () => {
         keeperOf = [ENT];
-        entDeals = [deal({ id: 'tx-f', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+        entDeals = [deal({ id: 'tx-f', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
         const done = vi.spyOn(api, 'treasuryComplete').mockResolvedValue({ success: true });
         const ownDoor = vi.spyOn(api, 'completeMarketplaceTransaction');
         await open(farmNeed, []);
@@ -1622,9 +1635,9 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it("a keeper sees the enterprise's held deal behind 50 newer finished ones, with its Release", async () => {
         keeperOf = [ENT];
-        const sold = Array.from({ length: 50 }, (_, i) => deal({ id: `tx-sold-${i}`, postId: 'other', status: 'completed', credits: 6,
+        const sold = Array.from({ length: 50 }, (_, i) => deal({ id: `tx-sold-${i}`, postId: 'other', status: 'completed', amount_c: 600,
             buyerPublicKey: `buyer-${i}`, sellerPublicKey: ENT, createdAt: new Date(Date.parse('2026-10-27T00:00:00.000Z') + i * 60_000).toISOString() }));
-        entDeals = [...sold, deal({ id: 'tx-old', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+        entDeals = [...sold, deal({ id: 'tx-old', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
         await open(farmNeed, []);
         const row = await screen.findByTestId('deal-row-tx-old');
         expect(within(row).getByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
@@ -1632,7 +1645,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it("a keeper paid by the enterprise's own Need: their pay is another keeper's to release; they cancel as themselves", async () => {
         keeperOf = [ENT];
-        entDeals = [deal({ id: 'tx-k', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME, sellerCallsign: 'Guest' })];
+        entDeals = [deal({ id: 'tx-k', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME, sellerCallsign: 'Guest' })];
         await open(farmNeed, []);
         const row = await screen.findByTestId('deal-row-tx-k');
         expect(within(row).getByText('⏳ Pending Release by Farm Co-op')).toBeInTheDocument();
@@ -1643,8 +1656,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     it("a keeper on the enterprise's recurring Offer: each buyer's row, waiting on them to release; no Release, no Cancel, no Accept", async () => {
         keeperOf = [ENT];
         entDeals = [
-            deal({ id: 'tx-1', credits: 6, buyerPublicKey: 'mo-pk', buyerCallsign: 'Mo', sellerPublicKey: ENT, sellerCallsign: 'Farm Co-op' }),
-            deal({ id: 'tx-2', credits: 6, buyerPublicKey: 'ana-pk', buyerCallsign: 'Ana', sellerPublicKey: ENT, sellerCallsign: 'Farm Co-op', createdAt: '2026-10-25T10:00:00.000Z' }),
+            deal({ id: 'tx-1', amount_c: 600, buyerPublicKey: 'mo-pk', buyerCallsign: 'Mo', sellerPublicKey: ENT, sellerCallsign: 'Farm Co-op' }),
+            deal({ id: 'tx-2', amount_c: 600, buyerPublicKey: 'ana-pk', buyerCallsign: 'Ana', sellerPublicKey: ENT, sellerCallsign: 'Farm Co-op', createdAt: '2026-10-25T10:00:00.000Z' }),
         ];
         await open(farmOffer, []);
         const rows = await screen.findByTestId('deals-under-way');
@@ -1657,7 +1670,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it("a keeper answers a request on the enterprise's Need at its door", async () => {
         keeperOf = [ENT];
-        entDeals = [deal({ id: 'tx-q', status: 'requested', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+        entDeals = [deal({ id: 'tx-q', status: 'requested', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
         const yes = vi.spyOn(api, 'treasuryApprove').mockResolvedValue({ success: true });
         const ownYes = vi.spyOn(api, 'approveMarketplaceRequest');
         await open(farmNeed, []);
@@ -1668,8 +1681,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it("a keeper's own offer to help on the enterprise's Need: theirs to withdraw, never on the farm's list to approve or deny", async () => {
         keeperOf = [ENT];
-        const mine = deal({ id: 'tx-mine', status: 'requested', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME, sellerCallsign: 'Guest' });
-        entDeals = [mine, deal({ id: 'tx-mo', status: 'requested', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo', createdAt: '2026-10-25T10:00:00.000Z' })];
+        const mine = deal({ id: 'tx-mine', status: 'requested', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME, sellerCallsign: 'Guest' });
+        entDeals = [mine, deal({ id: 'tx-mo', status: 'requested', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo', createdAt: '2026-10-25T10:00:00.000Z' })];
         const withdraw = vi.spyOn(api, 'cancelMarketplaceRequest').mockResolvedValue({ success: true } as any);
         const deny = vi.spyOn(api, 'treasuryReject');
         await open(farmNeed, [mine]);
@@ -1781,6 +1794,41 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             expect(after(takeUp, screen.getByText('Posted by'))).toBe(true);
             expect(after(takeUp, screen.getByTestId('share-button'))).toBe(true);
             expect(screen.getByTestId('listing-type-chip').textContent).toBe('NEED');
+        });
+
+        // A listing priced at 0 reads Free (core listing-price.ts; Marty, 9 Nov: "WILLING TO PAY 0 ... is it free? its confusing?").
+        it('a Need at 0: "Free help wanted" under the label Price, never "Willing to Pay" over a 0, with no Beans sign', async () => {
+            await open(listing({ type: 'need', title: 'Invites to harvest any sort of spray free food', price_c: 0 }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^PriceFree help wanted$/i);
+            expect(screen.queryByText('Willing to Pay')).toBeNull();
+            // No Beans icon and no figure: a screen reader reads "Free help wanted", not "0 B".
+            expect(box.querySelector('img')).toBeNull();
+            expect(box.textContent).not.toMatch(/0|B\b|hrs/);
+        });
+
+        it('an Offer at 0 says Free, under the label it always had, with no Beans sign and no hours line', async () => {
+            await open(listing({ price_c: 0 }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^Asking PriceFree$/i);
+            expect(box.querySelector('img')).toBeNull();
+        });
+
+        it.each(['hourly', 'daily', 'weekly', 'monthly'])('a price %s at 0 is Free too, never "Free /hr"', async (priceType) => {
+            await open(listing({ price_c: 0, priceType }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^Asking PriceFree$/i);
+            expect(box.textContent).not.toMatch(/\/|Hr|Dy|Wk|Mo/);
+        });
+
+        it('a Need with a price keeps its label, its figure, its Beans sign and its unit', async () => {
+            await open(listing({ type: 'need', price_c: 2000, priceType: 'hourly' }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/Willing to Pay/i);
+            expect(box).toHaveTextContent('20');
+            expect(box.querySelector('img')).not.toBeNull();
+            expect(box).toHaveTextContent('/Hr');
+            expect(box.textContent).not.toContain('Free');
         });
 
         it('places the photo left from md up, spanning the three rows, and the head, the action and the rest right, by the grid', async () => {

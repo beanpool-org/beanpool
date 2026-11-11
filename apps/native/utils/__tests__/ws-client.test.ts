@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, DeviceEventEmitter } from 'react-native';
 import { requestSync, applyLivePostChange, ownCardChanged, lastPillarSyncStartedAt } from '../../services/pillar-sync';
 import { WebSocketSyncClient } from '../../services/ws-client';
+import { noteHealthAnswer, resetNodeVersionGateForTests } from '../node-version-gate';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
@@ -58,10 +59,21 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
     let client: WebSocketSyncClient;
     // False stands in for a node that is down: new sockets never open.
     let autoOpen = true;
+    /** The server version the community's health names (utils/node-version-gate.ts): read before the first socket of a run. */
+    let serverVersion = '1.4.0';
+    const healthReads: string[] = [];
 
     beforeEach(() => {
         vi.useFakeTimers();
         vi.clearAllMocks();
+        resetNodeVersionGateForTests();
+        serverVersion = '1.4.0';
+        healthReads.length = 0;
+        // Nothing here reaches a node: the only request the socket client makes is the health read, answered here.
+        (globalThis as any).fetch = vi.fn(async (url: string) => {
+            healthReads.push(String(url));
+            return { ok: true, status: 200, json: async () => ({ version: serverVersion }) };
+        });
         mockAppStateListeners.length = 0;
         (AppState as any).currentState = 'active';
         autoOpen = true;
@@ -120,7 +132,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
         const socket = await startAndConnect();
         expect(buildSignedWsParams).toHaveBeenCalledWith('wss://testnode.beanpool.org/ws', 'aa', ME);
-        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2&nr=1');
+        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2&nr=1&bell=1');
     });
 
     it('opens no socket at all, signed or not, to an address that names one host and reaches another (#1224 review 4113495290)', async () => {
@@ -133,6 +145,25 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
             expect(buildSignedWsParams).not.toHaveBeenCalled();
             client.stop();
         }
+    });
+
+    it('a server older than this app talks to (1.2.37) gets no socket: its health is read first, and nothing else is opened', async () => {
+        serverVersion = '1.2.37';
+        expect(await startAndConnect()).toBeNull();
+        expect(healthReads).toEqual(['https://testnode.beanpool.org/api/community/health']);
+        client.stop();
+        // Heard already this run: not asked again, and still no socket.
+        expect(await startAndConnect()).toBeNull();
+        expect(healthReads).toHaveLength(1);
+    });
+
+    it('a server updated since (its health heard at 1.4.0) gets its socket again', async () => {
+        noteHealthAnswer('https://testnode.beanpool.org', { version: '1.2.37' });
+        expect(await startAndConnect()).toBeNull();
+        client.stop();
+        noteHealthAnswer('https://testnode.beanpool.org', { version: '1.4.0' });
+        expect(await startAndConnect()).not.toBeNull();
+        expect(healthReads).toEqual([]);
     });
 
     it('sends opt-in ping with { type: "ping", wantPong: true } on open and interval', async () => {

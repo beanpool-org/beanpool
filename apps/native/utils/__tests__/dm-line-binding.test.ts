@@ -105,7 +105,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { dmLineSigInMetadata, dmLineSigVerifies } from '@beanpool/core';
+import { dmLineSigOf, dmLineSigVerifies } from '@beanpool/core';
 import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
@@ -118,13 +118,12 @@ import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { dmPeerPinsStoreKey, dmLinesAtUpdateStoreKey, dmConversationsSeenStoreKey } from '../storage-keys';
-import { encryptDmFormat2 } from '../e2e-crypto';
 import { chatChoices, chatPickList } from '../home-chat';
 import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
 import { lockForDm, payloadForChat } from '../../../pwa/src/lib/dm-lock';
-import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, DM_NONCE_PREFIX, reportKind, pseudoLocalise, setLanguage } from '@beanpool/core';
+import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, dmLineSigDigest, DM_NONCE_PREFIX, reportKind, pseudoLocalise, setLanguage } from '@beanpool/core';
 import { reportedAlertBody, REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_TEXT, REPORT_CHILD_SAFETY_CLASSIFIED_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
@@ -276,6 +275,44 @@ function editStoredPins(who: Person, change: (pins: Record<string, any>) => void
 }
 
 /** Send a line from the phone in hand, through the real send path, and wait for the node to have it. */
+/**
+ * A line `sealer` sealed in `named`'s name (both hold the conversation's key, so the seal opens) and signed with `signer`'s
+ * key, laid out as dm-crypto.ts lays a line (sealDmLine refuses to make it). With `signer` = `named`, `named`'s genuine line.
+ */
+function sealedInNameOf(sealer: Person, named: Person, text: string, o: { signer?: Person; id?: string; part?: 'body' | 'attachment' } = {}): { id: string; ciphertext: string; nonce: string } {
+    const id = o.id ?? randomUUID();
+    const part = o.part ?? 'body';
+    const nonce = new Uint8Array(randomBytes(24));
+    const nonceColumn = DM_NONCE_PREFIX + Buffer.from(nonce).toString('base64');
+    const at = '2026-10-01T09:30:00.000Z';
+    const sealed = xchacha20poly1305(deriveDmKey({ myEdPrivHex: sealer.privateKey, peerEdPubHex: named.publicKey, conversationId: dm.id }), nonce,
+        dmLineAad(dm.id, { senderPubHex: named.publicKey, messageId: id, part })).encrypt(new Uint8Array([4, 0, ...Buffer.from(text, 'utf8')]));
+    const digest = dmLineSigDigest(nonceColumn, sealed, { conversationId: dm.id, senderPubHex: named.publicKey, recipientPubHex: sealer.publicKey, messageId: id, part, at });
+    const sig = ed25519.sign(digest, hexToBytes((o.signer ?? sealer).privateKey));
+    return { id, nonce: nonceColumn, ciphertext: Buffer.from(new Uint8Array([4, ...sig, ...Buffer.from(at, 'ascii'), ...sealed])).toString('base64') };
+}
+
+/** A row the node stores in `named`'s name, as sealedInNameOf makes it. */
+function rowInNameOf(sealer: Person, named: Person, text: string, signer?: Person): Line {
+    const f = sealedInNameOf(sealer, named, text, { signer });
+    const line: Line = { id: f.id, conversationId: dm.id, authorPubkey: named.publicKey, type: 'text', systemType: null, metadata: null, timestamp: tick(), editedAt: null, ciphertext: f.ciphertext, nonce: f.nonce };
+    node.lines.push(line);
+    return line;
+}
+
+/** A line as an app before 1.4.0 wrote it, from the primitives: format 2 (the conversation id alone) or format 3 (unsigned). */
+function olderFormatLine(format: 2 | 3, from: Person, to: Person, text: string): Line {
+    const id = randomUUID();
+    const nonce = new Uint8Array(randomBytes(24));
+    const aad = format === 3 ? Buffer.from(JSON.stringify(['beanpool-dm-line/3', dm.id, from.publicKey, id, 'body'])) : Buffer.from(dm.id);
+    const plain = format === 3 ? new Uint8Array([3, 0, ...Buffer.from(text, 'utf8')]) : new Uint8Array(Buffer.from(text, 'utf8'));
+    const ct = xchacha20poly1305(deriveDmKey({ myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: dm.id }), nonce, new Uint8Array(aad)).encrypt(plain);
+    const line: Line = { id, conversationId: dm.id, authorPubkey: from.publicKey, type: 'text', systemType: null, metadata: null, timestamp: tick(), editedAt: null,
+        ciphertext: Buffer.from(ct).toString('base64'), nonce: DM_NONCE_PREFIX + Buffer.from(nonce).toString('base64') };
+    node.lines.push(line);
+    return line;
+}
+
 async function says(who: Person, conv: Conv, text: string): Promise<Line> {
     const before = node.lines.length;
     await insertMessage(conv.id, who.publicKey, text);
@@ -299,7 +336,6 @@ async function drawn(conv: Conv, id: string, opts: { limit?: number } = {}) {
 const preview = async (who: Person, conv: Conv) => (await getConversations(who.publicKey)).find((c: any) => c.id === conv.id)?.lastMessage;
 const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64');
 const NOT_ENCRYPTED = "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.";
-const OLD_APP = "Sent from an older version of the app: BeanPool can't confirm who wrote it.";
 /** A row the operator writes into the node's database, in someone's name. */
 function written(conv: Conv, from: Person, ciphertext: string, nonce: string, extra: Partial<Line> = {}): Line {
     const line: Line = {
@@ -369,12 +405,11 @@ describe('Home\'s chat list reads the conversation list as getConversations buil
     });
 });
 
-// R0 (core dm-line-report.ts): the signature a line leaves this phone with is the one the node checks when it is reported.
+// Format 4 (core dm-crypto.ts): the signature a line leaves this phone with, in its own ciphertext, is the one both apps check
+// when they open it and the node checks when it is reported (core dm-line-report.ts).
 describe('a line\'s signature, and its report', () => {
-    const signedBy = (l: { id: string; ciphertext: string; nonce: string; metadata?: unknown }, from: Person, to: Person) => {
-        const lineSig = dmLineSigInMetadata(l.metadata);
-        return !!lineSig && dmLineSigVerifies(l, lineSig, { conversationId: dm.id, senderPubHex: from.publicKey, recipientPubHex: to.publicKey, messageId: l.id });
-    };
+    const signedBy = (l: { id: string; ciphertext: string; nonce: string }, from: Person, to: Person, part: 'body' | 'attachment' = 'body') =>
+        dmLineSigVerifies(l, { conversationId: dm.id, senderPubHex: from.publicKey, recipientPubHex: to.publicKey, messageId: l.id, part });
 
     it('a line leaves the phone signed by its sender, to the other person, and by nobody else', async () => {
         const { question, answer } = await aQuestionAndAnAnswer();
@@ -383,17 +418,30 @@ describe('a line\'s signature, and its report', () => {
         expect(signedBy(node.lines.find((l) => l.id === question.id)!, ben, ana)).toBe(false);
     });
 
-    it('an edit is signed anew, and the old signature no longer stands for the line', async () => {
+    it('an edit is signed anew, in its own ciphertext, and nothing rides beside it', async () => {
         const { question } = await aQuestionAndAnAnswer();
-        const before = node.lines.find((l) => l.id === question.id)!.metadata;
+        const before = node.lines.find((l) => l.id === question.id)!;
+        const [beforeSig, beforeMetadata] = [dmLineSigOf(before.ciphertext)?.sig, before.metadata];
         await phoneOf(ana);
         await editMessage(dm.id, question.id, 'Shall I cancel the whole order?');
         const line = node.lines.find((l) => l.id === question.id)!;
-        expect(line.metadata).not.toBe(before);
+        expect(dmLineSigOf(line.ciphertext)?.sig).not.toBe(beforeSig);
         expect(signedBy(line, ana, ben)).toBe(true);
+        expect(line.metadata).toEqual(beforeMetadata);
+        expect(JSON.stringify(line.metadata ?? '')).not.toContain('lineSig');
     });
 
-    it('a report hands over the sealed line as this phone holds it, its signature and the words it reads, and nothing of the line beside it', async () => {
+    it('a photo leaves the phone signed too, as its own part, so Ben can\'t put a picture in Ana\'s name', async () => {
+        await phoneOf(ana);
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,/9j/AAAA', 'the fence');
+        const line = node.lines.at(-1)!;
+        const photo = node.photos.get(line.id)!;
+        expect(signedBy(line, ana, ben)).toBe(true);
+        expect(signedBy({ id: line.id, ciphertext: photo.data, nonce: photo.nonce }, ana, ben, 'attachment')).toBe(true);
+        expect(signedBy({ id: line.id, ciphertext: photo.data, nonce: photo.nonce }, ana, ben, 'body')).toBe(false);
+    });
+
+    it('a report hands over the sealed line as this phone holds it, its signature in it, and the words it reads, and nothing of the line beside it', async () => {
         const { question, answer } = await aQuestionAndAnAnswer();
         await phoneOf(ben);
         await shows(dm);
@@ -401,10 +449,8 @@ describe('a line\'s signature, and its report', () => {
         const sent = node.reports.at(-1);
         const line = node.lines.find((l) => l.id === question.id)!;
         expect(sent).toMatchObject({ messageId: question.id, reason: 'Harassment' });
-        expect(sent.disclosure).toEqual({
-            v: 1, ciphertext: line.ciphertext, nonce: line.nonce, conversationId: dm.id, lineSig: dmLineSigInMetadata(line.metadata), words: 'Shall I cancel the order?',
-        });
-        expect(signedBy({ ...sent.disclosure, id: question.id, metadata: { lineSig: sent.disclosure.lineSig } }, ana, ben)).toBe(true);
+        expect(sent.disclosure).toEqual({ v: 1, ciphertext: line.ciphertext, nonce: line.nonce, conversationId: dm.id, words: 'Shall I cancel the order?' });
+        expect(signedBy({ ...sent.disclosure, id: question.id }, ana, ben)).toBe(true);
         expect(JSON.stringify(sent)).not.toContain(node.lines.find((l) => l.id === answer.id)!.ciphertext);
     });
 });
@@ -476,6 +522,25 @@ describe('what the node can do to it', () => {
         expect(await getDecryptedAttachment(dm.id, first.id)).toMatch(/chat-images\//);
         expect(fs.readFileSync(`${h.cacheDir}/chat-images/${first.id}.jpg`, 'utf8')).toBe('QUFBQQ==');
     });
+
+    it('put Ben\'s own picture on Ana\'s message, sealed in her name under its id (he holds the key): it stays locked on both phones', async () => {
+        await phoneOf(ana);
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,QUFBQQ==', '');
+        const line = node.lines.at(-1)!;
+        const theirs = sealedInNameOf(ben, ana, 'data:image/jpeg;base64,QkVO', { id: line.id, part: 'attachment' });
+        node.photos.set(line.id, { data: theirs.ciphertext, nonce: theirs.nonce });
+        for (const who of [ben, ana]) {
+            await phoneOf(who);
+            await shows(dm);
+            expect(await getDecryptedAttachment(dm.id, line.id)).toBeNull();
+        }
+        // Signed by Ana, the same picture opens: only the signature differs.
+        const hers = sealedInNameOf(ben, ana, 'data:image/jpeg;base64,QkVO', { id: line.id, part: 'attachment', signer: ana });
+        node.photos.set(line.id, { data: hers.ciphertext, nonce: hers.nonce });
+        await phoneOf(ben);
+        await shows(dm);
+        expect(await getDecryptedAttachment(dm.id, line.id)).toMatch(/chat-images\//);
+    });
 });
 
 describe('an edit', () => {
@@ -491,55 +556,31 @@ describe('an edit', () => {
     });
 });
 
-describe('old lines (written before this change)', () => {
-    /** A line an app from before wrote: format 2, bound to the conversation alone. */
-    function oldLine(from: Person, to: Person, text: string): Line {
-        const line: Line = {
-            id: randomUUID(), conversationId: dm.id, authorPubkey: from.publicKey, type: 'text', systemType: null, metadata: null,
-            timestamp: tick(), editedAt: null,
-            ...encryptDmFormat2(text, { myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: dm.id }),
-        };
-        node.lines.push(line);
-        return line;
-    }
-
-    it('still open, and every one is marked, wherever it sits and whoever it names: nothing in it proves who wrote it', async () => {
-        const seeYou = oldLine(ana, ben, 'see you at 6');
-        const ok = oldLine(ben, ana, 'ok');
-        await phoneOf(ana);
-        const here = await says(ana, dm, "I'm here");
-        const replay = { ...seeYou, id: randomUUID(), timestamp: tick() };
-        node.lines.push(replay);
-        const bensOld = oldLine(ben, ana, 'on my way');   // Ben still on an old app: his lines open, marked
-
+describe('a line its named sender didn\'t sign, or of an older format (format 4)', () => {
+    it('a line in Ana\'s name she didn\'t sign is never hers, on her phone or Ben\'s, in the thread and the preview', async () => {
         await phoneOf(ben);
-        expect(await shows(dm)).toEqual([
-            { id: seeYou.id, from: ana.publicKey, text: 'see you at 6', note: OLD_APP },
-            { id: ok.id, from: ben.publicKey, text: 'ok', note: OLD_APP },
-            { id: here.id, from: ana.publicKey, text: "I'm here", note: null },
-            { id: replay.id, from: ana.publicKey, text: 'see you at 6', note: OLD_APP },
-            { id: bensOld.id, from: ben.publicKey, text: 'on my way', note: OLD_APP },
-        ]);
-        // The preview never shows an old line's words as theirs.
-        expect(await preview(ben, dm)).toBe(OLD_APP);
+        await says(ben, dm, 'Can I borrow the ladder?');
+        // Ben seals words in Ana's name: he holds the key, so the seal opens for both; he can only sign them himself.
+        const genuine = rowInNameOf(ben, ana, 'Yes, take the ladder', ana);   // built the same way, signed by Ana: hers
+        const forged = rowInNameOf(ben, ana, 'I owe Ben 500 Beans');
+        for (const who of [ana, ben]) {
+            await phoneOf(who);
+            expect(await drawn(dm, genuine.id)).toEqual({ text: 'Yes, take the ladder', note: null, unattributed: false });
+            expect(await drawn(dm, forged.id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
+            expect(await preview(who, dm)).toBe('🔒 Encrypted message');
+            expect(JSON.stringify(await getMessages(dm.id))).not.toMatch(/500 Beans/);
+        }
     });
 
-    it('Ana\'s old line shown as Ben\'s newest, or replayed 51 lines after her updated line: marked on her phone', async () => {
-        const sell = oldLine(ana, ben, 'yes, sell it');
+    it('a line of an older format, 2 or 3, doesn\'t open: format 4 is the only one read', async () => {
         await phoneOf(ana);
         await says(ana, dm, "I'm here");
-        const asBens = { ...sell, id: randomUUID(), authorPubkey: ben.publicKey, timestamp: tick() };
-        node.lines.push(asBens);
-        await phoneOf(ana);
-        expect(await drawn(dm, asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, unattributed: false });
-
+        const two = olderFormatLine(2, ana, ben, 'see you at 6');
+        const three = olderFormatLine(3, ana, ben, 'see you at 7');
         await phoneOf(ben);
-        for (let i = 0; i < 51; i++) await says(ben, dm, `line ${i}`);
-        const replay = { ...sell, id: randomUUID(), timestamp: tick() };
-        node.lines.push(replay);
-        await phoneOf(ben);
-        // the chat screen's 50-line window holds no new line of Ana's
-        expect(await drawn(dm, replay.id, { limit: 50 })).toEqual({ text: 'yes, sell it', note: OLD_APP, unattributed: false });
+        for (const l of [two, three]) expect(await drawn(dm, l.id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
+        expect(await preview(ben, dm)).toBe('🔒 Encrypted message');
+        expect(JSON.stringify(await getMessages(dm.id))).not.toMatch(/see you at [67]/);
     });
 });
 
@@ -696,21 +737,13 @@ describe('the quote in a verified reply, after the node rewrites the row it answ
         Object.assign(q, asSent);
     });
 
-    it('an old-format question swapped for another old line: quoted with the older-version mark', async () => {
-        const old = (text: string): Line => {
-            const line: Line = {
-                id: randomUUID(), conversationId: dm.id, authorPubkey: ana.publicKey, type: 'text', systemType: null, metadata: null, timestamp: tick(), editedAt: null,
-                ...encryptDmFormat2(text, { myEdPrivHex: ana.privateKey, peerEdPubHex: ben.publicKey, conversationId: dm.id }),
-            };
-            node.lines.push(line);
-            return line;
-        };
-        const { q, yes } = await askedAndAnswered(async () => old('Can I borrow the ladder?'));
-        const other = old('Can I keep the 200 Beans you sent by mistake?');
-        Object.assign(q, { ciphertext: other.ciphertext, nonce: other.nonce });
+    it('swapped for words Ben sealed in Ana\'s name under its id and signed himself: quoted as nobody\'s, on both phones', async () => {
+        const { q, yes } = await askedAndAnswered(fresh);
+        // Under the question's own id, so the seal opens there: only the signature says it isn't Ana's.
+        const forged = sealedInNameOf(ben, ana, 'Can I keep the 200 Beans you sent by mistake?', { id: q.id });
+        Object.assign(q, { ciphertext: forged.ciphertext, nonce: forged.nonce });
         const { onBens, onAnas } = await both(yes.id);
-        expect(onBens).toEqual({ author: 'Ana', text: 'Can I keep the 200 Beans you sent by mistake?', note: OLD_APP });
-        expect(onAnas).toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: OLD_APP });
+        for (const quote of [onBens, onAnas]) expect(quote).toEqual({ author: 'Not confirmed', text: NOT_VERIFIED, note: null });
     });
 });
 
@@ -773,7 +806,7 @@ describe('the inbox preview in another language: only what BeanPool wrote is tra
         written(dm, ana, b64(TABLE_SENTENCE), 'plaintext-v1', { type: 'system' });
         await phoneOf(ben);
         expect(await shownInXx(ben)).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise(TABLE_SENTENCE)));
-        written(dm, ana, '', '00000', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount: 5 }) });
+        written(dm, ana, '', '00000', { type: 'system', systemType: 'ESCROW_FUNDED', metadata: JSON.stringify({ amount_c: 500 }) });
         expect(await shownInXx(ben)).toBe(pseudoLocalise('Notice: {text}').replace('{text}', pseudoLocalise('{n} Beans held in trust.').replace('{n}', '5')));
     });
 
@@ -856,44 +889,36 @@ describe('the node retyping a DM as a group\'s, an event\'s or an enterprise\'s 
 
 describe('a "still sending" flag in the node\'s metadata', () => {
     const FLAG = (s: string) => JSON.stringify({ __sendState: s });
-    const oldOf = (from: Person, to: Person, text: string): Line => {
-        const line: Line = {
-            id: randomUUID(), conversationId: dm.id, authorPubkey: from.publicKey, type: 'text', systemType: null, metadata: null, timestamp: tick(), editedAt: null,
-            ...encryptDmFormat2(text, { myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: dm.id }),
-        };
-        node.lines.push(line);
-        return line;
-    };
     const drawnFull = async (id: string) => {
         await syncMessages(h.me.publicKey);
         const m = (await getMessages(dm.id) as any[]).find((x) => x.id === id);
         return { text: m?.text, note: m?.integrityNote ?? null, sendState: m?.sendState };
     };
 
-    it('takes no mark off another person\'s line: an old line replayed as Ben\'s, flagged sending or failed, stays marked', async () => {
-        const sell = oldOf(ana, ben, 'yes, sell it');
+    it('takes nothing off another person\'s line: words in Ben\'s name he didn\'t sign, flagged sending or failed, stay nobody\'s', async () => {
         await phoneOf(ben);
         await says(ben, dm, 'ok');
         await phoneOf(ana);
         await says(ana, dm, "I'm here");
-        const asBens = { ...sell, id: randomUUID(), authorPubkey: ben.publicKey, timestamp: tick(), metadata: FLAG('sending') };
-        node.lines.push(asBens);
+        const asBens = { ...rowInNameOf(ana, ben, 'yes, sell it'), metadata: FLAG('sending') };
+        node.lines[node.lines.length - 1] = asBens;
         await phoneOf(ana);
-        expect(await drawnFull(asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, sendState: undefined });
-        // The same phone, which already showed it marked: the operator flags it failed.
+        expect(await drawnFull(asBens.id)).toEqual({ text: NOT_VERIFIED, note: null, sendState: undefined });
+        // The same phone, which already showed it as nobody's: the operator flags it failed.
         asBens.metadata = FLAG('failed');
-        expect(await drawnFull(asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, sendState: undefined });
-        // Ben's fresh phone: never his own unsent line, and still marked.
+        expect(await drawnFull(asBens.id)).toEqual({ text: NOT_VERIFIED, note: null, sendState: undefined });
+        // Ben's fresh phone: never his own unsent line, and still nobody's.
         await phoneOf(ben);
-        expect(await drawnFull(asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, sendState: undefined });
+        expect(await drawnFull(asBens.id)).toEqual({ text: NOT_VERIFIED, note: null, sendState: undefined });
         // The flag is not kept on this phone at all.
         expect((sql.prepare('SELECT metadata FROM messages WHERE id = ?').get(asBens.id) as any)?.metadata ?? null).toBeNull();
     });
 
     it('takes no note off a quote, a moved line, a reordered answer or the admins\' message', async () => {
-        // A quote: Ben's verified "Yes" answers Ana's old question; the operator swaps in her other old line and flags it.
-        const q = oldOf(ana, ben, 'Can I borrow the ladder?');
-        const other = oldOf(ana, ben, 'Can I keep the 200 Beans you sent by mistake?');
+        // A quote: Ben's verified "Yes" answers Ana's question; the operator swaps in words in her name she didn't sign, flagged.
+        await phoneOf(ana);
+        const q = await says(ana, dm, 'Can I borrow the ladder?');
+        const other = sealedInNameOf(ben, ana, 'Can I keep the 200 Beans you sent by mistake?', { id: q.id });
         await phoneOf(ben);
         const before = node.lines.length;
         await insertMessage(dm.id, ben.publicKey, 'Yes', JSON.stringify({ replyToId: q.id }));
@@ -905,7 +930,7 @@ describe('a "still sending" flag in the node\'s metadata', () => {
         const all = await getMessages(dm.id) as any[];
         const byId = new Map(all.map((m) => [m.id, m]));
         expect({ text: byId.get(yes.id).text, note: byId.get(yes.id).integrityNote ?? null }).toEqual({ text: 'Yes', note: null });
-        expect(dmQuoteFor(byId.get(q.id), ana.publicKey, 'Ben')).toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: OLD_APP });
+        expect(dmQuoteFor(byId.get(q.id), ana.publicKey, 'Ben')).toEqual({ author: 'Not confirmed', text: NOT_VERIFIED, note: null });
 
         // A reordered answer, flagged.
         const { question, answer } = await aQuestionAndAnAnswer();
@@ -1003,7 +1028,7 @@ describe('the phone and the web app read each other', () => {
         // Ben's web app reads the thread as MessagesPage does.
         const ben$ = inBrowser(ben);
         const read = webCrypto.checkDmThread(asThread(node.lines), { myEdPrivHex: ben$.privateKey, peerEdPubHex: ana.publicKey }, dm.id);
-        expect(read.get(fromPhone.id)).toEqual({ text: 'sent from the phone', format: 3, after: null, mark: null });
+        expect(read.get(fromPhone.id)).toEqual({ text: 'sent from the phone', format: 4, after: null, mark: null });
 
         // And answers as MessagesPage does: a new id, written after the newest line it has.
         const messageId = webCrypto.newDmMessageId();
@@ -1038,9 +1063,10 @@ describe('the phone and the web app read each other', () => {
         await sendImageMessage(dm.id, 'data:image/jpeg;base64,UEhPTkU=', '');
         const fromPhone = node.lines[node.lines.length - 1];
         const view = webCrypto.checkDmThread(asThread(node.lines), { myEdPrivHex: ben$.privateKey, peerEdPubHex: ana.publicKey }, dm.id).get(fromPhone.id)!;
+        expect(view.format).toBe(4);
         const photo = node.photos.get(fromPhone.id)!;
         expect(webCrypto.openDmLine({ ciphertext: photo.data, nonce: photo.nonce }, { myEdPrivHex: ben$.privateKey, peerEdPubHex: ana.publicKey },
-            { conversationId: dm.id, senderPubHex: ana.publicKey, messageId: fromPhone.id, part: 'attachment' }, [view.format!]).text)
+            { conversationId: dm.id, senderPubHex: ana.publicKey, messageId: fromPhone.id, part: 'attachment' }).text)
             .toBe('data:image/jpeg;base64,UEhPTkU=');
     });
 });
@@ -2163,16 +2189,13 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
     /**
      * A line PUPPET seals with Ana named as its sender, in a row the node writes in Ana's name: PUPPET's word twice over.
      * The two ends of a DM share one secret (core dm-crypto: "either of them could seal a line naming the other as
-     * sender"), so PUPPET seals it with that secret directly; the app's own seal refuses another sender.
+     * sender"), so PUPPET seals it with that secret directly (the app's own seal refuses another sender), in format 4's
+     * form, and signs it with the only key it has, its own: the best forgery it can make. It opens under no key, since Ana
+     * never signed it (format 4), and is never shown as hers or anyone's.
      */
     function forgedAsAna(conv: Conv, text: string, extra: Partial<Line> = {}): Line {
-        const messageId = extra.id ?? randomUUID().toLowerCase();
-        const key = deriveDmKey({ myEdPrivHex: puppet.privateKey, peerEdPubHex: ana.publicKey, conversationId: conv.id });
-        const nonce = new Uint8Array(24).map(() => Math.floor(Math.random() * 256));
-        const words = Buffer.from(text, 'utf8');
-        const framed = new Uint8Array([3, 0, ...words]);   // format 3, nothing it is written after
-        const ct = xchacha20poly1305(key, nonce, dmLineAad(conv.id, { senderPubHex: ana.publicKey, messageId, part: 'body' })).encrypt(framed);
-        return written(conv, ana, Buffer.from(ct).toString('base64'), DM_NONCE_PREFIX + Buffer.from(nonce).toString('base64'), { id: messageId, ...extra });
+        const f = sealedInNameOf(puppet, ana, text, { id: extra.id ?? randomUUID().toLowerCase() });
+        return written(conv, ana, f.ciphertext, f.nonce, { ...extra, id: f.id });
     }
 
     for (const forged of [false, true]) {
@@ -2353,13 +2376,55 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             await p21(when, (text, extra) => saysTo(puppet, dm, text, extra));
         });
 
-        it(`P22: P21 (${when}) with PUPPET's lines written in Ana's name (sealed by PUPPET naming her) and one marked edited: the same verdict (authors and dates are not consulted)`, async () => {
+        // Format 4 changed P22 deliberately: under format 3 a line PUPPET sealed in Ana's name opened under PUPPET's key (the
+        // forged-sender hole), so its 40 counted as PUPPET's lines and drew the offered key's fixed line. Now they open under no
+        // key, Ana never having signed them: in the window they are lines that place no key. Both ways it fails closed.
+        it(`P22: P21 (${when}) with PUPPET's lines written in Ana's name (sealed by PUPPET naming her, signed by PUPPET) and one marked edited: they open under no key, so PUPPET is never pinned, nothing goes, and none of its words show`, async () => {
             let edited = false;
-            await p21(when, (text, extra) => {
+            const line = (text: string, extra: Partial<Line>) => {
                 const l = forgedAsAna(dm, text, extra);
                 if (!edited) { l.editedAt = new Date(Date.parse(l.timestamp) + 60_000).toISOString(); edited = true; }
                 return l;
-            });
+            };
+            await bensHistoryHeld(30);
+            if (when === 'held at the update') {
+                dm.participants = [ana.publicKey, puppet.publicKey];
+                floodBothEnds(line);
+                await syncMessages(ana.publicKey);
+                expect(rowsIn(dm.id)).toBe(70);
+                theUpdate();
+            } else {
+                theUpdate();
+                floodBothEnds(line);
+            }
+            await syncMessages(ana.publicKey);
+            expect(rowsIn(dm.id)).toBe(70);
+            if (when === 'held at the update') {
+                // The window held at the update ends in 20 lines that place no key: rule 5, a record and no pin, and nothing
+                // goes until the member places the chat.
+                expect(await isDmUnplaced(dm.id)).toBe(true);
+                expect(await isDmKeyChangePending(dm.id)).toBe(false);
+                expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+            } else {
+                // Judged on the lines held at the update, Ben's alone: rule 3, Ben pinned, the listed key offered, nothing goes.
+                expect(await isDmKeyChangePending(dm.id)).toBe(true);
+                expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+                expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+            }
+            expect(pinOf(ana, dm.id)?.peer ?? null).not.toBe(puppet.publicKey);
+            const marks = await lineMarks(dm.id);
+            expect(marks.some((m) => m.offered)).toBe(false);
+            if (when === 'held at the update') {
+                // No pin, so no key to open a line with: every row stays locked, Ben's and PUPPET's alike, until the member
+                // places the chat.
+                expect(marks).toEqual(Array(70).fill({ text: '[Encrypted — update your app to read]', offered: false }));
+            } else {
+                // PUPPET's 40 are not verified, as nobody's, and from no key: not even the offered key's fixed line. Ben's read.
+                expect(marks.filter((m) => m.text === NOT_VERIFIED)).toEqual(Array(40).fill({ text: NOT_VERIFIED, offered: false }));
+                expect(marks.filter((m) => m.text !== NOT_VERIFIED).map((m) => m.text)).toEqual(bensTexts(30));
+            }
+            expect(JSON.stringify(marks)).not.toContain('PUPPET');
+            expect(JSON.stringify(await drawn(dm.id))).not.toContain('PUPPET');
         });
     }
 
@@ -2415,12 +2480,13 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             if (closed) restarted();
             expect(await isDmKeyChangePending(dm.id)).toBe(true);
             expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
-            // Ana's lines (PUPPET's copies in her name) open under the offered key: the fixed line. Ben's (PUPPET's copies as
-            // its own, in rows that name Ben) open under no key: unverified. None shows PUPPET's words.
+            // Ana's lines (PUPPET's copies in her name, signed by PUPPET) open under no key, as Ana never signed them (format
+            // 4; under format 3 they opened under the offered key and drew its fixed line). Ben's (PUPPET's copies as its own,
+            // in rows that name Ben) open under no key either. Every one unverified, from no key; none shows PUPPET's words.
             const marks = await lineMarks(dm.id);
             expect(marks.map((m) => m.text)).toEqual(Array(30).fill(NOT_VERIFIED));
-            expect(marks.map((m) => m.offered)).toEqual(Array.from({ length: 30 }, (_, i) => i % 2 === 0));
-            expect(await drawn(dm.id)).toEqual(Array.from({ length: 30 }, (_, i) => i % 2 === 0 ? DM_OFFERED_KEY_LINE : NOT_VERIFIED));
+            expect(marks.map((m) => m.offered)).toEqual(Array(30).fill(false));
+            expect(await drawn(dm.id)).toEqual(Array(30).fill(NOT_VERIFIED));
             expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
         });
     }
@@ -4816,7 +4882,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
     }
     const VOTE_FORMS: Record<string, (id: string, words: string) => Promise<unknown>> = {
         'group vote': (id, words) => dbPort.proposeGroupDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'close_group' } as any),
-        'enterprise vote': (id, words) => dbPort.proposeEnterpriseDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'pay_out', params: { to: puppet.publicKey, amount: 1, memo: `${words} (memo)` } } as any),
+        'enterprise vote': (id, words) => dbPort.proposeEnterpriseDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'pay_out', params: { to: puppet.publicKey, amount_c: 100, memo: `${words} (memo)` } } as any),
     };
     for (const how of ['a read that throws', 'a corrupt value'] as const) {
         it(`GXD (${how}) the list full when the DM is met; pruned, then relisted as an unlocked group while the pins can't be read: both vote forms are refused with the pins sentence and the node reads nothing; the pins back and after the sync, refused as a DM; a true group's and enterprise's votes wait for the pins too, then go`, async () => {
@@ -4886,14 +4952,14 @@ describe('the DM guard list: one bounded list per community file, never read as 
     const soon = () => ({ eventStartAt: new Date(Date.now() + 864e5).toISOString(), eventEndAt: new Date(Date.now() + 9e7).toISOString(), eventPlaceName: 'Hall' });
     /** The id-keyed forms, each for a group id `g`, an event id `ev` and an enterprise id `ent` (app/group-post.tsx, NewEventModal, treasury-detail, treasury-post, ProposeDecisionModal). */
     const ID_FORMS: Record<string, (ids: { g: string; ev: string; ent: string }, w: string) => Promise<unknown>> = {
-        'group feed post': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'offer', title: `${w} (post title)`, description: `${w} (post why)`, category: 'other', credits: 1, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), audienceScope: 'group', targetGroupId: g, reach: 'local' }),
-        'group-only event': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (event title)`, description: `${w} (event why)`, category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon(), eventPrivateNote: `${w} (private note)`, audienceScope: 'group', targetGroupId: g }),
-        'enterprise-hosted event': ({ ent }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (enterprise event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ent, created_at: new Date().toISOString(), ...soon() }),
+        'group feed post': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'offer', title: `${w} (post title)`, description: `${w} (post why)`, category: 'other', price_c: 100, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), audienceScope: 'group', targetGroupId: g, reach: 'local' }),
+        'group-only event': ({ g }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (event title)`, description: `${w} (event why)`, category: 'event', price_c: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon(), eventPrivateNote: `${w} (private note)`, audienceScope: 'group', targetGroupId: g }),
+        'enterprise-hosted event': ({ ent }, w) => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (enterprise event)`, description: 'x', category: 'event', price_c: 0, author_pubkey: ent, created_at: new Date().toISOString(), ...soon() }),
         'pledge memo': ({ ent }, w) => dbPort.treasuryPledge(ent, 1, `${w} (pledge memo)`),
-        'treasury offer': ({ ent }, w) => dbPort.treasuryPostOffer(ent, { category: 'other', title: `${w} (offer)`, description: `${w} (offer why)`, credits: 1 }),
-        'treasury need': ({ ent }, w) => dbPort.treasuryPostNeed(ent, { category: 'other', title: `${w} (need)`, credits: 1 }),
+        'treasury offer': ({ ent }, w) => dbPort.treasuryPostOffer(ent, { category: 'other', title: `${w} (offer)`, description: `${w} (offer why)`, price_c: 100 }),
+        'treasury need': ({ ent }, w) => dbPort.treasuryPostNeed(ent, { category: 'other', title: `${w} (need)`, price_c: 100 }),
         'event edit': ({ ev }, w) => dbPort.updateEvent(ev, { title: `${w} (event edit)`, description: `${w} (event edit why)` } as any),
-        'post edit': ({ ev }, w) => dbPort.updatePost(ev, { type: 'event', category: 'event', title: `${w} (post edit)`, description: 'x', credits: 0 }),
+        'post edit': ({ ev }, w) => dbPort.updatePost(ev, { type: 'event', category: 'event', title: `${w} (post edit)`, description: 'x', price_c: 0 }),
         'commons decision about an enterprise': ({ ent }, w) => dbPort.createDecision({ authorPubkey: ana.publicKey, title: `${w} (decision)`, description: `${w} (decision why)`, touches: 'pool', effect: 'write_off_deficit' as any, subject: ent }),
         // updateGroupApi's name and about (#1938 confirmation 9: no screen sends them today, GroupDetailModal sends joinPolicy).
         'group edit (name, about)': ({ g }, w) => dbPort.updateGroupApi(g, { name: `${w} (group name)`, description: `${w} (group about)` }),
@@ -4988,7 +5054,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
                 out[name] = r.err ?? (r.nodeReads.length === 1 && !r.reasons.length && r.wordsLeftOut === null ? 'went'
                     : !r.nodeReads.length && r.reasons.length === 1 && r.reasons[0] === form.picked && r.wordsLeftOut ? `the reason alone, ${r.wordsLeftOut}` : JSON.stringify(r));
             }
-            out['community event (no group)'] = went(await onScreen(took, () => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (public event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon() })));
+            out['community event (no group)'] = went(await onScreen(took, () => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (public event)`, description: 'x', category: 'event', price_c: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon() })));
             let noMemo: string = 'went';
             try { await dbPort.treasuryPledge(ent.id, 1); } catch (e: any) { if (e?.name && e.name !== 'Error') noMemo = e.name; }
             out['pledge, no memo'] = noMemo;

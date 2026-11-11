@@ -19,7 +19,7 @@ import {
 } from '../lib/web-join';
 import { NO_STORAGE_SENTENCE, STORE_WOULD_NOT_OPEN_SENTENCE, type JoinProvider } from '../lib/identity';
 import { aboutTime, busySentence, signInBusySentence, WORK_CANT_RUN } from '../lib/door-work';
-import { releaseRefusalMessage, sessionRefusalMessage } from '../lib/web-restore';
+import { collectRefusalMessage, findRefusalMessage, noAccountMessage } from '../lib/web-restore';
 import { leaveForLink, linkRefusalMessage, linkResultMessage } from '../lib/link-signin';
 import { WEB_REKEY_TEXT } from '../lib/web-rekey';
 import { approveUnlock, lookupUnlock, pasteProblemMessage, unlockRefusalMessage } from '../lib/takeover-unlock';
@@ -82,8 +82,9 @@ function libSentences(): string[] {
         const o = matchAuthReturn(ret as never, { provider: p, nonce: 'n' });
         if (o.kind === 'provider_error') out.push(o.message);
         for (const a of [answer(400), answer(401), answer(429), answer(503), answer(404), answer(500), answer(401, { code: 'x' })]) {
-            out.push(releaseRefusalMessage(a, p, 'Alice'));
+            out.push(findRefusalMessage(a, p));
         }
+        out.push(noAccountMessage(HOME, p));
         for (const code of ['already_joined', 'removed', 'sign_in']) out.push(linkRefusalMessage(answer(400, { code }), p));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: true }));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false }));
@@ -92,7 +93,10 @@ function libSentences(): string[] {
         if (!left.ok) out.push(left.message);
     }
     out.push(linkResultMessage({ kind: 'cancelled', provider: 'google' }));
-    for (const a of [answer(400), answer(409), answer(429), answer(500), answer(401)]) out.push(sessionRefusalMessage(a, 'Alice'));
+    for (const a of [answer(400), answer(409), answer(429), answer(500), answer(401)]) {
+        out.push(findRefusalMessage(a, null));
+        out.push(collectRefusalMessage(a));
+    }
     for (const a of [answer(404), answer(429), answer(429, {}, 120), answer(500)]) {
         out.push(doorRefusalMessage(a));
         out.push(linkRefusalMessage(a, null));

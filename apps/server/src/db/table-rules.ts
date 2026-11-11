@@ -3,7 +3,7 @@
  * table enforces; or schema.sql's, the rules a fresh install's table has.
  *
  * Why both: a node whose table predates a column got it from db.ts's `ALTER TABLE … ADD COLUMN`, often with no CHECK, so
- * its rows can hold a value a fresh table refuses (members.goal_amount below 0 on a community older than the enterprise
+ * its rows can hold a value a fresh table refuses (members.goal_amount_c below 0 on a community older than the enterprise
  * unification). A standby copies such a row into a table that refuses it (engine/sync.ts writeMemberStanding asks
  * RowRules), and a node brings its own rows into the fresh rules once (db.ts bringMembersToSchemaRules).
  */

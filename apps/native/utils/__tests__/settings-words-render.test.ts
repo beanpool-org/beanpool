@@ -292,6 +292,12 @@ vi.mock('../../services/pillar-sync', () => ({
     performSyncWhenFree: async () => ({ success: true }), forceResyncNotice: () => ({ title: 'Success', message: '' }), syncCursorKeysOf: () => [],
 }));
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => 'join' }));
+// The saved list and the guest mark, real but watched: "Add a community by address" on a server with no owner must write
+// neither (DESIGN-new-operator-path-fable.md, decision 1).
+vi.mock('../nodes', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../nodes')>();
+    return { ...real, addSavedNode: vi.fn(real.addSavedNode), markGuestNode: vi.fn(real.markGuestNode), clearGuestNode: vi.fn(real.clearGuestNode) };
+});
 // The guest visit (utils/use-global-guest-visit.ts): what Saved communities' global button starts, recorded.
 const visits = vi.hoisted(() => ({ n: 0, pushed: [] as unknown[], visiting: false }));
 vi.mock('../use-global-guest-visit', () => ({
@@ -308,6 +314,9 @@ import { copiesRuleNow } from '../copies-rule';
 import { PUSH_REGISTERED_AT_STORE_KEY } from '../storage-keys';
 import { readerFeaturesHeld } from '../reads-own';
 import SettingsScreen from '../../app/(tabs)/settings';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { addSavedNode, clearGuestNode, markGuestNode } from '../nodes';
+import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const NODE = 'https://mullum.example';
 
@@ -315,7 +324,7 @@ const NODE = 'https://mullum.example';
 const OTHERS = [
     'Ana', 'Mia', 'Grows beans by the river', '0400 000 000', 'Mullum Commons', 'Castlemaine', 'Hills', NODE, 'https://castle.example',
     'beanpool.org', 'CONFIRM', 'WIPE', 'DELETE', 'Google', 'mia-key', `${KEY.slice(0, 6)}...${KEY.slice(-6)}`, KEY.slice(0, 16),
-    'http://192.168.1.55', 'INV-', 'mullum.example', ...WORDS.split(' '),
+    'yourtown.beanpool.org', 'INV-', 'mullum.example', ...WORDS.split(' '),
 ].sort((a, b) => b.length - a.length);
 
 let host: HTMLDivElement;
@@ -1139,5 +1148,132 @@ describe('Saved communities: the global community, guest view first (Marty, 21 O
         expect(button?.getAttribute('aria-label')).toBe('Loading');
         expect(button?.getAttribute('aria-busy')).toBe('true');
         expect(button?.getAttribute('aria-disabled')).toBe('true');
+    });
+});
+
+/**
+ * "Add a community by address" (Settings → Saved communities) on a server that has no owner yet and its one-time code
+ * waiting: GET /api/local/claim is asked BEFORE anything is saved; nothing is saved, nothing switches and no guest mark is
+ * written, and a card offers Claim ‹name›, which opens the claim screen on that server with the code's id
+ * (DESIGN-new-operator-path-fable.md S2, decision 1). Before it, the phone saved the server, marked itself its guest,
+ * switched to it ("Node Added") and left a dead "Join this community" (Marty's claim of apollobay, 9 Nov: four tries).
+ * Any other answer adds the community as before.
+ */
+describe('Add a community by address: a server with no owner yet is claimed, not saved', () => {
+    const TYPED = 'apollobay.example.org';
+    const SERVER = 'https://apollobay.example.org';
+    const CODE_ID = '0a1b2c3d';
+    const claimAsks: string[] = [];
+    /** GET /api/local/claim at the typed server answers `claim`; everything else as the node above. */
+    function serverAnswers(claim: Record<string, unknown>) {
+        const node = globalThis.fetch;
+        globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+            const u = String(url);
+            if (u === `${SERVER}/api/local/claim`) { claimAsks.push(u); return new Response(JSON.stringify(claim), { status: 200, headers: { 'Content-Type': 'application/json' } }); }
+            return node(url, init);
+        }) as typeof fetch;
+    }
+    const watched = ['beanpool_anchor_url', SAVED_NODES_STORE_KEY, 'beanpool_guest_nodes'];
+    const snapshot = () => watched.map((k) => store.map.get(k) ?? null);
+    /** Types the address and presses Add & Connect; what the watched keys held just before the press. */
+    async function addAndConnect(lang: UiLang): Promise<Array<string | null>> {
+        await renderIn(lang);
+        await click(row('Saved communities', lang), 'Saved communities');
+        await settle();
+        await type(host.querySelector('[data-testid="settings-add-address"]'), TYPED);
+        vi.mocked(AsyncStorage.setItem).mockClear();
+        vi.mocked(addSavedNode).mockClear();
+        vi.mocked(markGuestNode).mockClear();
+        vi.mocked(clearGuestNode).mockClear();
+        const before = snapshot();
+        await click(host.querySelector('[data-testid="settings-add-connect"]'), 'Add & Connect');
+        // The press is over when its spinner goes (settings.tsx handleUpdateAnchor's finally), not after a fixed number
+        // of ticks: its first step loads utils/node-claim.ts for the first time, which on a loaded runner took longer
+        // than the ticks did (CI, 4df1a0b5: the claim not yet asked when checked).
+        await vi.waitFor(async () => {
+            await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+            if (host.querySelector('[data-testid="settings-add-connect"] [data-spinner]')) throw new Error('Add & Connect still running');
+        }, { timeout: 5_000, interval: 10 });
+        await settle();
+        return before;
+    }
+    beforeEach(() => { claimAsks.length = 0; });
+
+    it('no owner, a code waiting: the card, in its words; nothing saved, switched or marked; Claim opens the claim screen', async () => {
+        serverAnswers({ unclaimed: true, codeId: CODE_ID, salt: 'ab'.repeat(16), communityName: 'Apollo Bay' });
+        const before = await addAndConnect('en');
+        expect(claimAsks).toEqual([`${SERVER}/api/local/claim`]);
+        const card = host.querySelector('[data-testid="settings-no-owner"]');
+        expect(card, 'the no-owner card').not.toBeNull();
+        expect(card!.textContent).toContain('Apollo Bay has no owner yet');
+        expect(card!.textContent).toContain(SERVER);
+        expect(card!.textContent).toContain('If you installed it, claim it with the one-time code on the server.');
+        // Nothing saved, nothing switched, no guest mark, no "Node Added".
+        expect(addSavedNode).not.toHaveBeenCalled();
+        expect(markGuestNode).not.toHaveBeenCalled();
+        expect(clearGuestNode).not.toHaveBeenCalled();
+        expect(vi.mocked(AsyncStorage.setItem).mock.calls.map(([k]) => k).filter((k) => watched.includes(k))).toEqual([]);
+        expect(snapshot()).toEqual(before);
+        expect(store.map.get('beanpool_anchor_url')).toBe(NODE);
+        expect(alerts.said).not.toContain('Node Added');
+        // Claim ‹name›: the claim screen on that server, with the code's id and no code.
+        const claim = Array.from(card!.querySelectorAll('button')).find((b) => b.textContent === 'Claim Apollo Bay');
+        expect(claim, 'Claim Apollo Bay').toBeTruthy();
+        visits.pushed.length = 0;
+        await click(claim, 'Claim Apollo Bay');
+        expect(visits.pushed).toEqual([`/claim-community?node=${encodeURIComponent(SERVER)}&id=${CODE_ID}`]);
+        // Typing another address takes the card away.
+        await type(host.querySelector('[data-testid="settings-add-address"]'), 'riverside.example.org');
+        expect(host.querySelector('[data-testid="settings-no-owner"]')).toBeNull();
+    });
+
+    it('the card and the field in the pseudo-locale: every word through t(); the example address as written', async () => {
+        serverAnswers({ unclaimed: true, codeId: CODE_ID, salt: 'ab'.repeat(16), communityName: 'Apollo Bay' });
+        await addAndConnect('xx');
+        const card = host.querySelector('[data-testid="settings-no-owner"]');
+        expect(card).not.toBeNull();
+        expect(card!.textContent).toContain(pseudoLocalise('{name} has no owner yet').replace('{name}', 'Apollo Bay'));
+        expect(card!.textContent).toContain(pseudoLocalise('Claim {name}').replace('{name}', 'Apollo Bay'));
+        // The example is a name under beanpool.org, as most communities' are, not a LAN number (was http://192.168.1.55).
+        expect(host.querySelector('[data-testid="settings-add-address"]')!.getAttribute('placeholder')).toBe(pseudoLocalise('e.g. {address}').replace('{address}', 'yourtown.beanpool.org'));
+        const before = OTHERS.length;
+        OTHERS.push(SERVER, TYPED, 'Apollo Bay');
+        OTHERS.sort((a, b) => b.length - a.length);
+        try { expect(bypassing(), 'the no-owner card').toEqual([]); } finally { for (const o of [SERVER, TYPED, 'Apollo Bay']) OTHERS.splice(OTHERS.indexOf(o), 1); expect(OTHERS.length).toBe(before); }
+    });
+
+    it('an empty address: the alert says what to type', async () => {
+        await renderIn('en');
+        await click(row('Saved communities', 'en'), 'Saved communities');
+        await settle();
+        // The field starts with the address in use; emptied, Add & Connect says what to type.
+        await type(host.querySelector('[data-testid="settings-add-address"]'), '');
+        await click(host.querySelector('[data-testid="settings-add-connect"]'), 'Add & Connect');
+        expect(alerts.said).toContain("Type the community's address, like yourtown.beanpool.org.");
+        expect(claimAsks).toEqual([]);
+    });
+
+    it.each([
+        ['has an owner', { unclaimed: false }],
+        ['has no owner and no code waiting', { unclaimed: true, communityName: 'Apollo Bay' }],
+    ])('a server that %s: added and switched to, as before', async (_what, claim) => {
+        serverAnswers(claim);
+        await addAndConnect('en');
+        expect(claimAsks).toEqual([`${SERVER}/api/local/claim`]);
+        expect(host.querySelector('[data-testid="settings-no-owner"]')).toBeNull();
+        expect(addSavedNode).toHaveBeenCalledWith(SERVER, undefined);
+        expect(store.map.get('beanpool_anchor_url')).toBe(SERVER);
+        // The membership probe (stood in for above) says member: the guest mark is cleared, as before.
+        expect(clearGuestNode).toHaveBeenCalledWith(SERVER);
+        expect(alerts.said).toContain('Node Added');
+    });
+
+    it('a server that does not answer the question: added as before', async () => {
+        // The node above answers 404 to anything it doesn't know, /api/local/claim included.
+        await addAndConnect('en');
+        expect(host.querySelector('[data-testid="settings-no-owner"]')).toBeNull();
+        expect(addSavedNode).toHaveBeenCalledWith(SERVER, undefined);
+        expect(store.map.get('beanpool_anchor_url')).toBe(SERVER);
+        expect(alerts.said).toContain('Node Added');
     });
 });

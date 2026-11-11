@@ -35,9 +35,8 @@ export interface AmountOptions {
 }
 
 /**
- * For a door whose own guard decides the decimals (isWholeCents, the node's cents rule) or that takes any (hours, a
- * price): the parser reads the number and leaves the decimals to the door, as parseFloat did, so "1.234" still gets
- * the door's own "to the cent" sentence. What could be a thousand is refused all the same.
+ * For a door that takes any decimals (hours, a count): the parser reads the number and leaves the decimals to the door,
+ * as parseFloat did. What could be a thousand is refused all the same. A money door reads parseHundredths (two decimals).
  */
 export const ANY_DECIMALS: Readonly<AmountOptions> = Object.freeze({ maxDecimals: Infinity });
 
@@ -87,14 +86,32 @@ const GROUP_MARK = /[\s'\u2019\u066C]/;
 /** Invisible marks a right-to-left keyboard or a paste can leave in a number: direction marks, zero-width characters. */
 const INVISIBLE = /[\u200B-\u200F\u061C\u202A-\u202E\u2066-\u2069\uFEFF]/g;
 
-const refuse = (refusal: AmountRefusal): ParsedAmount => ({ ok: false, refusal });
+type AmountRefused = { ok: false; refusal: AmountRefusal };
+const refuse = (refusal: AmountRefusal): AmountRefused => ({ ok: false, refusal });
+
+/** What lexAmount read: the digits before and after the one decimal mark, as ASCII, and the sign. */
+export type LexedAmount = { ok: true; whole: string; fraction: string; negative: boolean } | AmountRefused;
 
 /**
  * The amount in `text`, read in `lang` (the device's language when absent), or why it is refused. Never throws.
- * en "12.5" → 12.5 exactly as `parseFloat` read it; fr "12,5" → 12.5; fr "1.000" → refused ('grouped').
+ * en "12.5" → 12.5 exactly as `parseFloat` read it; fr "12,5" → 12.5; fr "1.000" → refused ('grouped'). For a figure
+ * that is not money (hours, a count); a money door reads parseHundredths (hundredths.ts), which never makes a float.
  */
 export function parseAmount(text: string, lang?: UiLang, opts: AmountOptions = {}): ParsedAmount {
-    const maxDecimals = opts.maxDecimals ?? 2;
+    const lexed = lexAmount(text, lang, opts.maxDecimals ?? 2);
+    if (!lexed.ok) return lexed;
+    const value = Number(lexed.fraction ? `${lexed.whole || '0'}.${lexed.fraction}` : lexed.whole);
+    if (!Number.isFinite(value)) return refuse('not-a-number');
+    if (lexed.negative) return refuse('negative');
+    return { ok: true, value };
+}
+
+/**
+ * The amount in `text` as digits, read in `lang` (the device's language when absent), or why it is refused. Never
+ * throws. The one reading parseAmount (a number) and parseHundredths (whole hundredths, by string work, so "49.25" is
+ * never a float on its way to 4925) both build on. A minus is reported, not refused: each caller refuses it.
+ */
+export function lexAmount(text: string, lang?: UiLang, maxDecimals = 2): LexedAmount {
     const l = lang ?? currentLanguage();
     const own = decimalMarkOf(l);
     const native = isLang(l) ? AMOUNT_DIGITS[l] : undefined;
@@ -141,10 +158,7 @@ export function parseAmount(text: string, lang?: UiLang, opts: AmountOptions = {
         if (marks !== own && fraction.length === 3) return refuse('grouped');
         if (fraction.length > maxDecimals) return refuse('too-many-decimals');
     }
-    const value = Number(fraction ? `${whole || '0'}.${fraction}` : whole);
-    if (!Number.isFinite(value)) return refuse('not-a-number');
-    if (negative) return refuse('negative');
-    return { ok: true, value };
+    return { ok: true, whole, fraction, negative };
 }
 
 /**

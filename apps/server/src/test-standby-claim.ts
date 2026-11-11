@@ -5,8 +5,8 @@
  * are its main server's, and only a take-over brings them (engine/replication-manifest.ts node_roles). The way in that
  * exists is `beanpool recover --key` on its shell (recover-command.ts); this suite names it, it does not add one.
  *
- * Each boot is its own process on its own data dir, booted in the order index.ts boots (genesis, the admin password,
- * TLS, the database, the claim code, the real HTTPS server). Claims go over HTTPS to the real routes.
+ * Each boot is its own process on its own data dir, booted in the order index.ts boots (genesis, TLS, the database,
+ * the claim code, the real HTTPS server). Claims go over HTTPS to the real routes.
  *
  *   S. A new standby (NODE_ROLE=backup): no claim-code.txt and no waiting code; its output says it is a standby and
  *      names `beanpool recover --key`, and never "no owner yet"; GET /api/local/claim answers unclaimed: false,
@@ -46,14 +46,12 @@ const HOST = 'standby-claim.example';
 async function runChild(): Promise<void> {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     const { ensureGenesis } = await import('./genesis.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { initClaimCode } = await import('./claim-code.js');
     const { startHttpsServer } = await import('./https-server.js');
 
     await ensureGenesis();
-    initAdminPassword();
     await initTls();
     initStateEngine();
     initClaimCode();
@@ -75,9 +73,6 @@ interface Boot { port: number; output: () => string; stop: () => Promise<void> }
 async function boot(dataDir: string, standby: boolean): Promise<Boot> {
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: Record<string, string | undefined> = { ...process.env, BEANPOOL_DATA_DIR: dataDir, TRUSTED_PROXIES: '127.0.0.1' };
-    // A new install (config/local-config.ts initAdminPassword): no password.
-    delete childEnv.ADMIN_PASSWORD;
-    delete childEnv.BEANPOOL_SUITE_ENV_PASSWORD;
     delete childEnv.BEANPOOL_ADDRESSES;
     delete childEnv.CF_RECORD_NAME;
     delete childEnv.CF_API_TOKEN;
@@ -161,7 +156,14 @@ function beanpool(dir: string, args: string[], env: Record<string, string> = {})
     });
 }
 
-const pendingIn = (dir: string) => { const c = JSON.parse(fs.readFileSync(path.join(dir, 'local-config.json'), 'utf-8')).claim; return !!c && !c.claimedBy; };
+// No local-config.json is no claim code either: a standby saves no setting at its first start (nothing writes the file
+// until one is saved, as readLocalConfigFileIn reads a missing file as {}).
+const pendingIn = (dir: string) => {
+    const file = path.join(dir, 'local-config.json');
+    if (!fs.existsSync(file)) return false;
+    const c = JSON.parse(fs.readFileSync(file, 'utf-8')).claim;
+    return !!c && !c.claimedBy;
+};
 const STANDBY_SAYS = 'This server is a standby copy of its community';
 const NO_OWNER_YET = 'This community has no owner yet';
 /** A thrown error's trace in a node's output: the stack's "    at " lines, or the error's own name. */
@@ -242,7 +244,7 @@ async function main(): Promise<void> {
     const db = new Database(path.join(dirO, 'state.db'));
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                 VALUES (?, 'Ann', strftime('%Y-%m-%dT%H:%M:%fZ','now'), NULL, 'copied')`).run(ann.pub);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ann.pub);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ann.pub);
     db.close();
     // By key: a row written on this connection has no callsign_fold (the node's own connection folds names).
     const recovered = await beanpool(dirO, ['recover', '--key', ann.pub], { NODE_ROLE: 'backup' });
@@ -252,6 +254,8 @@ async function main(): Promise<void> {
     info = await request(o, 'GET', '/api/local/claim');
     await o.stop();
     assert(!o.output().includes(STANDBY_SAYS) && !o.output().includes(NO_OWNER_YET), 'R3. its next start says nothing of a claim: it has an owner');
+    // `password: false`: the node has no admin password (Marty, 11 Nov 2026), and the manager's sign-in draws a password
+    // form for any other answer.
     assert(info.status === 200 && JSON.stringify(info.json) === JSON.stringify({ unclaimed: false, password: false }),
         `R4. and GET answers as a server with an owner: unclaimed false, no standby flag (${info.status} ${JSON.stringify(info.json)})`);
     const owned = await beanpool(dirO, ['claim', '--no-name'], { NODE_ROLE: 'backup' });

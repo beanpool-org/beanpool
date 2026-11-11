@@ -381,7 +381,9 @@ describe('"Use the new address" carries the community\'s copy and what guards it
         const { before } = await phoneAtTheNumber();
         await firstApp.db.closeDB();
         const theirs = new DatabaseSync(file(TO_FILE));
-        theirs.exec("CREATE TABLE planted (x TEXT); INSERT INTO planted VALUES ('the phone was here before');");
+        // A copy this build made (at its schema number): one below it is cleared on open, its cursors forgotten
+        // (copy-schema-clear.test.ts), which is not what this case is about.
+        theirs.exec(`PRAGMA user_version = ${firstApp.db.COPY_SCHEMA}; CREATE TABLE planted (x TEXT); INSERT INTO planted VALUES ('the phone was here before');`);
         theirs.close();
         h.store.set(dmPeerPinsStoreKey(me.publicKey, TO_FILE), '{"pins":{}}');
         h.store.set(cursor(TO_FILE, 'last-sync'), '1700000000000');

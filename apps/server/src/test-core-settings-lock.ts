@@ -13,12 +13,12 @@
  *      alike; one owner alert; members told of the change only. Again: 409 core_locked, nothing written. With no change
  *      (the row removed by hand: no route removes it): the row and `core.lock` alone, one alert, nobody told.
  *   4. Locked, a Core change without a fresh proof is refused in the fresh proof's words, nothing written: a computer's
- *      key session (phone_required), the phone's hand-off 91 s after Manage (step_up_required), the password's session
- *      with no code (401) or a used one, an admin, every automation token. A request refused anyway (a bad value, a mixed
- *      request) never asks the code, nor spends it. Called without the route's proof, the write refuses on its own
- *      (core_proof_needed).
- *   5. Locked, with the proof: the phone's hand-off just after Manage, the password with a current code (`code`, the
- *      X-Fresh-Proof header, or inline). Each is written with a `core.unlock` line naming the setting before its own,
+ *      key session (phone_required), the phone's hand-off 91 s after Manage (step_up_required), an admin, every
+ *      automation token. A request refused anyway (a bad value, a mixed request) never asks the proof: a computer's
+ *      session, which cannot give it, is told what is wrong with the request. Called without the route's proof, the
+ *      write refuses on its own (core_proof_needed).
+ *   5. Locked, with the proof: the phone's hand-off just after Manage, the only fresh proof (the node has no admin
+ *      password, Marty 11 Nov 2026). Each is written with a `core.unlock` line naming the setting before its own,
  *      stamped alike, one owner alert naming the change, members told. The known floor asks it for any of its parts.
  *   6. Locked, everyday changes ask nothing; who can join is two: pausing and un-pausing to the same door ask nothing, a
  *      door change asks the proof, un-paused to the other door too. A Core setting sent unchanged writes nothing.
@@ -29,6 +29,7 @@
  */
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -38,8 +39,6 @@ delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.PRIVATE_PREVIEW;
 delete process.env.DIRECTORY_UNLISTED;
-process.env.ADMIN_PASSWORD = 'CoreSettingsLock123!';
-process.env.BEANPOOL_SUITE_ENV_PASSWORD = '1';
 // A directory push that got past every hold-back would go here: a closed port on this machine, never the registry.
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:9/directory-register';
 
@@ -64,11 +63,11 @@ async function main(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
-    const { ownerTokenHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { db } = await import('./db/db.js');
@@ -85,7 +84,6 @@ async function main(): Promise<void> {
     /** The switches as set (the profile's defaults and the overrides). */
     const np = () => getConfiguredSwitches();
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -96,7 +94,7 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
             .run(id.pk, name, ago(30 * DAY));
         setMemberPhoto(db, id.pk, 'data:image/png;base64,iVBORw0KGgo=');
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     /** A key session: a computer's, or the phone's Manage hand-off (whose unlock is now). */
@@ -116,7 +114,8 @@ async function main(): Promise<void> {
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             headers['X-Public-Key'] = id.pk;
-            headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+            headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }
@@ -284,21 +283,16 @@ async function main(): Promise<void> {
 
     // ── 4. Locked: a Core change without a fresh proof ──────────────────────────────────────────
     console.log('\n── 4. locked: a Core change without a fresh proof is refused ──');
-    const twoFa = turnOn2faForTests(process.env.ADMIN_PASSWORD!);
-    const pwSession = () => ({ 'X-Admin-Session': createPasswordSession().sessionId });
     const turnOn = { changes: { decisions: true } };
     await refusedClean("a computer's key session", () => post(turnOn, asComputer()), 403, 'phone_required');
     await refusedClean("the phone's hand-off 91 s after Manage (inside its step-up)", () => post(turnOn, asPhoneAgo(91_000)), 403, 'step_up_required', 'Press Manage on your phone again, then make this change within 90 seconds.');
-    await refusedClean("the password's session, with no code", () => post(turnOn, pwSession()), 401, null, /to change a core setting$/);
-    await refusedClean("the password's session, with a wrong code", () => post({ ...turnOn, code: '000000' }, pwSession()), 401, null);
     await refusedClean('an admin', () => post(turnOn, asAdmin()), 403, null);
     for (const scope of ['read', 'admin', 'backups', 'agent'] as const) {
         await refusedClean(`an automation token (${scope}) made by the owner`, () => post(turnOn, ownerTokenHeaders(scope, owen.pk)), 403, null);
     }
-    // Refused anyway: never asks the code, and never spends it.
-    const kept = twoFa.code();
-    await refusedClean('a bad value, with a code', () => post({ changes: { decisions: 'on' }, code: kept }, pwSession()), 400, 'bad_setting');
-    await refusedClean('a Core and an everyday change, with a code', () => post({ changes: { decisions: true, autoMute: true }, code: kept }, pwSession()),
+    // Refused anyway: never asks the proof. A computer's session cannot give it, and is told what is wrong with the request.
+    await refusedClean("a bad value, from a computer", () => post({ changes: { decisions: 'on' } }, asComputer()), 400, 'bad_setting');
+    await refusedClean("a Core and an everyday change, from a computer", () => post({ changes: { decisions: true, autoMute: true } }, asComputer()),
         400, 'one_kind_per_request', /^Change a core setting on its own: this request changes Community votes \(Decisions\), which is a core setting, and Repeat offenders muted automatically, which is not\./);
     {
         const b = snapshot();
@@ -330,36 +324,22 @@ async function main(): Promise<void> {
     assert(np().decisions === true && noticesSince(nMark).some((x) => /community votes are on/.test(x.body)), 'votes are on, and members are told');
     assert(lockRow() !== null && readShape().core.lock !== null, 'and the group is locked still: the next change asks again');
     await refusedClean('the next change, from a computer', () => post({ changes: { decisions: false } }, asComputer()), 403, 'phone_required');
-    // The code sent with the two requests refused anyway (section 4) was never spent: it changes votes now, nothing between
-    // having cleared the server's memory of used codes (twoFa.code() clears it).
-    await provenChange('the password, with a current code (`code`), the one sent with the refused requests', { decisions: false }, pwSession(), { code: kept },
-        'decisions', /\(on → off\)/);
-    await refusedClean('the same code again: spent', () => post({ changes: { decisions: true }, code: kept }, pwSession()), 401, null);
-    await provenChange('the password, with a code in X-Fresh-Proof', { decisions: true }, { ...pwSession(), 'X-Fresh-Proof': twoFa.code() }, {}, 'decisions', /\(off → on\)/);
-    await provenChange('the password with a code inline (X-Admin-TOTP)', { shareOutside: false }, twoFa.headers(), {}, 'shareOutside', /Members may share listings outside the community \(on → off\)/);
-    {
-        // With the node's 2FA off, the password gives no fresh proof. It never gets that far: turning 2FA off ends the
-        // password's sessions (401), and one opened after is held to the 2FA setup card by the middleware (sign-in step 7c),
-        // before requireFreshProof's own fail-closed refusal.
-        updateLocalConfig({ totpEnabled: false, totpSecret: null });
-        await refusedClean("the password's session with the node's 2FA off (held to the 2FA setup)", () => post({ changes: { decisions: true }, code: '123456' }, pwSession()),
-            403, 'totp_setup_required');
-        updateLocalConfig({ totpEnabled: true, totpSecret: twoFa.secret });
-    }
+    await provenChange('who may share outside, from the phone', { shareOutside: false }, asPhone(), {}, 'shareOutside', /Members may share listings outside the community \(on → off\)/);
     await provenChange('Beans, from the phone', { beans: false }, asPhone(), {}, 'beans', /Beans \(on → off\)/);
     await provenChange('Beans back on', { beans: true }, asPhone(), {}, 'beans', /Beans \(off → on\)/);
-    await refusedClean('the known floor, its floor alone, from a computer', () => post({ changes: { knownFloor: { floor: 1300 } } }, asComputer()), 403, 'phone_required');
-    await refusedClean('the known floor, its cap alone, from a computer', () => post({ changes: { knownFloor: { cap: 3000 } } }, asComputer()), 403, 'phone_required');
+    await refusedClean('the known floor, its floor alone, from a computer', () => post({ changes: { knownFloor: { floor_c: 130000 } } }, asComputer()), 403, 'phone_required');
+    await refusedClean('the known floor, its cap alone, from a computer', () => post({ changes: { knownFloor: { cap_c: 300000 } } }, asComputer()), 403, 'phone_required');
     await refusedClean('the known floor, its dial alone, from a computer', () => post({ changes: { knownFloor: { on: false } } }, asComputer()), 403, 'phone_required');
-    await provenChange('the known floor, floor and cap, from the phone', { knownFloor: { floor: 1300, cap: 3000 } }, asPhone(), {}, 'knownFloor',
-        /Known floor for confirmed members, the floor \(\d+ → 1300\); Known floor for confirmed members, the cap \(\d+ → 3000\)/);
+    await provenChange('the known floor, floor and cap, from the phone', { knownFloor: { floor_c: 130000, cap_c: 300000 } }, asPhone(), {}, 'knownFloor',
+        // The owners' alert names the change in Beans (a thousands comma allowed), as members' notice does: never hundredths.
+        /Known floor for confirmed members, the floor \([\d,]+ → 1,?300\); Known floor for confirmed members, the cap \([\d,]+ → 3,?000\)/);
     await refusedClean("where members' copies go, from a computer", () => post({ changes: { recoveryCopies: 'none' } }, asComputer()), 403, 'phone_required');
     await provenChange("where members' copies go, from the phone", { recoveryCopies: 'none' }, asPhone(), {}, 'recoveryCopies', /\(vault → none\)/);
-    await refusedClean('the voucher budget, from a computer', () => post({ changes: { voucherBudget: 1500 } }, asComputer()), 403, 'phone_required');
+    await refusedClean('the voucher budget, from a computer', () => post({ changes: { voucherBudget: 150000 } }, asComputer()), 403, 'phone_required');
     nMark = noticeMark();
-    await provenChange('the voucher budget, from the phone', { voucherBudget: 1500 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1000 → 1500\)/);
+    await provenChange('the voucher budget, from the phone', { voucherBudget: 150000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1,?000 → 1,?500\)/);
     assert(noticesSince(nMark).some((x) => /budget for each voucher is now 1,500 Beans/.test(x.body)), 'voucher budget changed, and members are told');
-    await provenChange('the voucher budget back to 1000', { voucherBudget: 1000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1500 → 1000\)/);
+    await provenChange('the voucher budget back to 1000', { voucherBudget: 100000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1,?500 → 1,?000\)/);
     {
         // Two Core settings in one request: one proof, a core.unlock line before each.
         const m = logMark();
@@ -400,7 +380,7 @@ async function main(): Promise<void> {
     await refusedClean('a pause beside a Core change', () => post({ changes: { join: 'paused', decisions: true } }, asPhone()), 400, 'one_kind_per_request');
     for (const [setting, to, door, core] of [
         ['join', 'paused', 'members', false], ['join', 'members', 'members', false], ['join', 'admins', 'members', true],
-        ['join', 'members', 'admins', true], ['knownFloor.cap', '3000', 'members', true], ['probation', 'on', 'members', false],
+        ['join', 'members', 'admins', true], ['knownFloor.cap', '300000', 'members', true], ['probation', 'on', 'members', false],
         ['removalDecider', 'everyone', 'members', false], ['listed', 'off', 'members', false], ['wordsDoor', 'on', 'members', true],
     ] as const) {
         assert(isCoreChange(setting, to, door) === core, `isCoreChange(${setting} → ${to}, door ${door}) is ${core}`);

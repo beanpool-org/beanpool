@@ -58,6 +58,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { localFetch } from './keepalive-test-fetch.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -76,10 +77,11 @@ function keypair(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -301,7 +303,7 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
             .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const keep = (enterprise: string, keeper: Id, role = 'keeper') => {
@@ -653,7 +655,7 @@ async function main() {
     const adaChal = createAdminChallenge();
     const adaSolved = verifyAndSolveChallenge({
         challengeId: adaChal.challengeId, memberPubkey: ada.pubKeyHex,
-        signature: crypto.sign(null, Buffer.from(adaChal.challenge, 'utf-8'), ada.privateKey).toString('hex'),
+        ...adminSigninFields(ada.privateKey, adaChal.challengeId),
     });
     const adaSession = adaSolved.ok ? consumeHandshakeToken(adaSolved.handshakeToken!).sessionId : undefined;
     assert(!!adaSession, 'Ada signs in as an admin with her key');
@@ -831,7 +833,7 @@ async function main() {
     const chal = createAdminChallenge();
     const solved = verifyAndSolveChallenge({
         challengeId: chal.challengeId, memberPubkey: mo.pubKeyHex,
-        signature: crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), mo.privateKey).toString('hex'),
+        ...adminSigninFields(mo.privateKey, chal.challengeId),
     });
     const modSession = solved.ok ? consumeHandshakeToken(solved.handshakeToken!).sessionId : undefined;
     assert(!!modSession, 'Mo signs in as a moderator with his key');
@@ -899,7 +901,7 @@ async function main() {
     db.transaction(() => {
         const member = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, updated_at)
                                    VALUES (?, ?, 'active', ?, 'seed', ?, ?)`);
-        const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active,
+        const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active,
                                  created_at, updated_at, event_start_at, event_end_at) VALUES (?, ?, 'food', ?, '', 5, ?, 'active', 1, ?, ?, ?, ?)`);
         const keys = Array.from({ length: 2000 }, (_, i) => {
             const k = crypto.randomBytes(32).toString('hex');
@@ -912,7 +914,7 @@ async function main() {
             post.run(crypto.randomUUID(), 'event', 'Holiday event', k, aYearAgo, aYearAgo, nextWeek, nextWeek);
         }
         // 5,000 ended deals between other members: what the node holds that the heal's lookup must not read.
-        const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
                                  VALUES (?, ?, ?, ?, 5, ?, ?)`);
         const bulkPosts = (db.prepare(`SELECT id, author_pubkey FROM posts WHERE title LIKE 'Bulk %' LIMIT 500`).all() as Array<{ id: string; author_pubkey: string }>);
         for (let i = 0; i < 5000; i++) {

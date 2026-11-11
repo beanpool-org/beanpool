@@ -34,6 +34,7 @@ import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -53,7 +54,7 @@ function makeAuthor(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -62,10 +63,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
         ...(extraHeaders || {}),
@@ -76,9 +78,10 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     return { status: res.status, body: json, error: json?.error as string | undefined };
 }
 
+/** A listing's price is whole hundredths on the wire (`price_c`): 20 Beans is 2000. */
 const post = (title: string, cashAlsoNeeded: boolean) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
+    price_c: 2000, priceType: 'fixed', cashAlsoNeeded, photos: TEST_PHOTOS,
 });
 
 async function main() {

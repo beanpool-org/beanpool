@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, Modal, StyleSheet, AppState, DeviceEventEmitter } from 'react-native';
+import { View, Text, Pressable, Modal, ScrollView, StyleSheet, AppState, DeviceEventEmitter } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../app/IdentityContext';
@@ -7,22 +7,32 @@ import { useTheme } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { getUnreadByConversation, getMarketplaceTransactions, signedGet } from '../utils/db';
 import { createRefreshGate } from '../utils/refresh-gate';
-import { anchorUrl } from '../utils/node-post';
+import { anchorUrl, signedPost } from '../utils/node-post';
+import { noticeRoute } from '../utils/push-notice-check';
 import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
 import { getCachedNodeProfile, decisionsOn, type NodeFeatures } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    buildNeedsYou, fitNeedsYou, isOwnInviteChange, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT,
+    buildNeedsYou, isOwnInviteChange, needsTargetHref, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT,
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
-import { isOthersListingDoorbell, t } from '@beanpool/core';
+import {
+    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
+} from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
-// The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
-// member, only while something of that kind does. No text. What counts, the order, the accent and the
-// wording live in utils/needs-you.ts.
+// The bell (scratch/fable-design/DESIGN-web-notifications-fable.md §2.1, slice W0; Marty, 9 Nov 2026: it takes the
+// needs-you row), between the bean and the invite icon: parity with the web's apps/pwa components/NeedsYouIcons.tsx. A red
+// count of the notices not yet opened (the node's list, GET /api/notices/push?unseen=1: what this phone is buzzed with, and
+// what a phone with no push still gets), an amber dot when nothing is new but something needs the member, and a sheet with
+// the open things at the top ("Needs you": what the icons were; what counts, the order, the accent and the wording live in
+// utils/needs-you.ts) and what happened under it, newest first, with the real words. A row leaves only when it is tapped
+// (it opens its thing, by the push tap's own route table, and is marked), when its ✕ is pressed (marked, opens nothing), when
+// "Clear all" is pressed (every notice, one request: { all: true }) or when its thing is opened (a chat read: the node marks
+// it and tells the sockets, `bell_activity` here); opening the sheet marks nothing. "Needs you" is none of those: its rows
+// are the open things, and leave when they are done (Marty, 10 Nov 2026, replacing the 9 Nov rule that had no "Clear all").
 //
 // Home's answer (GET /api/home, utils/home-store.ts) carries the same lines (design §5.2 "The header reads Home's
 // answer"): while one is fresher than two minutes the node's part (admin work, votes, group lines) is drawn from it and
@@ -48,6 +58,10 @@ const NEUTRAL = '#ffffff';
 const NODE_MIN_GAP_MS = 15_000;
 // A backstop for anything no event announces (a vote opening, say). Only while the app is in front.
 const SAFETY_POLL_MS = 120_000;
+// A notice kept: the list is read again this long after, so a burst is one read.
+const BELL_SETTLE_MS = 300;
+// The small bell, where the row has room for it but not for the full one; under it, none.
+const SMALL_BELL = 32;
 // A ws nudge usually means a message is on its way into the local database; the tab layout's sync
 // writes it there, so read a moment later rather than immediately.
 const WS_SETTLE_MS = 3_000;
@@ -146,6 +160,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const { colors } = useTheme();
     const pathname = usePathname();
     const [entries, setEntries] = useState<NeedsYouEntry[]>([]);
+    const [notices, setNotices] = useState<BellNotice[]>([]);
     const [sheet, setSheet] = useState(false);
     const [width, setWidth] = useState(0);
     const me = identity?.publicKey;
@@ -190,16 +205,29 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         } catch { /* keep what we had */ } finally { localBusy.current = false; }
     }, [me, rebuild]);
 
+    // The bell's list, read with the node's part (at most once per 15 s), and at once when the node says one was kept.
+    const bellBusy = useRef(false);
+    const refreshBell = useCallback(async () => {
+        if (!me || bellBusy.current) return;
+        bellBusy.current = true;
+        try {
+            const r = await signedGet('/api/notices/push?unseen=1');
+            if (r.ok && identityRef.current?.publicKey === me) setNotices(unseenBellNotices(await r.json()));
+        } catch { /* a node from before the bell, or no network: keep what we had */ } finally { bellBusy.current = false; }
+    }, [me]);
+
     // A new identity starts from nothing, and gets its own gate.
     useEffect(() => {
         local.current = { transactions: null, conversations: null };
         node.current = NO_NODE_PARTS;
         home.current = null;
         setEntries([]);
+        setNotices([]);
         if (!me) return;
         const g = createRefreshGate(NODE_MIN_GAP_MS, async () => {
             const id = identityRef.current;
             if (nodeBusy.current || !id || id.publicKey !== me) return;
+            refreshBell();
             nodeBusy.current = true;
             try {
                 // Home's answer when it is fresh (or, on Home, the one its read is about to bring): no request of our own.
@@ -223,7 +251,22 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
             rebuild();
         });
         return () => { g.cancel(); off(); if (gate.current === g) gate.current = null; };
-    }, [me, rebuild]);
+    }, [me, rebuild, refreshBell]);
+
+    // The node's word on the bell (services/ws-client.ts): a notice kept for this member, or some marked seen (a chat read
+    // here or on another device, a row tapped on the web).
+    useEffect(() => {
+        let settleTimer: ReturnType<typeof setTimeout> | null = null;
+        const sub = DeviceEventEmitter.addListener('bell_activity', (data: { type?: unknown; ids?: unknown }) => {
+            if (data?.type === BELL_EVENTS.seen && Array.isArray(data.ids)) {
+                setNotices(list => withoutBellNotices(list, data.ids as unknown[]));
+                return;
+            }
+            if (settleTimer) clearTimeout(settleTimer);
+            settleTimer = setTimeout(refreshBell, BELL_SETTLE_MS);
+        });
+        return () => { sub.remove(); if (settleTimer) clearTimeout(settleTimer); };
+    }, [refreshBell]);
 
     const poke = useCallback(() => {
         refreshLocal();
@@ -262,33 +305,121 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         goToNeedsTarget(t);
     };
 
-    const fit = fitNeedsYou(entries, width);
-    const byKind = new Map(fit.shown.map(e => [e.kind, e]));
+    // A tap on a notice: off the bell at once (and on the node, which tells the member's other apps), then to its thing by
+    // the push tap's own fixed routes (utils/push-notice-check.ts noticeRoute).
+    const openNotice = (n: BellNotice) => {
+        setSheet(false);
+        setNotices(list => withoutBellNotices(list, [n.id]));
+        const id = identityRef.current;
+        (async () => {
+            const url = await anchorUrl();
+            if (!url || !id) return;
+            const r = await signedPost(url, '/api/notices/push/seen', { ids: [n.id] }, id);
+            if (!r.ok) refreshBell();
+        })().catch(() => { refreshBell(); });
+        router.push(noticeRoute(isPushNoticeKind(n.kind) ? n.kind : null, n.data) as never);
+    };
+
+    // A notice's ✕: the same mark as a tap, and it opens nothing and leaves the sheet up. A failed mark reads the list again,
+    // so the row comes back.
+    const clearNotice = (n: BellNotice) => {
+        setNotices(list => withoutBellNotices(list, [n.id]));
+        const id = identityRef.current;
+        (async () => {
+            const url = await anchorUrl();
+            if (!url || !id) return;
+            const r = await signedPost(url, '/api/notices/push/seen', { ids: [n.id] }, id);
+            if (!r.ok) refreshBell();
+        })().catch(() => { refreshBell(); });
+    };
+
+    // "Clear all": every notice, one request (the node marks only this member's). Never "Needs you": those are `entries`, the
+    // open things, and they leave when they are done.
+    const clearAll = () => {
+        setNotices([]);
+        const id = identityRef.current;
+        (async () => {
+            const url = await anchorUrl();
+            if (!url || !id) return;
+            const r = await signedPost(url, '/api/notices/push/seen', { all: true }, id);
+            if (!r.ok) refreshBell();
+        })().catch(() => { refreshBell(); });
+    };
+
+    const clearWords = bellClearWords();
+    const unseen = notices.length;
+    // The payee's line of a short standing deal is listed, not counted (core needsYouCounts).
+    const counted = entries.filter(needsYouCounts).length;
+    const label = bellLabel(unseen, counted);
+    const small = width < NEEDS_YOU_SLOT;
+    const now = Date.now();
 
     return (
         <View style={s.row} onLayout={e => setWidth(e.nativeEvent.layout.width)}>
-            {needsYouRowOrder(fit).map(k => k === 'more' ? (
-                <Pressable key="more" onPress={() => setSheet(true)} style={({ pressed }) => [s.slot, pressed && s.pressed]}
-                    accessibilityRole="button" accessibilityLabel={moreLabel(fit.hidden)}>
-                    <MaterialCommunityIcons name="dots-horizontal" size={24} color={NEUTRAL} style={s.iconShadow} />
+            {width >= SMALL_BELL && (
+                <Pressable onPress={() => setSheet(true)} style={({ pressed }) => [s.slot, small && s.slotSmall, pressed && s.pressed]}
+                    accessibilityRole="button" accessibilityLabel={label}>
+                    <MaterialCommunityIcons name="bell-outline" size={small ? 20 : 24} color={NEUTRAL} style={s.iconShadow} />
+                    {unseen > 0 ? (
+                        <View style={[s.countDot, small && s.countDotSmall, { backgroundColor: colors.feedback.danger.solid }]}>
+                            <Text style={[s.countText, { color: colors.text.onDanger }]} allowFontScaling={false}>{bellBadge(unseen)}</Text>
+                        </View>
+                    ) : counted > 0 ? <View style={[s.needsDot, { backgroundColor: ACCENT }]} /> : null}
                 </Pressable>
-            ) : <NeedIcon key={k} e={byKind.get(k)!} open={open} />)}
+            )}
 
             <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
                 <Pressable style={s.sheetBg} onPress={() => setSheet(false)} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <View style={[s.sheet, { marginTop: sheetTop, backgroundColor: colors.surface.card }]}>
-                        <Text style={[s.sheetTitle, { color: colors.text.secondary }]} accessibilityRole="header">{t('Needs you')}</Text>
-                        {entries.map(e => (
-                            <Pressable key={e.kind} style={({ pressed }) => [s.sheetRow, pressed && { backgroundColor: colors.surface.subtle }]}
-                                onPress={() => { setSheet(false); open(e.target); }} accessibilityRole="button" accessibilityLabel={e.label}>
-                                <MaterialCommunityIcons name={ICON[e.kind]} size={22}
-                                    color={e.accent ? colors.feedback.warning.fg : colors.text.secondary} />
-                                <Text style={[s.sheetText, { color: colors.text.heading, fontWeight: e.accent ? '700' : '500' }]} numberOfLines={2}>
-                                    {e.label}
-                                </Text>
-                                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} />
-                            </Pressable>
-                        ))}
+                        <Text style={[s.sheetTitle, { color: colors.text.secondary }]} accessibilityRole="header">{t('Notifications')}</Text>
+                        <ScrollView style={s.sheetScroll}>
+                            {entries.length > 0 && (
+                                <Text style={[s.sectionTitle, { color: colors.text.muted }]} accessibilityRole="header">{t('Needs you')}</Text>
+                            )}
+                            {entries.map(e => (
+                                <Pressable key={e.kind} style={({ pressed }) => [s.sheetRow, pressed && { backgroundColor: colors.surface.subtle }]}
+                                    onPress={() => { setSheet(false); open(e.target); }} accessibilityRole="button" accessibilityLabel={e.label}>
+                                    <MaterialCommunityIcons name={ICON[e.kind]} size={22}
+                                        color={e.accent ? colors.feedback.warning.fg : colors.text.secondary} />
+                                    <Text style={[s.sheetText, { color: colors.text.heading, fontWeight: e.accent ? '700' : '500' }]} numberOfLines={2}>
+                                        {e.label}
+                                    </Text>
+                                    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.muted} />
+                                </Pressable>
+                            ))}
+                            {entries.length > 0 && notices.length > 0 && <View style={[s.divider, { backgroundColor: colors.border.default }]} />}
+                            {entries.length === 0 && notices.length === 0 && (
+                                <Text style={[s.empty, { color: colors.text.secondary }]}>{t('Nothing new.')}</Text>
+                            )}
+                            {notices.length > 0 && (
+                                <View style={s.clearAllRow}>
+                                    <Pressable style={({ pressed }) => [s.clearAll, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={clearAll} accessibilityRole="button" accessibilityLabel={clearWords.all}>
+                                        <Text style={[s.clearAllText, { color: colors.text.link }]}>{clearWords.all}</Text>
+                                    </Pressable>
+                                </View>
+                            )}
+                            {notices.map(n => (
+                                <View key={n.id} style={s.noticeLine}>
+                                    <Pressable style={({ pressed }) => [s.sheetRow, s.noticeRow, s.noticeOpen, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={() => openNotice(n)} accessibilityRole="button" accessibilityLabel={[n.title, n.body].filter(Boolean).join('. ')}>
+                                        <View style={[s.unseenDot, { backgroundColor: colors.feedback.danger.solid }]} />
+                                        <View style={s.noticeWords}>
+                                            <Text style={[s.noticeTitle, { color: colors.text.heading }]} numberOfLines={2}>{n.title || n.body}</Text>
+                                            {!!n.title && !!n.body && (
+                                                <Text style={[s.noticeBody, { color: colors.text.body }]} numberOfLines={3}>{n.body}</Text>
+                                            )}
+                                            <Text style={[s.noticeWhen, { color: colors.text.muted }]}>{timeAgo(Math.max(0, now - n.sentAt * 1000))}</Text>
+                                        </View>
+                                    </Pressable>
+                                    <Pressable style={({ pressed }) => [s.clearOne, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={() => clearNotice(n)} accessibilityRole="button" accessibilityLabel={clearWords.one}>
+                                        <MaterialCommunityIcons name="close" size={20} color={colors.text.muted} />
+                                    </Pressable>
+                                </View>
+                            ))}
+                            <Text style={[s.lifetime, { color: colors.text.muted }]}>{t('Older notices are gone after 7 days.')}</Text>
+                        </ScrollView>
                     </View>
                 </Pressable>
             </Modal>
@@ -298,16 +429,37 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
 }
 
 const s = StyleSheet.create({
-    // Right-aligned: the icons grow leftwards from the invite/Settings/avatar group, the gap sits by the bean.
+    // Right-aligned: the bell sits by the invite/Settings/avatar group, the gap by the bean.
     row: { flex: 1, minWidth: 0, height: NEEDS_YOU_SLOT, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
     slot: { width: NEEDS_YOU_SLOT, height: NEEDS_YOU_SLOT, alignItems: 'center', justifyContent: 'center', borderRadius: NEEDS_YOU_SLOT / 2 },
+    slotSmall: { width: SMALL_BELL },
     pressed: { backgroundColor: 'rgba(255,255,255,0.15)' },
     iconShadow: { textShadowColor: 'rgba(0,0,0,0.75)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
-    countDot: { position: 'absolute', top: 7, right: 5, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
-    countText: { color: '#1f2937', fontSize: 10, fontWeight: '900' },
+    countDot: { position: 'absolute', top: 6, right: 4, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+    countDotSmall: { right: -2 },
+    countText: { fontSize: 10, fontWeight: '900' },
+    needsDot: { position: 'absolute', top: 12, right: 12, width: 9, height: 9, borderRadius: 5 },
     sheetBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center' },
-    sheet: { width: '92%', borderRadius: 16, paddingVertical: 8, elevation: 6 },
+    sheet: { width: '92%', maxHeight: '75%', borderRadius: 16, paddingVertical: 8, elevation: 6 },
+    sheetScroll: { flexGrow: 0 },
     sheetTitle: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, paddingHorizontal: 16, paddingVertical: 8 },
+    sectionTitle: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 2 },
     sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingHorizontal: 16, paddingVertical: 8 },
     sheetText: { flex: 1, fontSize: 15 },
+    divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 16, marginVertical: 4 },
+    empty: { fontSize: 15, textAlign: 'center', paddingHorizontal: 16, paddingVertical: 16 },
+    noticeRow: { alignItems: 'flex-start' },
+    // A notice and its ✕ side by side; the ✕ is 44 dp square (the touch floor) and "Clear all" 44 dp tall, at any font size.
+    noticeLine: { flexDirection: 'row', alignItems: 'flex-start' },
+    noticeOpen: { flex: 1, minWidth: 0, paddingRight: 4 },
+    clearOne: { width: 44, height: 44, marginRight: 8, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    clearAllRow: { alignItems: 'flex-end', paddingHorizontal: 8 },
+    clearAll: { minHeight: 44, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    clearAllText: { fontSize: 14, fontWeight: '700' },
+    unseenDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
+    noticeWords: { flex: 1, minWidth: 0 },
+    noticeTitle: { fontSize: 15, fontWeight: '700' },
+    noticeBody: { fontSize: 15 },
+    noticeWhen: { fontSize: 12, marginTop: 2 },
+    lifetime: { fontSize: 12, textAlign: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
 });

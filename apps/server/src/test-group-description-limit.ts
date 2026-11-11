@@ -45,6 +45,7 @@ import WebSocket from 'ws';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const HERE = fileURLToPath(import.meta.url);
 
@@ -69,7 +70,7 @@ function newKey(): Key {
 }
 
 type Res = { status: number; text: string; bytes: number; body: any };
-/** A member's signed request, as the apps send one (the older request format, which every node still takes). */
+/** A member's signed request, as the apps send one (format 2, through signed-request-test-helper.ts). */
 async function call(base: string, method: 'GET' | 'POST' | 'PATCH', route: string, key: Key | null, body?: unknown): Promise<Res> {
     const raw = body === undefined ? '' : JSON.stringify(body);
     const headers: Record<string, string> = raw ? { 'Content-Type': 'application/json' } : {};
@@ -79,7 +80,8 @@ async function call(base: string, method: 'GET' | 'POST' | 'PATCH', route: strin
         const priv = crypto.createPrivateKey({ key: Buffer.from(key.priv, 'base64'), format: 'der', type: 'pkcs8' });
         Object.assign(headers, {
             'X-Public-Key': key.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), priv).toString('base64'),
+            'X-Signature': signRequest(priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts), 'X-Nonce': nonce,
         });
     }
@@ -104,8 +106,8 @@ function socket(base: string, key: Key): Promise<{ ws: WebSocket; events: any[];
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const priv = crypto.createPrivateKey({ key: Buffer.from(key.priv, 'base64'), format: 'der', type: 'pkcs8' });
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), priv).toString('base64');
-    const url = `${base.replace('https', 'wss')}/ws?pubkey=${key.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(priv, ts, nonce);
+    const url = `${base.replace('https', 'wss')}/ws?pubkey=${key.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false, maxPayload: 64 * 1024 * 1024 });
         const s = { ws, events: [] as any[], raw: [] as string[] };
@@ -154,10 +156,8 @@ async function seedHeap(a: { convenor: string; member: string }): Promise<void> 
 /** The real server, on port 0, reporting its heap's peak (sampled every 5 ms) when asked on stdin. */
 async function serve(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
@@ -174,11 +174,9 @@ async function serve(): Promise<void> {
 /** The server in this process, for the sections that check answers rather than the heap. */
 async function inProcessServer() {
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { startHttpsServer } = await import('./https-server.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
@@ -273,7 +271,7 @@ async function rulesOnGlobal(): Promise<void> {
     // The other free text the global profile's lists send for every row: a listing's, and a member's contact.
     console.log('\n— 2b. the other text the global profile\'s lists send —');
     const listing = (who: Key, fields: Record<string, unknown>) => call(base, 'POST', '/api/marketplace/posts', who, {
-        type: 'offer', category: 'food', title: 'Spare apples', description: 'A box', credits: 0, authorPublicKey: who.pk,
+        type: 'offer', category: 'food', title: 'Spare apples', description: 'A box', price_c: 0, authorPublicKey: who.pk,
         lat: -28.6, lng: 153.6, photos: [TINY_PNG], ...fields,
     });
     const atLimits = await listing(M, { title: 't'.repeat(200), description: 'u'.repeat(5_000), category: 'k'.repeat(50) });
@@ -329,7 +327,8 @@ async function rulesOnLocal(): Promise<void> {
         `an enterprise with a 2,001-character purpose: 400, none made (${purposeOver.status})`);
     assert(atLimits.status === 200 && atLimits.body?.purpose === 'p'.repeat(2_000), `a 100-character name and a 2,000-character purpose are taken (${atLimits.status} ${short(atLimits.body?.error)})`);
 
-    const crowdfund = (title: string, description: string) => call(base, 'POST', '/api/crowdfund/projects', P, { creatorPubkey: P.pk, title, description, goalAmount: 500 });
+    // Every money figure whole hundredths (money-body.ts): a goal of 500 Beans, a send and a pledge of 1.
+    const crowdfund = (title: string, description: string) => call(base, 'POST', '/api/crowdfund/projects', P, { creatorPubkey: P.pk, title, description, goalAmount_c: 50000 });
     const cfOver = await crowdfund('c'.repeat(101), 'A roof');
     const cfPurposeOver = await crowdfund('A long roof', 'r'.repeat(2_001));
     const cf = await crowdfund('A new roof', 'Tiles and labour');
@@ -337,7 +336,7 @@ async function rulesOnLocal(): Promise<void> {
         && cfPurposeOver.body?.error === tooLong("An enterprise's purpose", 2_000) && cf.status === 200,
         `a crowdfund's title past 100 and description past 2,000: 400 each; one within them is made (${cfOver.status}, ${cfPurposeOver.status}, ${cf.status})`);
     const cfId = cf.body?.project?.id;
-    const cfEdit = (description: string) => call(base, 'POST', '/api/crowdfund/projects/update', P, { id: cfId, creatorPubkey: P.pk, title: 'A new roof', description, goalAmount: 500 });
+    const cfEdit = (description: string) => call(base, 'POST', '/api/crowdfund/projects/update', P, { id: cfId, creatorPubkey: P.pk, title: 'A new roof', description, goalAmount_c: 50000 });
     const cfEditOver = await cfEdit('s'.repeat(2_001));
     // Stored where a crowdfund's create puts it (db.ts createCrowdfundProject): its enterprise's purpose, and its projects row.
     const storedPurpose = `Stored before the limit ${'v'.repeat(3_000)}`;
@@ -348,9 +347,9 @@ async function rulesOnLocal(): Promise<void> {
         `a crowdfund edit to 2,001 characters: 400; its own description from before the limit sent back: 200 (${cfEditOver.status}, ${cfSentBack.status} ${short(cfSentBack.body?.error)})`);
 
     const note501 = 'm'.repeat(501);
-    const send = await call(base, 'POST', '/api/ledger/transfer', Q, { from: Q.pk, to: R.pk, amount: 1, memo: note501 });
-    const send500 = await call(base, 'POST', '/api/ledger/transfer', Q, { from: Q.pk, to: R.pk, amount: 1, memo: 'm'.repeat(500) });
-    const pledge = await call(base, 'POST', `/api/crowdfund/projects/${cfId}/pledge`, Q, { fromPubkey: Q.pk, amount: 1, memo: note501 });
+    const send = await call(base, 'POST', '/api/ledger/transfer', Q, { from: Q.pk, to: R.pk, amount_c: 100, memo: note501 });
+    const send500 = await call(base, 'POST', '/api/ledger/transfer', Q, { from: Q.pk, to: R.pk, amount_c: 100, memo: 'm'.repeat(500) });
+    const pledge = await call(base, 'POST', `/api/crowdfund/projects/${cfId}/pledge`, Q, { fromPubkey: Q.pk, amount_c: 100, memo: note501 });
     const notes = (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(note501) as { n: number }).n;
     const noteWords = tooLong('A note with Beans', 500);
     assert(send.status === 400 && send.body?.error === noteWords && pledge.status === 400 && pledge.body?.error === noteWords && notes === 0,
@@ -359,8 +358,8 @@ async function rulesOnLocal(): Promise<void> {
 
     // A completed trade is R's standing to propose (a trust badge, earned_credit, is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
-                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), R.pk, Q.pk, tradedAt, tradedAt);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 500, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), R.pk, Q.pk, tradedAt, tradedAt);
     const propose = (title: string, description: string) => call(base, 'POST', '/api/commons/decisions', R, { title, description, touches: 'member', effect: 'freeze_credit', subject: Q.pk });
     const titleOver = await propose('t'.repeat(201), 'Ten or more characters of reasons');
     const descOver = await propose('A freeze for Quin', 'd'.repeat(5_001));

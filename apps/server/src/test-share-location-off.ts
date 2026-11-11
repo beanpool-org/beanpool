@@ -31,9 +31,9 @@ delete process.env.PUBLIC_ADDRESS_AUTO;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.PRIVATE_PREVIEW;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
-process.env.ADMIN_PASSWORD = 'ShareLocationOff123!';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -55,7 +55,8 @@ async function get(urlPath: string, id: Id | null = null, extra: Record<string, 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method: 'GET', path: urlPath.split('?')[0], timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -84,7 +85,7 @@ function holdsThePlace(text: string): boolean {
 async function main() {
     console.log('"Share Location & Radius" OFF hides the community\'s place from everyone but its members...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateLocalConfig, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer, PUBLIC_READ_EXACT } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
@@ -92,7 +93,6 @@ async function main() {
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
 
     await initTls();
-    initAdminPassword();
     se.initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
     // The dashboard names the node's key (ephemeral ports, no peers).

@@ -31,7 +31,12 @@ const underlying = vi.fn(async (_input: unknown, _init?: RequestInit) => ({ ok: 
 // No app version: the web build's wrapper, which still names the language.
 installNodeRequestSigning();
 
-const sentHeaders = (i: number) => (underlying.mock.calls[i][1]?.headers ?? {}) as Record<string, string>;
+/**
+ * The requests the app made, without the health read the wrapper sends first to a community it hasn't heard from this run
+ * (utils/node-version-gate.ts): that read is the wrapper's own, unsigned, and carries no header of the app's.
+ */
+const sent = () => underlying.mock.calls.filter(([input]) => !String(input).endsWith('/api/community/health'));
+const sentHeaders = (i: number) => (sent()[i][1]?.headers ?? {}) as Record<string, string>;
 
 beforeEach(() => {
     underlying.mockClear();

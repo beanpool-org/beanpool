@@ -12,7 +12,7 @@ import { readKnownRule, ruleStartsLine, type KnownRule } from '../known-rule.js'
 import { pseudoLocalise, setLanguage } from '../words.js';
 
 /** The defaults, nothing waiting. */
-const RULE: KnownRule = { knownFloor: 1000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
+const RULE: KnownRule = { knownFloor: 100000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
 const HALF = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -41,12 +41,12 @@ describe('the rule line', () => {
         expect(knownRuleLine({})).toBeNull();
         expect(knownRuleLine({ debtLinePct: 50 })).toBeNull();
         expect(knownRuleLine({ quietDays: 60 })).toBeNull();
-        expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 1000 }).filter(l => /admins can see/.test(l))).toEqual([]);
-        expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 1000 }).some(l => l.includes('1,000 Beans'))).toBe(true);
+        expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 100000 }).filter(l => /admins can see/.test(l))).toEqual([]);
+        expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 100000 }).some(l => l.includes('1,000 Beans'))).toBe(true);
     });
 
     it('sits right under the floor line on "How this community works", and only with the floor', () => {
-        const lines = communityShapeLines({ beans: true, door: 'members', knownFloor: 1000, debtLinePct: 50, quietDays: 60 });
+        const lines = communityShapeLines({ beans: true, door: 'members', knownFloor: 100000, debtLinePct: 50, quietDays: 60 });
         const floor = lines.findIndex(l => l.includes('(the known floor)'));
         expect(lines[floor + 1]).toBe(HALF);
         expect(communityShapeLines({ beans: true, door: 'members', debtLinePct: 50, quietDays: 60 }).filter(l => /admins can see/.test(l))).toEqual([]);
@@ -55,15 +55,20 @@ describe('the rule line', () => {
     it('the join screen draws the floor and the rule together, or nothing', () => {
         expect(joinRuleLines(RULE)).toEqual(['**Confirmed members** can owe up to 1,000 Beans (the known floor)', HALF]);
         expect(joinRuleLines(null)).toEqual([]);
-        expect(joinRuleLines({ knownFloor: 1000 })).toEqual([]);
+        expect(joinRuleLines({ knownFloor: 100000 })).toEqual([]);
         expect(joinRuleLines({ debtLinePct: 50, quietDays: 60 })).toEqual([]);
+    });
+
+    it('the floor is whole hundredths: 100050 reads 1,000.50, and a floor that is not whole hundredths is no rule', () => {
+        expect(joinRuleLines({ ...RULE, knownFloor: 100050 })[0]).toBe('**Confirmed members** can owe up to 1,000.50 Beans (the known floor)');
+        expect(readKnownRule({ known: true, knownFloor: 1000.5, debtLinePct: 50, quietDays: 60 })).toBeNull();
     });
 
     it('a tightened line carries its date on the rules page, per line, the number the owner set', () => {
         const waiting = { ...RULE, debtLinePct: 30, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: '2026-11-20T04:00:00.000Z', quietDays: 45 };
         expect(waitingLineSentences(waiting)).toEqual(['The line of 30% applies from 16 November.', 'The line of 45 days applies from 20 November.']);
         expect(waitingLineSentences(RULE)).toEqual([]);
-        const lines = communityShapeLines({ beans: true, door: 'members', knownFloor: 1000, debtLinePct: 30, quietDays: 45 }, waiting);
+        const lines = communityShapeLines({ beans: true, door: 'members', knownFloor: 100000, debtLinePct: 30, quietDays: 45 }, waiting);
         expect(lines.indexOf('The line of 30% applies from 16 November.')).toBe(lines.indexOf(knownRuleLine(waiting) as string) + 1);
     });
 
@@ -76,12 +81,12 @@ describe('the rule line', () => {
 
 describe('reading the node', () => {
     it('a whole known community only: an older node, a plain community and a bad answer are null', () => {
-        expect(readKnownRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null })).toEqual(RULE);
+        expect(readKnownRule({ known: true, knownFloor: 100000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null })).toEqual(RULE);
         expect(readKnownRule({ known: false })).toBeNull();
-        expect(readKnownRule({ known: false, knownFloor: 1000, debtLinePct: 50, quietDays: 60 })).toBeNull();
+        expect(readKnownRule({ known: false, knownFloor: 100000, debtLinePct: 50, quietDays: 60 })).toBeNull();
         expect(readKnownRule(null)).toBeNull();
         expect(readKnownRule({ error: 'Not found' })).toBeNull();
-        expect(readKnownRule({ known: true, knownFloor: '1000', debtLinePct: 50, quietDays: 60 })).toBeNull();
+        expect(readKnownRule({ known: true, knownFloor: '100000', debtLinePct: 50, quietDays: 60 })).toBeNull();
     });
 
     it('a date it can\'t read is no date, so no sentence is drawn from it', () => {

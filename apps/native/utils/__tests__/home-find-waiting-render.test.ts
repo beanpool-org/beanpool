@@ -53,7 +53,6 @@ vi.mock('../../utils/knock', async (importOriginal) => ({
     readKnockStatus: (...args: unknown[]) => readKnockStatusMock(...args),
     cancelKnock: (...args: unknown[]) => cancelKnockMock(...args),
     forgetKnock: (...args: unknown[]) => forgetKnockMock(...args),
-    cardKnockLines: () => [],
 }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -382,6 +381,22 @@ describe('FindCommunityBody tells the truth about what the community now answers
         expect(cancelButton(host)).toBeNull();
         expect(host.textContent).not.toContain('No answer came');
         expect(host.textContent).not.toContain('no open request');
+    });
+
+    it('a yes already used (the account is a member there now) draws no row, never a lone "🎉" (review of 8cc7b093)', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null, member: true } });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+        expect(host.querySelector(`[data-testid="home-find-invited-${byron}"]`)).toBeNull();
+        expect(host.textContent ?? '').not.toMatch(/🎉\s*$/m);
+    });
+
+    it('an unused yes still shows its line', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+        const row = host.querySelector(`[data-testid="home-find-invited-${byron}"]`);
+        expect(row?.textContent?.length ?? 0).toBeGreaterThan(3);
     });
 
     it('a cancel that meets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {

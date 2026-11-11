@@ -24,6 +24,10 @@ import { useOwnAvatar } from './lib/useOwnAvatar';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { PeekPage } from './pages/PeekPage';
+import { KnockWaitingPage } from './pages/KnockWaitingPage';
+import { HandoffPage } from './pages/HandoffPage';
+import { handoffAtLoad, takeHandoffParams } from './lib/handoff';
+import { isKnockKey } from './lib/knock-key';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
@@ -151,11 +155,30 @@ export function App() {
     const fitNavLabels = useFitNavLabels(lang);
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
+    /*
+     * Waiting to be let in (DESIGN-shared-listing-door-fable.md §2.1, slice A1): the key this browser made when it asked
+     * this community to let it in (lib/knock-key.ts), which no member has said yes to yet. It is never `identity`: every
+     * member effect below keys on that, and the first one registers a key that is no member (lib/member-name.ts
+     * openWithNodeName), which would let a stranger in without anyone's yes. The waiting page reads only the request's
+     * own status. `knockYes`: a member said yes, and the welcome page redeems it with this key; `waitingDoor`: the
+     * welcome page's invite form, which joins with this key too.
+     */
+    const [waitingKey, setWaitingKey] = useState<BeanPoolIdentity | null>(null);
+    const [knockYes, setKnockYes] = useState<{ invite: string; name: string } | null>(null);
+    const [waitingDoor, setWaitingDoor] = useState<'invite' | null>(null);
+    /*
+     * `/app?door=handoff&n=<nonce>&from=<origin>` (DESIGN-global-yes-join-fable.md §2.1, slice Y1): the page that holds a
+     * member's account in this browser opened this one to hand it over (pages/HandoffPage.tsx). Read once, at load, and taken
+     * out of the address at once, so a reload or a later door never reads it again.
+     */
+    const [handoff, setHandoff] = useState(() => (typeof window !== 'undefined' ? handoffAtLoad(window.location.search, window.location.origin) : null));
+    useEffect(() => { if (handoff) takeHandoffParams(); }, []); // once, at load
     // The hint the node reads at its bare address (front doors S15, lib/community-card.ts): with an account here `/`
     // opens this app as before; without one it shows a stranger the community's card. Said once the identity has loaded.
+    // A browser waiting to be let in keeps it too, so `/` opens the waiting page rather than the card again.
     useEffect(() => {
-        if (!loading) setAccountHint(!!identity);
-    }, [loading, identity]);
+        if (!loading) setAccountHint(!!identity || !!waitingKey);
+    }, [loading, identity, waitingKey]);
     /*
      * With no identity: the global lobby (G9b) when the node shows visitors its listings and nothing is part way through
      * a join in this browser; otherwise the welcome page, as always. Decided once, from the node's own word; a node
@@ -166,10 +189,12 @@ export function App() {
     useEffect(() => {
         if (loading || identity || visitorView.kind !== 'checking') return;
         let cancelled = false;
+        // `/app?door=ask` (a community's own Ask to join, A1) opens the welcome page's form, never the lobby.
+        const askDoor = new URLSearchParams(window.location.search).get('door') === 'ask';
         Promise.all([communityInfoOnce().catch(() => null), joinInFlight().catch(() => true)])
             .then(([info, inFlight]) => {
                 if (cancelled) return;
-                setVisitorView(info && visitorsSeeListings(info) && !inFlight ? { kind: 'lobby', info } : { kind: 'welcome', info });
+                setVisitorView(info && visitorsSeeListings(info) && !inFlight && !askDoor ? { kind: 'lobby', info } : { kind: 'welcome', info });
             });
         return () => { cancelled = true; };
     }, [loading, identity, visitorView.kind]);
@@ -195,6 +220,9 @@ export function App() {
     const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [peopleNavNonce, setPeopleNavNonce] = useState(0);
+    // People → Invites was opened from the line "N people asked to join" (the Needs-you icon, Home's line): WantsToJoin says
+    // so if they have all been answered by now, rather than showing nothing.
+    const [peopleFromNotice, setPeopleFromNotice] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
     // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
@@ -529,6 +557,7 @@ export function App() {
         // From Home's cards: People's community list or its invites, and Settings at the profile.
         if (tab === 'people-community' || tab === 'people-invites') {
             setPeopleSubView(tab === 'people-invites' ? 'invites' : 'community');
+            setPeopleFromNotice(tab === 'people-invites' && contextId === 'asked');
             setPeopleNavNonce(n => n + 1);
             setActiveTab('people');
             return;
@@ -651,7 +680,12 @@ export function App() {
         let mounted = true;
 
         loadIdentity()
-            .then(id => { if (mounted) setIdentity(id); })
+            .then(id => {
+                if (!mounted) return;
+                // The key a request to join made, not let in yet: the waiting page, never the member app.
+                if (id && isKnockKey(id)) setWaitingKey(id);
+                else setIdentity(id);
+            })
             .finally(() => { if (mounted) setLoading(false); });
 
         getCommunityHealth()
@@ -933,6 +967,33 @@ export function App() {
     // dot alone where the title wouldn't fit beside the chip's words.
     const headerTitle = activeTab !== 'map' || showSettings ? (activeTab === 'pulse' ? t('The Pulse') : activeTabEntry ? t(activeTabEntry.label) : '') : null;
 
+    // The handoff's door, before anything else: it answers the page that opened it whether or not an account is held here.
+    if (handoff && !loading) {
+        return (
+            <div className="page-wallpaper" data-testid="welcome-wallpaper">
+                <HandoffPage
+                    handoff={handoff}
+                    onOpen={() => setHandoff(null)}
+                    onJoin={({ account, invite, name }) => {
+                        // Kept as the waiting key (established); the welcome page redeems the yes with it (WelcomePage handleCreate).
+                        setHandoff(null);
+                        setWaitingDoor(null);
+                        setKnockYes({ invite, name });
+                        setWaitingKey(account);
+                    }}
+                    onMember={(member) => {
+                        setHandoff(null);
+                        beginAccountEpoch();
+                        setWaitingKey(null);
+                        setKnockYes(null);
+                        setWaitingDoor(null);
+                        setIdentity(member);
+                    }}
+                />
+            </div>
+        );
+    }
+
     if (loading || (!identity && visitorView.kind === 'checking')) {
         return (
             <div style={{
@@ -953,9 +1014,54 @@ export function App() {
         // Signed in here, with no reload: the account is this page's own from now (lib/account-epoch.ts), whatever
         // sign-out in another tab this page heard while it held no account.
         const signedInHere = (signedIn: BeanPoolIdentity) => {
+            // The key a request to join made, which no community has let in: the waiting page, never the member app,
+            // whichever screen handed it back (the welcome page's "this browser holds an account" screen offers the key
+            // it holds; review 4508428601). Its mark goes only once a community has it as a member (enterAsInvited).
+            if (isKnockKey(signedIn)) {
+                setKnockYes(null);
+                setWaitingDoor(null);
+                setWaitingKey(signedIn);
+                return;
+            }
             beginAccountEpoch();
+            setWaitingKey(null);
+            setKnockYes(null);
+            setWaitingDoor(null);
             setIdentity(signedIn);
         };
+        // Sent from the shared post's page or the card's form: this browser now waits to be let in.
+        const askedHere = (asker: BeanPoolIdentity) => {
+            forgetKeptPeek();
+            setPeekParam(null);
+            setWaitingKey(asker);
+        };
+        const welcomeAt = (door: 'invite' | 'signin') => {
+            try { window.history.replaceState(window.history.state, '', `${window.location.pathname}?door=${door}`); } catch { /* the page opens at its start */ }
+        };
+        if (waitingKey && !knockYes && !waitingDoor) {
+            return (
+                <KnockWaitingPage
+                    identity={waitingKey}
+                    onJoin={setKnockYes}
+                    onInvite={() => { welcomeAt('invite'); setWaitingDoor('invite'); }}
+                    onSignIn={() => { welcomeAt('signin'); setWaitingKey(null); }}
+                    onForgotten={() => setWaitingKey(null)}
+                />
+            );
+        }
+        if (waitingKey) {
+            // A yes to redeem with this key, or the invite form, which joins with it too (WelcomePage handleCreate).
+            return (
+                <div className="page-wallpaper" data-testid="welcome-wallpaper">
+                    <WelcomePage
+                        onComplete={signedInHere}
+                        knockYes={knockYes ?? undefined}
+                        onBackToRequest={() => { setKnockYes(null); setWaitingDoor(null); }}
+                        initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined}
+                    />
+                </div>
+            );
+        }
         if (visitorView.kind === 'lobby') {
             return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
         }
@@ -967,13 +1073,13 @@ export function App() {
                 try { window.history.replaceState(window.history.state, '', `${window.location.pathname}?door=${door}`); } catch { /* the page opens at its start */ }
                 setPeekParam(null);
             };
-            return <PeekPage postId={peekParam.postId} ticket={peekParam.ticket} onWelcome={toWelcome} />;
+            return <PeekPage postId={peekParam.postId} ticket={peekParam.ticket} onWelcome={toWelcome} onAsked={askedHere} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
             <div className="page-wallpaper" data-testid="welcome-wallpaper">
                 <FormerAddressBanner />
-                <WelcomePage onComplete={signedInHere} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
+                <WelcomePage onComplete={signedInHere} onAsked={askedHere} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
             </div>
         );
     }
@@ -1056,7 +1162,7 @@ export function App() {
                                 key={tab.id}
                                 onClick={() => {
                                     if (tab.id === 'marketplace') setMarketClickCount(c => c + 1);
-                                    if (tab.id === 'people' && activeTab !== 'people') setPeopleSubView('friends');
+                                    if (tab.id === 'people' && activeTab !== 'people') { setPeopleSubView('friends'); setPeopleFromNotice(false); }
                                     setActiveTab(tab.id);
                                     setShowSettings(false);
                                     closePagesOver();
@@ -1320,7 +1426,8 @@ export function App() {
                                     identity={identity}
                                     initialView={peopleSubView}
                                     navNonce={peopleNavNonce}
-                                    onViewChange={setPeopleSubView}
+                                    onViewChange={(v) => { setPeopleSubView(v); setPeopleFromNotice(false); }}
+                                    fromNotice={peopleFromNotice}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     preview={invitesMode === 'preview'}
@@ -1412,6 +1519,7 @@ export function App() {
                             identity={identity}
                             pubkey={openProfilePubkey}
                             onBack={() => setOpenProfilePubkey(null)}
+                            onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                             onOpenTreasury={(pubkey) => {
                                 setOpenProfilePubkey(null);
                                 setOpenTreasuryPubkey(pubkey);
@@ -1435,6 +1543,7 @@ export function App() {
                                 if (tab === 'guide') { navigateToTab('guide', subView); return; }
                                 if (tab === 'people' && subView) {
                                     setPeopleSubView(subView as any);
+                                    setPeopleFromNotice(false);
                                 }
                                 setActiveTab(tab as any);
                                 setShowSettings(false);
@@ -1541,6 +1650,7 @@ export function App() {
                                 }
                                 if (tab.id === 'people' && activeTab !== 'people') {
                                     setPeopleSubView('friends');
+                                    setPeopleFromNotice(false);
                                 }
                                 setActiveTab(tab.id);
                                 setShowSettings(false);

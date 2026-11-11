@@ -6,7 +6,7 @@
  * push-registrations.ts `registerPushTokenWithCommunity`): a request this account signed, over TLS, to the address the
  * member chose. It is kept under a store key of its own ({@link PUSH_PINS_STORE_KEY}: address → key), never on the
  * community's saved record, so nodes.ts's writers of the saved list (addSavedNode on every database open,
- * removeSavedNode, recordRequestSigning) can't overwrite a pin, and a pin write can't bring back a community the member
+ * removeSavedNode) can't overwrite a pin, and a pin write can't bring back a community the member
  * forgot. Pin writes are ordered against each other here; nothing else writes that key.
  *
  * - **A pin counts only while the phone keeps its community** (the one it is set to, or one in its saved list):

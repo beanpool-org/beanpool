@@ -7,9 +7,10 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { isPublicIpv4, knockStillAnswerable, t, tn, word } from '@beanpool/core';
+import { isPeekTicket, isPublicIpv4, knockStillAnswerable, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
+import { isNodeTooOldError } from './node-version-gate';
 
 export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
@@ -49,16 +50,24 @@ export interface KnockRequest {
     callsign: string;
     /** A photo as a data URL, or a shipped `bundled://` picture. Left out when it isn't one of those. */
     avatar?: string | null;
+    /**
+     * The ticket of the link shared outside that the request comes after (shared-listing door A3): the community names
+     * the listing and the member who shared it to whoever answers. Left out unless it has a ticket's shape; the
+     * community never refuses a request for one that opens nothing.
+     */
+    peek?: string | null;
 }
 
 export type KnockStatus =
     | { status: 'none' }
     | { status: 'pending' }
-    | { status: 'approved'; invite: string; expiresAt: string | null };
+    /** `member`: the yes has been used, and the key is a member there now (the node says so beside the yes, global yes Y1). */
+    | { status: 'approved'; invite: string; expiresAt: string | null; member?: true };
 
 export type KnockStatusResult =
     | { ok: true; value: KnockStatus }
-    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string }
+    /** `retryAfterSeconds`: a 429's Retry-After, when it named a wait (the page waits that long before asking again). */
+    | { ok: false; kind: 'refused'; status: number; code: string | null; message: string; retryAfterSeconds?: number }
     | { ok: false; kind: 'no_address' | 'unreachable'; message: string };
 
 export interface RememberedKnock {
@@ -67,6 +76,11 @@ export interface RememberedKnock {
     key: string | null;
     sentAt: string;
     cancelledAt?: string;
+    /**
+     * The name the request sent, the one the community's members saw (global yes Y1): the join after their yes starts
+     * from it. Absent on a request remembered before it was kept.
+     */
+    callsign?: string;
 }
 
 interface Store {
@@ -131,7 +145,7 @@ export function knockFromNode(): string | undefined {
  * The body a knock sends, as the phone's: no key in it, `fromNode`, never `from` (the node's signature check reads a
  * `from` field as the sender's key), and `toNode` naming the community it is for, inside what is signed.
  */
-export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string } {
+export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string; peek?: string } {
     const avatar = knockAvatar(req.avatar);
     const fromNode = knockFromNode();
     return {
@@ -140,6 +154,7 @@ export function knockBody(req: KnockRequest, toNode?: string): { message: string
         ...(fromNode ? { fromNode } : {}),
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
+        ...(isPeekTicket(req.peek) ? { peek: req.peek } : {}),
     };
 }
 
@@ -168,7 +183,10 @@ export function readStatus(body: unknown): KnockStatus | null {
     if (typeof b.status !== 'string') return null;
     if (b.status === 'none') return { status: 'none' };
     if (b.status === 'approved' && typeof b.invite === 'string' && b.invite.trim()) {
-        return { status: 'approved', invite: b.invite.trim(), expiresAt: typeof b.expiresAt === 'string' ? b.expiresAt : null };
+        return {
+            status: 'approved', invite: b.invite.trim(), expiresAt: typeof b.expiresAt === 'string' ? b.expiresAt : null,
+            ...(b.member === true ? { member: true as const } : {}),
+        };
     }
     return { status: 'pending' };
 }
@@ -217,14 +235,45 @@ export async function cancelledKnocks(pubkey: string, now: number = Date.now()):
 
 export async function rememberKnock(
     pubkey: string,
-    community: { url: string | null; name: string | null; key?: string | null },
+    community: { url: string | null; name: string | null; key?: string | null; callsign?: string | null },
     now: Date = new Date(),
 ): Promise<void> {
     const url = communityOrigin(community.url);
     if (!url) return;
     const knocks = readStore(pubkey).filter(k => k.url !== url);
-    knocks.push({ url, name: community.name, key: community.key ?? null, sentAt: now.toISOString() });
+    const callsign = typeof community.callsign === 'string' ? community.callsign.replace(/\s+/g, ' ').trim() : '';
+    knocks.push({ url, name: community.name, key: community.key ?? null, sentAt: now.toISOString(), ...(callsign ? { callsign } : {}) });
     writeStore(pubkey, knocks);
+}
+
+const YES_SEEN_KEY = 'beanpool_yes_seen';
+
+/** One yes, as the banner marks it: a new yes (another invite) from the same community is news again. */
+export function yesMark(url: string, invite: string): string {
+    return `${url} ${invite}`;
+}
+
+/**
+ * The yeses this browser's banner has been tapped for (Marty, 9 Nov: a yes not yet seen shows at the top of Home, with
+ * Join, until tapped), for this account. Nothing kept, or storage off: none, so the banner shows.
+ */
+export function yesSeenMarks(pubkey: string): Set<string> {
+    try {
+        if (typeof localStorage === 'undefined') return new Set();
+        const parsed = JSON.parse(localStorage.getItem(YES_SEEN_KEY) ?? 'null') as { pubkey?: unknown; seen?: unknown } | null;
+        if (!parsed || parsed.pubkey !== pubkey || !Array.isArray(parsed.seen)) return new Set();
+        return new Set(parsed.seen.filter((m): m is string => typeof m === 'string'));
+    } catch {
+        return new Set();
+    }
+}
+
+export function markYesSeen(pubkey: string, mark: string): void {
+    try {
+        if (typeof localStorage === 'undefined') return;
+        const seen = [...yesSeenMarks(pubkey), mark].slice(-50);
+        localStorage.setItem(YES_SEEN_KEY, JSON.stringify({ pubkey, seen: [...new Set(seen)] }));
+    } catch { /* storage off: the banner shows again next time, with the same Join */ }
 }
 
 export async function forgetKnock(pubkey: string, url: string): Promise<void> {
@@ -245,7 +294,9 @@ export async function sendKnock(communityUrl: string | null, identity: BeanPoolI
     try {
         const body = JSON.stringify(knockBody(req, origin.replace(/^https:\/\//, '')));
         res = await withTimeout(signedFetchAt('POST', origin, KNOCK_PATH, body, identity));
-    } catch {
+    } catch (e) {
+        // The version gate sent nothing: its own line, a refusal when the server named an older version, else out of reach.
+        if (isNodeTooOldError(e)) return e.nodeVersion ? { kind: 'refused', status: 426, code: 'node_too_old', message: e.message } : { kind: 'unreachable', message: e.message };
         return { kind: 'unreachable', message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (res.status === 201 || res.status === 200) return { kind: 'waiting', message: t(KNOCK_MESSAGES.waiting) };
@@ -262,12 +313,14 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
     let res: Response;
     try {
         res = await withTimeout(signedFetchAt('GET', origin, KNOCK_STATUS_PATH, '', identity));
-    } catch {
+    } catch (e) {
+        if (isNodeTooOldError(e)) return e.nodeVersion ? { ok: false, kind: 'refused', status: 426, code: 'node_too_old', message: e.message } : { ok: false, kind: 'unreachable', message: e.message };
         return { ok: false, kind: 'unreachable', message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (!res.ok) {
         const { message, code } = await readError(res);
-        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? t(KNOCK_MESSAGES.unreadable) };
+        const wait = retryAfterSecondsOf(res.headers?.get?.('Retry-After'));
+        return { ok: false, kind: 'refused', status: res.status, code, message: message ?? t(KNOCK_MESSAGES.unreadable), ...(wait !== null ? { retryAfterSeconds: wait } : {}) };
     }
     const body = await res.json().catch(() => null) as Record<string, unknown> | null;
     const status = readStatus(body);
@@ -284,7 +337,8 @@ export async function cancelKnock(
     let res: Response;
     try {
         res = await withTimeout(signedFetchAt('POST', origin, KNOCK_CANCEL_PATH, '{}', identity));
-    } catch {
+    } catch (e) {
+        if (isNodeTooOldError(e)) return e.nodeVersion ? { ok: false, message: e.message, status: 426, code: 'node_too_old' } : { ok: false, message: e.message };
         return { ok: false, message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (!res.ok) {
@@ -305,6 +359,8 @@ export function cardKnockLines(
         const s = statuses[k.url];
         if (!s || !s.ok) continue;
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        // A yes already used is no news: the key is a member there (global yes Y1).
+        if (s.value.status === 'approved' && s.value.member) continue;
         if (s.value.status === 'approved') lines.push({ url: k.url, text: t('{name} said yes. Join now.', { name }), invited: true });
         else if (s.value.status === 'pending') lines.push({ url: k.url, text: t('Waiting for {name}: usually a few days.', { name }), invited: false });
     }

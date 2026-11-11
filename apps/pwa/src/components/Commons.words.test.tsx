@@ -36,7 +36,7 @@ afterEach(() => { cleanup(); backToEnglish(); vi.restoreAllMocks(); });
 describe('the Commons information modal in the pseudo-locale', () => {
     it('each tab: every word came through t()', async () => {
         await showIn('xx');
-        render(<CommonsInfoModal isOpen onClose={() => {}} commonsBalance={123.45} />);
+        render(<CommonsInfoModal isOpen onClose={() => {}} commonsBalance={12345} />);
         expect(screen.getByRole('heading', { name: xx('Community Commons') })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: xx('Close information modal') })).toBeInTheDocument();
         expect(screen.getByRole('tablist', { name: xx('Commons information tabs') })).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe('the Commons information modal in the pseudo-locale', () => {
 
 describe('the Commons information modal in English', () => {
     it('reads as it always has', () => {
-        render(<CommonsInfoModal isOpen onClose={() => {}} commonsBalance={123.45} />);
+        render(<CommonsInfoModal isOpen onClose={() => {}} commonsBalance={12345} />);
         expect(bracketed()).toBe(0);
         expect(screen.getByRole('tab', { name: '🌊 How It Works' })).toBeInTheDocument();
         expect(screen.getByText(/Bad Debt Payouts:/).parentElement!.textContent).toBe('Bad Debt Payouts: If an inactive account is pruned with a negative balance, the Commons Pool pays off their outstanding debt to maintain zero-sum equilibrium.');
@@ -179,7 +179,7 @@ function drawDecide(decisions: any[], o: { canPropose?: boolean; hasOpen?: boole
             decisions={decisions}
             myPoolVoting={o.poolVoting ?? null}
             identity={o.identity === undefined ? ME : o.identity}
-            commonsBalance={300}
+            commonsBalance={30000}
             onRefresh={async () => {}}
             onOpenPropose={() => {}}
             canPropose={o.canPropose ?? true}
@@ -192,12 +192,12 @@ function drawDecide(decisions: any[], o: { canPropose?: boolean; hasOpen?: boole
 
 const OPEN_DECISIONS = [
     decision('a', { myVote: { support: true, voteCount: 1, creditsUsed: 0, updatedAt: '' } }),
-    decision('b', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', params: { amount: 50 }, closesAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    decision('b', { touches: 'pool', effect: 'grant_enterprise', franchise: 'quadratic_trade', params: { amount_c: 5000 }, closesAt: new Date(Date.now() + 30 * 60_000).toISOString(),
         myVote: { support: false, voteCount: 3, creditsUsed: 9, updatedAt: '' }, tally: { ...decision('b').tally, quorumMet: true, electorate: 4 } }),
     decision('c', { effect: 'keep_suspension', params: { memberName: 'Dave', suspendedAt: '2026-09-19T10:00:00.000Z' }, closesAt: new Date(Date.now() + 5 * 3_600_000).toISOString() }),
-    decision('d', { effect: 'remove_member', params: { memberName: 'Eve', debt: 12.5, commonsPool: 300 } }),
-    decision('e', { effect: 'remove_member', params: { memberName: 'Eve', commonsPool: 300 } }),
-    decision('f', { effect: 'remove_member', params: { memberName: 'Eve', balance: 4, commonsPool: 300 }, closesAt: new Date(Date.now() - 1000).toISOString() }),
+    decision('d', { effect: 'remove_member', params: { memberName: 'Eve', debt_c: 1250, commonsPool_c: 30000 } }),
+    decision('e', { effect: 'remove_member', params: { memberName: 'Eve', commonsPool_c: 30000 } }),
+    decision('f', { effect: 'remove_member', params: { memberName: 'Eve', balance_c: 400, commonsPool_c: 30000 }, closesAt: new Date(Date.now() - 1000).toISOString() }),
 ];
 const DECIDE_OTHERS = ['Dave', 'Eve', 'Spam in the market', 'The node had no funds', ...ICONS, ...'abcdefghij'.split('').flatMap((id) => [`Decision ${id}`, `Why ${id}`])];
 
@@ -360,7 +360,8 @@ describe('the Decide section in English', () => {
         expect(screen.getByRole('button', { name: /Voted Yes/ })).toBeDisabled();
         const debt = screen.getAllByTestId('removal-debt-write-off-line').map((l) => l.textContent);
         expect(debt).toEqual([
-            "Eve's balance is −12.5 beans. Removing them charges that 12.5 to the Commons pool, which currently holds 300.",
+            // Whole hundredths written as formatHundredths writes them: two decimals whenever there are cents.
+            "Eve's balance is −12.50 beans. Removing them charges that 12.50 to the Commons pool, which currently holds 300.",
             "Balances are private: only the members who can vote in this see Eve's balance and any debt. The Commons pool holds 300 beans.",
             'Eve has no debt. Removing them charges nothing to the Commons pool, which currently holds 300.',
         ]);
@@ -396,7 +397,7 @@ const GROUPS = [
 const PROPOSE_OTHERS = ['Egg flock', 'New hall roof'];
 
 function drawPropose() {
-    return render(<ProposeDecisionModal isOpen onClose={() => {}} onCreated={() => {}} identity={ME} commonsBalance={321.6} treasuries={GROUPS} members={[{ publicKey: 'm'.repeat(64), callsign: 'Mia' }]} />);
+    return render(<ProposeDecisionModal isOpen onClose={() => {}} onCreated={() => {}} identity={ME} commonsBalance={32160} treasuries={GROUPS} members={[{ publicKey: 'm'.repeat(64), callsign: 'Mia' }]} />);
 }
 const radio = (english: string) => screen.getAllByRole('radio').find((r) => r.textContent?.includes(xx(english)))!;
 const submit = async () => { await act(async () => { fireEvent.submit(screen.getByRole('dialog').querySelector('form')!); }); };

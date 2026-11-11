@@ -22,7 +22,7 @@
  */
 import Router from '@koa/router';
 import type Koa from 'koa';
-import { COMMUNITY_CARD_WORDS, PEEK_WORDS, brandCssVariableMap, communityCardFacts, communityCardName, isPeekPostId, isPeekTicket, peekKindWord, WEB_INK_GROUNDS, type CommunityCard, type Lang } from '@beanpool/core';
+import { formatHundredths, isHundredths, COMMUNITY_CARD_WORDS, PEEK_WORDS, brandCssVariableMap, communityCardFacts, communityCardName, isPeekPostId, isPeekTicket, peekKindWord, WEB_INK_GROUNDS, type CommunityCard, type Lang } from '@beanpool/core';
 import type { MarketplacePost } from '@beanpool/engine';
 import { makePeekTicket, listPeekTickets, peekPost, stopPeekTicket, PeekError } from '../engine/peek-tickets.js';
 import { communityCard, cardLanguage, ACCOUNT_HINT_COOKIE, serveCommunityCardPage } from './community-card.js';
@@ -220,8 +220,9 @@ export function renderPeekPage(input: PeekPageInput): string {
     const links = peekPageLinks(input);
 
     const kind = peekKindWord(post.type);
-    const price = (post.type === 'offer' || post.type === 'need') && typeof post.credits === 'number' && post.credits > 0
-        ? w.tn(post.credits, W.beans.one, W.beans.other, { n: post.credits.toLocaleString('en') }) : null;
+    // The price, whole hundredths, in the reader's words (formatHundredths); the plural form read from its Beans.
+    const price = (post.type === 'offer' || post.type === 'need') && isHundredths(post.price_c) && post.price_c > 0
+        ? w.tn(post.price_c / 100, W.beans.one, W.beans.other, { n: formatHundredths(post.price_c, lang) }) : null;
     const kindLine = [kind ? w.t(kind) : null, price].filter(Boolean).join(' · ');
     const description = typeof post.description === 'string' ? post.description : '';
     const photo = Array.isArray(post.photos) && typeof post.photos[0] === 'string' && post.photos[0].startsWith('/') ? `${origin}${post.photos[0]}` : null;

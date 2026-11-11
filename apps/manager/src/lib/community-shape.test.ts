@@ -10,6 +10,9 @@ import {
     fetchCommunityShape,
     updateCommunityShape,
     getConsequenceSentence,
+    knownFloorChange,
+    knownFloorDraftOf,
+    knownFloorUnchanged,
     Shape,
     ShapeSettings,
     KnownFloorSettings,
@@ -17,12 +20,40 @@ import {
 
 describe('community-shape lib', () => {
     describe('hoursWording', () => {
+        // Whole hundredths of a Bean: 4000 is 40 Beans, an hour of work (PROTOCOL_CONSTANTS.REFERENCE_RATE).
         it('formats 40 beans as 1 hour', () => {
-            expect(hoursWording(40)).toBe('40 Beans is about 1 hour of work the community is trusting you for.');
+            expect(hoursWording(4000)).toBe('40 Beans is about 1 hour of work the community is trusting you for.');
         });
 
         it('formats 80 beans as 2 hours', () => {
-            expect(hoursWording(80)).toBe('80 Beans is about 2 hours of work the community is trusting you for.');
+            expect(hoursWording(8000)).toBe('80 Beans is about 2 hours of work the community is trusting you for.');
+        });
+
+        it('says a figure to the cent as hundredths', () => {
+            expect(hoursWording(4925)).toBe('49.25 Beans is about 1 hour of work the community is trusting you for.');
+        });
+    });
+
+    describe('the known floor draft', () => {
+        it('starts its boxes from the shape\'s hundredths, and sends the typed Beans as { on, floor_c, cap_c }', () => {
+            const draft = knownFloorDraftOf({ on: true, floor: 100000, cap: 250050 });
+            expect(draft).toEqual({ on: true, floor: '1000', cap: '2500.50' });
+            expect(knownFloorChange(draft)).toEqual({ on: true, floor_c: 100000, cap_c: 250050 });
+            expect(knownFloorChange({ on: true, floor: '999.99', cap: '2000' })).toEqual({ on: true, floor_c: 99999, cap_c: 200000 });
+        });
+
+        it('sends nothing while the dial is on and a typed figure is not Beans to the cent; with the dial off, only the dial', () => {
+            expect(knownFloorChange({ on: true, floor: '12.505', cap: '2000' })).toBeNull();
+            expect(knownFloorChange({ on: true, floor: '1,000', cap: '2000' })).toBeNull();
+            expect(knownFloorChange({ on: false, floor: '', cap: '2000' })).toEqual({ on: false });
+        });
+
+        it('knows when a change changes nothing', () => {
+            const now = { on: true, floor: 100000, cap: 200000 };
+            expect(knownFloorUnchanged({ on: true, floor_c: 100000, cap_c: 200000 }, now)).toBe(true);
+            expect(knownFloorUnchanged({ on: true, floor_c: 100001, cap_c: 200000 }, now)).toBe(false);
+            expect(knownFloorUnchanged({ on: false }, now)).toBe(false);
+            expect(knownFloorUnchanged(null, now)).toBe(false);
         });
     });
 
@@ -86,43 +117,48 @@ describe('community-shape lib', () => {
     });
 
     describe('readKnownFloorSettings & readShapeKnownFloor', () => {
+        // As GET /api/local/admin/known-floor sends them (config/known-floor.ts knownFloorSettings): `*_c`, whole hundredths;
+        // the defaults are core's, in hundredths too (CREDIT_CAP_DEFAULT 200000, CREDIT_CAP_MAX 500000).
         it('parses valid KnownFloorSettings with defaults', () => {
             const result = readKnownFloorSettings({
                 confirmation: true,
-                knownFloor: 100,
-                creditCap: 500,
+                knownFloor_c: 10000,
+                creditCap_c: 50000,
             });
             expect(result).toEqual({
                 confirmation: true,
-                knownFloor: 100,
-                creditCap: 500,
-                creditCapDefault: 2000,
-                creditCapMax: 5000,
+                knownFloor_c: 10000,
+                creditCap_c: 50000,
+                creditCapDefault_c: 200000,
+                creditCapMax_c: 500000,
             });
         });
 
         it('returns null for invalid inputs', () => {
             expect(readKnownFloorSettings(null)).toBeNull();
             expect(readKnownFloorSettings({ confirmation: 'yes' })).toBeNull();
-            expect(readKnownFloorSettings({ confirmation: true, knownFloor: 1.5, creditCap: 500 })).toBeNull();
+            expect(readKnownFloorSettings({ confirmation: true, knownFloor_c: 1.5, creditCap_c: 500 })).toBeNull();
+            // The old names are no answer.
+            expect(readKnownFloorSettings({ confirmation: true, knownFloor: 100, creditCap: 500 })).toBeNull();
         });
 
         it('reads shape known floor from shape object', () => {
             const before: KnownFloorSettings = {
                 confirmation: false,
-                knownFloor: 0,
-                creditCap: 1000,
-                creditCapDefault: 2000,
-                creditCapMax: 5000,
+                knownFloor_c: 0,
+                creditCap_c: 100000,
+                creditCapDefault_c: 200000,
+                creditCapMax_c: 500000,
             };
+            // The shape keeps the old names, in whole hundredths (config/community-shape.ts readShape).
             const shape = {
                 settings: {
                     knownFloor: {
                         value: {
                             on: true,
-                            floor: 200,
-                            cap: 1000,
-                            capMax: 6000,
+                            floor: 20000,
+                            cap: 100000,
+                            capMax: 600000,
                         },
                     },
                 },
@@ -130,10 +166,10 @@ describe('community-shape lib', () => {
             const result = readShapeKnownFloor(shape, before);
             expect(result).toEqual({
                 confirmation: true,
-                knownFloor: 200,
-                creditCap: 1000,
-                creditCapDefault: 2000,
-                creditCapMax: 6000,
+                knownFloor_c: 20000,
+                creditCap_c: 100000,
+                creditCapDefault_c: 200000,
+                creditCapMax_c: 600000,
             });
         });
     });
@@ -238,7 +274,7 @@ describe('community-shape lib', () => {
                     knocks: defaultSetting(true),
                     preview: defaultSetting(false),
                     beans: { ...defaultSetting(true), includes: { escrow: true, enterprises: true, treasuries: true, crowdfund: true } },
-                    knownFloor: { ...defaultSetting({ on: true, floor: 500, cap: 2000, capMax: 5000 }) },
+                    knownFloor: { ...defaultSetting({ on: true, floor: 50000, cap: 200000, capMax: 500000 }) },
                     decisions: defaultSetting(true),
                     listed: defaultSetting(true),
                     shareLocation: defaultSetting(true),
@@ -284,7 +320,19 @@ describe('community-shape lib', () => {
         it('handles knownFloor setting', () => {
             const shape = createMockShape({});
             expect(getConsequenceSentence('knownFloor', { on: false }, shape)).toContain('Confirmed members go back to the credit they have earned');
-            expect(getConsequenceSentence('knownFloor', { on: true, floor: 300 }, shape)).toContain('Confirmed members can owe up to 300 Beans');
+            // The draft as typed (Beans text); a floor that isn't Beans to the cent reads the floor the shape has (500).
+            expect(getConsequenceSentence('knownFloor', { on: true, floor: '300', cap: '2000' }, shape)).toContain('Confirmed members can owe up to 300 Beans');
+            expect(getConsequenceSentence('knownFloor', { on: true, floor: '299.50', cap: '2000' }, shape)).toContain('Confirmed members can owe up to 299.50 Beans');
+            expect(getConsequenceSentence('knownFloor', { on: true, floor: 'abc', cap: '2000' }, shape)).toContain('Confirmed members can owe up to 500 Beans');
+        });
+
+        it('handles the voucher budget and the members\' gift in whole hundredths', () => {
+            const shape = createMockShape({});
+            expect(getConsequenceSentence('voucherBudget', 150000, shape)).toContain('New vouchers start with a budget of 1,500 Beans');
+            expect(getConsequenceSentence('voucherBudget', null, shape)).toBe('');
+            expect(getConsequenceSentence('memberGift', 0, shape)).toContain('Members can no longer give part of their credit line');
+            expect(getConsequenceSentence('memberGift', 2500, shape)).toContain('A member can give another up to 25 Beans');
+            expect(getConsequenceSentence('memberGift', 25.5, shape)).toBe('');
         });
 
         it('handles boolean toggle settings', () => {

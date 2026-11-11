@@ -14,8 +14,9 @@
  *   5-9. The old id is found in message_old_conversation_ids (schema.sql), which the messages triggers keep from each
  *      line's metadata (#1333 review: scanning the metadata told a hidden group's chat id from an id nobody has by
  *      time). A malformed line that names the key fails no write; the list form resolves item by item, never a part of
- *      one; the boot migration and the repair still fold old ids into the pair's DM; a line deleted, or its metadata
- *      changed, stops naming its old id; and a node upgraded with lines already there has them indexed at boot.
+ *      one; the boot migration and the repair still fold old ids into the pair's DM; and a line deleted, or its metadata
+ *      changed, stops naming its old id. (The one-time pass that indexed the lines a node already held when it gained the
+ *      table, audit A37, went in the 1.4.0 cutover: every kept node had run it, and the gate opens nothing older than 1.2.36.)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-messaging-consolidation.ts
  */
@@ -28,7 +29,7 @@ import {
     repairConsolidatedMessagesMetadata,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { db, initSchema } from './db/db.js';
+import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -42,7 +43,7 @@ function makeIdentity(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return pubKeyHex;
 }
 
@@ -202,26 +203,6 @@ async function main() {
         for (const id of namers(H)) db.prepare('UPDATE messages SET metadata = ? WHERE id = ?').run(JSON.stringify({ deleted: true }), id);
         assert(indexed(G) === 0 && sendTo(G, B) === null, 'the deleted lines no longer name their old id');
         assert(indexed(H) === 0 && sendTo(H, B) === null, 'lines whose metadata changes no longer name the old id they named');
-    }
-
-    // 10. A node upgraded with lines already there: the table, its triggers and the marker are absent at the boot that
-    //     brings them, and that boot indexes the lines (db.ts indexOldConversationIds).
-    {
-        db.exec(`DROP TRIGGER messages_old_conversation_ids_ai; DROP TRIGGER messages_old_conversation_ids_au;
-                 DROP TRIGGER messages_old_conversation_ids_ad; DROP TABLE message_old_conversation_ids;`);
-        db.prepare("DELETE FROM node_config WHERE key = 'migration_message_old_conversation_ids_v1'").run();
-        const U1 = 'legacy-upgrade-' + crypto.randomUUID(), U2 = 'legacy-upgrade-' + crypto.randomUUID(), U3 = 'legacy-upgrade-' + crypto.randomUUID();
-        insertLine(Y, A, JSON.stringify({ originalConversationId: U1 }));
-        insertLine(Y, B, JSON.stringify({ originalConversationIds: [U2, U3] }));
-        insertLine(Y, B, '{"originalConversationId": oops');
-        initSchema();
-        const landed = [U1, U2, U3].map(u => sendTo(u, A)?.conversationId);
-        assert(landed.every(c => c === Y), `the boot that brings the table indexes the lines already there (${landed.join(', ')})`);
-        assert(!!db.prepare("SELECT 1 FROM node_config WHERE key = 'migration_message_old_conversation_ids_v1'").get(), 'and writes its marker');
-        const before = (db.prepare('SELECT COUNT(*) AS c FROM message_old_conversation_ids').get() as any).c;
-        initSchema();
-        const after = (db.prepare('SELECT COUNT(*) AS c FROM message_old_conversation_ids').get() as any).c;
-        assert(before === after, `a later boot changes nothing (${before} → ${after})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

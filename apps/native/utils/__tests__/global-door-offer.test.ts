@@ -295,7 +295,7 @@ describe('the welcome screen', () => {
         const h = home();
         // Explore looks first on a phone with no account (slice S12, welcome's exploreWorldwide), which opens the door itself
         // wherever looking can't happen; `exploring` is the line under it while it asks.
-        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{\(\) => setMode\('create'\)\} openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\} restore=\{\(\) => setMode\('member'\)\} exploring=\{exploring\} styles=\{styles\} \/>$/m);
+        const doors = h.match(/^( *)(.*)<WelcomeDoors door=\{globalDoor\} joinWithInvite=\{openInviteStep\} openGlobalDoor=\{\(\) => \{ void exploreWorldwide\(\); \}\} restore=\{\(\) => setMode\('member'\)\} exploring=\{exploring\} styles=\{styles\} \/>$/m);
         expect(doors).not.toBeNull();
         // On a line of its own: no `{x && (`, no ternary, in front of it.
         expect(doors![2]).toBe('');

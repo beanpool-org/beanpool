@@ -5,6 +5,8 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { isHundredths } from '@beanpool/core';
+import { beansFigure, beansText } from '../../lib/beans';
 
 /**
  * "Take over as the main server" — on a standby, with the printed recovery code (sealed-keys.md §5.3–§5.5, slice 5)
@@ -139,7 +141,7 @@ function when(iso: string | number | null | undefined): string {
     return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
 }
 
-/** Accounts and the Beans they hold (the take-over audit's measure of a ledger). */
+/** Accounts and the Beans they hold (the take-over audit's measure of a ledger): `holdings` is whole hundredths of a Bean. */
 interface LedgerHeld { accounts: number; holdings: number }
 
 /**
@@ -149,12 +151,13 @@ interface LedgerHeld { accounts: number; holdings: number }
  */
 function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>): string {
     if (audit.ok) return 'The ledger adds up.';
-    // Every figure as the server sent it, which may not be a number (JSON writes Infinity as null): never assumed one.
+    // Every figure as the server sent it, which may not be a number (JSON writes Infinity as null): never assumed one. The
+    // money figures (holdings, drift) are whole hundredths of a Bean (server engine/audit.ts), said in Beans.
     const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-    const held = (h: LedgerHeld) => (finite(h.holdings)
-        ? `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`
+    const held = (h: LedgerHeld) => (isHundredths(h.holdings)
+        ? `${h.accounts} account(s) holding ${beansText(h.holdings)}`
         : `${h.accounts} account(s) holding an amount that is not a number`);
-    const difference = finite(audit.drift) ? `difference ${audit.drift}` : 'the difference is not a number';
+    const difference = isHundredths(audit.drift) ? `difference ${beansFigure(audit.drift)}` : 'the difference is not a number';
     const reasons: string[] = [];
     if (audit.error) reasons.push(`The ledger audit could not run (${audit.error}), so it can't say the ledger adds up.`);
     // Balances that are not a number leave the difference at 0 or make it not a number, so they are said as themselves,
@@ -162,7 +165,8 @@ function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['resul
     const bad = audit.badBalances ?? 0;
     if (audit.addsUp !== true && bad > 0) reasons.push(`${bad} account balance(s) are not a number, so the ledger can't add up.`);
     const stranded = finite(audit.strandedEscrows) ? audit.strandedEscrows : 0;
-    if (!audit.error && audit.addsUp !== true && (bad === 0 || (finite(audit.drift) && Math.abs(audit.drift) >= 0.01) || stranded > 0)) {
+    // Whole hundredths: any drift but 0 is the ledger not adding up (no slack to round under).
+    if (!audit.error && audit.addsUp !== true && (bad === 0 || (finite(audit.drift) && audit.drift !== 0) || stranded > 0)) {
         reasons.push(`The ledger does NOT add up (${difference}).`);
     }
     if (audit.copy && !audit.copy.match) {

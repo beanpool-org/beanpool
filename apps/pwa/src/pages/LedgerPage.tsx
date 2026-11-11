@@ -25,7 +25,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerCreditLine, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -33,7 +33,7 @@ import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MI
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
+import { t, tn, word, splitBold, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, formatHundredths, amountRefusalWords, isAmbiguousAmount, parseHundredths, type WordKey } from '@beanpool/core';
 import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
 import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../lib/credit-gift';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -363,9 +363,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         };
     }, [refresh, preview]);
 
-    // The typed amount, read once (core parseAmount): what handleSend sends is what "Recipient receives" shows, in the
-    // language's decimal mark (fr "12,5" is 12.5). The decimals are the cents guard's below, as they were Number()'s.
-    const sendRead = parseAmount(sendAmount, undefined, ANY_DECIMALS);
+    // The typed amount, read once to whole hundredths (core parseHundredths): what handleSend sends is what "Recipient
+    // receives" shows, in the language's decimal mark (fr "12,5" is 1,250). A third decimal is refused in words, never rounded.
+    const sendRead = parseHundredths(sendAmount);
 
     async function handleSend() {
         if (!sendTo || !sendAmount) return;
@@ -374,16 +374,19 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             setError(amountRefusalWords(sendRead.refusal));
             return;
         }
-        const amount = sendRead.ok ? sendRead.value : NaN;
-        // To the cent, as the node takes it (core isWholeCents): 1.234 is refused here, in words, before anything is sent.
-        if (!isWholeCents(amount)) {
+        if (!sendRead.ok) {
+            setError(amountRefusalWords(sendRead.refusal));
+            return;
+        }
+        const amount = sendRead.value;
+        if (amount <= 0) {
             setError(t('The amount is a number of Beans above 0, to the cent.'));
             return;
         }
         // Sends are positive-balance only — you can only send beans you actually hold. Your credit
         // line (overdraft) is for trading, not for gifting yourself into debt.
         if (amount > balance) {
-            setError(t('You can only send beans you hold — your balance is {balance}B.', { balance: formatNumber(balance, 2) }));
+            setError(t('You can only send beans you hold — your balance is {balance}B.', { balance: formatHundredths(balance) }));
             return;
         }
         setSending(true);
@@ -438,13 +441,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         getCreditGiftOffer().then((o) => { if (isMountedRef.current) setGiftOffer(o); });
     }
 
-    const balance = balanceInfo?.balance ?? 0;
-    const floor = balanceInfo?.floor ?? 0;              // earned credit LIMIT (how deep you could go)
-    const usableFloor = balanceInfo?.usableFloor ?? floor; // v3: how deep you may go NOW (gated by live offers)
+    // Whole hundredths of a Bean, every one (the node's `*_c` fields); written through formatHundredths.
+    const balance = balanceInfo?.balance_c ?? 0;
+    const floor = balanceInfo?.floor_c ?? 0;              // earned credit LIMIT (how deep you could go)
+    const usableFloor = balanceInfo?.usableFloor_c ?? floor; // v3: how deep you may go NOW (gated by live offers)
     const liveOffers = balanceInfo?.liveOffers ?? 0;       // v3: currently-live Offer count
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
     const activated = balanceInfo?.activated;   // has a credit line at all (earned/granted/known)
-    const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
+    const earned = balanceInfo?.earnedCredit_c ?? 0;     // from the saturating value curve
     // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
     // its tierCredit, the credit that tier is read from (what they did, never the known grant), so the badge above and the
     // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
@@ -486,10 +490,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const selCurrent = tierIdx === selLevel;
     const selNeeded = Math.max(0, sel.min - ec);
 
-    const hoursEquivalent = Math.abs(balance) / 40;
+    const hoursEquivalent = Math.abs(balance) / 4000; // at the 40-Beans-an-hour reference rate
 
     // What is held in trust: the Beans of this member's deals under way as the payer, the figure the phone's Ledger shows as HELD IN TRUST.
-    const inTrust = sample ? 0 : (deals ?? []).reduce((sum, d) => (d.status === 'pending' && d.buyerPublicKey === myKey ? sum + d.credits : sum), 0);
+    const inTrust = sample ? 0 : (deals ?? []).reduce((sum, d) => (d.status === 'pending' && d.buyerPublicKey === myKey ? sum + d.amount_c : sum), 0);
     // A hold's, release's or refund's other side is `escrow_<deal id>` (older ones `escrow_<listing id>`).
     const dealOfAccount = (key: string): MarketplaceTransaction | undefined => {
         const id = key.slice(ESCROW_ACCOUNT.length);
@@ -506,7 +510,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             note: ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet),
             // "1 Oct 2026, 9:00": core's date and time in the member's language, never the browser's own locale.
             when: Number.isFinite(at.getTime()) ? t('{date}, {time}', { date: formatDate(at, 'day-month-year'), time: formatDate(at, 'time') }) : '',
-            amount: tx.amount,
+            amount: tx.amount_c,
             // The listing this hold's deal is on: from the member's deals, else the one the note names. None: just a row.
             dealPostId: account ? (dealOfAccount(account)?.postId ?? tx.memo?.match(LISTING_ID)?.[0] ?? null) : null,
         };
@@ -571,7 +575,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
                 <div className="text-right flex flex-col items-center md:items-end">
                     <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500 dark:text-red-400'}`} data-testid="ledger-balance">
-                        {t('{amount}B', { amount: `${balance >= 0 ? '+' : ''}${formatNumber(balance, 1)}` })}
+                        {t('{amount}B', { amount: `${balance >= 0 ? '+' : ''}${formatHundredths(balance)}` })}
                     </span>
                     <span className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">{t('Beans')}</span>
                 </div>
@@ -586,8 +590,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         <div>
                             <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{t(KNOWN_FROZEN.title)}</h2>
                             <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{t(KNOWN_FROZEN.body)}</div>
-                            {frozenDebitLine(balanceInfo?.balance) && (
-                                <p className="text-xs font-bold text-nature-800 dark:text-nature-100 leading-relaxed mt-1.5" data-testid="ledger-frozen-debit">{frozenDebitLine(balanceInfo?.balance)}</p>
+                            {frozenDebitLine(balanceInfo?.balance_c) && (
+                                <p className="text-xs font-bold text-nature-800 dark:text-nature-100 leading-relaxed mt-1.5" data-testid="ledger-frozen-debit">{frozenDebitLine(balanceInfo?.balance_c)}</p>
                             )}
                         </div>
                     </div>
@@ -603,7 +607,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                             {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
                                 <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                                    {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                                    {ledgerCreditLine(balanceInfo.vouchedBy)}
                                 </div>
                             )}
                         </div>
@@ -612,13 +616,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} knownGrant={balanceInfo?.knownGrant ?? 0} />
+                    <CreditBar balance_c={balance} floor_c={floor} usableFloor_c={usableFloor} liveOffers={liveOffers} knownGrant_c={balanceInfo?.knownGrant_c ?? 0} />
                     {knownFrozenPartNote(balanceInfo ?? {}) && (
                         <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
                     )}
                     {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
                         <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                            {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                            {ledgerCreditLine(balanceInfo.vouchedBy)}
                         </div>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
@@ -628,7 +632,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <span>{tn(liveOffers,
                                 'Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
                                 'Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
-                                { limit: Math.abs(usableFloor) })}</span>
+                                { limit: formatHundredths(Math.abs(usableFloor)) })}</span>
                         </div>
                     )}
                 </div>
@@ -643,7 +647,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         data-testid="ledger-budget-row"
                     >
                         <span className="text-sm font-extrabold text-nature-900 dark:text-white">
-                            {ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                            {myVouching.noLimit ? t(VOUCH_PRESET_WORDS.ledgerBudgetNoLimit) : ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
                         </span>
                         <span className="text-nature-400 font-bold ml-1">›</span>
                     </button>
@@ -698,10 +702,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>{t('YOUR TRUST LEVEL')}</span>
                                 <div className="text-xl sm:text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
-                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { level: tierIdx + 1, levels: TIERS.length })}</div>
+                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec / 100, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { n: formatHundredths(ec), level: tierIdx + 1, levels: TIERS.length })}</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
-                                        ? <BoldIn text={tn(creditsToNext, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })} bold={(n) => <span className="font-black" style={{ color: tier.color }}>{n}</span>} />
+                                        ? <BoldIn text={tn(creditsToNext / 100, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { n: formatHundredths(creditsToNext), emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })} bold={(n) => <span className="font-black" style={{ color: tier.color }}>{n}</span>} />
                                         : <span className="text-amber-500 font-black">{t('✨ Highest level reached')}</span>
                                     }
                                 </div>
@@ -755,7 +759,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         {/* A quarter of a 320 px screen: a longer language's tier name breaks inside its tile. */}
                                         <span className="w-full text-center text-[11px] font-black mt-2 leading-tight [overflow-wrap:anywhere]" style={{ color: lvl.color }}>{t(TIER_WORDS[lvl.name])}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
-                                            {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min, '{n} trust', '{n} trust')}
+                                            {tierIdx === i ? t("You're here") : reached ? t('Reached') : tn(lvl.min / 100, '{n} trust', '{n} trust', { n: formatHundredths(lvl.min) })}
                                         </span>
                                     </button>
                                 );
@@ -789,7 +793,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <span className="mt-0.5">{selCurrent ? '⚖️' : '🛡️'}</span>
                             <div className="flex-1">
                                 <div className="text-[13px] text-nature-600 dark:text-nature-300 font-semibold">
-                                    {selCurrent ? t('Your current floor') : tn(sel.min, 'from {n} trust', 'from {n} trust')}
+                                    {selCurrent ? t('Your current floor') : tn(sel.min / 100, 'from {n} trust', 'from {n} trust', { n: formatHundredths(sel.min) })}
                                 </div>
                                 {selCurrent && (
                                     <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">{t('Grows deeper as you trade more')}</div>
@@ -797,7 +801,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                             {selCurrent && (
                                 <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
-                                    {formatNumber(floor)}
+                                    {formatHundredths(floor)}
                                 </span>
                             )}
                         </div>
@@ -812,7 +816,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         </div>
 
                         {!selReached && selNeeded > 0 && (
-                            <p className="text-[11px] text-nature-400 italic mt-4">{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: sel.min, left: selNeeded })}</p>
+                            <p className="text-[11px] text-nature-400 italic mt-4">{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: formatHundredths(sel.min), left: formatHundredths(selNeeded) })}</p>
                         )}
                         <p className="text-[11px] text-nature-400 italic mt-2">{preview
                             ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
@@ -823,13 +827,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     {nextTier && (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                             <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">{t('🚀 Reach {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })}</h3>
-                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{tn(creditsToNext, '{n} trust to go', '{n} trust to go')}</p>
+                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{tn(creditsToNext / 100, '{n} trust to go', '{n} trust to go', { n: formatHundredths(creditsToNext) })}</p>
                             <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
                                 {t('Trust grows with the real value you trade. Trading with someone NEW counts fastest — value with any one partner is capped, so a wide circle beats repeat trades with the same person.')}
                             </p>
                             <div className="grid grid-cols-2 gap-3 text-center">
                                 <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl relative">
-                                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${formatNumber(valueToNext)}` : '—'}</div>
+                                    <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${formatHundredths(valueToNext)}` : '—'}</div>
                                     <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">{t('beans of value to trade')}</div>
                                     <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-bp-commit-fill text-bp-commit-on font-black text-[8px] uppercase tracking-wider">{t('the lever')}</span>
                                 </div>
@@ -846,7 +850,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-4">{t('WHAT BUILDS YOUR TRUST')}</span>
                         <div className="grid grid-cols-3 gap-1.5 sm:gap-3" data-testid="trust-builders">
                             {[
-                                { icon: '💰', label: t('VALUE TRADED'), big: formatNumber(qualifiedValue), foot: tn(earned, '+{n} trust', '+{n} trust'), pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: '#10b981' },
+                                { icon: '💰', label: t('VALUE TRADED'), big: formatHundredths(qualifiedValue), foot: tn(earned / 100, '+{n} trust', '+{n} trust', { n: formatHundredths(earned) }), pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: '#10b981' },
                                 { icon: '👥', label: t('PARTNERS'), big: formatNumber(uniquePartners), foot: t('diverse = faster'), pct: Math.min(1, uniquePartners / 20), color: '#3b82f6' },
                                 { icon: '⭐', label: t('RATING'), big: reviewCount > 0 ? formatNumber(avgRating, 1) : '—', foot: reviewCount > 0 ? tn(reviewCount, '{n} review', '{n} reviews') : t('no reviews yet'), pct: reviewCount > 0 ? avgRating / 5 : 1, color: '#f97316' },
                             ].map(a => (
@@ -879,7 +883,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         <div className="flex-1 basis-[9rem] min-w-0 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm">
                             <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2">{t('Overdraft Floor')}</p>
                             <p className="text-2xl font-black font-mono text-nature-950 dark:text-white flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
-                                {formatNumber(floor)}
+                                {formatHundredths(floor)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
                             </p>
                             <p className="text-nature-400 text-[10px] mt-1 font-semibold">
@@ -895,7 +899,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 {t('Commons Pool')} <span className="text-xs text-nature-400 dark:text-nature-300">ⓘ</span>
                             </p>
                             <p className="text-2xl font-black font-mono text-amber-500 flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
-                                {formatNumber(balanceInfo?.commonsBalance ?? 0, 1)}
+                                {formatHundredths(balanceInfo?.commonsBalance_c ?? 0)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
                             </p>
                             <p className="text-nature-500 dark:text-nature-300 text-[10px] mt-1 font-semibold">
@@ -913,7 +917,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             >
                                 <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2">{t('Held in Trust')}</p>
                                 <p className="text-2xl font-black font-mono text-amber-700 dark:text-amber-400 flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
-                                    {formatNumber(inTrust, 1)}
+                                    {formatHundredths(inTrust)}
                                     <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
                                 </p>
                                 <p className="text-nature-500 dark:text-nature-300 text-[10px] mt-1 font-semibold">
@@ -1024,8 +1028,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                             <p data-testid="credit-gift-words" className="text-sm text-nature-700 dark:text-nature-300 leading-relaxed mb-3 break-words">
                                                 {canGive > 0
                                                     ? (selectedMember
-                                                        ? t('Give @{name} part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { name: selectedMember.callsign, max: formatNumber(canGive) })
-                                                        : t('Give part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { max: formatNumber(canGive) }))
+                                                        ? t('Give @{name} part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { name: selectedMember.callsign, max: formatHundredths(canGive) })
+                                                        : t('Give part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { max: formatHundredths(canGive) }))
                                                     : (giftOffer?.why ?? '')}
                                             </p>
                                             <input
@@ -1087,7 +1091,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                             <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
                                                 <div className="flex justify-between items-center text-nature-700 dark:text-nature-300">
                                                     <span>{t('Recipient receives:')}</span>
-                                                    <span className="font-mono font-bold text-nature-950 dark:text-white">{t('{amount} B', { amount: formatNumber(parsedAmount, 2) })}</span>
+                                                    <span className="font-mono font-bold text-nature-950 dark:text-white">{t('{amount} B', { amount: formatHundredths(parsedAmount) })}</span>
                                                 </div>
                                             </div>
                                         );
@@ -1116,9 +1120,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         says so in words rather than showing a zero. */}
                     {balance > 0 && (() => {
                         const monthly = monthlyCirculation(balance);
-                        const showAmber = balance > 1000;
-                        // Two decimals; a sliver over the line shows as <0.01 rather than a zero that reads broken.
-                        const twoDp = (n: number) => (n < 0.005 ? `<${formatNumber(0.01, 2)}` : formatNumber(n, 2));
+                        const showAmber = balance > 100000; // above 1,000 Beans
+                        // The charge is whole hundredths (core circulationChargeOf, truncated once), written as every figure is.
+                        const twoDp = (n: number) => formatNumber(n, 2);
 
                         return (
                             <div className={`rounded-2xl p-4 shadow-sm border border-nature-200 dark:border-nature-800 ${showAmber ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink' : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'}`} data-testid="ledger-circulation">
@@ -1126,7 +1130,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     <span className="text-[13px] font-bold"><span aria-hidden="true">🌿 </span>{t('Community Circulation')}</span>
                                     {monthly > 0 && (
                                         <span className="text-[13px] font-bold font-mono flex items-center" data-testid="ledger-circulation-amount">
-                                            −{twoDp(monthly)}
+                                            −{formatHundredths(monthly)}
                                             <img src="/assets/bean.png" className="w-[14px] h-[14px] ml-0.5" alt={t('B', undefined, 'the Beans sign')} />
                                         </span>
                                     )}
@@ -1134,7 +1138,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 <p className="text-[11px] mt-2 font-medium">
                                     {monthly > 0
                                         ? t('Goes to the Commons each month: about {rate}% of your balance. It funds community projects.', { rate: twoDp((monthly / balance) * 100) })
-                                        : t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: String(CIRCULATION_FREE_BEANS) })}
+                                        : t('Nothing goes to the Commons while you hold {free} Beans or less.', { free: formatHundredths(CIRCULATION_FREE_BEANS) })}
                                 </p>
                             </div>
                         );
@@ -1209,7 +1213,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                             </span>
                                             <span className="flex items-center gap-1 shrink-0">
                                                 <span style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
-                                                    {isSent ? '−' : '+'}{formatNumber(amount, 1)}
+                                                    {isSent ? '−' : '+'}{formatHundredths(amount)}
                                                     <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                                 </span>
                                                 <span aria-hidden="true" className="text-nature-400 text-lg leading-none">›</span>
@@ -1237,7 +1241,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                             </p>
                                         </div>
                                         <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
-                                            {isSent ? '−' : '+'}{formatNumber(amount, 1)}
+                                            {isSent ? '−' : '+'}{formatHundredths(amount)}
                                             <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt={t('B', undefined, 'the Beans sign')} />
                                         </p>
                                     </div>
@@ -1257,7 +1261,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             <CommonsInfoModal 
                 isOpen={showCommonsInfo} 
                 onClose={() => setShowCommonsInfo(false)} 
-                commonsBalance={balanceInfo?.commonsBalance ?? 0} 
+                commonsBalance={balanceInfo?.commonsBalance_c ?? 0} 
             />
 
             {showBudgetModal && myVouching?.budget && (

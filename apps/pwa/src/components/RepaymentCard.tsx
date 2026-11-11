@@ -9,11 +9,11 @@
  * payment has one id (lib/payment-request.ts): a lost answer keeps it here for Try again with the same id, never paid twice. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
  */
 import { useEffect, useRef, useState } from 'react';
-import { t } from '@beanpool/core';
+import { hundredthsAsDecimalText, t } from '@beanpool/core';
 import { getMyRepayment, payTheCommons, confirmCommonsPayment, unansweredPayment, parseBeans, debtCodeOk, payFailureWords, PAY_WORDS, REPAYMENT_WORDS, type Repayment, type CommonsPayment } from '../lib/debts';
 import type { ConfirmedPayment } from '../lib/payment-request';
 
-/** The pay-back link's code, and what was left on that debt when the admin shared it (null when the link doesn't say). */
+/** The pay-back link's code, and what was left on that debt when the admin shared it, whole hundredths (null when the link doesn't say). */
 function linkParams(): { code: string; left: number | null } {
     try {
         const q = new URLSearchParams(window.location.search);
@@ -29,7 +29,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
     const [link] = useState(linkParams);
     const [code, setCode] = useState(link.code);
     const [open, setOpen] = useState(() => code !== '');
-    const [amount, setAmount] = useState(link.left !== null ? String(link.left) : '');
+    const [amount, setAmount] = useState(link.left !== null ? hundredthsAsDecimalText(link.left) : '');
     const inFlight = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [paid, setPaid] = useState<string | null>(null);
@@ -56,6 +56,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         setError(null);
         let payment = held;
         if (!payment) {
+            // Whole hundredths (the body's amount_c).
             const beans = parseBeans(amount);
             if (beans === null) { setError(t(REPAYMENT_WORDS.badAmount)); return; }
             const debt = code.trim();
@@ -68,7 +69,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         try {
             const r = await payTheCommons(payment);
             setHeld(null);
-            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!payment.body.debtId, r, !payment.body.debtId && !!repayment));
+            setPaid(REPAYMENT_WORDS.paid(r.amount_c, r.transactionId, !!payment.body.debtId, r, !payment.body.debtId && !!repayment));
             setAmount('');
             onPaid?.();
         } catch (e) {

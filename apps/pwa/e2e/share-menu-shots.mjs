@@ -31,12 +31,12 @@ const PHOTO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http:
 const POSTS = [
     {
         id: 'p-ladder', type: 'offer', category: 'tools', title: 'Long ladder to lend', description: 'A 6 m extension ladder, light enough for one person.',
-        credits: 15, priceType: 'fixed', status: 'active', active: true, repeatable: false, authorPublicKey: 'damo-key', authorCallsign: 'Damo',
+        price_c: 1500, priceType: 'fixed', status: 'active', active: true, repeatable: false, authorPublicKey: 'damo-key', authorCallsign: 'Damo',
         createdAt: AT, photos: [PHOTO], audienceScope: 'public',
     },
     {
         id: 'ev-market', type: 'event', category: 'community', title: 'Mullumbimby Community Market', description: 'The farmers and community market at Summers Park. Next date: Sat 21 Nov.',
-        credits: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false, authorPublicKey: 'damo-key', authorCallsign: 'Damo', createdAt: AT,
+        price_c: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false, authorPublicKey: 'damo-key', authorCallsign: 'Damo', createdAt: AT,
         photos: [PHOTO], audienceScope: 'public', eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
         eventStartAt: new Date(Date.now() + 48 * HOUR).toISOString(), eventEndAt: new Date(Date.now() + 54 * HOUR).toISOString(),
         eventPlaceName: 'Summers Park, corner of Stuart and Dalley Streets', lat: -28.55, lng: 153.5,
@@ -115,7 +115,7 @@ try {
                         return json(route, id ? POSTS.filter((x) => x.id === id) : (url.searchParams.get('author') ? [] : POSTS));
                     }
                     if (p === '/api/node-admin/me') return json(route, { role: null });
-                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, usableFloor: 0, isBlockedFromTrading: false, keeperOf: [] });
+                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance_c: 10000, floor_c: -50000, usableFloor_c: 0, isBlockedFromTrading: false, keeperOf: [] });
                     if (p === '/api/marketplace/transactions') return json(route, []);
                     if (p.startsWith('/api/ratings')) return json(route, { ratings: [], average: 0, count: 0 });
                     if (p.startsWith('/api/treasuries')) return json(route, { treasuries: [] });

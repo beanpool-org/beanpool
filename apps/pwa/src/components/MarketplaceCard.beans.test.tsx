@@ -10,7 +10,7 @@ import { MarketplaceCard } from './MarketplaceCard';
 import type { MarketplacePost } from '../lib/marketplace';
 
 const base = {
-    id: 'p1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning', credits: 12,
+    id: 'p1', type: 'offer', category: 'food', title: 'Sourdough loaf', description: 'Baked this morning', price_c: 1200,
     priceType: 'fixed', authorPublicKey: 'a'.repeat(64), authorCallsign: 'Kofi', active: true, status: 'active',
     createdAt: new Date().toISOString(), authorFoundingNeeded: true,
 } as unknown as MarketplacePost;
@@ -40,7 +40,7 @@ describe('MarketplaceCard where Beans are marked (the global node)', () => {
     });
 
     it('an Elder author gets no Elder look either (a tier is Beans)', () => {
-        render(<MarketplaceCard post={base} viewMode="compact" authorEnergy={100000} beansMarked />);
+        render(<MarketplaceCard post={base} viewMode="compact" authorEnergy={10000000} beansMarked />);
         expect(screen.queryByText(/⛰️/)).toBeNull();
     });
 });
@@ -58,7 +58,7 @@ describe('MarketplaceCard on a local node (Beans live): unchanged', () => {
     });
 
     it('an Elder author keeps the Elder mark', () => {
-        render(<MarketplaceCard post={base} viewMode="compact" authorEnergy={100000} />);
+        render(<MarketplaceCard post={base} viewMode="compact" authorEnergy={10000000} />);
         expect(screen.getByText(/⛰️/)).toBeInTheDocument();
     });
 });

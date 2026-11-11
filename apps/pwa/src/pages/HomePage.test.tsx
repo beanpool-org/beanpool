@@ -7,7 +7,10 @@ import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { HomeAnswer, HomeLayout, HomeLayoutV2 } from '../lib/home-cards';
+import type { HomeAnswer, HomeLayoutV2 } from '../lib/home-cards';
+
+/** A version-1 layout as an older web app's copy held it: core still reads it (translateV1), nothing here writes one. */
+type HomeLayout = { v: 1; order: string[]; hidden: string[]; dismissed: Record<string, string>; updatedAt: string | null };
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
@@ -45,7 +48,8 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { readPricingGuide } from '../lib/starter-offers';
-import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
+import { HomePage, HOME_FAILED, HOME_HINT, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
+import { NodeTooOldError } from '../lib/node-version-gate';
 import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
@@ -63,6 +67,7 @@ import { rememberDmConversations } from '../lib/dm-guard';
 import { RADIUS_STORAGE_KEY, loadRadiusSettings } from '../lib/geo';
 import { nearRead } from '../lib/listings-near';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
+import { handedOverHere, markHandedOver } from '../lib/handoff';
 import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '../lib/another-tab';
 import { chooseAndShowLanguage, resetLanguageForTests } from '../lib/language';
 import { useLanguage } from '../lib/useLanguage';
@@ -86,13 +91,13 @@ function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {})
             events: { items: [{ id: 'e1', title: 'Seed swap', startsAt: new Date(Date.now() + 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: 'going' }], radiusKm: null },
             market: {
                 items: [
-                    { id: 'p1', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 20, photoUrl: null },
-                    { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null },
-                    { id: 'p3', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null, credits: 0 },
+                    { id: 'p1', type: 'offer', title: 'Pottery lessons', category: 'arts', price_c: 2000, photoUrl: null },
+                    { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', price_c: 1200, photoUrl: null },
+                    { id: 'p3', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null, price_c: 0 },
                 ], total14d: 3, more: false,
             },
             pulse: { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk', category: 'education', url: null }] },
-            beans: { balance: 12, room: 200, tier: 'Resident', activated: true, frozen: false },
+            beans: { balance_c: 1200, room_c: 20000, tier: 'Resident', activated: true, frozen: false },
             community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
             ...cards,
         },
@@ -225,7 +230,35 @@ describe('one request, the cached answer first (§5)', () => {
         expect(screen.queryByTestId('home-card-market')).toBeNull();
     });
 
-    it('offline with no copy: a sentence and Try again, never a blank page; a node older than Home says that', async () => {
+    it('pointed at a server below 1.4.0: the version gate\'s own line, with or without a copy, never "couldn\'t reach" or "what we had"', async () => {
+        const line = new NodeTooOldError('1.2.37').message;
+        expect(line).toBe("This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.");
+        vi.mocked(api.getHome).mockRejectedValue(new NodeTooOldError('1.2.37'));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(line);
+        expect(screen.getByTestId('home-failed')).not.toHaveTextContent(HOME_FAILED);
+        cleanup();
+        resetHomeCacheForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(line);
+        expect(screen.queryByTestId('home-offline')).toBeNull();
+        expect(screen.queryByTestId('home-card-market')).toBeNull();
+    });
+
+    it('pointed at a server whose version can\'t be read: the gate\'s line for that, which says both things it can be', async () => {
+        const line = new NodeTooOldError(null).message;
+        expect(line).toBe("This community's server can't be reached right now, or it runs a BeanPool older than 1.4.0. Try again later.");
+        vi.mocked(api.getHome).mockRejectedValueOnce(new NodeTooOldError(null));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(line);
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(answer()));
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByTestId('home-card-market')).toBeInTheDocument();
+    });
+
+    it('offline with no copy: a sentence and Try again, never a blank page; a 404 is the same failed line, no longer a node older than Home', async () => {
         vi.mocked(api.getHome).mockRejectedValueOnce(new TypeError('Failed to fetch'));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-failed')).toHaveTextContent("Couldn't reach your community");
@@ -237,7 +270,7 @@ describe('one request, the cached answer first (§5)', () => {
         vi.stubGlobal('indexedDB', memoryIndexedDB());
         vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_NOT_ON_NODE);
+        expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_FAILED);
     });
 
     it('a failed read says why in the language of the moment: a live switch translates it, a node\'s own words stay its own (#1947 review N2)', async () => {
@@ -246,10 +279,10 @@ describe('one request, the cached answer first (§5)', () => {
         try {
             vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Not found'), { status: 404 }));
             render(<Live />);
-            expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_NOT_ON_NODE);
+            expect(await screen.findByTestId('home-failed')).toHaveTextContent(HOME_FAILED);
             await act(async () => { await chooseAndShowLanguage('ru'); });
-            expect(screen.getByTestId('home-failed')).toHaveTextContent((ruWords as Record<string, unknown>)[HOME_NOT_ON_NODE] as string);
-            expect((ruWords as Record<string, unknown>)[HOME_NOT_ON_NODE]).not.toBe(HOME_NOT_ON_NODE);
+            expect(screen.getByTestId('home-failed')).toHaveTextContent((ruWords as Record<string, unknown>)[HOME_FAILED] as string);
+            expect((ruWords as Record<string, unknown>)[HOME_FAILED]).not.toBe(HOME_FAILED);
             cleanup();
             // A refusal the node wrote is shown as it wrote it, in any language.
             vi.mocked(api.getHome).mockRejectedValueOnce(Object.assign(new Error('Your account is paused.'), { status: 403 }));
@@ -550,7 +583,21 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(within(needs).getByTestId('home-needs-knock')).toHaveTextContent('2 people asked to join');
         expect(within(needs).queryByRole('link', { name: /asked to join/ })).toBeNull();
         fireEvent.click(within(needs).getByRole('button', { name: '2 people asked to join. Waiting on you.' }));
+        expect(nav).toHaveBeenCalledWith('people-invites', 'asked');
+    });
+
+    it('an ask-for-an-invite line lands on the same page, but as an ordinary visit: it is not a notice about requests to join', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'ask', count: 1, accent: true, label: '1 person asked for an invite', target: { to: 'people' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        fireEvent.click(within(needs).getByTestId('home-needs-ask').closest('button')!);
         expect(nav).toHaveBeenCalledWith('people-invites');
+        expect(nav).not.toHaveBeenCalledWith('people-invites', 'asked');
     });
 
     it("a group's vote line lands on the group (DESIGN-group-decisions S3), not Messages and not Commons → Decide", async () => {
@@ -597,7 +644,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
 
     it('a new member\'s Beans: nothing to repay, how credit opens; the steps link to where each is done', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
-            beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },
+            beans: { balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false },
             steps: { joinedAt: NOW, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null },
         })));
         const nav = vi.fn();
@@ -631,7 +678,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
 
     it('market cards with no photo render CategoryTile instead of bare emoji on grey', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
-            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },
+            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 150000, photoUrl: null }], total14d: 1, more: false },
         })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const marketCard = await screen.findByTestId('home-card-market');
@@ -640,7 +687,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
 
     it('a Market price of a thousand Beans or more in the language\'s number style: "1,500" in English, never in pt or es, where it reads as 1.5', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
-            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1500, photoUrl: null }], total14d: 1, more: false },
+            market: { items: [{ id: 'p9', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 150000, photoUrl: null }], total14d: 1, more: false },
         })));
         // As App does: the root re-renders when the language changes (lib/useLanguage.ts).
         const Live = () => { useLanguage(); return <HomePage identity={ME} onNavigate={vi.fn()} />; };
@@ -661,21 +708,21 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         }
     });
 
-    it('a fractional Market price to the cent: "1,234.5 Beans" grouped in English as it always was, "1234,5" in pt and es', async () => {
+    it('a fractional Market price to the cent: "1,234.50 Beans" grouped in English, "1234,50" in pt and es (formatHundredths: two decimals whenever there are cents)', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             market: { items: [
-                { id: 'p10', type: 'offer', title: 'Cargo bike', category: 'tools', credits: 1234.5, photoUrl: null },
-                { id: 'p11', type: 'offer', title: 'Trailer', category: 'tools', credits: 33.333333, photoUrl: null },
-                { id: 'p12', type: 'offer', title: 'Pump', category: 'tools', credits: 10.1 + 10.2, photoUrl: null },
+                { id: 'p10', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 123450, photoUrl: null },
+                { id: 'p11', type: 'offer', title: 'Trailer', category: 'tools', price_c: 3333, photoUrl: null },
+                { id: 'p12', type: 'offer', title: 'Pump', category: 'tools', price_c: 1010 + 1020, photoUrl: null },
             ], total14d: 3, more: false },
         })));
         const Live = () => { useLanguage(); return <HomePage identity={ME} onNavigate={vi.fn()} />; };
         try {
             render(<Live />);
             await screen.findByTestId('home-card-market');
-            // Never "1234.5", "33.333333" or the float's "20.299999999999997".
-            expect(marketTitles()).toEqual(['Offer, Cargo bike, 1,234.5 Beans', 'Offer, Trailer, 33.33 Beans', 'Offer, Pump, 20.3 Beans']);
-            for (const [lang, beans] of [['pt', ['1234,5 feijões', '33,33 feijões', '20,3 feijões']], ['es', ['1234,5 frijoles', '33,33 frijoles', '20,3 frijoles']]] as const) {
+            // Never "1234.5", "123450" (a count of hundredths shown as Beans) or a float's "20.299999999999997".
+            expect(marketTitles()).toEqual(['Offer, Cargo bike, 1,234.50 Beans', 'Offer, Trailer, 33.33 Beans', 'Offer, Pump, 20.30 Beans']);
+            for (const [lang, beans] of [['pt', ['1234,50 feijões', '33,33 feijões', '20,30 feijões']], ['es', ['1234,50 frijoles', '33,33 frijoles', '20,30 frijoles']]] as const) {
                 await act(async () => { await chooseAndShowLanguage(lang); });
                 const rows = within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item');
                 expect(rows.map(r => r.textContent), lang).toEqual(beans.map(b => expect.stringContaining(b)));
@@ -2008,6 +2055,24 @@ describe('the card frame (F3)', () => {
         await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market']));
     });
 
+    it('a layout the node refuses (400): the account\'s list stands, nothing is sent again by itself, and Arrange says nothing of an update', async () => {
+        nodeV2(answer(), v2(['market', 'events', 'pulse']));
+        vi.mocked(api.saveHomePreferences).mockImplementation(async () => { throw Object.assign(new Error('bad layout'), { status: 400 }); });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByTestId('home-card-menu'));
+        fireEvent.click(screen.getByTestId('home-menu-remove'));
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(1));
+        // The account's own list comes back: the card the node would not let go of is drawn again.
+        await waitFor(() => expect(cardIds()).toContain('pulse'));
+        openArrange();
+        expect(screen.queryByTestId('home-arrange-not-on-account')).toBeNull();
+        doneArrange();
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await pause(100);
+        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
+    });
+
     it('a card type this app does not know is kept byte for byte through every save, and never drawn or asked', async () => {
         const future = { id: 'fut1', type: 'future-card', settings: { a: [1, { b: 'é' }] } };
         nodeV2(answer(), v2(['market', 'events', 'pulse'], AT, [future]));
@@ -2019,56 +2084,6 @@ describe('the card frame (F3)', () => {
         await waitFor(() => expect(savedLayouts()).toHaveLength(1));
         expect(JSON.stringify(savedLayouts()[0].cards.find(c => c.id === 'fut1'))).toBe(JSON.stringify(future));
         for (const c of vi.mocked(api.getHome).mock.calls) expect(c[0]?.cards ?? []).not.toContain('fut1');
-    });
-
-    it('an empty version-1 list (a standby) draws the newcomer list; when the real list returns it stands and nothing is sent', async () => {
-        const node = nodeV2(answer(), null);
-        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(answer({ layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT } as never })));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-market');
-        expect(cardIds()).not.toContain('beans');
-        // The primary is back with the member's real list.
-        (node as unknown as { account: () => unknown }).account();
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['beans', 'market'], '2026-10-02T00:00:00.000Z') })));
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await waitFor(() => expect(cardIds()).toContain('beans'));
-        expect(api.saveHomePreferences).not.toHaveBeenCalled();
-    });
-
-    it('a node from before the frame refuses the list: kept here, Arrange says so, sent again once per landing only', async () => {
-        const v1Answer = answer({ layout: { v: 1, order: ['market', 'events', 'pulse'], hidden: [], dismissed: {}, updatedAt: AT } as never });
-        vi.mocked(api.getHome).mockResolvedValue(fresh(v1Answer));
-        vi.mocked(api.saveHomePreferences).mockImplementation(async () => { throw Object.assign(new Error('bad layout'), { status: 400 }); });
-        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByTestId('home-menu-remove'));
-        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(cardIds()).not.toContain('pulse'));
-        openArrange();
-        expect(screen.getByTestId('home-arrange-not-on-account')).toBeInTheDocument();
-        doneArrange();
-        // More reads on this landing send nothing.
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
-        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
-        expect(cardIds()).not.toContain('pulse');
-        // The next landing sends it once more.
-        first.unmount();
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(2));
-        expect(cardIds()).not.toContain('pulse');
-    });
-
-    it('the standby tie: a version-1 copy dated like this browser\'s never wins, and nothing is sent', async () => {
-        const mine = v2(['beans', 'market']);
-        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: mine }), layout: mine as never, layoutUnsaved: false, savedAt: 1 });
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: { v: 1, order: ['market', 'events'], hidden: [], dismissed: {}, updatedAt: AT } as never })));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
-        await waitFor(() => expect(cardIds()).toContain('beans'));
-        expect(cardIds()).not.toContain('events');
-        expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
 
     it('a member here before the frame who never edited sees the fewer-cards line once', async () => {
@@ -2095,26 +2110,8 @@ describe('the card frame (F3)', () => {
     });
 });
 
-describe('an empty version-1 account list, no copy here: every edit stands once the first is saved (review of #1701, finding 1)', () => {
+describe('edits made one after another: every one stands once the first is saved (review of #1701, finding 1)', () => {
     const posts = (log: string[]) => log.filter(l => l === 'POST').length;
-
-    it('R1: Add Your Beans, then Remove Coming up: the second edit is sent and stays', async () => {
-        const node = nodeKeeping(answer(), EMPTY_V1);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        fireEvent.click(screen.getByTestId('home-add-open'));
-        fireEvent.click(screen.getByTestId('home-add-beans'));
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause();
-        await waitFor(() => expect(cardIds()).toContain('beans'));
-        fireEvent.click(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByTestId('home-menu-remove'));
-        await pause(100);
-        expect(posts(node.log)).toBe(2);
-        expect(cardIds()).not.toContain('events');
-        expect(node.account().cards.map(c => c.id)).not.toContain('events');
-        expect(node.account().cards.map(c => c.id)).toContain('beans');
-    });
 
     it('R1b: Remove Coming up, then add a saved search: the search and its words stay', async () => {
         const node = nodeKeeping(answer(), EMPTY_V1);
@@ -2134,23 +2131,9 @@ describe('an empty version-1 account list, no copy here: every edit stands once 
         expect((node.account().cards.find(c => c.type === 'search') as { settings?: unknown } | undefined)?.settings).toMatchObject({ q: 'eggs' });
     });
 
-    it('R1c: the fewer-cards line shows; Your Beans, The Pulse and Your groups added one after another all stay', async () => {
-        const node = nodeKeeping(answer({}, { groups: { items: [{ id: 'g1', name: 'Garden', unread: 1, muted: false }] } } as never), EMPTY_V1);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        expect(screen.getByTestId('home-fewer')).toBeInTheDocument();
-        for (const t of ['beans', 'pulse', 'groups']) {
-            fireEvent.click(screen.getByTestId('home-add-open'));
-            fireEvent.click(screen.getByTestId(`home-add-${t}`));
-            await pause(80);
-        }
-        for (const t of ['beans', 'pulse', 'groups']) expect(cardIds()).toContain(t);
-        expect(posts(node.log)).toBe(3);
-        expect(node.account().cards.map(c => c.type)).toEqual(expect.arrayContaining(['beans', 'pulse', 'groups']));
-    });
 });
 
-describe('a read that overtakes the first save\'s answer on an empty version-1 list: the newer edit stands and is sent (review of #1701 confirmation, finding 2)', () => {
+describe('a read that overtakes a save\'s answer: the newer edit stands and is sent (review of #1701 confirmation, finding 2)', () => {
     const ids = (l: unknown) => ((l as { cards?: Array<{ id: string }> } | null)?.cards ?? []).map(c => c.id);
     /**
      * nodeKeeping, but a save is applied at once and, with `hold`, answered only when the test calls answerSaves(): never on
@@ -2195,118 +2178,6 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await pause(20);
     };
 
-    it('X1: Add Your Beans, then Add The Pulse before the first save answers, and the second edit\'s read answers first: both stand, on the account too', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, true);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause(20);
-        // The node has the first save; its answer is still out. The second edit's read answers before it.
-        const before = reads(node.log);
-        add('pulse');
-        await readAnswered(node.log, before);
-        expect(node.log).not.toContain('answered');
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        // Now the first save answers, then the second edit's save that waited on it.
-        await node.answerSaves();
-        await waitFor(() => expect(posts(node.log)).toBe(2));
-        await node.answerSaves();
-        await pause(100);
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        // The second edit is sent once, after the first save's answer (one save out at a time).
-        expect(posts(node.log)).toBe(2);
-        expect(node.log.indexOf('answered')).toBeLessThan(node.log.map(l => l.startsWith('POST ')).lastIndexOf(true));
-        expect(screen.getByTestId('home-live').textContent).toContain('The Pulse');
-    });
-
-    it('X1, the mark kept in this browser: closed before either answer, opened again, the account\'s list is this browser\'s own save, so the newer edit wins and is sent', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, true);
-        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause(20);
-        add('pulse');
-        // Closed at once: the second edit's read and the first save's answer reach no page.
-        first.unmount();
-        await pause(20);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-pulse');
-        expect(node.log).not.toContain('answered');
-        await node.answerSaves();
-        await waitFor(() => expect(posts(node.log)).toBe(2));
-        await node.answerSaves();
-        await pause(100);
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(posts(node.log)).toBe(2);
-    });
-
-    it('a standby\'s refusal keeps the mark, and the primary back with the member\'s real list still wins: nothing more is sent', async () => {
-        const real = v2(['market', 'events', 'pulse'], AT);
-        let primary = false;
-        let account: unknown = { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT };
-        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
-            if (!primary) throw Object.assign(new Error('A Home layout is …'), { status: 400 });
-            account = prefs['home.layout'];
-            return { success: true, 'home.layout': account } as never;
-        });
-        vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
-            const full = answer();
-            const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
-            return fresh({ ...full, layout: (primary ? real : account) as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
-        });
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await pause(80);
-        fireEvent.click(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByTestId('home-menu-remove'));
-        await pause(80);
-        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
-        primary = true;
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await pause(100);
-        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
-        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'events', 'pulse']));
-        expect(cardIds()).not.toContain('beans');
-    });
-
-    for (const behind of [200, 5_000]) {
-        it(`S1: X1 with the node's clock ${behind} ms behind this browser's, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
-            const node = nodeSlowSave(answer(), EMPTY_V1, true, behind);
-            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-            await screen.findByTestId('home-card-events');
-            add('beans');
-            await waitFor(() => expect(posts(node.log)).toBe(1));
-            await pause(20);
-            // The second edit's read carries the first save back with the node's date, not the one this browser sent.
-            const before = reads(node.log);
-            add('pulse');
-            await readAnswered(node.log, before);
-            expect(node.log).not.toContain('answered');
-            // The second save reaches the node at least 250 ms after its edit (a slower machine only makes it later): a node
-            // 200 ms behind takes its date as sent, one 5 s behind still holds it to its now.
-            await pause(250);
-            await node.answerSaves();
-            await waitFor(() => expect(posts(node.log)).toBe(2));
-            await node.answerSaves();
-            await pause(100);
-            expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            expect(posts(node.log)).toBe(2);
-            expect(screen.getByTestId('home-live').textContent).toContain('The Pulse');
-            await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-            await pause(300);
-            expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-            // The copy took the node's date from the save's answer: the read sends nothing more (review of #1715, note 1).
-            expect(posts(node.log)).toBe(2);
-        });
-    }
-
     it('S2: the member\'s own list, the node\'s clock 5 s behind this browser\'s: one Add is sent once, and the reads after it send nothing (review of #1715, note 1)', async () => {
         const node = nodeSlowSave(answer(), v2(['events', 'market', 'pulse'], AT), false, 5_000);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -2324,82 +2195,9 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         expect(ids(node.account())).toEqual(expect.arrayContaining(['events', 'market', 'pulse', 'beans']));
     });
 
-    it('S1, the mark kept in this browser: the node\'s clock 5 s behind, closed before either answer, opened again: the node\'s copy of the first save is still this browser\'s own, so the newer edit wins and is sent', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, true, 5_000);
-        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(node.log)).toBe(1));
-        await pause(20);
-        add('pulse');
-        first.unmount();
-        await pause(20);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-pulse');
-        expect(node.log).not.toContain('answered');
-        await node.answerSaves();
-        await waitFor(() => expect(posts(node.log)).toBe(2));
-        await node.answerSaves();
-        await pause(100);
-        expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        expect(posts(node.log)).toBe(2);
-    });
-
-    it('W2b: another device\'s list lands just before the first save, which the node drops as older: that list stands, and the edit that waited is not sent (review of #1715, finding 2)', async () => {
-        const full = answer();
-        const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
-        let account: unknown = EMPTY_V1;
-        const log: string[] = [];
-        let answerFirst = () => {};
-        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
-            const l = prefs['home.layout'] as unknown;
-            log.push(`POST ${ids(l).join(',')}`);
-            if (log.filter(x => x.startsWith('POST ')).length === 1) {
-                // The first save is applied only as it answers, when the test says (never on a timer); another device's
-                // list, dated 5 ms after it, lands first.
-                await new Promise<void>(r => { answerFirst = r; });
-                const other = {
-                    v: 2, dismissed: {}, updatedAt: new Date(at(l) + 5).toISOString(),
-                    cards: [{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
-                };
-                if (at(other) >= at(account)) account = other;
-            }
-            if (at(l) >= at(account)) account = l;
-            log.push('answered');
-            return { success: true, 'home.layout': account } as never;
-        });
-        vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
-            log.push(params.cards ? 'GET cards=' : 'GET');
-            const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
-            return fresh({ ...full, layout: account as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
-        });
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-events');
-        add('beans');
-        await waitFor(() => expect(posts(log)).toBe(1));
-        await pause(40);
-        // The second edit's read still sees the empty row: the first save is not applied yet.
-        const before = reads(log);
-        add('pulse');
-        await readAnswered(log, before);
-        expect(log).not.toContain('answered');
-        await act(async () => { answerFirst(); });
-        await waitFor(() => expect(log).toContain('answered'));
-        await pause(100);
-        expect(posts(log)).toBe(1);
-        expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
-        expect(cardIds()).toEqual(expect.arrayContaining(['market', 'search-k2x7']));
-        expect(cardIds()).not.toContain('pulse');
-        // Nothing more is sent at the next read either.
-        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
-        await pause(300);
-        expect(posts(log)).toBe(1);
-        expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
-    });
 });
 
-describe('what a never-edited member asks, and the old web app\'s empty copy (review of #1701, findings 6 and 4)', () => {
+describe('what a never-edited member asks (review of #1701, finding 6)', () => {
     it('R3: no row and no copy: the first read has no cards=, every read after it asks the newcomer\'s cards', async () => {
         const node = nodeKeeping(answer(), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -2420,21 +2218,6 @@ describe('what a never-edited member asks, and the old web app\'s empty copy (re
         expect(node.log).not.toContain('POST');
     });
 
-    it('R5: the old web app\'s Reset (an empty version-1 list on the account and in this browser\'s copy) is unknown: the newcomer\'s list, the fewer line, the newcomer\'s ask', async () => {
-        const empty = { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: AT };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: empty as never }), layout: empty as never, layoutUnsaved: false, savedAt: 1 });
-        const node = nodeKeeping(answer(), empty);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-market');
-        await pause();
-        expect(cardIds()).not.toContain('pulse');
-        expect(cardIds()).not.toContain('beans');
-        expect(screen.getByTestId('home-fewer')).toBeInTheDocument();
-        const asked = node.log.find(l => l.startsWith('GET'))!.slice(4).split(',');
-        expect(asked).not.toContain('pulse');
-        expect(asked).not.toContain('beans');
-        expect(node.log).not.toContain('POST');
-    });
 });
 
 // ── A chosen chat (DESIGN-home-chosen-chat-fable.md §2, slice C3): the same bodies as the phone's card ───────────────────
@@ -2683,7 +2466,7 @@ describe('a chosen chat shows its last lines, opened in the browser (slice C3)',
 });
 
 describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
-    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', credits: 5, photoUrl: null, distanceKm: km });
+    const row = (id: string, title: string, type: 'offer' | 'need', km: number) => ({ id, type, title, category: 'food', price_c: 500, photoUrl: null, distanceKm: km });
     const layout = (q = 'eggs') => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q, kind: 'any', km: 5 } }]);
     const withBody = (body: unknown) => answer({}, { ...answer().cards, 'search-k7mq': body } as never);
 
@@ -4452,9 +4235,9 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             others: 1,
             lifecycle: 'ongoing',
             keepers: 3,
-            balance: 340,
-            month: { trades: 5, in: 120, out: 60 },
-            latest: { amount: 12, at: new Date(Date.now() - 2 * 3600_000).toISOString(), kind: 'member', who: 'Ana' },
+            balance_c: 34000,
+            month: { trades: 5, in_c: 12000, out_c: 6000 },
+            latest: { amount_c: 1200, at: new Date(Date.now() - 2 * 3600_000).toISOString(), kind: 'member', who: 'Ana' },
         },
         decide: {
             open: 1,
@@ -4482,28 +4265,28 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             ],
         },
         beans: {
-            balance: -35,
-            room: 165,
+            balance_c: -3500,
+            room_c: 16500,
             tier: 'Resident',
             activated: true,
             frozen: false,
-            month: { trades: 3, in: 40, out: 25, fees: 0, more: false },
+            month: { trades: 3, in_c: 4000, out_c: 2500, fees_c: 0, more: false },
         },
         community: {
             name: 'Mullumbimby',
             members: 81,
             joined7d: 4,
             tradesThisMonth: 23,
-            commonsPot: 310,
+            commonsPot_c: 31000,
             listings: 37,
             eventsSoon: 3,
         },
         market: {
             items: [
-                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: 'https://example.com/m1.jpg', distanceKm: 2 },
-                { id: 'm2', type: 'need', title: 'Ride to Lismore', category: 'rides', credits: 0, photoUrl: null, distanceKm: 5 },
-                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', credits: 6, photoUrl: 'https://example.com/m3.jpg', distanceKm: 1 },
-                { id: 'm4', type: 'offer', title: 'Mend clothes', category: 'skills', credits: 20, photoUrl: null, distanceKm: 3 },
+                { id: 'm1', type: 'offer', title: 'Garlic', category: 'food', price_c: 800, photoUrl: 'https://example.com/m1.jpg', distanceKm: 2 },
+                { id: 'm2', type: 'need', title: 'Ride to Lismore', category: 'rides', price_c: 0, photoUrl: null, distanceKm: 5 },
+                { id: 'm3', type: 'offer', title: 'Jam', category: 'food', price_c: 600, photoUrl: 'https://example.com/m3.jpg', distanceKm: 1 },
+                { id: 'm4', type: 'offer', title: 'Mend clothes', category: 'skills', price_c: 2000, photoUrl: null, distanceKm: 3 },
             ],
             total14d: 4,
             more: false,
@@ -4733,7 +4516,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
                 tradesThisMonth: 0,
                 joined7d: 1,
                 eventsSoon: 0,
-                commonsPot: 0,
+                commonsPot_c: 0,
             },
         });
 
@@ -5104,6 +4887,55 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             await screen.findByTestId('home-card-market');
             expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
         });
+
+        // Global yes Y1 (DESIGN-global-yes-join-fable.md §2.2): on a phone's browser, after the account was handed over from
+        // global's page and joined here, Home offers the phone app once (the guide's own advice), then the usual rule.
+        const dayOneMember = () => answer({
+            profile: 'local',
+            me: { joinedAt: new Date(Date.now() - 60_000).toISOString(), isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
+        });
+        const phoneBrowser = () => {
+            window.matchMedia = ((q: string) => ({ matches: q.includes('reduce') || q.includes('pointer: coarse'), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
+        };
+
+        it('handed over and joined, on a phone: offered on the first Home at once, and on that visit only', async () => {
+            phoneBrowser();
+            markHandedOver(ME.publicKey);
+            vi.mocked(api.getHome).mockResolvedValue(fresh(dayOneMember()));
+            const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+            expect(handedOverHere(ME.publicKey)).toBe(false);
+            unmount();
+            // Once: the next Home is the usual rule's (a member of a minute with no post: not yet).
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+        });
+
+        it('handed over and joined on a computer, another key handed over, or the card dismissed: not offered early', async () => {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(dayOneMember()));
+            markHandedOver(ME.publicKey);
+            const computer = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            // Taken all the same: a computer never offers it later from this mark.
+            expect(handedOverHere(ME.publicKey)).toBe(false);
+            computer.unmount();
+
+            phoneBrowser();
+            markHandedOver('9'.repeat(64));
+            const other = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            other.unmount();
+
+            localStorage.setItem(`beanpool_use_phone_app_dismissed_${ME.publicKey}`, '1');
+            markHandedOver(ME.publicKey);
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+        });
     });
 
     it('calendar-s4: events card links "Calendar ›" to map-calendar and "All events ›" to marketplace events', async () => {
@@ -5139,8 +4971,8 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
 describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fable.md §2.2; 320 px wide, light and dark)', () => {
     const PINNED_CARDS = (): HomeAnswer['cards'] => ({
         market: { items: [
-            { id: 'p3', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 20, photoUrl: null, pinned: true },
-            { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null },
+            { id: 'p3', type: 'offer', title: 'Pottery lessons', category: 'arts', price_c: 2000, photoUrl: null, pinned: true },
+            { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', price_c: 1200, photoUrl: null },
             { id: 'p4', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null },
         ], total14d: 3, more: false },
         events: { items: [
@@ -5201,9 +5033,9 @@ describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fa
 
 describe('Asked near you, and the First steps line for a Need (cold-start N2)', () => {
     const askedItems = () => [
-        { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), photoUrl: null },
-        { id: 'n2', title: 'Someone to dig a bed', category: 'arts', credits: 40, createdAt: new Date(Date.now() - 26 * 3_600_000).toISOString(), photoUrl: null },
-        { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), photoUrl: null },
+        { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', price_c: 2000, createdAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), photoUrl: null },
+        { id: 'n2', title: 'Someone to dig a bed', category: 'arts', price_c: 4000, createdAt: new Date(Date.now() - 26 * 3_600_000).toISOString(), photoUrl: null },
+        { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', price_c: 0, createdAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), photoUrl: null },
     ];
     const MEMBER = { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: true, standing: 'member' as const, tour: TOUR_ENDED };
     /** A member whose list holds the card after the Market; `steps` as the node sends it; the star `arts`. */
@@ -5241,9 +5073,9 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     it('a Need priced by the hour or the month says so, on the row and in its label; a fixed price and Free are as before', async () => {
         const [first, , free] = askedItems();
         vi.mocked(api.getHome).mockResolvedValue(fresh(asked([
-            { ...first, id: 'n1', title: 'Borrow a trailer Saturday', credits: 20, priceType: 'hourly' },
-            { ...first, id: 'n2', title: 'Someone to mind the shop', credits: 300, priceType: 'monthly' },
-            { ...first, id: 'n3', title: 'Dig a bed', credits: 25, priceType: 'fixed' },
+            { ...first, id: 'n1', title: 'Borrow a trailer Saturday', price_c: 2000, priceType: 'hourly' },
+            { ...first, id: 'n2', title: 'Someone to mind the shop', price_c: 30000, priceType: 'monthly' },
+            { ...first, id: 'n3', title: 'Dig a bed', price_c: 2500, priceType: 'fixed' },
             { ...free, id: 'n4', title: 'Lift to Lismore Thursday', priceType: 'hourly' },
         ])));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -5279,7 +5111,7 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     });
 
     it('Beans are off (the worldwide community): no price, only how long ago', async () => {
-        const noPrice = askedItems().map(({ credits: _c, ...rest }) => rest);
+        const noPrice = askedItems().map(({ price_c: _c, ...rest }) => rest);
         vi.mocked(api.getHome).mockResolvedValue(fresh(asked(noPrice as never, {}, { profile: 'global', features: { beans: false, guestListingsOnly: true } as never })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-asked');

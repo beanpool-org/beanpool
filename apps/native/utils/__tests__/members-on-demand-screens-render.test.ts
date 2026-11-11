@@ -286,12 +286,12 @@ const node = {
 const NEWCOMER_TRUST = {
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
     risk: { band: 'red', headline: 'New here — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
-    vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
+    vouchedInBy: { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null },
     mutualCount: 1, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }],
     joinedAt: '2026-10-01T00:00:00.000Z', lastActiveAt: null,
 };
 /** Words only the Beans half of the Trust & safety panel draws. */
-const TRUST_PANEL_WORDS = ['Trust Points', 'Newcomer', 'New Member:', 'take normal precautions', 'Invited directly by the system admin', 'Completion', 'Calculating trust signals'];
+const TRUST_PANEL_WORDS = ['Trust Points', 'Newcomer', 'New Member:', 'take normal precautions', 'Invited with an owner’s invite card', 'Completion', 'Calculating trust signals'];
 /** The plain meeting advice another member's profile carries where Beans are off (director's call, 16 Oct 11:07). */
 const MEETING_TIPS = ['Meet somewhere public the first time.', "Don't share your home address until you've met.", "Tell a friend where and when you're meeting."];
 async function nodeFetch(input: unknown): Promise<Response> {
@@ -822,7 +822,7 @@ for (const scheme of ['light', 'dark'] as const) {
         describe('Your deals', () => {
             async function holdDeal(partner: string) {
                 await (await db.getDb()).runAsync(
-                    "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 12, 'completed', ?, ?, 'Sourdough loaf')",
+                    "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 1200, 'completed', ?, ?, 'Sourdough loaf')",
                     [OWN, partner, '2026-10-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z']);
             }
 
@@ -970,7 +970,7 @@ for (const scheme of ['light', 'dark'] as const) {
                 nav.params = { publicKey: KOFI, callsign: "Kofi" };
                 await render(createElement(PublicProfileScreen));
                 await settle(50);
-                for (const w of ["Newcomer", "0 Trust Points", "New Member:", "take normal precautions", "Invited directly by the system admin", "Completion"]) expect(text(), w).toContain(w);
+                for (const w of ["Newcomer", "0 Trust Points", "New Member:", "take normal precautions", "Invited with an owner’s invite card", "Completion"]) expect(text(), w).toContain(w);
                 expect(host.querySelector("[data-testid=\"trust-track-record\"]")).not.toBeNull();
                 expect(text()).not.toContain(LOCAL_COMMUNITY_LINES.profile);
                 expect(text()).toContain("Collaboration Chemistry");

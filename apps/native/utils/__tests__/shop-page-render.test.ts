@@ -141,10 +141,11 @@ function memberShop(over: Record<string, unknown> = {}) {
         paused: false, backOn: null, openedAt: '2026-08-14T09:00:00.000Z', updatedAt: '2026-10-20T09:00:00.000Z', ...over,
     };
 }
+// Each price whole hundredths of a Bean, as GET /api/marketplace/posts sends it (price_c): 2, 1 and 3 Beans.
 const LISTINGS = [
-    { id: 'l1', type: 'offer', category: 'tools', title: 'Ladder, 3 m', credits: 2, priceType: 'daily', status: 'active', lendable: true, featuredAt: '2026-10-20T00:00:00.000Z', shopId: SHOP, photos: ['/api/marketplace/posts/l1/photos/0'], authorEnergyCycled: 200 },
-    { id: 'l2', type: 'offer', category: 'tools', title: 'Cordless drill', credits: 1, priceType: 'daily', status: 'pending', lendable: true, shopId: SHOP, authorEnergyCycled: 200 },
-    { id: 'l3', type: 'offer', category: 'tools', title: 'Box of screws', credits: 3, priceType: 'fixed', status: 'active', shopId: SHOP, authorEnergyCycled: 200 },
+    { id: 'l1', type: 'offer', category: 'tools', title: 'Ladder, 3 m', price_c: 200, priceType: 'daily', status: 'active', lendable: true, featuredAt: '2026-10-20T00:00:00.000Z', shopId: SHOP, photos: ['/api/marketplace/posts/l1/photos/0'], authorEnergyCycled: 200 },
+    { id: 'l2', type: 'offer', category: 'tools', title: 'Cordless drill', price_c: 100, priceType: 'daily', status: 'pending', lendable: true, shopId: SHOP, authorEnergyCycled: 200 },
+    { id: 'l3', type: 'offer', category: 'tools', title: 'Box of screws', price_c: 300, priceType: 'fixed', status: 'active', shopId: SHOP, authorEnergyCycled: 200 },
 ];
 type Answer = { status: number; json?: unknown } | 'down';
 function node(shop: Answer = { status: 200, json: memberShop() }, listings: Answer = { status: 200, json: LISTINGS }) {

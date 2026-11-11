@@ -46,7 +46,7 @@ export function yoursRows(
             const myKeeper = ent.keepers?.find(k => (k.publicKey || k.pubkey) === myPubkey && !k.suspended);
             if (myKeeper) {
                 seenKept.add(ent.publicKey);
-                const isProject = ent.lifecycle === 'bounded' || (ent.goalAmount != null && ent.goalAmount > 0);
+                const isProject = ent.lifecycle === 'bounded' || (ent.goalAmount_c != null && ent.goalAmount_c > 0);
                 kept.push({
                     chat: {
                         kind: 'enterprise',

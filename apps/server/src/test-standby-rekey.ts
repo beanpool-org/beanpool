@@ -60,6 +60,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -110,7 +111,7 @@ async function child(): Promise<void> {
             for (const [name, pk, invitedBy] of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
                             VALUES (?, ?, ?, ?, 'TEST', 'active', ?)`).run(pk, name, new Date(Date.now() - 30 * DAY_MS).toISOString(), invitedBy, new Date().toISOString());
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             return true;
         },
@@ -121,9 +122,9 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             const now = new Date().toISOString();
             db.transaction(() => {
-                db.prepare('UPDATE accounts SET balance = balance - ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.from);
-                db.prepare('UPDATE accounts SET balance = balance + ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.to);
-                db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
+                db.prepare('UPDATE accounts SET balance_c = balance_c - ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.from);
+                db.prepare('UPDATE accounts SET balance_c = balance_c + ?, last_updated_at = ? WHERE public_key = ?').run(a.amount, now, a.to);
+                db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
                     .run(crypto.randomUUID(), a.from, a.to, a.amount, 'standby re-key test', now);
             })();
             se.reconcileLedgerFromDb();
@@ -136,13 +137,13 @@ async function child(): Promise<void> {
             const { sealRecoveryFields, shareRowAad } = await import('./services/recovery-seal-key.js');
             const now = new Date().toISOString();
             const t = a.tag;
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at)
                         VALUES (?, 'offer', 'general', 'Firewood', 'Split and dry', 5, ?, ?, ?)`).run(`post-${t}`, a.pk, now, now);
             // A post the peer addressed to them alone, and a task the peer gave them: who may read it and who does it.
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to, created_at, updated_at)
                         VALUES (?, 'request', 'general', 'Kindling', 'For you', 0, ?, 'direct', ?, ?, ?, ?)`).run(`post-${t}-for`, a.peer, a.pk, a.pk, now, now);
             // Their copy of an event from their own community: a re-key leaves its stamp, so only the standby's own move reaches it.
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, shown_from_host, created_at, updated_at)
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, shown_from_host, created_at, updated_at)
                         VALUES (?, 'event', 'community', 'Street party', 'Bring a plate', 0, ?, '', ?, ?)`).run(`post-${t}-copy`, a.pk, now, now);
             db.prepare(`INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, updated_at) VALUES (?, ?, 'going', '', ?)`).run(`post-${t}`, a.pk, now);
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?), (?, ?, ?)').run(a.pk, a.peer, now, a.peer, a.pk, now);
@@ -238,8 +239,8 @@ async function child(): Promise<void> {
             return {
                 keyRows,
                 members,
-                accounts: db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all(),
-                sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+                accounts: db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all(),
+                sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
                 invalidated: db.prepare('SELECT public_key, reason, rekeyed_to FROM invalidated_keys ORDER BY public_key').all(),
                 marker: (db.prepare("SELECT value FROM node_config WHERE key = 'replicated_invalidated_keys_v1'").get() as { value: string } | undefined)?.value ?? null,
             };
@@ -411,7 +412,8 @@ async function call(port: number, id: Id | null, method: 'GET' | 'POST', route: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -424,9 +426,7 @@ async function call(port: number, id: Id | null, method: 'GET' | 'POST', route: 
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 async function main(): Promise<void> {
@@ -465,7 +465,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server ──
         console.log('\n— 1. a main server; Rex, Sue and Tom leave rows in the tables a re-key moves —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
@@ -481,7 +481,7 @@ async function main(): Promise<void> {
         await main.send('reseal');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');
@@ -694,7 +694,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         require_(standby.ready.role === 'primary', 'it is the main server');
         const port = (await standby.send('serve')).port as number;

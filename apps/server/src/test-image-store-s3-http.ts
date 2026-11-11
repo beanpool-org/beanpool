@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -108,23 +109,19 @@ async function child(): Promise<void> {
     const { initStateEngine } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { seedOwnerForTests, ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { checkImageStoreAtBoot } = await import('./storage/image-store.js');
     const { db } = await import('./db/db.js');
 
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const pw = 'Fresh-S3-Server-Pw-551!';
-    const { hash, salt } = hashPassword(pw);
-    updateLocalConfig({ adminHash: hash, salt });
+    // The owner who claimed this fresh server (the claim code: the node has no admin password), its only member, signs
+    // in with their key for the restore. Seeded before membersBefore, so that count stays exact.
+    const freshOwner = seedOwnerForTests('FreshS3Owner');
     const boot = await checkImageStoreAtBoot({ role: 'primary', dataDir });
     const membersBefore = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
-    // Step 7c: with 2FA off the password alone opens no admin route. This fresh server's owner has an authenticator,
-    // so the restore carries the password with a code (no member is seeded: membersBefore stays exact).
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const twoFa = turnOn2faForTests(pw);
 
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -135,7 +132,7 @@ async function child(): Promise<void> {
     resetAdminAuthTarpit();
     const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, {
         method: 'POST',
-        headers: { ...twoFa.headers(), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE!, 'Content-Type': 'application/octet-stream' },
+        headers: { ...ownerSessionHeaders(freshOwner), 'X-Recovery-Code': process.env.TEST_RECOVERY_CODE!, 'Content-Type': 'application/octet-stream' },
         body: new Uint8Array(fs.readFileSync(file)),
     });
     const body = await res.json();
@@ -197,8 +194,8 @@ async function main(): Promise<void> {
     const { initStateEngine, createPost, updatePost, exportSyncState, createConversation } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { ensureGenesis } = await import('./genesis.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { seedOwnerForTests, ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { getImageStore, checkImageStoreAtBoot, imagesDir } = await import('./storage/image-store.js');
     const { getStorageCleanPreview, sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
     const { createSnapshot, snapshotImagesDir, SNAPSHOTS_DIR } = await import('./services/snapshot-scheduler.js');
@@ -209,9 +206,8 @@ async function main(): Promise<void> {
     await initTls();
     initStateEngine();
     await ensureGenesis();
-    const pw = 'S3-Node-Admin-Pw-773!';
-    const { hash, salt } = hashPassword(pw);
-    updateLocalConfig({ adminHash: hash, salt });
+    // The node's owner: backups, snapshots and the storage clean-up are an owner's (key sign-in; no admin password).
+    const nodeOwner = seedOwnerForTests('s3Owner');
 
     // ── 1. boot ────────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 1. Boot ---');
@@ -221,12 +217,9 @@ async function main(): Promise<void> {
     assert(store.kind === 's3', 'the node\'s image store is the S3 store');
     const port = await startHttpsServer(0);
     const BASE = `https://localhost:${port}`;
-    // Step 7c: the password opens admin routes only with 2FA on and a code beside it.
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const twoFa = turnOn2faForTests(pw);
     const adminFetch = async (p: string, init: RequestInit = {}) => {
         resetAdminAuthTarpit();
-        return fetch(`${BASE}${p}`, { ...init, headers: { ...twoFa.headers(), ...(init.headers as any || {}) } });
+        return fetch(`${BASE}${p}`, { ...init, headers: { ...ownerSessionHeaders(nodeOwner), ...(init.headers as any || {}) } });
     };
 
     // ── 2. a photo in, and out ─────────────────────────────────────────────────────────────────
@@ -235,7 +228,7 @@ async function main(): Promise<void> {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'S3RoundTripMarker', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(author);
     setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const photoA = makePhoto('a');
     const photoB = makePhoto('b');
     const post = createPost('offer', 'food', 'Sourdough', 'Baked this morning', 3, 'fixed', author, undefined, undefined,
@@ -335,8 +328,8 @@ async function main(): Promise<void> {
     const asBob = (p: string): Record<string, string> => {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const signature = crypto.sign(null, Buffer.from(`GET\n${p}\n${ts}\n${nonce}\n`), bobKeys.privateKey).toString('base64');
-        return { 'X-Public-Key': bob, 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+        const signature = signRequest(bobKeys.privateKey, { method: 'GET', path: p, timestamp: ts, nonce });
+        return { 'X-Public-Key': bob, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce };
     };
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Bob', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(bob);
     const conv = createConversation('dm', [author, bob], author);
@@ -496,16 +489,10 @@ async function main(): Promise<void> {
     // the kept label says, checked here where it is kept.)
     console.log('\n--- 9. The harvester\'s kept copy ---');
     {
-        // Step 7c: the harvester's legacy entry sends the admin password alone, with no code, and this node's 2FA is on:
-        // refused, nothing kept (with 2FA off it is 403 password_needs_2fa, checked in test-harvester). The fleet holds an
-        // owner's automation token with the backups scope instead (#1550), sent as a bearer and nothing beside it.
+        // The fleet holds an owner's automation token with the backups scope (#1550), sent as a bearer and nothing beside
+        // it: the one credential a node's backup route takes from the fleet (an older entry's admin password is refused
+        // before any request, test-harvester).
         const kept = path.join(dataDir, 'backups', 'local-node', 'state.db');
-        const keptBeforePw = fs.existsSync(kept);
-        resetAdminAuthTarpit();
-        let pwError = '';
-        try { await pullBackupForNode({ id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw } as any); } catch (e) { pwError = (e as Error).message; }
-        assert(/HTTP 401/.test(pwError) && fs.existsSync(kept) === keptBeforePw, `the password alone, no code: refused, nothing kept (${pwError || 'pulled'})`);
-        const { seedOwnerForTests } = await import('./admin-auth-test-harness.js');
         const { issueAutomationToken } = await import('./automation-tokens.js');
         const fleetTok = issueAutomationToken({ name: 'fleet harvester', scope: 'backups', createdBy: seedOwnerForTests('fleetOwner') });
         if (!fleetTok.ok) throw new Error(`the fleet owner's backups token was not made: ${fleetTok.error}`);

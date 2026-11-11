@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 165,
-  "hash": "52b977c3e6972b5d297901b3099909dd71c45fb2f9192325d6d20d290adfd12c",
+  "version": 167,
+  "hash": "3f17431ec2dc96991787d526986191db48bd992258f2f842e1c1f43c0c4af3ec",
   "sections": [
     {
       "id": "about",
@@ -45,6 +45,7 @@
         "your-shop",
         "my-deals",
         "a-deal-step-by-step",
+        "standing-deals",
         "when-a-deal-goes-wrong",
         "lending-and-borrowing"
       ]
@@ -167,11 +168,15 @@
         },
         {
           "type": "p",
-          "text": "An **Offer** is something you can do or give: bread, a lift, an hour of gardening, a repair."
+          "text": "An **Offer** is something you'll give or do for others: bread, a lift, an hour of gardening, a repair."
         },
         {
           "type": "p",
-          "text": "A **Need** is something you are looking for."
+          "text": "A **Need** is something you're looking for."
+        },
+        {
+          "type": "p",
+          "text": "Either can be free. Free is a price of 0, not a third kind of post, so it reads **Free** wherever the price is shown."
         },
         {
           "type": "p",
@@ -220,7 +225,7 @@
         },
         {
           "type": "p",
-          "text": "Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget."
+          "text": "Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget. An owner can also vouch 200 or 500 beans, and has no budget limit. Once an owner has vouched for you, your vouches can add up to 500 beans in all (300 otherwise)."
         },
         {
           "type": "p",
@@ -596,7 +601,7 @@
             "If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.",
             "An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.",
             "An admin cannot remove a member without the community's vote. Where too few members can vote, an owner may decide it (see \"A small community\"). Where the people who run the server have switched community votes off, the admins remove members themselves.",
-            "Owners and credit-committee admins can make a confirmed member a voucher on the names list.",
+            "Owners and credit-committee admins can make a confirmed member a voucher on the names list. Only an owner makes an admin a voucher, and only an owner stops an admin's budget.",
             "Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.",
             "Admins sort out stuck trades, but never one they are part of."
           ]
@@ -671,11 +676,19 @@
         },
         {
           "type": "p",
-          "text": "Owners and admins are vouchers by role, and an owner or credit-committee admin can make a confirmed member a voucher on the names list. Each voucher receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans)."
+          "text": "Owners are vouchers by role. An admin is a voucher only when an owner makes them one, with no names-list entry needed: being made an admin gives no budget on its own. An owner or credit-committee admin can make a confirmed member a voucher on the names list. Each admin an owner makes a voucher and each voucher on the names list receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans). Owners have no budget limit: their vouches are still recorded on their voucher card, but nothing is taken from a budget, and nobody sets one for them."
         },
         {
           "type": "p",
-          "text": "Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Each voucher can vouch for a person once (raisable up to 100 Beans total), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Trust badges never give this right."
+          "text": "Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Owners can also choose 200 or 500 Beans. Each voucher can vouch for a person once (raisable up to 100 Beans total, or 500 for an owner), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Once an owner has vouched for someone, that person can hold up to 500 Beans of vouches in all, and an owner's vouch can top up someone who already has 3 vouchers, to 500 at most. Trust badges never give this right."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Owner:** 25, 50, 75, 100, 200 or 500 Beans, no budget limit, up to 500 for one person.",
+            "**Admin an owner made a voucher:** 25, 50, 75 or 100 Beans, a budget of 100 to 2,000, up to 100 for one person.",
+            "**Voucher on the names list:** the same as an admin."
+          ]
         }
       ]
     },
@@ -1341,7 +1354,7 @@
         },
         {
           "type": "p",
-          "text": "No invite, but a community near you? Ask it to let you in. On the phone app's first screen, tap **Know a community near you? Ask to join it**, type the community's address or scan its code, and send your request: that makes your account, with no invite and nothing from the BeanPool project. Any of its members can let you in, or, in a community where only the admins invite, its admins. You can also join the global community first and find the community there. See \"Finding a community near you\"."
+          "text": "No invite, but a community near you? Ask it to let you in. On the phone app's first screen, tap **Know a community near you? Ask to join it**, type the community's address or scan its code, and send your request: that makes your account, with no invite and nothing from the BeanPool project. In a browser, open the community's own address, or a listing a member shared with you, and tap **Ask to join**: that makes your account in that browser and sends your request the same way. Any of its members can let you in, or, in a community where only the admins invite, its admins. You can also join the global community first and find the community there. See \"Finding a community near you\"."
         },
         {
           "type": "p",
@@ -1520,7 +1533,11 @@
         },
         {
           "type": "p",
-          "text": "**Vouching on an invite.** If you are a voucher (owners and admins by role, and members set as vouchers on the names list by an owner or committee admin), **Invites** also shows **Vouch for them**: **None**, **25**, **50**, **75** or **100**, taken from your voucher budget. Under the choices, it shows your unspent budget (\"From your budget: 550 of 1,000 left\"). A preset above what is left is greyed (\"Not enough budget left\"), and with nothing left it says \"No budget left. Ask an owner for more.\" Pick an amount and that amount is held from your budget. When the person joins with the invite, they receive that starting credit line from your budget."
+          "text": "**Vouching on an invite.** If you are a voucher (owners by role, admins an owner has made vouchers, and members set as vouchers on the names list by an owner or committee admin), **Invites** also shows **Vouch for them**: **None**, **25**, **50**, **75** or **100**, taken from your voucher budget. Under the choices, it shows your unspent budget (\"From your budget: 550 of 1,000 left\"). A preset above what is left is greyed (\"Not enough budget left\"), and with nothing left it says \"No budget left. Ask an owner for more.\" Pick an amount and that amount is held from your budget. When the person joins with the invite, they receive that starting credit line from your budget."
+        },
+        {
+          "type": "p",
+          "text": "**If you are an owner,** you have no budget limit: the choices also include **200** and **500**, none is greyed for budget, and the line under them reads \"From your budget: No limit\". Every vouch you make is still recorded on your voucher card."
         },
         {
           "type": "ul",
@@ -1533,11 +1550,11 @@
         },
         {
           "type": "p",
-          "text": "**Vouching for someone already inside.** A voucher can also vouch for a member who has already joined: open their profile and tap **Vouch for @name**, choosing from the same presets (**25**, **50**, **75** or **100** Beans) from your budget. You can only vouch for each person once, though you can later raise your vouch for them up to 100 in total. At most 3 vouchers may vouch for the same person (up to 300 Beans total). You cannot vouch for someone who is below zero: hardship help goes through credit-line gifts or community Decisions."
+          "text": "**Vouching for someone already inside.** A voucher can also vouch for a member who has already joined: open their profile and tap **Vouch for @name**, choosing from the same presets (**25**, **50**, **75** or **100** Beans, and **200** or **500** for an owner) from your budget. You can only vouch for each person once, though you can later raise your vouch for them up to 100 in total (500 for an owner). At most 3 vouchers may vouch for the same person (up to 300 Beans total). Once an owner has vouched for someone, they can hold up to 500 Beans of vouches in all, and an owner can top up someone who already has 3 vouchers, to 500 at most. You cannot vouch for someone who is below zero: hardship help goes through credit-line gifts or community Decisions."
         },
         {
           "type": "p",
-          "text": "**The Vouchers block.** Owners and credit-committee admins see a **Vouchers** block at the top of **Invites** (behind the person icon with a plus). It lists each voucher, their remaining budget, how many people they have vouched for, and how many are below zero. Tapping a voucher opens their voucher card, where owners and committee admins can adjust their budget with **Set budget to**. A final row, **+ Make someone a voucher**, opens the names list."
+          "text": "**The Vouchers block.** Owners and credit-committee admins see a **Vouchers** block at the top of **Invites** (behind the person icon with a plus). It lists each voucher, their remaining budget, how many people they have vouched for, and how many are below zero. Tapping a voucher opens their voucher card, where owners and committee admins can adjust their budget with **Set budget to**. An owner's row and card read **No limit** instead, with no **Set budget to**. A final row, **+ Make someone a voucher**, opens a list of who can be made one, in two parts: **Admins** (only an owner sees these; no names-list entry is needed) and **Confirmed on the names list**. Pick someone, set their budget (it starts at the community's default), and tap **Make @name a voucher**. The web shows the same list, by callsign. A voucher's card has **Stop vouching**: an owner can stop an admin's budget, and an owner or committee admin can stop a member's. Nobody can stop an owner's."
         },
         {
           "type": "p",
@@ -1568,7 +1585,7 @@
         },
         {
           "type": "p",
-          "text": "People can ask to join your community from the global community, or from the phone app's first screen with your community's address. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Under each request: when they asked, and where they came from, such as **from global.beanpool.org**, or **from the BeanPool app** when they asked another way. In the web app, open **People**, then **Invites**: the requests are listed there too, with the same two buttons."
+          "text": "People can ask to join your community from the global community, or from the phone app's first screen with your community's address. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Under each request: when they asked, and where they came from, such as **from global.beanpool.org**, or **from the BeanPool app** when they asked another way. When they asked after reading a listing a member shared outside, one more line says so, such as **After reading 'Short-term shelter available', which Sarah shared outside.** It tells you where they heard of your community. It is not a recommendation, and the person asking never sees it. In the web app, open **People**, then **Invites**: the requests are listed there too, with the same two buttons."
         },
         {
           "type": "p",
@@ -1813,6 +1830,10 @@
             "Type the community's address, such as riverside.example.org, or tap **Scan a code** and point the camera at its code. The camera is asked for only then. The list of communities near you shows once you have an account.",
             "Tap **Ask to join**, check your name, write a few words about yourself, and tap **Send**."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A community's card does the same: open its address, or a post a member shared with you, and tap **Ask to join** and the community's name."
         },
         {
           "type": "p",
@@ -2941,7 +2962,7 @@
         {
           "type": "ul",
           "items": [
-            "**Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you look around global first, join there to get an account, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**",
+            "**Ask to join**: write your name and a few words about yourself, and tap **Send**. That makes your account here, in this browser, and sends your request to this community: its members decide, and no invite is needed. The page then says when you asked and that your request arrived; it checks for an answer while it is open, and **Check again** asks now. When a member says yes, tap **Join** and the community's name: your account joins, you choose a photo, and you see your 12 words for the first time. Write them down. You can **Cancel my request**, and ask again after 24 hours. A request that is no longer open can be forgotten with **Forget this request**, which removes the account it made from this browser. On an Android phone with the BeanPool app, **Ask to join** opens the community's card in the app, and **or ask here in your browser** asks from the browser instead.",
             "**I have an invite**: the form for your invite code.",
             "**Already a member**: the ways back into your account.",
             "**Look around the global community**: where the community links to one."
@@ -2949,7 +2970,7 @@
         },
         {
           "type": "p",
-          "text": "In the app, a community's address opens its card too. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and send a few words about yourself: the request goes to that community, as from **Find a community**. With an invite, tap **I have an invite**, then paste it under **Join Another Community**."
+          "text": "In the app, a community's address opens its card too, and so does **Ask to join** on a post someone shared with you. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and its name, and send your name and a few words about yourself: the request goes to that community, as from **Find a community**. With no account on the phone yet, the card says so under the button: sending makes your account on this phone, with nothing from the BeanPool project, and the app's first screen then shows your request until the community answers. When a member says yes, tap **Join** and the community's name: you choose a photo and see your 12 words for the first time. With an invite, tap **I have an invite**: with an account, paste it under **Join Another Community**; with none, the app's invite step asks for it."
         },
         {
           "type": "h2",
@@ -3249,16 +3270,18 @@
         },
         {
           "type": "p",
-          "text": "On the global community, the sign-in you joined with brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one."
+          "text": "The sign-in you joined with, or linked in Settings, brings your account back to a browser: one whose saved data was cleared, or a new one on another computer. You get the same account, never a second one."
         },
         {
           "type": "ul",
           "items": [
-            "Tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.)",
+            "On the global community, tap **Already have BeanPool?**, then **Use my sign-in**. (After **Join**, **I joined with a sign-in before** does the same.) On your own local community's web address, tap **Restore Existing Identity**, then **Recover with Social Sign-In**.",
             "A browser too old to hold a BeanPool account says so here instead of offering these, as it does in place of **Join**. Use an up-to-date Chrome, Firefox, Safari or Edge.",
-            "Type your name here. Tap your account when it shows.",
+            "The page shows the community it looks in: the one whose web address you opened. There is nothing to type.",
             "Choose the sign-in you joined with: **Google**, **Apple** or **Facebook**. As when joining, the page takes you to that company's own sign-in and brings you back.",
-            "The page opens your account's locked copy in the browser, and checks that it really is the account you tapped. If it isn't, it says **That isn't** (the name) and saves nothing.",
+            "The page says **Finding your account…** while the community finds the account that sign-in protects. If it protects more than one account there, the page asks **Which account is yours?**: tap yours.",
+            "If no account at that community uses the sign-in, the page says so. Try your own community's web address, or your 12 words.",
+            "The page opens your account's locked copy in the browser, and checks that it really is the account the community found. If it isn't, it says **That isn't** (the name) and saves nothing.",
             "You're in, with your 12 words when the copy kept them: an account that joined in a browser always has them. If the copy didn't keep them, this browser doesn't have them, and Settings says so (see \"Keep your 12 words\" below)."
           ]
         },
@@ -3272,7 +3295,7 @@
         },
         {
           "type": "p",
-          "text": "If you sign in with an account that isn't the one you joined with, the page says so and lets you choose again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in)."
+          "text": "If you sign in with an account that isn't the one you joined with, the page says no account there uses it, and lets you start again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in)."
         },
         {
           "type": "p",
@@ -3712,7 +3735,7 @@
         },
         {
           "type": "p",
-          "text": "Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off."
+          "text": "Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. When someone asks to join after reading it, its row counts them, such as **2 asked to join from this link**, and your phone tells you: **Someone asked to join after a listing you shared.** It never says who. Where only admins answer requests, the count is all you see. The person who wrote the listing is not told. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off."
         },
         {
           "type": "h3",
@@ -3739,11 +3762,12 @@
     {
       "slug": "posting",
       "title": "Posting an Offer or a Need",
-      "summary": "Put up something you can do or give, or something you are looking for.",
+      "summary": "Put up something you'll give or do for others, or something you are looking for.",
       "section": "market",
       "related": [
         "a-deal-step-by-step",
         "my-deals",
+        "standing-deals",
         "map-pins",
         "credit-line"
       ],
@@ -3776,13 +3800,13 @@
           "type": "ul",
           "items": [
             "Tap **+ ADD POST** on the Market tab or the Map.",
-            "Choose **Offer** or **Need**. The form opens on the Map.",
+            "Choose **Offer** (something you'll give or do for others) or **Need** (something you're looking for). The line under each choice says the same. The form opens on the Map.",
             "**Title:** a few words, up to 50 characters on the phone. \"Sourdough loaf\", \"Lift to town on Fridays\".",
             "**Category:** pick the closest one.",
             "**Description:** what, when, where, anything people should know.",
             "**Photos:** at least one, up to five. Tap **Camera**, **Gallery** (which opens on **Albums**), or **Browse files** (to choose from any folder on the device). Every Offer and Need needs at least one photo.",
             "**Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See \"Where your pin goes\".",
-            "**Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.",
+            "**Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away. A listing priced at 0 reads **Free** wherever its price is shown, with no Beans sign, and a Need at 0 reads **Free help wanted** on its own page. A post priced above 0 **/ Wk** or **/ Mo** makes a standing deal when someone takes it up: each week or month is paid when it starts. A free post, or a thing you lend with a weekly fee, does not. See \"Standing deals\".",
             "Tap **Post Offer** or **Post Need**."
           ]
         },
@@ -3799,7 +3823,7 @@
           "items": [
             "Tap the **+** button on the Map (named **New Post**), or **+ ADD POST** on the Market.",
             "To place your pin, tap **My location**, or tap **Drop a pin** and then tap the map. There is no **Confirm Pin**.",
-            "The price is a number box and a unit list. There is no **FREE** button: type 0 to give it away.",
+            "The price is a number box and a unit list (**Total**, **/ Hr**, **/ Dy**, **/ Wk**, **/ Mo**). There is no **FREE** button: type 0 to give it away.",
             "The title has no 50-character limit.",
             "The button says **Map location required** or **Fill required fields** while something is missing. It also stays grey until you have added at least one photo.",
             "The form keeps no draft."
@@ -4079,6 +4103,7 @@
       "section": "market",
       "related": [
         "a-deal-step-by-step",
+        "standing-deals",
         "posting",
         "your-balance",
         "when-a-deal-goes-wrong",
@@ -4104,14 +4129,14 @@
         {
           "type": "ul",
           "items": [
-            "**In Progress:** deals under way, and requests waiting for an answer. Each card says whose step is next, for example **Waiting on you: answer** (someone has asked), **Waiting on you: release** (the beans are held and the deal is done) or **You asked · waiting on** the other member. A deal with the beans held safely is marked **Held in Trust**. The number on the tab counts the cards listed underneath.",
+            "**In Progress:** deals under way, and requests waiting for an answer. Each card says whose step is next, for example **Waiting on you: answer** (someone has asked), **Waiting on you: release** (the beans are held and the deal is done) or **You asked · waiting on** the other member. A deal with the beans held safely is marked **Held in Trust**. A standing deal holds nothing, so it is marked **🔁 STANDING** and shows the same line as its post, such as **This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec**; while it runs well it is not waiting on you, and it adds nothing to the red number. If a period could not be paid, the card of the person paying says **⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Nov or it ends**, and that does count. The card of the person being paid says **This month isn't paid yet · we'll keep trying until 24 Nov**, and does not count. The number on the tab counts the cards listed underneath.",
             "**My Posts:** your Offers and Needs that are up, or **PAUSED**. A post someone has asked for shows **Action Required**.",
-            "**History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person."
+            "**History:** finished, cancelled and declined deals. Choose **All**, **Received** or **Given**. Each shows the date, the amount and the other person. A standing deal stopped with **Stop now** says so: **Stopped by you on 12 Dec · this month unpaid · nothing owed** or **Stopped by** their name **on 12 Dec · …**. One that ended because a period was never paid says that. A standing deal that ended any other way, stopped with **Stop…**, run to its number of periods or ended because its post was removed, gets no extra line."
           ]
         },
         {
           "type": "p",
-          "text": "Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal. A request nobody answers ends by itself after 7 days."
+          "text": "Tap a deal in **In Progress** or **My Posts** to open the post. That is where you accept, finish or cancel a deal, or stop a standing deal with **Stop…**. A request nobody answers ends by itself after 7 days. See \"Standing deals\"."
         },
         {
           "type": "h2",
@@ -4119,7 +4144,7 @@
         },
         {
           "type": "p",
-          "text": "A finished trade in **History** has a **Review** button. After you review, it says **Edit**, and you can change your stars."
+          "text": "A finished trade in **History** has a **Review** button. After you review, it says **Edit**, and you can change your stars. A standing deal asks for one review, not one for each month."
         },
         {
           "type": "p",
@@ -4136,7 +4161,8 @@
         "my-deals",
         "when-a-deal-goes-wrong",
         "posting",
-        "how-it-works"
+        "how-it-works",
+        "standing-deals"
       ],
       "blocks": [
         {
@@ -4146,6 +4172,10 @@
         {
           "type": "p",
           "text": "When a deal starts, the person paying has their beans **held in trust**. Nobody can spend held beans. When the job is done, the person paying releases them and the other person is paid. The screens call the beans \"credits\" in a few places; they mean the same thing."
+        },
+        {
+          "type": "p",
+          "text": "Most posts priced by the week or the month make a **standing deal** instead. It holds nothing: each week or month is paid when it starts. This page is about the other deals. For a standing deal, and which posts make one, see \"Standing deals\"."
         },
         {
           "type": "p",
@@ -4160,6 +4190,7 @@
           "items": [
             "Open the Offer and tap **Accept Offer**.",
             "If it is priced by the hour, say how many hours.",
+            "If it is priced by the week or the month, a **Take this up?** screen opens instead, and the first week or month is paid straight away. See \"Standing deals\".",
             "Tap **Confirm**. Your beans are held straight away, and the seller is told. There is no waiting for the seller to say yes.",
             "A chat with the seller opens. Agree when and where."
           ]
@@ -4175,7 +4206,7 @@
         {
           "type": "ul",
           "items": [
-            "Open the Need and tap **I can do this**. Under it the app says in one sentence what you would be paid and what happens next, such as: **You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.** A Need with nothing to pay says **You'd do it for free** instead. If it is priced by the hour, day, week or month, say how many first, and the amount follows. Then tap **Confirm**.",
+            "Open the Need and tap **I can do this**. Under it the app says in one sentence what you would be paid and what happens next, such as: **You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.** A Need with nothing to pay says **You'd do it for free** instead. If it is priced by the hour or day, say how many first, and the amount follows. Then tap **Confirm**. A Need priced by the week or month asks nothing more: it is a standing deal, and the person who posted it chooses how long it runs. See \"Standing deals\".",
             "Your request shows the market fee: **You have requested to earn 20 credits (19.70 net after 1.5% transaction fee)**. The fee goes to your community's Commons, and comes off when you are paid.",
             "The person who posted it decides. Until then you can tap **Withdraw Request**. If they do not answer in 7 days, the request ends by itself and you are both told.",
             "They see your request under **Fulfillment Requests**, and can **Message** you, **Deny** it or **Approve & Commit**.",
@@ -4189,6 +4220,10 @@
         {
           "type": "h2",
           "text": "While the beans are held"
+        },
+        {
+          "type": "p",
+          "text": "A standing deal holds nothing, so none of this applies to it: it has no **Release Credits** and no button to call a hold off. See \"Standing deals\"."
         },
         {
           "type": "p",
@@ -4225,6 +4260,7 @@
             "**You are helping with someone's Need, and they said yes:** **You're helping with this · 20 Beans held for you**, or **no Beans held** on a free Need, and **Pending Release by** their name. Do the job; they release the beans.",
             "**You offered to help, and they have not answered:** **You offered to help · waiting on** their name, and the button to withdraw.",
             "**You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**, or **no Beans held** on a deal for nothing, such as a thing you lend for free. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name. Each line has **Message** for the person in that deal, and **All your deals ›** sits under them.",
+            "**A standing deal is running on it:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then when this month was paid and when the next goes, with **Stop…** and **Message**. Both of you see it, and neither has a **Release Credits**. See \"Standing deals\".",
             "**Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.",
             "**You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again."
           ]
@@ -4280,11 +4316,267 @@
         },
         {
           "type": "p",
+          "text": "A standing deal asks for one review, on its first period, and never again."
+        },
+        {
+          "type": "p",
           "text": "Everyone in your community can read the stars and words of a review. Only the two people in the trade can see who wrote it and which deal it was about."
         },
         {
           "type": "p",
           "text": "Stars matter. A low average reduces how much trust the other person earns from their trades. Be fair."
+        }
+      ]
+    },
+    {
+      "slug": "standing-deals",
+      "title": "Standing deals",
+      "summary": "Paying for something by the week or the month. Each week or month is paid when it starts, nothing is held, and either of you can stop it.",
+      "section": "market",
+      "related": [
+        "a-deal-step-by-step",
+        "my-deals",
+        "when-a-deal-goes-wrong",
+        "posting",
+        "credit-line",
+        "holiday-mode",
+        "notifications"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What a standing deal is"
+        },
+        {
+          "type": "p",
+          "text": "A standing deal is one agreement that pays again every week or every month: storing a car, a weekly lift, a regular clean. You agree once. After that the same amount goes from the person paying to the person providing at the start of each week or month, until one of you stops it or the number of weeks or months you chose runs out."
+        },
+        {
+          "type": "p",
+          "text": "It starts when you take up a post priced **per week** or **per month**. The card shows **/wk** or **/mo**. Every other post makes the one-off deal in \"A deal, step by step\": a price by the hour or by the day, a fixed total, a free post, and a thing you lend."
+        },
+        {
+          "type": "p",
+          "text": "Two names are used on this page. **The payer** is the person who pays: whoever takes up an Offer, or whoever posted a Need. **The provider** is the person who is paid."
+        },
+        {
+          "type": "h2",
+          "text": "Nothing is held"
+        },
+        {
+          "type": "p",
+          "text": "A one-off deal holds the payer's Beans in trust until the job is done. A standing deal holds nothing. Each week or month is **paid when it starts**, like rent paid in advance, so the provider has the Beans before the work."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "There is no **Release Credits**, no **Cancel Trust Hold** and no **Hold back** on a standing deal. There is nothing held to release, so nobody has a tap to make each month.",
+            "The 1.5% market fee comes off what the provider is paid, as in any deal, and goes to your community's Commons.",
+            "A payment is final. If you pay for a month and get nothing, the most you lose is that month, because you can stop the rest with one tap. The app cannot take a paid month back, and with nothing held there is nothing for an admin to settle. See \"When a deal goes wrong\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Taking up an Offer"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Open the Offer and tap **Accept Offer**. A screen, **Take this up?**, opens in place of the hours. It says the title, the amount and who it is from, such as **Vehicle Storage · 50 Beans a month · from Rob**.",
+            "Under **How long?** choose **Until one of us stops it**, or **For 6 months** (or weeks). The **−** and **+** change the number, from 1 to 52.",
+            "Under **Start:** choose **Today**, or **Up to 30 days ahead** and use the **−** and **+** to pick the day.",
+            "Read the lines under that. They say what happens now, such as **50 Beans go to Rob now for the first month (9 Nov – 9 Dec), then 50 at the start of each month, until one of you stops it.** If you chose a later start, the first period is still paid when you tap Agree, and it covers the period that begins on your start day.",
+            "Tap **Agree and pay 50 Beans**. Or tap **Cancel** and nothing happens."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your phone (or your browser) signs one agreement with your key when you tap Agree. It names the amount, the week or month, how many, who is paid and the start day. Your community's server can only pay exactly that: never more, never more often, never past the count, never to anyone else."
+        },
+        {
+          "type": "p",
+          "text": "If you do not have the room to pay the first period, **Agree** is greyed out and the screen says why, such as **You need 50 Beans of room; you have 30**. Your room is your balance plus the credit line you can use. See \"Your credit line\"."
+        },
+        {
+          "type": "h2",
+          "text": "Helping with a Need"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "On a Need priced per week or per month, tap **I can do this** as for any Need. You are not asked how many weeks or months. You offer to help, and the person who posted it chooses how long it runs.",
+            "The person who posted the Need sees your request and taps **Approve & Commit** (in the web app, **Approve & Hold in Trust**, though nothing is held on a standing deal). The same **Take this up?** screen opens on their side, and they tap **Agree and pay**.",
+            "The person who posted the Need is the payer. They pay you the first period at once, and each one after at its start."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What each of you sees"
+        },
+        {
+          "type": "p",
+          "text": "The post shows the deal, so you never have to look for it, in the phone app and the web app alike. Your deals marks it **🔁 STANDING** and shows the same line as the post."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The payer sees:** **🔁 Standing deal since 9 Nov · 50 Beans a month**, then **This month's 50 went to Rob on 9 Nov · the next 50 go on 9 Dec**. If you chose a number, it also says **Month 3 of 6**.",
+            "**The provider sees:** **Marty's standing deal · 50 Beans a month · paid for this month on 9 Nov · next on 9 Dec**.",
+            "Both have **Stop…** and **Message**. Nothing else: no Release, no Cancel, no Hold back."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A standing deal that is running well never adds to the red number on **Your deals** or to the count on the bell: it is not waiting on anyone."
+        },
+        {
+          "type": "p",
+          "text": "Each time a period is paid:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The payer** gets a Ledger row, such as **Standing deal · Vehicle Storage · month 3**, and a line in the deal's chat. There is no alert: it is your own standing order.",
+            "**The provider** gets an alert, as for any payment, and the same Ledger row and chat line: **50 Beans for Vehicle Storage came in from Marty · month 3**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Dates"
+        },
+        {
+          "type": "p",
+          "text": "Weeks are exactly 7 days. A month keeps the day you started on, at about the same time of day, and a month without that day uses its last one. A deal that starts on 31 January is paid again on 28 February (29 in a leap year), then 31 March, then 30 April. It never slips: each date is worked out from the start, not from the one before."
+        },
+        {
+          "type": "h2",
+          "text": "Stopping it"
+        },
+        {
+          "type": "p",
+          "text": "Either of you can stop a standing deal at any time. Tap **Stop…** and the app asks first."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The payer** sees **Stop after this month?** and **You've paid for this month; Rob keeps it; nothing more is paid.**",
+            "**The provider** sees **Stop after this month?** and **Nothing more will be paid to you after 9 Dec.**",
+            "Tap **Stop it** to go ahead, or **Keep it** to leave it running. In the web app the buttons are **OK** and **Cancel**. (On a weekly deal it says **week**.)"
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The period that is paid stays paid, and the deal ends when it ends. The card says **Stops on 9 Dec · this month is paid**, and the other person is told. A post that is not Repeatable goes back on the market when the deal ends. Pausing a post does not stop its standing deals."
+        },
+        {
+          "type": "h2",
+          "text": "When the next period cannot be paid"
+        },
+        {
+          "type": "p",
+          "text": "A period is due when it starts. If the payer does not have the room to pay it, the deal is **short**, and nobody is left guessing."
+        },
+        {
+          "type": "p",
+          "text": "**The warning.** A few days before (3 for a month, 1 for a week), if the payer's room would not cover it, the payer gets an alert that says so: **Vehicle Storage: 50 Beans go to Rob on 9 Dec and you're 30 short. Earn or receive Beans by then, or stop the standing deal.** The provider is told nothing at this point. Only the payer ever hears their balance or how short they are."
+        },
+        {
+          "type": "p",
+          "text": "**The grace.** If the period is due and not paid, the deal gets a grace of **half a period**: about 15 days on a monthly deal, 3½ days on a weekly one. The app names the last day. During the grace:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The server tries again every hour.",
+            "**The moment Beans reach the payer**, whatever way (a payment for something, a gift, a refund), the whole period is paid to the provider at once. It is never paid in parts, and the dates stay the same.",
+            "If the payer's room grows without Beans arriving, such as a higher credit line, the next hourly try pays it, so it can take up to an hour.",
+            "**Either of you can stop it now** (see below).",
+            "If nothing arrives and nobody stops it, the deal ends when the grace ends."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Example, a month.** Marty pays Rob 50 Beans a month for Vehicle Storage. The second month is due on 9 Dec, and Marty is 30 Beans short."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "6 Dec: Marty is warned that he will be 30 short. Rob hears nothing.",
+            "9 Dec: the 50 cannot be paid. Both are told. Marty's card says **⚠️ This month's 50 Beans couldn't be paid · 50 needed by 24 Dec or it ends**. Rob's says **This month isn't paid yet · we'll keep trying until 24 Dec**, and he can stop it now.",
+            "About 16 Dec, halfway: both get a reminder, such as **Vehicle Storage: 50 Beans 7 days overdue. Earn or receive Beans by 24 Dec, or it ends.**",
+            "17 Dec: someone pays Marty enough for a job to cover it. The 50 goes to Rob straight away, and both are told: **Vehicle Storage: this month's 50 Beans have gone to Rob.** The next 50 is still due on 9 Jan.",
+            "Had nothing arrived: on 23 Dec both are told it ends tomorrow unless the 50 reaches Rob. On 24 Dec it ends. Marty is told **Vehicle Storage ended: this month's Beans couldn't be paid. Nothing more will be taken. Talk to Rob about it.** Rob is told **Marty's Vehicle Storage ended: this month's Beans couldn't be paid. Nothing is owed through the app for the days since 9 Dec.**"
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Example, a week.** Ana pays Sam 20 Beans a week for a weekly lift, due each Monday. The grace is 3½ days, so a week that is not paid on Monday has until about Thursday. A weekly deal has no halfway reminder, because it would come only 18 hours before the one that says it ends tomorrow. The rest is the same: the warning the day before, both told on Monday, paid the moment Beans arrive, and both told on the Wednesday that it ends unless the 20 arrives."
+        },
+        {
+          "type": "h2",
+          "text": "While it is short: Stop now"
+        },
+        {
+          "type": "p",
+          "text": "On a short deal the button on both cards becomes **Stop now**, for the payer as well as the provider."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The payer** sees **Stop it now?** and **It ends now. This month's 50 Beans aren't paid and won't be; nothing is owed through the app for the days since 9 Dec. Talk to Rob about it.**",
+            "**The provider** sees **Stop it now?** and **It ends now. This month's 50 Beans won't come; nothing is owed through the app for the days since 9 Dec.**",
+            "**Stop it** ends the deal at once. Nothing is paid for that period, now or later, and the Ledger shows nothing for it. The other person is told in words like **Marty stopped Vehicle Storage. This month's 50 Beans weren't paid; nothing is owed through the app for the days since 9 Dec.**",
+            "**Keep it** leaves it running.",
+            "In the web app the buttons are **OK** and **Cancel**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**\"Nothing is owed through the app\"** means BeanPool keeps no tab for the unpaid days. If Rob stored the car for two weeks of that month and the two of you think something is owed, settle it between you. The app will not count it, and nothing in it can collect it."
+        },
+        {
+          "type": "h2",
+          "text": "Where you see it"
+        },
+        {
+          "type": "p",
+          "text": "A short deal is a step for the payer, so while it is short:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Under **Needs you** at the top of the bell (**Notifications**), and on Home's **Needs you** card, the payer has one line: **Vehicle Storage: 50 Beans 3 days overdue · until 24 Dec**. It is amber and counts in the number. On the day it is due, it says **due today**.",
+            "The provider has one too: **Marty's 50 Beans for Vehicle Storage: 3 days overdue · we try until 24 Dec · you can stop it now**. It is listed but does not count, because it is not their step.",
+            "The line rewrites its own days each day. **✕** and **Clear all** do not remove it. It goes by itself when the period is paid, or the deal is stopped or ended. Tap it to open the deal.",
+            "Each alert above is also kept as a notice in the bell, under **Needs you**. You can clear these, and they go by themselves after 7 days. On your lock screen an alert says only **There is news on one of your trades.** The words are in the bell. See \"Notifications\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Other ways it ends"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The count runs out.** You are told when the last period is paid, and it ends on the day that period ends: **Vehicle Storage: the last month of this standing deal is paid. It ends on 9 Jun.**",
+            "**Whoever posted it takes the post down.** The period already paid stays paid and the deal ends when it ends. On a short deal it ends at once. The other person is told.",
+            "**An admin removes the post.** The deal ends now, and both are told. Periods already paid stay paid.",
+            "**Either of you deletes your account, or is removed from the community.** The deal ends at once.",
+            "**The server was away.** If it is off for a short time, the period is paid when it is back, with the dates unchanged. If a whole week or month goes by with nobody to pay it, nothing is paid for it and the deal ends. Both are told: **This community's server was away for longer than a whole period, so the standing deal for Vehicle Storage has ended and nothing was paid for it. Talk to each other, and take it up again if you both want to.**",
+            "**It cannot go on.** If something no longer allows it, it ends and both are told: **The standing deal for Vehicle Storage can't carry on, so it has ended. Nothing more will be paid.**"
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Good to know"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Holiday Mode.** A payer cannot switch on Holiday Mode while a standing deal of theirs is running. The app says **Stop your standing deal for Vehicle Storage first.** A provider can go away while theirs run.",
+            "**Enterprises.** A standing deal cannot pay a keeper of the enterprise that pays it. Pay each job as a deal instead.",
+            "**Reviews.** A standing deal asks for one review, on its first period, not one a month."
+          ]
         }
       ]
     },
@@ -4295,6 +4587,7 @@
       "section": "market",
       "related": [
         "a-deal-step-by-step",
+        "standing-deals",
         "getting-help",
         "reporting",
         "rules"
@@ -4316,7 +4609,8 @@
           "type": "ul",
           "items": [
             "**Before it is agreed:** the person who asked taps **Withdraw Request**. The person who posted a Need taps **Deny**, then **Decline**, and can add a short message. A request nobody answers ends by itself after 7 days.",
-            "**While the beans are held:** either of you can tap **Cancel Trust Hold**, then **Yes, Cancel**. All the held beans go back to the person paying, and the post goes back on the market. The other person is told."
+            "**While the beans are held:** either of you can tap **Cancel Trust Hold**, then **Yes, Cancel**. All the held beans go back to the person paying, and the post goes back on the market. The other person is told.",
+            "**A standing deal:** nothing is held, so there is no hold to cancel. Either of you can tap **Stop…** at any time, then **Stop it** (**OK** in the web app). The week or month already paid stays paid, and nothing more is taken. If the next one could not be paid, the button says **Stop now**, and it ends at once with nothing owed through the app. See \"Standing deals\"."
           ]
         },
         {
@@ -4346,6 +4640,10 @@
         {
           "type": "p",
           "text": "An admin cannot settle a deal they are part of, or one involving an enterprise they keep."
+        },
+        {
+          "type": "p",
+          "text": "These settle held beans. A standing deal holds none, so an admin has nothing to settle in it. If you paid a month and got nothing, tap **Stop…** so no more is paid, talk to them, leave a fair review, and report them if you need to."
         },
         {
           "type": "p",
@@ -4914,14 +5212,14 @@
           "items": [
             "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. On the phone, the chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too, and so are your edits.",
             "Each message is also locked to who sent it, to that one message, to its chat and, if it is a reply, to the message it answers. So the server cannot show your message as the other person's, send it again as a new message, or point your answer at a different message. Where it tries, the app shows **This message couldn't be verified, so it isn't shown.** in the middle of the chat, as nobody's, instead of the words. A photo the server swaps for another reads **Image unavailable**.",
-            "If the server puts a message into another chat, the app refuses it there. When two of your chats with the same person are joined into one, each message carries the chat it came from. One sent since this update then shows with **Moved here from another conversation.** underneath. One sent before it shows the older-version line instead (see below).",
+            "If the server puts a message into another chat, the app refuses it there. When two of your chats with the same person are joined into one, each message carries the chat it came from, and shows with **Moved here from another conversation.** underneath.",
             "Each message also remembers the newest message its writer had when they wrote it. If the server shows it before that one, it reads **Shown out of the order it was written in.** underneath. Two messages written at the same moment, neither after the other, can come in either order without it.",
             "Anything in a chat between two people that is not locked is never shown as either person's words: it reads **This message wasn't encrypted, so BeanPool can't confirm who wrote it.** in the middle of the chat, and its words are not shown. Your list of chats shows the same line.",
             "A message your community's admins send you from the server's admin page is not locked, and is not a private message. It shows in the middle of the chat, never as someone's own message, with **From your community's admins. Not a private message: the community's server can read it.** underneath.",
-            "Messages sent before this update, by any app, were locked without these checks: the server could have changed who they seem to be from, or sent one again. They still open, and every one reads **Sent from an older version of the app: BeanPool can't confirm who wrote it.** underneath, wherever it is in the chat. Someone still on an older app cannot read messages from an updated one until they update.",
-            "A reply shows the message it answers the way that message itself is shown. It names the writer only when their message opened, and carries that message's line underneath, such as the older-version one. It names **Notice** for one of the server's notices and **Your community's admins** for the admins' message. Anything that didn't open or wasn't locked is quoted as **Not confirmed**, with the line that stands in for its words.",
+            "Each message, and each photo in it, is also signed by the person who wrote it. The two of you share one lock, so without the signature either of you could lock words in the other's name. A message that isn't signed by the person it is shown as from never shows as theirs: it reads **This message couldn't be verified, so it isn't shown.** in the middle of the chat, as nobody's, and a photo stays locked. So does a message from an app older than BeanPool 1.4, which didn't sign messages this way. Your community's server refuses a message from an older app, and the app is told to update.",
+            "A reply shows the message it answers the way that message itself is shown. It names the writer only when their message opened, and carries that message's line underneath, such as **Moved here from another conversation.** It names **Notice** for one of the server's notices and **Your community's admins** for the admins' message. Anything that didn't open or wasn't locked is quoted as **Not confirmed**, with the line that stands in for its words.",
             "So the server alone cannot make either of you seem to write words you did not write. It can still hold a message back, deliver it late, or make it read **This message was deleted**. It can show an edited message's earlier words instead of the new ones: both are really the sender's. It sees which message each message answers, but cannot change that unseen. It can add or take away an emoji reaction in either person's name: reactions aren't locked. And it can add its own notices to a chat. A notice shows as a notice, is quoted as **Notice**, and reads **Notice:** in your list of chats, never as either of you.",
-            "Locking proves a message came from one of the two of you, not which one: the other person, with the help of the people who run your server, could put words in your name.",
+            "The signature proves which of the two of you wrote a message. The other person can't make words show as yours, even with the help of the people who run your server: the most they can make is a message that reads as not verified.",
             "All of this rests on your app having the other person's real key, which it gets from your community's server, as the encryption itself does. In the web app it also rests on the app itself, which your community's server sends to your browser. The phone app comes from the app store.",
             "A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.",
             "The notices BeanPool adds to a chat about a deal are not encrypted: Beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.",
@@ -5467,17 +5765,18 @@
         },
         {
           "type": "p",
-          "text": "A voucher can vouch for a member who has already joined, giving them a credit line to start trading with. Vouchers are owners and admins by role, and members set as vouchers on the names list by an owner or credit-committee admin."
+          "text": "A voucher can vouch for a member who has already joined, giving them a credit line to start trading with. Vouchers are owners by role, admins an owner has made vouchers, and members set as vouchers on the names list by an owner or credit-committee admin."
         },
         {
           "type": "p",
-          "text": "On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. No Beans leave the voucher's own wallet."
+          "text": "On the member's profile, a voucher taps **Vouch for @name** and chooses **25**, **50**, **75** or **100** Beans, from their voucher budget. An owner can also choose **200** or **500**, and has no budget limit (\"From your budget: No limit\"). No Beans leave the voucher's own wallet."
         },
         {
           "type": "ul",
           "items": [
-            "**One vouch per person:** each voucher can vouch for a person once. You can later raise your vouch for them, up to 100 Beans in total.",
+            "**One vouch per person:** each voucher can vouch for a person once. You can later raise your vouch for them, up to 100 Beans in total (500 for an owner).",
             "**At most 3 vouchers:** at most 3 vouchers can vouch for the same person (up to 300 Beans total).",
+            "**Up to 500 with an owner:** once an owner has vouched for someone, they can hold up to 500 Beans of vouches in all. An owner can top up someone who already has 3 vouchers, to 500 at most.",
             "**Never below zero:** you cannot vouch for a member who is below zero now. To help someone in debt, members can give part of their credit line on Send, or propose a community Decision."
           ]
         },
@@ -7509,7 +7808,7 @@
             "Your trust badge, your reviews (nobody else can see who wrote a review), and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.",
             "Your posts, and where their pins are. See \"Where your pin goes\".",
             "How you voted on a Poll, but only on a Poll its creator made an **open vote**. Polls are anonymous otherwise, and votes on **Decisions** are always secret.",
-            "Who invited you. On the phone your profile says **Invited by** and their name. If you came in as a founding member or were invited directly by the system admin, it says **Founding member** or **Invited directly by the system admin** instead."
+            "Who invited you. Your profile says **Invited by** and their name, on the phone and on the web, with **owner** or **admin** beside it if they are one (**Invited by marty · owner**). If you came in as a founding member it says **Founding member**; if you joined with an invite card the owners printed with the admin password, it says **Invited with an owner’s invite card**. You can hide it from other members: see \"What you control\", below."
           ]
         },
         {
@@ -7551,6 +7850,8 @@
           "items": [
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
             "**Connections in common:** when you and two people have each added each other, each of them can see your name on the other's profile, as someone they can ask. In Settings, under **Legal & Privacy**, turn off **Show me as a connection in common** and nobody sees your name there. It is on until you turn it off. See \"People and friends\".",
+            "**Who invited you:** in Settings, under **Legal & Privacy**, turn off **Show who invited me to other members** and other members no longer see who invited you, on your profile or in the invite tree. You still see it yourself, and so do the person who invited you and your community's owners and admins. It is on until you turn it off.",
+            "**Who you brought in:** on your own profile, **Brought in** and a number lists the people you invited, when they joined and whether they are still here. The owners and admins see that line on your profile too; other members don't. But any member can open the invite tree (in the web app, **Invites**, then **Tree**), which shows who invited whom, and so the people you brought in. Anyone who turned off **Show who invited me to other members** is shown under you there only to you, to them, and to the owners and admins. On a community that anyone can join without an invite, a member sees only the people they invited themselves.",
             "**Who added you:** when you add someone, they see a line on their People tab saying you added them, so they can add you back. They are not sent a notification.",
             "**Location (phone):** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how. In a web browser there is no such switch: the browser asks you, and remembers your answer.",
             "**Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching. See \"Your area\".",
@@ -7747,6 +8048,14 @@
             "If you leave or delete your account, your confirmation ends. Your entry stays on the admins' list until an admin deletes it: ask them to.",
             "If you are confirmed and you leave, are removed or delete your account while you owe Beans, the Commons covers the debt as always. The admins' list also keeps a note on your entry of what you owed, why and when, for 3 years, and admins see it next to your name on their phones. Nobody can be confirmed against that entry until it is paid back, worked off or forgiven."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Who invited whom"
+        },
+        {
+          "type": "p",
+          "text": "Every member can see who invited you on your profile, with **owner** or **admin** beside their name if they are one, unless you turned off **Show who invited me to other members** in Settings. The owners and admins always see it, switch or not, and so does the person who invited you. On anyone's profile, the owners and admins also see **Brought in** and a number: the people that member invited, when each joined and whether they are still here. Looking is not logged."
         },
         {
           "type": "h2",

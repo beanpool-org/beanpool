@@ -79,6 +79,7 @@
  *   its welcome), an event's start and end as its members see them, and the day's count: no key, no token, nothing about
  *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
  */
+import { assistantBeansOf, hundredthsFromAssistantBeans } from '../money-body.js';
 import crypto from 'node:crypto';
 import {
     approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LEGACY_CATEGORY_ALIASES, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
@@ -708,7 +709,9 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     if (!AGENT_POST_CATEGORIES.includes(category)) {
         return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
     }
-    const credits = num(args.beans) ?? 0;
+    // The assistant gives Beans; the node keeps whole hundredths (money-body.ts): a figure finer than a cent is refused.
+    const credits = args.beans === undefined ? 0 : hundredthsFromAssistantBeans(args.beans);
+    if (credits === null) return { ok: false, error: 'beans is the price in Beans: a number, 0 or more, to the cent.' };
     // Both apps' enterprise forms ask a price of more than 0 (treasury-post.tsx, TreasuryDetailPage), where the node has
     // Beans; a member's own may be 0. Where it has none, none is asked (enterpriseListingRequired).
     if (who.enterprise && getProfileSwitches().beans && credits <= 0) {
@@ -1214,7 +1217,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
 interface MadeRow {
     id: string; type: string; status: string; active: number; title: string; author_pubkey: string; created_by: string | null; created_at: string;
     tags: string; free_tags: string; shown_from_host: string | null;
-    description: string; category: string; credits: number; price_type: string | null; repeatable: number | null; cash_also_needed: number | null;
+    description: string; category: string; price_c: number; price_type: string | null; repeatable: number | null; cash_also_needed: number | null;
     lat: number | null; lng: number | null; shop_id: string | null; photo_count: number;
     lendable: number; lend_max_days: number | null; lend_terms: string | null; replacement_value: string | null;
     event_start_at: string | null; event_end_at: string | null; event_start_local: string | null; event_end_local: string | null; event_tz: string | null; event_place_name: string | null;
@@ -1225,7 +1228,7 @@ interface MadeRow {
 
 /** What update_post can change and my_posts reads back, and what either has to know first. */
 const MADE_COLUMNS = `id, type, status, active, title, author_pubkey, created_by, created_at, tags, free_tags, shown_from_host,
-    description, category, credits, price_type, repeatable, cash_also_needed, lat, lng, shop_id,
+    description, category, price_c, price_type, repeatable, cash_also_needed, lat, lng, shop_id,
     (SELECT COUNT(*) FROM post_photos WHERE post_id = posts.id) AS photo_count,
     lendable, lend_max_days, lend_terms, replacement_value,
     event_start_at, event_end_at, event_start_local, event_end_local, event_tz, event_place_name, event_private_note, event_online, event_link, event_host_lets_in,
@@ -1355,13 +1358,13 @@ function listingEdit(row: MadeRow, grant: AgentGrant, args: Record<string, unkno
         updates.category = category;
     }
     if (args.beans !== undefined) {
-        const beans = num(args.beans);
-        if (beans === undefined || beans < 0) return 'beans is the price in Beans: a number, 0 or more.';
+        const beans = hundredthsFromAssistantBeans(args.beans);
+        if (beans === null) return 'beans is the price in Beans: a number, 0 or more, to the cent.';
         // An enterprise's listing keeps a price of more than 0 where the node has Beans, as its form asks (create_enterprise_listing).
         if (row.author_pubkey !== grant.member && getProfileSwitches().beans && beans <= 0) {
             return "beans must be more than 0: an enterprise's listing has a price, as its form asks.";
         }
-        updates.credits = beans;
+        updates.price_c = beans;
     }
     const flag = notAFlag(args, ['repeatable', 'cash_also_needed', 'lendable']);
     if (flag) return flag;
@@ -1720,7 +1723,7 @@ export function grantIdsWithMadePosts(): string[] {
 /** What update_post can change on an Offer or a Need, for an assistant to read first; words typed are fenced. */
 function listingFieldsOf(r: MadeRow, boundary: string): Record<string, unknown> {
     return {
-        category: categoryRead(r.category, boundary, `post ${r.id}, category`), beans: r.credits, priceType: r.price_type ?? 'fixed', repeatable: r.repeatable === 1, cashAlsoNeeded: r.cash_also_needed === 1,
+        category: categoryRead(r.category, boundary, `post ${r.id}, category`), beans: assistantBeansOf(r.price_c), priceType: r.price_type ?? 'fixed', repeatable: r.repeatable === 1, cashAlsoNeeded: r.cash_also_needed === 1,
         shopId: r.shop_id, lendable: r.lendable === 1, lendMaxDays: r.lend_max_days,
         lendTerms: fence(boundary, `post ${r.id}, lending terms`, r.lend_terms), replacementValue: fence(boundary, `post ${r.id}, replacement value`, r.replacement_value),
     };

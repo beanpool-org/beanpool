@@ -46,6 +46,7 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 // No host but this machine.
 const realFetch = globalThis.fetch;
@@ -78,8 +79,8 @@ type Keypair = ReturnType<typeof makeKeypair>;
 /** `phone`: the phone's Manage hand-off, just now (an owner's fresh proof, admin-auth.ts requireFreshProof). */
 function keySession(kp: Keypair, phone = false): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), phone ? { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS } : {});
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);
@@ -121,12 +122,12 @@ async function runTests() {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         const bodyStr = JSON.stringify(body);
-        const signature = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyStr}`), kp.privateKey).toString('base64');
+        const signature = signRequest(kp.privateKey, { method: 'POST', path, timestamp: ts, nonce, body: bodyStr });
         const res = await fetch(`${base}${path}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Public-Key': kp.pubKeyHex, 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
+                'X-Public-Key': kp.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
             },
             body: bodyStr,
         });

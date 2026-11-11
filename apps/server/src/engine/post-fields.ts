@@ -24,14 +24,18 @@ import {
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
     POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
     FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, freeTagRefusal, freeTagStored, freeTagsOf, storedFreeTags,
+    beans, isHundredths,
 } from '@beanpool/core';
+
+// The deal arithmetic is core's, so the apps show the figure the node holds (packages/beanpool-core/src/hundredths.ts).
+export { dealAmountFor, quantityHundredths } from '@beanpool/core';
 
 // A refusal with values in it, in English, its sentence marked for the way out to find again in the member's language
 // (member-words.ts), as engine/posts.ts writes them.
 const { t: tr } = wordsFor('en');
 
-/** The most Beans one listing may ask, per unit: far above any real price, and far below where arithmetic misbehaves. */
-export const POST_CREDITS_MAX = 1_000_000;
+/** The most one listing may ask, per unit, in whole hundredths: a million Beans, far above any real price. */
+export const POST_PRICE_MAX_C = beans(1_000_000);
 /** The most units (hours, days, …) one deal may be for. */
 export const POST_HOURS_MAX = 10_000;
 /**
@@ -50,7 +54,8 @@ export interface PostFieldsIn {
     title?: unknown;
     description?: unknown;
     category?: unknown;
-    credits?: unknown;
+    /** The price, whole hundredths of a Bean (the wire's `price_c`). */
+    price_c?: unknown;
     priceType?: unknown;
     lat?: unknown;
     lng?: unknown;
@@ -82,9 +87,9 @@ export function dealQuantityFromBody(raw: unknown): number | undefined {
     return NaN;
 }
 
-/** A listing's price in Beans: a finite number, 0 or more, at most POST_CREDITS_MAX. */
+/** A listing's price: whole hundredths of a Bean, 0 or more, at most POST_PRICE_MAX_C. */
 export function isListingPrice(v: unknown): v is number {
-    return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= POST_CREDITS_MAX;
+    return isHundredths(v) && v >= 0 && v <= POST_PRICE_MAX_C;
 }
 
 /** A listing's text the rule refuses for its length, in the words both apps show. */
@@ -131,8 +136,8 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (mode === 'create' || has('title')) text(fields, 'title', 'Title', true, LISTING_TITLE_LIMIT, LISTING_TITLE_TOO_LONG, stored.title);
     if (has('description')) text(fields, 'description', 'Description', false, LISTING_DESCRIPTION_LIMIT, LISTING_DESCRIPTION_TOO_LONG, stored.description);
     if (has('category')) text(fields, 'category', 'Category', true, LISTING_CATEGORY_LIMIT, LISTING_CATEGORY_TOO_LONG, stored.category);
-    if (has('credits') && !isListingPrice(fields.credits)) {
-        throw new Error(`The price must be a number of Beans from 0 to ${POST_CREDITS_MAX}`);
+    if (has('price_c') && !isListingPrice(fields.price_c)) {
+        throw new Error('The price must be a number of Beans from 0 to 1000000');
     }
     if (has('priceType') && !(POST_PRICE_TYPES as readonly unknown[]).includes(fields.priceType)) {
         throw new Error(`The price type must be one of ${POST_PRICE_TYPES.join(', ')}`);

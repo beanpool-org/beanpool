@@ -17,6 +17,15 @@ export type NeedsYouKind = 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite
  */
 export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'knock', 'ask', 'deal', 'vote', 'invite', 'message', 'group'];
 
+/**
+ * Whether a line of "Needs you" counts in the bell's dot and its label. Every line does but one: the payee's live line of a
+ * short standing deal, the one deal line that is not amber, is listed and not counted, because the bell means "your step"
+ * and the step is the payer's (DESIGN-standing-deals-upfront-amend-fable §2).
+ */
+export function needsYouCounts(e: { kind: NeedsYouKind; accent: boolean }): boolean {
+    return e.accent || e.kind !== 'deal';
+}
+
 export const NEEDS_YOU_SLOT = 48;
 
 /**

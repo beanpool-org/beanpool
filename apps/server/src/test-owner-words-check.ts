@@ -8,7 +8,7 @@
  *     derived from the words can be stored); the stored signature re-verifies against the owner's key.
  *  2. GET /api/node/owner/words-check: the owner's own last check, null before; a member → 403.
  *  3. POST /api/local/admin/takeover/words-checks: every current owner with "checked <date>" or null ("not yet");
- *     owners and admins by key session, the admin password too; unauthenticated → 401; a removed owner drops off.
+ *     owners and admins by key session (the node has no admin password); unauthenticated → 401; a removed owner drops off.
  *  4. A never-checked owner can still do everything: their owner routes answer 200.
  *  5. Nothing gates on the record: no server source outside this feature reads the table.
  *  6. The silent open check (slice 6): an owner's app reads the current lock's header (signed), opens its own stanza
@@ -27,12 +27,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bytesOfSignedText } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -51,12 +52,11 @@ function keypair(): Identity {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey, pubObj: publicKey };
 }
-const signText = (who: Identity, text: string) => crypto.sign(null, Buffer.from(text), who.priv).toString('base64');
 
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 /** A member-signed request, exactly as the apps send it: METHOD\nPATH\nTIMESTAMP\nNONCE\nBODY. */
@@ -67,7 +67,8 @@ async function signed(method: 'GET' | 'POST', p: string, signer?: Identity, body
     if (signer) {
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = signText(signer, `${method}\n${p}\n${ts}\n${nonce}\n${raw}`);
+        headers['X-Signature'] = signRequest(signer.priv, { method, path: p, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -92,7 +93,7 @@ async function admin(method: 'GET' | 'POST', p: string, headers: Record<string, 
 async function keySession(who: Identity): Promise<string> {
     const chal = await admin('POST', '/api/local/admin/auth/challenge', {});
     const v = await admin('POST', '/api/local/admin/auth/verify-challenge', {}, {
-        challengeId: chal.body.challengeId, memberPubkey: who.pub, signature: signText(who, chal.body.challenge),
+        challengeId: chal.body.challengeId, memberPubkey: who.pub, ...adminSigninFields(who.priv, chal.body.challengeId, undefined, 'base64'),
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: v.body.handshakeToken }),
@@ -126,12 +127,7 @@ async function main() {
     grantNodeRole(anna.pub, 'owner', 'SYSTEM');
     grantNodeRole(ben.pub, 'owner', anna.pub);
     grantNodeRole(mo.pub, 'admin', anna.pub);
-    const adminPass = 'WordsCheck-Secret-123!';
-    const salt = crypto.randomBytes(16).toString('hex');
-    updateLocalConfig({
-        adminHash: crypto.scryptSync(adminPass, salt, 64).toString('hex'), salt,
-        totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'Words Test',
-    } as any);
+    updateLocalConfig({ communityName: 'Words Test' });
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -169,9 +165,10 @@ async function main() {
         assert(ok.status === 200 && ok.body.wordsCheckedAt === ts, `an owner's statement → 200, dated by the signed timestamp (got ${ok.status} ${ok.body?.wordsCheckedAt})`);
         const row = db.prepare('SELECT * FROM owner_words_checks WHERE member_pubkey = ?').get(anna.pub) as any;
         assert(!!row && Number(row.checked_at) === ts, 'stored against the signer, with that date');
-        const reverifies = crypto.verify(null, Buffer.from(row.signed_payload), anna.pubObj, Buffer.from(row.signature, 'base64'));
+        // The stored text is the format-2 request as signed (its bytes are 0xFF and the text: bytesOfSignedText).
+        const reverifies = crypto.verify(null, Buffer.from(bytesOfSignedText(row.signed_payload)), anna.pubObj, Buffer.from(row.signature, 'base64'));
         assert(reverifies, 'the stored record re-verifies against the owner\'s key');
-        assert(row.signed_payload.endsWith(JSON.stringify(STATEMENT)) && row.signed_payload.startsWith(`POST\n${WC}\n${ts}\n`), 'the record is the fact and the date, nothing else');
+        assert(row.signed_payload.endsWith(JSON.stringify(STATEMENT)) && row.signed_payload.startsWith(`beanpool-request/2\n${signedForHost()}\nPOST\n${WC}\n${ts}\n`), 'the record is the fact and the date, nothing else');
         const cols = (db.prepare('PRAGMA table_info(owner_words_checks)').all() as any[]).map((c) => c.name).sort();
         assert(JSON.stringify(cols) === JSON.stringify(['checked_at', 'member_pubkey', 'signature', 'signed_payload']), `the table holds only those columns (${cols.join(', ')})`);
 
@@ -202,21 +199,12 @@ async function main() {
     const benSession = await keySession(ben);
     const moSession = await keySession(mo);
     {
-        // Step 7c: with the node's 2FA off, the admin password alone reads nothing (it used to read the list); with 2FA
-        // on, the password and a code read it. 2FA goes off again after.
-        const alone = await admin('POST', LIST, { 'x-admin-password': adminPass });
-        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.owners,
-            `with 2FA off the admin password alone is refused (got ${alone.status} ${alone.body?.code})`);
-        const twoFa = turnOn2faForTests(adminPass);
-        const pw = await admin('POST', LIST, twoFa.headers());
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-        assert(pw.status === 200, `with 2FA on, the admin password with a code reads the list (got ${pw.status})`);
-        const owners = pw.body.owners as any[];
+        const byOwner = await admin('POST', LIST, { 'x-admin-session': benSession });
+        assert(byOwner.status === 200, `an owner's key session reads it (got ${byOwner.status})`);
+        const owners = byOwner.body.owners as any[];
         assert(owners.length === 2 && owners.map((o) => o.callsign).join(',') === 'wcAnna,wcBen', `the list is the owners, oldest first (${owners.map((o) => o.callsign)})`);
         assert(typeof owners[0].wordsCheckedAt === 'number' && owners[1].wordsCheckedAt === null, 'Anna checked, Ben not yet');
-        assert(!JSON.stringify(pw.body).includes('signature') && !JSON.stringify(pw.body).includes('signed_payload'), 'the list carries the date only');
-        const byOwner = await admin('POST', LIST, { 'x-admin-session': benSession });
-        assert(byOwner.status === 200 && byOwner.body.owners.length === 2, `an owner's key session reads it (got ${byOwner.status})`);
+        assert(!JSON.stringify(byOwner.body).includes('signature') && !JSON.stringify(byOwner.body).includes('signed_payload'), 'the list carries the date only');
         const byAdmin = await admin('POST', LIST, { 'x-admin-session': moSession });
         assert(byAdmin.status === 200 && byAdmin.body.owners.length === 2, `an admin's key session reads it (got ${byAdmin.status})`);
         const none = await admin('POST', LIST, {});
@@ -246,7 +234,7 @@ async function main() {
     {
         const core = await import('@beanpool/core');
         const OPEN = core.OWNER_LOCK_OPEN_CHECK_PATH;
-        // Step 7c: the password alone reads nothing with 2FA off; Settings reads the list under Ben's owner key session.
+        // Settings reads the list under Ben's owner key session.
         const before = await admin('POST', LIST, { 'x-admin-session': benSession });
         const current = before.body.lock?.envelopeId as string | null;
         assert(typeof current === 'string' && /^[0-9a-f]{32}$/.test(current), `this server holds a take-over lock (${current})`);
@@ -283,7 +271,7 @@ async function main() {
             `@wcBen's last report is about another lock, and says it did not open (${JSON.stringify(byName.wcBen.lockOpen)})`);
         assert(!JSON.stringify(list.body).includes('signature') && !JSON.stringify(list.body).includes('signed_payload'), 'the list carries the date only');
         const row = db.prepare('SELECT signature, signed_payload FROM owner_lock_opens WHERE member_pubkey = ?').get(anna.pub) as any;
-        assert(crypto.verify(null, Buffer.from(row.signed_payload), anna.pubObj, Buffer.from(row.signature, 'base64')),
+        assert(crypto.verify(null, Buffer.from(bytesOfSignedText(row.signed_payload)), anna.pubObj, Buffer.from(row.signature, 'base64')),
             "the stored report re-verifies against the owner's key");
     }
 

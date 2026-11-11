@@ -7,6 +7,16 @@ import Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 
+/**
+ * Money is whole hundredths of a Bean in INTEGER `*_c` columns (1.4.0): written as Beans exactly ('1250' is 12.50), and
+ * anything that isn't a figure (none, NULL) as '—'. A database from before whole hundredths has none of these columns.
+ */
+function beansText(c) {
+    if (!Number.isSafeInteger(c)) return '—';
+    const a = Math.abs(c);
+    return `${c < 0 ? '-' : ''}${Math.floor(a / 100)}.${String(a % 100).padStart(2, '0')}`;
+}
+
 const dbPath = process.argv[2] || (
     process.env.BEANPOOL_DATA_DIR
         ? path.join(process.env.BEANPOOL_DATA_DIR, 'state.db')
@@ -39,7 +49,7 @@ if (tableExists('projects')) {
     const countRow = db.prepare('SELECT COUNT(*) as c FROM projects').get();
     report.crowdfundProjects.count = countRow ? countRow.c : 0;
     if (report.crowdfundProjects.count > 0) {
-        report.crowdfundProjects.rows = db.prepare('SELECT id, creator_pubkey, title, goal_amount, current_amount, status, created_at FROM projects').all();
+        report.crowdfundProjects.rows = db.prepare('SELECT id, creator_pubkey, title, goal_amount_c, current_amount_c, status, created_at FROM projects').all();
     }
 }
 
@@ -64,7 +74,7 @@ if (tableExists('members')) {
         const countRow = db.prepare('SELECT COUNT(*) as c FROM members WHERE is_treasury = 1').get();
         report.treasuries.count = countRow ? countRow.c : 0;
         if (report.treasuries.count > 0) {
-            report.treasuries.rows = db.prepare('SELECT public_key, callsign, status, earned_credit, earned_surplus, working_capital_ceiling FROM members WHERE is_treasury = 1').all();
+            report.treasuries.rows = db.prepare('SELECT public_key, callsign, status, earned_credit_c, earned_surplus_c, working_capital_ceiling_c FROM members WHERE is_treasury = 1').all();
         }
     }
 }
@@ -75,7 +85,7 @@ if (tableExists('transactions')) {
         const countRow = db.prepare('SELECT COUNT(*) as c FROM transactions WHERE project_id IS NOT NULL').get();
         report.projectTransactions.count = countRow ? countRow.c : 0;
         if (report.projectTransactions.count > 0) {
-            report.projectTransactions.rows = db.prepare('SELECT id, from_pubkey, to_pubkey, amount, memo, project_id FROM transactions WHERE project_id IS NOT NULL LIMIT 20').all();
+            report.projectTransactions.rows = db.prepare('SELECT id, from_pubkey, to_pubkey, amount_c, memo, project_id FROM transactions WHERE project_id IS NOT NULL LIMIT 20').all();
         }
     }
 }
@@ -89,21 +99,21 @@ console.log(`Transactions referencing a project: ${report.projectTransactions.co
 if (report.crowdfundProjects.count > 0) {
     console.log('\nCrowdfund Projects:');
     for (const p of report.crowdfundProjects.rows) {
-        console.log(`  - [${p.id}] "${p.title}" by ${p.creator_pubkey.slice(0, 12)}… (${p.current_amount}/${p.goal_amount} Beans, status=${p.status})`);
+        console.log(`  - [${p.id}] "${p.title}" by ${p.creator_pubkey.slice(0, 12)}… (${beansText(p.current_amount_c)}/${beansText(p.goal_amount_c)} Beans, status=${p.status})`);
     }
 }
 
 if (report.commonsProjectsBlob.count > 0) {
     console.log('\nCommons Proposals:');
     for (const cp of report.commonsProjectsBlob.proposals) {
-        console.log(`  - [${cp.id}] "${cp.title}" by ${(cp.proposerPubkey || '').slice(0, 12)}… (${cp.requestedAmount} Beans, status=${cp.status})`);
+        console.log(`  - [${cp.id}] "${cp.title}" by ${(cp.proposerPubkey || '').slice(0, 12)}… (${beansText(cp.requestedAmount_c)} Beans, status=${cp.status})`);
     }
 }
 
 if (report.treasuries.count > 0) {
     console.log('\nTreasuries / Enterprises:');
     for (const t of report.treasuries.rows) {
-        console.log(`  - [${t.public_key.slice(0, 12)}…] ${t.callsign} (status=${t.status}, earnedCredit=${t.earned_credit}, earnedSurplus=${t.earned_surplus})`);
+        console.log(`  - [${t.public_key.slice(0, 12)}…] ${t.callsign} (status=${t.status}, earnedCredit=${beansText(t.earned_credit_c)}, earnedSurplus=${beansText(t.earned_surplus_c)})`);
     }
 }
 

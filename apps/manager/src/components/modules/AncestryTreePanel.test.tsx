@@ -27,7 +27,7 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         // The prune dialog reads the branch's figures from the node before Confirm opens (PruneBranchModal).
-        vi.mocked(nodeClient.fetchBranchPruneFigures).mockResolvedValue({ members: 3, badDebt: 0, surplus: 0, net: 0 });
+        vi.mocked(nodeClient.fetchBranchPruneFigures).mockResolvedValue({ members: 3, badDebt_c: 0, surplus_c: 0, net_c: 0 });
     });
 
     const realPayload = {
@@ -36,21 +36,22 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                 publicKey: 'pk_alice_genesis_0000000000',
                 callsign: 'Alice',
                 invitedBy: 'genesis',
-                earnedCredit: 1400,
+                // Whole hundredths of a Bean, as the node sends earnedCredit (engine members.ts earned_credit_c).
+                earnedCredit: 140000,
                 standing: 'GOOD',
             },
             {
                 publicKey: 'pk_bob_level1_000000000000',
                 callsign: 'Bob',
                 invitedBy: 'pk_alice_genesis_0000000000',
-                earnedCredit: 600,
+                earnedCredit: 60000,
                 standing: 'GOOD',
             },
             {
                 publicKey: 'pk_charlie_level2_0000000000',
                 callsign: 'Charlie',
                 invitedBy: 'pk_bob_level1_000000000000',
-                earnedCredit: 200,
+                earnedCredit: 20000,
                 standing: 'FROZEN',
             },
         ],
@@ -83,7 +84,7 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
             pk_bob_level1_000000000000: { posts: 2, messages: 4 },
             pk_charlie_level2_0000000000: { posts: 1, messages: 1 },
         },
-        tradeTotals: { deals: 4, volume: 200, cancelled: 1 },
+        tradeTotals: { deals: 4, volume: 20050, cancelled: 1 },
         accounts: [
             { publicKey: 'pk_alice_genesis_0000000000', balance: 100 },
             { publicKey: 'pk_bob_level1_000000000000', balance: 50 },
@@ -143,7 +144,8 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         // The community's trade totals, once
         const totals = document.getElementById('community-trade-totals')!;
         expect(totals).toHaveTextContent('Deals: 4');
-        expect(totals).toHaveTextContent('Volume: 200 Beans');
+        // The volume is whole hundredths (getTradeTotals sums amount_c): 20050 is 200.50 Beans.
+        expect(totals).toHaveTextContent('Volume: 200.50 Beans');
         expect(totals).toHaveTextContent('Cancelled: 1');
 
         // Test Filter: ⏸️ Frozen (Charlie)

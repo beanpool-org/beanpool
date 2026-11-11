@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
-import { createDeferredSync, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
+import { BELL_EVENTS, createDeferredSync, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
 import { requestSync, applyLivePostChange, ownCardChanged, lastPillarSyncStartedAt } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
 import { isPlainNodeAddress, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
+import { learnNodeVersion, tooOldVersionOf } from '../utils/node-version-gate';
 
 class WebSocketSyncClient {
     private ws: WebSocket | null = null;
@@ -133,6 +134,14 @@ class WebSocketSyncClient {
                 this.isConnecting = false;
                 return;
             }
+            // A server older than this app talks to (utils/node-version-gate.ts) gets no socket: its health is heard first
+            // when this run hasn't heard it, as for every request to it (utils/node-request-signing.ts).
+            await learnNodeVersion(anchorUrl, fetch);
+            if (typeof tooOldVersionOf(anchorUrl) === 'string') {
+                console.warn('[WS Sync] Refusing a socket to a server older than this app talks to');
+                this.isConnecting = false;
+                return;
+            }
 
             let identity = null;
             try {
@@ -173,6 +182,9 @@ class WebSocketSyncClient {
             }
             // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
             params.push('nr=1');
+            // And the bell's events (@beanpool/core BELL_EVENTS): a build from before them rang a full sync for any unknown
+            // event, so the node sends them only to a socket that says it reads them.
+            params.push('bell=1');
             if (params.length) {
                 wsUrl += `?${params.join('&')}`;
             }
@@ -245,6 +257,13 @@ class WebSocketSyncClient {
                     }
 
                     console.log(`[WS Sync] 📥 Received broadcast message type: ${data.type}`);
+
+                    // The bell (components/NeedsYouIcons.tsx): a notice kept for this member, or some marked seen. Only the
+                    // bell reads again: never a doorbell or a sync (the thing a notice is about rings its own).
+                    if (data.type === BELL_EVENTS.kept || data.type === BELL_EVENTS.seen) {
+                        DeviceEventEmitter.emit('bell_activity', data);
+                        return;
+                    }
 
                     if (data.type !== 'state_snapshot') {
                         // A public offer or need the node sent whole: write it into the cache instead of

@@ -12,8 +12,8 @@
  * producing what a caller would actually get.
  *
  * Verifies:
- *  1. The one request shape that used to work — signed AND carrying the admin password — is refused by the
- *     router: 405, because the sibling GET /api/commons/decisions/:id still matches that path, so
+ *  1. The one request shape that used to work — signed AND carrying node admin credentials (the admin password
+ *     then; the node has none now, so an owner's key session here) — is refused by the router: 405, because the sibling GET /api/commons/decisions/:id still matches that path, so
  *     @koa/router's allowedMethods() answers Method Not Allowed rather than 404. Either way no handler
  *     runs. On a tree that still has the route this request is 200.
  *  2. Nothing ticked: a Decision sitting past its close time is untouched by that request...
@@ -39,12 +39,12 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createDecision, tickDecisions, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const TICK_PATH = '/api/commons/decisions/tick';
-const ADMIN_PW = 'TickRouteGone123!';
 
 // Every assertion runs and failures are reported together, so one broken finding does not hide the others.
 let run = 0, passed = 0;
@@ -59,9 +59,9 @@ function makeMember(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
     const joinedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c)
                 VALUES (?, ?, ?, 'active', 100)`).run(pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
     reconcileLedgerFromDb();
     return { pubKeyHex, privateKey };
 }
@@ -83,9 +83,10 @@ async function signedFetch(
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -103,8 +104,6 @@ async function main(): Promise<void> {
     console.log('\nThe decisions tick route is gone, over real HTTPS\n');
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -112,7 +111,7 @@ async function main(): Promise<void> {
     const subject = makeMember('TickTom');
     // Tina's standing to propose is a completed trade (the earned_credit badge makeMember gives is none).
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), author.pubKeyHex, subject.pubKeyHex, tradedAt, tradedAt);
 
     // A Decision past its close time: the tick has work to do, so "nothing happened" below is a real result.
@@ -127,10 +126,11 @@ async function main(): Promise<void> {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(decision.id);
     assert(statusOf(decision.id) === 'open', `the fixture Decision starts open (got ${statusOf(decision.id)})`);
 
-    // The only shape that ever worked since #1021: a signed request that also carries the admin password.
-    const admin = await signedFetch('POST', TICK_PATH, {}, author, { 'x-admin-password': ADMIN_PW });
+    // The only shape that ever worked since #1021: a signed request that also carries node admin credentials (then the
+    // admin password; the node has none now, so an owner's key session).
+    const admin = await signedFetch('POST', TICK_PATH, {}, author, ownerSessionHeaders());
     assert(admin.status === 405 || admin.status === 404,
-        `a signed POST ${TICK_PATH} with the admin password is refused by the router (got ${admin.status} ${admin.error ?? ''})`);
+        `a signed POST ${TICK_PATH} with an owner's key session is refused by the router (got ${admin.status} ${admin.error ?? ''})`);
     assert(admin.body?.success !== true, 'the refusal carries no tick result');
     assert(statusOf(decision.id) === 'open',
         `and the overdue Decision is untouched — nothing ticked (got ${statusOf(decision.id)})`);

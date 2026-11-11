@@ -13,7 +13,7 @@
  *
  * Anything else, a member's words above all, is shown exactly as written.
  */
-import { t, tn, word, requestsLimitedWords, type WordKey, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT } from '@beanpool/core';
+import { t, tn, word, requestsLimitedWords, formatHundredths, parseHundredths, type WordKey, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT } from '@beanpool/core';
 
 /** utils/name-key-memory.ts markKeyChanged: the details line, alone or after a note the line already had. */
 const KEY_CHANGED_DETAILS = "This phone knew this name on another key, and the new key hasn't confirmed it was theirs.";
@@ -35,7 +35,6 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     [DM_LINE_NOT_VERIFIED_TEXT]: word("🔒 This message couldn't be verified, so it isn't shown."),
     [DM_LINE_NOT_ENCRYPTED_TEXT]: word("⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown."),
     [DM_LINE_DELETED_TEXT]: word('This message was deleted'),
-    "Sent from an older version of the app: BeanPool can't confirm who wrote it.": word("Sent from an older version of the app: BeanPool can't confirm who wrote it."),
     'Shown out of the order it was written in.': word('Shown out of the order it was written in.'),
     'Moved here from another conversation.': word('Moved here from another conversation.'),
     "From your community's admins. Not a private message: the community's server can read it.": word("From your community's admins. Not a private message: the community's server can read it."),
@@ -103,12 +102,23 @@ const PREFIXED: ReadonlyArray<[string, (text: string) => string]> = [
 ];
 
 const NUMBER = String.raw`(\d+(?:\.\d+)?)`;
+/**
+ * A figure db.ts writes in plain ASCII (core hundredthsAsDecimalText: "5", "49.25"), read back as whole hundredths by string
+ * work (never a float), for tn: the plural form from its Beans, `{n}` as formatHundredths writes it in the member's language.
+ * Not a figure (more than two decimals): null, and the line is shown as written.
+ */
+function beansCounted(text: string, say: (n: number, values: { n: string }) => string): string | null {
+    const read = parseHundredths(text, 'en');
+    return read.ok ? say(read.value / 100, { n: formatHundredths(read.value) }) : null;
+}
+/** utils/db.ts formatSystemMessage: a trade's lines with their figure. */
+const BEANS_COUNTED: ReadonlyArray<[RegExp, (n: number, values: { n: string }) => string]> = [
+    [new RegExp(`^${NUMBER} Beans held in trust\\.$`), (n, v) => tn(n, '{n} Beans held in trust.', '{n} Beans held in trust.', v)],
+    [new RegExp(`^Payment of ${NUMBER} Beans released to you\\.$`), (n, v) => tn(n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', v)],
+    [new RegExp(`^Payment of ${NUMBER} Beans released to the provider\\.$`), (n, v) => tn(n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', v)],
+];
 /** Sentences with a number in them; English writes one form for both where it always has. */
 const COUNTED: ReadonlyArray<[RegExp, (n: number) => string]> = [
-    // utils/db.ts formatSystemMessage.
-    [new RegExp(`^${NUMBER} Beans held in trust\\.$`), (n) => tn(n, '{n} Beans held in trust.', '{n} Beans held in trust.')],
-    [new RegExp(`^Payment of ${NUMBER} Beans released to you\\.$`), (n) => tn(n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.')],
-    [new RegExp(`^Payment of ${NUMBER} Beans released to the provider\\.$`), (n) => tn(n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.')],
     // utils/group-history-unlock.ts lockedHistoryRowText.
     [new RegExp(`^🔒 ${NUMBER} messages? from before you changed phones\\. Unlock →$`), (n) => tn(n, '🔒 {n} message from before you changed phones. Unlock →', '🔒 {n} messages from before you changed phones. Unlock →')],
 ];
@@ -130,6 +140,10 @@ const FILLED: ReadonlyArray<[RegExp, (m: RegExpExecArray) => string]> = [
 /** A whole line this table knows, in the member's language, or null. */
 function knownLine(text: string): string | null {
     if (Object.prototype.hasOwnProperty.call(FIXED, text)) return t(FIXED[text]);
+    for (const [pattern, say] of BEANS_COUNTED) {
+        const m = pattern.exec(text);
+        if (m) return beansCounted(m[1], say);
+    }
     for (const [pattern, say] of COUNTED) {
         const m = pattern.exec(text);
         if (m) return say(Number(m[1]));

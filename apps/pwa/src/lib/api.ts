@@ -6,9 +6,9 @@
 import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
-import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury, WaitingVoucherRow } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, readKnockVia, t, type DmLineDisclosure, type KnockVia } from '@beanpool/core';
+import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry, unseenBellNotices, type BellNotice } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -18,6 +18,11 @@ import {
     ed25519Signer,
     type Signer,
     signReEnroll,
+    signStandingAuthorisation,
+    type StandingAuthorisationFields,
+    type StandingPeriodUnit,
+    type StandingPhase,
+    type StandingStartBody,
     audienceOf,
     onboardingEventKey,
     oncePerPersonVariant,
@@ -30,6 +35,7 @@ import type { OwnDecisionVote } from './decision-own-vote';
 import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeCommunity } from './home-cards';
 import { ringProfileSaved } from './profile-saved';
+import { refuseIfNodeTooOld } from './node-version-gate';
 import { rememberLastPhoto } from './last-photo';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
@@ -77,6 +83,8 @@ export async function testNodeConnection(url: string): Promise<{ ok: boolean; ca
     const start = Date.now();
     try {
         const sanitized = url.trim().replace(/\/+$/, '');
+        // A node not known to run 1.4.0 (below it, or its version unread) is refused here, with the gate's line (lib/node-version-gate.ts).
+        await refuseIfNodeTooOld(sanitized);
         const res = await fetch(`${sanitized}/api/community/info`, { cache: 'no-store' });
         const latencyMs = Date.now() - start;
         if (!res.ok) {
@@ -189,6 +197,7 @@ export async function request<T>(method: string, path: string, body?: any, signa
         }
 
         const baseUrl = getNodeApiUrl();
+        if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
         return fetch(`${baseUrl}${path}`, opts);
     };
 
@@ -218,7 +227,9 @@ export async function signedFetch(method: string, path: string, body?: unknown, 
     if (identity && identity.privateKey) {
         Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
     }
-    return fetch(`${getNodeApiUrl()}${path}`, {
+    const baseUrl = getNodeApiUrl();
+    if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
+    return fetch(`${baseUrl}${path}`, {
         method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
     });
 }
@@ -244,22 +255,22 @@ async function refusalError(res: Response): Promise<Error> {
     const error = new Error(err.message || err.error || t('Request failed: {status}', { status: res.status }));
     // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
     if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;
-    // The status travels with the error: a node older than a route answers 404, and a screen that can
-    // hide a feature quietly needs to tell that apart from the node being down or refusing.
+    // The status travels with the error: a screen that reads a 404 as "nothing there" (a decision with no jury,
+    // isRouteMissing) needs to tell that apart from the node being down or refusing.
     (error as Error & { status?: number }).status = res.status;
     // So does the node's own code (a new account's limit, a moderation pause): a form shows those in place,
     // in the node's words (lib/node-refusal.ts).
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
-    // And an existing vouch amount for a member (`already_vouched`), for the raise confirmation prompt.
+    // And an existing vouch total for a member (`already_vouched`, `raise_not_above`), so a screen that took a raise for a first vouch shows the raise card.
     if (typeof err.prior === 'number' && Number.isInteger(err.prior) && err.prior > 0) (error as Error & { prior?: number }).prior = err.prior;
     // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
     if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
     return error;
 }
 
-/** True when a route does not exist on this node — an older node, not a failure worth showing anyone. */
+/** True when the node answered 404: nothing is there (a decision with no jury, say), not a failure worth showing anyone. */
 export function isRouteMissing(e: unknown): boolean {
     return (e as { status?: number } | null)?.status === 404;
 }
@@ -311,6 +322,7 @@ export async function signedFetchWithKey(
         await signedHeaders(method, path, bodyString, privateKeyHex, publicKeyHex));
 
     const baseUrl = getNodeApiUrl();
+    if (baseUrl) await refuseIfNodeTooOld(baseUrl, signal);
     return fetch(`${baseUrl}${path}`, opts);
 }
 
@@ -335,7 +347,7 @@ export interface CommunityInfo {
     memberCount: number;
     postCount: number;
     transactionCount: number;
-    commonsBalance: number;
+    commonsBalance_c: number;
     /** What kind of node this is, and what it does (config/node-profile.ts). Absent on a node older than both. */
     profile?: 'local' | 'global';
     /**
@@ -545,6 +557,23 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
     return Array.isArray(res?.notices) ? res.notices : [];
 }
 
+/** The bell: the signer's own push notices not yet opened, newest first (GET /api/notices/push?unseen=1). */
+export async function getBellNotices(): Promise<BellNotice[]> {
+    return unseenBellNotices(await request<{ notices?: unknown[] }>('GET', '/api/notices/push?unseen=1'));
+}
+
+/** Takes these of the signer's own notices off the bell (a tap on the row, or its ✕); the node ignores an id that is not theirs. */
+export async function markBellNoticesSeen(ids: string[]): Promise<number> {
+    const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { ids });
+    return typeof answer?.marked === 'number' ? answer.marked : 0;
+}
+
+/** "Clear all": every one of the signer's own notices off the bell, in one request (the node marks only the signer's). */
+export async function clearAllBellNotices(): Promise<number> {
+    const answer = await request<{ marked?: number }>('POST', '/api/notices/push/seen', { all: true });
+    return typeof answer?.marked === 'number' ? answer.marked : 0;
+}
+
 /**
  * Marks the signer's own notices seen; the node ignores an id that is not theirs. Once it has, the page hears
  * NOTICES_SEEN_EVENT, so Home's "From your community" goes as the member puts an alert away (lib/home-cards.ts).
@@ -568,7 +597,13 @@ export interface InviteCode {
     usedBy: string | null;
     usedAt: string | null;
     intendedFor?: string;
-    vouchAmount?: number;
+    vouchAmount?: number | null;
+    /** What the node tells the maker of an invite (GET /api/invite/mine): the names-list entry it is bound to, the budget it promises, when it lapses. */
+    namesEntryId?: string | null;
+    voucherLevel?: number | null;
+    expiresAt?: string | null;
+    forKnock?: boolean;
+    usedByCallsign?: string | null;
 }
 
 export async function generateInvite(
@@ -592,7 +627,10 @@ export async function checkInvite(code: string): Promise<InviteCheck | null> {
     try {
         const data: any = await request('GET', `/api/invite/check?code=${encodeURIComponent(code)}`);
         return typeof data?.valid === 'boolean' ? (data as InviteCheck) : null;
-    } catch {
+    } catch (e) {
+        // A community whose invites are off (the global one, 404 `feature_off`): the code is some other community's, and the
+        // join box says so (WelcomePage handleCreate) instead of sending a redeem this community can only refuse.
+        if ((e as { code?: unknown })?.code === 'feature_off') return { valid: false, reason: 'invites_off' };
         return null;
     }
 }
@@ -660,6 +698,7 @@ export async function checkMembership(publicKey: string): Promise<{ isMember: bo
 export async function fetchMembershipAt(community: string, publicKey: string, signal?: AbortSignal): Promise<Response> {
     const path = `/api/community/membership/${encodeURIComponent(publicKey)}`;
     const headers: Record<string, string> = { Accept: 'application/json' };
+    await refuseIfNodeTooOld(community, signal);
     const identity = await loadIdentity();
     if (identity?.privateKey && identity.publicKey === publicKey) {
         Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey, community));
@@ -669,16 +708,18 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
 
 /**
  * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
- * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts). Signed for that
- * host only. The caller keeps its own timeout and reads the Response; a POST carries `bodyString` as JSON.
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts) and the browser it asked
+ * to be told on (lib/web-push.ts). Signed for that host only. The caller keeps its own timeout and reads the Response; a
+ * POST or DELETE carries `bodyString` as JSON.
  */
 export async function signedFetchAt(
-    method: 'GET' | 'POST', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
+    method: 'GET' | 'POST' | 'DELETE', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
 ): Promise<Response> {
+    await refuseIfNodeTooOld(community);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
-    return fetch(`${community}${path}`, method === 'POST'
-        ? { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString }
-        : { method, headers: signed, cache: 'no-cache' });
+    return fetch(`${community}${path}`, method === 'GET'
+        ? { method, headers: signed, cache: 'no-cache' }
+        : { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString });
 }
 
 /**
@@ -691,6 +732,7 @@ export async function signedCopyFetch(
     method: 'GET' | 'POST' | 'DELETE', community: string, path: string, body: unknown, identity: BeanPoolIdentity, signal?: AbortSignal,
 ): Promise<Response> {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
+    await refuseIfNodeTooOld(community, signal);
     const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
     return fetch(`${community}${path}`, {
         method, headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en', ...signed }, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
@@ -712,6 +754,15 @@ function onGlobalCopy(run: (copy: typeof import('./show-on-global'), identity: B
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
     return request('GET', `/api/invite/mine/${encodeURIComponent(publicKey)}`);
+}
+
+/**
+ * Revoke one of this member's unused invites (invites-vouching I2: DELETE /api/invite/:code, signed; the maker, or an owner
+ * for anyone's). A vouch it held comes back to the budget. Refusals throw with the node's sentence and code: 409
+ * `invite_used`, 404 `no_invite` (the community holds no such unused code of theirs).
+ */
+export async function revokeInvite(code: string): Promise<{ revoked: number; returned: number; promiseEnded: boolean }> {
+    return request('DELETE', `/api/invite/${encodeURIComponent(code)}`);
 }
 
 // ===================== WANTS TO JOIN (front doors S2: the phone's utils/knock-inbox.ts) =====================
@@ -740,6 +791,8 @@ export interface JoinRequest {
     /** Where their app says it came from (`global.beanpool.org`); not checked by anyone. */
     fromNode: string | null;
     createdAt: string;
+    /** The listing shared outside it came after and who shared it (shared-listing door A3), or null. */
+    via: KnockVia | null;
 }
 
 export type JoinRequestsResult =
@@ -766,6 +819,7 @@ function readJoinRequest(raw: unknown): JoinRequest | null {
         avatar: typeof k.avatar === 'string' && k.avatar ? k.avatar : null,
         fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
         createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
+        via: readKnockVia(k.via),
     };
 }
 
@@ -818,15 +872,17 @@ export interface MyVouching {
     };
     source?: 'role' | 'entry';
     history?: VoucherHistoryLine[];
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit", never left or level; 200 and 500 too. */
+    noLimit?: boolean;
     presets: number[];
     vouchMax: number;
     budgetMax: number;
-    vouchedBy: { memberPubkey: string; callsign: string; amount: number; at: string }[];
+    vouchedBy: { memberPubkey: string; callsign: string; amount_c: number; at: string }[];
 }
 
 export interface VoucherHistoryLine {
     kind: string;
-    amount: number;
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;
@@ -847,6 +903,8 @@ export interface VoucherSummary {
     madeAt: string | null;
     stoppedAt: string | null;
     stopReason: string | null;
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit" and no set-to, never left or level. */
+    noLimit?: boolean;
     left: number;
     held: number;
     heldInvites: number;
@@ -855,7 +913,9 @@ export interface VoucherSummary {
     level: number;
     belowZero: number;
     writtenOff: number;
-    passedOn: { amount: number; people: number };
+    /** What their vouches that landed in the last 30 days add up to, in hundredths: the card's headline (invites-vouching I4). */
+    vouchedLast30Days?: number;
+    passedOn: { amount_c: number; people: number };
     invitesWithVouch: number;
     trading: { withOthers: number; insideOnly: number };
 }
@@ -866,7 +926,7 @@ export interface VoucherCardData extends VoucherSummary {
         memberPubkey: string;
         callsign: string;
         joinedAt: string | null;
-        amount: number;
+        amount_c: number;
         raised: boolean;
         byInvite: boolean;
         belowZero: boolean;
@@ -876,10 +936,20 @@ export interface VoucherCardData extends VoucherSummary {
         trading: 'others' | 'inside' | 'none';
     }[];
     canChange?: boolean;
+    /** Whether this viewer may stop this budget now: never an owner's; an admin's by an owner only (invites-vouching I5). */
+    canStop?: boolean;
 }
+
+/** Someone "+ Make someone a voucher" offers (I5): an admin (no entry needed), or someone confirmed on the names list. */
+export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
 
 export interface VouchersBlockData {
     vouchers: VoucherSummary[];
+    /** Invites not used yet that promise a voucher budget, by names-list entry id (the name is on the phone). */
+    waiting?: WaitingVoucherRow[];
+    /** Whom "+ Make someone a voucher" offers this viewer (I5): admins (an owner's to make) and confirmed names.
+     *  `adminsOffered`: the node offers this viewer admins at all (an owner); false: only an owner makes an admin a voucher. */
+    candidates?: { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean };
     settings: {
         voucherBudget: number;
         memberGift: number;
@@ -896,16 +966,17 @@ export async function getMyVouching(): Promise<MyVouching | null> {
     return request<MyVouching>('GET', '/api/vouchers/me');
 }
 
+/**
+ * A vouch from a profile: `{ vouchAmount }` for a first vouch (a preset), or `{ raiseTo }` for a raise, the total the vouches
+ * for this person end at (a preset of the voucher's), never an amount to add. The node lands the difference.
+ */
+export type VouchPick = { vouchAmount: number } | { raiseTo: number };
+
 export async function vouchForMember(
     memberPubkey: string,
-    vouchAmount: number,
-    raise?: boolean,
+    pick: VouchPick,
 ): Promise<{ id: string; memberPubkey: string; amount: number; total: number; budget: any }> {
-    return request('POST', '/api/vouch', {
-        memberPubkey,
-        vouchAmount,
-        ...(raise ? { raise: true } : {}),
-    });
+    return request('POST', '/api/vouch', { memberPubkey, ...pick });
 }
 
 export async function getVouchersBlock(): Promise<VouchersBlockData> {
@@ -923,8 +994,30 @@ export async function setVoucherBudget(
     return request('POST', `/api/names/vouchers/${encodeURIComponent(memberPubkey)}/budget`, { level });
 }
 
+/**
+ * Make a voucher (I5): someone confirmed on the names list by its entry, or an admin by their key (an owner only). The budget
+ * is `amount_c`, whole hundredths (the node refuses the old `amount`); left out, the node gives the community's default.
+ */
+export async function makeVoucher(who: { entryId: string } | { memberPubkey: string }, amount_c?: number): Promise<VoucherCardData> {
+    return request('POST', '/api/names/vouchers', { ...who, ...(amount_c === undefined ? {} : { amount_c }) });
+}
+
+/** Stop vouching: the budget ends, its open holds come back; the credit lines given stay. */
+export async function stopVoucher(memberPubkey: string): Promise<VoucherCardData> {
+    return request('DELETE', `/api/names/vouchers/${encodeURIComponent(memberPubkey)}`);
+}
+
 export async function getTrustProfile(targetPubkey: string): Promise<any> {
     return request('POST', '/api/trust/profile', { targetPubkey });
+}
+
+/** Your "Show who invited me to other members" (I3; server members.inviter_shown), yours alone. */
+export async function getProfilePrivacy(): Promise<{ inviterShown: boolean }> {
+    return request('GET', '/api/profile/privacy');
+}
+
+export async function setProfilePrivacy(inviterShown: boolean): Promise<{ success: boolean; inviterShown: boolean }> {
+    return request('PUT', '/api/profile/privacy', { inviterShown });
 }
 
 // ===================== PROFILES =====================
@@ -1274,11 +1367,13 @@ export enum SystemMessageType {
     ESCROW_RELEASED = 'ESCROW_RELEASED',
     ESCROW_CANCELLED = 'ESCROW_CANCELLED',
     DISPUTE_OPENED = 'DISPUTE_OPENED',
-    REVIEW_LEFT = 'REVIEW_LEFT'
+    REVIEW_LEFT = 'REVIEW_LEFT',
+    /** A standing deal's record line (due, covered, ended, stopped in the grace): its words are the node's own sentence. */
+    STANDING_DEAL = 'STANDING_DEAL'
 }
 
 export interface SystemMessageMetadata {
-    amount?: number;        // The Beans involved
+    amount_c?: number;        // The Beans involved
     postId: string;         // Link back to the original post
     actorPubkey: string;    // Who triggered the event (Buyer/Seller)
     txHash?: string;        // The ledger transaction ID for verification
@@ -1336,14 +1431,14 @@ export async function sendMessageApi(
     return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id });
 }
 
+/** Edit a line: a DM line's new words carry their new signature in their own ciphertext (core dm-crypto.ts, format 4). */
 export async function editMessageApi(
     messageId: string,
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
-    lineSig?: DmLineSig,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce, ...(lineSig ? { metadata: { lineSig } } : {}) });
+    return request('POST', '/api/messages/edit', { messageId, authorPubkey, ciphertext, nonce });
 }
 
 /** Report one line of a direct message with what this reporter hands over for it (core dm-line-report.ts). */
@@ -1366,13 +1461,13 @@ export async function getConversations(publicKey: string): Promise<Conversations
 /**
  * What waits for the signer in this community, in counts alone (GET /api/me/unread): the Chat badge's number, without the
  * whole list. A visitor's row never joined, so the counts route refuses it, yet what is sent to it still waits, in the one
- * list it may read; an older node at a pasted address has no such route. Both read their number from the list.
+ * list it may read. Both read their number from the list.
  */
 export async function getMyUnread(publicKey: string): Promise<UnreadAnswer> {
     try {
         return await request('GET', '/api/me/unread');
     } catch (e) {
-        if (!isRouteMissing(e) && (e as { code?: unknown } | null)?.code !== 'not_a_member') throw e;
+        if ((e as { code?: unknown } | null)?.code !== 'not_a_member') throw e;
         const list = await getConversations(publicKey);
         return { unread: list.totalUnread, requests: list.requests?.count ?? 0, asOf: new Date().toISOString() };
     }
@@ -1455,17 +1550,17 @@ export interface TierInfo {
 }
 
 export interface BalanceInfo {
-    balance: number;
-    floor: number;
+    balance_c: number;
+    floor_c: number;
 
     tier: TierInfo;
-    tierCredit?: number;      // the credit `tier` is read from (what they did, never the known grant); memberLevel
-    earnedCredit?: number;
+    tierCredit_c?: number;      // the credit `tier` is read from (what they did, never the known grant); memberLevel
+    earnedCredit_c?: number;
     grantedCredit?: number;   // genesis/admin grants (separate lane, no vote weight)
     qualifiedValue?: number;  // diversity-capped trade value behind the earned score
     avgRating?: number;       // reputation multiplier inputs
     reviewCount?: number;
-    commonsBalance: number;
+    commonsBalance_c: number;
     commons?: number;
     callsign: string;
     trustStats?: {
@@ -1494,11 +1589,11 @@ export interface BalanceInfo {
     /** True if the member has ≥1 live Offer posted (offer covenant, Gate 2). */
     hasLiveOffer?: boolean;
     /** Trust Model v3 — the floor you may actually reach now = shallower of earned limit & what your live Offers unlock. */
-    usableFloor?: number;
+    usableFloor_c?: number;
     /** Trust Model v3 — count of currently-live Offers (drives the offer-band credit ladder). */
     liveOffers?: number;
     /** The known floor's part of the limit (community modes slice 4): one live Offer unlocks all of it. Absent from an older node. */
-    knownGrant?: number;
+    knownGrant_c?: number;
     /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
     frozen?: boolean;
     /** The community's admins froze your known floor (an exception) / your whole line (the manager's Freeze). Absent from an older node. */
@@ -1507,7 +1602,7 @@ export interface BalanceInfo {
     vouchedBy?: Array<{
         memberPubkey: string;
         callsign: string;
-        amount: number;
+        amount_c: number;
         at: string;
     }>;
 }
@@ -1516,8 +1611,8 @@ export interface Transaction {
     id: string;
     from: string;
     to: string;
-    amount: number;
-    taxFee?: number;
+    amount_c: number;
+    fee_c?: number;
     memo: string;
     timestamp: string;
 }
@@ -1526,8 +1621,9 @@ export async function getBalance(publicKey: string): Promise<BalanceInfo> {
     return request('GET', `/api/ledger/balance/${encodeURIComponent(publicKey)}`);
 }
 
-export async function sendTransfer(from: string, to: string, amount: number, memo: string): Promise<{ success: boolean; transaction: Transaction }> {
-    return request('POST', '/api/ledger/transfer', { from, to, amount, memo });
+/** A send of `amount_c` whole hundredths of a Bean (the node refuses anything else, and the old `amount`, with 400). */
+export async function sendTransfer(from: string, to: string, amount_c: number, memo: string): Promise<{ success: boolean; transaction: Transaction }> {
+    return request('POST', '/api/ledger/transfer', { from, to, amount_c, memo });
 }
 
 export async function getTransactions(publicKey?: string, limit = 50): Promise<Transaction[]> {
@@ -1556,7 +1652,7 @@ export interface MarketplacePost {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    price_c: number;
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
     authorPublicKey: string;
     authorCallsign: string;
@@ -1659,7 +1755,7 @@ export interface MarketplaceTransaction {
     buyerCallsign: string;
     sellerPublicKey: string;
     sellerCallsign: string;
-    credits: number;
+    amount_c: number;
     hours?: number;
     status: 'requested' | 'rejected' | 'pending' | 'completed' | 'cancelled';
     createdAt: string;
@@ -1670,6 +1766,25 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /**
+     * A period of a standing deal (DESIGN-standing-deals-fable §2.3; the node's read, @beanpool/engine escrow.ts): which one
+     * and its number; on its CURRENT period's row only, its phase, Beans per period, unit, count (null: until stopped), when
+     * the node next acts, its start, since when it is short, and whether either side has tapped Stop.
+     */
+    standingId?: string;
+    periodNo?: number;
+    standingPhase?: StandingPhase;
+    standingBeans_c?: number;
+    standingUnit?: StandingPeriodUnit;
+    standingMaxPeriods?: number | null;
+    standingNextDueAt?: string;
+    standingStartsAt?: string;
+    standingShortSince?: string | null;
+    /** On an ended standing deal's current row: why it ended, who tapped Stop (if anyone) and when it ended (its History line). */
+    standingEndedReason?: string | null;
+    standingStoppedBy?: string | null;
+    standingEndedAt?: string | null;
+    standingStopped?: boolean;
 }
 
 export async function getMarketplacePosts(filter?: {
@@ -1737,7 +1852,8 @@ export async function createMarketplacePost(post: {
     category: string;
     title: string;
     description: string;
-    credits: number;
+    /** The price, whole hundredths of a Bean (0: free). */
+    price_c: number;
     priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
     authorPublicKey: string;
     lat?: number;
@@ -2103,6 +2219,7 @@ export interface CommissionCapacity {
     /** `ceiling − energyBalance`, floored at 0. Fee included, so it is what an amount must fit inside. */
     allowance: number;
     /** How much of the allowance is credit already earned rather than fresh discretion. */
+    /** Every figure here is whole hundredths of a Bean (federation-commission.ts CommissionCapacity). */
     redeemable: number;
     treasuryBalance: number;
     commonsBalance: number;
@@ -2126,16 +2243,16 @@ export async function getCommissionCapacity(): Promise<{ links: CommissionCapaci
  * in flight and recovery will finish it — `request` surfaces the body either way, so the caller reads
  * `status` rather than assuming success.
  */
-export async function commissionListing(postId: string, amount?: number): Promise<{
+export async function commissionListing(postId: string, amount_c?: number): Promise<{
     status: 'settled' | 'pending' | 'refused' | 'reversed';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     drawnFromCommons: number;
     commissionedBy: string;
     peer: string;
     listing: string;
 }> {
-    return request('POST', '/api/federation/commission', amount === undefined ? { postId } : { postId, amount });
+    return request('POST', '/api/federation/commission', amount_c === undefined ? { postId } : { postId, amount_c });
 }
 
 export async function removeMarketplacePost(id: string, authorPublicKey: string): Promise<{ success: boolean }> {
@@ -2152,7 +2269,7 @@ export async function updateMarketplacePost(
         category?: string;
         title?: string;
         description?: string;
-        credits?: number;
+        price_c?: number;
         priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
         lat?: number;
         lng?: number;
@@ -2218,10 +2335,29 @@ export async function getEventZones(): Promise<{ zones: EventZone[] }> {
 
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
+/**
+ * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
+ * `standing` carries the payer's signed authorisation (signStandingStart) and no hours.
+ */
 export async function acceptMarketplacePost(
-    postId: string, buyerPublicKey: string, hours?: number
+    postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody,
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/posts/accept', { postId, buyerPublicKey, hours });
+    return request('POST', '/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
+}
+
+/**
+ * The payer's standing authorisation for the community this web app talks to (§6), signed by core's builder: the host is
+ * the one every request here is signed for, and the bytes are 0xFF and the text, as every member statement's.
+ */
+export async function signStandingStart(fields: StandingAuthorisationFields): Promise<StandingStartBody> {
+    const identity = await loadIdentity();
+    if (!identity?.privateKey) throw new Error('Cannot sign a standing deal: this browser holds no key');
+    return signStandingAuthorisation(nodeAddress(), fields, memberSigner(identity.privateKey));
+}
+
+/** Stop a standing deal (either side, §1.3): the period under way is still paid, and nothing more is held. */
+export async function stopStandingDeal(standingId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/standing/${encodeURIComponent(standingId)}/stop`, {});
 }
 
 export async function requestMarketplacePost(
@@ -2244,10 +2380,11 @@ export function openDealIn(e: unknown): { transactionId?: string } | null {
     return typeof err.transactionId === 'string' ? { transactionId: err.transactionId } : {};
 }
 
+/** Approve a request. On a Need priced per week or per month the author pays: `standing` is their signed authorisation (§4). */
 export async function approveMarketplaceRequest(
-    transactionId: string, authorPublicKey: string
+    transactionId: string, authorPublicKey: string, standing?: StandingStartBody,
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/transactions/approve', { transactionId, authorPublicKey });
+    return request('POST', '/api/marketplace/transactions/approve', standing ? { transactionId, authorPublicKey, standing } : { transactionId, authorPublicKey });
 }
 
 export async function rejectMarketplaceRequest(
@@ -2463,7 +2600,7 @@ export interface MemberCard {
     nodeRole?: string | null;
     avatarUrl?: string | null;
     profileUpdatedAt?: string | null;
-    earnedCredit?: number;
+    earnedCredit_c?: number;
     archetype?: string | null;
     distanceKm?: number | null;
 }
@@ -2484,6 +2621,7 @@ export interface NodeInfo {
 
 /** Fetch node info from a remote node */
 export async function getNodeInfo(baseUrl: string): Promise<NodeInfo> {
+    await refuseIfNodeTooOld(baseUrl);
     const res = await fetch(`${baseUrl}/api/node/info`);
     if (!res.ok) throw new Error(`Failed to fetch node info from ${baseUrl}`);
     return res.json();
@@ -2505,11 +2643,13 @@ export async function getRemotePosts(baseUrl: string, filters?: { type?: string;
     if (filters?.category) params.set('category', filters.category);
     const qs = params.toString() ? `?${params}` : '';
 
+    // One 5-second limit for the version check and the read together (lib/node-version-gate.ts).
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     let res;
     try {
+        await refuseIfNodeTooOld(baseUrl, controller.signal);
         res = await fetch(`${baseUrl}/api/marketplace/posts${qs}`, { signal: controller.signal });
     } finally {
         clearTimeout(timeoutId);
@@ -2538,13 +2678,14 @@ function assertHttpsPeerUrl(url: string): void {
 }
 
 export async function sendRemoteTransfer(
-    baseUrl: string, from: string, to: string, amount: number, memo: string
+    baseUrl: string, from: string, to: string, amount_c: number, memo: string
 ): Promise<{ success: boolean; transaction: Transaction }> {
     assertHttpsPeerUrl(baseUrl);
+    await refuseIfNodeTooOld(baseUrl);
     const res = await fetch(`${baseUrl}/api/ledger/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, amount, memo }),
+        body: JSON.stringify({ from, to, amount_c, memo }),
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Transfer failed' }));
@@ -2569,6 +2710,7 @@ export async function sendRemoteTransfer(
 
 /** Check balance on a remote node */
 export async function getRemoteBalance(baseUrl: string, publicKey: string): Promise<BalanceInfo> {
+    await refuseIfNodeTooOld(baseUrl);
     const res = await fetch(`${baseUrl}/api/ledger/balance/${encodeURIComponent(publicKey)}`);
     if (!res.ok) throw new Error(`Failed to fetch balance from ${baseUrl}`);
     return res.json();
@@ -2588,20 +2730,13 @@ export interface CommunityProject {
     fundedAt?: string;
 }
 
-export async function getCommonsBalance(): Promise<{ balance: number }> {
+/** The Commons pot, whole hundredths of a Bean. */
+export async function getCommonsBalance(): Promise<{ balance_c: number }> {
     return request('GET', '/api/commons/balance');
 }
 
 export async function getCommonsProjects(): Promise<{ projects: CommunityProject[] }> {
     return request('GET', '/api/commons/projects');
-}
-
-export async function proposeProject(proposerPubkey: string, title: string, description: string, requestedAmount: number): Promise<{ success: boolean; project: CommunityProject }> {
-    return request('POST', '/api/commons/projects', { proposerPubkey, title, description, requestedAmount });
-}
-
-export async function updateCommunityProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): Promise<{ success: boolean }> {
-    return request('POST', '/api/commons/projects/update', { proposerPubkey, projectId, title, description, requestedAmount });
 }
 
 export async function deleteCommunityProject(proposerPubkey: string, projectId: string): Promise<{ success: boolean }> {
@@ -2812,17 +2947,17 @@ export interface Treasury {
     callsign?: string;
     avatar?: string | null;
     avatarUrl?: string | null;
-    balance: number;
-    creditLine: number;
-    floor?: number;
-    usableFloor?: number;
+    balance_c: number;
+    creditLine_c: number;
+    floor_c?: number;
+    usableFloor_c?: number;
     liveOffers: number;
-    earnedSurplus?: number;
-    workingCapitalCeiling?: number | null;
+    earnedSurplus_c?: number;
+    workingCapitalCeiling_c?: number | null;
     purpose?: string | null;
     description?: string | null;
-    goalAmount?: number | null;
-    currentAmount?: number | null;
+    goalAmount_c?: number | null;
+    currentAmount_c?: number | null;
     deadlineAt?: string | null;
     /** When the node gave a project's backers their Beans back, its goal not reached a week after its end date; else null. */
     pledgesReturnedAt?: string | null;
@@ -2831,7 +2966,7 @@ export interface Treasury {
     paused?: boolean;
     pausedAt?: string | null;
     pausedBy?: string | null;
-    pausedFloorSnapshot?: number | null;
+    pausedFloorSnapshot_c?: number | null;
     pauseExpiresAt?: string | null;
     pauseDaysRemaining?: number | null;
     pauseExpiringSoon?: boolean;
@@ -2871,8 +3006,8 @@ export interface EnterpriseLedgerEntry {
     id: string;
     timestamp: string;
     direction: 'income' | 'spend';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     netAmount: number;
     counterparty: string;
     counterpartyName: string;
@@ -2897,7 +3032,7 @@ export interface EnterpriseLedgerResponse {
         purpose: string | null;
         status: string;
         paused: boolean;
-        balance: number;
+        balance_c: number;
     };
     period: {
         since: string | null;
@@ -3018,8 +3153,8 @@ export async function getEnterpriseLedger(treasury: string, opts?: { since?: str
     return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/ledger${qs ? `?${qs}` : ''}`);
 }
 
-export async function treasuryPledge(treasury: string, amount: number, memo?: string): Promise<{ success: boolean; txId: string }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount, memo });
+export async function treasuryPledge(treasury: string, amount_c: number, memo?: string): Promise<{ success: boolean; txId: string }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/pledge`, { amount_c, memo });
 }
 
 export async function createEnterprise(data: {
@@ -3028,11 +3163,11 @@ export async function createEnterprise(data: {
     photos?: string[];
     purpose?: string;
     description?: string;
-    goalAmount?: number | null;
+    goalAmount_c?: number | null;
     deadlineAt?: string | null;
     lifecycle?: 'ongoing' | 'bounded';
-    creditLine?: number;
-    workingCapitalCeiling?: number | null;
+    creditLine_c?: number;
+    workingCapitalCeiling_c?: number | null;
 }): Promise<any> {
     return request('POST', '/api/treasury', data);
 }
@@ -3044,10 +3179,10 @@ export async function deleteCrowdfundProject(projectId: string, creatorPubkey?: 
 // Operator actions — signed as the operator; the treasury id rides the URL path (so it clears the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer). `photos`: JPEG data URLs, at most five
 // (lib/photo-resize.ts), checked by the node as a member's own listing's are.
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; price_c: number; priceType?: string; photos?: string[]; tags?: string[]; freeTags?: string[] }): Promise<{ success: boolean; post: any }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
 /**
@@ -3092,16 +3227,16 @@ export async function treasuryReject(treasury: string, transactionId: string): P
 export async function treasuryComplete(treasury: string, transactionId: string, hours?: number): Promise<{ success: boolean }> {
     return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/complete`, { transactionId, hours });
 }
-export async function treasurySweep(treasury: string, amount: number): Promise<{ success: boolean; swept: number; balance: number }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
+export async function treasurySweep(treasury: string, amount_c: number): Promise<{ success: boolean; swept_c: number; balance_c: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount_c });
 }
-export async function treasuryPledgeBacking(treasury: string, amount: number): Promise<{ success: boolean; pledge: any; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount });
+export async function treasuryPledgeBacking(treasury: string, amount_c: number): Promise<{ success: boolean; pledge: any; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/backing`, { amount_c });
 }
-export async function treasuryRelease(treasury: string, amount?: number): Promise<{ success: boolean; releasedAmount: number; remainingPledge: number; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number }> {
-    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/release`, { amount });
+export async function treasuryRelease(treasury: string, amount_c?: number): Promise<{ success: boolean; releasedAmount_c: number; remainingPledge_c: number; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number }> {
+    return request('POST', `/api/treasury/${encodeURIComponent(treasury)}/release`, amount_c === undefined ? {} : { amount_c });
 }
-export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor: number; allowance: number; derivedAllowance: number; legacyFloor: number; availableToBack: number | null }> {
+export async function getTreasuryPledges(treasury: string): Promise<{ pledges: any[]; floor_c: number; allowance_c: number; derivedAllowance_c: number; availableToBack_c: number | null }> {
     return request('GET', `/api/treasury/${encodeURIComponent(treasury)}/pledges`);
 }
 
@@ -3110,6 +3245,7 @@ export interface KeeperRequestItem {
     id: string;
     enterprisePubkey: string;
     memberPubkey: string;
+    /** The pledge, whole hundredths of a Bean: the node's answer keeps this key (a listed deviation); the request body sends pledgedBacking_c. */
     pledgedBacking: number;
     status: 'pending' | 'approved' | 'declined';
     createdAt: string;
@@ -3120,7 +3256,7 @@ export interface KeeperRequestItem {
     /** On a pending request, whether approving it would go through as far as the applicant's standing goes (null on a closed one): all the lead keeper learns of it. */
     canBackPledge?: boolean | null;
     /** What the applicant has left to back with: only on their own request (myPendingRequest), never on a keeper's list. */
-    availableToBack?: number;
+    availableToBack_c?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window. */
     pendingChange?: KeeperChangeItem | null;
 }
@@ -3133,6 +3269,7 @@ export interface KeeperChangeItem {
     memberPubkey: string;
     memberCallsign: string;
     requestId: string | null;
+    /** The pledge, whole hundredths of a Bean (the node keeps this key, as on KeeperRequestItem). */
     pledgedBacking: number;
     /** True when pledgedBacking is the pledge's named part only, as a keeper other than the lead reads it. */
     namedBackingOnly?: boolean;
@@ -3174,15 +3311,15 @@ export interface SuccessionProposalItem {
     hasVoted?: boolean;
 }
 
-export async function requestToJoinEnterprise(treasury: string, pledgedBacking: number): Promise<{ success: boolean; request: KeeperRequestItem }> {
-    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking });
+export async function requestToJoinEnterprise(treasury: string, pledgedBacking_c: number): Promise<{ success: boolean; request: KeeperRequestItem }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/request`, { pledgedBacking_c });
 }
 
 export async function getEnterpriseKeeperRequests(treasury: string, status = 'pending'): Promise<{ success: boolean; requests: KeeperRequestItem[] }> {
     return request('GET', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests?status=${encodeURIComponent(status)}`);
 }
 
-export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing: number; applied: boolean; change: KeeperChangeItem | null }> {
+export async function approveKeeperRequest(treasury: string, requestId: string): Promise<{ success: boolean; backing_c: number; applied: boolean; change: KeeperChangeItem | null }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/keepers/requests/${encodeURIComponent(requestId)}/approve`);
 }
 
@@ -3221,7 +3358,7 @@ export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDe
 
 /** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
 export async function proposeEnterpriseDecision(treasury: string, body: {
-    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount_c: number; memo?: string };
 }): Promise<{ success: boolean }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
 }
@@ -3405,27 +3542,13 @@ export async function cancelRecoveryCollection(collectionId: string): Promise<bo
  * Owner side: Stop It Now. Stops every live recovery session against the account and returns how many are still live,
  * by the node's own count, so "all cancelled" is said only when it is true.
  *
- * One request: the node stops them all however many there are, and answers with `live`. A node from before that
- * refuses a Stop naming no session: then one request per listed session (such a node lists every one, at most ten),
- * and what is left is the number that failed.
+ * One request: the node stops them all however many there are, and answers with `live`. Throws when the node gave no
+ * number: "all cancelled" is never said on a guess.
  */
-export async function stopEveryRecoveryCollection(listed: { collectionId: string }[]): Promise<number> {
-    try {
-        const res = await request<{ live?: number }>('POST', '/api/recovery/collect/cancel', {});
-        if (typeof res?.live === 'number') return res.live;
-    } catch {
-        // An older node ('Which session?'), or no answer: one by one below.
-    }
-    let failed = 0;
-    for (const session of listed) {
-        try {
-            await cancelRecoveryCollection(session.collectionId);
-        } catch (e) {
-            failed++;
-            console.warn(`[RecoveryAlert] Failed to cancel ${session.collectionId}:`, (e as Error).message);
-        }
-    }
-    return failed;
+export async function stopEveryRecoveryCollection(): Promise<number> {
+    const res = await request<{ live?: number }>('POST', '/api/recovery/collect/cancel', {});
+    if (typeof res?.live === 'number') return res.live;
+    throw new Error('The node did not say how many recovery sessions are still live');
 }
 
 /**
@@ -3522,6 +3645,7 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     }
     const conditional = !!etag && sameOrigin;
     if (conditional) headers['If-None-Match'] = etag!;
+    if (base) await refuseIfNodeTooOld(base, signal);
     const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache', ...(signal ? { signal } : {}) });
     if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
     if (!res.ok) throw await refusalError(res);
@@ -3580,13 +3704,17 @@ export async function pollPairingToPhoneApi(sessionId: string): Promise<{
     status: 'waiting' | 'confirming' | 'released' | 'sent' | 'collected' | 'saved' | 'not-saved' | 'burned' | 'expired' | 'wrong-browser';
     phonePubHex?: string;
 }> {
-    const res = await fetch(`${getNodeApiUrl()}/api/pair/poll?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
+    const base = getNodeApiUrl();
+    if (base) await refuseIfNodeTooOld(base);
+    const res = await fetch(`${base}/api/pair/poll?session=${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
     return res.json().catch(() => ({ status: 'expired' as const }));
 }
 
 /** The account, sealed to the phone's key, sent once its digits matched (the binding cookie goes with it). */
 export async function sendToPhoneApi(sessionId: string, nonceHex: string, ciphertextHex: string): Promise<{ ok: boolean; status: number }> {
-    const res = await fetch(`${getNodeApiUrl()}/api/pair/send`, {
+    const base = getNodeApiUrl();
+    if (base) await refuseIfNodeTooOld(base);
+    const res = await fetch(`${base}/api/pair/send`, {
         method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, nonceHex, ciphertextHex }),
     });
     return { ok: res.ok, status: res.status };
@@ -3597,7 +3725,9 @@ export async function sendToPhoneApi(sessionId: string, nonceHex: string, cipher
  * holding the session's binding cookie, types them: 'released', 'wrong' (tries left), or 'burned' after three wrong.
  */
 export async function confirmPairingApi(sessionId: string, code: string): Promise<{ result: 'released' | 'wrong' | 'burned' | 'wrong-browser' | 'expired' | 'not-confirming'; triesLeft?: number }> {
-    const res = await fetch(`${getNodeApiUrl()}/api/pair/confirm`, {
+    const base = getNodeApiUrl();
+    if (base) await refuseIfNodeTooOld(base);
+    const res = await fetch(`${base}/api/pair/confirm`, {
         method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, code }),
     });
     return res.json().catch(() => ({ result: 'expired' as const }));

@@ -10,13 +10,13 @@ import type { MyVouching } from '../lib/api';
 
 const VOUCHING: MyVouching & { budget: NonNullable<MyVouching['budget']> } = {
     voucher: true,
-    budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+    budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
     history: [
-        { kind: 'grant', amount: 1000, actor: 'a'.repeat(64), actorCallsign: 'marty', at: '2026-11-05T00:00:00Z' },
+        { kind: 'grant', amount_c: 100000, actor: 'a'.repeat(64), actorCallsign: 'marty', at: '2026-11-05T00:00:00Z' },
     ],
-    presets: [25, 50, 75, 100],
-    vouchMax: 100,
-    budgetMax: 2000,
+    presets: [2500, 5000, 7500, 10000],
+    vouchMax: 10000,
+    budgetMax: 200000,
     vouchedBy: [],
 };
 

@@ -59,10 +59,11 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 const ME = 'a-real-member-key';
 const at = new Date('2026-10-14T09:00:00Z').toISOString();
-// Bought (a minus) and sold (a plus), both completed, so the History tab draws them with the longest badge.
+// Bought (a minus) and sold (a plus), both completed, so the History tab draws them with the longest badge. What each deal
+// holds is whole hundredths of a Bean (getMarketplaceTransactions' amount_c): 12 and 480 Beans.
 const TXS = [
-    { id: 't-bought', postId: 'p1', postTitle: 'Fix the garden gate', status: 'completed', buyerPublicKey: ME, sellerPublicKey: 'n1', sellerCallsign: 'Robin', credits: 12, createdAt: at, ratedByBuyer: true },
-    { id: 't-sold', postId: 'p2', postTitle: 'Sourdough loaves', status: 'completed', buyerPublicKey: 'n2', buyerCallsign: 'Kim', sellerPublicKey: ME, credits: 480, createdAt: at, ratedBySeller: false },
+    { id: 't-bought', postId: 'p1', postTitle: 'Fix the garden gate', status: 'completed', buyerPublicKey: ME, sellerPublicKey: 'n1', sellerCallsign: 'Robin', amount_c: 1200, createdAt: at, ratedByBuyer: true },
+    { id: 't-sold', postId: 'p2', postTitle: 'Sourdough loaves', status: 'completed', buyerPublicKey: 'n2', buyerCallsign: 'Kim', sellerPublicKey: ME, amount_c: 48000, createdAt: at, ratedBySeller: false },
 ];
 vi.mock('../db', () => ({
     getPosts: async () => [], getMyPosts: async () => [], getMarketplaceTransactions: async () => TXS,

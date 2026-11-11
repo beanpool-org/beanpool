@@ -37,7 +37,7 @@ const offenderKey = generateTestKeyHex();
 function createTestMember(pubKey: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pubKey, callsign);
     setMemberPhoto(db, pubKey, 'https://example.com/avatar.jpg');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pubKey);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pubKey);
     ledger.initializeGenesisAccount(pubKey);
 }
 

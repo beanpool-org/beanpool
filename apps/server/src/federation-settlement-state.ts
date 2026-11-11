@@ -57,9 +57,9 @@ export interface SettlementRow {
     /** Inbound: the local member we pay when the receipt lands. Outbound: the peer's seller, informational. */
     sellerPubkey: string | null;
     postId: string | null;
-    amount: number;
+    amount_c: number;
     /** Outbound only: the fee charged to the buyer on top of `amount` (§2.1). Refunded on reversal. */
-    fee: number;
+    fee_c: number;
     /** Inbound only: ISO timestamp at which the cap reservation lapses. */
     reservedUntil: string | null;
     state: SettlementState;
@@ -79,8 +79,8 @@ const rowToSettlement = (r: any): SettlementRow => ({
     buyerHomeNode: r.buyer_home_node ?? null,
     sellerPubkey: r.seller_pubkey ?? null,
     postId: r.post_id ?? null,
-    amount: r.amount,
-    fee: r.fee ?? 0,
+    amount_c: r.amount_c,
+    fee_c: r.fee_c ?? 0,
     reservedUntil: r.reserved_until ?? null,
     state: r.state,
     receipt: r.receipt ?? null,
@@ -135,8 +135,8 @@ export function claimSettlement(input: {
     buyerHomeNode?: string | null;
     sellerPubkey?: string | null;
     postId?: string | null;
-    amount: number;
-    fee?: number;
+    amount_c: number;
+    fee_c?: number;
     reservedUntil?: string | null;
     state: Extract<SettlementState, 'escrowed' | 'reserved'>;
 }): { row: SettlementRow; created: boolean } {
@@ -146,13 +146,13 @@ export function claimSettlement(input: {
     // Validating whatever row actually ends up in the table closes both orderings with one check.
     const inserted = db.prepare(`
         INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey,
-                                 post_id, amount, fee, reserved_until, state)
+                                 post_id, amount_c, fee_c, reserved_until, state)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(key) DO NOTHING
     `).run(
         input.key, input.direction, input.peerId, input.buyerPubkey,
         input.buyerHomeNode ?? null, input.sellerPubkey ?? null, input.postId ?? null,
-        input.amount, input.fee ?? 0, input.reservedUntil ?? null, input.state,
+        input.amount_c, input.fee_c ?? 0, input.reservedUntil ?? null, input.state,
     );
 
     const row = getSettlement(input.key)!;
@@ -172,7 +172,7 @@ export function claimSettlement(input: {
         // old row — an avoidable mismatch and reversal. `fee` and `buyerHomeNode` are deliberately excluded:
         // fee is derived from amount, and buyerHomeNode is informational rather than trade-defining.
         && (row.postId ?? null) === (input.postId ?? null)
-        && Math.round(row.amount * 10000) === Math.round(input.amount * 10000);
+        && row.amount_c === input.amount_c;
     if (!same) {
         throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
     }
@@ -299,12 +299,12 @@ export const unfinalisedSettlementsSql = (direction?: SettlementDirection): stri
  */
 export function reservedAgainstPeer(peerId: string, excludeKey?: string): number {
     const row = db.prepare(`
-        SELECT COALESCE(SUM(amount), 0) AS total FROM settlements
+        SELECT COALESCE(SUM(amount_c), 0) AS total FROM settlements
         WHERE direction = 'inbound' AND peer_id = ?
           AND (state = 'held' OR (state = 'reserved' AND (reserved_until IS NULL OR reserved_until >= ?)))
           AND (? IS NULL OR key != ?)
     `).get(peerId, new Date().toISOString(), excludeKey ?? null, excludeKey ?? '') as any;
-    return Math.round((row?.total ?? 0) * 10000) / 10000;
+    return ((row?.total ?? 0));
 }
 
 /**
@@ -340,11 +340,11 @@ export function expiredReservations(nowIso = new Date().toISOString()): Settleme
  */
 export function memberForeignExposure(publicKey: string): number {
     const row = db.prepare(`
-        SELECT COALESCE(SUM(amount + fee), 0) AS total FROM settlements
+        SELECT COALESCE(SUM(amount_c + fee_c), 0) AS total FROM settlements
         WHERE direction = 'outbound' AND buyer_pubkey = ?
           AND state IN ('escrowed', 'committed', 'settled')
     `).get(publicKey) as any;
-    return Math.round((row?.total ?? 0) * 10000) / 10000;
+    return ((row?.total ?? 0));
 }
 
 /**

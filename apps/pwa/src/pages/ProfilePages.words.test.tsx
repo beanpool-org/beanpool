@@ -24,7 +24,6 @@ vi.mock('../lib/blocklist', () => ({
     blockUser: vi.fn(async () => {}),
     unblockUser: vi.fn(async () => {}),
     onBlocklistUpdated: vi.fn(() => () => {}),
-    getBlocklistFullNote: vi.fn(() => null),
 }));
 
 const ME: any = { publicKey: 'my-user-pubkey', privateKey: 'priv', callsign: 'Alice', createdAt: '2026-01-01T00:00:00.000Z' };
@@ -51,8 +50,8 @@ vi.mock('../lib/api', () => ({
             { stars: 4, comment: '', role: 'receiver', createdAt: '2026-09-20T00:00:00Z' },
         ],
     })),
-    getMarketplacePosts: vi.fn(async () => [{ id: 'p1', type: 'offer', title: 'Sourdough loaves', status: 'active', credits: 12, photos: null }]),
-    getBalance: vi.fn(async () => ({ balance: 12.5, floor: -50, earnedCredit: 140, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } })),
+    getMarketplacePosts: vi.fn(async () => [{ id: 'p1', type: 'offer', title: 'Sourdough loaves', status: 'active', price_c: 1200, photos: null }]),
+    getBalance: vi.fn(async () => ({ balance_c: 1250, floor_c: -5000, earnedCredit_c: 14000, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } })),
     getRatingsGiven: vi.fn(async () => ({ ratings: [{ id: 'r1', stars: 4, comment: '', target_callsign: 'Dan', transactionId: 'tx1', targetPubkey: 'dan-pk', createdAt: '2026-08-01T00:00:00Z' }] })),
     getFriends: vi.fn(async () => [{ publicKey: 'f1' }, { publicKey: 'f2' }]),
     submitRating: vi.fn(async () => ({})),

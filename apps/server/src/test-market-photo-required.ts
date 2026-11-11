@@ -26,6 +26,7 @@ import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { cacheRemoteListings } from './federation-listings.js';
 import { NODE_PROFILE_KEY } from './config/node-profile.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -49,7 +50,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -59,9 +60,10 @@ async function signedFetch(method: 'POST', path: string, body: unknown, id: Id |
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -96,7 +98,7 @@ async function main(): Promise<void> {
         authorPublicKey: alice.pubKeyHex,
         title: 'Sourdough loaf no photo',
         category: 'food',
-        credits: 5,
+        price_c: 500, // 5 Beans, whole hundredths
         description: 'Fresh bread',
         lat: -28.55,
         lng: 153.5,
@@ -111,7 +113,7 @@ async function main(): Promise<void> {
         authorPublicKey: alice.pubKeyHex,
         title: 'Sourdough loaf with photo',
         category: 'food',
-        credits: 5,
+        price_c: 500, // 5 Beans, whole hundredths
         description: 'Fresh bread',
         lat: -28.55,
         lng: 153.5,
@@ -130,7 +132,7 @@ async function main(): Promise<void> {
         authorPublicKey: alice.pubKeyHex,
         title: 'Gardening help no photo',
         category: 'help',
-        credits: 10,
+        price_c: 1000, // 10 Beans, whole hundredths
         description: 'Need weeding',
         lat: -28.55,
         lng: 153.5,
@@ -145,7 +147,7 @@ async function main(): Promise<void> {
         authorPublicKey: alice.pubKeyHex,
         title: 'Gardening help with photo',
         category: 'help',
-        credits: 10,
+        price_c: 1000, // 10 Beans, whole hundredths
         description: 'Need weeding',
         lat: -28.55,
         lng: 153.5,
@@ -163,7 +165,7 @@ async function main(): Promise<void> {
         authorPublicKey: bob.pubKeyHex,
         title: 'Global need no photo',
         category: 'help',
-        credits: 0,
+        price_c: 0,
         description: 'Need assistance',
         lat: -28.55,
         lng: 153.5,
@@ -178,7 +180,7 @@ async function main(): Promise<void> {
         authorPublicKey: bob.pubKeyHex,
         title: 'Global need with photo',
         category: 'help',
-        credits: 0,
+        price_c: 0,
         description: 'Need assistance',
         lat: -28.55,
         lng: 153.5,
@@ -193,7 +195,7 @@ async function main(): Promise<void> {
     const entOfferNoPhoto = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
         title: 'Orchard apples no photo',
         category: 'produce',
-        credits: 8,
+        price_c: 800, // 8 Beans, whole hundredths
         description: 'Box of apples',
     }, keeper);
     assert(entOfferNoPhoto.status === 400 && entOfferNoPhoto.error === 'Add a photo first',
@@ -204,7 +206,7 @@ async function main(): Promise<void> {
     const entOfferWithPhoto = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
         title: 'Orchard apples with photo',
         category: 'produce',
-        credits: 8,
+        price_c: 800, // 8 Beans, whole hundredths
         description: 'Box of apples',
         photos: [PHOTO],
     }, keeper);
@@ -214,7 +216,7 @@ async function main(): Promise<void> {
     const entNeedNoPhoto = await signedFetch('POST', `/api/treasury/${enterprise}/need`, {
         title: 'Orchard pruning no photo',
         category: 'labour',
-        credits: 20,
+        price_c: 2000, // 20 Beans, whole hundredths
         description: 'Winter pruning',
     }, keeper);
     assert(entNeedNoPhoto.status === 400 && entNeedNoPhoto.error === 'Add a photo first',
@@ -225,7 +227,7 @@ async function main(): Promise<void> {
     const entNeedWithPhoto = await signedFetch('POST', `/api/treasury/${enterprise}/need`, {
         title: 'Orchard pruning with photo',
         category: 'labour',
-        credits: 20,
+        price_c: 2000, // 20 Beans, whole hundredths
         description: 'Winter pruning',
         photos: [PHOTO],
     }, keeper);
@@ -276,8 +278,8 @@ async function main(): Promise<void> {
 
     // Direct insert of an older photoless post
     const olderPostId = 'photoless-legacy-post-1';
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status)
-                VALUES (?, 'offer', 'food', 'Old bread legacy', 'Old loaf', 5, 'fixed', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1, 'active')`)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status)
+                VALUES (?, 'offer', 'food', 'Old bread legacy', 'Old loaf', 500, 'fixed', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 1, 'active')`)
         .run(olderPostId, alice.pubKeyHex);
 
     const editOlderPost = await signedFetch('POST', '/api/marketplace/posts/update', {
@@ -299,7 +301,7 @@ async function main(): Promise<void> {
         category: 'food',
         title: 'Remote peer bread',
         description: 'From peer without photos',
-        credits: 10,
+        price_c: 1000, // 10 Beans, whole hundredths
         priceType: 'fixed',
         authorPublicKey: crypto.randomBytes(32).toString('hex'),
         authorCallsign: 'RemoteAuthor',

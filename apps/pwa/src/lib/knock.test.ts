@@ -5,6 +5,7 @@ import {
 } from './knock';
 import * as knockLib from './knock';
 import type { BeanPoolIdentity } from './identity';
+import { hearNodeVersionForTests, nodeNotReadText, nodeTooOldText, resetNodeVersionGateForTests } from './node-version-gate';
 import { formatDate, KNOCK_ANSWERABLE_DAYS, t } from '@beanpool/core';
 
 const PUB = 'a'.repeat(64);
@@ -26,6 +27,16 @@ describe('communityOrigin on web', () => {
     });
 });
 
+describe("the knock body carries the shared link's ticket (shared-listing door A3)", () => {
+    const T = 'AbCdEfGhIjKlMnOpQrSt_-';
+    it("in a ticket's shape only, inside what is signed", () => {
+        expect(knockLib.knockBody({ callsign: 'Robin', message: 'Hi', peek: T }, 'byron.beanpool.org')).toMatchObject({ peek: T, toNode: 'byron.beanpool.org' });
+        for (const bad of [undefined, null, '', 'not-a-ticket', `${T}A`]) {
+            expect(knockLib.knockBody({ callsign: 'Robin', message: 'Hi', peek: bad as any })).not.toHaveProperty('peek');
+        }
+    });
+});
+
 describe('readStatus', () => {
     it('parses status payloads correctly', () => {
         expect(readStatus({ status: 'none' })).toEqual({ status: 'none' });
@@ -35,9 +46,16 @@ describe('readStatus', () => {
     });
 });
 
+/** These tests read every fetch: the communities are heard new enough, so the version gate's own read is not among them. */
+const hearCommunities = () => {
+    resetNodeVersionGateForTests();
+    for (const host of ['c', 'f', 'n', 's']) hearNodeVersionForTests(`https://${host}.example.org`);
+};
+
 describe('rememberedKnocks & storage on web', () => {
     beforeEach(() => {
         localStorage.clear();
+        hearCommunities();
     });
 
     it('remembers knocks, orders by newest first, and forgets on request', async () => {
@@ -161,6 +179,7 @@ describe('rememberedKnocks & storage on web', () => {
 describe('the status read and the cancel are signed for the community they name', () => {
     beforeEach(() => {
         localStorage.clear();
+        hearCommunities();
     });
 
     afterEach(() => {
@@ -186,6 +205,18 @@ describe('the status read and the cancel are signed for the community they name'
         expect(headers['X-Signed-For']).toBe('s.example.org');
     });
 
+    it('a 429 carries its Retry-After to the page, so the page waits as long as it was told', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Slow down.' }), { status: 429, headers: { 'Retry-After': '90' } }));
+        expect(await readKnockStatus('https://s.example.org', IDENTITY)).toEqual({ ok: false, kind: 'refused', status: 429, code: null, message: 'Slow down.', retryAfterSeconds: 90 });
+    });
+
+    it('a refusal with no Retry-After says nothing of one', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'No.' }), { status: 403 }));
+        const res = await readKnockStatus('https://s.example.org', IDENTITY);
+        expect(res).toEqual({ ok: false, kind: 'refused', status: 403, code: null, message: 'No.' });
+        expect('retryAfterSeconds' in res).toBe(false);
+    });
+
     it('a cancel is a signed POST of {} to that community\'s cancel path', async () => {
         await rememberKnock(PUB, { url: 'https://c.example.org', name: 'CancelMe' }, new Date('2026-10-10T00:00:00Z'));
         const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
@@ -209,5 +240,37 @@ describe('the status read and the cancel are signed for the community they name'
         expect(await readKnockStatus(null, IDENTITY)).toMatchObject({ ok: false, kind: 'no_address' });
         expect(await cancelKnock('http://insecure.example.org', IDENTITY)).toMatchObject({ ok: false });
         expect(fetchSpy).not.toHaveBeenCalled();
+    });
+});
+
+describe("a community the version gate refuses: Ask to join, the waiting page and cancel say the gate's own line", () => {
+    const OLD = 'https://s.example.org';
+    beforeEach(() => {
+        localStorage.clear();
+        resetNodeVersionGateForTests();
+    });
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('a server heard on 1.2.37: nothing is sent, and each says the version line (a refusal, 426)', async () => {
+        hearNodeVersionForTests(OLD, '1.2.37');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+        const line = nodeTooOldText('1.2.37');
+        expect(await knockLib.sendKnock(OLD, IDENTITY, { callsign: 'Ana', message: 'Hello.' })).toEqual({ kind: 'refused', status: 426, code: 'node_too_old', message: line });
+        expect(await readKnockStatus(OLD, IDENTITY)).toEqual({ ok: false, kind: 'refused', status: 426, code: 'node_too_old', message: line });
+        expect(await cancelKnock(OLD, IDENTITY)).toEqual({ ok: false, message: line, status: 426, code: 'node_too_old' });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(line).not.toBe(t(KNOCK_MESSAGES.unreachable));
+    });
+
+    it('a health read that fails the way a browser does (TypeError): only the health read went, and each says the not-read line', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+        const line = nodeNotReadText();
+        expect(await knockLib.sendKnock(OLD, IDENTITY, { callsign: 'Ana', message: 'Hello.' })).toEqual({ kind: 'unreachable', message: line });
+        expect(await readKnockStatus(OLD, IDENTITY)).toEqual({ ok: false, kind: 'unreachable', message: line });
+        expect(await cancelKnock(OLD, IDENTITY)).toEqual({ ok: false, message: line });
+        for (const [url] of fetchSpy.mock.calls) expect(String(url)).toBe('https://s.example.org/api/community/health');
+        expect(line).not.toBe(t(KNOCK_MESSAGES.unreachable));
     });
 });

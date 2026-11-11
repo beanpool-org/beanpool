@@ -54,7 +54,7 @@ const KIMS_HOME: HomeAnswer = {
     cards: {
         needs: { items: [{ kind: 'message', count: 1, accent: false, label: 'Unread message from Kofi', target: { to: 'unread-messages' } }] },
         groups: { items: [{ id: 'g1', kind: 'group', name: 'Garden group', unread: 2, muted: false }], total: 1 },
-        beans: { balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false },
+        beans: { balance_c: -3500, room_c: 16500, tier: 'Resident', activated: true, frozen: false },
         community: { name: 'Castlemaine', members: 81 },
     },
 };

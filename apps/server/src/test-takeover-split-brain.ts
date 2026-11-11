@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server and its standby ──
         console.log('\n— 1. a main server serves its epoch, signed; a standby copies it —');
-        let old = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        let old = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(old);
         const setup = await old.send('setup-primary', { ownerSeedHex, replicationToken });
         const mainPeerId = old.ready.peerId;
@@ -179,7 +179,7 @@ async function main(): Promise<void> {
 
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: old.base, replicationToken, primaryPeerId: mainPeerId });
         const pulled = await standby.send('pull');
@@ -200,7 +200,7 @@ async function main(): Promise<void> {
         const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 120)})`);
         assert((await standby.exited) === 0, 'the standby restarts itself');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         assert(standby.ready.role === 'primary' && standby.ready.peerId === mainPeerId, 'it is the main server, with the same PeerId');
 
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
 
         // ── 3. The old main server comes back ──
         console.log('\n— 3. the old main server is started again; its address leads to the new one —');
-        old = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', BEANPOOL_TEST_IDENTITY_EPOCH_URL: standby.base + EPOCH_PATH });
+        old = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', BEANPOOL_TEST_IDENTITY_EPOCH_URL: standby.base + EPOCH_PATH });
         nodes.push(old);
         assert(old.ready.role === 'primary' && old.ready.peerId === mainPeerId, 'it still boots, as the main server it was');
         assert(old.ready.epochCheck?.state === 'replaced' && old.ready.epochCheck.seen === 1 && old.ready.epochCheck.own === 0,
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
 
         await old.kill('SIGTERM');
         const gone = await closedPortUrl();
-        old = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', BEANPOOL_TEST_IDENTITY_EPOCH_URL: gone });
+        old = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', BEANPOOL_TEST_IDENTITY_EPOCH_URL: gone });
         nodes.push(old);
         assert(old.ready.epochCheck?.state === 'unreachable', `started again with its address unreachable (${old.ready.epochCheck?.state})…`);
         const stillRefused = await memberWrite(old);
@@ -248,7 +248,7 @@ async function main(): Promise<void> {
         // ── 4. Unreachable ──
         console.log('\n— 4. an address that does not answer: carry on —');
         copyDir(dirs.before, dirs.copy);
-        const copy = await spawnNode(SCRIPT, dirs.copy, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', BEANPOOL_TEST_IDENTITY_EPOCH_URL: gone });
+        const copy = await spawnNode(SCRIPT, dirs.copy, { NODE_ROLE: 'primary', BEANPOOL_TEST_IDENTITY_EPOCH_URL: gone });
         nodes.push(copy);
         assert(copy.ready.role === 'primary' && copy.ready.epochCheck?.state === 'unreachable', `unreachable hostname → it boots as the main server (${JSON.stringify(copy.ready.epochCheck)})`);
         const w4 = await memberWrite(copy);

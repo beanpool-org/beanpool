@@ -36,6 +36,7 @@ import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { pushTokenId } from './services/push-token-seal.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -76,9 +77,10 @@ async function answer(method: 'POST' | 'DELETE', path: string, body: unknown, si
     if (signer) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

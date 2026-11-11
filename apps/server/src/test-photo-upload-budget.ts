@@ -28,6 +28,7 @@ import { spawnSync } from 'node:child_process';
 import sharp from 'sharp';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 const fails: string[] = [];
@@ -45,8 +46,8 @@ function newId(): Id {
 }
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
-    return { 'X-Public-Key': id.pk, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
+    return { 'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signRequest(id.privateKey, canonical), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 let beforeCall: () => void = () => {};
 async function req(method: string, p: string, id?: Id, body?: any): Promise<{ status: number; headers: Headers; body: any }> {
@@ -134,7 +135,7 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`).run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
 
@@ -215,7 +216,7 @@ async function main(): Promise<void> {
                 description: 'Crisp and juicy seasonal apples for trade',
                 category: 'food',
                 authorPublicKey: carol.pk,
-                credits: 5,
+                price_c: 500, // 5 Beans, whole hundredths
                 photos: [bigImg]
             });
             check('listing-crossing-refused', s.status === 429, `listing photo crossing budget → 429 (got ${s.status})`);
@@ -230,7 +231,7 @@ async function main(): Promise<void> {
                 description: 'Crisp and juicy seasonal apples for trade',
                 category: 'food',
                 authorPublicKey: carol.pk,
-                credits: 5,
+                price_c: 500, // 5 Beans, whole hundredths
                 photos: [smallImg]
             });
             const postId = sOk.body?.post?.id;
@@ -253,7 +254,7 @@ async function main(): Promise<void> {
                 description: 'Ceramic bowl',
                 category: 'art',
                 authorPublicKey: fiona.pk,
-                credits: 10,
+                price_c: 1000, // 10 Beans, whole hundredths
                 photos: [smallImg]
             });
             const pId = createRes.body?.post?.id;
@@ -571,7 +572,7 @@ async function main(): Promise<void> {
             const p1 = await req('POST', '/api/crowdfund/projects', crowdfundCreator, {
                 title: 'Community Garden Project',
                 description: 'Seeds and tools for everyone in town',
-                goalAmount: 500,
+                goalAmount_c: 50000, // 500 Beans, whole hundredths
                 photos: [bigImg],
             });
             check('crowdfund-create-under-budget', p1.status === 200, `POST /api/crowdfund/projects under budget → 200 (got ${p1.status})`);
@@ -579,7 +580,7 @@ async function main(): Promise<void> {
             const p2 = await req('POST', '/api/crowdfund/projects', crowdfundCreator, {
                 title: 'Community Bakery Project',
                 description: 'Flour and ovens for baking bread',
-                goalAmount: 1000,
+                goalAmount_c: 100000, // 1000 Beans, whole hundredths
                 photos: [bigImg],
             });
             check('crowdfund-create-over-budget-status', p2.status === 429, `POST /api/crowdfund/projects over budget → 429 (got ${p2.status})`);
@@ -589,7 +590,7 @@ async function main(): Promise<void> {
             const p3 = await req('POST', '/api/crowdfund/projects', cfMember2, {
                 title: 'Library Project',
                 description: 'Books for all members',
-                goalAmount: 300,
+                goalAmount_c: 30000, // 300 Beans, whole hundredths
                 photos: [smallImg],
             });
             check('crowdfund-update-init', p3.status === 200, `POST /api/crowdfund/projects initial project → 200 (got ${p3.status})`);
@@ -599,7 +600,7 @@ async function main(): Promise<void> {
                 id: projId,
                 title: 'Library Project Updated',
                 description: 'Books and shelves for all members',
-                goalAmount: 300,
+                goalAmount_c: 30000, // 300 Beans, whole hundredths
                 photos: [hugeImg],
             });
             check('crowdfund-update-over-budget-status', p4.status === 429, `POST /api/crowdfund/projects/update over budget → 429 (got ${p4.status})`);
@@ -610,7 +611,7 @@ async function main(): Promise<void> {
             const p5 = await req('POST', '/api/crowdfund/projects', cfMember3, {
                 title: 'Multi Photo Project',
                 description: 'Several photos in project',
-                goalAmount: 200,
+                goalAmount_c: 20000, // 200 Beans, whole hundredths
                 photos: [`/api/avatar/${cfMember3.pk}`, hugeImg],
             });
             check('crowdfund-multi-photos-over-budget', p5.status === 429, `POST /api/crowdfund/projects with self URL first + photo crossing budget → 429 (got ${p5.status})`);

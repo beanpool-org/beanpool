@@ -1,7 +1,7 @@
 /**
  * The key each community signs its notices with is kept under its own store key (utils/push-pins.ts), not on the
  * community's saved record, so nodes.ts's writers of the saved list (addSavedNode on every database open,
- * removeSavedNode, recordRequestSigning) can never overwrite a pin, nor a pin write bring back a community the member
+ * removeSavedNode) can never overwrite a pin, nor a pin write bring back a community the member
  * forgot. The phone's storage here takes the same few milliseconds for every call and applies a write as it resolves,
  * as AsyncStorage does, so two read-modify-writes that overlap really do.
  */

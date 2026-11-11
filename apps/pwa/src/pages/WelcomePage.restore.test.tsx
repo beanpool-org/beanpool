@@ -23,7 +23,7 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true } };
+const GLOBAL_OPEN = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true } };
 
 function stubNode(handlers: Record<string, Handler> = {}) {
     const calls: Array<{ path: string; body: any; headers: Record<string, string> }> = [];
@@ -31,7 +31,7 @@ function stubNode(handlers: Record<string, Handler> = {}) {
         const path = String(input);
         const body = init.body ? JSON.parse(String(init.body)) : undefined;
         calls.push({ path, body, headers: (init.headers ?? {}) as Record<string, string> });
-        if (path === '/api/community/info') return json(200, GLOBAL_OPEN);
+        if (path === '/api/community/info' && !handlers['/api/community/info']) return json(200, GLOBAL_OPEN);
         const key = Object.keys(handlers).find((k) => path === k || path.startsWith(k));
         if (key) return handlers[key](body, path);
         return json(200, {});
@@ -47,25 +47,27 @@ let account: BeanPoolIdentity;
 let other: BeanPoolIdentity;
 let eph: EphemeralKey;
 
-/** Alice's restore left for Google with nonce `rn-1`, and Google sent the browser back to the return page. */
+/** A restore left for Google with nonce `rn-1` (no account is known before the sign-in), and Google sent the browser back. */
 async function backFromGoogle(nonce = 'rn-1') {
     const now = Date.now();
-    await savePendingRestore({
-        kind: 'restore', ephemeral: eph, account: { publicKey: account.publicKey, callsign: 'Alice' }, collectionId: 'col-1',
-        provider: 'google', nonce: 'rn-1', startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS,
-    });
+    await savePendingRestore({ kind: 'restore', ephemeral: eph, provider: 'google', nonce: 'rn-1', startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS });
     const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g-sub-1', nonce }))}.c2ln`;
     window.history.replaceState(null, '', `/app/auth/google#state=${nonce}&id_token=${token}`);
 }
 
-/** The node's recovery routes and its membership probe: Alice is a member, and her Google copy is released. */
+/**
+ * The node's find and recovery routes and its membership probe, on the global profile's open door (GLOBAL_OPEN: global is
+ * case 1, Marty 9 Nov): the find names Alice, she is a member, and her Google copy is released by the hold.
+ */
 function restoreNode(extra: Record<string, Handler> = {}) {
     return stubNode({
-        '/api/recovery/collect/sso': () => json(200, { collected: 1 }),
+        '/api/recovery/find-nonce': () => json(200, { nonce: 'rn-2', expiresInSeconds: 600, clientIds: { google: 'web', apple: 'org.beanpool.web' } }),
+        '/api/recovery/find': () => json(200, { accounts: [{ publicKey: account.publicKey, callsign: 'Alice' }] }),
         '/api/recovery/collect/fragments': async () => {
             const c = await sealSeedToSso(toEd25519Seed(hexToBytes(account.privateKey)), 'google', 'g-sub-1', { words: account.mnemonic ?? null });
             return json(200, { fragments: [{ holderType: 'sso', shareIndex: 1, payload: c.encryptedShare, payloadIv: c.shareIv, payloadTag: c.shareTag, kdfParams: c.kdfParams }] });
         },
+        '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
         '/api/community/membership/': (_b, path) => json(200, path.endsWith(account.publicKey)
             ? { isMember: true, callsign: 'Alice' }
             : { isMember: false, callsign: null }),
@@ -106,8 +108,12 @@ describe('a sign-in coming back for a restore', () => {
         expect(saved.privateKey).toBe(account.privateKey);
         expect(saved.mnemonic).toEqual(account.mnemonic);
         expect(await loadPendingRestore()).toBeNull();
-        // The collect calls were the throwaway key's; the membership question was the restored key's own.
-        for (const c of calls.filter((x) => x.path.startsWith('/api/recovery/collect'))) expect(c.headers['X-Public-Key']).toBe(eph.publicKey);
+        // Found from the sign-in, with nothing typed: the find, then the collect for the account it named, by its key.
+        const recovery = calls.filter((x) => x.path.startsWith('/api/recovery/'));
+        expect(recovery.map((c) => c.path)).toEqual(['/api/recovery/find', '/api/recovery/collect', '/api/recovery/collect/fragments']);
+        expect(recovery[1].body).toEqual({ candidatePublicKey: account.publicKey });
+        // The find and collect calls were the throwaway key's; the membership question was the restored key's own.
+        for (const c of recovery) expect(c.headers['X-Public-Key']).toBe(eph.publicKey);
         expect(calls.find((c) => c.path.startsWith('/api/community/membership/'))?.headers['X-Public-Key']).toBe(account.publicKey);
         expect(calls.some((c) => c.path.startsWith('/api/join'))).toBe(false);
     });
@@ -163,34 +169,80 @@ describe('a sign-in coming back for a restore', () => {
         render(<WelcomePage onComplete={vi.fn()} />);
         await screen.findByTestId('onboarding-stepper');
         expect(calls.filter((c) => c.path === '/api/join')).toHaveLength(1);
-        expect(calls.some((c) => c.path.startsWith('/api/recovery/collect'))).toBe(false);
+        expect(calls.some((c) => c.path.startsWith('/api/recovery/'))).toBe(false);
         expect((await loadPendingRestore())?.nonce).toBe('rn-1');
     });
 });
 
 describe('where it starts on the open door', () => {
-    it('"Already have BeanPool?" → "Use my sign-in": your name here', async () => {
-        stubNode({ '/api/recovery/lookup/': () => json(200, []) });
+    it('"Already have BeanPool?" → "Use my sign-in": this community and its sign-ins, with no name to type', async () => {
+        restoreNode();
         render(<WelcomePage onComplete={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Already have BeanPool?' }));
         // Disabled until WebJoin's browserKeyProblem() answers: wait for it, or a slow runner clicks a disabled button.
         const signin = await screen.findByTestId('join-restore-signin');
         await waitFor(() => expect(signin).not.toBeDisabled());
         fireEvent.click(signin);
-        await screen.findByTestId('restore-screen-name');
+        await screen.findByTestId('restore-screen-providers');
+        await screen.findByTestId('restore-provider-google');
+        expect(screen.getByTestId('restore-community').textContent?.trim()).not.toBe('');
+        expect(screen.queryByTestId('restore-callsign')).toBeNull();
+        expect(screen.queryByText('Your name here', { exact: false })).toBeNull();
         // And back: the lobby again.
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));
         await screen.findByTestId('join-screen-lobby');
     });
 
+    it('at the app\'s global community (global.beanpool.org): the community it finds in is "Global community", nothing typed', async () => {
+        restoreNode({ '/api/community/info': () => json(200, { ...GLOBAL_OPEN, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Already have BeanPool?' }));
+        const signin = await screen.findByTestId('join-restore-signin');
+        await waitFor(() => expect(signin).not.toBeDisabled());
+        fireEvent.click(signin);
+        await screen.findByTestId('restore-provider-google');
+        expect(screen.getByTestId('restore-community').textContent?.trim()).toBe('Global community');
+        expect(screen.queryByTestId('restore-callsign')).toBeNull();
+    });
+
+    it('a local community with an invite door: "Restore Existing Identity" → "Recover with Social Sign-In", the community by its name, nothing typed', async () => {
+        restoreNode({
+            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } }),
+            '/api/community/card': () => json(200, { name: 'Mullumbimby', host: 'mullum.beanpool.org', members: 77, area: null, joining: 'invite', doors: [] }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(await screen.findByTestId('member-restore-signin'));
+        await screen.findByTestId('restore-provider-google');
+        // By the name on its card, once the card has come (the page's address until then).
+        await waitFor(() => expect(screen.getByTestId('restore-community').textContent?.trim()).toBe('Mullumbimby'));
+        expect(screen.queryByTestId('restore-callsign')).toBeNull();
+        // And back: the ways to restore again.
+        fireEvent.click(screen.getByRole('button', { name: '← Back' }));
+        await screen.findByTestId('member-restore-signin');
+    });
+
+    it('a local community that keeps no copies of accounts does not offer it: a sign-in there could bring nothing back', async () => {
+        restoreNode({
+            '/api/community/info': () => json(200, { memberCount: 77, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false }, recoveryCopies: 'none' }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        await screen.findByText('Recover with 12 Words', { exact: false });
+        // The node's answer is read once the page has asked: give it the moment, then the way is still not offered.
+        await waitFor(() => expect(screen.queryByTestId('member-restore-signin')).toBeNull());
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('member-restore-signin')).toBeNull();
+    });
+
     it('"Have you used BeanPool before?" offers it too, so nobody makes a second account', async () => {
-        stubNode();
+        restoreNode();
         render(<WelcomePage onComplete={vi.fn()} />);
         const join = await screen.findByTestId('join-start');
         await waitFor(() => expect(join).not.toBeDisabled());
         fireEvent.click(join);
         fireEvent.click(await screen.findByTestId('join-guard-signin'));
-        await screen.findByTestId('restore-screen-name');
+        await screen.findByTestId('restore-screen-providers');
     });
 
     it("a sign-in that already has an account here: \"Restore with Google\", and Google is offered first", async () => {
@@ -198,17 +250,12 @@ describe('where it starts on the open door', () => {
         await savePendingJoin({ identity: joiner, provider: 'google', nonce: 'jn-1', startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false });
         const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g-sub-1', nonce: 'jn-1' }))}.c2ln`;
         window.history.replaceState(null, '', `/app/auth/google#state=jn-1&id_token=${token}`);
-        stubNode({
+        restoreNode({
             '/api/join': () => json(409, { code: 'already_joined', error: 'This Google account already has a BeanPool identity here.' }),
             '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
-            '/api/recovery/lookup/': () => json(200, [{ publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true }]),
-            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'rn-1', clientIds: { google: 'web', apple: 'org.beanpool.web' } }),
-            '/api/recovery/collect': () => json(200, { collectionId: 'col-1' }),
         });
         render(<WelcomePage onComplete={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Restore with Google' }));
-        fireEvent.change(await screen.findByTestId('restore-callsign'), { target: { value: 'Alice' } });
-        fireEvent.click(await screen.findByRole('button', { name: 'Alice' }));
         await screen.findByTestId('restore-provider-apple');
         const order = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid')).filter((t) => t?.startsWith('restore-provider-'));
         expect(order[0]).toBe('restore-provider-google');

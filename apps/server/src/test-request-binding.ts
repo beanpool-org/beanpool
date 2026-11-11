@@ -10,12 +10,12 @@
  *
  * Every node here is a REAL server, its own process in its own process group, over real HTTPS through the real
  * signature middleware: A (`a.test`) and B (`b.test`, and `b2.test` from BEANPOOL_ADDRESSES), the same member keys
- * members of both; C (`c.test`) with ENFORCE_WS_AUTH=true and ACCEPT_UNBOUND_SIGNATURES_UNTIL=never; G on the global
- * profile (`global.test`); U, a self-hoster's node with no address configured. The apps are played by the core
- * builders PR 2 (native) and PR 3 (PWA) use. The requests reach each server at localhost: the host a request is signed
- * for is the one a phone would have connected to.
+ * members of both; C (`c.test`) with ENFORCE_WS_AUTH=true; G on the global profile (`global.test`); U, a self-hoster's
+ * node with no address configured. The apps are played by the core builders PR 2 (native) and PR 3 (PWA) use. The
+ * requests reach each server at localhost: the host a request is signed for is the one a phone would have connected to.
  *
- *  1. Old apps keep working until the switch: an old-format send, read and socket, and they are counted.
+ *  1. An app from before binding is refused (the cutover, 1.4.0, CUT4): an old-format send and a gated read get 426
+ *     app_too_old with nothing done and the nonce never looked at, and its socket gets what an unsigned one gets.
  *  2. Replay refused: a Beans transfer signed for A and sent to B → 421 wrong_community, B's balances unchanged, the
  *     nonce unspent at B (the same request re-signed for b.test, same nonce and timestamp, succeeds there, once).
  *  3. A gated read signed for A → 421 at B, with nothing of the read in the answer. A request whose signature is
@@ -27,29 +27,29 @@
  *     entries it left out (a non-ASCII name, a bad port).
  *  6. The directory: on the global node, a signed /api/global/home read for global.test shows the member's watches;
  *     signed for b.test → 421.
- *  7. The switch: before the date the old format is accepted; after it (the clock injected) 426 app_too_old and an
- *     old-format socket is treated as unsigned; env ACCEPT_UNBOUND_SIGNATURES_UNTIL=never refuses it now.
+ *  7. The old format on any day: 426 app_too_old before the date (UNCONFIGURED_HOSTS_UNTIL) and after it alike; its
+ *     public reads are answered as unsigned (health, info); an old-format socket is treated as unsigned, 401 at C.
  *  8. The Manage button: a hostile node's "challenge" that is a request's text, signed as an old app signs it, is
- *     refused as a request after the switch and never accepted as a format-2 sign-in; the format-2 sign-in for this
- *     host opens a session, for another host 421; the old sign-in form works until the switch and 426 after.
- *  9. Pairing and offline tickets made for A are refused at B; the old forms until the switch only.
- * 10. The self-hoster: any host accepted until an owner confirms one; then only that one; after the switch, an
- *     unconfirmed host is refused. Settings offers a host with one tap only when it is open at that host itself;
- *     from anywhere else a host apps reached, the owner's app included, is held back to tick (test-address-offers has
- *     the rest of that rule).
- * 11. Settings: the address list with its sources and counts, and the old-app count. No key is stored. Keys with no
- *     row here move neither count.
+ *     refused as a request (426) and never accepted as a format-2 sign-in; the format-2 sign-in for this host opens a
+ *     session, for another host 421; the old sign-in forms (the node's text, the bare id) get 426.
+ *  9. Pairing and offline tickets made for A are refused at B; their old forms are refused as too old.
+ * 10. The self-hoster: any host accepted until an owner confirms one; then only that one; from the date
+ *     (UNCONFIGURED_HOSTS_UNTIL), an unconfirmed host is refused. Settings offers a host with one tap only when it is
+ *     open at that host itself; from anywhere else a host apps reached, the owner's app included, is held back to tick
+ *     (test-address-offers has the rest of that rule).
+ * 11. Settings: the address list with its sources and counts, and the date. No key is stored. Keys with no row here
+ *     move no count, and an old app's signature counts for nothing (it is refused unchecked).
  * 12. "Delete my account" signed for A, replayed at B → 421, B's row unchanged; re-signed for b.test it works there.
  * 13. A nonce is held for as long as its request is fresh: a timestamp from a clock running ahead is fresh past the
  *     window from its arrival, and the same request is still refused there as a replay.
  * 14. Settings' Remove takes off an owner-confirmed address stored in another spelling (as a take-over envelope may
  *     carry it), and a request signed for it is refused from then on.
  * 15. An offline ticket joins once, however its signature is written: without its `==`, with spaces, in the URL-safe
- *     alphabet (the same 64 bytes); a format-2 ticket and an old {i, t} one.
+ *     alphabet (the same 64 bytes); a format-2 ticket. An old {i, t} one joins nobody, however it is written.
  *
- * The switch date is the nodes' own (unboundSignaturesCutoff: the constant, or ACCEPT_UNBOUND_SIGNATURES_UNTIL when it
- * is set for the run), and A, B, G and U run with the switch clock pinned just before it, except in the steps that move
- * it past. So the suite holds for any date, before and after it passes.
+ * The date is the nodes' own (engine/member-signature.ts UNCONFIGURED_HOSTS_UNTIL, the one date left since the
+ * cutover), and A, B, G and U run with the clock pinned just before it, except in the steps that move it past. So the
+ * suite holds for any date, before and after it passes, and the old format is shown refused on both sides of it.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-request-binding.ts
  */
@@ -66,7 +66,9 @@ import { setMemberPhoto } from '@beanpool/engine';
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Request-Binding-Pw-4471!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
-/** The switch (ms), read from the nodes once they are up. */
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
+/** UNCONFIGURED_HOSTS_UNTIL (ms), read from the nodes once they are up. */
 let SWITCH = 0;
 
 // ── The node processes ─────────────────────────────────────────────────────────────────────
@@ -80,7 +82,6 @@ async function child(): Promise<void> {
     // Never a real certificate or DNS: a self-signed certificate whatever the name.
     delete process.env.CF_API_TOKEN;
     delete process.env.CF_ZONE_ID;
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
@@ -94,13 +95,12 @@ async function child(): Promise<void> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
 
     const offer = (pk: string, title: string) => {
-        const post = createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk);
+        const post = createPost('offer', 'produce', title, `${title}, fresh`, hc(10), 'fixed', pk);
         if (!post) throw new Error(`could not list ${title}`);
         return post;
     };
@@ -114,8 +114,8 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
                     .run(m.pk, m.callsign);
                 setMemberPhoto(db, m.pk, AVATAR);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
-                if (a.beans) se.transfer('genesis', m.pk, 100, `seed ${m.callsign}`, 'direct', true);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
+                if (a.beans) se.transfer('genesis', m.pk, hc(100), `seed ${m.callsign}`, 'direct', true);
             }
             // A completed trade, so the trader may send Beans directly (the send gate).
             if (a.trader && a.partner) {
@@ -125,7 +125,8 @@ async function child(): Promise<void> {
             }
             return true;
         },
-        balance: (a: { pk: string }) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(a.pk) as { balance: number } | undefined)?.balance ?? null,
+        // A member's balance row, whole hundredths.
+        balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance_c: number } | undefined)?.balance_c ?? null,
         member: (a: { pk: string }) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(a.pk) as { status: string } | undefined)?.status ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
         nonceSpent: async (a: { nonce: string }) => (await ms()).requestNonces.isSpent(a.nonce),
@@ -139,7 +140,7 @@ async function child(): Promise<void> {
                 return v.ok ? 'ok' : v.status;
             });
         },
-        switchCutoff: async () => (await ms()).unboundSignaturesCutoff(),
+        switchCutoff: async () => Date.parse(`${(await ms()).UNCONFIGURED_HOSTS_UNTIL}T00:00:00Z`),
         switchClock: async (a: { at: number | null }) => {
             (await ms()).setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
             return true;
@@ -215,8 +216,7 @@ let seq = 0;
 function startNode(name: string, env: Record<string, string | undefined>): Promise<Node> {
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dataDir, { recursive: true });
-    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
-    // ACCEPT_UNBOUND_SIGNATURES_UNTIL is kept: a date set for the run is every node's switch (C sets its own).
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir };
     for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
@@ -356,7 +356,7 @@ async function main(): Promise<void> {
         if (!sessions.has(n)) sessions.set(n, await n.send('owner-session'));
         return sessions.get(n)!;
     };
-    /** A node's switch clock just before the switch: every step that is not about "after the switch" runs there. */
+    /** A node's clock just before UNCONFIGURED_HOSTS_UNTIL: every step that is not about "from the date" runs there. */
     const beforeSwitch = (n: Node) => n.send('switchClock', { at: SWITCH - 1 });
 
     try {
@@ -364,7 +364,7 @@ async function main(): Promise<void> {
         const [A, B, C, G, U] = await Promise.all([
             startNode('a', { CF_RECORD_NAME: 'a.test' }),
             startNode('b', { CF_RECORD_NAME: 'b.test', BEANPOOL_ADDRESSES: 'b2.test, https://B2.test:8443/ , bücher.test, name.example:844x' }),
-            startNode('c', { CF_RECORD_NAME: 'c.test', ENFORCE_WS_AUTH: 'true', ACCEPT_UNBOUND_SIGNATURES_UNTIL: 'never' }),
+            startNode('c', { CF_RECORD_NAME: 'c.test', ENFORCE_WS_AUTH: 'true' }),
             startNode('g', { CF_RECORD_NAME: 'global.test', NODE_PROFILE: 'global' }),
             startNode('u', {}),
         ]);
@@ -373,25 +373,30 @@ async function main(): Promise<void> {
         }
         await G.send('seed', { owner: { pk: owner.pk, callsign: owner.callsign }, members: [{ pk: mia.pk, callsign: mia.callsign }], beans: false });
         const cutoff = await A.send('switchCutoff');
-        if (typeof cutoff !== 'number') throw new Error('A refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
+        if (!Number.isFinite(cutoff)) throw new Error('A names no UNCONFIGURED_HOSTS_UNTIL: this suite needs the date');
         SWITCH = cutoff;
-        console.log(`the switch: ${new Date(SWITCH).toISOString()}; the nodes' clocks are pinned just before it`);
+        console.log(`UNCONFIGURED_HOSTS_UNTIL: ${new Date(SWITCH).toISOString()}; the nodes' clocks are pinned just before it`);
         for (const n of [A, B, G, U]) await beforeSwitch(n);
 
-        // ── 1. Old apps keep working until the switch ──
-        console.log('\n— 1. an app from before binding keeps working until the switch —');
+        // ── 1. An app from before binding is refused ──
+        console.log('\n— 1. an app from before binding is refused: 426 app_too_old (CUT4) —');
         await section('1', async () => {
             const before = await A.send('balance', { pk: xan.pk });
-            const r = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'old app send' }));
-            assert(r.status === 200 && (await A.send('balance', { pk: xan.pk })) === before + 1, `an old-format Beans send is accepted at A (${show(r)})`);
+            const send = unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'old app send' });
+            const r = await sendTo(A, 'POST', send);
+            assert(r.status === 426 && r.body?.code === 'app_too_old' && /too old/.test(r.body?.error)
+                && (await A.send('balance', { pk: xan.pk })) === before && (await A.send('transfers', { memo: 'old app send' })) === 0,
+                `an old-format Beans send at A → 426 app_too_old, and nothing moves (${show(r)})`);
+            assert((await A.send('nonceSpent', { nonce: send.headers['X-Nonce'] })) === false, 'its nonce is never spent: nothing in it was checked');
             const read = await sendTo(B, 'GET', unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`));
-            assert(read.status === 200, `an old-format gated read is accepted at B (${show(read)})`);
+            assert(read.status === 426 && read.body?.code === 'app_too_old' && Object.keys(read.body).sort().join(',') === 'code,error',
+                `an old-format gated read at B → 426, with nothing of the read in the answer (${show(read)})`);
             const sock = await socket(B, oldWsQuery(mia));
-            assert(sock.kind === 'open', `an old-format /ws token opens a socket at B (${sockShow(sock)})`);
+            assert(sock.kind === 'open', `an old-format /ws token still opens a socket at B, in the default mode (${sockShow(sock)})`);
             await B.send('announce', { title: 'OLD-APP-FEED' });
             await sleep(300);
-            assert(sock.kind === 'open' && sock.events.some((e) => e.type === 'system_announcement' && e.title === 'OLD-APP-FEED'),
-                'and it gets the member feed, as before');
+            assert(sock.kind === 'open' && !sock.events.some((e) => e.type === 'system_announcement' && e.title === 'OLD-APP-FEED'),
+                'but it gets no member feed: what an unsigned socket gets');
             if (sock.kind === 'open') sock.ws.terminate();
         });
 
@@ -399,10 +404,10 @@ async function main(): Promise<void> {
         console.log('\n— 2. a Beans send signed for A, replayed at B —');
         await section('2', async () => {
             const memo = `bound send ${crypto.randomBytes(3).toString('hex')}`;
-            const req = await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 3, memo });
+            const req = await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(3), memo });
             const aBefore = await A.send('balance', { pk: xan.pk });
             const atA = await sendTo(A, 'POST', req);
-            assert(atA.status === 200 && (await A.send('balance', { pk: xan.pk })) === aBefore + 3, `signed for a.test, the send is accepted at A (${show(atA)})`);
+            assert(atA.status === 200 && (await A.send('balance', { pk: xan.pk })) === aBefore + hc(3), `signed for a.test, the send is accepted at A (${show(atA)})`);
             const [bMia, bXan] = [await B.send('balance', { pk: mia.pk }), await B.send('balance', { pk: xan.pk })];
             const atB = await sendTo(B, 'POST', req);
             assert(atB.status === 421 && atB.body?.code === 'wrong_community', `the identical bytes at B → 421 wrong_community (${show(atB)})`);
@@ -410,10 +415,10 @@ async function main(): Promise<void> {
                 "B's balances are unchanged and no transfer was written there");
             assert((await B.send('nonceSpent', { nonce: req.nonce })) === false, 'the nonce is unspent at B');
             assert((await A.send('nonceSpent', { nonce: req.nonce })) === true, '(and spent at A, where it was accepted)');
-            const again = await bound(mia, 'POST', 'https://b.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 3, memo },
+            const again = await bound(mia, 'POST', 'https://b.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(3), memo },
                 { timestamp: Number(req.headers['X-Timestamp']), nonce: req.nonce });
             const reSigned = await sendTo(B, 'POST', again);
-            assert(reSigned.status === 200 && (await B.send('balance', { pk: xan.pk })) === bXan + 3 && (await B.send('transfers', { memo })) === 1,
+            assert(reSigned.status === 200 && (await B.send('balance', { pk: xan.pk })) === bXan + hc(3) && (await B.send('transfers', { memo })) === 1,
                 `the same body re-signed for b.test, with the same nonce and timestamp, is accepted at B, once (${show(reSigned)})`);
             const replayAtB = await sendTo(B, 'POST', again);
             assert(replayAtB.status === 403 && (await B.send('transfers', { memo })) === 1, `and replayed there it is refused as a replay (${show(replayAtB)})`);
@@ -436,7 +441,8 @@ async function main(): Promise<void> {
             assert(hexAtA.status === 403, `the same read signed for a.test, its signature written in hex → 403 at A, as on main (${show(hexAtA)})`);
             const oldHex = unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`);
             const oldHexAtA = await sendTo(A, 'GET', { ...oldHex, headers: { ...oldHex.headers, 'X-Signature': hexOf(oldHex.headers['X-Signature']) } });
-            assert(oldHexAtA.status === 403, `an old-format one written in hex → 403 too (${show(oldHexAtA)})`);
+            assert(oldHexAtA.status === 426 && oldHexAtA.body?.code === 'app_too_old',
+                `an old-format one written in hex → 426: the old shape is refused before its signature is read (${show(oldHexAtA)})`);
             const asSigned = await sendTo(A, 'GET', hexRead);
             assert(asSigned.status === 200, `and the first, sent as signed (base64), is accepted: its nonce was left unspent (${show(asSigned)})`);
         });
@@ -502,17 +508,19 @@ async function main(): Promise<void> {
             assert(elsewhere.status === 421 && !('watches' in (elsewhere.body || {})), `the same read signed for b.test → 421, no watches (${show(elsewhere)})`);
         });
 
-        // ── 7. The switch ──
-        console.log('\n— 7. the switch —');
+        // ── 7. The old format on any day ──
+        console.log('\n— 7. the old format, before the date and after it —');
         await section('7', async () => {
-            await beforeSwitch(A);
-            const lastDay = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'last day' }));
-            assert(lastDay.status === 200, `the last moment before ${new Date(SWITCH).toISOString().slice(0, 10)}: old format accepted (${show(lastDay)})`);
-            await A.send('switchClock', { at: SWITCH });
-            const before = await A.send('balance', { pk: xan.pk });
-            const after = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'after the switch' }));
-            assert(after.status === 426 && after.body?.code === 'app_too_old' && /too old/.test(after.body?.error) && (await A.send('balance', { pk: xan.pk })) === before,
-                `from the switch: old format → 426 app_too_old, nothing moves (${show(after)})`);
+            const day = new Date(SWITCH).toISOString().slice(0, 10);
+            for (const [when, at] of [['the last moment before', SWITCH - 1], ['from', SWITCH]] as const) {
+                await A.send('switchClock', { at });
+                const before = await A.send('balance', { pk: xan.pk });
+                const memo = `old app, ${when} ${day}`;
+                const old = await sendTo(A, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo }));
+                assert(old.status === 426 && old.body?.code === 'app_too_old' && /too old/.test(old.body?.error)
+                    && (await A.send('balance', { pk: xan.pk })) === before && (await A.send('transfers', { memo })) === 0,
+                    `${when} ${day}: old format → 426 app_too_old, nothing moves (${show(old)})`);
+            }
             const oldRead = await sendTo(A, 'GET', unbound(mia, 'GET', `/api/messages/conversations/${mia.pk}`));
             assert(oldRead.status === 426, `an old-format private read too (${show(oldRead)})`);
             // Every old app signs its GETs to its node, and reads its "update BeanPool" banner's minimum version from
@@ -526,22 +534,23 @@ async function main(): Promise<void> {
                 `(Mia's own figures, signed for a.test, differ from the node-wide ones: ${miasInfo.body?.transactionCount} vs ${plainInfo.body?.transactionCount})`);
             assert(signedInfo.status === 200 && signedInfo.body?.transactionCount === plainInfo.body?.transactionCount,
                 `and /api/community/info, answered as unsigned: the node-wide figures, not Mia's (${signedInfo.body?.transactionCount} = ${plainInfo.body?.transactionCount})`);
-            const newStill = await sendTo(A, 'POST', await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'new app after switch' }));
+            const newStill = await sendTo(A, 'POST', await bound(mia, 'POST', 'https://a.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'new app after switch' }));
             assert(newStill.status === 200, `format 2 is unaffected (${show(newStill)})`);
             const oldSock = await socket(A, oldWsQuery(mia));
-            assert(oldSock.kind === 'open', `an old-format /ws token after the switch still opens a socket in the default mode (${sockShow(oldSock)})`);
+            assert(oldSock.kind === 'open', `an old-format /ws token still opens a socket in the default mode (${sockShow(oldSock)})`);
             await A.send('announce', { title: 'AFTER-SWITCH-NEWS' });
             await sleep(300);
             assert(oldSock.kind === 'open' && !oldSock.events.some((e) => e.type === 'system_announcement'), 'but it is treated as unsigned: no member feed');
             if (oldSock.kind === 'open') oldSock.ws.terminate();
             await beforeSwitch(A);
 
-            const never = await sendTo(C, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'never' }));
-            assert(never.status === 426 && never.body?.code === 'app_too_old', `with ACCEPT_UNBOUND_SIGNATURES_UNTIL=never (C) the old format is refused now (${show(never)})`);
-            const cBound = await sendTo(C, 'POST', await bound(mia, 'POST', 'https://c.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount: 1, memo: 'c bound' }));
+            const atC = await sendTo(C, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'never' }));
+            assert(atC.status === 426 && atC.body?.code === 'app_too_old' && (await C.send('transfers', { memo: 'never' })) === 0,
+                `at C (no setting of its own) the old format is refused too (${show(atC)})`);
+            const cBound = await sendTo(C, 'POST', await bound(mia, 'POST', 'https://c.test/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'c bound' }));
             assert(cBound.status === 200, `and format 2 for c.test is accepted (${show(cBound)})`);
             const strictOldSock = await socket(C, oldWsQuery(mia));
-            assert(strictOldSock.kind === 'status' && strictOldSock.status === 401, `an old-format /ws token at C (strict, switch passed) → 401 (${sockShow(strictOldSock)})`);
+            assert(strictOldSock.kind === 'status' && strictOldSock.status === 401, `an old-format /ws token at C (strict) → 401 (${sockShow(strictOldSock)})`);
         });
 
         // ── 8. The Manage button ──
@@ -555,12 +564,11 @@ async function main(): Promise<void> {
             const oldPhoneSig = Buffer.from(ed25519.sign(core.utf8Bytes(stubChallenge), mia.seed)).toString('base64');
             const forged = { headers: { 'X-Public-Key': mia.pk, 'X-Signature': oldPhoneSig, 'X-Timestamp': ts, 'X-Nonce': nonce }, path: '/api/member/purge', body: undefined };
             const atC = await sendTo(C, 'POST', forged);
-            assert(atC.status === 426 && (await C.send('member', { pk: mia.pk })) === 'active',
-                `that signature used as "delete my account" at a community past the switch → 426, the account is untouched (${show(atC)})`);
-            await B.send('switchClock', { at: SWITCH + 1000 });
+            assert(atC.status === 426 && atC.body?.code === 'app_too_old' && (await C.send('member', { pk: mia.pk })) === 'active',
+                `that signature used as "delete my account" at another community → 426, the account is untouched (${show(atC)})`);
             const atB = await sendTo(B, 'POST', forged);
-            assert(atB.status === 426 && (await B.send('member', { pk: mia.pk })) === 'active', `and at B once its clock passes the switch (${show(atB)})`);
-            await beforeSwitch(B);
+            assert(atB.status === 426 && atB.body?.code === 'app_too_old' && (await B.send('member', { pk: mia.pk })) === 'active',
+                `and at B, whose clock is before the date (${show(atB)})`);
 
             const challenge = async () => (await call(B, 'POST', '/api/local/admin/auth/challenge', {}, '{}')).body;
             const verify = (body: Record<string, unknown>) => call(B, 'POST', '/api/local/admin/auth/verify-challenge', {}, JSON.stringify(body));
@@ -577,17 +585,19 @@ async function main(): Promise<void> {
             const forB = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: await core.signAdminSignin('https://b.test', ch.challengeId, owner.sign), signedFor: 'b.test' });
             assert(forB.status === 200 && /^[0-9a-f]{64}$/.test(forB.body?.handshakeToken) && forB.body?.role === 'owner', `signed for b.test it opens a sign-in (${show(forB)})`);
 
-            ch = await challenge();
-            const oldForm = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: Buffer.from(ed25519.sign(core.utf8Bytes(ch.challenge), owner.seed)).toString('base64') });
-            assert(oldForm.status === 200 && oldForm.body?.handshakeToken, `the old sign-in form (the node's text) still works before the switch (${show(oldForm)})`);
-            ch = await challenge();
-            await B.send('switchClock', { at: SWITCH });
-            const oldAfter = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: Buffer.from(ed25519.sign(core.utf8Bytes(ch.challenge), owner.seed)).toString('base64') });
-            assert(oldAfter.status === 426 && oldAfter.body?.code === 'app_too_old' && !oldAfter.body?.handshakeToken, `and is refused after it: 426 (${show(oldAfter)})`);
-            const bareId = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: Buffer.from(ed25519.sign(core.utf8Bytes(ch.challengeId), owner.seed)).toString('base64') });
-            assert(bareId.status === 426, `so is the bare-id form (${show(bareId)})`);
-            const v2After = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: await core.signAdminSignin('https://b.test', ch.challengeId, owner.sign), signedFor: 'b.test' });
-            assert(v2After.status === 200 && v2After.body?.handshakeToken, `the format-2 sign-in for b.test works after the switch (${show(v2After)})`);
+            // The old sign-in forms (an app from before binding signs the node's text, or the bare id, and names no host):
+            // 426, before the date and from it, and the challenge stays open for the app's format-2 answer.
+            for (const [when, at] of [['before the date', SWITCH - 1], ['from the date', SWITCH]] as const) {
+                await B.send('switchClock', { at });
+                ch = await challenge();
+                const oldForm = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: Buffer.from(ed25519.sign(core.utf8Bytes(ch.challenge), owner.seed)).toString('base64') });
+                assert(oldForm.status === 426 && oldForm.body?.code === 'app_too_old' && /too old/.test(oldForm.body?.error) && !oldForm.body?.handshakeToken,
+                    `${when}: the old sign-in form (the node's text) → 426 app_too_old, no sign-in (${show(oldForm)})`);
+                const bareId = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: Buffer.from(ed25519.sign(core.utf8Bytes(ch.challengeId), owner.seed)).toString('base64') });
+                assert(bareId.status === 426 && bareId.body?.code === 'app_too_old' && !bareId.body?.handshakeToken, `so is the bare-id form (${show(bareId)})`);
+                const v2 = await verify({ challengeId: ch.challengeId, memberPubkey: owner.pk, signature: await core.signAdminSignin('https://b.test', ch.challengeId, owner.sign), signedFor: 'b.test' });
+                assert(v2.status === 200 && v2.body?.handshakeToken, `and the same challenge, signed in format 2 for b.test, opens a sign-in (${show(v2)})`);
+            }
             await beforeSwitch(B);
 
             // A route that reads the signed timestamp back from the stored text (the owner's "12 words checked").
@@ -614,10 +624,14 @@ async function main(): Promise<void> {
             const v1Sig = Buffer.from(ed25519.sign(core.utf8Bytes(v1), owner.seed)).toString('base64');
             await B.send('switchClock', { at: SWITCH });
             const v1After = await approve(p, { signature: v1Sig });
-            assert(v1After.status === 426, `the old v1 approval after the switch → 426 (${show(v1After)})`);
+            assert(v1After.status === 426 && v1After.body?.code === 'app_too_old', `the old v1 approval from the date → 426 app_too_old (${show(v1After)})`);
             await beforeSwitch(B);
             const v1Before = await approve(p, { signature: v1Sig });
-            assert(v1Before.status === 200, `and before it, accepted as before (${show(v1Before)})`);
+            assert(v1Before.status === 426 && v1Before.body?.code === 'app_too_old', `and before it, 426 as well (${show(v1Before)})`);
+            const stillWaits = await call(B, 'GET', `/api/local/admin/auth/pairing/${p.pairingId}`);
+            const v2Approve = await approve(p, { signature: await core.signSettingsSignin('https://b.test', 'approve', p.pairingId, p.shortCode, owner.sign), signedFor: 'b.test' });
+            assert(stillWaits.status === 200 && v2Approve.status === 200 && v2Approve.body?.role === 'owner',
+                `the pairing still waits, and the phone's format-2 approval for b.test is taken (${show(stillWaits)}; ${show(v2Approve)})`);
 
             const joiner = (n: string) => id(n);
             // Signed by the joiner's key for the node it is sent to, as both apps sign a redeem (the node registers no key a
@@ -645,17 +659,17 @@ async function main(): Promise<void> {
                 const s = Buffer.from(ed25519.sign(core.utf8Bytes(payload), mia.seed)).toString('base64');
                 return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
             };
-            const jOld = joiner('JoOld');
-            const oldBefore = await redeem(B, oldTicket(), jOld);
-            assert(oldBefore.status === 200 && oldBefore.body?.success, `an old app's ticket still joins before the switch (${show(oldBefore)})`);
-            await B.send('switchClock', { at: SWITCH });
-            const late = oldTicket();
-            const jLate = joiner('JoLate');
-            const oldAfter = await redeem(B, late, jLate);
-            assert(oldAfter.status === 400 && /old version/.test(oldAfter.body?.error) && (await B.send('member', { pk: jLate.pk })) === null,
-                `after it, refused, and the joiner is told to ask for a new one (${show(oldAfter)})`);
-            const lateCheck = await check(B, late);
-            assert(lateCheck.body?.valid === false && lateCheck.body?.reason === 'app_too_old', `the pre-flight says so too (${show(lateCheck)})`);
+            // An old app's ticket names no community: refused as too old, before the date and from it.
+            for (const [when, at] of [['before the date', SWITCH - 1], ['from the date', SWITCH]] as const) {
+                await B.send('switchClock', { at });
+                const old = oldTicket();
+                const jOld = joiner(`JoOld${at === SWITCH ? 'Late' : ''}`);
+                const refused = await redeem(B, old, jOld);
+                assert(refused.status === 400 && /old version/.test(refused.body?.error) && (await B.send('member', { pk: jOld.pk })) === null,
+                    `${when}: an old app's ticket is refused, nobody joins, and the joiner is told to ask for a new one (${show(refused)})`);
+                const oldCheck = await check(B, old);
+                assert(oldCheck.body?.valid === false && oldCheck.body?.reason === 'app_too_old', `the pre-flight says so too (${show(oldCheck)})`);
+            }
             await beforeSwitch(B);
         });
 
@@ -666,12 +680,12 @@ async function main(): Promise<void> {
             assert(infoBefore.body?.requestSigning === 2 && Array.isArray(infoBefore.body?.addresses) && infoBefore.body.addresses.length === 0,
                 `it lists no address (${JSON.stringify(infoBefore.body?.addresses)})`);
             const any = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
-            assert(any.status === 200, `a request signed for community.example.org is accepted until the switch (${show(any)})`);
+            assert(any.status === 200, `a request signed for community.example.org is accepted until the date (${show(any)})`);
             const lan = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://192.168.1.20:8443/api/community/me'));
             assert(lan.status === 200, `so is one for its LAN address (${show(lan)})`);
             await U.send('switchClock', { at: SWITCH });
             const late = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
-            assert(late.status === 421, `after the switch an unconfirmed host is refused (${show(late)})`);
+            assert(late.status === 421, `from the date an unconfirmed host is refused (${show(late)})`);
             const lanLate = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://192.168.1.20:8443/api/community/me'));
             assert(lanLate.status === 200, `while its LAN address still works (${show(lanLate)})`);
             await beforeSwitch(U);
@@ -724,7 +738,7 @@ async function main(): Promise<void> {
         });
 
         // ── 11. Settings on B: the list and the counts ──
-        console.log('\n— 11. Settings: the address list and the old-app count —');
+        console.log('\n— 11. Settings: the address list and the counts —');
         await section('11', async () => {
             const r = await call(B, 'GET', '/api/local/admin/app-addresses', await adminOf(B));
             const b = r.body || {};
@@ -732,16 +746,17 @@ async function main(): Promise<void> {
             assert(r.status === 200 && by('b.test')?.source === 'public-address' && by('b2.test')?.source === 'env',
                 `B lists b.test (its public address) and b2.test (BEANPOOL_ADDRESSES) (${JSON.stringify(b.addresses)})`);
             assert(by('b.test')?.today >= 1 && by('b2.test')?.today >= 1, 'each with how many people\'s apps used it today');
-            assert(b.oldApps?.today >= 1 && b.unboundSignaturesUntil === new Date(SWITCH).toISOString().slice(0, 10) && b.unboundSignaturesAccepted === true,
-                `and how many signed with an old app, and the switch date (${JSON.stringify({ o: b.oldApps, u: b.unboundSignaturesUntil })})`);
+            assert(!('oldApps' in b) && b.unboundSignaturesUntil === new Date(SWITCH).toISOString().slice(0, 10) && b.unboundSignaturesAccepted === true,
+                `and the date until which a node that knows none of its names takes any host; no old-app count, as such apps are refused (${JSON.stringify({ o: b.oldApps, u: b.unboundSignaturesUntil })})`);
             const rows: any[] = await B.send('countsTable');
             const keys = [owner, mia, xan].map((m) => m.pk);
             assert(rows.length > 0 && !JSON.stringify(rows).match(new RegExp(keys.map((k) => k.slice(0, 16)).join('|'))),
                 `the counts table holds counts and addresses, no key (${rows.length} rows)`);
+            assert(!rows.some((row) => row.kind === 'old_app'),
+                `and no old-app row, though B's members signed the old way in sections 1, 8 and 9: a refused signature counts for nothing (${JSON.stringify(rows.map((row) => row.kind))})`);
             const moderatorless = await call(B, 'GET', '/api/local/admin/app-addresses');
             assert(moderatorless.status === 401, `and the list needs admin auth (${show(moderatorless)})`);
-            // Only members' apps are counted: a throwaway key costs nothing, and the old-app count is what an owner reads
-            // to decide whether to move the switch date.
+            // Only members' apps are counted: a throwaway key costs nothing.
             const strangers = [1, 2, 3, 4, 5].map((i) => id(`Nobody${i}`));
             const statuses: number[] = [];
             for (const k of strangers) {
@@ -751,8 +766,8 @@ async function main(): Promise<void> {
             assert(statuses.every((s) => s === 200), `5 keys with no row at B each send an old-format and a format-2 read, and are answered (${statuses.join(',')})`);
             const after = (await call(B, 'GET', '/api/local/admin/app-addresses', await adminOf(B))).body || {};
             const bTestAfter = after.addresses?.find((x: any) => x.address === 'b.test')?.today;
-            assert(after.oldApps?.today === b.oldApps?.today && bTestAfter === by('b.test')?.today,
-                `neither count moves: apps too old ${b.oldApps?.today} → ${after.oldApps?.today}, b.test ${by('b.test')?.today} → ${bTestAfter}`);
+            assert(!('oldApps' in after) && bTestAfter === by('b.test')?.today,
+                `no count moves: b.test ${by('b.test')?.today} → ${bTestAfter}`);
         });
 
         // ── 12. "Delete my account", replayed ──
@@ -782,7 +797,7 @@ async function main(): Promise<void> {
             // Signed on a phone 4½ minutes ahead: fresh from its arrival until 9½ minutes after it.
             const arrived = Date.now();
             const ahead = arrived + 4.5 * 60_000;
-            const skewed = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'skewed' }, { timestamp: ahead }));
+            const skewed = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount_c: hc(1), memo: 'skewed' }, { timestamp: ahead }));
             const [first, afterArrivalWindow, lastFresh, stale] = await A.send('verifyAt', {
                 parts: skewed, at: [arrived, arrived + W + 1_000, ahead + W, ahead + W + 1],
             });
@@ -792,7 +807,7 @@ async function main(): Promise<void> {
             assert(stale === 401, `after that it is stale (${stale})`);
             // A clock that agrees: the last fresh millisecond is exactly 5 minutes after it.
             const t = Date.now();
-            const onTime = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount: 1, memo: 'on time' }, { timestamp: t }));
+            const onTime = partsOf(await bound(xan, 'POST', 'https://a.test/api/ledger/transfer', { from: xan.pk, to: owner.pk, amount_c: hc(1), memo: 'on time' }, { timestamp: t }));
             const [once, edge] = await A.send('verifyAt', { parts: onTime, at: [t, t + W] });
             assert(once === 'ok' && edge === 403, `a request on time: accepted once, refused as a replay at the edge of its window (${once}, ${edge})`);
         });
@@ -840,8 +855,17 @@ async function main(): Promise<void> {
             };
             const kinds: [string, (t: number) => Promise<string> | string][] = [
                 ['a format-2 ticket', (t) => core.buildInviteTicket('https://a.test', xan.pk, xan.sign, { timestamp: t })],
-                ['an old {i, t} ticket', oldTicket],
             ];
+            // An old {i, t} ticket (an app from before binding) joins nobody, however its signature is written: too old.
+            {
+                const old = oldTicket(Date.now());
+                for (const [how, f] of [['as made', (s: string) => s] as [string, (s: string) => string], ...spellings]) {
+                    const j = joiner();
+                    const r = await redeem(respell(old, f), j);
+                    assert(r.status === 400 && /old version/.test(r.body?.error) && (await A.send('member', { pk: j.pk })) === null,
+                        `an old {i, t} ticket, ${how}: refused as too old, and nobody joins (${show(r)})`);
+                }
+            }
             for (const [kind, make] of kinds) {
                 // One whose signature holds a + or a /, so its URL-safe spelling differs (a signature is fixed by what it
                 // signs, so the time is moved back a millisecond at a time).

@@ -32,10 +32,21 @@ const BEANS_ON: Array<[string, NodeFeatures | null | undefined]> = [
 const FIELDS = ['', '0', '12', '12.5', ' 7 ', ' ', 'abc', '-3', '1e3'];
 const UNITS = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'];
 
-// What app/group-post.tsx computed inline before, copied verbatim, to hold Beans on to it.
+// What app/group-post.tsx takes from each field with Beans on: the price read as every typed amount is (core
+// parseHundredths, atomic Beans M2), whole hundredths of a Bean, and whether Post marks the field. Before M2 the field was
+// `Number(field) || 0` Beans, so '1e3' passed as 1,000; it is no amount now, as on every other money door.
+const ON: Record<string, { price_c: number; invalid: boolean }> = {
+    '': { price_c: 0, invalid: true },
+    '0': { price_c: 0, invalid: false },
+    '12': { price_c: 1200, invalid: false },
+    '12.5': { price_c: 1250, invalid: false },
+    ' 7 ': { price_c: 700, invalid: false },
+    ' ': { price_c: 0, invalid: true },
+    'abc': { price_c: 0, invalid: true },
+    '-3': { price_c: 0, invalid: true },
+    '1e3': { price_c: 0, invalid: true },
+};
 const before = {
-    credits: (credits: string) => Number(credits) || 0,
-    invalid: (credits: string) => !credits.trim() || isNaN(Number(credits)) || Number(credits) < 0,
     missing: 'Please provide a title, category, and price/credits.',
 };
 
@@ -51,7 +62,7 @@ describe('the rule is beansOn’s', () => {
 describe('a group’s post form (app/group-post.tsx)', () => {
     it('Beans off: the post goes up at 0 Beans and a total, whatever the field held', () => {
         for (const field of FIELDS) {
-            for (const unit of UNITS) expect(groupPostPrice(field, unit, GLOBAL)).toEqual({ credits: 0, price_type: 'fixed' });
+            for (const unit of UNITS) expect(groupPostPrice(field, unit, GLOBAL)).toEqual({ price_c: 0, price_type: 'fixed' });
         }
     });
 
@@ -62,10 +73,10 @@ describe('a group’s post form (app/group-post.tsx)', () => {
     });
 
     for (const [name, f] of BEANS_ON) {
-        it(`Beans on (${name}): exactly today’s form`, () => {
+        it(`Beans on (${name}): the price in whole hundredths, read as every typed amount is`, () => {
             for (const field of FIELDS) {
-                for (const unit of UNITS) expect(groupPostPrice(field, unit, f)).toEqual({ credits: before.credits(field), price_type: unit });
-                expect(groupPostPriceInvalid(field, f)).toBe(before.invalid(field));
+                for (const unit of UNITS) expect(groupPostPrice(field, unit, f)).toEqual({ price_c: ON[field].price_c, price_type: unit });
+                expect(groupPostPriceInvalid(field, f)).toBe(ON[field].invalid);
             }
             expect(groupPostMissingFields(f)).toBe(before.missing);
         });
@@ -128,8 +139,9 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         const beans = lines.flatMap((l, i) => (l.includes("require('../assets/images/bean.png')") ? [i] : []));
         expect(beans.length).toBe(2);
         for (const i of beans) expect(lines.slice(i - 5, i).join('\n')).toContain('{showsBeans && (');
-        expect(block(src, '{showsBeans && (')).toContain("{isBuyer ? '- ' : '+ '}{item.credits}");
-        expect(src.split('{showsBeans && (')[2]).toContain("{item.credits ?? '?'}");
+        // Each figure is whole hundredths of a Bean (a deal's amount_c, a listing's price_c), written by formatHundredths.
+        expect(block(src, '{showsBeans && (')).toContain("{isBuyer ? '- ' : '+ '}{formatHundredths(item.amount_c)}");
+        expect(src.split('{showsBeans && (')[2]).toContain("{item.price_c === undefined ? '?' : formatHundredths(item.price_c)}");
         const market = read('app/(tabs)/market.tsx');
         const mount = market.slice(market.indexOf('<MyDealsSheet'), market.indexOf('/>', market.indexOf('<MyDealsSheet')));
         // Where deals are previewed, the sample's amounts are Example Valley's Beans, drawn as a local community's are.
@@ -162,10 +174,11 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(card).toContain('styles.trustBalance');
         expect(src.split("router.push('/(tabs)/ledger')").length - 1).toBe(1);
         // The listing's figure sits in the showsBeans block that holds it (the Trust & safety panel has its own above it).
-        const figure = src.indexOf("{p.credits ?? '?'}");
+        // The figure is the listing's price in whole hundredths (price_c), written by formatHundredths.
+        const figure = src.indexOf('{formatHundredths(p.price_c)}');
         expect(figure).toBeGreaterThan(-1);
         const listing = block(src.slice(src.lastIndexOf('\n', src.lastIndexOf('{showsBeans && (', figure)) + 1), '{showsBeans && (');
-        expect(listing).toContain("{p.credits ?? '?'}");
+        expect(listing).toContain('{formatHundredths(p.price_c)}');
         expect(listing).toContain('bean.png');
         expect(src.split('bean.png').length - 1).toBe(1);
     });
@@ -181,7 +194,8 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
     it('Commons (a link still opens it): no pool balance, no voice credits, no pool info', () => {
         const src = read('app/(tabs)/projects.tsx');
         const row = block(src, '{showsBeans && (');
-        expect(row).toContain('<CurrencyDisplay amount={formatNumber(balanceState.commons || 0, 2)}');
+        // The pool's balance, whole hundredths of a Bean (getBalance's commons_c), written by formatHundredths.
+        expect(row).toMatch(/<CurrencyDisplay amount=\{formatHundredths\([^\n]*balanceState\.commons_c/);
         expect(row).toContain('testID="voice-credits-card"');
         const title = src.slice(src.indexOf('right={showsBeans ? ('), src.indexOf(') : undefined} />'));
         expect(title).toContain("accessibilityLabel={t('About the Commons Pool')}");

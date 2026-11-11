@@ -114,7 +114,6 @@ async function openContext(browser, origin, identity, { dark = false } = {}) {
         document.addEventListener('securitypolicyviolation', (e) => window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI }));
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
     }, [dark ? 'dark' : 'light']);
@@ -156,7 +155,7 @@ const harness = async (context, origin) => {
 const listing = (page, title, extra = {}) => page.evaluate(async ([title, extra, pin, photo]) => {
     const me = await window.tick.loadIdentity();
     const made = await window.tick.api.createMarketplacePost({
-        type: 'offer', category: 'food', title, description: `About ${title}`, credits: 20, priceType: 'fixed', authorPublicKey: me.publicKey, repeatable: false, ...pin, photos: [photo], ...extra,
+        type: 'offer', category: 'food', title, description: `About ${title}`, price_c: 2000, priceType: 'fixed', authorPublicKey: me.publicKey, repeatable: false, ...pin, photos: [photo], ...extra,
     });
     return made.post;
 }, [title, extra, PIN, PHOTO]);
@@ -189,7 +188,7 @@ async function corsAndRequest(ctx) {
     check(!!stored && stored.author_pubkey === member.publicKey, 'the copy is on global by the same key');
     check(stored?.shown_from_host === HOST && stored?.shown_from_post_id === post.id, 'global keeps the listed host and the home id');
     check(stored?.lat === -28.7 && stored?.lng === 153.5, `the pin is the rounded one (${stored?.lat}, ${stored?.lng})`);
-    check(stored?.credits === 0 && stored?.shown_price === '20 fixed', `no money: 0 Beans, the price in words (${stored?.credits}, ${stored?.shown_price})`);
+    check(stored?.price_c === 0 && stored?.shown_price === '2000 fixed', `no money: 0 Beans, the price in words, whole hundredths (${stored?.price_c}, ${stored?.shown_price})`);
     const photos = await global_.ask({ op: 'sql', sql: 'SELECT COUNT(*) AS n FROM post_photos WHERE post_id = ?', params: [copyId], all: true });
     check(photos[0].n === 1, 'its photo came from home, inside the create');
 
@@ -203,7 +202,7 @@ async function corsAndRequest(ctx) {
     const ordinary = await page.evaluate(async ([global_, body]) => {
         const res = await window.tick.api.signedCopyFetch('POST', global_, '/api/marketplace/posts', { ...body, authorPublicKey: (await window.tick.loadIdentity()).publicKey }, await window.tick.loadIdentity());
         return { status: res.status, body: await res.json() };
-    }, [global_.origin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Plain', credits: 0, ...PIN, photos: [PHOTO] }]);
+    }, [global_.origin, { id: crypto.randomUUID(), type: 'offer', category: 'food', title: 'Plain', price_c: 0, ...PIN, photos: [PHOTO] }]);
     check(ordinary.status === 403 && ordinary.body?.code === 'copy_only', `an ordinary post from the community's page is refused (${ordinary.status})`);
 
     const wire = onWire.filter((r) => r.method === 'POST' && r.url.endsWith('/api/marketplace/posts'))[0];
@@ -238,7 +237,7 @@ async function firstCases(ctx) {
     await tick(page, edited);
     await page.evaluate(async (post) => {
         const me = await window.tick.loadIdentity();
-        await window.tick.api.updateMarketplacePost(post.id, me.publicKey, { title: 'Big pumpkins', category: post.category, description: post.description, credits: 20, priceType: 'fixed', type: 'offer', repeatable: false });
+        await window.tick.api.updateMarketplacePost(post.id, me.publicKey, { title: 'Big pumpkins', category: post.category, description: post.description, price_c: 2000, priceType: 'fixed', type: 'offer', repeatable: false });
     }, edited);
     await page.waitForTimeout(800);
     check((await row(global_, (await pairOf(page, edited.id))?.copyId))?.title === 'Big pumpkins', 'an edit at home follows at the moment');
@@ -338,7 +337,7 @@ async function firstCases(ctx) {
     await stopAndTick(offerAgain, 'an Offer, a second time');
     const startAt = new Date(Date.now() + 7 * 86_400_000).toISOString();
     const endAt = new Date(Date.now() + 7 * 86_400_000 + 3_600_000).toISOString();
-    const eventAgain = await listing(page, 'Plum picking', { type: 'event', category: 'community', credits: 0, eventStartAt: startAt, eventEndAt: endAt, eventTz: 'UTC' });
+    const eventAgain = await listing(page, 'Plum picking', { type: 'event', category: 'community', price_c: 0, eventStartAt: startAt, eventEndAt: endAt, eventTz: 'UTC' });
     await tick(page, eventAgain);
     await stopAndTick(eventAgain, 'an event');
     await fresh();

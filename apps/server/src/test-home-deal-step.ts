@@ -19,6 +19,7 @@ import { initStateEngine, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -42,9 +43,9 @@ function makeMember(callsign: string, initialBalance = 100) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
 
-    const totalSum = (db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts`).get() as any).s;
+    const totalSum = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts`).get() as any).s;
     db.prepare(`UPDATE node_config SET value = ? WHERE key = 'ledger_audit_baseline'`).run(String(totalSum));
     reconcileLedgerFromDb();
 
@@ -56,10 +57,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -86,14 +88,14 @@ async function main() {
     console.log('\n── Case 1: Need request ──');
     const needId = 'post-need-s3a';
     db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, repeatable, lendable)
+        INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, repeatable, lendable)
         VALUES (?, 'need', 'general', 'Garden help needed', 'Need weeding help', 15, ?, 1, 'active', 0, 0)
     `).run(needId, alice.pubKeyHex);
 
     // On a Need: buyer is author (Alice, payer of beans), seller is helper (Bob, payee)
     const needTxId = 'tx-need-s3a';
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES (?, ?, ?, ?, 15, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(needTxId, needId, alice.pubKeyHex, bob.pubKeyHex);
 
@@ -115,14 +117,14 @@ async function main() {
     console.log('\n── Case 2: Lendable Offer request ──');
     const lendId = 'post-lend-s3a';
     db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, repeatable, lendable)
+        INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, repeatable, lendable)
         VALUES (?, 'offer', 'tools', 'Lawn mower to lend', 'Electric mower', 5, ?, 1, 'active', 1, 1)
     `).run(lendId, alice.pubKeyHex);
 
     // On a lendable Offer: buyer is borrower (Bob, payer), seller is lender (Alice, payee/author)
     const lendTxId = 'tx-lend-s3a';
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES (?, ?, ?, ?, 5, 'requested', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(lendTxId, lendId, bob.pubKeyHex, alice.pubKeyHex);
 
@@ -140,14 +142,14 @@ async function main() {
     console.log('\n── Case 3: Payee is not waiting on you ──');
     const offerId = 'post-offer-s3a';
     db.prepare(`
-        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, repeatable, lendable)
+        INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, repeatable, lendable)
         VALUES (?, 'offer', 'food', 'Sourdough bread', 'Fresh loaf', 4, ?, 1, 'active', 0, 0)
     `).run(offerId, carol.pubKeyHex);
 
     // Pending deal: Alice is buyer/payer, Carol is seller/payee
     const pendTxId = 'tx-pend-s3a';
     db.prepare(`
-        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+        INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
         VALUES (?, ?, ?, ?, 4, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(pendTxId, offerId, alice.pubKeyHex, carol.pubKeyHex);
 

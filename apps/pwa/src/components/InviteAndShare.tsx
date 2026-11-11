@@ -116,6 +116,7 @@ export function useInviteAndShare(post: { id: string; title: string }, offered: 
                                     onChange={setVouchPreset}
                                     budgetLeft={myVouching.budget?.left ?? 0}
                                     budgetTotal={myVouching.budget?.level ?? 0}
+                                    noLimit={myVouching.noLimit === true}
                                 />
                             </div>
                         )}

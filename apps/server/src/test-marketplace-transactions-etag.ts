@@ -30,6 +30,7 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 import crypto from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -48,10 +49,11 @@ function newId(name: string): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -103,12 +105,12 @@ async function main() {
                     VALUES (?, ?, ?, 'seed', ?, 'active')`).run(id.pk, name, weekAgo, `INV-${name.toUpperCase()}`);
         setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
         // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
         return id;
     };
     const listing = (owner: Id, title: string, credits = 5): string => {
         const id = `post-${crypto.randomUUID()}`;
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey) VALUES (?, 'offer', 'food', ?, '', ?, ?)`)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey) VALUES (?, 'offer', 'food', ?, '', ?, ?)`)
             .run(id, title, credits, owner.pk);
         return id;
     };
@@ -234,7 +236,7 @@ async function main() {
     const rae = member('Rae'), sam = member('Sam');
     for (let i = 0; i < 50; i++) {
         const postId = listing(sam, `Firewood, a trailer load (${i})`);
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                     VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`)
             .run(crypto.randomUUID(), postId, rae.pk, sam.pk, new Date(Date.now() - i * 60_000).toISOString(), new Date().toISOString());
     }

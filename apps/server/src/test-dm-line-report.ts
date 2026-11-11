@@ -8,15 +8,15 @@
  *      signature, reads the words as the reporter's and nothing more. The Reports list names it as a direct message, without
  *      its words, and the assistant never reads them
  *   2. what a signature proves: a signature by someone else, over other bytes, under another message id or to another person
- *      never verifies; bytes nobody signed are never filed as the line (the node's own copy is), and a line from an older
- *      app reads as unsigned
+ *      never verifies; bytes nobody signed are never filed as the line (the node's own copy is); a report taken before the
+ *      1.4.0 cutover, of a line with no signature in its column, reads as unsigned
  *   3. who may report: an outsider, a line of a group, a node's own line and a line nobody has answer word for word alike;
  *      their own line is refused; signed out is 401
  *   4. one report per reporter per line; a repeat that changes the reason to Child safety changes the one on file
  *   5. the sender can't take it back: reported, then deleted; deleted, then reported from the copy the reporter holds; a
- *      request cancelled. An unsigned line that is gone has nothing to stand on
- *   6. an edit: a new signature replaces the old, an edit from an older app drops it, a reply's or not, and a report of the old
- *      copy still verifies
+ *      request cancelled. A line whose signature fails, once gone, has nothing to stand on
+ *   6. an edit: its new signature comes in its column and its metadata stays the line's, a reply's or not; an edit of an older
+ *      format is refused; a report of the old copy still verifies
  *   7. the form: the disclosure's shape, its words' limit
  *   8. a standby copy carries the row exactly, and a server that took over verifies it the same
  *   9. a request whose line its sender deleted: it still waits, the node takes no report of the tombstone an app is left with,
@@ -43,9 +43,12 @@ import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harnes
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { DM_REPORT_SEALED_MAX, DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmPublicKeyOf, newDmMessageId, sealDmLine, signDmLine } from '@beanpool/core';
+import {
+    DM_REPORT_SEALED_MAX, DM_REPORT_WORDS_MAX, dmLineDisclosureFor, dmLineSigDigest, dmLineSigOf, dmPublicKeyOf, newDmMessageId, sealDmLine,
+} from '@beanpool/core';
 import { lockedDm } from './dm-test-payload.js';
 import { AGENT_TOOLS, type AgentGrant } from './agent/tools.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -75,7 +78,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(id.pk, name, owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -89,7 +92,8 @@ async function call(method: 'GET' | 'POST', signer: Id | null, p: string, body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -108,35 +112,46 @@ const open = async (a: Id, b: Id): Promise<string> => {
 };
 
 interface Line { id: string; conversationId: string; ciphertext: string; nonce: string; metadata: string | undefined; text: string }
-/** A line as an app sends one: sealed, and its sealed bytes signed by its sender to `to`. */
-function sealed(from: Id, to: Id, conversationId: string, text: string, o: { id?: string; signer?: Id; signedTo?: Id; signedId?: string; signed?: boolean } = {}): Line {
+/**
+ * A line as an app sends one: sealed, and its sealed bytes signed by its sender to `to`, the signature in its column (core
+ * sealDmLine, format 4). `signer`, `signedTo` and `signedId` put another signature in the column in its place, as a forger
+ * could: by someone else, to someone else, or under another message id. The node takes each (it checks the form, not who
+ * signed); a report of it never verifies.
+ */
+function sealed(from: Id, to: Id, conversationId: string, text: string, o: { id?: string; signer?: Id; signedTo?: Id; signedId?: string } = {}): Line {
     const id = o.id ?? newDmMessageId();
     const seal = sealDmLine(text, { myEdPrivHex: from.seedHex, peerEdPubHex: to.pk, conversationId }, { senderPubHex: from.pk, messageId: id });
-    if (o.signed === false) return { id, conversationId, ...seal, metadata: undefined, text };
+    if (!o.signer && !o.signedTo && !o.signedId) return { id, conversationId, ...seal, metadata: undefined, text };
     const by = o.signer ?? from;
-    const lineSig = signDmLine(seal, by.seedHex, {
-        conversationId, senderPubHex: by.pk, recipientPubHex: (o.signedTo ?? to).pk, messageId: o.signedId ?? id, at: new Date().toISOString(),
+    const column = Buffer.from(seal.ciphertext, 'base64');
+    const at = column.subarray(1 + 64, 1 + 64 + 24).toString('ascii');
+    const digest = dmLineSigDigest(seal.nonce, new Uint8Array(column.subarray(1 + 64 + 24)), {
+        conversationId, senderPubHex: by.pk, recipientPubHex: (o.signedTo ?? to).pk, messageId: o.signedId ?? id, part: 'body', at,
     });
-    return { id, conversationId, ...seal, metadata: JSON.stringify({ lineSig }), text };
+    const sig = crypto.sign(null, Buffer.from(digest), by.priv);
+    return { id, conversationId, nonce: seal.nonce, ciphertext: Buffer.concat([column.subarray(0, 1), sig, column.subarray(1 + 64)]).toString('base64'), metadata: undefined, text };
 }
+/** The line with no signature in its column: an older format's (the AEAD output alone), as an app before 1.4.0 sealed it. */
+const unsigned = (l: Line): Line => ({ ...l, ciphertext: crypto.randomBytes(60).toString('base64') });
 async function send(from: Id, line: Line): Promise<Res> {
     const r = await call('POST', from, '/api/messages/send', { id: line.id, conversationId: line.conversationId, authorPubkey: from.pk, ciphertext: line.ciphertext, nonce: line.nonce, metadata: line.metadata });
     if (r.status !== 200) throw new Error(`setup: ${from.name}'s line was not sent (${show(r)})`);
     return r;
 }
-const disclosureOf = (l: Line, words = l.text) => dmLineDisclosureFor({ ciphertext: l.ciphertext, nonce: l.nonce, conversationId: l.conversationId, metadata: l.metadata }, words);
+const disclosureOf = (l: Line, words = l.text) => dmLineDisclosureFor({ ciphertext: l.ciphertext, nonce: l.nonce, conversationId: l.conversationId }, words);
 const report = (who: Id | null, l: Line, extra: Record<string, unknown> = {}) =>
     call('POST', who, '/api/messages/report', { messageId: l.id, reason: 'Harassment', disclosure: disclosureOf(l), ...extra });
 /**
- * What `run` returned, and how many signature checks it made on `sig`. ed25519 is frozen, so its verify can't be wrapped, but
- * dmLineSigVerifies decodes the signature once for each try, in this process. The counts asserted are exact, so a change to
- * that decoding fails here rather than counting nothing.
+ * What `run` returned, and how many signature checks it made on the line whose ciphertext column is `column`. ed25519 is
+ * frozen, so its verify can't be wrapped, but dmLineSigVerifies decodes the column once for each try, in this process (and
+ * nothing else in a report's path decodes it). The counts asserted are exact, so a change to that decoding fails here rather
+ * than counting nothing.
  */
-async function verifiesDuring<T>(sig: string, run: () => Promise<T>): Promise<{ result: T; verifies: number }> {
+async function verifiesDuring<T>(column: string, run: () => Promise<T>): Promise<{ result: T; verifies: number }> {
     const realFrom = Buffer.from;
     let verifies = 0;
     (Buffer as any).from = function (...args: any[]) {
-        if (args[0] === sig && args[1] === 'base64') verifies++;
+        if (args[0] === column && args[1] === 'base64') verifies++;
         return (realFrom as any).apply(Buffer, args);
     };
     try {
@@ -174,8 +189,8 @@ async function main(): Promise<void> {
     await send(bo, other);
     const annRead = await call('GET', ann, `/api/messages/${conv}`);
     const annCopy = (annRead.body?.messages ?? []).find((m: any) => m.id === nasty.id);
-    assert(JSON.parse(annCopy?.metadata ?? '{}').lineSig?.sig === JSON.parse(nasty.metadata!).lineSig.sig,
-        'the signature reaches the person the line is for, with the line, as an app reads it');
+    assert(annCopy?.ciphertext === nasty.ciphertext && dmLineSigOf(annCopy?.ciphertext)?.sig === dmLineSigOf(nasty.ciphertext)?.sig && !!dmLineSigOf(nasty.ciphertext),
+        'the signature reaches the person the line is for, in the line\'s own column, as an app reads it');
     const rep = await report(ann, nasty);
     assert(rep.status === 200 && rep.body?.report?.targetPubkey === bo.pk && rep.body?.report?.reporterPubkey === ann.pk && rep.body?.report?.targetMessageId === nasty.id,
         `the report names the line, its author and, from the signature, its reporter (${show(rep)})`);
@@ -220,12 +235,17 @@ async function main(): Promise<void> {
     const swappedKept = JSON.parse((db.prepare('SELECT disclosure FROM abuse_reports WHERE id = ?').get(swapped.body?.report?.id) as any).disclosure);
     assert(swapped.status === 200 && swappedKept.ciphertext === honest.ciphertext && swappedKept.nonce === honest.nonce,
         'bytes nobody signed are never filed as the line: the node keeps its own copy');
-    const oldApp = sealed(bo, ann, conv, 'from an older app', { signed: false });
-    await send(bo, oldApp);
-    const oldRep = await report(ann, oldApp);
-    v = await viewOf(oldRep.body?.report?.id);
-    assert(oldRep.status === 200 && v.body?.message?.signature === 'unsigned' && v.body?.message?.words?.text === 'from an older app',
-        `a line from an older app is still reported, as unsigned (${v.body?.message?.signature})`);
+    // A report taken before the 1.4.0 cutover holds a line of an older format: no signature in its column, whatever was beside it.
+    const before14 = sealed(bo, ann, conv, 'reported before the cutover');
+    await send(bo, before14);
+    const oldRepId = crypto.randomUUID();
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at) VALUES (?, ?, ?, ?, ?, 'Harassment', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(oldRepId, ann.pk, bo.pk, before14.id, JSON.stringify({
+            kind: 'dm-line', ...disclosureOf(unsigned(before14)), lineSig: { sig: crypto.randomBytes(64).toString('base64'), at: '2026-11-01T09:00:00.000Z' },
+        }));
+    v = await viewOf(oldRepId);
+    assert(v.status === 200 && v.body?.message?.signature === 'unsigned' && v.body?.message?.signer === null && v.body?.message?.words?.text === 'reported before the cutover',
+        `a report taken before the cutover reads as unsigned: a signature beside its line is never read (${show(v)})`);
 
     console.log('── 3. who may report ──');
     const allBefore = allReports();
@@ -247,8 +267,10 @@ async function main(): Promise<void> {
         .run(adminLine, conv, bo.pk, 'c2VudGluZWw=');
     const readable = await report(ann, { ...nasty, id: adminLine });
     assert(readable.status === 404, `a readable line the admins sent is no sealed line (${show(readable)})`);
-    const unsignedNobody = await report(ann, { ...sealed(bo, ann, conv, 'never sent', { signed: false }) });
+    const unsignedNobody = await report(ann, unsigned(sealed(bo, ann, conv, 'never sent')));
     assert(unsignedNobody.status === 404, `an unsigned line the node doesn't hold has nothing to stand on (${show(unsignedNobody)})`);
+    const forgedNobody = await report(ann, sealed(bo, ann, conv, 'never sent either', { signer: ann }));
+    assert(forgedNobody.status === 404, `nor one whose signature fails (${show(forgedNobody)})`);
     assert(allReports() === allBefore, 'none of those filed anything');
 
     console.log('── 4. one report per reporter per line ──');
@@ -271,46 +293,51 @@ async function main(): Promise<void> {
     v = await viewOf(late.body?.report?.id);
     assert(late.status === 200 && v.body?.message?.signature === 'verified' && v.body?.message?.line === 'gone',
         `deleted, then reported from the copy the reporter holds: it stands on its signature (${show(late)})`);
-    const quickOld = sealed(bo, ann, conv, 'old app, deleted', { signed: false });
-    await send(bo, quickOld);
-    await call('POST', bo, '/api/messages/delete', { messageId: quickOld.id });
-    const lateOld = await report(ann, quickOld);
-    assert(lateOld.status === 404, `an unsigned line that is gone has nothing to stand on (${show(lateOld)})`);
+    const quickForged = sealed(bo, ann, conv, 'signed by someone else, deleted', { signer: cy });
+    await send(bo, quickForged);
+    await call('POST', bo, '/api/messages/delete', { messageId: quickForged.id });
+    const lateForged = await report(ann, quickForged);
+    assert(lateForged.status === 404, `a line whose signature fails, once gone, has nothing to stand on (${show(lateForged)})`);
 
     console.log('── 6. an edit ──');
     const edited = sealed(bo, ann, conv, 'first words');
     await send(bo, edited);
     const newWords = sealed(bo, ann, conv, 'second words', { id: edited.id });
-    const ed = await call('POST', bo, '/api/messages/edit', { messageId: edited.id, ciphertext: newWords.ciphertext, nonce: newWords.nonce, metadata: JSON.parse(newWords.metadata!) });
-    const edRow = db.prepare('SELECT metadata FROM messages WHERE id = ?').get(edited.id) as { metadata: string };
-    assert(ed.status === 200 && JSON.parse(edRow.metadata).lineSig.sig === JSON.parse(newWords.metadata!).lineSig.sig, `an edit carries its new signature (${show(ed)})`);
+    const ed = await call('POST', bo, '/api/messages/edit', { messageId: edited.id, ciphertext: newWords.ciphertext, nonce: newWords.nonce });
+    const edRow = db.prepare('SELECT ciphertext, metadata FROM messages WHERE id = ?').get(edited.id) as { ciphertext: string; metadata: string | null };
+    assert(ed.status === 200 && edRow.ciphertext === newWords.ciphertext && dmLineSigOf(edRow.ciphertext)?.sig === dmLineSigOf(newWords.ciphertext)?.sig
+        && dmLineSigOf(edRow.ciphertext)?.sig !== dmLineSigOf(edited.ciphertext)?.sig, `an edit carries its new signature in its column (${show(ed)})`);
     const ofOld = await report(ann, edited);
     v = await viewOf(ofOld.body?.report?.id);
     assert(v.body?.message?.signature === 'verified' && v.body?.message?.line === 'changed' && v.body?.message?.words?.text === 'first words',
         `the copy the reporter was sent still verifies, and reads as changed since (${show(v)})`);
+    // A reply's edit keeps what the line answers: an edit is new sealed bytes, its metadata is the line's own.
     const replied = sealed(bo, ann, conv, 'a reply');
-    await send(bo, { ...replied, metadata: JSON.stringify({ ...JSON.parse(replied.metadata!), replyToId: other.id }) });
-    const oldEdit = sealed(bo, ann, conv, 'edited by an older app', { id: replied.id, signed: false });
-    await call('POST', bo, '/api/messages/edit', { messageId: replied.id, ciphertext: oldEdit.ciphertext, nonce: oldEdit.nonce });
-    const dropped = JSON.parse((db.prepare('SELECT metadata FROM messages WHERE id = ?').get(replied.id) as { metadata: string }).metadata);
-    assert(dropped.lineSig === undefined && dropped.replyToId === other.id,
-        'an edit from an older app drops the old signature, which covers bytes the line no longer has, and keeps the rest of its metadata');
-    const unsignedEdit = await report(ann, oldEdit);
-    v = await viewOf(unsignedEdit.body?.report?.id);
-    assert(v.body?.message?.signature === 'unsigned', `so it reports as unsigned, not as a failed signature (${v.body?.message?.signature})`);
-    // The signature is all this one's metadata holds, so nothing else keeps the row's metadata in being (the deciding review of
-    // #2705). Fay's own chat, as Ann is at her hourly limit on reports by now.
+    await send(bo, { ...replied, metadata: JSON.stringify({ replyToId: other.id }) });
+    const repliedEdit = sealed(bo, ann, conv, 'a reply, edited', { id: replied.id });
+    const re = await call('POST', bo, '/api/messages/edit', { messageId: replied.id, ciphertext: repliedEdit.ciphertext, nonce: repliedEdit.nonce, metadata: { lineSig: { sig: 'x', at: 'y' } } });
+    const kept6 = JSON.parse((db.prepare('SELECT metadata FROM messages WHERE id = ?').get(replied.id) as { metadata: string }).metadata);
+    assert(re.status === 200 && kept6.replyToId === other.id && kept6.lineSig === undefined,
+        `a reply's edit keeps what it answers, and a signature sent beside it is never stored (${JSON.stringify(kept6)})`);
+    // An edit as an app before 1.4.0 makes it (format 3, no signature in its column) is refused, the line untouched.
+    const before6 = db.prepare('SELECT ciphertext, metadata, edited_at FROM messages WHERE id = ?').get(replied.id);
+    const oldEdit = unsigned(sealed(bo, ann, conv, 'edited by an older app', { id: replied.id }));
+    const oe = await call('POST', bo, '/api/messages/edit', { messageId: replied.id, ciphertext: oldEdit.ciphertext, nonce: oldEdit.nonce });
+    assert(oe.status === 400 && oe.body?.code === 'dm_not_encrypted' && JSON.stringify(db.prepare('SELECT ciphertext, metadata, edited_at FROM messages WHERE id = ?').get(replied.id)) === JSON.stringify(before6),
+        `an edit of an older format is refused, and the line is as it was (${show(oe)})`);
+    // A line that is not a reply has no metadata, and an edit leaves it so (the deciding review of #2705 asked that nothing keep
+    // a row's metadata in being). Fay's own chat, as Ann is at her hourly limit on reports by now.
     const fay = member('Fay');
     const fayConv = await open(bo, fay);
     const plain = sealed(bo, fay, fayConv, 'not a reply');
     await send(bo, plain);
-    const plainEdit = sealed(bo, fay, fayConv, 'edited by an older app, and not a reply', { id: plain.id, signed: false });
+    const plainEdit = sealed(bo, fay, fayConv, 'edited, and not a reply', { id: plain.id });
     const pe = await call('POST', bo, '/api/messages/edit', { messageId: plain.id, ciphertext: plainEdit.ciphertext, nonce: plainEdit.nonce });
     const plainRow = db.prepare('SELECT metadata FROM messages WHERE id = ?').get(plain.id) as { metadata: string | null };
-    assert(pe.status === 200 && plainRow.metadata === null, `an edit from an older app of a line that is not a reply leaves no signature either (${plainRow.metadata})`);
+    assert(pe.status === 200 && plainRow.metadata === null, `an edit of a line that is not a reply leaves it no metadata (${plainRow.metadata})`);
     const plainReport = await report(fay, plainEdit);
     v = await viewOf(plainReport.body?.report?.id);
-    assert(v.body?.message?.signature === 'unsigned', `and it too reports as unsigned, not as a failed signature (${show(v)})`);
+    assert(v.body?.message?.signature === 'verified' && v.body?.message?.line === 'same', `and a report of the edited line stands on its new signature (${show(v)})`);
 
     console.log('── 7. the form ──');
     const allForm = allReports();
@@ -362,7 +389,7 @@ async function main(): Promise<void> {
     assert(heldNow?.type === 'removed', `and all an app reads now is a tombstone (${heldNow?.type})`);
     const ofTombstone = await call('POST', ann, '/api/messages/report', {
         messageId: heldNow.id, reason: 'Harassment',
-        disclosure: dmLineDisclosureFor({ ciphertext: heldNow.ciphertext, nonce: heldNow.nonce, conversationId: deeConv, metadata: heldNow.metadata }, ''),
+        disclosure: dmLineDisclosureFor({ ciphertext: heldNow.ciphertext, nonce: heldNow.nonce, conversationId: deeConv }, ''),
     });
     assert(ofTombstone.status === 400 && ofTombstone.body?.code === 'disclosure_form' && reportRows(ann.pk, deeLine.id) === 0,
         `the node takes no report of it, so the apps never hand it over (${show(ofTombstone)})`);
@@ -378,28 +405,27 @@ async function main(): Promise<void> {
     const gus = member('Gus');
     const gusConv = await open(bo, gus);
     const manyIds = Array.from({ length: 300 }, (_, i) => `listed-${i}`);
-    const withIds = (l: Line, ids: Record<string, unknown>): Line => ({ ...l, metadata: JSON.stringify({ ...JSON.parse(l.metadata!), ...ids }) });
+    const withIds = (l: Line, ids: Record<string, unknown>): Line => ({ ...l, metadata: JSON.stringify({ ...(l.metadata ? JSON.parse(l.metadata) : {}), ...ids }) });
     // A real signature made for another message id, so nothing verifies and the whole list would be walked, as the review's was.
     const walker = withIds(sealed(bo, gus, gusConv, 'a list to walk', { signedId: newDmMessageId() }), { originalConversationIds: manyIds });
     await send(bo, walker);
     const stored = (db.prepare('SELECT metadata FROM messages WHERE id = ?').get(walker.id) as { metadata: string }).metadata;
     assert(JSON.parse(stored).originalConversationIds?.length === manyIds.length, 'the sender\'s list is stored as sent, the case the cap is for');
-    const sig = JSON.parse(walker.metadata!).lineSig.sig as string;
-    // The handed copy's check, then the stored copy's, at two ids each; a moderator's read checks once.
-    const filed = await verifiesDuring(sig, () => report(gus, walker));
+    // The handed copy's check, then the stored copy's, at two ids each. A moderator's read checks at two ids, and reads the
+    // column once more for the time it was signed (no verify).
+    const filed = await verifiesDuring(walker.ciphertext, () => report(gus, walker));
     assert(filed.result.status === 200 && filed.verifies === 4, `a report of it costs 4 verifies, not one for each id listed (${filed.verifies}, ${show(filed.result)})`);
-    const again10 = await verifiesDuring(sig, () => report(gus, walker));
+    const again10 = await verifiesDuring(walker.ciphertext, () => report(gus, walker));
     assert(again10.result.body?.duplicate === true && again10.verifies === 4, `and the same again as a repeat (${again10.verifies})`);
-    const walked = await verifiesDuring(sig, () => viewOf(filed.result.body?.report?.id));
-    assert(walked.result.body?.message?.signature === 'unverified' && walked.verifies === 2, `a moderator opening it costs 2, through the same cap (${walked.verifies}, ${walked.result.body?.message?.signature})`);
+    const walked = await verifiesDuring(walker.ciphertext, () => viewOf(filed.result.body?.report?.id));
+    assert(walked.result.body?.message?.signature === 'unverified' && walked.verifies === 2 + 1, `a moderator opening it costs 2, through the same cap (${walked.verifies - 1}, ${walked.result.body?.message?.signature})`);
 
     const ownId = withIds(sealed(bo, gus, gusConv, 'signed here, with a list beside it'), { originalConversationIds: manyIds });
     await send(bo, ownId);
-    const ownIdSig = JSON.parse(ownId.metadata!).lineSig.sig as string;
-    const ownFiled = await verifiesDuring(ownIdSig, () => report(gus, ownId));
-    const ownView = await verifiesDuring(ownIdSig, () => viewOf(ownFiled.result.body?.report?.id));
-    assert(ownFiled.verifies === 1 && ownView.result.body?.message?.signature === 'verified' && ownView.verifies === 1,
-        `a line signed under its own id verifies at the first try, whatever is listed beside it (${ownFiled.verifies}, ${ownView.verifies}, ${ownView.result.body?.message?.signature})`);
+    const ownFiled = await verifiesDuring(ownId.ciphertext, () => report(gus, ownId));
+    const ownView = await verifiesDuring(ownId.ciphertext, () => viewOf(ownFiled.result.body?.report?.id));
+    assert(ownFiled.verifies === 1 && ownView.result.body?.message?.signature === 'verified' && ownView.verifies === 1 + 1,
+        `a line signed under its own id verifies at the first try, whatever is listed beside it (${ownFiled.verifies}, ${ownView.verifies - 1}, ${ownView.result.body?.message?.signature})`);
 
     const oldThread = crypto.randomUUID();
     const signedInOld = (text: string) => ({ ...sealed(bo, gus, oldThread, text), conversationId: gusConv });

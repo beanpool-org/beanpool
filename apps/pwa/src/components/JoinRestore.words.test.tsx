@@ -233,52 +233,56 @@ describe('a change of language redraws the join, its notice included', () => {
 });
 
 describe('getting an account back with a sign-in (WebRestore) in the pseudo-locale', () => {
-    // More specific paths first: a key matches its own path and any path under it. Only Alice comes back with a sign-in.
+    const COMMUNITY = 'Mullumbimby';
+    // More specific paths first: a key matches its own path and any path under it.
     function recoveryNode(overrides: Record<string, Handler> = {}) {
         stubNode({
-            '/api/recovery/collect/sso-nonce': () => json(200, { nonce: 'rn-1', expiresInSeconds: 600, clientIds: { google: 'web-client', apple: 'org.beanpool.web', facebook: '818892721251369' } }),
+            '/api/recovery/find-nonce': () => json(200, { nonce: 'rn-1', expiresInSeconds: 600, clientIds: { google: 'web-client', apple: 'org.beanpool.web', facebook: '818892721251369' } }),
+            '/api/recovery/find': () => json(200, { accounts: [] }),
             ...overrides,
-            '/api/recovery/lookup/Alice': () => json(200, [{ publicKey: identity.publicKey, callsign: 'Alice', canRecoverBySso: true }]),
-            '/api/recovery/lookup/': () => json(200, []),
-            '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
         });
     }
     const renderRestore = (props: Partial<React.ComponentProps<typeof WebRestore>> = {}) => render(
         <WebRestore onRestored={vi.fn(async () => true)} onHeld={vi.fn()} onExisting={vi.fn()} onBack={vi.fn()} onOtherWay={vi.fn()}
-            navigate={vi.fn()} origin={ORIGIN} authReturn={null} {...props} />,
+            community={COMMUNITY} navigate={vi.fn()} origin={ORIGIN} authReturn={null} {...props} />,
     );
+    /** Back from Google with a restore this page started. */
+    async function backFromGoogle() {
+        const now = Date.now();
+        await savePendingRestore({ kind: 'restore', ephemeral: makeEphemeralKey(), provider: 'google', nonce: 'rn-9', startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS });
+        return readAuthReturn('/app/auth/google', `#state=rn-9&id_token=${fakeJwt({ sub: 's', nonce: 'rn-9' })}`);
+    }
 
-    it('the name, no account by it, the accounts it could be, and the sign-ins', async () => {
+    it('this community and the sign-ins, with nothing to type', async () => {
         await showIn('xx');
         recoveryNode();
         renderRestore();
-        const box = await screen.findByTestId('restore-callsign');
-        allThroughWords();
-        fireEvent.change(box, { target: { value: 'Zed' } });
-        expect(await screen.findByTestId('restore-none', undefined, { timeout: 3000 })).toBeInTheDocument();
-        allThroughWords([...OTHERS, 'Zed']);
-
-        fireEvent.change(box, { target: { value: 'Alice' } });
-        fireEvent.click(await screen.findByTestId('restore-candidate', undefined, { timeout: 3000 }));
         expect(await screen.findByTestId('restore-provider-google')).toBeInTheDocument();
-        expect(screen.getByRole('heading').textContent).toBe(xx('Sign in as {name}').replace('{name}', 'Alice'));
-        allThroughWords();
+        expect(screen.getByRole('heading').textContent).toBe(xx('Get your account back'));
+        expect(screen.queryByRole('textbox')).toBeNull();
+        allThroughWords([...OTHERS, COMMUNITY]);
     });
 
-    it('a sign-in that is no way back into the account: the lib file\'s sentence, translated, with the names as they are', async () => {
+    it('no account here uses this sign-in: the sentence translated, with the community and the sign-in as they are', async () => {
         await showIn('xx');
-        recoveryNode({ '/api/recovery/collect/sso': () => json(400, { error: 'x' }) });
-        const eph = makeEphemeralKey();
-        const now = Date.now();
-        await savePendingRestore({
-            kind: 'restore', ephemeral: eph, account: { publicKey: identity.publicKey, callsign: 'Alice' }, collectionId: 'col-1',
-            provider: 'google', nonce: 'rn-9', startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS,
-        });
-        renderRestore({ authReturn: readAuthReturn('/app/auth/google', `#state=rn-9&id_token=${fakeJwt({ sub: 's', nonce: 'rn-9' })}`) });
-        const notice = await screen.findByTestId('join-notice');
-        expect(notice.textContent).toBe(xx("That {provider} account isn't a way back into {name}. Try the sign-in you joined with, or your 12 words.").replace('{provider}', 'Google').replace('{name}', 'Alice'));
-        allThroughWords();
+        recoveryNode();
+        renderRestore({ authReturn: await backFromGoogle() });
+        const none = await screen.findByTestId('restore-none');
+        expect(none.textContent).toBe(xx('No account at {community} uses this {provider} account. Try another community, or your 12 words.')
+            .replace('{community}', COMMUNITY).replace('{provider}', 'Google'));
+        allThroughWords([...OTHERS, COMMUNITY]);
     });
+
+    it('one sign-in, several accounts: "Which account is yours?" translated, the names as they are', async () => {
+        await showIn('xx');
+        const other = await generateIdentity('Bea');
+        recoveryNode({ '/api/recovery/find': () => json(200, { accounts: [{ publicKey: identity.publicKey, callsign: 'Alice' }, { publicKey: other.publicKey, callsign: 'Bea' }] }) });
+        renderRestore({ authReturn: await backFromGoogle() });
+        expect((await screen.findByRole('heading')).textContent).toBe(xx('Which account is yours?'));
+        // The round marks are the names' first letters.
+        allThroughWords([...OTHERS, 'A', 'B']);
+    });
+
 });
 
 describe('a re-key code (WebRekey) in the pseudo-locale', () => {

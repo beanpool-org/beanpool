@@ -48,18 +48,23 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100): `hc` turns a Beans figure into hundredths
+ * for a call, a row or a check (a floor of -200 Beans is hc(-200) = -20000).
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
-/** An admin's binding with the keeper's pledge of `amount` beside it: the pledge row is the backing every floor reads. */
-function assignWithPledge(enterprise: string, keeper: string, amount: number) {
+/** An admin's binding with the keeper's pledge of `beans` beside it: the pledge row is the backing every floor reads. */
+function assignWithPledge(enterprise: string, keeper: string, beans: number) {
     adminAssignTreasuryOperator(enterprise, keeper, 'admin');
-    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
-        .run(crypto.randomUUID(), keeper, enterprise, amount, new Date().toISOString());
+    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+        .run(crypto.randomUUID(), keeper, enterprise, hc(beans), new Date().toISOString());
     clearEnterpriseFloorCache(db, enterprise);
 }
 
@@ -83,15 +88,15 @@ async function main() {
 
     // Initial check: ToolShed has 200 underlying allowance from Carol's backing
     const und0 = getEnterpriseUnderlyingFloor(shed);
-    assert(und0.floor === -200, `ToolShed underlying floor is -200 from Carol backing (got ${und0.floor})`);
+    assert(und0.floor === hc(-200), `ToolShed underlying floor is -200 from Carol backing (got ${und0.floor} hundredths)`);
 
     // Add 2 active offers so covenant allows full depth
-    const offer1 = createPost('offer', 'tools', 'Shovel', 'Sturdy shovel', 10, 'fixed', shed);
-    const offer2 = createPost('offer', 'tools', 'Wheelbarrow', 'Good condition', 20, 'fixed', shed);
+    const offer1 = createPost('offer', 'tools', 'Shovel', 'Sturdy shovel', hc(10), 'fixed', shed);
+    const offer2 = createPost('offer', 'tools', 'Wheelbarrow', 'Good condition', hc(20), 'fixed', shed);
     assert(offer1 !== null && offer2 !== null, 'Created 2 initial offers for ToolShed');
 
     const uFloor0 = usableFloor(shed);
-    assert(uFloor0 === -200, `ToolShed usableFloor is -200 before pause (got ${uFloor0})`);
+    assert(uFloor0 === hc(-200), `ToolShed usableFloor is -200 before pause (got ${uFloor0} hundredths)`);
 
     // ── 1. Auth: non-keeper cannot pause ──
     let nonKeeperFailed = false;
@@ -106,12 +111,12 @@ async function main() {
     // ── 2. Keeper can pause (idempotent, snapshot taken) ──
     const pauseRes = pauseEnterprise(shed, carolLead);
     assert(pauseRes.ok === true && pauseRes.paused === true, 'Keeper Carol paused ToolShed');
-    assert(pauseRes.pausedFloorSnapshot === -200, `Paused floor snapshot recorded as -200 (got ${pauseRes.pausedFloorSnapshot})`);
+    assert(pauseRes.pausedFloorSnapshot === hc(-200), `Paused floor snapshot recorded as -200 (got ${pauseRes.pausedFloorSnapshot} hundredths)`);
 
-    const mRow = db.prepare("SELECT paused, paused_at, paused_by, paused_floor_snapshot FROM members WHERE public_key = ?").get(shed) as any;
+    const mRow = db.prepare("SELECT paused, paused_at, paused_by, paused_floor_snapshot_c FROM members WHERE public_key = ?").get(shed) as any;
     assert(mRow.paused === 1, 'members.paused is 1 in DB');
     assert(mRow.paused_by === carolLead, `members.paused_by is ${carolLead}`);
-    assert(mRow.paused_floor_snapshot === -200, 'members.paused_floor_snapshot is -200 in DB');
+    assert(mRow.paused_floor_snapshot_c === hc(-200), `members.paused_floor_snapshot_c is -200 Beans in DB (got ${mRow.paused_floor_snapshot_c})`);
 
     // Idempotent second pause
     const pauseRes2 = pauseEnterprise(shed, daveKeeper);
@@ -122,22 +127,22 @@ async function main() {
 
     // Assertion A: Covenant floor can never pull it below snapshot (even with 0 offers)
     // Live listings are hidden while paused, liveOfferCount may be 0 for marketplace covenant
-    assert(usableFloor(shed) === -200, `Usable floor holds at snapshot -200 while paused (got ${usableFloor(shed)})`);
+    assert(usableFloor(shed) === hc(-200), `Usable floor holds at snapshot -200 while paused (got ${usableFloor(shed)} hundredths)`);
 
     // Assertion B: Earned growth still counts (higher value)
     // An enterprise grows by its keepers' pledges, the bigger of its line or them, never both (Marty, 21 Oct): its own
     // members.earned_credit (createTreasury's copy of its opening line, or an admin's tier badge) is no part of its limit.
-    db.prepare("UPDATE members SET earned_credit = 100 WHERE public_key = ?").run(shed);
-    assert(usableFloor(shed) === -200, `ToolShed's own earned_credit doesn't stack on its pledges: still -200 while paused (got ${usableFloor(shed)})`);
-    db.prepare("UPDATE members SET earned_credit = 0 WHERE public_key = ?").run(shed);
+    db.prepare("UPDATE members SET earned_credit_c = ? WHERE public_key = ?").run(hc(100), shed);
+    assert(usableFloor(shed) === hc(-200), `ToolShed's own earned_credit doesn't stack on its pledges: still -200 while paused (got ${usableFloor(shed)} hundredths)`);
+    db.prepare("UPDATE members SET earned_credit_c = 0 WHERE public_key = ?").run(shed);
     // Dave's 100 more of backing is the growth (a pledge row, as assignWithPledge writes one)
     const growthPledge = crypto.randomUUID();
-    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, 100, ?, NULL)`)
-        .run(growthPledge, daveKeeper, shed, new Date().toISOString());
-    assert(usableFloor(shed) === -300, `Earned growth raised usable floor to -300 while paused (got ${usableFloor(shed)})`);
+    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+        .run(growthPledge, daveKeeper, shed, hc(100), new Date().toISOString());
+    assert(usableFloor(shed) === hc(-300), `Earned growth raised usable floor to -300 while paused (got ${usableFloor(shed)} hundredths)`);
     // Reset the growth
     db.prepare("UPDATE enterprise_pledges SET released_at = ? WHERE id = ?").run(new Date().toISOString(), growthPledge);
-    assert(usableFloor(shed) === -200, `Resetting earned credit returns floor to -200 (got ${usableFloor(shed)})`);
+    assert(usableFloor(shed) === hc(-200), `Resetting earned credit returns floor to -200 (got ${usableFloor(shed)} hundredths)`);
 
     // Assertion C: Keeper exits still release backing
     // Carol (who backed 200) exits!
@@ -148,7 +153,7 @@ async function main() {
     // Re-assign Carol with 200 backing for remaining tests
     assignWithPledge(shed, carolLead, 200);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, carolLead);
-    assert(usableFloor(shed) === -200, `Re-assigned Carol backing restored floor to -200`);
+    assert(usableFloor(shed) === hc(-200), `Re-assigned Carol backing restored floor to -200`);
 
     // Assertion D: 90-day expiry reverts to normal formula
     // Simulate paused_at 95 days ago
@@ -163,7 +168,7 @@ async function main() {
     const nowIso = new Date().toISOString();
     db.prepare("UPDATE members SET paused_at = ? WHERE public_key = ?").run(nowIso, shed);
     db.prepare("UPDATE posts SET status = 'active' WHERE author_pubkey = ?").run(shed);
-    assert(usableFloor(shed) === -200, `Active snapshot restored floor to -200`);
+    assert(usableFloor(shed) === hc(-200), `Active snapshot restored floor to -200`);
 
     // ── 4. While Paused Enforcement ──
     console.log('── Testing Operations Blocked While Paused ──');
@@ -180,7 +185,7 @@ async function main() {
     // Blocking new offers or needs
     let postOfferThrew = false;
     try {
-        createPost('offer', 'tools', 'Hammer', 'Claw hammer', 15, 'fixed', shed);
+        createPost('offer', 'tools', 'Hammer', 'Claw hammer', hc(15), 'fixed', shed);
     } catch (e: any) {
         postOfferThrew = true;
         assert(e.message.includes('Enterprise is paused'), `Create offer blocked: "${e.message}"`);
@@ -189,7 +194,7 @@ async function main() {
 
     let postNeedThrew = false;
     try {
-        createPost('need', 'tools', 'Nails', 'Box of nails', 5, 'fixed', shed);
+        createPost('need', 'tools', 'Nails', 'Box of nails', hc(5), 'fixed', shed);
     } catch (e: any) {
         postNeedThrew = true;
         assert(e.message.includes('Enterprise is paused'), `Create need blocked: "${e.message}"`);
@@ -199,12 +204,12 @@ async function main() {
     // Blocking pledges in
     // Create a bounded project associated with ToolShed
     db.prepare(`
-        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, status, enterprise_pubkey)
-        VALUES ('shed-roof', ?, 'Fix Shed Roof', 'Need tin', '[]', 500, 0, 'ACTIVE', ?)
-    `).run(carolLead, shed);
+        INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, current_amount_c, status, enterprise_pubkey)
+        VALUES ('shed-roof', ?, 'Fix Shed Roof', 'Need tin', '[]', ?, 0, 'ACTIVE', ?)
+    `).run(carolLead, hc(500), shed);
     let pledgeThrew = false;
     try {
-        pledgeToProject('pledge-tx-1', 'shed-roof', malloryStranger, 50, 'Support shed roof');
+        pledgeToProject('pledge-tx-1', 'shed-roof', malloryStranger, hc(50), 'Support shed roof');
     } catch (e: any) {
         pledgeThrew = true;
         assert(e.message.includes('Enterprise is paused'), `Pledge blocked: "${e.message}"`);
@@ -214,10 +219,10 @@ async function main() {
     // Blocking bid approvals
     // Create a need outside pause, then try approving while paused
     db.prepare("UPDATE members SET paused = 0 WHERE public_key = ?").run(shed);
-    const need2 = createPost('need', 'goods', 'Timber', '2x4s', 20, 'fixed', shed);
+    const need2 = createPost('need', 'goods', 'Timber', '2x4s', hc(20), 'fixed', shed);
     const bid = requestPost(need2!.id, malloryStranger);
     // Now pause ToolShed again
-    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_floor_snapshot = -200 WHERE public_key = ?").run(nowIso, shed);
+    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_floor_snapshot_c = ? WHERE public_key = ?").run(nowIso, hc(-200), shed);
 
     let approveThrew = false;
     try {
@@ -230,14 +235,14 @@ async function main() {
 
     // Blocking wage payments out to keepers
     // Temporarily unpause to approve need2 with keeper Dave as seller
-    db.prepare("UPDATE members SET paused = 0, earned_surplus = 50 WHERE public_key = ?").run(shed);
-    db.prepare("UPDATE accounts SET balance = 50 WHERE public_key = ?").run(shed);
+    db.prepare("UPDATE members SET paused = 0, earned_surplus_c = ? WHERE public_key = ?").run(hc(50), shed);
+    db.prepare("UPDATE accounts SET balance_c = ? WHERE public_key = ?").run(hc(50), shed);
     reconcileLedgerFromDb();
-    const needKeeper = createPost('need', 'work', 'Shed maintenance', 'Roof oiling', 15, 'fixed', shed);
+    const needKeeper = createPost('need', 'work', 'Shed maintenance', 'Roof oiling', hc(15), 'fixed', shed);
     const keeperBid = requestPost(needKeeper!.id, daveKeeper);
     approvePostRequest(keeperBid.id, shed, { authSigner: carolLead });
     // Pause ToolShed before completion
-    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_floor_snapshot = -200 WHERE public_key = ?").run(nowIso, shed);
+    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_floor_snapshot_c = ? WHERE public_key = ?").run(nowIso, hc(-200), shed);
 
     let wageThrew = false;
     try {
@@ -261,11 +266,11 @@ async function main() {
     const resumeRes = resumeEnterprise(shed, daveKeeper);
     assert(resumeRes.ok === true && resumeRes.paused === false, 'Keeper Dave resumed ToolShed');
 
-    const resumedRow = db.prepare("SELECT paused, paused_at, paused_by, paused_floor_snapshot FROM members WHERE public_key = ?").get(shed) as any;
+    const resumedRow = db.prepare("SELECT paused, paused_at, paused_by, paused_floor_snapshot_c FROM members WHERE public_key = ?").get(shed) as any;
     assert(resumedRow.paused === 0, 'members.paused is 0 after resume');
     assert(resumedRow.paused_at === null, 'members.paused_at cleared');
     assert(resumedRow.paused_by === null, 'members.paused_by cleared');
-    assert(resumedRow.paused_floor_snapshot === null, 'members.paused_floor_snapshot cleared');
+    assert(resumedRow.paused_floor_snapshot_c === null, 'members.paused_floor_snapshot_c cleared');
 
     // Idempotent resume
     const resumeRes2 = resumeEnterprise(shed, carolLead);

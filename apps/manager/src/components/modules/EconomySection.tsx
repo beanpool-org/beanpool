@@ -28,6 +28,8 @@ import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 import { nodeCredential } from '../../lib/profiles';
 import { useInPageConfirm } from '../common/InPageConfirm';
 import type { RolesViewer } from './NodeRolesPanel';
+import { isHundredths } from '@beanpool/core';
+import { beansFigure, beansText, parseBeans, beansRefusalText } from '../../lib/beans';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -45,6 +47,7 @@ interface CommonsProject {
     id: string;
     title: string;
     description: string;
+    /** Keeps its name, and is whole hundredths of a Bean (server routes/admin.ts /admin/commons/projects: goal_amount_c). */
     requestedAmount?: number;
     proposer?: string;
     status?: string;
@@ -116,12 +119,16 @@ export function EconomySection({
     const [seedingOffer, setSeedingOffer] = useState(false);
 
     // Commons proposals state
+    // `balance` is the Commons pot the same answer carries, whole hundredths of a Bean (getCommonsBalance); null until read.
     const [commonsData, setCommonsData] = useState<{
         proposed: CommonsProject[];
-    }>({ proposed: [] });
+        balance: number | null;
+    }>({ proposed: [], balance: null });
     const [loadingCommons, setLoadingCommons] = useState(false);
 
     const members: MemberItem[] = Array.isArray(nodeData?.members) ? nodeData.members : [];
+    // The Commons pot for the pool tab: the projects answer's, else the node data's (both getCommonsBalance, whole hundredths).
+    const poolReserve: number | null = commonsData.balance ?? (isHundredths(nodeData?.commonsBalance) ? nodeData!.commonsBalance! : null);
 
     // ⚡ Bolt: O(1) Map lookup for community members by lowercased pubkey instead of repeated O(M) .find() scans
     const membersMap = useMemo(() => {
@@ -243,6 +250,7 @@ export function EconomySection({
                 const data = await res.json();
                 setCommonsData({
                     proposed: data.projects || data.proposed || [],
+                    balance: isHundredths(data.balance) ? data.balance : null,
                 });
             }
         } catch {
@@ -262,13 +270,20 @@ export function EconomySection({
         if (!newEnterpriseName.trim()) return;
         setCreatingEnterprise(true);
         try {
-            const ceilingNum = newEnterpriseCeiling.trim() ? Number(newEnterpriseCeiling) : null;
+            // The ceiling as typed, in Beans, to whole hundredths (the node takes `workingCapitalCeiling_c`); none when left
+            // empty. Typed Beans that aren't an amount stop here, in words, before anything is sent.
+            let ceiling_c: number | null = null;
+            if (newEnterpriseCeiling.trim()) {
+                const typed = parseBeans(newEnterpriseCeiling);
+                if (!typed.ok) throw new Error(`Working capital ceiling: ${beansRefusalText(typed.refusal)}`);
+                ceiling_c = typed.value;
+            }
             const res = await createNodeTreasury(
                 activeNode.url,
                 {
                     name: newEnterpriseName.trim(),
                     avatar: newEnterpriseAvatar.trim() || '🌾',
-                    workingCapitalCeiling: ceilingNum,
+                    workingCapitalCeiling_c: ceiling_c,
                     purpose: newEnterprisePurpose.trim() || undefined,
                 },
                 nodeCredential(activeNode),
@@ -406,6 +421,9 @@ export function EconomySection({
         if (offerPhotos.length === 0) return;
         setSeedingOffer(true);
         try {
+            // The price as typed, in Beans, to whole hundredths: the node takes `price_c` (15 Beans is 1500).
+            const price = parseBeans(offerCredits);
+            if (!price.ok) throw new Error(`Price: ${beansRefusalText(price.refusal)}`);
             const pk = seedOfferTreasury.publicKey || '';
             await seedTreasuryOffer(
                 activeNode.url,
@@ -413,7 +431,7 @@ export function EconomySection({
                 {
                     title: offerTitle.trim(),
                     category: offerCategory,
-                    credits: Number(offerCredits) || 10,
+                    price_c: price.value,
                     photos: offerPhotos,
                     description: `${seedOfferTreasury.name} community offer`,
                 },
@@ -589,10 +607,10 @@ export function EconomySection({
                                             </p>
 
                                             {/* Working capital ceiling badge */}
-                                            {t.workingCapitalCeiling != null && (
+                                            {t.workingCapitalCeiling_c != null && (
                                                 <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-nature-950 border border-nature-800 text-[10px] text-nature-300 mb-3">
                                                     <span className="text-bp-ink-terra font-bold">Ceiling:</span>
-                                                    <span className="font-mono">{t.workingCapitalCeiling} beans</span>
+                                                    <span className="font-mono">{beansFigure(t.workingCapitalCeiling_c)} beans</span>
                                                 </div>
                                             )}
 
@@ -685,7 +703,7 @@ export function EconomySection({
                                             <div>
                                                 <div className="text-[10px] text-nature-400 uppercase font-bold">Balance</div>
                                                 <div className="text-sm font-bold text-white font-mono">
-                                                    {t.balance ?? '0.00'} beans
+                                                    {beansFigure(t.balance_c)} beans
                                                 </div>
                                             </div>
                                             <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
@@ -744,11 +762,11 @@ export function EconomySection({
                                         <div className="min-w-0 break-words">
                                             <h4 className="text-sm font-bold text-white m-0">{p.title}</h4>
                                             <p className="text-xs text-nature-400 m-0 mt-0.5">{p.description}</p>
-                                            {p.requestedAmount && (
+                                            {p.requestedAmount ? (
                                                 <span className="text-xs text-bp-ink-terra font-semibold mt-1 inline-block">
-                                                    Requesting: {p.requestedAmount} beans
+                                                    Requesting: {beansFigure(p.requestedAmount)} beans
                                                 </span>
-                                            )}
+                                            ) : null}
                                         </div>
                                         <button
                                             onClick={() => handleRejectProject(p.id)}
@@ -777,8 +795,11 @@ export function EconomySection({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="p-4 rounded-xl bg-nature-950 border border-nature-800">
                             <span className="text-xs text-nature-400 font-bold uppercase">Pool Reserve</span>
-                            <div className="text-2xl font-black text-white font-mono mt-1">240.0 beans</div>
-                            <span className="text-[10px] text-emerald-400 font-medium">✓ Solvent &amp; Fully Backed</span>
+                            {/* The node's Commons pot (whole hundredths, the projects answer's `balance`, else /admin/data's), never a figure made here. */}
+                            <div className="text-2xl font-black text-white font-mono mt-1" data-testid="pool-reserve">{beansText(poolReserve)}</div>
+                            {isHundredths(poolReserve) && poolReserve >= 0 && (
+                                <span className="text-[10px] text-emerald-400 font-medium">✓ Solvent &amp; Fully Backed</span>
+                            )}
                         </div>
                         <div className="p-4 rounded-xl bg-nature-950 border border-nature-800">
                             <span className="text-xs text-nature-400 font-bold uppercase">Conservation Check</span>
@@ -883,6 +904,7 @@ export function EconomySection({
                                 <input
                                     type="number"
                                     min="0"
+                                    step="0.01"
                                     value={newEnterpriseCeiling}
                                     onChange={(e) => setNewEnterpriseCeiling(e.target.value)}
                                     placeholder="e.g. 200 (surplus above this automatically sweeps to Commons)"
@@ -1163,10 +1185,12 @@ export function EconomySection({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-nature-300 mb-1">Price (Beans)</label>
+                                    <label htmlFor="seed-offer-price" className="block text-xs font-bold text-nature-300 mb-1">Price (Beans)</label>
                                     <input
+                                        id="seed-offer-price"
                                         type="number"
                                         min="1"
+                                        step="0.01"
                                         value={offerCredits}
                                         onChange={(e) => setOfferCredits(e.target.value)}
                                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono"

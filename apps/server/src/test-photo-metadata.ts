@@ -31,20 +31,19 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'PhotoMetaAdmin123!';
 
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { withAvatarKey } from './avatar-test-url.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -608,10 +607,10 @@ async function signed(method: string, path: string, body: unknown, signer: Ident
     const bodyString = method === 'GET' ? '' : JSON.stringify(body);
     const ts = String(Date.now());
     const nonce = crypto.randomUUID();
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pub,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': ts,
         'X-Nonce': nonce,
     };
@@ -664,7 +663,6 @@ async function served(name: string, bytes: Buffer | null, expected: Buffer): Pro
 async function partTwo(): Promise<void> {
     await initTls();
     initStateEngine();
-    initAdminPassword();
     ADMIN = ownerTokenHeaders('admin');
     const member = keypair();
     // Joined long ago with a photo and a name, so no new-account limit or profile gate is what answers.
@@ -672,13 +670,13 @@ async function partTwo(): Promise<void> {
                 VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
         .run(member.pub, `photo-${member.pub.slice(0, 6)}`);
     setMemberPhoto(db, member.pub, dataUrl('image/jpeg', CLEAN_JPEG));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
     console.log('\n── 2a. A post with a photo in each format: POST /api/marketplace/posts → GET …/photos/:n ──');
     const create = await signed('POST', '/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Lemons from the tree', description: 'A bag of lemons', credits: 0, priceType: 'fixed',
+        type: 'offer', category: 'other', title: 'Lemons from the tree', description: 'A bag of lemons', price_c: 0, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21,
         photos: [dataUrl('image/jpeg', CAMERA_JPEG), dataUrl('image/png', CAMERA_PNG), dataUrl('image/webp', CAMERA_WEBP)],
     }, member);
@@ -704,7 +702,7 @@ async function partTwo(): Promise<void> {
 
     console.log('\n── 2c. An event\'s photo: POST /api/marketplace/posts (type event) ──');
     const event = await signed('POST', '/api/marketplace/posts', {
-        type: 'event', category: 'community', title: 'Street party', credits: 0, priceType: 'fixed',
+        type: 'event', category: 'community', title: 'Street party', price_c: 0, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21, eventStartAt: new Date(Date.now() + 30 * 3600_000).toISOString(),
         photos: [dataUrl('image/jpeg', CAMERA_JPEG)],
     }, member);
@@ -716,17 +714,17 @@ async function partTwo(): Promise<void> {
     // a picture the strip knows are refused, whatever the data URL says they are.
     const mislabelled = dataUrl('image/jpeg', CAMERA_HEIC);
     const heicPost = await signed('POST', '/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Limes from the tree', description: 'A bag of limes', credits: 0, priceType: 'fixed',
+        type: 'offer', category: 'other', title: 'Limes from the tree', description: 'A bag of limes', price_c: 0, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', CLEAN_JPEG), mislabelled],
     }, member);
     assert(heicPost.status === 400, `a post photo whose bytes are a HEIC (GPS inside), labelled image/jpeg, is refused (${heicPost.status} ${heicPost.json?.error ?? ''})`);
     const textPost = await signed('POST', '/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Figs from the tree', description: 'A bag of figs', credits: 0, priceType: 'fixed',
+        type: 'offer', category: 'other', title: 'Figs from the tree', description: 'A bag of figs', price_c: 0, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/png', Buffer.from('plain text, not a picture'))],
     }, member);
     assert(textPost.status === 400, `and one whose bytes are no picture at all (${textPost.status} ${textPost.json?.error ?? ''})`);
     const heicEvent = await signed('POST', '/api/marketplace/posts', {
-        type: 'event', category: 'community', title: 'Working bee', credits: 0, priceType: 'fixed',
+        type: 'event', category: 'community', title: 'Working bee', price_c: 0, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21, eventStartAt: new Date(Date.now() + 30 * 3600_000).toISOString(),
         photos: [mislabelled],
     }, member);
@@ -760,7 +758,7 @@ async function partTwo(): Promise<void> {
 
     console.log('\n── 2e. An enterprise, as the web app proposes one: POST /api/treasury → GET /api/avatar/<enterprise> ──');
     const ent = await signed('POST', '/api/treasury', {
-        name: 'Shade House Co-op', purpose: 'We build a shade house', lifecycle: 'bounded', goalAmount: 500,
+        name: 'Shade House Co-op', purpose: 'We build a shade house', lifecycle: 'bounded', goalAmount_c: 50000,
         photos: [dataUrl('image/jpeg', CAMERA_JPEG)], avatar: dataUrl('image/jpeg', CAMERA_JPEG),
     }, member);
     const entKey = ent.json?.publicKey as string | undefined;
@@ -776,7 +774,7 @@ async function partTwo(): Promise<void> {
         await served('GET /api/enterprise/:id avatarUrl (the stored value)', await avatarBytes(page.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
     }
     const bareHeicEnt = await signed('POST', '/api/treasury', {
-        name: 'Seed Bank Co-op', purpose: 'We keep seeds', lifecycle: 'bounded', goalAmount: 500,
+        name: 'Seed Bank Co-op', purpose: 'We keep seeds', lifecycle: 'bounded', goalAmount_c: 50000,
         photos: [CAMERA_HEIC.toString('base64')],
     }, member);
     assert(bareHeicEnt.status === 400, `an enterprise photo sent as bare base64 of a HEIC (GPS inside) is refused, not stored (${bareHeicEnt.status})`);
@@ -812,7 +810,7 @@ async function partTwo(): Promise<void> {
     console.log('\n── 2f. A crowdfund project: POST /api/crowdfund/projects (+ /update) → GET /api/crowdfund/projects/:id and /api/avatar ──');
     // The server makes a project's id (routes/commons.ts): the rest of the step uses the one it answers with.
     const proj = await signed('POST', '/api/crowdfund/projects', {
-        title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        title: 'Community oven', description: 'A wood-fired oven', goalAmount_c: 30000,
         photos: [dataUrl('image/jpeg', CAMERA_JPEG), dataUrl('image/png', CAMERA_PNG)],
     }, member);
     const projectId = String(proj.json?.project?.id ?? '');
@@ -828,7 +826,7 @@ async function partTwo(): Promise<void> {
     await served('crowdfund photo 1, as the project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG);
     await served('crowdfund project avatar', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_JPEG_STRIPPED);
     const projUpd = await signed('POST', '/api/crowdfund/projects/update', {
-        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount_c: 30000,
         photos: [dataUrl('image/webp', CAMERA_WEBP)],
     }, member);
     assert(projUpd.status === 200, `the project edit is saved (${projUpd.status} ${projUpd.json?.error ?? ''})`);
@@ -836,24 +834,24 @@ async function partTwo(): Promise<void> {
     await served('crowdfund photo after the edit', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
     await served('crowdfund project avatar after the edit', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
     const heicProject = await signed('POST', '/api/crowdfund/projects', {
-        title: 'Tool library', description: 'Shared tools', goalAmount: 200,
+        title: 'Tool library', description: 'Shared tools', goalAmount_c: 20000,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), dataUrl('image/heic', CAMERA_HEIC)],
     }, member);
     assert(heicProject.status === 400, `a second photo the node cannot strip (a HEIC, GPS inside) is refused, not stored (${heicProject.status})`);
     const heicEdit = await signed('POST', '/api/crowdfund/projects/update', {
-        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount_c: 30000,
         photos: [dataUrl('image/webp', CAMERA_WEBP), dataUrl('image/heic', CAMERA_HEIC)],
     }, member);
     assert(heicEdit.status === 400, `the same HEIC is refused on an edit (${heicEdit.status})`);
     listed = await projectPhotos();
     assert(listed.length === 1 && leak(Buffer.from(JSON.stringify(listed), 'latin1')) === null, 'the refused edit left the project as it was');
     const bareHeicProject = await signed('POST', '/api/crowdfund/projects', {
-        title: 'Seed library', description: 'Shared seeds', goalAmount: 200,
+        title: 'Seed library', description: 'Shared seeds', goalAmount_c: 20000,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), CAMERA_HEIC.toString('base64')],
     }, member);
     assert(bareHeicProject.status === 400, `a HEIC sent as bare base64, no data: prefix, is refused too (${bareHeicProject.status})`);
     const bareHeicEdit = await signed('POST', '/api/crowdfund/projects/update', {
-        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount_c: 30000,
         photos: [dataUrl('image/webp', CAMERA_WEBP), CAMERA_HEIC.toString('base64url')],
     }, member);
     assert(bareHeicEdit.status === 400, `and on an edit, in URL-safe base64 (${bareHeicEdit.status})`);
@@ -862,7 +860,7 @@ async function partTwo(): Promise<void> {
     // What an editor that loaded the project sends back: this node's own avatar address as photos[0], which means
     // "unchanged". Not image bytes, so still accepted, beside a bare photo that is stripped.
     const selfUrlEdit = await signed('POST', '/api/crowdfund/projects/update', {
-        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount_c: 30000,
         photos: [`/api/avatar/${projectId}`, CAMERA_JPEG.toString('base64url')],
     }, member);
     assert(selfUrlEdit.status === 200, `an edit sending back the node's own avatar address and a bare photo is saved (${selfUrlEdit.status} ${selfUrlEdit.json?.error ?? ''})`);
@@ -948,7 +946,7 @@ async function partTwo(): Promise<void> {
                 VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
         .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`);
     setMemberPhoto(db, reader.pub, dataUrl('image/jpeg', CLEAN_JPEG));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
     const storedAvatar = () => getMemberPhoto(db, member.pub);
 
     const bare = await signed('POST', '/api/profile/update', { avatar: CAMERA_JPEG.toString('base64') }, member);
@@ -1030,7 +1028,7 @@ async function partTwo(): Promise<void> {
         await served(`the member's photo with ${label}, as stored and handed out`, await avatarBytes(storedAvatar()), expected);
 
         const post = await signed('POST', '/api/marketplace/posts', {
-            type: 'offer', category: 'other', title: `${tag} pears from the tree`, description: 'A bag of pears', credits: 0, priceType: 'fixed',
+            type: 'offer', category: 'other', title: `${tag} pears from the tree`, description: 'A bag of pears', price_c: 0, priceType: 'fixed',
             authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', camera)],
         }, member);
         const id = post.json?.post?.id as string | undefined;
@@ -1038,7 +1036,7 @@ async function partTwo(): Promise<void> {
         if (id) await served(`the post photo with ${label}, GET …/photos/0`, (await fetchBytes(photoPathOf(id, 0))).bytes, expected);
 
         const ent = await signed('POST', '/api/treasury', {
-            name: `${tag} Orchard Co-op`, purpose: 'We grow pears', lifecycle: 'bounded', goalAmount: 500, avatar: dataUrl('image/jpeg', camera),
+            name: `${tag} Orchard Co-op`, purpose: 'We grow pears', lifecycle: 'bounded', goalAmount_c: 50000, avatar: dataUrl('image/jpeg', camera),
         }, member);
         const key = ent.json?.publicKey as string | undefined;
         assert(ent.status === 200 && !!key, `an enterprise photo with ${label} is saved (${ent.status} ${ent.json?.error ?? ''})`);
@@ -1061,13 +1059,13 @@ async function partTwo(): Promise<void> {
         assert(storedAvatar() === avatarBefore, `${label}: the stored photo is unchanged`);
     }
     const refusedPost = await signed('POST', '/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Quinces from the tree', description: 'A bag of quinces', credits: 0, priceType: 'fixed',
+        type: 'offer', category: 'other', title: 'Quinces from the tree', description: 'A bag of quinces', price_c: 0, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', CLEAN_JPEG), dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG)],
     }, member);
     assert(refusedPost.status === 400, `the same JPEG as a post's second photo is refused (${refusedPost.status} ${refusedPost.json?.error ?? ''})`);
     assert((db.prepare('SELECT COUNT(*) AS n FROM posts WHERE title = ?').get('Quinces from the tree') as { n: number }).n === 0, 'and no post is stored');
     const refusedEnt = await signed('POST', '/api/treasury', {
-        name: 'Quince Co-op', purpose: 'We grow quinces', lifecycle: 'bounded', goalAmount: 500, avatar: dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG),
+        name: 'Quince Co-op', purpose: 'We grow quinces', lifecycle: 'bounded', goalAmount_c: 50000, avatar: dataUrl('image/jpeg', UNWALKABLE_CAMERA_JPEG),
     }, member);
     assert(refusedEnt.status === 400, `and as an enterprise's photo (${refusedEnt.status} ${refusedEnt.json?.error ?? ''})`);
     assert((db.prepare('SELECT COUNT(*) AS n FROM members WHERE callsign = ?').get('Quince Co-op') as { n: number }).n === 0, 'and no enterprise is stored');
@@ -1076,7 +1074,7 @@ async function partTwo(): Promise<void> {
     // The aggregator gives an item its matching listing's first photo, as this node's address for it: a string made
     // only of base64 characters, which the bare-base64 photo rule read as a picture and refused.
     const listing = await signed('POST', '/api/marketplace/posts', {
-        type: 'offer', category: 'other', title: 'Lemons (bag) from the tree', description: 'Picked this morning', credits: 5, priceType: 'fixed',
+        type: 'offer', category: 'other', title: 'Lemons (bag) from the tree', description: 'Picked this morning', price_c: 500, priceType: 'fixed',
         authorPublicKey: member.pub, lat: -37.06, lng: 144.21, photos: [dataUrl('image/jpeg', CLEAN_JPEG)],
     }, member);
     const listingId = listing.json?.post?.id as string | undefined;

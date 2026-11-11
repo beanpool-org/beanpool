@@ -53,6 +53,7 @@ import fs from 'node:fs';
 import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // With GLOBAL_PINS_LOG_OUT set, everything this run prints is also written there (the runner keeps no log of a passing run).
 if (process.env.GLOBAL_PINS_LOG_OUT) {
@@ -85,10 +86,11 @@ function keypair(name: string): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -114,8 +116,8 @@ async function post(p: string, payload: unknown, id: Id): Promise<Answer> {
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 interface Sock { ws: WebSocket; raw: string[] }
 function openSocket(url: string): Promise<Sock> {
@@ -202,7 +204,7 @@ async function main() {
     const shop = member('Bangalow Bakery', null, 1);
     db.prepare("INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at) VALUES (?, ?, 'lead', ?)").run(shop.pubKeyHex, kim.pubKeyHex, iso(T0));
 
-    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng,
                                                    event_start_at, event_end_at, event_private_note, event_host_lets_in, audience_scope)
                                 VALUES (@id, @type, 'general', @title, '', 0, @author, @at, @at, @lat, @lng, @start, @end, @note, @letsIn, 'public')`);
     const place = new Map<string, { lat: number; lng: number }>();
@@ -466,7 +468,7 @@ async function main() {
         const authorSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
         await sleep(300);
         const made = await post('/api/marketplace/posts', { type: 'offer', category: 'general', title: `Reach ${k}`, description: 'Spare seedlings',
-            credits: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng, photos: TEST_PHOTOS }, alice);
+            price_c: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng, photos: TEST_PHOTOS }, alice);
         const newId = made.body?.id ?? made.body?.post?.id;
         await sleep(800);
         const got = (s: Sock) => s.raw.some(x => { try { const e = JSON.parse(x); return (e.post?.id ?? e.id) === newId; } catch { return false; } });
@@ -619,7 +621,7 @@ async function main() {
     const SP = { lat: -28.664321, lng: 153.587654 };
     const SC = cellOf(SP.lat, SP.lng);
     const madeSeries = await post('/api/marketplace/posts', {
-        type: 'event', title: 'Friday garden working bee', description: 'Bring gloves', credits: 0, authorPublicKey: hana.pubKeyHex,
+        type: 'event', title: 'Friday garden working bee', description: 'Bring gloves', price_c: 0, authorPublicKey: hana.pubKeyHex,
         lat: SP.lat, lng: SP.lng, photos: TEST_PHOTOS, eventPrivateNote: 'Side gate, number 7', eventHostLetsIn: true,
         eventStartLocal: '2098-01-03T19:00', eventEndLocal: '2098-01-03T21:00', eventTz: 'Australia/Sydney',
         eventRepeat: { freq: 'weekly', interval: 1, byDay: 'FR' },

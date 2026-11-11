@@ -6,6 +6,14 @@ import { App } from './App';
  * A node answering as if this browser holds a live password session (the httpOnly cookie the password sign-in sets):
  * /auth/session says so, /csrf-token gives its token. `onAdmin` sees every other request.
  */
+/** The pages the console reads after the node's summary (members, then posts): one member, so the node is not a brand-new one. */
+function pagedAnswer(url: string) {
+    const page = (body: unknown) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    if (url.endsWith('/api/local/admin/data/members')) return page({ members: [{ publicKey: 'aa'.repeat(32), callsign: 'Ana', isTreasury: false }], profiles: [], memberStats: {}, nextCursor: null, total: 1 });
+    if (url.endsWith('/api/local/admin/data/posts')) return page({ posts: [], nextCursor: null });
+    return null;
+}
+
 function stubPasswordSession(onAdmin?: (url: string, opts?: any) => unknown) {
     const fetchMock = vi.fn().mockImplementation((url: string, opts?: any) => {
         if (String(url).includes('/api/local/admin/auth/session')) {
@@ -20,6 +28,8 @@ function stubPasswordSession(onAdmin?: (url: string, opts?: any) => unknown) {
         }
         const custom = onAdmin?.(String(url), opts);
         if (custom) return custom;
+        const paged = pagedAnswer(String(url));
+        if (paged) return paged;
         return Promise.resolve({
             ok: true,
             status: 200,
@@ -58,6 +68,8 @@ describe('App Component', () => {
                         }),
                 });
             }
+            const paged = pagedAnswer(url);
+            if (paged) return paged;
             return Promise.resolve({
                 ok: true,
                 status: 200,
@@ -83,13 +95,11 @@ describe('App Component', () => {
             }
         });
 
-        it("the retired copilot's stored settings are removed, and its saved tab opens the Overview instead of nothing", async () => {
-            localStorage.setItem('bp_fleet_ai_config', JSON.stringify({ provider: 'openrouter', apiKey: 'sk-or-v1-stale' }));
+        it("a saved tab that no longer exists (the retired copilot's) opens the Overview instead of nothing", async () => {
             localStorage.setItem('bp_fleet_active_tab', 'ai');
             await act(async () => {
                 render(<App isFleetMode={true} />);
             });
-            expect(localStorage.getItem('bp_fleet_ai_config')).toBeNull();
             expect(localStorage.getItem('bp_fleet_active_tab')).toBe('overview');
         });
 
@@ -259,6 +269,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
 
             expect(screen.getByText('BeanPool')).toBeInTheDocument();
             expect(screen.getByText('Node Settings')).toBeInTheDocument();
@@ -296,6 +307,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /download backup/i }));
             });
@@ -315,6 +327,7 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
             await act(async () => {
                 fireEvent.click(screen.getByRole('button', { name: /download backup/i }));
             });
@@ -397,6 +410,8 @@ describe('App Component', () => {
                     });
                 }
                 if (String(url).includes('/api/local/admin/')) adminCalls.push({ url: String(url), headers: opts?.headers || {} });
+                const paged = pagedAnswer(String(url));
+                if (paged) return paged;
                 return Promise.resolve({
                     ok: true,
                     status: 200,
@@ -538,7 +553,7 @@ describe('App Component', () => {
             expect(screen.getByTestId('totp-setup-gate')).toBeInTheDocument();
         });
 
-        it('what an older build stored (the password, its 2FA session, a profile password) is removed on load and never sent', async () => {
+        it('what an older build stored in a fleet profile (a password, a replication token) is removed on load and never sent', async () => {
             sessionStorage.clear();
             localStorage.clear();
             localStorage.setItem('bp_fleet_profiles', JSON.stringify([{
@@ -548,9 +563,6 @@ describe('App Component', () => {
                 adminPassword: 'stale-password-from-storage',
                 replicationToken: 'stale-replication-token',
             }]));
-            sessionStorage.setItem('bp-admin-token', 'old-build-password');
-            sessionStorage.setItem('bp-2fa-session', 'old-2fa-session');
-            sessionStorage.setItem('bp_tfa_session_local-node', 'old-2fa-session');
 
             let lastAdminHeaders: Record<string, string> = {};
             stubPasswordSession((url, opts) => {
@@ -567,8 +579,9 @@ describe('App Component', () => {
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+            await screen.findByText('Action Required');
 
-            for (const secret of ['stale-password-from-storage', 'stale-replication-token', 'old-build-password', 'old-2fa-session']) {
+            for (const secret of ['stale-password-from-storage', 'stale-replication-token']) {
                 expect(storedText()).not.toContain(secret);
             }
 

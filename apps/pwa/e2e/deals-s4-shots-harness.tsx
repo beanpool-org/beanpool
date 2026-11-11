@@ -17,23 +17,23 @@ const ME = 'me-key';
 const identity: BeanPoolIdentity = { publicKey: ME, privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-09-01T00:00:00.000Z' };
 const AT = '2026-10-24T10:00:00.000Z';
 const deal = (over: Partial<MarketplaceTransaction>): MarketplaceTransaction => ({
-    id: 'tx', postId: 'p', postTitle: 'Listing', credits: 45, status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Ana',
+    id: 'tx', postId: 'p', postTitle: 'Listing', amount_c: 4500, status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Ana',
     sellerPublicKey: 'damo-key', sellerCallsign: 'Damo', createdAt: AT, ...over,
 });
 
 /** The member's own deals, by view (the node's answers for the listing itself are the routes'). */
 const MINE: Record<string, MarketplaceTransaction[]> = {
     payer: [deal({ id: 'tx-pay', postId: 'p-course' })],
-    payee: [deal({ id: 'tx-help', postId: 'p-stall', credits: 20, buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Ana' })],
+    payee: [deal({ id: 'tx-help', postId: 'p-stall', amount_c: 2000, buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Ana' })],
     author: [
         deal({ id: 'tx-a', postId: 'p-mine', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME, sellerCallsign: 'Ana', createdAt: '2026-10-26T10:00:00.000Z' }),
-        deal({ id: 'tx-b', postId: 'p-mine', credits: 30, buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Ana' }),
+        deal({ id: 'tx-b', postId: 'p-mine', amount_c: 3000, buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Ana' }),
     ],
     keeper: [],
     // A daily Need's author releasing a 3-day deal from its row, with 5 typed (review on #2588).
-    release: [deal({ id: 'tx-d', postId: 'p-olives', credits: 60, hours: 3, buyerPublicKey: ME, buyerCallsign: 'Ana', sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })],
+    release: [deal({ id: 'tx-d', postId: 'p-olives', amount_c: 6000, hours: 3, buyerPublicKey: ME, buyerCallsign: 'Ana', sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })],
     // A door that named a deal that is over by now: the listing as it is, and what became of that deal.
-    over: [deal({ id: 'tx-c', postId: 'p-other', status: 'cancelled', credits: 6 })],
+    over: [deal({ id: 'tx-c', postId: 'p-other', status: 'cancelled', amount_c: 600 })],
     feed: [
         deal({ id: 'tx-1', postId: 'p-course' }),
         deal({ id: 'tx-2', postId: 'p-ladder', status: 'requested' }),

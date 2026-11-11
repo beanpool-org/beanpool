@@ -23,7 +23,7 @@ import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
 import { type CommunityInfo } from '../lib/api';
-import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatNumber, groupNameShown, t, tn, toolsOnShelf, word, bundledGroupEmblem, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
+import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatHundredths, formatNumber, groupNameShown, parseHundredths, t, tn, toolsOnShelf, word, bundledGroupEmblem, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
 import { TOOL_APPS } from '../tools';
 import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
@@ -86,6 +86,12 @@ const localToday = (): string => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+
+/** The goal box's figure (Beans, as typed) to whole hundredths, or 0 when it isn't one (the create refuses 0). */
+function goalHundredths(v: number | ''): number {
+    const read = parseHundredths(String(v), 'en');
+    return read.ok ? read.value : 0;
+}
 
 export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember, initialStart, onStartOpened }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
@@ -237,7 +243,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     return { treasuries: [] };
                 }) : { treasuries: [] },
                 readsDecisions && getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
-                readsDecisions && getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
+                readsDecisions && getCommonsBalance ? getCommonsBalance().catch(() => ({ balance_c: 0 })) : { balance_c: 0 },
                 // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
                 // members list below keeps who it had, and the next fetch reads them again.
                 // Read only once the node has said it reads whole (the effect below reads them when it says so).
@@ -247,9 +253,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setDecisions(decData.decisions || []);
             setMyPoolVoting(decData.myPoolVoting ?? null);
             setNodeSaysCanPropose((decData as { canPropose?: boolean | null }).canPropose ?? null);
-            setCommonsBalance(commonsData.balance || 0);
+            setCommonsBalance(commonsData.balance_c || 0);
             if (Array.isArray(membersData)) {
-                setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+                setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance_c ?? 0 })));
             }
         } catch (err: any) {
             setError(err.message || t('Failed to fetch community enterprises'));
@@ -259,7 +265,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     };
 
     // The node's rule (a completed trade, or a node admin); earned credit only until the list has loaded.
-    const canProposeDecision = nodeSaysCanPropose ?? (balanceInfo?.earnedCredit || 0) > 0;
+    const canProposeDecision = nodeSaysCanPropose ?? (balanceInfo?.earnedCredit_c || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;
         return effectiveDecisions.some(d => d.authorPubkey === identity.publicKey && d.status === 'open');
@@ -316,7 +322,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         if (membersOnDemand !== false) return;
         // Asked inside the promise, so a read that throws before it starts waits for the next fetch too.
         Promise.resolve().then(() => getAllMembers()).then((membersData) => {
-            if (Array.isArray(membersData)) setAllMembersList(membersData.map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+            if (Array.isArray(membersData)) setAllMembersList(membersData.map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance_c ?? 0 })));
         }).catch(() => { /* the next fetch reads them again */ });
     }, [membersOnDemand]);
 
@@ -372,7 +378,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setCreateError(t('Purpose statement is required (docs/the-commons.md §2.1)'));
             return;
         }
-        if (newLifecycle === 'bounded' && (!newGoal || Number(newGoal) <= 0)) {
+        if (newLifecycle === 'bounded' && goalHundredths(newGoal) <= 0) {
             setCreateError(t('A project needs a goal in Beans'));
             return;
         }
@@ -394,7 +400,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 purpose: newDescription.trim(),
                 description: newDescription.trim(),
                 lifecycle: newLifecycle,
-                goalAmount: newLifecycle === 'bounded' ? Number(newGoal) : null,
+                // The goal typed in Beans, to whole hundredths by core's own reader (never a float times 100).
+                goalAmount_c: newLifecycle === 'bounded' ? goalHundredths(newGoal) : null,
                 deadlineAt,
                 photos: newPhotos,
                 avatar: newPhotos.length > 0 ? newPhotos[0] : undefined,
@@ -482,9 +489,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const filteredEnterprises = useMemo(() => {
         let list = treasuries.filter(t => !yourKeptPubkeys.has(t.publicKey));
         if (filter === 'ongoing') {
-            list = list.filter(t => t.lifecycle !== 'bounded' && (!t.goalAmount || t.goalAmount <= 0));
+            list = list.filter(t => t.lifecycle !== 'bounded' && (!t.goalAmount_c || t.goalAmount_c <= 0));
         } else if (filter === 'bounded') {
-            list = list.filter(t => t.lifecycle === 'bounded' || (t.goalAmount != null && t.goalAmount > 0));
+            list = list.filter(t => t.lifecycle === 'bounded' || (t.goalAmount_c != null && t.goalAmount_c > 0));
         }
         return list;
     }, [treasuries, filter, yourKeptPubkeys]);
@@ -555,7 +562,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 {t('Commons Pool')}
                             </div>
                             <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
-                                {formatNumber(balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0) : 0, 2)} 🫘
+                                {formatHundredths(balanceInfo?.commonsBalance_c ?? 0)} 🫘
                             </div>
                         </div>
                     )}
@@ -666,23 +673,23 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {yourKeptRows.map(item => {
                                 const e = item.chat;
                                 const summary = item.summary;
-                                const isProject = e.lifecycle === 'bounded' || summary?.lifecycle === 'bounded' || (summary?.goalAmount != null && summary.goalAmount > 0);
+                                const isProject = e.lifecycle === 'bounded' || summary?.lifecycle === 'bounded' || (summary?.goalAmount_c != null && summary.goalAmount_c > 0);
                                 const isLead = e.role === 'lead' || summary?.keepers?.some(k => !k.suspended && (k.publicKey || k.pubkey) === identity?.publicKey && k.role === 'lead');
                                 const roleWord = isProject
                                     ? (isLead ? t('Leader', undefined, 'project role') : t('Collaborator', undefined, 'project role'))
                                     : (isLead ? t('Lead keeper', undefined, 'enterprise role') : t('Keeper', undefined, 'enterprise role'));
                                 const kindWord = isProject ? t('Project') : t('Enterprise');
                                 const resolvedAvatar = resolveAvatarUrl(e.avatarUrl || summary?.avatar || summary?.avatarUrl);
-                                const isFunded = isProject && summary?.goalAmount != null && summary.goalAmount > 0 && (summary.currentAmount ?? summary.balance ?? 0) >= summary.goalAmount;
+                                const isFunded = isProject && summary?.goalAmount_c != null && summary.goalAmount_c > 0 && (summary.currentAmount_c ?? summary.balance_c ?? 0) >= summary.goalAmount_c;
                                 const offersText = summary ? tn(summary.liveOffers || 0, '{n} live offer', '{n} live offers') : '';
                                 const line2 = summary
                                     ? (isProject
                                         ? t('{raised} of {goal} 🫘 raised', {
-                                            raised: formatNumber(summary.currentAmount ?? summary.balance ?? 0),
-                                            goal: formatNumber(summary.goalAmount ?? 0),
+                                            raised: formatHundredths(summary.currentAmount_c ?? summary.balance_c ?? 0),
+                                            goal: formatHundredths(summary.goalAmount_c ?? 0),
                                         })
                                         : t('Balance {amount} 🫘 · {offers}', {
-                                            amount: formatNumber(summary.balance || 0),
+                                            amount: formatHundredths(summary.balance_c || 0),
                                             offers: offersText,
                                         }))
                                     : null;

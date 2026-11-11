@@ -19,6 +19,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -37,7 +38,7 @@ function makeAuthor(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -46,10 +47,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -61,7 +63,7 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
 
 const post = (title: string, extra: Record<string, unknown> = {}) => ({
     type: 'offer', category: 'general', title, description: 'test listing',
-    credits: 20, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
+    price_c: 2000 /* 20 Beans */, priceType: 'fixed', photos: TEST_PHOTOS, ...extra,
 });
 
 async function main() {

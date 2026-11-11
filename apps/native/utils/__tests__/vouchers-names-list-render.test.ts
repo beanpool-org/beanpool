@@ -124,21 +124,25 @@ const ADMINS_ONLY = 'Only the community’s owners and admins can open the names
 
 // ── The list: five entries, sealed with one real key ──────────────────────────────────────────────────────────────
 const KID = '9'.repeat(64);
-const ID = { zara: '1'.repeat(32), ann: '2'.repeat(32), mary: '3'.repeat(32), sally: '4'.repeat(32), tom: '5'.repeat(32) };
+const ID = { zara: '1'.repeat(32), ann: '2'.repeat(32), mary: '3'.repeat(32), sally: '4'.repeat(32), tom: '5'.repeat(32), ash: '6'.repeat(32) };
+/** On for the one test that puts an admin's confirmed entry on the list (Ash, no budget: an admin made after I5 has none). */
+let adminEntryOnList = false;
 const conf = (id: string, entryId: string, memberPubkey: string, callsign: string, status = 'confirmed') => ({
     id, entryId, memberPubkey, callsign, status, confirmedBy: key('b'), confirmedAt: '2026-11-03T09:00:00Z', needsSecond: status === 'awaiting_second',
     secondedBy: null, secondedAt: null, revokedBy: null, revokedAt: null, revokeReason: null,
 });
-function sealedList(listKey: Uint8Array) {
+function sealedList(listKey: Uint8Array, withAdminEntry = false) {
     const entry = (id: string, name: string) => ({ id, keyId: KID, ciphertext: sealNamesEntry(listKey, id, KID, { name, note: '' }), createdBy: key('a'), createdAt: '2026-11-01T00:00:00.000Z', updatedBy: null, updatedAt: '' });
     return {
         current: null,
-        entries: [entry(ID.zara, 'Zara Quinn'), entry(ID.ann, 'Ann Awaiting'), entry(ID.mary, 'Mary Smith'), entry(ID.sally, 'Sally Owner'), entry(ID.tom, 'Tom Unconfirmed')],
+        entries: [entry(ID.zara, 'Zara Quinn'), entry(ID.ann, 'Ann Awaiting'), entry(ID.mary, 'Mary Smith'), entry(ID.sally, 'Sally Owner'), entry(ID.tom, 'Tom Unconfirmed'),
+            ...(withAdminEntry ? [entry(ID.ash, 'Ash Admin')] : [])],
         confirmations: [
             conf('c1', ID.zara, PEOPLE.voucher.publicKey, 'zara'),
             conf('c2', ID.ann, key('7'), 'ann', 'awaiting_second'),
             conf('c3', ID.mary, PEOPLE.member.publicKey, 'Bea'),
             conf('c4', ID.sally, PEOPLE.owner.publicKey, 'Sally'),
+            ...(withAdminEntry ? [conf('c5', ID.ash, PEOPLE.plainAdmin.publicKey, 'Ash')] : []),
         ],
     };
 }
@@ -154,18 +158,18 @@ function openedFor(listKey: Uint8Array, me: (typeof PEOPLE)[Who]) {
         plan: { kind: 'ready' },
         pin: { me: me.publicKey, trusted: ADMINS.map((a) => a.publicKey).filter((k) => k !== me.publicKey), chain: [{ id: KID, n: 1 }], abandoned: [], communityId: 'mullum' },
         ring: { [KID]: listKey }, generations: new Map(),
-        list: sealedList(listKey),
+        list: sealedList(listKey, adminEntryOnList),
         notices: [], made: null, sentTo: [], toCheck: [],
     };
 }
 
-/** The node's block (one voucher: Zara, made from her entry) and her card. */
+/** The node's block (one voucher: Zara, made from her entry) and her card. Every figure is whole hundredths of a Bean, as the node sends them. */
 const ZARA = {
     memberPubkey: PEOPLE.voucher.publicKey, callsign: 'zara', source: 'entry', entryId: ID.zara, madeBy: key('a'), madeByCallsign: 'Sally', madeAt: '2026-11-05T10:00:00Z',
-    stoppedAt: null, stopReason: null, left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 0,
-    passedOn: { amount: 50, people: 1, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 },
+    stoppedAt: null, stopReason: null, left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 65000, belowZero: 1, writtenOff: 0,
+    passedOn: { amount_c: 5000, people: 1, belowZero: 0 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 },
 };
-const BLOCK = { vouchers: [ZARA], settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 } };
+const BLOCK = { vouchers: [ZARA], settings: { voucherBudget: 100000, memberGift: 10000, presets: [2500, 5000, 7500, 10000], vouchMax: 10000, vouchesPerPerson: 3, budgetMax: 200000 } };
 const node = vi.hoisted(() => ({ calls: [] as Array<{ method: string; url: string; body: unknown }> }));
 function fakeNode() {
     return vi.fn(async (url: unknown, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
@@ -191,6 +195,7 @@ beforeEach(() => {
     root = createRoot(host);
     alerts.said.length = 0;
     node.calls.length = 0;
+    adminEntryOnList = false;
     const listKey = newNamesListKey();
     names.opened = (pubkey) => {
         const me = Object.values(PEOPLE).find((p) => p.publicKey === pubkey)!;
@@ -249,6 +254,21 @@ describe('the names list with vouchers, exactly as the node answers', () => {
         expect(host.textContent).not.toMatch(/\d+ vouchers?\b/);
     });
 
+    // Only an owner makes an admin a voucher (I5): the node answers a committee admin 403 owner_only, so the list doesn't offer it.
+    it('an admin’s confirmed entry: Make a voucher is offered to an owner and not to a committee admin (the node would refuse them)', async () => {
+        adminEntryOnList = true;
+        await renderAs('owner');
+        expect(host.textContent).toContain('Ash Admin');
+        // Mary Smith (Bea) and Ash's: the owner may make either one.
+        expect(buttons('Make a voucher')).toHaveLength(2);
+        act(() => root.unmount());
+        root = createRoot(host);
+        await renderAs('committeeAdmin');
+        expect(host.textContent).toContain('Ash Admin');
+        // Mary Smith's and Sally's (an owner, who this fake node shows with no budget): not Ash's, an admin's.
+        expect(buttons('Make a voucher')).toHaveLength(2);
+    });
+
     for (const w of ['voucher', 'member'] as const) {
         it(`a voucher and a member: the node refuses the list and the block (${w}), and nothing of vouchers shows`, async () => {
             await renderAs(w);
@@ -263,13 +283,15 @@ describe('the names list with vouchers, exactly as the node answers', () => {
         await renderAs('owner');
         await click(buttons('Make a voucher')[0]);
         expect(host.textContent).toContain('Make @Bea a voucher?');
-        expect(host.textContent).toContain('1000 Beans');
+        // Figures from whole hundredths (formatHundredths): 1,000 and more grouped, as on the web.
+        expect(host.textContent).toContain('1,000 Beans');
         await click(host.querySelector('[aria-label="Increase budget by 100"]'));
-        expect(host.textContent).toContain('1100 Beans');
+        expect(host.textContent).toContain('1,100 Beans');
         await click(buttons('Make a voucher').at(-1));
         const posted = node.calls.filter((c) => c.method === 'POST' && c.url === `${NODE}/api/names/vouchers`);
-        expect(posted.map((c) => c.body)).toEqual([{ entryId: ID.mary, amount: 1100 }]);
-        expect(host.textContent).toContain('Made @Bea a voucher with a budget of 1100 Beans.');
+        // The budget is `amount_c`, whole hundredths (engine/vouchers.ts makeVoucher refuses the old `amount` with 400).
+        expect(posted.map((c) => c.body)).toEqual([{ entryId: ID.mary, amount_c: 110000 }]);
+        expect(host.textContent).toContain('Made @Bea a voucher with a budget of 1,100 Beans.');
     });
 
     it('Community health’s Vouchers section names each voucher by @callsign, also one the phone has no member row for', async () => {

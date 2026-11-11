@@ -44,7 +44,7 @@ const mayRead = (p) => READS.has(p) || /^\/api\/marketplace\/posts\/[^/]+\/photo
 
 const GUEST_POST = {
     id: POST_ID, type: 'offer', category: 'tools', title: 'Long ladder to lend for the weekend', status: 'active', active: true,
-    description: 'A 6 m extension ladder, light enough for one person. Good for gutters and fruit trees.', credits: 15, priceType: 'fixed',
+    description: 'A 6 m extension ladder, light enough for one person. Good for gutters and fruit trees.', price_c: 1500, priceType: 'fixed',
     photos: [`/api/marketplace/posts/${POST_ID}/photos/0?v=1&k=key`], createdAt: new Date(Date.now() - 86_400_000).toISOString(),
     audienceScope: 'public', lat: -37.1, lng: 144.2, repeatable: false,
     authorPublicKey: 'hidden', authorCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0, authorFoundingNeeded: false,
@@ -89,7 +89,6 @@ async function main() {
                 document.addEventListener('securitypolicyviolation', (e) => {
                     window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI, page: location.href });
                 });
-                localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                 localStorage.setItem('beanpool-theme-mode', dark ? 'dark' : 'light');
                 document.addEventListener('DOMContentLoaded', () => {
                     const s = document.createElement('style');
@@ -106,7 +105,7 @@ async function main() {
                 if (!mayRead(p)) seen.refused.push(p);
                 const reply = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
                 if (p === '/api/community/info') {
-                    return reply(200, { memberCount: 42, postCount: 30, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { beans: true, shareOutside: true } });
+                    return reply(200, { memberCount: 42, postCount: 30, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { beans: true, shareOutside: true } });
                 }
                 if (p === '/api/community/card') return reply(200, CARD);
                 if (p === '/api/community/health') return reply(200, { status: 'ok', version: '1.2.31' });

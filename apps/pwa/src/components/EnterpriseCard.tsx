@@ -3,7 +3,7 @@
  * preview (ShowcasePreviews CommonsPreview): the same card fed the sample, `sample` adding the 🏘️ Local community pill.
  */
 import { useState } from 'react';
-import { deadlineDaysRemaining, formatNumber, t, tn } from '@beanpool/core';
+import { deadlineDaysRemaining, formatHundredths, t, tn } from '@beanpool/core';
 import type { Treasury } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { takesPledges } from '../lib/enterprise-pledge';
@@ -11,13 +11,14 @@ import { LocalCommunityPill } from './LocalCommunityMark';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 
-/** Energy Balance sentence (docs/the-commons.md §2.2). */
-function energySentence(energyBalance: number): string {
-    const beans = Math.round(Math.abs(energyBalance) * 100) / 100;
-    if (beans === 0) return t('Square — nothing owed either way');
-    return energyBalance > 0
-        ? tn(beans, 'We owe them {n} bean of work', 'We owe them {n} beans of work')
-        : tn(beans, 'They owe us {n} bean of work', 'They owe us {n} beans of work');
+/** Energy Balance sentence (docs/the-commons.md §2.2), from whole hundredths of a Bean. */
+function energySentence(energyBalance_c: number): string {
+    const owed = Math.abs(energyBalance_c);
+    if (owed === 0) return t('Square — nothing owed either way');
+    const n = { n: formatHundredths(owed) };
+    return energyBalance_c > 0
+        ? tn(owed / 100, 'We owe them {n} bean of work', 'We owe them {n} beans of work', n)
+        : tn(owed / 100, 'They owe us {n} bean of work', 'They owe us {n} beans of work', n);
 }
 
 function getDaysRemaining(deadline: string | null | undefined): { text: string; expired: boolean } | null {
@@ -31,9 +32,10 @@ function getDaysRemaining(deadline: string | null | undefined): { text: string; 
 export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury: Treasury; onOpen?: (publicKey: string) => void; sample?: boolean }) {
     // Avatar URLs that failed to load; the card shows the no-avatar placeholder instead of alt text.
     const [failedAvatars, setFailedAvatars] = useState<ReadonlySet<string>>(() => new Set());
-    const hasGoal = treasury.goalAmount != null && treasury.goalAmount > 0;
-    const currentRaised = treasury.currentAmount != null ? treasury.currentAmount : Math.max(0, treasury.balance);
-    const goal = treasury.goalAmount || 1;
+    // Whole hundredths of a Bean, each (the node's `*_c` fields).
+    const hasGoal = treasury.goalAmount_c != null && treasury.goalAmount_c > 0;
+    const currentRaised = treasury.currentAmount_c != null ? treasury.currentAmount_c : Math.max(0, treasury.balance_c);
+    const goal = treasury.goalAmount_c || 1;
     const progress = Math.min(100, (currentRaised / goal) * 100);
     const isFunded = hasGoal && (currentRaised >= goal || treasury.status === 'funded' || treasury.status === 'completed');
     const daysRemaining = getDaysRemaining(treasury.deadlineAt);
@@ -136,17 +138,17 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                 </p>
 
                 {/* Energy Balance sentence (docs/the-commons.md §2.2) */}
-                {treasury.balance != null && (
+                {treasury.balance_c != null && (
                     <p className="text-[11px] text-nature-400 italic">
-                        {energySentence(treasury.balance)}
+                        {energySentence(treasury.balance_c)}
                     </p>
                 )}
 
                 {/* Financial Ceiling indicator if surplus exists */}
-                {treasury.earnedSurplus != null && treasury.earnedSurplus > 0 && (
+                {treasury.earnedSurplus_c != null && treasury.earnedSurplus_c > 0 && (
                     <div className="flex items-center gap-1 text-[11px] text-emerald-400">
                         <span aria-hidden="true">📈</span>
-                        <span>{t('Earned Surplus: {amount} 🫘', { amount: treasury.earnedSurplus })}</span>
+                        <span>{t('Earned Surplus: {amount} 🫘', { amount: formatHundredths(treasury.earnedSurplus_c) })}</span>
                     </div>
                 )}
             </div>
@@ -158,14 +160,14 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
                             {t('Balance')}
                         </div>
-                        {treasury.balance < 0 && (
+                        {treasury.balance_c < 0 && (
                             <div className="text-[11px] font-bold text-amber-400">
                                 {t('in deficit (keepers eat last)')}
                             </div>
                         )}
                     </div>
-                    <div className={`font-black text-sm ${treasury.balance < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                        {formatNumber(treasury.balance)} 🫘
+                    <div className={`font-black text-sm ${treasury.balance_c < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {formatHundredths(treasury.balance_c)} 🫘
                     </div>
                 </div>
 
@@ -176,8 +178,8 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                             {/* One sentence for the translator: the amount raised is its bold part. */}
                             <span className="font-normal text-nature-400">
                                 <Sentence
-                                    text={t('{amount} raised of {goal} 🫘', { goal: treasury.goalAmount ?? 0 })}
-                                    parts={{ amount: <span className={`font-bold ${isFunded ? 'text-emerald-400' : 'text-white'}`}>{formatNumber(currentRaised)} 🫘</span> }}
+                                    text={t('{amount} raised of {goal} 🫘', { goal: formatHundredths(treasury.goalAmount_c ?? 0) })}
+                                    parts={{ amount: <span className={`font-bold ${isFunded ? 'text-emerald-400' : 'text-white'}`}>{formatHundredths(currentRaised)} 🫘</span> }}
                                 />
                             </span>
                             {daysRemaining && (
@@ -193,8 +195,9 @@ export function EnterpriseCard({ treasury, onOpen, sample = false }: { treasury:
                             />
                         </div>
 
-                        {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
-                        {takesPledges(treasury) && (
+                        {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges. Core's rule reads the old
+                            names; it only compares raised with goal, so the hundredths go in as they are. */}
+                        {takesPledges({ goalAmount: treasury.goalAmount_c, currentAmount: treasury.currentAmount_c, balance: treasury.balance_c, status: treasury.status, lifecycle: treasury.lifecycle, deadlineAt: treasury.deadlineAt }) && (
                             <div
                                 aria-hidden="true"
                                 className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"

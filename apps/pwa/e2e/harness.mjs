@@ -90,7 +90,6 @@ export async function openMarket(browser, origin, { width, height = 1200, dark =
     await context.addInitScript(([mode, extra]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
-            localStorage.setItem('beanpool-theme-default-light-v1', 'done');
             for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
         } catch { /* a picture of the default theme is still a picture */ }
     }, [dark ? 'dark' : 'light', storage]);

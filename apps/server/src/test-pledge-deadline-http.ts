@@ -33,11 +33,14 @@ import { db } from './db/db.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { SERVER_FAULT_TEXT } from './routes/member-error-text.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 const REFUSAL_TEXT = "This project's deadline has passed: it takes no more pledges.";
 const REFUSAL_CODE = 'project_closed';
 
@@ -57,7 +60,7 @@ function makeMember(): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, `Member${++made}`);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -65,13 +68,14 @@ async function signedPost(path: string, body: unknown, id: Id) {
     const bodyString = JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `POST\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method: 'POST', path, timestamp: ts, nonce, body: bodyString };
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pubKeyHex,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -82,10 +86,12 @@ async function signedPost(path: string, body: unknown, id: Id) {
     return { status: res.status, body: json, error: json?.error as string | undefined };
 }
 
+/** An account's balance row, whole hundredths. */
 const balanceOf = (key: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(key) as { balance: number } | undefined)?.balance ?? 0;
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(key) as { balance_c: number } | undefined)?.balance_c ?? 0;
+/** A project's raised figure, whole hundredths. */
 const raisedOf = (projectId: string): number =>
-    (db.prepare('SELECT current_amount FROM projects WHERE id = ?').get(projectId) as { current_amount: number } | undefined)?.current_amount ?? 0;
+    (db.prepare('SELECT current_amount_c FROM projects WHERE id = ?').get(projectId) as { current_amount_c: number } | undefined)?.current_amount_c ?? 0;
 
 /** A project's deadline on both its rows: the enterprise's (members) and the crowdfund project's (projects). */
 function setDeadline(projectId: string, deadline: string | null): void {
@@ -99,7 +105,7 @@ function moneyNow(backer: string, projectId: string) {
         backer: balanceOf(backer),
         escrow: balanceOf(`escrow_${projectId}`),
         raised: raisedOf(projectId),
-        sum: (db.prepare('SELECT SUM(balance) as s FROM accounts').get() as any).s as number,
+        sum: (db.prepare('SELECT SUM(balance_c) as s FROM accounts').get() as any).s as number,
         txs: (db.prepare('SELECT COUNT(*) as n FROM transactions').get() as any).n as number,
     };
 }
@@ -109,7 +115,7 @@ function assertNothingMoved(before: ReturnType<typeof moneyNow>, after: ReturnTy
         assert(after[field] === before[field], `${what}: ${field} unchanged (${after[field]} === ${before[field]})`);
     }
     const audit = runLedgerAudit();
-    assert(audit.ok && Math.abs(audit.drift) < 0.0001, `${what}: LedgerAudit holds with 0 drift (drift: ${audit.drift})`);
+    assert(audit.ok && audit.drift === 0, `${what}: LedgerAudit holds with 0 drift (drift: ${audit.drift})`);
 }
 
 async function main(): Promise<void> {
@@ -122,9 +128,9 @@ async function main(): Promise<void> {
     const backer = makeMember();
 
     // Fund backer with 50 Beans from Commons
-    payFromCommons(backer.pubKeyHex, 50, 'Initial beans for backer', { allowDeficit: true });
+    payFromCommons(backer.pubKeyHex, hc(50), 'Initial beans for backer', { allowDeficit: true });
     const backerInitialBal = balanceOf(backer.pubKeyHex);
-    assert(backerInitialBal === 50, `backer funded with 50 beans (got ${backerInitialBal})`);
+    assert(backerInitialBal === hc(50), `backer funded with 50 beans (got ${backerInitialBal} hundredths)`);
 
     // ── 1. Create bounded enterprise with a future deadline ──────────────────────────────────
     const futureDeadline = new Date(Date.now() + 5 * DAY).toISOString();
@@ -132,7 +138,7 @@ async function main(): Promise<void> {
         name: 'Community Greenhouse',
         purpose: 'Grow winter greens',
         lifecycle: 'bounded',
-        goalAmount: 100,
+        goalAmount_c: hc(100),
         deadlineAt: futureDeadline,
     }, creator);
     assert(created.status === 200, `project created with future deadline (status ${created.status})`);
@@ -140,19 +146,19 @@ async function main(): Promise<void> {
 
     // ── 2. Pledge BEFORE deadline is taken ──────────────────────────────────────────────────
     const pledgeBefore = await signedPost(`/api/treasury/${projectId}/pledge`, {
-        amount: 10,
+        amount_c: hc(10),
         memo: 'Early pledge',
     }, backer);
     assert(pledgeBefore.status === 200 && pledgeBefore.body?.success === true,
         `pledge before deadline is taken (got ${pledgeBefore.status})`);
 
     const backerBalAfterFirst = balanceOf(backer.pubKeyHex);
-    assert(backerBalAfterFirst === 40, `backer debited by 10 (got ${backerBalAfterFirst})`);
+    assert(backerBalAfterFirst === hc(40), `backer debited by 10 (got ${backerBalAfterFirst} hundredths)`);
     const projectRaised = raisedOf(projectId);
-    assert(projectRaised === 10, `project current_amount is 10 (got ${projectRaised})`);
+    assert(projectRaised === hc(10), `project current_amount is 10 (got ${projectRaised} hundredths)`);
 
     const auditFirst = runLedgerAudit();
-    assert(auditFirst.ok && Math.abs(auditFirst.drift) < 0.0001, 'ledger audit holds after valid pledge');
+    assert(auditFirst.ok && auditFirst.drift === 0, 'ledger audit holds after valid pledge');
 
     // ── 3. A deadline an hour ago is still its end date: the badge says "Ends today", and pledges are taken ──────
     // The phone stores the chosen day at the time its picker opened, so on the end date its deadline is hours behind now.
@@ -163,11 +169,11 @@ async function main(): Promise<void> {
         ['crowdfund', `/api/crowdfund/projects/${projectId}/pledge`],
     ] as const) {
         const before = moneyNow(backer.pubKeyHex, projectId);
-        const onEndDate = await signedPost(path, { amount: 5, memo: `Pledge on the end date (${door})` }, backer);
+        const onEndDate = await signedPost(path, { amount_c: hc(5), memo: `Pledge on the end date (${door})` }, backer);
         assert(onEndDate.status === 200 && onEndDate.body?.success === true,
             `${door} pledge an hour after the deadline's instant (its end date) is taken (got ${onEndDate.status} ${onEndDate.body?.code ?? ''})`);
         const after = moneyNow(backer.pubKeyHex, projectId);
-        assert(before.backer - after.backer === 5 && after.raised - before.raised === 5,
+        assert(before.backer - after.backer === hc(5) && after.raised - before.raised === hc(5),
             `${door} pledge on the end date moved 5 Beans from the backer to the project (backer ${before.backer} → ${after.backer}, raised ${before.raised} → ${after.raised})`);
     }
 
@@ -180,7 +186,7 @@ async function main(): Promise<void> {
         name: 'Seed Swap',
         purpose: 'Seeds for the spring',
         lifecycle: 'bounded',
-        goalAmount: 100,
+        goalAmount_c: hc(100),
         deadlineAt: webToday,
     }, creator2);
     assert(createdToday.status === 200, `project created with today's date as the web sends it, ${webToday} (status ${createdToday.status} ${createdToday.error ?? ''})`);
@@ -192,11 +198,11 @@ async function main(): Promise<void> {
         ['crowdfund', `/api/crowdfund/projects/${todayId}/pledge`],
     ] as const) {
         const before = moneyNow(backer.pubKeyHex, todayId);
-        const pledgeToday = await signedPost(path, { amount: 5, memo: `Pledge on the day it ends (${door})` }, backer);
+        const pledgeToday = await signedPost(path, { amount_c: hc(5), memo: `Pledge on the day it ends (${door})` }, backer);
         assert(pledgeToday.status === 200 && pledgeToday.body?.success === true,
             `${door} pledge to a project ending today is taken (got ${pledgeToday.status} ${pledgeToday.body?.code ?? ''})`);
         const after = moneyNow(backer.pubKeyHex, todayId);
-        assert(before.backer - after.backer === 5 && after.escrow - before.escrow === 5 && after.raised - before.raised === 5,
+        assert(before.backer - after.backer === hc(5) && after.escrow - before.escrow === hc(5) && after.raised - before.raised === hc(5),
             `${door} pledge to a project ending today moved 5 Beans into its escrow (backer ${before.backer} → ${after.backer}, escrow ${before.escrow} → ${after.escrow})`);
     }
 
@@ -208,15 +214,15 @@ async function main(): Promise<void> {
     const backerBalBeforeLate = balanceOf(backer.pubKeyHex);
     const escrowBeforeLate = balanceOf(`escrow_${projectId}`);
     const projectBeforeLate = raisedOf(projectId);
-    const accountsSumBeforeLate = (db.prepare('SELECT SUM(balance) as s FROM accounts').get() as any).s;
+    const accountsSumBeforeLate = (db.prepare('SELECT SUM(balance_c) as s FROM accounts').get() as any).s;
     const txCountBeforeLate = (db.prepare('SELECT COUNT(*) as n FROM transactions').get() as any).n;
     const auditBeforeLate = runLedgerAudit();
     assert(auditBeforeLate.ok, 'audit holds before late pledge attempts');
-    assert(escrowBeforeLate === 20, `the project's escrow holds the 20 Beans pledged so far (got ${escrowBeforeLate})`);
+    assert(escrowBeforeLate === hc(20), `the project's escrow holds the 20 Beans pledged so far (got ${escrowBeforeLate} hundredths)`);
 
     // ── 4. Pledge AFTER deadline refused: treasury route ───────────────────────────────────
     const pledgeLateTreasury = await signedPost(`/api/treasury/${projectId}/pledge`, {
-        amount: 10,
+        amount_c: hc(10),
         memo: 'Late pledge to treasury',
     }, backer);
     assert(pledgeLateTreasury.status === 409,
@@ -229,7 +235,7 @@ async function main(): Promise<void> {
     // ── 5. Pledge AFTER deadline refused: crowdfund route ──────────────────────────────────
     const pledgeLateCrowdfund = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
         fromPubkey: backer.pubKeyHex,
-        amount: 10,
+        amount_c: hc(10),
         memo: 'Late pledge to crowdfund',
     }, backer);
     assert(pledgeLateCrowdfund.status === 409,
@@ -243,7 +249,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE projects SET deadline_at = NULL WHERE id = ?').run(projectId);
     const pledgeMemberOnly = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
         fromPubkey: backer.pubKeyHex,
-        amount: 10,
+        amount_c: hc(10),
         memo: 'Pledge when deadline only on members table',
     }, backer);
     assert(pledgeMemberOnly.status === 409 && pledgeMemberOnly.body?.code === REFUSAL_CODE,
@@ -262,7 +268,7 @@ async function main(): Promise<void> {
     assert(projectAfterLate === projectBeforeLate,
         `project current_amount unchanged (${projectAfterLate} === ${projectBeforeLate})`);
 
-    const accountsSumAfterLate = (db.prepare('SELECT SUM(balance) as s FROM accounts').get() as any).s;
+    const accountsSumAfterLate = (db.prepare('SELECT SUM(balance_c) as s FROM accounts').get() as any).s;
     assert(accountsSumAfterLate === accountsSumBeforeLate,
         `sum of accounts unchanged (${accountsSumAfterLate} === ${accountsSumBeforeLate})`);
 
@@ -271,7 +277,7 @@ async function main(): Promise<void> {
         `transaction count unchanged (${txCountAfterLate} === ${txCountBeforeLate})`);
 
     const auditAfterLate = runLedgerAudit();
-    assert(auditAfterLate.ok && Math.abs(auditAfterLate.drift) < 0.0001,
+    assert(auditAfterLate.ok && auditAfterLate.drift === 0,
         `LedgerAudit holds with 0 drift after refused pledges (drift: ${auditAfterLate.drift})`);
 
     // ── 7. Actor from auth, not body ────────────────────────────────────────────────────────
@@ -279,7 +285,7 @@ async function main(): Promise<void> {
     // stranger signs, but body claims backer's pubkey: signature middleware enforces identity match (403)
     const spoofAttempt = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
         fromPubkey: backer.pubKeyHex,
-        amount: 10,
+        amount_c: hc(10),
         memo: 'Spoof attempt',
     }, stranger);
     assert(spoofAttempt.status === 403,
@@ -287,7 +293,7 @@ async function main(): Promise<void> {
 
     // stranger signs with valid signature: deadline check still refuses with 409 project_closed
     const strangerPledgeClosed = await signedPost(`/api/crowdfund/projects/${projectId}/pledge`, {
-        amount: 10,
+        amount_c: hc(10),
         memo: 'Stranger pledge to closed project',
     }, stranger);
     assert(strangerPledgeClosed.status === 409 && strangerPledgeClosed.body?.code === REFUSAL_CODE,
@@ -298,14 +304,14 @@ async function main(): Promise<void> {
         name: 'Open Solar Project',
         purpose: 'Solar panels',
         lifecycle: 'bounded',
-        goalAmount: 100,
+        goalAmount_c: hc(100),
         deadlineAt: '',
     }, creator);
     assert(createdNoDeadline.status === 200, `project created without deadline`);
     const noDeadlineId = createdNoDeadline.body.publicKey;
 
     const pledgeNoDeadline = await signedPost(`/api/treasury/${noDeadlineId}/pledge`, {
-        amount: 5,
+        amount_c: hc(5),
         memo: 'Pledge to open project',
     }, backer);
     assert(pledgeNoDeadline.status === 200 && pledgeNoDeadline.body?.success === true,
@@ -322,7 +328,7 @@ async function main(): Promise<void> {
             ['crowdfund', `/api/crowdfund/projects/${noDeadlineId}/pledge`],
         ] as const) {
             const before = moneyNow(backer.pubKeyHex, noDeadlineId);
-            const fault = await signedPost(path, { amount: 1, memo: 'Forced fault' }, backer);
+            const fault = await signedPost(path, { amount_c: hc(1), memo: 'Forced fault' }, backer);
             assert(fault.status === 400 && fault.body?.error === SERVER_FAULT_TEXT,
                 `${door} pledge hit by a server fault answers the general words (got ${fault.status} "${fault.body?.error}")`);
             assert(fault.body !== undefined && !('code' in fault.body),
@@ -339,7 +345,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET deadline_at = ? WHERE public_key = ?').run(futureDeadline, todayId);
     db.prepare('UPDATE projects SET deadline_at = ? WHERE id = ?').run(dayAndAnHourAgo, todayId);
     const beforeInner = moneyNow(backer.pubKeyHex, todayId);
-    const innerRefusal = await signedPost(`/api/treasury/${todayId}/pledge`, { amount: 1, memo: 'Refused inside pledgeToProject' }, backer);
+    const innerRefusal = await signedPost(`/api/treasury/${todayId}/pledge`, { amount_c: hc(1), memo: 'Refused inside pledgeToProject' }, backer);
     assert(innerRefusal.status === 409 && innerRefusal.body?.code === REFUSAL_CODE && innerRefusal.body?.error === REFUSAL_TEXT,
         `pledgeToProject's own deadline refusal answers 409 ${REFUSAL_CODE} with its words (got ${innerRefusal.status} ${JSON.stringify(innerRefusal.body)})`);
     assertNothingMoved(beforeInner, moneyNow(backer.pubKeyHex, todayId), "pledgeToProject's own deadline refusal");

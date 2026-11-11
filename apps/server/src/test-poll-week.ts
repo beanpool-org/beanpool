@@ -50,6 +50,7 @@ import { db } from './db/db.js';
 import { initStateEngine, createPost, closePoll, removePost, adminDeletePost, pausePost, resumePost, createGroup, joinGroup, createDecision } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { assertPollStartRoom, nextPollStartAt, POLL_START_WINDOW_MS } from './engine/poll-week.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -69,7 +70,7 @@ function makeMember(callsign: string): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
         .run(pub, callsign, `INV-${callsign.toUpperCase()}-${crypto.randomBytes(3).toString('hex')}`);
     setMemberPhoto(db, pub, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return { pub, priv: privateKey };
 }
 
@@ -100,7 +101,8 @@ function signedHeaders(method: string, p: string, body: string, id: Id): Record<
     const nonce = crypto.randomBytes(16).toString('hex');
     return {
         'X-Public-Key': id.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
 }
 async function send(method: string, p: string, payload: unknown, headers: Record<string, string>): Promise<{ status: number; cache: string | null; body: any }> {
@@ -375,7 +377,7 @@ async function main(): Promise<void> {
     console.log('\n--- 8. Decisions and the other votes are not polls ---');
     const trade = (a: string, b: string) => {
         const now = new Date().toISOString();
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at) VALUES (?, ?, ?, ?, 20, 'completed', ?, ?)")
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at) VALUES (?, ?, ?, ?, 20, 'completed', ?, ?)")
             .run(`tx-${crypto.randomBytes(4).toString('hex')}`, `post-${crypto.randomBytes(4).toString('hex')}`, a, b, now, now);
     };
     const dee = makeMember('Dee');

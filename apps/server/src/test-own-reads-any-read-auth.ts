@@ -21,6 +21,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false'; // https-server.ts's rule: unset means ON
 let BASE = '';
@@ -40,10 +41,11 @@ function keypair(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -71,7 +73,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?)`)
             .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`, visitor ? 1 : 0);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const owner = row('owner');
@@ -94,9 +96,9 @@ async function main() {
     }
     const POST = 'own-reads-post-1';
     const TRADE = 'own-reads-trade-1';
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                 VALUES (?, 'offer', 'misc', 'test', 'test', 5, ?, 'completed')`).run(POST, owner.pubKeyHex);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
                 VALUES (?, ?, ?, ?, 5, 'completed')`).run(TRADE, POST, other.pubKeyHex, owner.pubKeyHex);
 
     const ROUTES: { label: string; path: (pk: string) => string; secrets: string[] }[] = [

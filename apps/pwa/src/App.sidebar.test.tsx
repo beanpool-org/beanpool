@@ -13,7 +13,7 @@
  * sidebar is in the document at any width: these tests drive it as a wide screen would.
  */
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
 import { getMemberProfile } from './lib/api';
@@ -433,5 +433,67 @@ describe('the sidebar\'s profile button shows the member\'s own picture', () => 
         await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
         expect(getMemberProfile).not.toHaveBeenCalled();
         showsPreset();
+    });
+});
+
+// Marty, 9 Nov 2026 (two screenshots of the web app on a computer): the side bar's bottom-left drew the "?", Invite and
+// Settings beside the profile pill, and a pill at the top right drew them again. The mobile header is `md:hidden`, but its
+// inline `display: flex` won, so it (and its pill) showed beside the side bar. From 768 px the side bar's controls and the
+// profile pill are the one set; below it the top-right pill is, as on the phone. jsdom applies no stylesheet: the pill
+// follows the same media query the side bar's `md:` does, and these tests answer it for a window of each width.
+describe('the whole app: one set of controls at every width', () => {
+    const realMatchMedia = window.matchMedia;
+    const windowOf = (px: number) => {
+        window.matchMedia = ((media: string) => {
+            const min = Number(/min-width:\s*(\d+)px/.exec(media)?.[1] ?? 0);
+            return {
+                matches: px >= min, media, onchange: null,
+                addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+            } as unknown as MediaQueryList;
+        }) as typeof window.matchMedia;
+    };
+    beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); standing.isMember = true; });
+    afterEach(() => { window.matchMedia = realMatchMedia; });
+
+    it('at 1280 px: no pill at the top right; the side bar has the "?", Invite, Settings and the profile pill', async () => {
+        windowOf(1280);
+        await landed();
+        expect(screen.queryByTestId('header-pill')).toBeNull();
+        expect(within(sidebar()).getByTestId('sidebar-help')).toBeInTheDocument();
+        expect(inviteButton()).toBeInTheDocument();
+        expect(cog()).toBeInTheDocument();
+        expect(profileButton()).toBeInTheDocument();
+    });
+
+    it('at 375 px: the top-right pill has profile, "?", Invite and Settings, as on the phone', async () => {
+        windowOf(375);
+        await landed();
+        const pill = within(screen.getByTestId('header-pill'));
+        expect(pill.getByTestId('header-profile')).toBeInTheDocument();
+        expect(pill.getByTestId('header-help')).toBeInTheDocument();
+        expect(pill.getByTestId('header-invite')).toBeInTheDocument();
+        expect(pill.getByTestId('header-settings')).toBeInTheDocument();
+    });
+
+    it('a guest of the community, at 1280 px: the side bar\'s "?" and Settings are the set, no Invite, no pill', async () => {
+        standing.isMember = false;
+        windowOf(1280);
+        await landed();
+        // Invite shows until the node says this key is no member (two membership reads and a register): wait for that.
+        await waitFor(() => expect(within(sidebar()).queryByTestId('sidebar-invite')).toBeNull());
+        expect(screen.queryByTestId('header-pill')).toBeNull();
+        expect(within(sidebar()).getByTestId('sidebar-help')).toBeInTheDocument();
+        expect(cog()).toBeInTheDocument();
+    });
+
+    it('a guest of the community, at 375 px: the pill has "?" and Settings, no Invite', async () => {
+        standing.isMember = false;
+        windowOf(375);
+        await landed();
+        // As at 1280 px: Invite goes once the node's "no member" answer lands.
+        await waitFor(() => expect(within(screen.getByTestId('header-pill')).queryByTestId('header-invite')).toBeNull());
+        const pill = within(screen.getByTestId('header-pill'));
+        expect(pill.getByTestId('header-help')).toBeInTheDocument();
+        expect(pill.getByTestId('header-settings')).toBeInTheDocument();
     });
 });

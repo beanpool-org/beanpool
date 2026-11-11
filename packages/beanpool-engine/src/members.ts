@@ -7,7 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes, word } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf, INVITE_LIFE_MS, parseInviteTicketText, signedRequestBytes, word } from '@beanpool/core';
 import { prepared } from './statements.js';
 import { foldName } from './names.js';
 
@@ -96,6 +96,19 @@ export interface InviteCode {
     intendedFor?: string;
 }
 
+/**
+ * An invite as its maker reads it (GET /api/invite/mine/:publicKey, to that member alone): the code and everything it carries.
+ * `namesEntryId`, `vouchAmount` and `voucherLevel` are null on a plain invite; `expiresAt` is made from the one 30-day life
+ * (core INVITE_LIFE_DAYS), the same time `checkInvite` and the hourly prune go by.
+ */
+export interface MyInvite extends InviteCode {
+    namesEntryId: string | null;
+    vouchAmount: number | null;
+    voucherLevel: number | null;
+    /** Null only for a row whose made-at time can't be read. */
+    expiresAt: string | null;
+}
+
 export interface MemberProfile {
     publicKey: string;
     avatar: string | null;
@@ -166,7 +179,7 @@ export function rowToMember(row: any): Member {
         status: row.status || 'active',
         lastActiveAt: row.last_active_at || null,
         updatedAt: row.updated_at || null,
-        earnedCredit: row.earned_credit ?? 0,
+        earnedCredit: row.earned_credit_c ?? 0,
         isTreasury: !!row.is_treasury,
         archetype: row.archetype || null,
         nodeRole: row.node_role ?? null,
@@ -329,7 +342,7 @@ export interface DirectoryRow {
     joined_at: unknown;
     avatar_ref: string | null;
     profile_updated_at: unknown;
-    earned_credit: number | null;
+    earned_credit_c: number | null;
     archetype: string | null;
     is_treasury: unknown;
     /**
@@ -342,7 +355,7 @@ export interface DirectoryRow {
     photo_inline?: number;
 }
 
-const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, archetype, is_treasury';
+const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit_c, archetype, is_treasury';
 
 /** DIRECTORY_COLUMNS, and photo_inline while the old `avatar_url` column is there (DirectoryRow). */
 function directoryColumns(db: Db): string {
@@ -419,7 +432,7 @@ export function getMemberDirectoryRowsByKeys(db: Db, keys: string[], updatedAfte
 /**
  * The members whose name starts with `prefix`, case forgiven by the one name rule (`foldName`, any alphabet), shortest
  * name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a project or a
- * treasury. Answered from idx_members_callsign_fold (the server's db.ts migrateCallsignFold; SQLite's `lower()` folds A–Z
+ * treasury. Answered from idx_members_callsign_fold (the server's schema.sql; SQLite's `lower()` folds A–Z
  * only, so the old index on it missed "Олег" for "ол"): a range of the index, the folded prefix and every name after it
  * that still starts with it, then LIKE with `%` and `_` escaped, so a typed wildcard is only a character. The range term
  * is what the index answers (SQLite never turns a LIKE into a range on an index of an expression), and the `status` term
@@ -590,7 +603,7 @@ export function checkInvite(db: Db, codeOrTicket: string, binding?: TicketBindin
 
     // standard online codes generated more than 30 days ago expire
     const ageMs = Date.now() - new Date(row.created_at).getTime();
-    if (ageMs > 30 * 24 * 60 * 60 * 1000) return { valid: false, reason: 'expired' };
+    if (ageMs > INVITE_LIFE_MS) return { valid: false, reason: 'expired' };
     // Its maker has since been pruned or re-keyed, or is a visitor's row (a code made before visitors couldn't make
     // them): redeemInvite refuses it (apps/server engine/invites.ts), so say so now.
     if (!mayBringSomeoneIn(db, row.created_by)) return { valid: false, reason: 'unknown_inviter' };
@@ -599,16 +612,23 @@ export function checkInvite(db: Db, codeOrTicket: string, binding?: TicketBindin
     return { valid: true, inviterCallsign: inviter?.callsign || null };
 }
 
-export function getInvitesByMember(db: Db, pubkey: string): InviteCode[] {
+export function getInvitesByMember(db: Db, pubkey: string): MyInvite[] {
     const rows = db.prepare("SELECT * FROM invite_codes WHERE created_by = ?").all(pubkey) as any[];
-    return rows.map(r => ({
-        code: r.code,
-        createdBy: r.created_by,
-        createdAt: r.created_at,
-        usedBy: r.used_by,
-        usedAt: r.used_at,
-        intendedFor: r.intended_for || undefined,
-    }));
+    return rows.map(r => {
+        const madeAt = Date.parse(r.created_at);
+        return {
+            code: r.code,
+            createdBy: r.created_by,
+            createdAt: r.created_at,
+            usedBy: r.used_by,
+            usedAt: r.used_at,
+            intendedFor: r.intended_for || undefined,
+            namesEntryId: r.names_entry_id || null,
+            vouchAmount: r.vouch_amount_c || null,
+            voucherLevel: r.voucher_level_c || null,
+            expiresAt: Number.isFinite(madeAt) ? new Date(madeAt + INVITE_LIFE_MS).toISOString() : null,
+        };
+    });
 }
 
 export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {

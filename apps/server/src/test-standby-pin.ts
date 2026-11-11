@@ -7,8 +7,8 @@
  * HTTPS with a replication token. A copy source that "answers as another key" is, to the standby, a source whose signer
  * is not its pin: here the pin names another key (K4), which is what a standby pointed at Mallory's server sees.
  *
- *  a. The residual, closed: with the owner's fresh phone hand-off (Manage within 90 s), and with the password and a
- *     current code: a `mirror` link → 400 (no such level); another key's pairing code in Live Backup Server → 409
+ *  a. The residual, closed: with the owner's fresh phone hand-off (Manage within 90 s), the strongest credential there
+ *     is: a `mirror` link → 400 (no such level); another key's pairing code in Live Backup Server → 409
  *     pairOnShell; another server's address and token → 200 and the pin as it was; standby-main.json byte for byte. A
  *     same-community file signed by K4, locked to her own code → 409 signerNotPinned, naming both keys; the phone way
  *     (X-Unlock-With: phone) too; a file naming K1 that K1 never signed → 400 altered. (test-owner-delete-gates 3a has
@@ -55,7 +55,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.PUBLIC_ADDRESS_NAME;
 delete process.env.PUBLIC_ADDRESS_AUTO;
-delete process.env.BACKUP_ADMIN_PASSWORD;
 delete process.env.BACKUP_REPLICATION_TOKEN;
 delete process.env.BACKUP_PRIMARY_URL;
 
@@ -184,10 +183,9 @@ async function main(): Promise<void> {
     const { ensureGenesis, notABrandNewInstall } = await import('./genesis.js');
     const { generateKeyPair } = await import('@libp2p/crypto/keys');
     const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
-    const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { getConnectors, loadConnectors, removeConnector } = await import('./connector-manager.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
@@ -233,14 +231,13 @@ async function main(): Promise<void> {
     // A whole copy made ready would restart the server: here it stays ready (the stager's own suites swap it).
     setSwapRestartForTests(() => {});
 
-    const PW = 'Standby-Pin-Pw-8842!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, breakGlassMode: false, replicationTokenOnly: true } as any);
+    /** What an older install's admin password looked like: no credential now (g sends it). */
+    const OLD_PW = 'Standby-Pin-Pw-8842!';
     const owner = crypto.randomBytes(32).toString('hex');
     const admin = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(owner, 'Victor');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Adam', ?, ?, 'TEST')`).run(admin, new Date().toISOString(), owner);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(admin);
     const { grantNodeRole } = await import('./state-engine.js');
     grantNodeRole(admin, 'admin', owner);
     const keySession = (pk: string, role: 'owner' | 'admin', phone = false): string => {
@@ -271,8 +268,6 @@ async function main(): Promise<void> {
         return { status: res.status, text, json, cache: res.headers.get('cache-control') };
     }
     const short = (r: { status: number; text: string }) => `${r.status} ${r.text.slice(0, 160)}`;
-    const tfa = turnOn2faForTests(PW);
-    const pwCode = (): Record<string, string> => ({ 'x-admin-session': createPasswordSession().sessionId });
     const pinFile = path.join(dataDir, PIN_FILE);
     const copied = () => JSON.stringify(tableContentHashes());
     sm?.startPairRequestWatch(dataDir);
@@ -435,7 +430,6 @@ async function main(): Promise<void> {
         const k4Code = makeCode({ url: 'https://mallory.example.invalid', communityId: community, peerId: K4, token: 'b'.repeat(64) });
         for (const [who, headers, extra] of [
             ['a fresh phone hand-off', asPhone, () => ({})],
-            ['the password with a current code', pwCode, () => ({ code: tfa.code() })],
         ] as Array<[string, () => Record<string, string>, () => Record<string, unknown>]>) {
             const link = await call('POST', '/api/local/connectors', headers(), { address: `/ip4/127.0.0.1/tcp/4002/p2p/${K4}`, trustLevel: 'mirror', ...extra() });
             assert(link.status === 400 && trusted() === pinBytes, `a. ${who}: a mirror link → 400, the keys it trusts as they were (${short(link)})`);
@@ -490,8 +484,8 @@ async function main(): Promise<void> {
         // ── g. No route writes the pin ──
         console.log('\n── g. the peer-link routes and Live Backup Server, every credential: the pin byte for byte ──');
         const creds: Array<[string, () => Record<string, string>]> = [
-            ['no credential', () => ({})], ['an admin', asAdmin], ["the owner's computer", asComputer], ['a password session', pwCode],
-            ['a fresh phone hand-off', asPhone], ['the password with a current code', () => ({ ...pwCode(), 'x-fresh-proof': tfa.code() })],
+            ['no credential', () => ({})], ['an admin', asAdmin], ["the owner's computer", asComputer],
+            ['an old admin password', () => ({ 'X-Admin-Password': OLD_PW })], ['a fresh phone hand-off', asPhone],
         ];
         const bait = { address: `/ip4/127.0.0.1/tcp/4002/p2p/${K4}`, trustLevel: 'mirror', pairingCode: k4Code, peerId: K4, primaryUrl: base, primaryToken: token };
         let sent = 0;

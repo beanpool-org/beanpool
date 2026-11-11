@@ -70,6 +70,11 @@ async function main(): Promise<void> {
     assert(appleRes1.status === 200, 'GET /.well-known/apple-app-site-association returns 200');
     const appleBody1 = (await appleRes1.json()) as AppleAppSiteAssociation;
     assert(Array.isArray(appleBody1?.applinks?.details), 'Apple applinks details is an array');
+    // The phone opens links on "/" only (app/+native-intent.ts); /app is the web app's, which a browser keeps. The old
+    // "/app*" claim sent the web app's door links (/app?door=ask) into the phone app (cutover N2, audit E5).
+    const claimed = (appleBody1?.applinks?.details?.[0]?.components ?? []).map((c) => String(c['/']));
+    assert(claimed.includes('/') && !claimed.some((p) => p.startsWith('/app')),
+        `the node's iOS links claim "/" and nothing under /app (${JSON.stringify(claimed)})`);
 
     const appleRes2 = await fetch(`${BASE}/apple-app-site-association`);
     assert(appleRes2.status === 200, 'GET /apple-app-site-association returns 200');

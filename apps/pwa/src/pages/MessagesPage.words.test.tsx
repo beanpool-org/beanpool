@@ -37,7 +37,7 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => {
     return {
         ...real,
         decodePlaintext: vi.fn((c: string) => c),
-        openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+        openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 4, after: null, conversationId: '', moved: false })),
         checkDmThread: vi.fn(() => new Map()),
         isEncryptedNonce: vi.fn(() => false),
     };
@@ -91,13 +91,14 @@ const garden: Conversation = {
     createdBy: 'my-pubkey', unreadCount: 0, createdAt: '2026-10-13T09:00:00Z',
 } as Conversation;
 
-const trade = (id: string, status: string, credits: number, rated: boolean): MarketplaceTransaction => ({
+/** A trade of `amount_c` whole hundredths of a Bean. */
+const trade = (id: string, status: string, amount_c: number, rated: boolean): MarketplaceTransaction => ({
     id, postId: `post-${id}`, postTitle: 'Ladder', buyerPublicKey: 'my-pubkey', buyerCallsign: 'Alice', sellerPublicKey: 'peer-pubkey',
-    sellerCallsign: 'Bob', credits, status, createdAt: '2026-10-14T00:00:00Z', completedAt: status === 'completed' ? '2026-10-14T00:00:00Z' : null,
+    sellerCallsign: 'Bob', amount_c, status, createdAt: '2026-10-14T00:00:00Z', completedAt: status === 'completed' ? '2026-10-14T00:00:00Z' : null,
     ratedByBuyer: rated, ratedBySeller: false,
 } as MarketplaceTransaction);
-const FINISHED = trade('tx-done', 'completed', 5, false);
-const HELD = trade('tx-held', 'pending', 3, false);
+const FINISHED = trade('tx-done', 'completed', 500, false);
+const HELD = trade('tx-held', 'pending', 300, false);
 
 const NOW = new Date().toISOString();
 const line = (id: string, author: string, text: string, over: Partial<ApiMessage> = {}): ApiMessage => ({
@@ -109,10 +110,10 @@ const BOB_LINES: ApiMessage[] = [
         metadata: JSON.stringify({ reactions: [{ emoji: '👍', author: 'my-pubkey' }, { emoji: '❤️', author: 'peer-pubkey' }] }),
     }),
     line('m2', 'my-pubkey', 'Yes, come by Saturday', { metadata: JSON.stringify({ replyToId: 'm1' }), editedAt: NOW }),
-    line('m3', 'SYSTEM', '', { type: 'system', systemType: 'ESCROW_FUNDED' as ApiMessage['systemType'], metadata: JSON.stringify({ amount: 5, postId: 'post-tx-done' }) }),
+    line('m3', 'SYSTEM', '', { type: 'system', systemType: 'ESCROW_FUNDED' as ApiMessage['systemType'], metadata: JSON.stringify({ amount_c: 500, postId: 'post-tx-done' }) }),
     line('m4', 'SYSTEM', '', {
         type: 'system', systemType: 'ESCROW_RELEASED' as ApiMessage['systemType'],
-        metadata: JSON.stringify({ amount: 5, postId: 'post-tx-done', transactionId: 'tx-done', sellerPubkey: 'peer-pubkey' }),
+        metadata: JSON.stringify({ amount_c: 500, postId: 'post-tx-done', transactionId: 'tx-done', sellerPubkey: 'peer-pubkey' }),
     }),
     line('m5', 'peer-pubkey', '', { type: 'image' }),
 ];

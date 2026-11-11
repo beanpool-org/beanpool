@@ -24,17 +24,30 @@
  * Nothing here is load-bearing: an unknown version means no banner, which is what
  * a phone that could not reach the store had anyway.
  *
- * The floors (getAppFloors) are what can stop an app: from the build that has it, an app
- * below its platform's floor shows a full-screen "Update required" at a safe moment
- * (apps/native/utils/force-update.ts). So every rule here fails towards NOT stopping
- * anyone: a floor is enforced only once that platform's store has a build that meets it
- * (an unknown store version enforces nothing), a grace date that is not a date turns the
- * block off, and nothing on the server ever refuses a request for the app's version.
+ * The floors (getAppFloors) are what can stop an app. From the build that has it (2 Oct,
+ * #1415), an app below its platform's floor shows a full-screen "Update required" at its
+ * next safe moment: a start, or a return after 5 minutes or more away
+ * (apps/native/utils/force-update.ts). While that block applies, the server also refuses
+ * such an app its gated reads and writes, 426 app_too_old (floorRefusing, https-server.ts
+ * requireSignature), all but its ways out (floorLetsThrough). An app from 1.4.0 on, which
+ * only a floor raised past it refuses, reads that answer and puts "Update required" up at
+ * once (#3043). An older one doesn't: what it tries fails until its next safe moment puts
+ * the screen up. An app from before the
+ * full-screen update sends no version, so it is never refused, and shows its banner only.
+ * So every rule here fails towards NOT stopping anyone: a floor is enforced only once that
+ * platform's store has a build that meets it (an unknown store version enforces nothing), a
+ * grace date that is not a date turns the block off, and the server refuses an app only
+ * where the app's own block applies.
  *
  * DISABLE_APP_STORE_CHECK=true turns the lookup off (appStoreCheckDisabled): no request to
  * either store, ever. The versions then stay unknown (null), never "up to date", with what
  * unknown already means above: no phone is told of a newer build, and no floor is
  * enforced, so an app below one gets its banner only.
+ *
+ * APP_STORE_VERSIONS (e.g. `android=1.4.0,ios=1.4.0`) says what a store has in place of asking it, for a test community
+ * to try "Update required" before the stores have the build (storeVersionsSetting). A platform it names is never asked;
+ * everything downstream reads the version it gives as a store's. It is the one setting here that can stop an app the
+ * store cannot replace yet, which is why it is for a test community only, and why what it can't read stops nobody.
  */
 
 import { logger } from './logger.js';
@@ -43,18 +56,58 @@ const IOS_BUNDLE_ID = 'org.beanpool.pillar';
 const ANDROID_PACKAGE = 'org.beanpool.pillar';
 
 /**
- * The oldest app build this node expects to work with, as served to clients.
- *
- * Deliberately far below anything in the field. The field exists so a node CAN say
- * "the app talking to me is too old to work properly", and until now it has been a
- * hardcoded string in the health payload that no client ever read. Raising it makes
- * every phone below the value show a banner it cannot dismiss, so it is an operator
- * decision (MIN_APP_VERSION), not a default.
+ * The oldest app build this node works with, as served to clients: 1.4.0, the clean-slate cutover (design §1). In code,
+ * not .env, so every self-hoster's node holds old apps off without configuring anything. It is also the lowest floor
+ * there is: a floor set in .env (MIN_APP_VERSION, or per platform) can raise it and never lower it. One below it is
+ * ignored, and the log says so once, at start (noteFloorsBelowBuiltIn). It brings no grace date of its own: unless the
+ * operator sets one (MIN_APP_VERSION_FROM), it stops apps below it as soon as their store has 1.4.0, and never before
+ * (getPlatformFloorDetail). What a stopped app then does: the file comment above.
  */
-const DEFAULT_MIN_APP_VERSION = '1.0.75';
+const DEFAULT_MIN_APP_VERSION = '1.4.0';
 
+/** The floors an operator can set in .env, in the order the start-up line names them. */
+const FLOOR_ENV = ['MIN_APP_VERSION', 'MIN_APP_VERSION_ANDROID', 'MIN_APP_VERSION_IOS'] as const;
+
+/**
+ * A floor from .env as the server applies it: null when unset or not a version (the next one down stands), the built-in
+ * floor in place of one below it, otherwise the value itself.
+ */
+function raisedFloor(raw: unknown): string | null {
+    const set = normaliseVersion(raw);
+    if (!set) return null;
+    return isOlder(set, DEFAULT_MIN_APP_VERSION) ? DEFAULT_MIN_APP_VERSION : set;
+}
+
+/** The floor for both kinds of phone: the higher of MIN_APP_VERSION and the built-in floor. */
 export function getMinAppVersion(): string {
-    return normaliseVersion(process.env.MIN_APP_VERSION) || DEFAULT_MIN_APP_VERSION;
+    return raisedFloor(process.env.MIN_APP_VERSION) ?? DEFAULT_MIN_APP_VERSION;
+}
+
+/**
+ * The floors set in .env below the built-in one, which the server ignores (raisedFloor), each as NAME=version. Empty when
+ * there are none.
+ */
+export function floorsBelowBuiltIn(): string[] {
+    return FLOOR_ENV.flatMap((name) => {
+        const set = normaliseVersion(process.env[name]);
+        return set && isOlder(set, DEFAULT_MIN_APP_VERSION) ? [`${name}=${set}`] : [];
+    });
+}
+
+/**
+ * At start (initAppStoreVersionChecks): one line in the log when a floor in .env is ignored for being below the built-in
+ * one. A node that set a floor before 1.4.0 (G7's, say) would otherwise still read it there and never learn why its
+ * phones are held to 1.4.0. Returns the line, or null when nothing is ignored.
+ */
+export function noteFloorsBelowBuiltIn(): string | null {
+    const ignored = floorsBelowBuiltIn();
+    if (!ignored.length) return null;
+    const one = ignored.length === 1;
+    const line = `[AppVersions] ${ignored.join(', ')} in .env ${one ? 'is' : 'are'} below this server's own floor, `
+        + `${DEFAULT_MIN_APP_VERSION}, so ${one ? 'it is' : 'they are'} ignored and ${DEFAULT_MIN_APP_VERSION} applies. `
+        + `A floor in .env can only raise it: remove ${one ? 'that line' : 'those lines'}, or set ${DEFAULT_MIN_APP_VERSION} or higher.`;
+    logger.warn('SYS', line);
+    return line;
 }
 
 /** The phone platforms that have a store, a floor and a block. The web app has none of the three: see getAppFloors. */
@@ -64,11 +117,13 @@ export type AppPlatform = typeof APP_PLATFORMS[number];
 const PLATFORM_ENV: Record<AppPlatform, string> = { android: 'ANDROID', ios: 'IOS' };
 
 /**
- * One platform's floor as the operator set it: MIN_APP_VERSION_IOS / MIN_APP_VERSION_ANDROID, else MIN_APP_VERSION, else
- * the default. A platform value that is not a version is ignored (the generic floor stands), never read as a higher one.
+ * One platform's floor: MIN_APP_VERSION_IOS / MIN_APP_VERSION_ANDROID, else MIN_APP_VERSION, else the default, and never
+ * below the default (raisedFloor). A platform value that is not a version is ignored (the generic floor stands), never
+ * read as a higher one. A platform value may sit below MIN_APP_VERSION (one kind of phone held back), but not below the
+ * built-in floor: there it is the built-in floor.
  */
 export function getPlatformFloor(platform: AppPlatform): string {
-    return normaliseVersion(process.env[`MIN_APP_VERSION_${PLATFORM_ENV[platform]}`]) || getMinAppVersion();
+    return raisedFloor(process.env[`MIN_APP_VERSION_${PLATFORM_ENV[platform]}`]) ?? getMinAppVersion();
 }
 
 /**
@@ -111,7 +166,7 @@ export function getMinAppVersionFrom(): string | null {
 
 /** Everything this node knows about one platform's floor: the manager's view (GET /api/local/admin/app-versions). */
 export interface PlatformFloorDetail {
-    /** The floor the operator set for this platform (getPlatformFloor). */
+    /** This platform's floor (getPlatformFloor): the operator's, never below the built-in one. */
     floor: string;
     /** The newest build this node has seen in the platform's store, or null if it has never read one. */
     store: string | null;
@@ -132,7 +187,7 @@ export interface PlatformFloorDetail {
 
 export function getPlatformFloorDetail(platform: AppPlatform, now: Date = new Date()): PlatformFloorDetail {
     const floor = getPlatformFloor(platform);
-    const store = normaliseVersion(cached[platform]);
+    const store = normaliseVersion(storeVersion(platform));
     const reachable = !!store && !isOlder(store, floor);
     const held = !!store && !reachable;
     const { iso: from, invalid: fromInvalid } = getFloorFrom(platform);
@@ -140,6 +195,38 @@ export function getPlatformFloorDetail(platform: AppPlatform, now: Date = new Da
     const blocking = !!enforced && !fromInvalid && (from === null || now.getTime() >= Date.parse(from));
     noteHeldFloor(platform, floor, store, held, fromInvalid);
     return { floor, store, enforced, held, from, fromInvalid, blocking };
+}
+
+/**
+ * The floor the `platform` app at `version` is refused below, or null when it isn't: the platform's enforced floor while
+ * its update block applies (getPlatformFloorDetail `blocking`), so a node never refuses an app its store cannot replace
+ * yet (a floor ahead of the store, an unknown store, or a grace date still ahead). The signature middleware answers such
+ * an app's gated reads and writes 426 app_too_old with this floor (https-server.ts requireSignature).
+ */
+export function floorRefusing(platform: AppPlatform, version: string, now: Date = new Date()): string | null {
+    const d = getPlatformFloorDetail(platform, now);
+    return d.blocking && d.enforced && isOlder(version, d.enforced) ? d.enforced : null;
+}
+
+/**
+ * The ways out, which the floor never refuses (#3047's deciding review, finding 1). "Update required" offers Leave this
+ * community (apps/native utils/update-block-escape.ts): with another community on the phone, it asks this one to stop
+ * that phone's alerts (account-leaves-phone.ts stopPushAlertsAt); as the last, it takes the account off the phone as
+ * Sign Out does, which asks the same with the leave's stamp (unregisterPushToken). A phone that couldn't reach it then
+ * presents the signed leave statement later (push-leave.ts). The phone sends its version on each of these while it is
+ * still set to this community, so refused, the node would go on pushing the account's alerts to a phone that left it.
+ * Each only ever takes away: the push token's row for the signer, or for the statement's own key. Its route still checks
+ * it as it checks any request. A registration (POST /api/push-tokens) is no way out. Matched on the path as the router
+ * answers it (one trailing slash is the path itself); any other spelling stays refused.
+ */
+const FLOOR_WAYS_OUT: ReadonlyArray<{ method: string; path: RegExp }> = [
+    { method: 'DELETE', path: /^\/api\/push-tokens\/?$/ },
+    { method: 'POST', path: /^\/api\/push-tokens\/leave\/[^/]+\/?$/ },
+];
+
+/** Whether the floor lets this request through to its route, whatever the app's version: FLOOR_WAYS_OUT. */
+export function floorLetsThrough(method: string, path: string): boolean {
+    return FLOOR_WAYS_OUT.some((w) => w.method === method && w.path.test(path));
 }
 
 /**
@@ -178,7 +265,8 @@ function noteHeldFloor(platform: AppPlatform, floor: string, store: string | nul
     lastFloorNote[platform] = key;
     const env = `MIN_APP_VERSION_${PLATFORM_ENV[platform]}`;
     if (held) {
-        logger.warn('SYS', `[AppVersions] ${platform} floor ${floor} is held: the store has ${store}, so no ${platform} app is stopped until it has ${floor} (${env} / MIN_APP_VERSION)`);
+        const said = platform in storeVersionsSetting().stores ? ' (as APP_STORE_VERSIONS says)' : '';
+        logger.warn('SYS', `[AppVersions] ${platform} floor ${floor} is held: the store has ${store}${said}, so no ${platform} app is stopped until it has ${floor} (${env} / MIN_APP_VERSION)`);
     }
     if (fromInvalid) {
         logger.warn('SYS', `[AppVersions] ${platform}: MIN_APP_VERSION_FROM_${PLATFORM_ENV[platform]} / MIN_APP_VERSION_FROM is not a date (use 2026-10-15 or 2026-10-15T09:00:00+10:00) — the ${platform} update block is off until it is`);
@@ -194,10 +282,123 @@ export interface AppStoreVersions {
     checkedAt: string | null;
 }
 
+/** What the stores last answered. Read through storeVersion, which puts APP_STORE_VERSIONS first. */
 let cached: AppStoreVersions = { android: null, ios: null, checkedAt: null };
 
+/**
+ * The store versions as this node uses them (health's `appVersions`): for a platform APP_STORE_VERSIONS names, the version
+ * it gives (null where it can't read it); for any other, what its store last answered. `checkedAt` is the stores' own:
+ * when one last answered, never moved by the setting.
+ */
 export function getAppStoreVersions(): AppStoreVersions {
-    return { ...cached };
+    return { android: storeVersion('android'), ios: storeVersion('ios'), checkedAt: cached.checkedAt };
+}
+
+/** One platform's store version (getAppStoreVersions). */
+function storeVersion(platform: AppPlatform): string | null {
+    const { stores } = storeVersionsSetting();
+    return platform in stores ? stores[platform] ?? null : cached[platform];
+}
+
+const STORE_NAME: Record<AppPlatform, string> = { android: 'Google Play', ios: 'the App Store' };
+
+/** APP_STORE_VERSIONS as read: see storeVersionsSetting. */
+interface StoreVersionsSetting {
+    /**
+     * Each platform the setting takes over from its store, which is then never asked: the version it gives, or null where
+     * it can't read one for it (an unknown store, so nothing is enforced there).
+     */
+    stores: Partial<Record<AppPlatform, string | null>>;
+    /** Why each entry it couldn't read was not read, for the log. */
+    unread: string[];
+}
+
+/**
+ * APP_STORE_VERSIONS: what a platform's store has, as the operator says, in place of asking it. Comma-separated
+ * `platform=version` entries, `android=1.4.0,ios=1.4.0`, each version read as a store's is (normaliseVersion). It is for a
+ * test community, to try the update block before the stores have the build (Marty, 11 Nov: the stores still had 1.3.4, so
+ * a 1.4.0 node let 1.3.4 in). With android=1.4.0 the floor 1.4.0 is enforced on Android as if Google Play had 1.4.0, so a
+ * 1.3.4 Android app gets "Update required" and its gated requests 426 app_too_old, its ways out still answered.
+ *
+ * A platform it names is never asked (checkAppStoreVersions). One it doesn't name is asked as without it. Nothing else
+ * changes: the floors, the grace dates, `blocking`, health's appVersions and appFloors, floorRefusing and the ways out read
+ * the version it gives as they read a store's, and the phone checks appVersions against the floor as it always does. It
+ * only says what a store has, so it lowers no floor: a version below the floor holds that floor (`held`), as a store
+ * behind it does, and MIN_APP_VERSION and MIN_APP_VERSION_FROM apply as without it.
+ *
+ * On a real community it would stop older apps before their members can get the new build. So what it can't read stops
+ * nobody: an entry it can't read leaves every platform it could mean with no store version, and asks no store for them
+ * either, so a typo never falls back to a store that may meet the floor. That is the one platform an entry names
+ * (`android=banana`, android named twice), or both when it names neither (`1.4.0`, `android:1.4.0`, `web=1.4.0`). The log
+ * says why, once each time the value changes.
+ */
+function readStoreVersionsSetting(raw: string | undefined): StoreVersionsSetting {
+    const given: Partial<Record<AppPlatform, string>> = {};
+    const named = new Set<AppPlatform>();
+    const unreadable = new Set<AppPlatform>();
+    const unread: string[] = [];
+    for (const entry of (raw ?? '').split(',').map(e => e.trim()).filter(Boolean)) {
+        const eq = entry.indexOf('=');
+        const name = eq > 0 ? entry.slice(0, eq).trim().toLowerCase() : '';
+        const platform = APP_PLATFORMS.find(p => p === name);
+        if (!platform) {
+            for (const p of APP_PLATFORMS) unreadable.add(p);
+            unread.push(`"${entry}" names neither android nor ios`);
+            continue;
+        }
+        if (named.has(platform)) {
+            unreadable.add(platform);
+            unread.push(`${platform} is named twice`);
+            continue;
+        }
+        named.add(platform);
+        const version = normaliseVersion(entry.slice(eq + 1));
+        if (!version) {
+            unreadable.add(platform);
+            unread.push(`"${entry}" is not a version`);
+            continue;
+        }
+        given[platform] = version;
+    }
+    const stores: StoreVersionsSetting['stores'] = {};
+    for (const p of APP_PLATFORMS) {
+        if (unreadable.has(p)) stores[p] = null;
+        else if (given[p]) stores[p] = given[p];
+    }
+    return { stores, unread };
+}
+
+/** APP_STORE_VERSIONS read once each time its value changes, which is when the log says what it couldn't read. */
+let settingRead: { raw: string | undefined; setting: StoreVersionsSetting } | null = null;
+function storeVersionsSetting(): StoreVersionsSetting {
+    const raw = process.env.APP_STORE_VERSIONS;
+    if (settingRead && settingRead.raw === raw) return settingRead.setting;
+    const setting = readStoreVersionsSetting(raw);
+    settingRead = { raw, setting };
+    if (setting.unread.length) {
+        const off = APP_PLATFORMS.filter(p => setting.stores[p] === null);
+        logger.warn('SYS', `[AppVersions] APP_STORE_VERSIONS=${raw} can't be read: ${setting.unread.join('; ')}. Write it as `
+            + `android=1.4.0,ios=1.4.0. Until it is fixed, no ${off.join(' or ')} app is stopped for its version, and `
+            + `${off.map(p => STORE_NAME[p]).join(' and ')} ${off.length === 1 ? 'is' : 'are'} not asked`);
+    }
+    return setting;
+}
+
+/**
+ * At start (initAppStoreVersionChecks): the one line that says APP_STORE_VERSIONS is in use, naming the versions it gives
+ * and that those stores are not asked. Returns the line, or null when it gives none (unset, or nothing it can read).
+ */
+export function noteStoreVersionsGiven(): string | null {
+    const { stores } = storeVersionsSetting();
+    const given = APP_PLATFORMS.filter(p => typeof stores[p] === 'string');
+    if (!given.length) return null;
+    const one = given.length === 1;
+    const line = `[AppVersions] APP_STORE_VERSIONS gives ${given.map(p => `${p}=${stores[p]}`).join(' and ')}: this server `
+        + `takes ${one ? 'that' : 'those'} as what ${given.map(p => STORE_NAME[p]).join(' and ')} ${one ? 'has' : 'have'}, and `
+        + `does not ask ${one ? 'it' : 'them'}. A floor ${one ? 'that version' : 'those versions'} meet${one ? 's' : ''} stops older `
+        + `apps there as if the store had the build: for a test community only, never a real one`;
+    logger.warn('SYS', line);
+    return line;
 }
 
 /**
@@ -259,6 +460,7 @@ export function applyCheckResult(
 /** Test seam — resets the module cache between assertions. */
 export function __resetAppStoreVersionsForTest(): void {
     cached = { android: null, ios: null, checkedAt: null };
+    settingRead = null;
     for (const p of APP_PLATFORMS) delete lastFloorNote[p];
 }
 
@@ -323,21 +525,30 @@ export async function checkAppStoreVersions(): Promise<AppStoreVersions> {
     // Off: nothing is asked and nothing is folded in, so the versions stay what they were
     // (null on a node that never asked): unknown, not "up to date".
     if (appStoreCheckDisabled()) return getAppStoreVersions();
-    const [android, ios] = await Promise.all([fetchAndroidVersion(), fetchIosVersion()]);
-    const next = applyCheckResult({ android, ios });
-    if (android === null || ios === null) {
-        // Worth a line: if one store stops answering for weeks, the phones quietly stop
-        // being told about updates, and the only place that is visible is here.
-        logger.warn('SYS', `[AppVersions] store check incomplete (android=${android ?? 'miss'} ios=${ios ?? 'miss'})`);
-    } else {
-        logger.info('SYS', `[AppVersions] android=${android} ios=${ios}`);
+    // A platform APP_STORE_VERSIONS names is never asked: the setting says what its store has (storeVersionsSetting).
+    const named = storeVersionsSetting().stores;
+    const asked = APP_PLATFORMS.filter(p => !(p in named));
+    if (asked.length) {
+        const fetchers: Record<AppPlatform, () => Promise<string | null>> = { android: fetchAndroidVersion, ios: fetchIosVersion };
+        const answers = await Promise.all(asked.map(p => fetchers[p]()));
+        const got: Record<AppPlatform, string | null> = { android: null, ios: null };
+        asked.forEach((p, i) => { got[p] = answers[i]; });
+        applyCheckResult(got);
+        const said = asked.map(p => `${p}=${got[p] ?? 'miss'}`).join(' ');
+        if (asked.some(p => got[p] === null)) {
+            // Worth a line: if one store stops answering for weeks, the phones quietly stop
+            // being told about updates, and the only place that is visible is here.
+            logger.warn('SYS', `[AppVersions] store check incomplete (${said})`);
+        } else {
+            logger.info('SYS', `[AppVersions] ${said}`);
+        }
     }
     // An operator who sets a floor above what a store actually serves gets a floor their community cannot act on. The
     // node holds it (getPlatformFloorDetail: never enforced above the store's build) and the app degrades the banner to a
     // dismissible notice, so nobody is trapped, but the operator still wants to hear about it: reading each platform's
     // floor logs a held one, once each time it changes.
     for (const p of APP_PLATFORMS) getPlatformFloorDetail(p);
-    return next;
+    return getAppStoreVersions();
 }
 
 let started = false;
@@ -347,13 +558,18 @@ let started = false;
  * GitHub release check in routes/settings.ts — the store is not going to publish
  * anything we need within seconds of a boot, and a node restart loop should not
  * turn into a burst of store traffic. With DISABLE_APP_STORE_CHECK=true: no timer at all,
- * and one line in the log saying so.
+ * and one line in the log saying so. Either way, first, one line for a floor in .env that is
+ * ignored for being below the built-in one (noteFloorsBelowBuiltIn), and one for the store
+ * versions APP_STORE_VERSIONS gives (noteStoreVersionsGiven), which apply either way.
  */
 export function initAppStoreVersionChecks(): void {
     if (started) return;
     started = true;
+    noteFloorsBelowBuiltIn();
+    const given = noteStoreVersionsGiven() !== null;
     if (appStoreCheckDisabled()) {
-        logger.info('SYS', '[AppVersions] the app-store check is off (DISABLE_APP_STORE_CHECK=true): this server never asks Google Play or the App Store, so phones are told of no newer app, and an app below its floor gets a banner only');
+        const still = given ? '. The versions APP_STORE_VERSIONS gives (the line above) still apply to the platforms it names' : '';
+        logger.info('SYS', `[AppVersions] the app-store check is off (DISABLE_APP_STORE_CHECK=true): this server never asks Google Play or the App Store, so phones are told of no newer app, and an app below its floor gets a banner only${still}`);
         return;
     }
     setTimeout(() => { void checkAppStoreVersions(); }, 30000).unref();

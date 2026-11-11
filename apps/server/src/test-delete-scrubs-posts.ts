@@ -36,6 +36,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -204,7 +205,7 @@ async function child(): Promise<void> {
             return {
                 deals: db.prepare(`SELECT mt.id, mt.post_id, mt.status, p.id AS found FROM marketplace_transactions mt LEFT JOIN posts p ON p.id = mt.post_id
                                    WHERE mt.post_id IN (${ph}) ORDER BY mt.id`).all(...a.ids),
-                ledger: db.prepare(`SELECT id, from_pubkey, to_pubkey, amount, memo FROM transactions ORDER BY id`).all(),
+                ledger: db.prepare(`SELECT id, from_pubkey, to_pubkey, amount_c, memo FROM transactions ORDER BY id`).all(),
             };
         },
         checkpoint: async () => {
@@ -254,7 +255,8 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -318,7 +320,7 @@ async function main(): Promise<void> {
     const dir = (n: string) => path.join(root, n);
     const nodes: NodeProc[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const gwen = newId('Gwen');
     const rhea = newId(CALLSIGN);
     const bo = newId('Bo');
@@ -343,7 +345,7 @@ async function main(): Promise<void> {
         }
         built('the admin makes Bo an Elder (a credit line to buy with)', await A(`/api/local/admin/users/${bo.pk}/elder`, { grant: true }));
         const offer = async (who: Id, title: string, description: string, pin: number[] | null, photos: string[]) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description, credits: 3, priceType: 'fixed', authorPublicKey: who.pk,
+            type: 'offer', category: 'food', title, description, price_c: 300 /* 3 Beans, whole hundredths */, priceType: 'fixed', authorPublicKey: who.pk,
             ...(pin ? { lat: pin[0], lng: pin[1] } : {}), photos,
         })).post;
         await offer(bo, 'Plain seedlings', 'Tomato seedlings', null, [TINY_PNG]); // a buyer lists an offer first (the offer covenant)
@@ -376,7 +378,7 @@ async function main(): Promise<void> {
             optionId: poll.pollOptions.find((o: { other?: boolean }) => o.other).id, otherWords: TYPED_LINE,
         }));
         const lent = built('Rhea lists a thing to lend', await S_(rhea, '/api/marketplace/posts', {
-            type: 'offer', category: 'tools', title: WORDS.lentTitle, description: WORDS.lentText, credits: 0, priceType: 'fixed', authorPublicKey: rhea.pk,
+            type: 'offer', category: 'tools', title: WORDS.lentTitle, description: WORDS.lentText, price_c: 0, priceType: 'fixed', authorPublicKey: rhea.pk,
             lat: PINS.lent[0], lng: PINS.lent[1], photos: [TINY_PNG],
             lendable: true, lendMaxDays: 7, lendTerms: WORDS.lentTerms, replacementValue: WORDS.lentValue,
         })).post;
@@ -387,7 +389,7 @@ async function main(): Promise<void> {
         })).post;
         const askable = built('Cy shows an Offer and takes questions about it', await S_(cy, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title: 'Seed packets', description: 'From the home community', authorPublicKey: cy.pk,
-            lat: -28.7, lng: 153.7, photos: [TINY_PNG], shownPrice: { beans: 2, per: 'fixed' }, shownFrom: { host: 'not-in-the-directory.example.org', takesQuestions: true },
+            lat: -28.7, lng: 153.7, photos: [TINY_PNG], shownPrice: { price_c: 200 /* 2 Beans */, per: 'fixed' }, shownFrom: { host: 'not-in-the-directory.example.org', takesQuestions: true },
         })).post;
         await main.send('directory', { on: false });
         require_(copy.shownCopy === true, 'M: it is a copy');

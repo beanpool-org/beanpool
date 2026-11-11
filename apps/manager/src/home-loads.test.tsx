@@ -18,7 +18,8 @@ function communityData(): Record<string, unknown> {
     members.push({ publicKey: 'ee'.repeat(32), callsign: 'Bakery', isTreasury: true });
     return {
         members, profiles: [], posts: [], health: { flags: [] }, reports: [], reportCount: 0, escrowDisputesCount: 0,
-        memberStats: {}, tradeTotals: { deals: 12, volume: 340.5, cancelled: 1 }, commonsBalance: 87.25,
+        // Whole hundredths of a Bean, as /admin/data sends both (getTradeTotals, getCommonsBalance).
+        memberStats: {}, tradeTotals: { deals: 12, volume: 34050, cancelled: 1 }, commonsBalance: 8725,
     };
 }
 
@@ -107,8 +108,8 @@ describe('Settings Home after the phone link: real figures, or "couldn\'t load",
         await waitFor(() => expect(card(/Members/)).toHaveTextContent('34'));
         expect(card(/Members/)).not.toHaveTextContent(/^Members👥0/);
         expect(card(/Shared Enterprises/)).toHaveTextContent('1');
-        expect(card(/Circulation/)).toHaveTextContent('340.5');
-        expect(card(/Commons Pool/)).toHaveTextContent('87.3');
+        expect(card(/Circulation/)).toHaveTextContent('340.50 beans');
+        expect(card(/Commons Pool/)).toHaveTextContent('87.25 beans');
         // Still signed in: a refusal of a request asked before the sign-in is no session ending.
         expect(screen.queryByPlaceholderText('Password')).toBeNull();
         void fetchMock;

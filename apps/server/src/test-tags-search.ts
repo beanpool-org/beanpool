@@ -44,6 +44,7 @@ import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { cacheRemoteListings, listingsForPeer } from './federation-listings.js';
 import { postSearchKeywords, postSearchKeywordsWithSynonyms } from './engine/search-keywords.js';
 import { TEST_PHOTO } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -70,7 +71,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -84,7 +85,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -97,7 +99,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
 
 async function offer(author: Id, title: string, extra: Record<string, unknown> = {}): Promise<Res> {
     return call('POST', author, '/api/marketplace/posts', {
-        type: 'offer', category: 'food', title, description: '', credits: 0, priceType: 'fixed', authorPublicKey: author.pk,
+        type: 'offer', category: 'food', title, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: author.pk,
         lat: -28.55, lng: 153.5, photos: [TEST_PHOTO], ...extra,
     });
 }
@@ -274,7 +276,7 @@ async function main(): Promise<void> {
         `the listings offered to a peer carry tags, none on an untagged one (${JSON.stringify(offLime?.tags)})`);
     const remoteAuthor = newId('Remy').pk;
     const remote = (id: string, title: string, tags?: unknown) => ({
-        id, type: 'offer', category: 'food', title, description: '', credits: 0, priceType: 'fixed', authorPublicKey: remoteAuthor,
+        id, type: 'offer', category: 'food', title, description: '', price_c: 0, priceType: 'fixed', authorPublicKey: remoteAuthor,
         authorCallsign: 'Remy', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...(tags !== undefined ? { tags } : {}),
     });
     const cached = cacheRemoteListings(PEER, 'https://peer.example', [
@@ -294,7 +296,7 @@ async function main(): Promise<void> {
     // ── 9. the LIKE filter on 5,000 listings ──────────────────────────────────────────────────
     console.log('\n── 9. the tag filter measured on 5,000 listings ──');
     const pool = ['food.fruit.lemon', 'food.fruit.lime', 'food.eggs', 'food.dairy.milk', 'garden', 'tools'];
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, active, status, tags, search_keywords)
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, tags, search_keywords)
                                VALUES (?, 'offer', 'food', ?, '', 0, ?, 1, 'active', ?, 'food')`);
     db.transaction(() => {
         for (let i = 0; i < 5000; i++) {

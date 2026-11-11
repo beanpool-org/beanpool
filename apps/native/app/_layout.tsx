@@ -24,7 +24,9 @@ import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
-import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
+import { getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
+import { forgetRetiredKeys } from '../utils/retired-keys';
+import { holdInvite } from '../utils/held-invite';
 import { forgetKnockKey } from '../utils/knock-key';
 import { inviteLinkToWelcome } from '../utils/waiting-to-join';
 import { listenForScannedInvites } from '../utils/scanned-invite';
@@ -239,8 +241,8 @@ function RootLayoutNav() {
                 .catch(() => { if (mounted) setNoCommunity(false); });
         };
         refreshHold.current = refresh;
-        // A claim code an older build kept at rest for an account made elsewhere (#2412): that detour is gone.
-        void forgetOldPendingClaim();
+        // Keys older builds left that nothing reads (conversion code, log row CUT3: utils/retired-keys.ts).
+        void forgetRetiredKeys();
         refresh();
         const unsubscribe = subscribePendingOnboarding(refresh);
         return () => { mounted = false; unsubscribe(); };
@@ -294,7 +296,7 @@ function RootLayoutNav() {
     useEffect(() => { void sweepPrintedPdfs(); }, []);
 
     // At start (and for a new identity): the copy of a break-glass code an older app offered to keep on this phone, which
-    // nothing reads back and this app no longer makes (utils/break-glass.ts, #1531).
+    // nothing reads back and this app no longer makes (utils/break-glass.ts, #1531). Conversion code, log row CUT3.
     useEffect(() => {
         const publicKey = identity?.publicKey;
         if (!publicKey) return;
@@ -449,6 +451,9 @@ function RootLayoutNav() {
 
         const routeToWelcomeWithInvite = () => {
             if (!isComponentMounted.current) return;
+            // Kept on the phone until it is redeemed (utils/held-invite.ts): a warm start's link opens a NEW welcome with no
+            // params, after this has set them on the old one, and the code was lost (Damo, 9 Nov).
+            void holdInvite(AsyncStorage, { invite: parsedCode, server: extractedNodeOrigin, post: linkPostId });
             const rootSegment = (segments as string[])[0];
             if (rootSegment === 'welcome') {
                 router.setParams({

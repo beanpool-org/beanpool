@@ -38,10 +38,10 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.LISTING_ARCHIVE_DAYS;
-process.env.ADMIN_PASSWORD = 'Retention-Suite-Admin-77!';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
@@ -65,7 +65,8 @@ async function call(method: 'GET' | 'POST', urlPath: string, body: unknown, id: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -93,8 +94,6 @@ async function main() {
     const { getImageStore } = await import('./storage/image-store.js');
 
     initSchema();
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     const se = await import('./state-engine.js');
     await se.initStateEngine();
     const { archiveEndedPosts: archiveEngine } = await import('./engine/posts.js');
@@ -112,7 +111,7 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
             .run(pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, pubKeyHex, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
         return { pubKeyHex, privateKey, callsign };
     };
     const noPhoto = (n: number) => (n === 0 ? { allowNoPhoto: true } : {});
@@ -422,7 +421,7 @@ async function main() {
     console.log('\n── 4. a listing a member traded on inside the 90 days stays ──');
     const traded = listing(ana, 'Traded on lately', 100);
     const tradedLongAgo = listing(ana, 'Traded on long ago', 100);
-    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, updated_at)
+    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, updated_at)
                              VALUES (?, ?, ?, ?, 5, 'completed', ?, ?, ?)`);
     deal.run(crypto.randomUUID(), traded, ben.pubKeyHex, ana.pubKeyHex, ago(12), ago(10), ago(10));
     deal.run(crypto.randomUUID(), tradedLongAgo, ben.pubKeyHex, ana.pubKeyHex, ago(102), ago(100), ago(100));

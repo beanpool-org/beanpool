@@ -23,8 +23,8 @@ export const PW_MAIN = 'Main-Server-Pw-512!';
 export const PW_STANDBY = 'Standby-Own-Pw-618!';
 export const TUNNEL_TOKEN = 'tunnel-' + crypto.randomBytes(12).toString('hex');
 export const STANDBY_OWN_ADDRESS = { name: 'standby-own', mode: 'direct', hostname: 'standby-own.example' };
-/** A start of the standby: its own admin password, as a standby. */
-export const STANDBY_ENV = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' };
+/** A start of the standby, as a standby. */
+export const STANDBY_ENV = { NODE_ROLE: 'backup' };
 
 /**
  * node_config rows a main server's boot writes and a standby's does not (the 2026-10-02 review of #1433): the listing-photo
@@ -54,7 +54,7 @@ export async function rollbackChild(): Promise<void> {
             se.seedGenesisMember(anna, 'Anna');
             db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                 .run(ben, 'Ben', new Date().toISOString(), anna, 'TEST');
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(ben);
             se.grantNodeRole(ben, 'admin', anna);
             se.payFromCommons(ben, 3, 'a commons grant', { allowDeficit: true });
             addConnector('/ip4/127.0.0.1/tcp/4999/p2p/12D3KooWD3eckifWpRn9wQpMG9R9hX3sD158z7EqHWmweQAJU5SA', 'peer', 'Neighbours', 'https://neighbours.example', true);
@@ -154,7 +154,7 @@ async function standbyState(): Promise<Record<string, any>> {
         cursor: (db.prepare("SELECT last_synced_at AS c FROM sync_cursors WHERE peer_id = 'backup:primary'").get() as { c: string } | undefined)?.c ?? null,
         ledger: {
             members: (db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n,
-            sum: (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as { s: number }).s,
+            sum: (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as { s: number }).s,
         },
         connectorsInMemory: getConnectors().map((x: any) => x.trustLevel).sort(),
         /** The standby's pin (services/standby-main.ts): the PeerId it copies, or null. */
@@ -219,12 +219,12 @@ export async function buildWorld(script: string, root: string): Promise<World> {
     const baseDir = path.join(root, 'standby-base');
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const main = await spawnNode(script, mainDir, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+    const main = await spawnNode(script, mainDir, { NODE_ROLE: 'primary' });
     try {
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken, tunnelToken: TUNNEL_TOKEN });
         fs.mkdirSync(baseDir, { recursive: true });
         fs.copyFileSync(path.join(mainDir, 'genesis.json'), path.join(baseDir, 'genesis.json'));
-        const standby = await spawnNode(script, baseDir, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(script, baseDir, { NODE_ROLE: 'backup' });
         let before: Record<string, any>;
         try {
             await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
@@ -244,8 +244,8 @@ export async function buildWorld(script: string, root: string): Promise<World> {
 }
 
 /**
- * Open the keys with the code and confirm, under an owner's key session the standby makes (step 7c: the password alone
- * opens no admin route with 2FA off). The confirm's answer (none if it died).
+ * Open the keys with the code and confirm, under an owner's key session the standby makes (the node has no admin
+ * password). The confirm's answer (none if it died).
  */
 export async function openAndConfirm(node: NodeProc, code: string): Promise<{ status: number; body: any }> {
     const owner: Record<string, string> = await node.send('owner-session');

@@ -12,7 +12,8 @@
  *      reported post (both ways), a fresh CSRF token. Refused even there: suspending the member from a report, and
  *      removing a post nobody reported, or one whose reports are all dismissed or actioned, by either route
  *      (owners and admins still can).
- *   4. The password path never yields a moderator: it is owner level, whatever else is sent.
+ *   4. An old admin password is no credential: alone it signs nobody in, and beside a moderator's session it makes
+ *      nothing more of it.
  *   5. A moderator whose role is taken away, or changed, loses the session at once. Signing yourself out everywhere
  *      works; signing someone else out does not.
  *   6. The app's queue shows a moderator only the reports waiting.
@@ -33,8 +34,6 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { db } from './db/db.js';
 import { checkAdminAuth, resetAdminAuthTarpit, MODERATOR_ROUTES } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
@@ -60,6 +59,7 @@ import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { createAvatarRoutes } from './routes/avatar.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -67,6 +67,7 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
 }
 
+/** What an older install's admin password looked like: no credential now (the node has none). */
 const PW = 'ModeratorRoutes123!';
 
 function makeKeypair() {
@@ -79,8 +80,8 @@ type Keypair = ReturnType<typeof makeKeypair>;
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. */
 function keySession(kp: Keypair): { sessionId?: string; csrfToken?: string; role?: string; error?: string } {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) return { error: solved.error };
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     return ex.ok ? { sessionId: ex.sessionId, csrfToken: ex.csrfToken, role: ex.role } : { error: ex.error };
@@ -89,7 +90,7 @@ function keySession(kp: Keypair): { sessionId?: string; csrfToken?: string; role
 function addMember(kp: Keypair, callsign: string, invitedBy: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
         .run(kp.pubKeyHex, callsign, new Date().toISOString(), invitedBy, 'TEST');
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(kp.pubKeyHex);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(kp.pubKeyHex);
 }
 
 /** A concrete path for a route pattern: every :param and regex group becomes a harmless literal. */
@@ -100,8 +101,6 @@ function concretePath(pattern: string): string {
 async function main() {
     console.log('--- TEST: moderators reach reports and removing reported posts, nothing else ---');
     initStateEngine();
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false } as any);
 
     const olive = makeKeypair(); // owner
     const mo = makeKeypair();    // moderator
@@ -238,9 +237,9 @@ async function main() {
         const EXPECTED_NOT_GATED: Record<string, { why: string; status: number }> = {
             // Who is signed in: the moderator's own session, read back.
             'GET /api/local/admin/auth/session': { why: 'reports the caller\'s own session', status: 200 },
-            // The backup's pull takes a replication token or the password header, never a key session.
-            'GET /api/local/admin/sync-snapshot': { why: 'replication token or password only', status: 401 },
-            'GET /api/local/admin/sync-delta': { why: 'replication token or password only', status: 401 },
+            // The backup's pull takes the replication token, never a key session.
+            'GET /api/local/admin/sync-snapshot': { why: 'replication token only', status: 401 },
+            'GET /api/local/admin/sync-delta': { why: 'replication token only', status: 401 },
             // Member routes sharing a handler with the Settings one; they check the member's signature instead.
             'POST /api/enterprise/:treasury/location': { why: 'signed member route (keeper)', status: 404 },
             'POST /api/treasury/:treasury/location': { why: 'signed member route (keeper)', status: 404 },
@@ -333,24 +332,13 @@ async function main() {
         const actioned = await call('GET', '/api/local/admin/reports?status=actioned', asMod);
         assert(actioned.status === 200 && actioned.body.reports.length === 4, `the actioned filter shows the four acted on (A, B, D, and F by the admin; got ${actioned.body.reports?.length})`);
 
-        // ── 4. The password path ──
-        console.log('\n4. The password never yields a moderator');
+        // ── 4. An old admin password ──
+        console.log('\n4. An old admin password is no credential');
         resetAdminAuthTarpit();
-        // Sign-in step 7c: with the node's 2FA off, the password sent alone opens nothing (it was owner level before).
+        // The node has no admin password: one sent alone signs nobody in.
         const pwAlone = await call('GET', '/api/local/admin/auth/session', { 'X-Admin-Password': PW });
-        assert(pwAlone.body.authenticated === false && pwAlone.body.role === undefined, `with 2FA off the password alone is refused (got ${JSON.stringify(pwAlone.body)})`);
+        assert(pwAlone.body.authenticated === false && pwAlone.body.role === undefined, `an old admin password alone signs nobody in (got ${JSON.stringify(pwAlone.body)})`);
         resetAdminAuthTarpit();
-        // With 2FA on, the password and a code: an owner's credential, still never a moderator.
-        const twoFa = turnOn2faForTests(PW);
-        const pw = await call('GET', '/api/local/admin/auth/session', twoFa.headers());
-        assert(pw.body.authenticated === true && pw.body.role === 'owner', `the password is owner level (got ${pw.body.role})`);
-        const pwWithMod = await call('GET', '/api/local/admin/auth/session', { ...twoFa.headers(), 'x-admin-session': 'not-a-session' });
-        assert(pwWithMod.body.role !== 'moderator', 'a dead session beside the password does not make it a moderator');
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-        resetAdminAuthTarpit();
-        // The password login takes the password and nothing else: a moderator's session stands in for none of it.
-        const modPwRoute = await call('POST', '/api/local/verify-password', asMod, { password: 'not-the-password' });
-        assert(modPwRoute.status === 401, `a moderator's session does not get past the password login (got ${modPwRoute.status})`);
         const modPwHeader = await call('GET', '/api/local/admin/auth/session', { ...asMod, 'X-Admin-Password': 'not-the-password' });
         assert(modPwHeader.body.role === 'moderator', 'a session with a wrong password beside it stays a moderator session, never more');
         const modPwAdmin = await call('POST', '/api/local/admin/data', { ...asMod, 'X-Admin-Password': 'not-the-password' });

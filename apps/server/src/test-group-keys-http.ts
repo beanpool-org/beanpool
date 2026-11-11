@@ -50,6 +50,7 @@ import {
     type GroupEpochReason, type GroupEpochRecord, type GroupServedWrap,
 } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 // Loaded at run time, so on a server without them (origin/main, the fail-first run) the suite reports a count, not a crash.
 const groupThread: any = await import('./engine/group-thread.js');
 const groupKeys: any = await import('./engine/group-keys.js').catch(() => null);
@@ -86,7 +87,7 @@ function member(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(id.pk, name, owner.pk);
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
 
@@ -99,7 +100,8 @@ async function call(method: 'GET' | 'POST' | 'DELETE', signer: Id, path: string,
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

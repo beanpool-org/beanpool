@@ -69,6 +69,7 @@ import { lockedDm } from './dm-test-payload.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { listingPhotoUrlsIn, withListingPhotoKeysNormalised } from './takeover-parity-compare.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -84,9 +85,9 @@ const MIN = 60_000;
 /**
  * The importer format a copy records now (engine/sync.ts REPLICA_FORMAT: 6 was this change's, 7 a whole copy built from
  * nothing in a staging database, P2, 8 listing photos by reference, P4, 9 members' phones locked, 10 event times, 11 events' let-ins, 12 repeating events,
- * 13 a poll's typed Other, 14 chat photos, G4); the one before this change's, a standby to re-seed.
+ * 13 a poll's typed Other, 14 chat photos, G4, 15 money in whole hundredths); the one before this change's, a standby to re-seed.
  */
-const FORMAT = '14';
+const FORMAT = '15';
 const FORMAT_BEFORE = '5';
 /**
  * The standby's cap on the rows of any one table in a copy (engine/sync.ts MAX_IMPORT_ROWS_PER_CATEGORY, 250,000 by
@@ -182,6 +183,18 @@ async function child(): Promise<void> {
             const made = await makeRecoveryCode();
             await flushTakeoverChecks();
             return { code: made.code };
+        },
+        /**
+         * The standby's own owner. A standby holds none (only a take-over brings its main server's), and the way in is
+         * `beanpool recover --key` (recover-command.ts). This writes the node_roles row that leaves, and only it, so the
+         * copy's member rows stay its main server's for the comparisons. Until conversion-s0 the boot gave every active
+         * genesis member an owner row, a standby's included, and this suite's standby session leant on it.
+         */
+        'standby-owner': async (a: { owner: string }) => {
+            const { db } = await import('./db/db.js');
+            const { RECOVER_ACTOR } = await import('./recover-command.js');
+            db.prepare(`INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)`).run(a.owner, RECOVER_ACTOR);
+            return true;
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
@@ -400,7 +413,7 @@ async function child(): Promise<void> {
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
                 answers[`dispatchPushNotification(${category})`] = se.dispatchPushNotification(a.everyone, 'SYSTEM', 'On a standby', 'Never sent', {}, category, 'community.notice');
             }
-            answers.sendPushNotification = se.sendPushNotification(id.post, SystemMessageType.ESCROW_FUNDED, { amount: 1, actorPubkey: id.gwen } as any, a.everyone) ?? 'no answer';
+            answers.sendPushNotification = se.sendPushNotification(id.post, SystemMessageType.ESCROW_FUNDED, { amount_c: 1, actorPubkey: id.gwen } as any, a.everyone) ?? 'no answer';
             answers.adminBroadcastAnnouncement = se.adminBroadcastAnnouncement('On a standby', 'Never sent', 'info') ?? 'no answer';
             answers.tickEventReminders = tickEventReminders(se.dispatchPushNotification, Number(id.remindAt));
             answers.runMarketplaceHygiene = se.runMarketplaceHygiene() ?? 'no answer';
@@ -467,7 +480,8 @@ async function api(base: string, method: Method, route: string, opts: { as?: Id;
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -565,7 +579,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = (pw: string, role: string) => ({
-        ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
         ...(role === 'backup' ? { MAX_IMPORT_ROWS_PER_CATEGORY: String(STANDBY_ROW_CAP) } : {}),
     });
     const gwen = newId('Gwen');
@@ -651,13 +665,14 @@ async function main(): Promise<void> {
         require_(reminded.claimed === 1 && reminded.pushes.length === 2 && reminded.pushes.every((p: Push) => p.to.includes('bo-')),
             `M: the day-before reminder goes to Bo's two phones (${JSON.stringify(reminded)})`);
         // Listings, a deal, and a line from 40 days ago that the hourly prune takes.
-        const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
+        const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         built('the admin makes Gwen an Elder (credit to buy with)', await A('POST', `/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
-        await offer(gwen, 'Sourdough loaf', 4);
-        const tuneUp = await offer(kip, 'Bike tune-up', 10);
+        await offer(gwen, 'Sourdough loaf', 400);
+        const tuneUp = await offer(kip, 'Bike tune-up', 1000);
         const tx = built('Gwen asks for Kip\'s tune-up', await S_(gwen, '/api/marketplace/posts/request', { postId: tuneUp.id, buyerPublicKey: gwen.pk })).transaction;
         built('Kip approves: the Beans are held', await S_(kip, '/api/marketplace/transactions/approve', { transactionId: tx.id, authorPublicKey: kip.pk }));
         built('Gwen confirms: the deal is done', await S_(gwen, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: gwen.pk }));
@@ -708,7 +723,7 @@ async function main(): Promise<void> {
         built('Kip signs back in on his first phone, after his leave', await phone(kip, token('kip-1'), 9000));
         const custom = built('the admin adds a pricing item', await A('POST', '/api/pricing-guide/admin/item', { category: edited.category, emoji: '🧺', name: 'Picnic basket', description: 'Wicker', priceBeans: 6 }));
         built('and deletes it again', await A('DELETE', `/api/pricing-guide/admin/item/${custom.item.id}`));
-        await offer(bo, 'Honey', 5);
+        await offer(bo, 'Honey', 500);
         const m3 = await main.send('rows');
         assert(!has(m3.tables, 'chat_mutes', { conversation_id: chatAC }) && has(m3.tables, 'chat_mutes', { conversation_id: chatAB, member_pubkey: ann2.pk })
             && !has(m3.tables, 'push_tokens', { public_key: ann.pk }) && has(m3.tables, 'push_tokens', { public_key: ann2.pk, token: token('ann') })
@@ -1020,7 +1035,7 @@ async function main(): Promise<void> {
 
         // A line of today's, so M's last line is again one S copies (the backdated ones above were the newest ids, gone on
         // both): step 8 checks the promoted server numbers its next line after it.
-        await offer(cy, 'Seed potatoes', 2);
+        await offer(cy, 'Seed potatoes', 200);
 
         const ids: Record<string, string> = {
             gwen: gwen.pk, ann2: ann2.pk, bo: bo.pk, cy: cy.pk, dee: dee.pk, kip: kip.pk, probe: probe.publicKey, chatAB, chatAC,
@@ -1032,7 +1047,8 @@ async function main(): Promise<void> {
         const sv = `https://localhost:${await standby.send('serve')}`;
         // Step 7c: S's admin calls go under an owner's key session S makes, so each refusal below is S's 409 standby, not a
         // refused credential.
-        const sOwner: Record<string, string> = await standby.send('owner-session');
+        await standby.send('standby-owner', { owner: gwen.pk });
+        const sOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const onS = (method: Method, route: string, who: Id | null, body: unknown = {}) => api(sv, method, route, who ? { as: who, body } : { admin: sOwner, body });
         const routes: [string, Promise<Answer>][] = [
             ['a phone registered', onS('POST', '/api/push-tokens', cy, { publicKey: cy.pk, token: token('on-standby'), registeredAt: 9_000_000 })],
@@ -1093,7 +1109,7 @@ async function main(): Promise<void> {
             conversationId: chatAC, authorPubkey: cy.pk, ...lockedDm(),
         } });
         const threadOnS = await api(sv, 'POST', `/api/treasury/${probe.publicKey}/thread/message`, { as: kip, body: { text: 'On a standby' } });
-        const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: await standby.send('owner-session'), body: { title: 'On a standby', body: 'Never sent' } });
+        const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: await standby.send('owner-session', { owner: gwen.pk }), body: { title: 'On a standby', body: 'Never sent' } });
         await sleep(200);
         const httpPushes = await standby.send('pushes');
         assert(httpPushes.length === 0, `a chat message, an enterprise thread post and an announcement over HTTPS push nothing from S (${chatOnS.status}, ${threadOnS.status}, ${announceOnS.status}; ${httpPushes.length} pushes)`);
@@ -1149,7 +1165,7 @@ async function main(): Promise<void> {
         await main.send('checkpoint');
         await main.kill('SIGKILL');
         // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
-        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const standbyOwner: Record<string, string> = await standby.send('owner-session', { owner: gwen.pk });
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
@@ -1250,7 +1266,7 @@ async function main(): Promise<void> {
         }));
         assert(guidePhotos.length === new Set(listingPhotoUrlsIn(mainGuide.body)).size && guidePhotos.length > 0 && guidePhotoStatuses.every((st) => st === 200),
             `every listing photo URL in the promoted server's pricing guide opens there, unsigned (${guidePhotoStatuses.filter((st) => st === 200).length} of ${guidePhotos.length} answered 200)`);
-        await offer2(p, gwen, 'Plum jam', 3);
+        await offer2(p, gwen, 'Plum jam', 300);
         const lineHere = await standby.send('last-activity-id');
         assert(typeof mainLastLine === 'number' && lineHere === mainLastLine + 1, `the next activity line is numbered after M's last (${mainLastLine} → ${lineHere})`);
 
@@ -1278,10 +1294,10 @@ function phone2(base: string, who: Id, t: string, registeredAt: number): Promise
     return api(base, 'POST', '/api/push-tokens', { as: who, body: { publicKey: who.pk, token: t, platform: 'android', registeredAt } });
 }
 
-/** An offer on the server at `base`. */
-async function offer2(base: string, who: Id, title: string, credits: number): Promise<void> {
+/** An offer on the server at `base`, its price in whole hundredths of a Bean (`price_c`). */
+async function offer2(base: string, who: Id, title: string, price_c: number): Promise<void> {
     const r = await api(base, 'POST', '/api/marketplace/posts', { as: who, body: {
-        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
+        type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk,
         photos: [TINY_PNG],
     } });
     require_(r.status >= 200 && r.status < 300, `the promoted server: ${who.name} offers ${title} (${brief(r)})`);

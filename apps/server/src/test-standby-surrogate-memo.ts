@@ -37,7 +37,6 @@ async function main(): Promise<void> {
     // After the environment above: ENFORCE_LEDGER_AUTH is read when engine/sync.ts loads.
     const core = await import('@beanpool/core');
     const { ed25519 } = await import('@noble/curves/ed25519.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
@@ -48,7 +47,6 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
 
     console.log('A standby with ENFORCE_LEDGER_AUTH keeps a signed send whose note holds a lone surrogate (#1515)\n');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
@@ -63,8 +61,9 @@ async function main(): Promise<void> {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
         setMemberPhoto(db, pk, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
-        se.transfer('genesis', pk, 100, `seed ${callsign}`, 'direct', true);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+        // 100 Beans, as the ledger holds them: whole hundredths (every figure below is).
+        se.transfer('genesis', pk, 10000, `seed ${callsign}`, 'direct', true);
         return { pk, seed, sign: core.ed25519Signer(seed) };
     };
     const founder = crypto.randomBytes(32).toString('hex');
@@ -72,12 +71,13 @@ async function main(): Promise<void> {
     const mia = member('Mia');
     const xan = member('Xan');
     // A trade each, so the two can send Beans to each other (the same set-up as test-request-binding-ledger.ts).
-    const offer = (pk: string, title: string) => createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;
+    const offer = (pk: string, title: string) => createPost('offer', 'produce', title, `${title}, fresh`, 1000, 'fixed', pk)!;
     offer(mia.pk, 'Mia seedlings');
     se.completePostTransaction(se.acceptPost(offer(xan.pk, 'Xan bread').id, mia.pk).id, mia.pk);
 
-    const send = async (amount: number, memo: string) => {
-        const body = JSON.stringify({ from: mia.pk, to: xan.pk, amount, memo });
+    /** `beans`: what Mia sends, as the route takes it: whole hundredths, `amount_c`. */
+    const send = async (beans: number, memo: string) => {
+        const body = JSON.stringify({ from: mia.pk, to: xan.pk, amount_c: Math.round(beans * 100), memo });
         const headers = await core.buildBoundRequestHeaders({ method: 'POST', url: 'https://ledger.test/api/ledger/transfer', body, publicKeyHex: mia.pk, sign: mia.sign });
         const res = await fetch(`${base}/api/ledger/transfer`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
         return { status: res.status, body: await res.json().catch(() => null) as any };

@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Alert } from '../utils/keyboard-alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
+import { router, ErrorBoundary, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, readCommunityCard, t, tn, word, type CommunityCard,
+    COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, isPeekTicket, knockTickOf, readCommunityCard, t, tn, word, type CommunityCard, type KnockWatchTick,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
+import type { BeanPoolIdentity } from '../utils/identity';
+import type { JoinKey } from '../utils/door-key';
 import { communityOrigin } from '../utils/community-origin';
 import {
     sendKnock, rememberedKnocks, cancelledKnocks, rememberKnock, forgetKnock, readKnockStatus, knockCardState, knockFormProblem,
@@ -20,6 +22,7 @@ import {
 import { knockFromNode } from '../utils/knock-address';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
+import { useKnockStatusWatch } from '../utils/use-knock-status-watch';
 import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
@@ -72,14 +75,20 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  *     fills its server box, so no link can point a member's join at another server: pair-link.test.ts holds it);
  *   - an account in no community yet (waiting to be let in, slice S3): the same, but its yes goes to welcome, which joins
  *     it through the invite step so the 12 words its key has never shown come next (as Find a community's Join does);
- *   - no account yet: the first screen, for an invite (Join with an invite), the ways back (Already a member), or
- *     look around global first, join there and find it in Find a community.
- * Nothing is read but the community's public card; nothing is sent until the member taps Send.
+ *   - no account yet (DESIGN-shared-listing-door-fable.md §2.3, slice A2): Ask to join {name}, here, as Find a community
+ *     asks with no account (utils/knock-key.ts): the key is drafted in memory when the form opens and written to the phone
+ *     only when Send is tapped, before the request goes; the phone then waits on welcome (utils/waiting-to-join.ts), whose
+ *     yes joins through the invite step and shows the 12 words. The line under the button says so, in the web's words.
+ *     And the first screen's own steps: an invite (I have an invite) and the ways back (Already a member).
+ * Nothing is read but the community's public card; nothing is written or sent until Send is tapped.
  */
 export default function CommunityCardScreen() {
-    const params = useLocalSearchParams<{ node?: string }>();
+    const params = useLocalSearchParams<{ node?: string; peek?: string }>();
     const origin = communityOrigin(params.node);
-    const { identity } = useIdentity();
+    // Opened from a shared post's screen: its link's ticket, sent with the request (shared-listing door A3), so the
+    // members who answer read which listing it came after and who shared it. Nothing of it is shown here.
+    const peekTicket = isPeekTicket(params.peek) ? params.peek : null;
+    const { identity, setIdentity } = useIdentity();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -96,6 +105,7 @@ export default function CommunityCardScreen() {
         chip: { alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999, backgroundColor: colors.surface.subtle },
         chipText: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
         note: { fontSize: 15, color: colors.text.body, marginTop: 12, lineHeight: 21 },
+        askNote: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
         refusal: { fontSize: 15, color: colors.feedback.warning.fg, marginTop: 12, lineHeight: 21 },
         actions: { gap: 10, marginTop: 16 },
         primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
@@ -146,16 +156,25 @@ export default function CommunityCardScreen() {
 
     // The community's answer, only where this key asked it: a signed read shows a community who is asking.
     const [status, setStatus] = useState<KnockStatusResult | null>(null);
-    const [statusAsk, setStatusAsk] = useState(0);
-    useEffect(() => {
-        if (!origin || !identity || !asked) return;
-        let alive = true;
-        setStatus(null);
-        readKnockStatus(origin, identity)
-            .then(r => { if (alive) setStatus(r); })
-            .catch(() => { if (alive) setStatus({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable }); });
-        return () => { alive = false; };
-    }, [origin, identity?.publicKey, asked, statusAsk]);
+    // Read when the card knows it was asked, then by itself while this screen is in front (Damo, 9 Nov 2026: the yes showed
+    // only after a manual refresh), on utils/use-knock-status-watch.ts's schedule; Check again reads at once.
+    const [shown, setShown] = useState(true);
+    useFocusEffect(useCallback(() => {
+        setShown(true);
+        return () => setShown(false);
+    }, []));
+    useEffect(() => { setStatus(null); }, [origin, identity?.publicKey, asked]);
+    const identityRef = useRef(identity);
+    identityRef.current = identity;
+    const readRound = async (): Promise<KnockWatchTick> => {
+        const me = identityRef.current;
+        if (!origin || !me) return { kind: 'settled' };
+        const r: KnockStatusResult = await readKnockStatus(origin, me)
+            .catch((): KnockStatusResult => ({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable }));
+        setStatus(r);
+        return knockTickOf(r);
+    };
+    const watch = useKnockStatusWatch(readRound, !!origin && !!identity && !!asked, `${origin ?? ''}|${identity?.publicKey ?? ''}`, shown);
 
     // What this key's request says here, as Find a community decides it (app/find-community.tsx stateFor).
     const knock: KnockCardState = asked === null
@@ -164,34 +183,73 @@ export default function CommunityCardScreen() {
             ? { kind: 'cancelled', note: KNOCK_MESSAGES.cancelled }
             : knockCardState(true, asked, asked ? status : undefined, memberNote);
 
-    // The request to join: as on Find a community, to the community itself, with the phone's own key.
+    // The request to join: as on Find a community, to the community itself, with the phone's own key; on a phone with no
+    // account, with the key this form drafted (utils/knock-key.ts).
     const [formOpen, setFormOpen] = useState(false);
     const [callsign, setCallsign] = useState((identity?.callsign ?? '').slice(0, KNOCK_CALLSIGN_CHARS));
     const [message, setMessage] = useState('');
     const [formError, setFormError] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
+    /**
+     * The key a request from a phone with no account signs with: drafted in memory when the form opens, written to the
+     * phone only at Send (utils/knock-key.ts). With an account, the account's key, and nothing is drafted.
+     */
+    const [heldKey, setHeldKey] = useState<JoinKey | null>(null);
+    useEffect(() => {
+        if (!formOpen || identity) return;
+        let alive = true;
+        // Loaded at the tap, as the key store is only needed here.
+        import('../utils/knock-key').then(m => m.knockKeyForThisPhone(heldKey)).then(k => { if (alive) setHeldKey(k); }).catch(() => {});
+        return () => { alive = false; };
+    }, [formOpen, !!identity]);
+    const openForm = () => { setFormOpen(true); setFormError(null); };
+
     const send = async (c: CommunityCard) => {
-        if (!identity || !origin) return;
+        if (!origin) return;
         const problem = knockFormProblem({ callsign, message });
         if (problem) { setFormError(problem); return; }
-        await askNotificationPermissionOnAction('knock', identity.publicKey);
+        // The key the request signs with: the account's, or the one this form drafted, written to the phone now, before
+        // the request goes out, and never taken off again on its own (utils/knock-key.ts). An account the phone has stored
+        // since the form opened (an invite join in between) signs it instead, and the draft is dropped: never a second key.
+        let signer: BeanPoolIdentity;
+        try {
+            if (identity) signer = identity;
+            else {
+                const { commitKnockKey, knockKeyForThisPhone } = await import('../utils/knock-key');
+                signer = await commitKnockKey(await knockKeyForThisPhone(heldKey), callsign);
+            }
+        } catch (e: any) {
+            setFormError(e?.message ? welcomeLineWords(e.message) : t('Please try again.'));
+            return;
+        }
+        if (!identity) setIdentity(signer);
+        await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
         // Profile S2-W: knocks do not leak another community's photo
         const avatar = null;
         // From the global community only for a member there, as Find a community says it (utils/knock-address.ts): a phone
-        // waiting to be let in (S3), or one in a local community, names no community it came from.
-        const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        // waiting to be let in (S3), one in a local community, or one that had no account when the form opened, names no
+        // community it came from.
+        const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
-        const r = await sendKnock(origin, identity, { callsign, message, avatar }, knockFromNode(anchor, guest));
+        const r = await sendKnock(origin, signer, { callsign, message, avatar, peek: peekTicket }, knockFromNode(anchor, guest));
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
-            await rememberKnock(identity.publicKey, { url: origin, name: c.name });
+            await rememberKnock(signer.publicKey, { url: origin, name: c.name });
             setFormOpen(false);
             setMessage('');
-            // Read what it says now: waiting, or a yes with its invite.
+            // Asked from a phone that had no account: it is waiting to be let in now, and welcome is where it waits (its
+            // waiting mode: this request, Check again, and a yes joined through the invite step, then the 12 words).
+            if (!identity && !(await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null))) {
+                router.replace('/welcome');
+                return;
+            }
+            // Read what it says now: waiting, or a yes with its invite. The old answer goes first (as Check again does), so the
+            // card shows "checking", never the earlier request's "no longer open" and a second Ask, while the read is out.
             setAsked(true);
-            setStatusAsk(n => n + 1);
+            setStatus(null);
+            watch.restart();
         } else if (r.kind === 'member') {
             setFormOpen(false);
             setMemberNote(r.message);
@@ -234,7 +292,30 @@ export default function CommunityCardScreen() {
     };
 
     const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
-    const welcome = (mode?: 'create' | 'member') => router.replace(mode ? { pathname: '/welcome', params: { mode } } : '/welcome');
+    const welcome = (mode: 'create' | 'member') => router.replace({ pathname: '/welcome', params: { mode } });
+
+    /** The request's form: the same for an account and for none (whose key Send writes first). */
+    const askForm = (c: CommunityCard) => (
+        <View>
+            <Text style={styles.label}>{t('Your name')}</Text>
+            <TextInput style={styles.input} value={callsign} onChangeText={v => setCallsign(v.slice(0, KNOCK_CALLSIGN_CHARS))}
+                maxLength={KNOCK_CALLSIGN_CHARS} autoCapitalize="words" accessibilityLabel={t('Your name')} />
+            <Text style={styles.label}>{t('A few words about yourself')}</Text>
+            <TextInput style={[styles.input, styles.multiline]} value={message} multiline
+                onChangeText={v => setMessage(Array.from(v).slice(0, KNOCK_MESSAGE_CHARS).join(''))}
+                placeholder={t("Where you live, what you'd like to share or learn")} accessibilityLabel={t('A few words about yourself')} />
+            <Text style={styles.counter}>{Array.from(message).length}/{KNOCK_MESSAGE_CHARS}</Text>
+            {!!formError && <Text style={styles.formError} accessibilityLiveRegion="polite">{findLineWords(formError)}</Text>}
+            <View style={styles.actions}>
+                <Pressable style={[styles.primary, sending && { opacity: 0.6 }]} onPress={() => send(c)} disabled={sending} accessibilityRole="button">
+                    <Text style={styles.primaryText}>{sending ? t('Sending…') : t('Send')}</Text>
+                </Pressable>
+                <Pressable style={styles.secondary} onPress={() => { setFormOpen(false); setFormError(null); }} accessibilityRole="button">
+                    <Text style={styles.secondaryText}>{t('Cancel')}</Text>
+                </Pressable>
+            </View>
+        </View>
+    );
 
     const body = () => {
         if (!origin) return <Text style={styles.note}>{t(CARD_SCREEN_WORDS.noCommunity)}</Text>;
@@ -284,7 +365,7 @@ export default function CommunityCardScreen() {
                         )}
                         {knock.kind === 'unreachable' && (
                             <View style={styles.actions}>
-                                <Pressable style={styles.secondary} onPress={() => setStatusAsk(n => n + 1)} accessibilityRole="button" testID="community-card-check-again">
+                                <Pressable style={styles.secondary} onPress={() => { setStatus(null); void watch.readNow(); }} accessibilityRole="button" testID="community-card-check-again">
                                     <Text style={styles.secondaryText}>{t('Check again')}</Text>
                                 </Pressable>
                             </View>
@@ -300,32 +381,12 @@ export default function CommunityCardScreen() {
                         {/* Ask to join: nothing asked, no answer came, or a refusal that asking again could get past. */}
                         {card.joining === 'requests' && (knock.kind === 'ask' || (knock.kind === 'refused' && knock.canAsk)) && !formOpen && (
                             <View style={styles.actions}>
-                                <Pressable style={styles.primary} onPress={() => { setFormOpen(true); setFormError(null); }} accessibilityRole="button" testID="community-card-ask">
-                                    <Text style={styles.primaryText}>{t(W.ask)}</Text>
+                                <Pressable style={styles.primary} onPress={openForm} accessibilityRole="button" testID="community-card-ask">
+                                    <Text style={styles.primaryText}>{t(W.askName, { name })}</Text>
                                 </Pressable>
                             </View>
                         )}
-                        {formOpen && (
-                            <View>
-                                <Text style={styles.label}>{t('Your name')}</Text>
-                                <TextInput style={styles.input} value={callsign} onChangeText={v => setCallsign(v.slice(0, KNOCK_CALLSIGN_CHARS))}
-                                    maxLength={KNOCK_CALLSIGN_CHARS} autoCapitalize="words" accessibilityLabel={t('Your name')} />
-                                <Text style={styles.label}>{t('A few words about yourself')}</Text>
-                                <TextInput style={[styles.input, styles.multiline]} value={message} multiline
-                                    onChangeText={v => setMessage(Array.from(v).slice(0, KNOCK_MESSAGE_CHARS).join(''))}
-                                    placeholder={t("Where you live, what you'd like to share or learn")} accessibilityLabel={t('A few words about yourself')} />
-                                <Text style={styles.counter}>{Array.from(message).length}/{KNOCK_MESSAGE_CHARS}</Text>
-                                {!!formError && <Text style={styles.formError} accessibilityLiveRegion="polite">{findLineWords(formError)}</Text>}
-                                <View style={styles.actions}>
-                                    <Pressable style={[styles.primary, sending && { opacity: 0.6 }]} onPress={() => send(card)} disabled={sending} accessibilityRole="button">
-                                        <Text style={styles.primaryText}>{sending ? t('Sending…') : t('Send')}</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.secondary} onPress={() => { setFormOpen(false); setFormError(null); }} accessibilityRole="button">
-                                        <Text style={styles.secondaryText}>{t('Cancel')}</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        )}
+                        {formOpen && askForm(card)}
                         {!formOpen && (
                             <View style={styles.actions}>
                                 <Pressable style={styles.secondary} accessibilityRole="button" testID="community-card-invite"
@@ -337,20 +398,26 @@ export default function CommunityCardScreen() {
                     </View>
                 ) : (
                     <View>
-                        {card.joining === 'requests' && <Text style={styles.note} testID="community-card-needs-account">{t(W.askViaGlobal, { name })}</Text>}
-                        <View style={styles.actions}>
-                            {card.joining === 'requests' && (
-                                <Pressable style={styles.primary} onPress={() => welcome()} accessibilityRole="button" testID="community-card-ask">
-                                    <Text style={styles.primaryText}>{t(W.ask)}</Text>
+                        {/* No account: Ask to join makes it here, at Send, as the web's card says (A1). */}
+                        {card.joining === 'requests' && !formOpen && (
+                            <View style={styles.actions}>
+                                <Pressable style={styles.primary} onPress={openForm} accessibilityRole="button" testID="community-card-ask">
+                                    <Text style={styles.primaryText}>{t(W.askName, { name })}</Text>
                                 </Pressable>
-                            )}
-                            <Pressable style={card.joining === 'requests' ? styles.secondary : styles.primary} onPress={() => welcome('create')} accessibilityRole="button" testID="community-card-invite">
-                                <Text style={card.joining === 'requests' ? styles.secondaryText : styles.primaryText}>{t(W.haveInvite)}</Text>
-                            </Pressable>
-                            <Pressable style={styles.secondary} onPress={() => welcome('member')} accessibilityRole="button" testID="community-card-signin">
-                                <Text style={styles.secondaryText}>{t(W.member)}</Text>
-                            </Pressable>
-                        </View>
+                                <Text style={styles.askNote} testID="community-card-ask-note">{t(W.askNote, { name })}</Text>
+                            </View>
+                        )}
+                        {formOpen && askForm(card)}
+                        {!formOpen && (
+                            <View style={styles.actions}>
+                                <Pressable style={card.joining === 'requests' ? styles.secondary : styles.primary} onPress={() => welcome('create')} accessibilityRole="button" testID="community-card-invite">
+                                    <Text style={card.joining === 'requests' ? styles.secondaryText : styles.primaryText}>{t(W.haveInvite)}</Text>
+                                </Pressable>
+                                <Pressable style={styles.secondary} onPress={() => welcome('member')} accessibilityRole="button" testID="community-card-signin">
+                                    <Text style={styles.secondaryText}>{t(W.member)}</Text>
+                                </Pressable>
+                            </View>
+                        )}
                     </View>
                 )}
             </View>

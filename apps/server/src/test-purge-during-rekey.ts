@@ -39,6 +39,7 @@ import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 // No host but this machine.
 const realFetch = globalThis.fetch;
@@ -70,17 +71,20 @@ type Keypair = ReturnType<typeof makeKeypair>;
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. */
 function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);
     return ex.sessionId!;
 }
 
-const sumOfAccounts = () => (db.prepare('SELECT COALESCE(SUM(balance), 0) AS s FROM accounts').get() as any).s as number;
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
+const sumOfAccounts = () => (db.prepare('SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts').get() as any).s as number;
 const memberRows = (pk: string) => (db.prepare('SELECT COUNT(*) AS c FROM members WHERE public_key = ? COLLATE NOCASE').get(pk) as any).c as number;
-const accountBalance = (pk: string) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ? COLLATE NOCASE').get(pk) as any)?.balance ?? 0;
+/** An account's balance row, whole hundredths (0 when there is no row). */
+const accountBalance = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ? COLLATE NOCASE').get(pk) as any)?.balance_c ?? 0;
 
 async function runTests() {
     console.log('--- TEST: a removal or deletion during a pending re-key does not bring the member back ---');
@@ -113,12 +117,12 @@ async function runTests() {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         const bodyStr = JSON.stringify(body);
-        const signature = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyStr}`), kp.privateKey).toString('base64');
+        const signature = signRequest(kp.privateKey, { method: 'POST', path, timestamp: ts, nonce, body: bodyStr });
         const res = await fetch(`${base}${path}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Public-Key': kp.pubKeyHex, 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
+                'X-Public-Key': kp.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
             },
             body: bodyStr,
         });
@@ -146,7 +150,7 @@ async function runTests() {
     /** Neither key acts: no Beans sent, no profile edited. */
     async function neitherKeyActs(name: string, old: Keypair, fresh: Keypair) {
         for (const [which, kp] of [['old', old], ['new', fresh]] as const) {
-            const send = await signed(kp, '/api/ledger/transfer', { to: rex.pubKeyHex, amount: 1, memo: 'after the re-key' });
+            const send = await signed(kp, '/api/ledger/transfer', { to: rex.pubKeyHex, amount_c: hc(1), memo: 'after the re-key' });
             assert(send.status >= 400, `${name}: the ${which} key can't send Beans (${send.status})`);
             const edit = await signed(kp, '/api/profile/update', { bio: 'I am back' });
             assert(edit.status >= 400, `${name}: the ${which} key can't edit a profile (${edit.status})`);
@@ -158,7 +162,7 @@ async function runTests() {
         const row = getMember(old.pubKeyHex);
         assert(row?.status === 'pruned', `${name}: the old row is still pruned (${row?.status})`);
         assert(memberRows(fresh.pubKeyHex) === 0, `${name}: no member row for the new key`);
-        assert(accountBalance(old.pubKeyHex) === 0 && getBalance(old.pubKeyHex).balance === 0, `${name}: no Beans on the old key`);
+        assert(accountBalance(old.pubKeyHex) === 0 && getBalance(old.pubKeyHex).balance_c === 0, `${name}: no Beans on the old key`);
         assert(accountBalance(fresh.pubKeyHex) === 0, `${name}: no Beans on the new key`);
         const inv = db.prepare('SELECT reason, rekeyed_to FROM invalidated_keys WHERE public_key = ?').get(old.pubKeyHex) as any;
         assert(!inv?.rekeyed_to, `${name}: the old key was not re-keyed to anything`);
@@ -173,7 +177,7 @@ async function runTests() {
     {
         const pat = makeKeypair(), patNew = makeKeypair();
         join(pat, 'PatPruned');
-        payFromCommons(pat.pubKeyHex, 40, 'Grant to Pat', { allowDeficit: true });
+        payFromCommons(pat.pubKeyHex, hc(40), 'Grant to Pat', { allowDeficit: true });
         const sumBefore = sumOfAccounts();
         const code = await issue('A', pat.pubKeyHex);
 
@@ -182,7 +186,7 @@ async function runTests() {
         const prune = await admin('POST', `/api/local/admin/users/${pat.pubKeyHex}/prune`);
         setSwitchOverride('decisions', true);
         assert(prune.status === 200, `A: the owner removes Pat while the re-key is pending (${prune.status} ${prune.json.error ?? ''})`);
-        assert(getMember(pat.pubKeyHex)?.status === 'pruned' && getBalance(pat.pubKeyHex).balance === 0, 'A: Pat is pruned, the 40 Beans gone to the Commons');
+        assert(getMember(pat.pubKeyHex)?.status === 'pruned' && getBalance(pat.pubKeyHex).balance_c === 0, 'A: Pat is pruned, the 40 Beans gone to the Commons');
 
         const phone = await reEnroll(code, patNew);
         assert(phone.status === 404 && phone.json.error === REKEY_CODE_NOT_VALID, `A: the new phone's ask is refused, as on any dead code (${phone.status} ${phone.json.error})`);
@@ -195,7 +199,7 @@ async function runTests() {
     {
         const sam = makeKeypair(), samNew = makeKeypair();
         join(sam, 'SamSelfPurge');
-        payFromCommons(sam.pubKeyHex, 25, 'Grant to Sam', { allowDeficit: true });
+        payFromCommons(sam.pubKeyHex, hc(25), 'Grant to Sam', { allowDeficit: true });
         const sumBefore = sumOfAccounts();
         const code = await issue('B', sam.pubKeyHex);
 
@@ -218,7 +222,7 @@ async function runTests() {
     {
         const tia = makeKeypair(), tiaNew = makeKeypair();
         join(tia, 'TiaPending');
-        payFromCommons(tia.pubKeyHex, 15, 'Grant to Tia', { allowDeficit: true });
+        payFromCommons(tia.pubKeyHex, hc(15), 'Grant to Tia', { allowDeficit: true });
         const sumBefore = sumOfAccounts();
         const code = await issue('C', tia.pubKeyHex);
 
@@ -232,10 +236,10 @@ async function runTests() {
         // The account was never deleted: the re-key is the member's own, and moves it whole.
         assert(phone.status === 200 && phone.json.success === true, `C: the re-key then completes (${phone.status})`);
         assert(getMember(tiaNew.pubKeyHex)?.status === 'active' && getMember(tiaNew.pubKeyHex)?.callsign === 'TiaPending', 'C: the account, name and all, is on the new key');
-        assert(getBalance(tiaNew.pubKeyHex).balance === 15 && accountBalance(tia.pubKeyHex) === 0, 'C: the 15 Beans moved with it, none left on the old key');
+        assert(getBalance(tiaNew.pubKeyHex).balance_c === hc(15) && accountBalance(tia.pubKeyHex) === 0, 'C: the 15 Beans moved with it, none left on the old key');
         assert(memberRows(tia.pubKeyHex) === 0, 'C: no member row is left on the old key');
         assert(runLedgerAudit().ok && sumOfAccounts() === sumBefore, 'C: the ledger audit holds and the sum is unchanged');
-        const send = await signed(tia, '/api/ledger/transfer', { to: rex.pubKeyHex, amount: 1, memo: 'old key' });
+        const send = await signed(tia, '/api/ledger/transfer', { to: rex.pubKeyHex, amount_c: hc(1), memo: 'old key' });
         assert(send.status >= 400, `C: the old key can't send Beans (${send.status})`);
         const again = await signed(tia, '/api/member/purge', { action: 'purge_account' });
         assert(again.status >= 400 && getMember(tiaNew.pubKeyHex)?.status === 'active', `C: the old key can't delete the moved account (${again.status})`);

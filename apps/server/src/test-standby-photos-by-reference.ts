@@ -38,9 +38,10 @@
  *     the standby review). (Before: the whole copy asked for, built and sent again on the next tick.) The objects it fetched
  *     are kept through an orphan sweep past the sweep's hour of grace, and the copy that lands fetches only the rest (F5).
  *     (Before: swept, and every one fetched again.)
- *  9. A standby copying with M's admin password (an install from before token-only): M checks it with scrypt once for the
- *     whole first copy, not once for each object (review of #1370, routes/backup.ts:1074). A wrong password is refused and
- *     pays its scrypt every time; changed on M, the old one is refused at once. (Before: a scrypt for every request.)
+ *  9. A second standby B copies M with the replication token: M checks it with scrypt once or twice for the whole first
+ *     copy, not once for each object (review of #1370, routes/backup.ts:1074). An old admin password on M's copy routes is
+ *     no credential: refused, 401, every time, and M runs no scrypt for it (the node has no admin password to check it
+ *     against). (Before: a scrypt for every request.)
  * 10. A take-over confirmed while a delta fetches its objects, or a whole copy of one page does (M at its real page bounds),
  *     stops the fetch: no object request is sent to the old main server after the confirm, with the restart switched off,
  *     and nothing of the pull is imported (review of #1370, backup-puller.ts:872). (Before: every remaining object asked
@@ -63,15 +64,15 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
-import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed certificates
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Photos-By-Ref-Main-Pw-5521!';
-const PW_STANDBY = 'Photos-By-Ref-Standby-Pw-8830!';
+/** What an older install's admin password looked like: no credential now (step 9 sends it). */
+const OLD_PW = 'Photos-By-Ref-Main-Pw-5521!';
 /** M's page bounds, scaled down from 8 MB and 25,000 rows. */
 const PAGE_BYTES = 64 * 1024;
 const PAGE_ROWS = 200;
@@ -134,7 +135,8 @@ async function api(base: string, route: string, as: Id, body: unknown): Promise<
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'Content-Type': 'application/json', 'X-Public-Key': as.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64'),
+        'X-Signature': signRequest(as.priv, { method: 'POST', path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
     const res = await fetch(`${base}${route}`, { method: 'POST', headers, body: raw });
     const text = await res.text();
@@ -306,11 +308,11 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const envM = {
-        ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', NODE_ENV: 'test',
+        NODE_ROLE: 'primary', NODE_ENV: 'test',
         SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
     };
     const envS = {
-        ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
         BACKUP_RESYNC_RETRY_MS: String(RESYNC_RETRY_MS), BACKUP_PAGE_GAP_MS: '0', BACKUP_DELTA_BYTES: String(DELTA_BYTES),
     };
     const gwen = newId('Gwen');
@@ -559,16 +561,20 @@ async function main(): Promise<void> {
             await closeIfOpened(ten);
             const eleven = await open('11');
             await closeIfOpened(eleven);
+            // 14: the last format whose money was REAL Beans; money is whole hundredths (`*_c`) from 15 (engine/sync.ts).
+            const fourteen = await open('14');
+            await closeIfOpened(fourteen);
             const log = await main.send('access-log');
-            const needs = /reads replica format 11, and copies from this server need 13; update it/;
-            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 13/.test(none.text)
-                && nine.status === 426 && /reads replica format 9, and copies from this server need 13; update it/.test(nine.text)
-                && ten.status === 426 && /reads replica format 10, and copies from this server need 13; update it/.test(ten.text)
-                && eleven.status === 426 && needs.test(eleven.text) && JSON.parse(eleven.text).needsReplicaFormat === 13
+            const needs = /reads replica format 14, and copies from this server need 15; update it/;
+            assert(none.status === 426 && seven.status === 426 && /reads replica format none, and copies from this server need 15/.test(none.text)
+                && nine.status === 426 && /reads replica format 9, and copies from this server need 15; update it/.test(nine.text)
+                && ten.status === 426 && /reads replica format 10, and copies from this server need 15; update it/.test(ten.text)
+                && eleven.status === 426 && /reads replica format 11, and copies from this server need 15; update it/.test(eleven.text)
+                && fourteen.status === 426 && needs.test(fourteen.text) && JSON.parse(fourteen.text).needsReplicaFormat === 15
                 && needs.test(log?.[0]?.reason ?? '') && log?.[0]?.auth === 'rejected',
-                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 13 (no format, 7 before photos by reference, 9 before event times, `
-                + `10 before the let-in, 11 before repeating events) is refused, 426, and M's Replication Access log says why `
-                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status}; ${ten.status}; ${eleven.status} ${eleven.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
+                `a copy asked for by a standby older than OLDEST_STANDBY_FORMAT 15 (no format, 7 before photos by reference, 9 before event times, `
+                + `10 before the let-in, 11 before repeating events, 14 before money in whole hundredths) is refused, 426, and M's Replication Access log says why `
+                + `(${none.status} ${none.text.slice(0, 120)}; ${seven.status}; ${nine.status}; ${ten.status}; ${eleven.status}; ${fourteen.status} ${fourteen.text.slice(0, 160)}; ${JSON.stringify(log?.[0])})`);
             const current = await open(String(await main.send('replica-format')));
             await closeIfOpened(current);
             assert(current.status === 200, `one at this build's REPLICA_FORMAT opens its copy (${current.status} ${current.text.slice(0, 120)})`);
@@ -657,7 +663,7 @@ async function main(): Promise<void> {
             await fresh.kill();
         });
 
-        // Two more standbys of M: step 8's copies with the token, step 9's with the admin password; step 10 takes over on each.
+        // Two more standbys of M, each copying with the token (steps 8 and 9); step 10 takes over on each.
         let standbyA: NodeProc | null = null;
         let standbyB: NodeProc | null = null;
         /** M's recovery code, made once (a second would replace it): steps 10 and 11 take over with it. */
@@ -706,15 +712,13 @@ async function main(): Promise<void> {
                 + `and, landed, keeps them no longer (${refetched.length} fetched again; before: all ${firstFetched.size})`);
         });
 
-        await step('9. a standby copying with the admin password: one scrypt for the whole copy; a wrong or changed password pays in full', async () => {
-            // An install from before token-only: M's flag reads as off, and a standby copies with M's admin password.
-            await main.send('token-only', { on: false });
+        await step('9. a second standby copies with the token: one scrypt for the whole copy; an old admin password opens nothing and costs M nothing', async () => {
             fs.mkdirSync(dir('standby-b'), { recursive: true });
             fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby-b'), 'genesis.json'));
             const b = await spawnNode(SCRIPT, dir('standby-b'), envS);
             nodes.push(b);
             standbyB = b;
-            await b.send('setup-standby-pw', { primaryUrl: px.url, password: PW_MAIN, primaryPeerId: main.ready.peerId });
+            await b.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
             const g0 = gets();
             const o0 = px.opened.length;
             const k0: number = await main.send('count-scrypts');
@@ -722,32 +726,18 @@ async function main(): Promise<void> {
             const fetched = gets() - g0;
             const pages = px.opened.length > o0 ? pagesOf(px).length : 0;
             const k1: number = await main.send('count-scrypts');
-            assert(b1.ok === true && b1.staged === true && fetched > 20 && k1 - k0 >= 1 && k1 - k0 <= 2,
-                `its first copy lands, and M checked the admin password with scrypt ${k1 - k0} time(s) for ${pages} pages and ${fetched} objects `
+            assert(b1.ok === true && b1.staged === true && fetched > 20 && k1 - k0 >= 0 && k1 - k0 <= 2,
+                `its first copy lands, and M checked the token with scrypt ${k1 - k0} time(s) for ${pages} pages and ${fetched} objects `
                 + `(${JSON.stringify(b1)}; before: once per request, ${fetched + pages}+)`);
-            // Straight to M's copy routes: a wrong password pays its scrypt, 401, each time; the right one, remembered, none.
-            const at = (password: string) => fetch(`${main.base}/api/local/admin/sync-object/${made[0].sha256}`, { headers: { 'X-Admin-Password': password } })
+            // Straight to M's copy routes with an old admin password: refused, 401, each time, before any check runs.
+            const at = (headers: Record<string, string>) => fetch(`${main.base}/api/local/admin/sync-object/${made[0].sha256}`, { headers })
                 .then(async (r) => { await r.arrayBuffer(); return r.status; });
             const k2: number = await main.send('count-scrypts');
-            const wrong = [await at('Not-The-Main-Pw-1234!'), await at(`${PW_MAIN}x`)];
+            const refused = [await at({ 'X-Admin-Password': OLD_PW }), await at({ 'X-Admin-Password': `${OLD_PW}x` }), await at({ 'X-Admin-Password': OLD_PW })];
             const k3: number = await main.send('count-scrypts');
-            const right = await at(PW_MAIN);
-            const k4: number = await main.send('count-scrypts');
-            assert(wrong.every((st) => st === 401) && k3 - k2 === 2 && right === 200 && k4 === k3,
-                `two wrong passwords are refused, 401, and pay a scrypt each (${JSON.stringify(wrong)}, ${k3 - k2}); the right one is taken with none (${right}, ${k4 - k3})`);
-            // The admin password changed on M: the old one, remembered, is refused at once; the new one pays its scrypt once.
-            const changed = 'Photos-By-Ref-Main-Pw-Changed-7731!';
-            await main.send('set-admin-password', { password: changed });
-            const old = await at(PW_MAIN);
-            const k5: number = await main.send('count-scrypts');
-            const fresh = [await at(changed), await at(changed)];
-            const k6: number = await main.send('count-scrypts');
-            await main.send('set-admin-password', { password: PW_MAIN });
-            assert(old === 401 && fresh.every((st) => st === 200) && k6 - k5 === 1,
-                `changed on M, the old password is refused at once (${old}); the new one is taken, one scrypt for two requests (${JSON.stringify(fresh)}, ${k6 - k5})`);
-            // From here on B copies with the token, and M is token-only again.
-            await b.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
-            await main.send('token-only', { on: true });
+            const withToken = await at({ 'X-Replication-Token': replicationToken });
+            assert(refused.every((st) => st === 401) && k3 - k2 === 0 && withToken === 200,
+                `an old admin password is refused, 401, and costs M no scrypt (${JSON.stringify(refused)}, ${k3 - k2}); the token still gets the photo (${withToken})`);
         });
 
         await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: no object request is sent to the old main server after it', async () => {
@@ -773,11 +763,10 @@ async function main(): Promise<void> {
                 px.holdObjects = true;
                 const quiet = await until(`the standby's fetch to wait on its ${OBJECT_CONCURRENCY} requests, held`, () => px.held.length >= OBJECT_CONCURRENCY, 30_000);
                 const asksAtConfirm = px.objectAsks;
-                // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key
-                // session the node makes (takeover-test-harness.ts owner-session).
-                const pw: Record<string, string> = await node.send('owner-session');
-                const openT = await post(node.base, '/api/local/admin/takeover/open', { code }, pw);
-                const confirmT = await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+                // The take-over goes under an owner's key session the node makes (takeover-test-harness.ts owner-session).
+                const asOwner: Record<string, string> = await node.send('owner-session');
+                const openT = await post(node.base, '/api/local/admin/takeover/open', { code }, asOwner);
+                const confirmT = await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, asOwner);
                 px.holdObjects = false;
                 for (const release of px.held.splice(0)) release();
                 require_(fetchedSome && quiet && confirmT.status === 200, `the take-over is confirmed mid-fetch (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
@@ -820,10 +809,10 @@ async function main(): Promise<void> {
             const g0 = gets();
             const pulling = standby.send('pull', { whole: true });
             const fetchedSome = await until('S to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
-            // Step 7c: under an owner's key session the standby makes, as above.
-            const pw: Record<string, string> = await standby.send('owner-session');
-            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw);
-            const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+            // Under an owner's key session the standby makes, as above.
+            const asOwner: Record<string, string> = await standby.send('owner-session');
+            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code }, asOwner);
+            const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, asOwner);
             const asksAtConfirm = px.objectAsks;
             require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
             const stopped = await pulling;
@@ -892,27 +881,6 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
             syncBuiltinESMExports();
         }
         return scrypts;
-    },
-    /** Whether copies of this main server take the replication token only (off: an install from before token-only). */
-    'token-only': async (a: { on: boolean }) => {
-        const { updateLocalConfig } = await import('./config/local-config.js');
-        updateLocalConfig({ replicationTokenOnly: a.on ? true : undefined });
-        return true;
-    },
-    /** This server's admin password, changed as Settings changes it: a new hash and salt. */
-    'set-admin-password': async (a: { password: string }) => {
-        const { updateLocalConfig, hashPassword } = await import('./config/local-config.js');
-        const { hash, salt } = hashPassword(a.password);
-        updateLocalConfig({ adminHash: hash, salt });
-        return true;
-    },
-    /** A standby that copies with its main server's admin password, as one set up before the replication token. */
-    'setup-standby-pw': async (a: { primaryUrl: string; password: string; primaryPeerId: string }) => {
-        const { addConnector } = await import('./connector-manager.js');
-        const { updateLocalConfig } = await import('./config/local-config.js');
-        pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
-        updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupAdminPassword: a.password, backupReplicationToken: null });
-        return true;
     },
     /** The replication token this main server takes, set (as the operator rotates it) or, with null, revoked. */
     'set-token': async (a: { token: string | null }) => {
@@ -1009,7 +977,7 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         const { db } = await import('./db/db.js');
         db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
                     INSERT INTO members (public_key, callsign, updated_at) SELECT lower(hex(randomblob(32))), 'Many ' || i, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM n`).run(a.n);
-        db.prepare(`INSERT INTO accounts (public_key, balance) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'`).run();
+        db.prepare(`INSERT INTO accounts (public_key, balance_c) SELECT public_key, 0 FROM members WHERE callsign LIKE 'Many %'`).run();
         return true;
     },
     /** Each listing photo's URL as this server hands it out with its listing (its key included). */

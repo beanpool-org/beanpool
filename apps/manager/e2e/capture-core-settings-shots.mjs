@@ -101,7 +101,7 @@ try {
             const c = withCore({ locked: false })(json);
             return { ...c, settings: { ...c.settings,
                 beans: { ...c.settings.beans, value: false, configured: false, lock: null },
-                knownFloor: { ...c.settings.knownFloor, value: { on: false, floor: 1000, cap: 2000, capMax: 5000 }, lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } } };
+                knownFloor: { ...c.settings.knownFloor, value: { on: false, floor: 100000, cap: 200000, capMax: 500000 }, lock: { code: 'beans_off', why: 'Beans are off, so there is no floor.' } } } };
         } } },
             async (p) => {
                 await p.getByTestId('core-walk-start').click();

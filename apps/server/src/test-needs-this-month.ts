@@ -21,7 +21,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'NeedsMonth123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -32,13 +31,13 @@ import { consumeHandshakeToken, mintHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { communityTotals } from './engine/community-health.js';
 import { NEEDS_POSTED_SQL, NEEDS_REQUESTS_SQL, needsThisMonth } from './engine/needs-this-month.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -59,7 +58,7 @@ interface PostOpts { type?: string; originNode?: string; shownFrom?: string; cre
 /** A Need (or other post) asked at `at`, by `author`: a stored time as given, so a SQLite-form one can be tried too. */
 function addPost(author: string, at: string, opts: PostOpts = {}): string {
     const id = `post-${++n}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, audience_scope)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status, active, origin_node, shown_from_host, created_via, audience_scope)
                 VALUES (?, ?, 'general', ?, '', 5, ?, ?, ?, 1, ?, ?, ?, ?)`)
         .run(id, opts.type ?? 'need', id, author, at, opts.status ?? 'active', opts.originNode ?? null, opts.shownFrom ?? null, opts.createdVia ?? null, opts.audience ?? 'public');
     return id;
@@ -67,7 +66,7 @@ function addPost(author: string, at: string, opts: PostOpts = {}): string {
 
 /** A neighbour's request on a Need: on a Need the asker is the buyer and the helper the seller. */
 function addRequest(postId: string, asker: string, helper: string, at: string, status = 'requested'): void {
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 5, ?, ?)`)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 5, ?, ?)`)
         .run(`deal-${++n}`, postId, asker, helper, status, at);
 }
 
@@ -98,7 +97,6 @@ const read = () => needsThisMonth(MID);
 
 async function main(): Promise<void> {
     console.log('Needs this month\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const base = `https://localhost:${await startHttpsServer(0)}`;
@@ -112,7 +110,8 @@ async function main(): Promise<void> {
         const nonce = crypto.randomBytes(16).toString('hex');
         return {
             'X-Public-Key': pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), priv).toString('base64'),
+            'X-Signature': signRequest(priv, { method: 'GET', path, timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         };
     };
     const reset = () => { resetGatewayRateLimit(); resetAdminRateLimit(); resetAdminAuthTarpit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -361,7 +360,7 @@ async function main(): Promise<void> {
     }
     {
         // posts has no index on type, so the read walks the table once: 50,000 other posts beside the Needs, one pass.
-        const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, audience_scope)
+        const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status, active, audience_scope)
                                    VALUES (?, 'offer', 'general', 't', '', 5, ?, ?, 'active', 1, 'public')`);
         db.transaction(() => { for (let i = 0; i < 50_000; i++) insert.run(`bulk-${i}`, 'k'.repeat(64), iso(MID.getTime() - ((i % 90) + 1) * DAY)); })();
         const started = process.hrtime.bigint();

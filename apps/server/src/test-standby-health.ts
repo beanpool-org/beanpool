@@ -39,9 +39,10 @@
  *     the incident stays, and the banner and the preview say what didn't match. Then a whole copy the main
  *     server sends without its hashes (as it does when written to while making one): recorded as not compared in full, it
  *     is no all-clear (review 4118340714): the incident stays open, and the preview still warns and names the older exact copy.
- *  5. The report can't be forged into anything: too long, not JSON, a field out of shape, sent with the admin password
- *     instead of the replication token, or with a wrong token: ignored. A well-formed one with the token from a second
- *     standby is kept (so the refusals aren't vacuous), and an owner stops watching it.
+ *  5. The report can't be forged into anything: too long, not JSON, a field out of shape, sent with an old admin
+ *     password instead of the replication token (no credential: the pull refused), or with a wrong token: ignored. A
+ *     well-formed one with the token from a second standby is kept (so the refusals aren't vacuous), and an owner stops
+ *     watching it.
  *  6. The main server dies; the standby, whose last whole copy did not match, is taken over with the recovery code. The
  *     preview says in plain words what didn't match and when the last exact copy was, and the take-over goes ahead.
  *  7. The old main server comes back as a standby, still holding the incident it had open: its owner's admin queue and
@@ -60,14 +61,15 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the nodes' own self-signed certificates
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Standby-Health-Main-Pw-4471!';
-const PW_STANDBY = 'Standby-Health-Standby-Pw-902!';
+/** What an older install's admin password looked like: no credential now (step 5 sends it). */
+const OLD_PW = 'Standby-Health-Main-Pw-4471!';
 const HOUR = 60 * 60_000;
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -121,12 +123,12 @@ async function child(): Promise<void> {
             for (const [pk, callsign] of [[a.ann, 'Ann'], [a.bo, 'Bo'], [a.cy, 'Cy']]) {
                 db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                     .run(pk, callsign, new Date().toISOString(), a.gwen, 'TEST');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             grantNodeRole(a.ann, 'admin', a.gwen);
             grantNodeRole(a.bo, 'moderator', a.gwen);
-            // Beans that moved, so a copy that makes more is one the ledger check refuses.
-            payFromCommons(a.cy, 5, 'a commons grant', { allowDeficit: true });
+            // Beans that moved, so a copy that makes more is one the ledger check refuses: 5 Beans, 500 hundredths.
+            payFromCommons(a.cy, 500, 'a commons grant', { allowDeficit: true });
             // Every one of them has a phone that registered with this server.
             for (const [pk, token] of [[a.gwen, 'ExponentPushToken[gwen-owner]'], [a.ann, 'ExponentPushToken[ann-admin]'],
                 [a.bo, 'ExponentPushToken[bo-moderator]'], [a.cy, 'ExponentPushToken[cy-member]']]) {
@@ -216,7 +218,10 @@ async function child(): Promise<void> {
             db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('test_touch', ?)").run(new Date().toISOString());
             return true;
         },
-        /** A payload the main server signs that makes 50 Beans for one account: only the ledger's check stands in its way. */
+        /**
+         * A payload the main server signs that makes 50 Beans (5000 hundredths, the copy's `balance_c`) for one account: only
+         * the ledger's check stands in its way.
+         */
         'forge-mint': async (a: { publicKey: string }) => {
             const { exportSyncState, signSyncPayload } = await import('./state-engine.js');
             const { getPrivateKey } = await import('./p2p.js');
@@ -224,7 +229,7 @@ async function child(): Promise<void> {
             const payload: any = await exportSyncState(peerIdFromPrivateKey(getPrivateKey()).toString());
             delete payload.signature;
             delete payload.publicKey;
-            payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance: x.balance + 50 } : x));
+            payload.accounts = payload.accounts.map((x: any) => (x.publicKey === a.publicKey ? { ...x, balance_c: x.balance_c + 5000 } : x));
             payload.generatedAt = new Date().toISOString();
             // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
             return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
@@ -233,8 +238,8 @@ async function child(): Promise<void> {
         'photo-main-cannot-read': async (a: { author: string }) => {
             const { db } = await import('./db/db.js');
             const at = new Date().toISOString();
-            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, created_at, updated_at)
-                VALUES ('plums-lost-photo', 'offer', 'food', 'Plums', 'Plums, from Gwen', 2, ?, 'active', ?, ?)`).run(a.author, at, at);
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, created_at, updated_at)
+                VALUES ('plums-lost-photo', 'offer', 'food', 'Plums', 'Plums, from Gwen', 200, ?, 'active', ?, ?)`).run(a.author, at, at);
             return db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num, updated_at, storage_key, mime)
                 VALUES ('plums-lost-photo', NULL, 0, ?, 'photos/lost-on-the-main-server.webp', 'image/webp')`).run(at).changes;
         },
@@ -248,8 +253,8 @@ async function child(): Promise<void> {
             delete payload.publicKey;
             const at = new Date().toISOString();
             payload.accounts = [
-                { publicKey: '', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
-                { publicKey: 'zz\ud800', balance: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
+                { publicKey: '', balance_c: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
+                { publicKey: 'zz\ud800', balance_c: 0, lastUpdatedAt: at, lastDemurrageEpoch: 0 },
             ];
             payload.generatedAt = at;
             // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
@@ -350,7 +355,7 @@ interface Answer { status: number; body: any }
 
 /**
  * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
- * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ * The node has no admin password: `admin` is an owner's key session the node makes.
  */
 async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
@@ -359,7 +364,8 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -439,20 +445,20 @@ async function main(): Promise<void> {
     const doors: MainServerDoor[] = [];
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const [gwen, ann, bo, cy] = ['Gwen', 'Ann', 'Bo', 'Cy'].map(newId);
     const OWNER_TOKEN = 'ExponentPushToken[gwen-owner]';
 
     try {
         // ── 1. A healthy standby ──
         console.log('\n— 1. a healthy standby —');
-        let main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        let main = await spawnNode(SCRIPT, dir('main'), env('primary'));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, gwen: gwen.pk, ann: ann.pk, bo: bo.pk, cy: cy.pk });
         let m = `https://localhost:${await main.send('serve')}`;
         fs.mkdirSync(dir('standby'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        let standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         const door = await mainServerDoor(main.base);
         doors.push(door);
@@ -497,8 +503,14 @@ async function main(): Promise<void> {
         // Version 22: vouchers (V1): members with credit_committee, invite_codes with vouch_amount, and three new tables,
         // vouchers, voucher_allocations and room_gifts (engine/vouchers.ts), each hashed in the whole copy a standby checks.
         // Version 23: invite_codes with voucher_level and voucher_outcome (a names-bound invite that makes a voucher, amend3 A1).
-        assert(snap?.tableHashes?.v === 23 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
-            'vouchers', 'voucher_allocations', 'room_gifts'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 24: a new table, standing_deals, and marketplace_transactions with standing_id and period_no (standing deals, S1).
+        // Version 25: recovery_shares with sso_find_hash (a restore finds the account from the sign-in alone, S0).
+        // Version 26: join_requests with via_post_id and via_sharer_pubkey (where a request to join came from, door A3).
+        // Version 27: standing_deals without held_back_reason (standing deals paid at the start of each period, U1).
+        // Version 28: members with inviter_shown (a member's "Show who invited me to other members", slice I3).
+        // Version 29: money in whole hundredths: every money column INTEGER and named *_c, members without legacy_credit_floor.
+        assert(snap?.tableHashes?.v === 29 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
+            'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'recovery_shares', 'join_requests'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');
@@ -523,14 +535,14 @@ async function main(): Promise<void> {
         // no search keywords, and a standby restarted on its own fills them in at its boot, before its main server does.
         const cachedListing = await main.send('cache-peer-listing', {
             peerId: '12D3KooWHealthNeighbourPeer000000000000000000000',
-            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', credits: 2,
+            listing: { id: 'nb-1', type: 'offer', category: 'food', title: 'Neighbour jam', description: 'From next door', price_c: 200,
                 priceType: 'fixed', authorPublicKey: newId('Nia').pk, authorCallsign: 'Nia', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         });
         require_(cachedListing?.cached === 1, `M caches a linked community's listing (${brief(cachedListing)})`);
         require_((await pull()).ok, 'S copies it');
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         await main.send('touch');
         const afterRestart = await pull(true);
@@ -613,7 +625,7 @@ async function main(): Promise<void> {
         const banner = diag.body?.standbyHealth;
         assert(banner?.incident?.lines?.length === 1 && /has not made a copy of this server since/.test(banner.incident.lines[0]) && banner.incident.pushed === true
             && banner.incident.whatToDo.some((w: string) => /running and can reach this one/.test(w)),
-            `Settings (the owner, by the node password) shows the banner: "${banner?.incident?.lines?.[0]}"`);
+            `Settings (the owner, by their key session) shows the banner: "${banner?.incident?.lines?.[0]}"`);
         health = await main.send('health-check', {});
         pushes = await pushesSoFar();
         assert(health?.incident?.id === incident1?.id && pushes.length === 1, `a second check: the same incident, no second push (${pushes.length})`);
@@ -625,7 +637,7 @@ async function main(): Promise<void> {
         await sleep(2000);
         await main.send('checkpoint');
         await main.kill();
-        main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        main = await spawnNode(SCRIPT, dir('main'), env('primary'));
         nodes.push(main);
         m = `https://localhost:${await main.send('serve')}`;
         door.retarget(main.base);
@@ -713,7 +725,7 @@ async function main(): Promise<void> {
         // nobody is told. Once a copy came for it, it is taken: another restart asks for it no more.
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
         assert(await standby.send('plant', { value: 'planted before a restart' }) === 1, 'planted again');
@@ -724,7 +736,7 @@ async function main(): Promise<void> {
             `S's whole copy differs, and asks for its held force-resync (${brief(rec?.lastWhole)})`);
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         door.next({ status: 503, body: { error: 'Snapshot unavailable: node signing identity not ready' } });
         const unanswered = await pull();
@@ -741,7 +753,7 @@ async function main(): Promise<void> {
             `the copy healed by itself across the restart: no incident, no push (${brief({ incident: health?.state.incident, pushes: pushes.length })})`);
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         const afterTaken = await pull();
         assert(afterTaken.ok && afterTaken.mode !== 'resync', `a resync taken is taken: S restarts again, and its next pull is a ${afterTaken.mode}, not another`);
@@ -791,7 +803,7 @@ async function main(): Promise<void> {
         // M's), so the check after it still differs. That is when the owners are told.
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
         assert(await standby.send('plant', { value: 'planted again' }) === 1, 'planted again');
@@ -818,7 +830,7 @@ async function main(): Promise<void> {
         // and the incident stays open, the same one. The retry is served a copy whose listings aren't M's again: not cured.
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         require_(await standby.send('resync-slot', { agoMs: 6 * HOUR + 60_000 }) === true, "S's last force-resync, in its record, is more than six hours ago");
         await main.send('touch');
@@ -842,7 +854,7 @@ async function main(): Promise<void> {
         // doesn't mend never loops.
         await standby.send('checkpoint');
         await standby.kill();
-        standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+        standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
         nodes.push(standby);
         await main.send('touch');
         const afterRestart4 = await pull(true);
@@ -903,23 +915,19 @@ async function main(): Promise<void> {
             ['a count out of range', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"fails":0', '"fails":-1') }],
             ['a table that is not copied', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"differs":[]', '"differs":["sqlite_master"]') }],
             ['a "mending" that is not a yes or no', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"healing":false', '"healing":"yes"') }],
-            ['the admin password, not the token', { 'X-Admin-Password': PW_MAIN, 'X-Standby-Report': good(newIdHex()) }],
         ];
-        // A main server takes the admin password for a pull only with token-only off (its default is on): off, so that
-        // pull is served and only its report is left unheard.
-        // Step 7c: the password alone opens no admin route with 2FA off: the owner's Settings calls go under an owner's key
-        // session the node makes (takeover-test-harness.ts owner-session).
+        // The owner's Settings calls go under an owner's key session the node makes (takeover-test-harness.ts owner-session).
         const mOwner: Record<string, string> = await main.send('owner-session');
-        const tokenOnlyOff = await post(main.base, '/api/local/admin/replication-token/mode', { tokenOnly: false }, mOwner);
-        require_(tokenOnlyOff.status === 200 && tokenOnlyOff.body?.tokenOnly === false, `M takes the admin password for pulls, for this step (${brief(tokenOnlyOff.body)})`);
         const statuses: string[] = [];
         for (const [what, headers] of forged) {
             const r = await deltaWith(headers);
             statuses.push(`${what} ${r.status}${r.ok ? '' : ` ${(await r.text()).slice(0, 80)}`}`);
         }
         const wrongToken = await deltaWith({ 'X-Replication-Token': 'f'.repeat(64), 'X-Standby-Report': good(newIdHex()) });
-        assert(statuses.every((s) => s.endsWith(' 200')) && wrongToken.status === 401,
-            `each pull is answered as ever: a report never fails one (${statuses.join('; ')}; a wrong token ${wrongToken.status})`);
+        // An old admin password in place of the token is no credential: the pull is refused, and its report unheard.
+        const oldPassword = await deltaWith({ 'X-Admin-Password': OLD_PW, 'X-Standby-Report': good(newIdHex()) });
+        assert(statuses.every((s) => s.endsWith(' 200')) && wrongToken.status === 401 && oldPassword.status === 401,
+            `each pull is answered as ever: a report never fails one (${statuses.join('; ')}; a wrong token ${wrongToken.status}; an old admin password ${oldPassword.status})`);
         assert(JSON.stringify(await standbysNow()) === JSON.stringify(known), `and none of those reports is kept: no new standby, the one there unchanged (${brief(await standbysNow())})`);
         const second = newIdHex();
         const kept = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(second) });
@@ -965,7 +973,7 @@ async function main(): Promise<void> {
         assert(confirmed.status === 200, `the confirm goes ahead: never blocked by the copy (${confirmed.status} ${brief(confirmed.body)})`);
         if (confirmed.status === 200) {
             const exit = await standby.exited;
-            standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
+            standby = await spawnNode(SCRIPT, dir('standby'), env('backup'));
             nodes.push(standby);
             assert(exit === 0 && standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId,
                 `S restarted as the main server, with M's identity (${standby.ready.role})`);
@@ -973,7 +981,7 @@ async function main(): Promise<void> {
 
         // ── 7. The old main server comes back as a standby ──
         console.log('\n— 7. the old main server comes back as a standby —');
-        const demoted = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'backup'));
+        const demoted = await spawnNode(SCRIPT, dir('main'), env('backup'));
         nodes.push(demoted);
         const d = `https://localhost:${await demoted.send('serve')}`;
         const heldThere = await demoted.send('health');

@@ -117,7 +117,7 @@ async function main() {
     }
     // Gone, and back.
     fs.rmSync(CONFIG);
-    assert(lc.getLocalConfig().communityName === null && lc.getLocalConfig().adminHash === null, 'a missing file reads as a new install, as before');
+    assert(lc.getLocalConfig().communityName === null && lc.getLocalConfig().callsign === null, 'a missing file reads as a new install, as before');
     lc.saveLocalConfig({ ...lc.getLocalConfig(), communityName: 'Back' });
     age();
     assert(lc.getLocalConfig().communityName === 'Back', 'and the file written again is read');
@@ -280,10 +280,12 @@ async function main() {
         assert(engine.confirmationDialOn(db) === false, '…raw SQL that switches it off is the next read');
         db.prepare('DELETE FROM node_config WHERE key = ?').run(engine.CONFIRMATION_DIAL_KEY);
         assert(engine.confirmationDialOn(db) === true, '…and its removal');
-        const shown = kf.setKnownFloorSettings('owner', { confirmation: false, creditCap: 3000, knownFloor: 1500 });
-        assert(shown.confirmation === false && shown.creditCap === 3000 && shown.knownFloor === 1500, 'the owner console\'s setter: the next read says what was set');
-        assert(engine.confirmationDialOn(db) === false && engine.savedCreditCap(db) === 3000 && engine.knownFloor(db) === 1500, '…through the engine\'s reads too');
-        const back = kf.setKnownFloorSettings('owner', { confirmation: true, creditCap: 2000, knownFloor: 1000 });
+        // The cap and the known floor are whole hundredths (`*_c`): 3000 and 1500 Beans.
+        const hc = (beans: number) => Math.round(beans * 100);
+        const shown = kf.setKnownFloorSettings('owner', { confirmation: false, creditCap_c: hc(3000), knownFloor_c: hc(1500) });
+        assert(shown.confirmation === false && shown.creditCap_c === hc(3000) && shown.knownFloor_c === hc(1500), 'the owner console\'s setter: the next read says what was set');
+        assert(engine.confirmationDialOn(db) === false && engine.savedCreditCap(db) === hc(3000) && engine.knownFloor(db) === hc(1500), '…through the engine\'s reads too');
+        const back = kf.setKnownFloorSettings('owner', { confirmation: true, creditCap_c: hc(2000), knownFloor_c: hc(1000) });
         assert(back.confirmation === true && engine.confirmationDialOn(db) === true, 'switched back on: the next read');
         cli.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(engine.CONFIRMATION_DIAL_KEY, 'off');
         assert(engine.confirmationDialOn(db) === false, 'the dial switched off by another connection is the next read');
@@ -307,11 +309,15 @@ async function main() {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         return { hex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
     };
-    const TEXT = 'a fixed statement';
-    /** Whether verifyStatementSignature accepts `sig` as `hex`'s signature of TEXT (the old form, accepted until the switch day). */
+    // A statement in format 2 (the only form since the cutover, CUT4), for the host a test node takes as its own.
+    const HOST = 'localhost';
+    const TEXT = `a fixed statement\n${HOST}`;
+    /** Whether verifyStatementSignature accepts `sig` as `hex`'s signature of TEXT, signed for HOST. */
     const accepts = (hex: string, sig: string): boolean =>
-        ms.verifyStatementSignature({ signature: sig, pubKeyHex: hex, boundText: () => '', oldTexts: [TEXT] }).ok === true;
-    const signOf = (s: { privateKey: crypto.KeyObject }, text = TEXT): string => crypto.sign(null, Buffer.from(text, 'utf-8'), s.privateKey).toString('base64');
+        ms.verifyStatementSignature({ signature: sig, pubKeyHex: hex, boundText: (host: string) => `a fixed statement\n${host}`, signedFor: HOST }).ok === true;
+    /** `text` signed as a format-2 statement is: 0xFF, then the text. */
+    const signOf = (s: { privateKey: crypto.KeyObject }, text = TEXT): string =>
+        crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(text, 'utf-8')]), s.privateKey).toString('base64');
 
     {
         const s = signer();

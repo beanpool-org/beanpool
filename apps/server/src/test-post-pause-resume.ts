@@ -18,6 +18,7 @@ import { initStateEngine, getPosts } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -35,7 +36,7 @@ function makeMember(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -44,10 +45,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -70,7 +72,7 @@ async function main() {
     // Create a post as author
     const createRes = await signedFetch('POST', '/api/marketplace/posts', author, {
         type: 'offer', category: 'general', title: 'Garden Tools', description: 'Rake and shovel',
-        credits: 10, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
+        price_c: 1000 /* 10 Beans, in whole hundredths */, priceType: 'fixed', authorPublicKey: author.pubKeyHex, photos: TEST_PHOTOS,
     });
     assert(createRes.status === 200, 'author created a post successfully');
     const postId = createRes.body?.post?.id;

@@ -33,16 +33,16 @@ const post = (p: Partial<MarketplacePost>) => ({
 }) as MarketplacePost;
 
 const POSTS = [
-    post({ id: 'p-couch', type: 'need', title: 'Help moving a couch', authorPublicKey: ana, authorCallsign: 'Ana', status: 'active', credits: 30, photos: ['/api/marketplace/posts/p-couch/photos/0'] }),
-    post({ id: 'p-mend', type: 'offer', title: 'Mending jackets', authorPublicKey: ana, authorCallsign: 'Ana', status: 'active', credits: 15 }),
-    post({ id: 'p-bike', type: 'offer', title: 'Bike tune-up', authorPublicKey: kofi, authorCallsign: 'Kofi', status: 'pending', acceptedBy: ana, credits: 20 }),
+    post({ id: 'p-couch', type: 'need', title: 'Help moving a couch', authorPublicKey: ana, authorCallsign: 'Ana', status: 'active', price_c: 3000, photos: ['/api/marketplace/posts/p-couch/photos/0'] }),
+    post({ id: 'p-mend', type: 'offer', title: 'Mending jackets', authorPublicKey: ana, authorCallsign: 'Ana', status: 'active', price_c: 1500 }),
+    post({ id: 'p-bike', type: 'offer', title: 'Bike tune-up', authorPublicKey: kofi, authorCallsign: 'Kofi', status: 'pending', acceptedBy: ana, price_c: 2000 }),
 ];
 const TXS: MarketplaceTransaction[] = [
-    { id: 'tx-pending-buy', postId: 'p-bike', postTitle: 'Bike tune-up', buyerPublicKey: ana, buyerCallsign: 'Ana', sellerPublicKey: kofi, sellerCallsign: 'Kofi', credits: 20, status: 'pending', createdAt: '2026-10-15T12:00:00Z', coverImage: '/api/marketplace/posts/p-bike/photos/0' } as MarketplaceTransaction,
-    { id: 'tx-pending-sell', postId: 'p-weed', postTitle: 'Weed the veggie patch', buyerPublicKey: tama, buyerCallsign: 'Tama', sellerPublicKey: ana, sellerCallsign: 'Ana', credits: 10, status: 'pending', createdAt: '2026-10-14T00:00:00Z' },
-    { id: 'tx-completed-sold', postId: 'p-mend', postTitle: 'Mending jackets', buyerPublicKey: mere, buyerCallsign: 'Mere', sellerPublicKey: ana, sellerCallsign: 'Ana', credits: 15, status: 'completed', createdAt: '2026-10-09T00:00:00Z' },
-    { id: 'tx-cancelled', postId: 'p-bread', postTitle: 'Rye bread', buyerPublicKey: ana, buyerCallsign: 'Ana', sellerPublicKey: mere, sellerCallsign: 'Mere', credits: 8, status: 'cancelled', createdAt: '2026-10-11T00:00:00Z' },
-    { id: 'tx-rejected', postId: 'p-bread', postTitle: 'Rye bread', buyerPublicKey: ana, buyerCallsign: 'Ana', sellerPublicKey: mere, sellerCallsign: 'Mere', credits: 8, status: 'rejected', createdAt: '2026-10-12T00:00:00Z' },
+    { id: 'tx-pending-buy', postId: 'p-bike', postTitle: 'Bike tune-up', buyerPublicKey: ana, buyerCallsign: 'Ana', sellerPublicKey: kofi, sellerCallsign: 'Kofi', amount_c: 2000, status: 'pending', createdAt: '2026-10-15T12:00:00Z', coverImage: '/api/marketplace/posts/p-bike/photos/0' } as MarketplaceTransaction,
+    { id: 'tx-pending-sell', postId: 'p-weed', postTitle: 'Weed the veggie patch', buyerPublicKey: tama, buyerCallsign: 'Tama', sellerPublicKey: ana, sellerCallsign: 'Ana', amount_c: 1000, status: 'pending', createdAt: '2026-10-14T00:00:00Z' },
+    { id: 'tx-completed-sold', postId: 'p-mend', postTitle: 'Mending jackets', buyerPublicKey: mere, buyerCallsign: 'Mere', sellerPublicKey: ana, sellerCallsign: 'Ana', amount_c: 1500, status: 'completed', createdAt: '2026-10-09T00:00:00Z' },
+    { id: 'tx-cancelled', postId: 'p-bread', postTitle: 'Rye bread', buyerPublicKey: ana, buyerCallsign: 'Ana', sellerPublicKey: mere, sellerCallsign: 'Mere', amount_c: 800, status: 'cancelled', createdAt: '2026-10-11T00:00:00Z' },
+    { id: 'tx-rejected', postId: 'p-bread', postTitle: 'Rye bread', buyerPublicKey: ana, buyerCallsign: 'Ana', sellerPublicKey: mere, sellerCallsign: 'Mere', amount_c: 800, status: 'rejected', createdAt: '2026-10-12T00:00:00Z' },
 ];
 const others = ['Help moving a couch', 'Mending jackets', 'Bike tune-up', 'Weed the veggie patch', 'Rye bread', 'Ana', 'Kofi', 'Mere', 'Tama'];
 

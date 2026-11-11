@@ -8,6 +8,8 @@
  */
 import type { WaitingLines } from './community-shape-card.js';
 import type { OpenedEntry } from './names-list-flows.js';
+import { debtBeans } from './names-list-debts.js';
+import { formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
 
 export type HealthReason = 'past_debt_line' | 'quiet_in_debit';
 const REASONS: readonly string[] = ['past_debt_line', 'quiet_in_debit'] satisfies HealthReason[];
@@ -15,8 +17,8 @@ const REASONS: readonly string[] = ['past_debt_line', 'quiet_in_debit'] satisfie
 export interface HealthException {
     memberPubkey: string;
     entryId: string;
-    balance: number;
-    floor: number;
+    balance_c: Hundredths;
+    floor_c: Hundredths;
     reasons: HealthReason[];
 }
 
@@ -24,10 +26,10 @@ export interface HealthException {
 export interface DepartedDebt {
     id: string;
     entryId: string | null;
-    amount: number;
+    amount_c: Hundredths;
     reason: 'removed' | 'account_deleted';
     removedAt: string;
-    repaid: number;
+    repaid_c: Hundredths;
     repaying: boolean;
 }
 
@@ -87,7 +89,7 @@ export function exceptionRows(body: HealthExceptionsBody, entries: Pick<OpenedEn
         // A reason this phone has no words for gets the balance and the floor alone, never the wrong line: reasonText
         // says "in debit with no sale" of anything else, and the node has a third (S1's step-back, which no app calls).
         const crossed = e.reasons.filter((r) => REASONS.includes(r));
-        const base = `${beans(e.balance)} of a ${beans(e.floor)} floor`;
+        const base = `${debtBeans(e.balance_c)} of a ${debtBeans(e.floor_c)} floor`;
         return {
             key: e.memberPubkey,
             name: nameFor(e.entryId, entries),
@@ -114,7 +116,7 @@ export function departedRows(body: HealthExceptionsBody, entries: Pick<OpenedEnt
     return body.departed.map((d) => ({
         key: d.id,
         name: nameFor(d.entryId, entries),
-        detail: `left owing ${beans(d.amount - d.repaid)}${d.repaid > 0 ? ` (${beans(d.repaid)} repaid)` : ''}${d.repaying ? ' · repaying' : ''}`,
+        detail: `left owing ${debtBeans(d.amount_c - d.repaid_c)}${d.repaid_c > 0 ? ` (${debtBeans(d.repaid_c)} repaid)` : ''}${d.repaying ? ' · repaying' : ''}`,
     }));
 }
 
@@ -156,15 +158,16 @@ export function tradeLookText(l: HealthLogLine): string {
  * which adds the pot in), and JSON sends NaN as null. Unknown, never 0.
  */
 export interface HealthTotals {
-    beansInCirculation: number | null;
-    sumOfCredit: number | null;
-    sumOfDebt: number | null;
+    beansInCirculation_c: Hundredths | null;
+    sumOfCredit_c: Hundredths | null;
+    sumOfDebt_c: Hundredths | null;
     membersInDebit: number | null;
-    commonsPot: number | null;
+    commonsPot_c: Hundredths | null;
     tradesThisMonth: number | null;
 }
 
-const TOTAL_KEYS = ['beansInCirculation', 'sumOfCredit', 'sumOfDebt', 'membersInDebit', 'commonsPot', 'tradesThisMonth'] as const;
+const TOTAL_KEYS = ['beansInCirculation_c', 'sumOfCredit_c', 'sumOfDebt_c', 'membersInDebit', 'commonsPot_c', 'tradesThisMonth'] as const;
+const MONEY_TOTALS: ReadonlySet<string> = new Set(['beansInCirculation_c', 'sumOfCredit_c', 'sumOfDebt_c', 'commonsPot_c']);
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -178,24 +181,24 @@ export function readHealthTotals(v: unknown): HealthTotals | null {
     const out = {} as HealthTotals;
     for (const k of TOTAL_KEYS) {
         const x = (t as Record<string, unknown>)[k];
-        if (num(x)) out[k] = x;
+        if (MONEY_TOTALS.has(k) ? isHundredths(x) : num(x)) out[k] = x as number;
         else if (x === null || x === undefined) out[k] = null;
         else return null;
     }
     return TOTAL_KEYS.some((k) => out[k] !== null) ? out : null;
 }
 
-const wholeBeans = (n: number | null) => (n === null ? HEALTH_COPY.totalUnknown : `${Math.round(n).toLocaleString('en')} Beans`);
+const wholeBeans = (c: Hundredths | null) => (c === null ? HEALTH_COPY.totalUnknown : `${formatHundredths(c, 'en')} Beans`);
 const count = (n: number | null) => (n === null ? HEALTH_COPY.totalUnknown : n.toLocaleString('en'));
 
 /** The totals as the screen lists them: the manager panel's labels, one label and value per line. */
 export function totalsRows(t: HealthTotals): Array<{ label: string; value: string }> {
     return [
-        { label: 'Beans in circulation', value: wholeBeans(t.beansInCirculation) },
-        { label: 'Credit held (all balances above 0)', value: wholeBeans(t.sumOfCredit) },
-        { label: 'Debt owed (all balances below 0)', value: wholeBeans(t.sumOfDebt) },
+        { label: 'Beans in circulation', value: wholeBeans(t.beansInCirculation_c) },
+        { label: 'Credit held (all balances above 0)', value: wholeBeans(t.sumOfCredit_c) },
+        { label: 'Debt owed (all balances below 0)', value: wholeBeans(t.sumOfDebt_c) },
         { label: 'Members in debit', value: count(t.membersInDebit) },
-        { label: 'Commons pot', value: wholeBeans(t.commonsPot) },
+        { label: 'Commons pot', value: wholeBeans(t.commonsPot_c) },
         { label: 'Trades this month', value: count(t.tradesThisMonth) },
     ];
 }

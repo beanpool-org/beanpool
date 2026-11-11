@@ -71,7 +71,7 @@ if (!DATA) { console.error('Set BEANPOOL_DATA_DIR to a throwaway directory'); pr
 
 // Secrets the server's environment holds: none may reach the child.
 const SENTINELS: Record<string, string> = {
-    ADMIN_PASSWORD: 'SENTINEL-admin-pw-7c1f93',
+    
     CF_API_TOKEN: 'SENTINEL-cf-api-4d2a18',
     IMAGE_S3_SECRET_ACCESS_KEY: 'SENTINEL-s3-9e0b44',
     IMAGE_S3_ACCESS_KEY_ID: 'SENTINEL-s3-id-51c2',
@@ -602,13 +602,19 @@ async function main(): Promise<void> {
         });
 
         await section('7. Settings: claim, status, Take offline, Restart tunnel', async () => {
-            // Owner level, as the real checkAdminAuth gives the admin password (an admin is test-tunnel-token-owner-only's), sent
-            // with a current code: the owner's fresh proof that taking the address offline or claiming over a live name asks
-            // (design case 18, B1, B3). The node's 2FA is on, so the password path has its second factor.
-            const { updateLocalConfig } = await import('./config/local-config.js');
-            const { generateTotpSecret } = await import('./totp.js');
-            updateLocalConfig({ totpEnabled: true, totpSecret: generateTotpSecret() } as any);
-            const deps = { checkAdminAuth: async (ctx: any) => { ctx.state.adminRole = 'owner'; ctx.state.secondFactorJustVerified = true; return true; } } as unknown as RouteDeps;
+            // Owner level, as the real checkAdminAuth gives an owner's key session that the phone's Manage hand-off opened just
+            // now (an admin is test-tunnel-token-owner-only's): the owner's fresh proof that taking the address offline or
+            // claiming over a live name asks (design case 18, B1, B3), a phone hand-off younger than 90 seconds.
+            const OWNER_KEY = '0b'.repeat(32);
+            const deps = {
+                checkAdminAuth: async (ctx: any) => {
+                    Object.assign(ctx.state, {
+                        adminRole: 'owner', actor: OWNER_KEY, auth_signer: OWNER_KEY, isKeySession: true,
+                        phoneHandoff: true, keySessionCreatedAt: Date.now(), phoneStepUpDue: false,
+                    });
+                    return true;
+                },
+            } as unknown as RouteDeps;
             const k = new Koa();
             k.use(async (ctx: any, next: any) => {
                 if (ctx.method === 'POST') {

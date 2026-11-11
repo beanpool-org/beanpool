@@ -167,27 +167,28 @@ const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
 // ── The community: what its members wrote is kept here, so the checks can take it out ───────────────────────────
 const BAKERY = 'Hill Bakery';
 const PURPOSE = 'Bread for the whole valley, baked in the old hall oven';
+// Every figure below is whole hundredths of a Bean, as the node sends it (`*_c`, and the ledger's kept names).
 const LISTINGS = [
-    { id: 'p1', type: 'offer', title: 'Sourdough loaf', description: 'Baked on Saturdays', credits: 4, repeatable: 1 },
-    { id: 'p2', type: 'need', title: 'Oven repair', description: 'The door hinge is loose', credits: 30, repeatable: 0 },
+    { id: 'p1', type: 'offer', title: 'Sourdough loaf', description: 'Baked on Saturdays', price_c: 400, repeatable: 1 },
+    { id: 'p2', type: 'need', title: 'Oven repair', description: 'The door hinge is loose', price_c: 3000, repeatable: 0 },
 ];
 const THREAD = [
     { id: 'm1', type: 'text', ciphertext: b64('see you at the stall'), authorCallsign: 'Kofi', authorPubkey: KOFI, timestamp: iso(now - 2 * DAY) },
     { id: 'm2', type: 'removed', ciphertext: '', authorCallsign: 'Mia', authorPubkey: MIA, timestamp: iso(now - DAY) },
 ];
 const ledgerEntry = (i: number) => ({
-    id: `l${i}`, direction: i % 2 ? 'income' : 'spend', amount: 3 + i,
+    id: `l${i}`, direction: i % 2 ? 'income' : 'spend', amount_c: (3 + i) * 100,
     counterpartyName: i % 3 === 0 ? undefined : 'Kofi', memo: i % 4 === 0 ? undefined : 'flour run',
-    timestamp: iso(now - i * DAY), runningBalance: 100 - i,
+    timestamp: iso(now - i * DAY), runningBalance: (100 - i) * 100,
 });
 const LEDGER = {
     enterprise: { publicKey: ENT }, period: { since: null, until: null },
-    summary: { totalIncome: 60, totalSpend: 20, netChange: 38.5, startingBalance: 30, endingBalance: 68.5, transactionCount: 23 },
+    summary: { totalIncome: 6000, totalSpend: 2000, netChange: 3850, startingBalance: 3000, endingBalance: 6850, transactionCount: 23 },
     entries: Array.from({ length: 23 }, (_, i) => ledgerEntry(i + 1)),
 };
 const decision = (over: Partial<ScopedDecisionCard> = {}): ScopedDecisionCard => ({
     id: 'd1', authorPubkey: KOFI, title: 'Pay Mia for the oven door', description: 'She fixed the hinge last week.',
-    effect: 'pay_out', subject: MIA, params: { amount: 12.5 }, status: 'open',
+    effect: 'pay_out', subject: MIA, params: { amount_c: 1250 }, status: 'open',
     opensAt: iso(now - 3600_000), closesAt: iso(now + 4 * DAY),
     tally: { voted: 1, roll: 3, quorumRequired: 2, thresholdRequired: 0.6 }, myVote: null, canVote: true, ...over,
 });
@@ -203,29 +204,30 @@ const DECISIONS: ScopedDecisionList = {
 function leadsView(over: Record<string, unknown> = {}) {
     return {
         publicKey: ENT, name: BAKERY, purpose: PURPOSE, lifecycle: 'ongoing', status: 'active', paused: false,
-        balance: -12.5, creditLine: 100, liveOffers: 1, earnedSurplus: 7.25, workingCapitalCeiling: 400,
-        goalAmount: 500, currentAmount: 120, deadlineAt: iso(now + 9 * DAY),
-        isLeadOrSoleKeeperOrAdmin: true, availableToBack: 40,
+        balance_c: -1250, creditLine_c: 10000, liveOffers: 1, earnedSurplus_c: 725, workingCapitalCeiling_c: 40000,
+        goalAmount_c: 50000, currentAmount_c: 12000, deadlineAt: iso(now + 9 * DAY),
+        isLeadOrSoleKeeperOrAdmin: true, availableToBack_c: 4000,
         keepers: [
             { publicKey: ME, callsign: 'Ana', role: 'lead', grantedAt: iso(now - 300 * DAY) },
-            { publicKey: KOFI, callsign: 'Kofi', role: 'keeper', backing: 20, grantedAt: iso(now - 200 * DAY) },
+            { publicKey: KOFI, callsign: 'Kofi', role: 'keeper', backing_c: 2000, grantedAt: iso(now - 200 * DAY) },
             { publicKey: MIA, callsign: 'Mia', role: 'keeper', suspended: true, grantedAt: iso(now - 100 * DAY) },
         ],
         keeperRequests: [
-            { id: 'r1', callsign: 'Ivo', pledgedBacking: 15, canBackPledge: false },
+            // pledgedBacking keeps its name on the node and carries whole hundredths (M1's listed deviations).
+            { id: 'r1', callsign: 'Ivo', pledgedBacking: 1500, canBackPledge: false },
             { id: 'r2', callsign: 'Zoe', pledgedBacking: 0, canBackPledge: true, pendingChange: { appliesAt: iso(now + 2 * DAY + 5 * 3600_000) } },
         ],
         keeperChanges: [
-            { id: 'c1', kind: 'add', memberPubkey: ZOE, memberCallsign: 'Zoe', proposedBy: KOFI, proposedByCallsign: 'Kofi', pledgedBacking: 10, appliesAt: iso(now + 2 * DAY) },
+            { id: 'c1', kind: 'add', memberPubkey: ZOE, memberCallsign: 'Zoe', proposedBy: KOFI, proposedByCallsign: 'Kofi', pledgedBacking: 1000, appliesAt: iso(now + 2 * DAY) },
             { id: 'c2', kind: 'remove', memberPubkey: MIA, memberCallsign: 'Mia', proposedBy: KOFI, proposedByCallsign: null, appliesAt: iso(now + 3 * 3600_000) },
         ],
-        deferredClaims: [{ id: 'w1', status: 'pending', amount: 18 }],
+        deferredClaims: [{ id: 'w1', status: 'pending', amount_c: 1800 }],
         posts: LISTINGS,
-        flow: [{ incoming: true, amount: 8, memo: 'loaf sale', timestamp: iso(now - DAY) }, { incoming: false, amount: 5, memo: '', timestamp: iso(now - 2 * DAY) }],
-        pendingBids: [{ id: 'b1', post_title: 'Oven repair', peer_callsign: 'Ivo', credits: 30 }],
+        flow: [{ incoming: true, amount_c: 800, memo: 'loaf sale', timestamp: iso(now - DAY) }, { incoming: false, amount_c: 500, memo: '', timestamp: iso(now - 2 * DAY) }],
+        pendingBids: [{ id: 'b1', post_title: 'Oven repair', peer_callsign: 'Ivo', amount_c: 3000 }],
         activeDeals: [
-            { id: 'd1', post_id: 'p1', post_title: 'Sourdough loaf', peer_callsign: 'Zoe', credits: 4, action_required: 'fulfill' },
-            { id: 'd2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: null, credits: 30, action_required: 'release', price_type: 'hourly', hours: 2 },
+            { id: 'd1', post_id: 'p1', post_title: 'Sourdough loaf', peer_callsign: 'Zoe', amount_c: 400, action_required: 'fulfill' },
+            { id: 'd2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: null, amount_c: 3000, action_required: 'release', price_type: 'hourly', hours: 2 },
         ],
         ...over,
     };
@@ -244,7 +246,7 @@ type Answers = Record<string, unknown>;
 function community(over: Answers = {}): (name: string, args: unknown[]) => Promise<unknown> | undefined {
     const answers: Answers = {
         getTreasuryDetail: leadsView(),
-        getBalance: { balance: 10, keeperOf: [ENT] },
+        getBalance: { balance_c: 1000, keeperOf: [ENT] },
         getEnterpriseThread: { conversation: null, messages: THREAD, readOnly: false },
         getEnterpriseLedger: LEDGER,
         getEnterpriseDecisions: DECISIONS,
@@ -376,7 +378,8 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         await click(buttonWith(xx('Cancel')), 'Cancel');
         await click(byLabel(xx('Start Wind-Up')), 'Start Wind-Up');
         expect(host.textContent).toContain(xx('Start Enterprise Wind-Up'));
-        expect(host.textContent).toContain(xx('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.').replace('{amount}', '-12.5'));
+        // The deficit as every figure below zero is written: whole hundredths, two places, the true minus (formatHundredths).
+        expect(host.textContent).toContain(xx('Cannot wind up an enterprise in deficit ({amount} 🫘). Debt must be resolved or written off first.').replace('{amount}', '−12.50'));
         expect(bypassing(), 'wind-up').toEqual([]);
 
         await click(byLabel(xx('Step down as a keeper')), 'Step down');
@@ -414,7 +417,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         const quiet = { isEligible: true, leadPubkey: KOFI, leadCallsign: 'Kofi', daysInactive: 34 };
         const proposal = { id: 's1', status: 'active', candidatePubkey: ZOE, candidateCallsign: SUCCESSION_CANDIDATE, votesCount: 1, noVotesCount: 0, requiredVotes: 2, totalEligible: 3, deadlineAt: iso(now + 13 * DAY), votes: [] };
         const project = (over: Record<string, unknown>) => leadsView({
-            lifecycle: 'bounded', balance: 40, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [],
+            lifecycle: 'bounded', balance_c: 4000, isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [],
             keepers: [
                 { publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }, { publicKey: ZOE, callsign: SUCCESSION_CANDIDATE, role: 'keeper' },
             ],
@@ -436,25 +439,25 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
     });
 
     it('a member who is not a keeper: the join card with its standing box; a request waiting, then approved', async () => {
-        const member = { isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }], balance: 20 };
-        net.answer = community({ getTreasuryDetail: leadsView(member), getBalance: { balance: 10, keeperOf: [] } });
+        const member = { isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }], balance_c: 2000 };
+        net.answer = community({ getTreasuryDetail: leadsView(member), getBalance: { balance_c: 1000, keeperOf: [] } });
         await renderIn('xx');
         expect(host.textContent).toContain(xx('🤝 ASK TO JOIN AS A KEEPER'));
         expect(host.textContent).toContain(xx('PLEDGE BEANS 🌱'));
         expect(bypassing(), 'join').toEqual([]);
 
-        net.answer = community({ getTreasuryDetail: leadsView({ ...member, myPendingRequest: { pledgedBacking: 5 } }), getBalance: { balance: 10, keeperOf: [] } });
+        net.answer = community({ getTreasuryDetail: leadsView({ ...member, myPendingRequest: { pledgedBacking: 500 } }), getBalance: { balance_c: 1000, keeperOf: [] } });
         await again('xx');
         expect(host.textContent).toContain(xx('⏳ KEEPER REQUEST PENDING'));
         expect(bypassing(), 'waiting').toEqual([]);
 
-        net.answer = community({ getTreasuryDetail: leadsView({ ...member, myPendingRequest: { pledgedBacking: 5, pendingChange: { appliesAt: iso(now + DAY) } } }), getBalance: { balance: 10, keeperOf: [] } });
+        net.answer = community({ getTreasuryDetail: leadsView({ ...member, myPendingRequest: { pledgedBacking: 500, pendingChange: { appliesAt: iso(now + DAY) } } }), getBalance: { balance_c: 1000, keeperOf: [] } });
         await again('xx');
         expect(bypassing(), 'approved').toEqual([]);
     });
 
     it('the banners every member sees: paused (with its warning), winding up (grace over), completed (the discussion read-only)', async () => {
-        net.answer = community({ getTreasuryDetail: leadsView({ paused: true, pausedAt: iso(now - 85 * DAY), pauseDaysRemaining: 5, pausedFloorSnapshot: 80 }) });
+        net.answer = community({ getTreasuryDetail: leadsView({ paused: true, pausedAt: iso(now - 85 * DAY), pauseDaysRemaining: 5, pausedFloorSnapshot_c: 8000 }) });
         await renderIn('xx');
         // The banner's label in capitals, the language's way (inCapitalsOf; the pseudo-locale takes English's rule).
         expect(host.textContent).toContain(xx('Paused for the season').toUpperCase());
@@ -467,7 +470,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(host.textContent).toContain(xx('The 7-day grace period has elapsed. Ready to be finalised.'));
         expect(bypassing(), 'winding up').toEqual([]);
 
-        net.answer = community({ getTreasuryDetail: leadsView({ status: 'completed', balance: 0 }), getEnterpriseThread: { conversation: null, messages: [], readOnly: true } });
+        net.answer = community({ getTreasuryDetail: leadsView({ status: 'completed', balance_c: 0 }), getEnterpriseThread: { conversation: null, messages: [], readOnly: true } });
         await again('xx');
         expect(host.textContent).toContain(xx('Enterprise has wound up — discussion thread is read-only.'));
         expect(bypassing(), 'completed').toEqual([]);
@@ -483,7 +486,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(host.textContent).toContain(xx('Try again'));
         expect(bypassing(), 'no console').toEqual([]);
 
-        net.answer = community({ getTreasuryDetail: leadsView({ posts: [], flow: [], balance: 5 }), getEnterpriseThread: { conversation: null, messages: [], readOnly: false }, getEnterpriseLedger: { ...LEDGER, entries: [] } });
+        net.answer = community({ getTreasuryDetail: leadsView({ posts: [], flow: [], balance_c: 500 }), getEnterpriseThread: { conversation: null, messages: [], readOnly: false }, getEnterpriseLedger: { ...LEDGER, entries: [] } });
         await again('xx');
         await openMoney();
         expect(host.textContent).toContain(xx('No transactions recorded for this period.'));
@@ -518,7 +521,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         await renderIn('en');
         await openMoney();
         expect(bracketed()).toBe(0);
-        expect(host.textContent).toContain('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit (-12.5 🫘).');
+        expect(host.textContent).toContain('⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit (−12.50 🫘).');
         expect(host.textContent).toContain('Show 3 more (3 older)');
         expect(host.textContent).toContain('120 🫘 raised');
         expect(host.textContent).toContain('removed by a keeper');
@@ -846,7 +849,7 @@ describe('the enterprise page follows a language picked in Settings', () => {
     it('labels in capitals take the language\'s rule, not the phone\'s: a project\'s balance label in Turkish reads BAKİYE', async () => {
         const tr = JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, 'tr.json'), 'utf8')) as Record<string, string>;
         expect(tr['Balance']).toBe('Bakiye');
-        const project = leadsView({ lifecycle: 'bounded', balance: 40, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }] });
+        const project = leadsView({ lifecycle: 'bounded', balance_c: 4000, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }] });
         net.answer = community({ getTreasuryDetail: project });
         await renderIn('tr');
         await openMoney();

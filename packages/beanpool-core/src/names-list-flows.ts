@@ -50,6 +50,7 @@ import {
 } from './names-list-trust.js';
 import type { HealthExceptionsBody, HealthLogLine } from './names-list-health.js';
 import { namesInviteBody, type BoundInvite, type NamesInviteBody } from './names-list-invite.js';
+import type { WaitingVoucherRow } from './vouchers-block.js';
 
 // ── What a device supplies ───────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,8 @@ export interface VoucherSummaryRow {
     madeAt: string | null;
     stoppedAt: string | null;
     stopReason: string | null;
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit" and no set-to, never left or level. */
+    noLimit?: boolean;
     left: number;
     held: number;
     heldInvites: number;
@@ -183,9 +186,11 @@ export interface VoucherSummaryRow {
     level: number;
     belowZero: number;
     writtenOff: number;
+    /** What their vouches that landed in the last 30 days add up to: the card's headline (invites-vouching I4). */
+    vouchedLast30Days?: number;
     /** Room rooted at this voucher that moved on past the people they vouched for (§5 tracking (a)): how much, held by how
-     *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf). */
-    passedOn: { amount: number; people: number; belowZero: number };
+     *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf), in whole hundredths. */
+    passedOn: { amount_c: number; people: number; belowZero: number };
     invitesWithVouch: number;
     trading: { withOthers: number; insideOnly: number };
 }
@@ -201,14 +206,15 @@ export interface VoucherSettings {
 
 export interface VoucherHistoryLine {
     kind: string;
-    amount: number;
+    /** Whole hundredths of a Bean, signed as the allocation ledger keeps them (engine/vouchers.ts historyOf). */
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;
     for?: 'invite' | 'profile';
     inviteMadeAt?: string | null;
     outcome?: 'held' | 'vouched' | 'back';
-    why?: 'expired' | 'stopped' | 'not_landed';
+    why?: 'expired' | 'stopped' | 'not_landed' | 'revoked';
     person?: { memberPubkey: string; callsign: string } | null;
 }
 
@@ -216,7 +222,8 @@ export interface VoucherPersonRow {
     memberPubkey: string;
     callsign: string;
     joinedAt: string | null;
-    amount: number;
+    /** What this voucher vouched for them, in whole hundredths (engine/vouchers.ts peopleOf). */
+    amount_c: number;
     raised: boolean;
     byInvite: boolean;
     belowZero: boolean;
@@ -230,10 +237,21 @@ export interface VoucherCardData extends VoucherSummaryRow {
     history: VoucherHistoryLine[];
     people: VoucherPersonRow[];
     canChange: boolean;
+    /** Whether this viewer may stop this budget now: never an owner's; an admin's by an owner only (slice I5). */
+    canStop?: boolean;
 }
 
+/**
+ * Whom "+ Make someone a voucher" offers the viewer (slice I5): `admins` (an owner's to make, no names-list entry needed;
+ * empty for a committee admin) and `confirmed` (confirmed on the names list, by entry id: the phone opens the name).
+ * `adminsOffered`: the node offers this viewer admins at all (an owner). When it is false the empty `admins` says nothing
+ * about the admins' budgets, only that an owner makes them.
+ */
+export interface VoucherCandidates { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean }
+export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
+
 /** The vouchers block (GET /api/names/vouchers): the node answers it only for owners and credit-committee admins. */
-export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; settings: VoucherSettings }
+export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; waiting?: WaitingVoucherRow[]; candidates?: VoucherCandidates; settings: VoucherSettings }
 
 // ── The pin, sealed at rest ──────────────────────────────────────────────────────────────────
 
@@ -1193,8 +1211,13 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
     const fetchVoucherCard = (anchor: string, id: I, memberPubkey: string) =>
         call<VoucherCardData>(anchor, id, 'GET', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
 
-    const makeNamesVoucher = (anchor: string, id: I, entryId: string, amount?: number) =>
-        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { entryId, ...(amount !== undefined ? { amount } : {}) });
+    /** Make a confirmed name a voucher: `{ entryId, amount_c? }`, the budget in whole hundredths (the node refuses `amount`). */
+    const makeNamesVoucher = (anchor: string, id: I, entryId: string, amount_c?: number) =>
+        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { entryId, ...(amount_c !== undefined ? { amount_c } : {}) });
+
+    /** An owner makes an admin a voucher with no names-list entry (slice I5): `{ memberPubkey, amount_c? }`. */
+    const makeAdminVoucher = (anchor: string, id: I, memberPubkey: string, amount_c?: number) =>
+        call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { memberPubkey, ...(amount_c !== undefined ? { amount_c } : {}) });
 
     const stopNamesVoucher = (anchor: string, id: I, memberPubkey: string) =>
         call<VoucherCardData>(anchor, id, 'DELETE', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
@@ -2040,6 +2063,14 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         return call<{ invite: { code: string } }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`, namesInviteBody(body));
     }
 
+    /**
+     * Revoke the live invite on this entry from the entry's line (invites-vouching I2): its maker or an owner. Bound invites
+     * reach no admin as a code, so the entry names it. The vouch it held comes back to its maker's budget.
+     */
+    function revokeEntryInvite(anchor: string, identity: I, entryId: string) {
+        return call<{ revoked: number; returned: number; promiseEnded: boolean }>(anchor, identity, 'DELETE', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`);
+    }
+
     /** Every bound invite on this community, for the admins: used or not, and what each did. */
     function readBoundInvites(anchor: string, identity: I) {
         return call<{ invites: BoundInvite[] }>(anchor, identity, 'GET', `${NAMES_PATH}/invites`);
@@ -2117,6 +2148,7 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         fetchVouchers,
         fetchVoucherCard,
         makeNamesVoucher,
+        makeAdminVoucher,
         stopNamesVoucher,
         setVoucherBudget,
         deleteNamesEntry,
@@ -2137,6 +2169,7 @@ export function createNamesFlows<I extends NamesSigner>(platform: NamesPlatform<
         sendKeysAgain,
         addNamesEntry,
         inviteForNamesEntry,
+        revokeEntryInvite,
         readBoundInvites,
         editNamesEntry,
         pendingRemovals,

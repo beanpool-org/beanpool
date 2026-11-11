@@ -59,6 +59,7 @@ import {
 } from './agent/oauth.js';
 import { AGENT_REFUSAL_LOG_BUDGET, endAgentRefusalLogMinute } from './agent/mcp-route.js';
 import { limiterKeyForIp, setTrustConfigForTests } from './client-ip.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 // Time moves on for the lifetimes (section 11) only; 0 everywhere else.
 const realNow = Date.now.bind(Date);
@@ -99,7 +100,7 @@ const signer = (k: Key) => (bytes: Uint8Array) => new Uint8Array(crypto.sign(nul
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),
@@ -219,7 +220,7 @@ async function main(): Promise<void> {
     const addMember = (k: Key, callsign: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'inv-test')`).run(k.pub, callsign, owner.pub);
-        db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
+        db.prepare('INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(k.pub);
     };
     addMember(admin, 'Adam');
     addMember(admin2, 'Ada');
@@ -692,7 +693,7 @@ async function main(): Promise<void> {
         const poster = keypair(), reporter = keypair();
         addMember(poster, 'Pat');
         addMember(reporter, 'Rita');
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                     VALUES ('post-oauth-1', 'offer', 'general', 'Bike repair', 'Bring it on Saturday.', 10, ?, 'active')`).run(poster.pub);
         const report = submitReport(reporter.pub, poster.pub, 'Looks like spam', 'post-oauth-1');
         resetLimits();

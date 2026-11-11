@@ -3,12 +3,13 @@
  * (the privacy policy's words; found by #1283's deciding review, inline 4123829044).
  *
  *  1. The copying routes over real HTTP, from made-up internet addresses (a local proxy's CF-Connecting-IP, as the
- *     tunnel sends it): a pull with no credentials, one with a wrong token, one with a wrong admin password and one
- *     from an IPv6 address (all refused); a token pull (allowed); a standby's pull that reports three refused copies (an
- *     incident for the owners); a take-over envelope fetch with the token; and a standby fetching the take-over keys.
- *     Within the 7 days the owner sees each fresh address (the Replication Access route, node Settings' panel, the
- *     standby banner, the take-over keys' holders).
- *  2. Wrong admin passwords from one address, past the free ones, and from an IPv6 /64: the brake still says wait. A
+ *     tunnel sends it): a pull with no credentials, one with a wrong token, one with an admin password (the node has
+ *     none) and one from an IPv6 address (all refused); a token pull (allowed); a standby's pull that reports three
+ *     refused copies (an incident for the owners); a take-over envelope fetch with the token; and a standby fetching the
+ *     take-over keys. Within the 7 days the owner sees each fresh address (the Replication Access route, the standby
+ *     banner, the take-over keys' holders).
+ *  2. Wrong break-glass codes on the enrol route (what the password brake guards: the node has no admin password) from
+ *     one address, past the free ones, and wrong attempts from an IPv6 /64: the brake still says wait. A
  *     proxy that forwards for others without being trusted is warned about, and so is the brake it shares. A gateway
  *     429. Every one of those log lines names the address only by its daily keyed hash, and the brake's names the
  *     same source each time.
@@ -39,15 +40,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 import Database from 'better-sqlite3';
 
-const ADMIN_PW = 'Address-Retention-Pw-5528!q';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 delete process.env.TRUSTED_PROXIES;
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR;
@@ -70,15 +68,14 @@ for (const stream of [process.stdout, process.stderr]) {
 const { initStateEngine } = await import('./state-engine.js');
 const { setNodeRole } = await import('./config/node-role.js');
 const { startP2P } = await import('./p2p.js');
-const { initAdminPassword, setReplicationToken, updateLocalConfig } = await import('./config/local-config.js');
+const { setReplicationToken } = await import('./config/local-config.js');
 const { checkAdminAuth, resetAdminAuthTarpit } = await import('./admin-auth.js');
-const { checkAdminPassword, notePasswordFailure, acquirePasswordAttempt, settlePasswordAttempt, resetPasswordBrake } = await import('./password-brake.js');
+const { notePasswordFailure, acquirePasswordAttempt, settlePasswordAttempt, resetPasswordBrake } = await import('./password-brake.js');
 const { resolveClientIp, resetUntrustedForwardersForTests } = await import('./client-ip.js');
 const { gatewayAdmit, resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
 const { getStandbyHealthBanner } = await import('./services/standby-health.js');
-const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
 const { noteEnvelopeFetch, getEnvelopeHolders, makeRecoveryCode } = await import('./services/takeover-envelope.js');
 const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
 const { createPlainBackup, createSealedBackup } = await import('./services/sealed-backup.js');
@@ -126,8 +123,6 @@ const refusedReport = JSON.stringify({
 });
 
 async function main() {
-    initAdminPassword();
-    updateLocalConfig({ replicationTokenOnly: false }); // a wrong admin password is still tried, so it is refused as one
     setNodeRole('primary');
     initStateEngine();
     const node = await startP2P(0, 0);
@@ -169,38 +164,12 @@ async function main() {
         return res.json() as Promise<any>;
     };
 
-    // node Settings' Replication Access panel (static/settings.js), run against the real route.
-    const settingsSrc = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'static', 'settings.js'), 'utf-8');
-    const start = settingsSrc.indexOf('async function loadReplicationAccess()');
-    let depth = 0, end = settingsSrc.indexOf('{', start);
-    for (let i = end; i < settingsSrc.length; i++) {
-        if (settingsSrc[i] === '{') depth++;
-        else if (settingsSrc[i] === '}' && --depth === 0) { end = i + 1; break; }
-    }
-    const els: Record<string, any> = {};
-    for (const id of ['rep-token-state', 'rep-token-only', 'rep-token-only-notice', 'rep-last-pull', 'rep-total-pulls', 'rep-rejected', 'rep-recent']) {
-        els[id] = { textContent: '', innerHTML: '', style: {}, checked: false };
-    }
-    const tfa = turnOn2faForTests(ADMIN_PW);
-    const settingsCtx = vm.createContext({
-        API: `${base}/api/local`, authToken: ADMIN_PW, relativeTime: () => 'now', JSON,
-        // Step 7c: with the node's 2FA off the password alone opens no admin route, so the panel's owner has 2FA on and
-        // their password goes with a code.
-        fetch: (u: string, init: any) => { resetBrakes(); return fetch(u, { ...init, headers: { ...(init?.headers || {}), 'X-Admin-TOTP': tfa.code() } }); },
-        document: { getElementById: (id: string) => els[id] || null, createElement: () => ({ style: {} }) },
-    });
-    vm.runInContext(settingsSrc.slice(start, end) + '\nthis.loadReplicationAccess = loadReplicationAccess;', settingsCtx);
-    const settingsPanel = async () => {
-        await settingsCtx.loadReplicationAccess();
-        return `${els['rep-last-pull'].textContent}\n${els['rep-recent'].innerHTML}`;
-    };
-
     try {
         // ── 1. The copying routes ──
         say('\n— 1. pulls and refusals from made-up addresses —');
         assert(await get('/api/local/admin/sync-snapshot', from('203.0.113.10')) === 401, '1. a pull with no credentials is refused');
         assert(await get('/api/local/admin/sync-delta', from('203.0.113.11', { 'X-Replication-Token': 'not-the-token' })) === 401, '1. a pull with a wrong token is refused');
-        assert(await get('/api/local/admin/sync-snapshot', from('203.0.113.12', { 'X-Admin-Password': 'not-the-password' })) === 401, '1. a pull with a wrong admin password is refused');
+        assert(await get('/api/local/admin/sync-snapshot', from('203.0.113.12', { 'X-Admin-Password': 'Address-Retention-Pw-5528!q' })) === 401, '1. a pull with an admin password (the node has none) is refused');
         assert(await get('/api/local/admin/sync-delta', from('2001:db8:1:2::abcd')) === 401, '1. a pull from an IPv6 address with no credentials is refused');
         assert(await get('/api/local/admin/sync-snapshot', from('203.0.113.20', { 'X-Replication-Token': TOKEN })) === 200, '1. a token pull is allowed');
         assert(await get('/api/local/admin/sync-delta', from('203.0.113.30', { 'X-Replication-Token': TOKEN, 'X-Standby-Report': refusedReport })) === 200,
@@ -215,8 +184,6 @@ async function main() {
         const recentIps = (fresh.recent ?? []).map((e: any) => e.ip);
         assert(['203.0.113.10', '203.0.113.11', '203.0.113.12', '2001:db8:1:2::abcd', '203.0.113.20', '203.0.113.30', '203.0.113.40'].every((ip) => recentIps.includes(ip)),
             `1. …and each recent pull's (${recentIps.join(', ')})`);
-        const panel = await settingsPanel();
-        assert(panel.includes('203.0.113.40') && panel.includes('2001:db8:1:2::abcd'), "1. node Settings' Replication Access panel shows them");
         const banner = getStandbyHealthBanner();
         assert(banner.incident !== null && banner.standbys.some((s) => s.label === 'The standby at 203.0.113.30'),
             `1. the standby banner names the standby by its address (${banner.standbys.map((s) => s.label).join(', ')})`);
@@ -224,14 +191,22 @@ async function main() {
         assert(!!holder && holder.message.startsWith('The standby at 203.0.113.31'), `1. the take-over keys' holders name it by its address ("${holder?.message}")`);
 
         // ── 2. The password brake, an untrusted proxy, the gateway ──
-        say('\n— 2. wrong admin passwords, an untrusted proxy, a gateway 429 —');
+        say('\n— 2. wrong break-glass codes, an untrusted proxy, a gateway 429 —');
         resetBrakes();
         resetUntrustedForwardersForTests();
-        const ctxFrom = (ip: string) => ({ state: {}, ip, headers: {}, set: () => { }, get: () => '' });
+        // What the brake guards (the node has no admin password): an owner's break-glass code on the enrol route, sent
+        // here wrong, through the real checkAdminAuth.
+        const enrolFrom = (ip: string) => ({ state: {}, ip, path: '/api/local/admin/auth/enrol', method: 'POST', headers: { 'x-break-glass-code': 'not-a-code' },
+            status: 0, body: null as unknown, set: () => { }, get: () => '' });
         const results: string[] = [];
-        for (let i = 0; i < 7; i++) results.push(await checkAdminPassword(ctxFrom('203.0.113.50'), 'wrong-password'));
+        // The tarpit is not reset between them: resetAdminAuthTarpit() clears the brake too.
+        for (let i = 0; i < 7; i++) {
+            const c = enrolFrom('203.0.113.50');
+            const ok = await checkAdminAuth(c);
+            results.push(ok ? 'ok' : c.status === 401 ? 'wrong' : c.status === 429 ? 'braked' : `status ${c.status}`);
+        }
         assert(results.slice(0, 6).every((r) => r === 'wrong') && results[6] === 'braked',
-            `2. six wrong admin passwords from one address, then the brake makes it wait (${results.join(', ')})`);
+            `2. six wrong break-glass codes from one address, then the brake makes it wait (${results.join(', ')})`);
         const v6 = await acquirePasswordAttempt('2001:db8:5:6::/64');
         if (v6.admitted) settlePasswordAttempt('2001:db8:5:6::/64', false);
         for (let i = 0; i < 6; i++) notePasswordFailure('2001:db8:5:6::/64');
@@ -291,9 +266,6 @@ async function main() {
         assert(after.recent.length === beforeSweep.recent.length
             && after.recent.every((e: any, i: number) => e.ip === null && e.at === beforeSweep.recent[i].at && e.auth === beforeSweep.recent[i].auth),
             '4. every recent entry keeps its time and outcome, and no address');
-        const panelAfter = await settingsPanel();
-        assert(addressesIn(panelAfter).length === 0 && els['rep-last-pull'].textContent.includes('address no longer kept') && panelAfter.includes('address no longer kept'),
-            `4. node Settings says "address no longer kept" ("${els['rep-last-pull'].textContent}")`);
         const bannerAfter = getStandbyHealthBanner();
         assert(bannerAfter.standbys.length === 1 && addressesIn(JSON.stringify(bannerAfter)).length === 0,
             `4. the standby is still watched, named without an address (${bannerAfter.standbys.map((s) => s.label).join(', ')})`);

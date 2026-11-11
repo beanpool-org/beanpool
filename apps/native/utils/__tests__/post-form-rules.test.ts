@@ -15,7 +15,7 @@ const OLD = readNodeProfile({})!;
 
 const needNoPhoto: PostFormState = {
     posting: false, needBlocked: false, postType: 'need', category: 'general', hasLocation: true, photoCount: 0,
-    credits: '', title: 'Help moving a couch', description: 'Saturday morning',
+    priceText: '', title: 'Help moving a couch', description: 'Saturday morning',
 };
 
 describe('postFormRules', () => {
@@ -39,7 +39,7 @@ describe('postFormRules', () => {
         const on = postFormRules(LOCAL.features, 'need', true);
         expect(postFormSubmitLabel({ ...needNoPhoto, needBlocked: on.needBlocked, photoRequired: on.photoRequired }, LOCAL.features))
             .toBe('🟢 List an Offer first to post Needs');
-        expect(postFormSubmitLabel({ ...needNoPhoto, photoRequired: on.photoRequired, credits: '5' }, LOCAL.features)).toBe('📷 Add a photo');
+        expect(postFormSubmitLabel({ ...needNoPhoto, photoRequired: on.photoRequired, priceText: '5' }, LOCAL.features)).toBe('📷 Add a photo');
     });
 
     it('the listing form (app/new-listing.tsx, out of map.tsx since MAP-FORM) reads the rules, never the raw blocked flag or a bare photo count', () => {

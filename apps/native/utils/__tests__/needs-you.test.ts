@@ -410,3 +410,43 @@ describe('What needs you: 🛡️ admin work (owners and admins only)', () => {
         });
     });
 });
+
+// DESIGN-standing-deals-upfront-amend-fable §2: one live line per short standing deal, per side, from the row on every draw.
+// Month 2 of Vehicle Storage (9 Nov – 9 Dec, a 30-day month: the grace ends 24 Nov 08:00 UTC, the same day everywhere).
+describe('What needs you: a short standing deal (U2)', () => {
+    const PAYEE = 'rob-pubkey';
+    const standing = (over: Partial<NeedsYouTransaction> = {}): NeedsYouTransaction => ({
+        id: 'sd-m1', postId: 'post-storage', postTitle: 'Vehicle Storage', status: 'completed', buyerPublicKey: ME, buyerCallsign: 'Marty',
+        sellerPublicKey: PAYEE, sellerCallsign: 'Rob', standingId: 'sd-1', periodNo: 1, standingPhase: 'short', standingBeans_c: 5000, standingUnit: 'month',
+        standingStartsAt: '2026-10-09T08:00:00.000Z', standingShortSince: '2026-11-09T08:00:00.000Z', standingStopped: false, ...over,
+    });
+    const at = (s: string) => Date.parse(s);
+
+    it("the payer's line: amber, counted, the days overdue and the grace's last day; it opens the deal", () => {
+        const [e] = buildNeedsYou(quiet({ now: at('2026-11-12T10:00:00.000Z'), transactions: [standing()] }));
+        expect(e).toEqual({
+            kind: 'deal', count: 1, accent: true, standingId: 'sd-1',
+            label: 'Vehicle Storage: 50 Beans 3 days overdue · until 24 Nov',
+            target: { to: 'deal', postId: 'post-storage', txId: 'sd-m1' },
+        });
+    });
+
+    it("the payee's line: calm, never the payer's balance; written fresh as the clock moves (due today, 1 day)", () => {
+        const line = (now: string) => buildNeedsYou(quiet({ me: PAYEE, now: at(now), transactions: [standing()] }));
+        expect(line('2026-11-09T20:00:00.000Z')).toEqual([{
+            kind: 'deal', count: 1, accent: false, standingId: 'sd-1',
+            label: "Marty's 50 Beans for Vehicle Storage: due today · we try until 24 Nov · you can stop it now",
+            target: { to: 'deal', postId: 'post-storage', txId: 'sd-m1' },
+        }]);
+        expect(line('2026-11-10T09:00:00.000Z')[0].label).toBe("Marty's 50 Beans for Vehicle Storage: 1 day overdue · we try until 24 Nov · you can stop it now");
+        expect(line('2026-11-10T09:00:00.000Z')[0].label).not.toMatch(/short|balance|have/i);
+    });
+
+    it('paid or ended: no line; the generic "deal waiting" never counts a standing deal', () => {
+        for (const phase of ['paid', 'ended'] as const) {
+            expect(buildNeedsYou(quiet({ now: at('2026-11-12T10:00:00.000Z'), transactions: [standing({ standingPhase: phase })] }))).toEqual([]);
+        }
+        const both = buildNeedsYou(quiet({ now: at('2026-11-12T10:00:00.000Z'), transactions: [standing(), tx('a', 'requested')] }));
+        expect(both.map(e => [e.label, e.count])).toEqual([['A deal is waiting for you', 1], ['Vehicle Storage: 50 Beans 3 days overdue · until 24 Nov', 1]]);
+    });
+});

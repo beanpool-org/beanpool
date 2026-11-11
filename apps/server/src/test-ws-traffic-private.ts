@@ -6,7 +6,8 @@
  * watching the log saw it. Balances and trades are private by default. Now each line says what kind of frame it was
  * (its top-level `type`), its size, its direction and when, and nothing of what it says.
  *
- * Real HTTPS server: a member's signed /ws socket, an admin's /ws/logs socket opened with a ticket, a real signed
+ * Real HTTPS server: a member's signed /ws socket, an owner's /ws/logs socket opened with a ticket from the owner's key
+ * session (the node has no admin password, Marty 11 Nov 2026: a logs ticket is a session's), a real signed
  * POST /api/ledger/transfer between two members, and a frame the member's socket sends in. Then:
  *   1. the transfer reaches the payer's socket (the frame the log describes exists);
  *   2. the log has a `ws_traffic` line for it: direction out, frameType 'transaction', its size, a time;
@@ -28,7 +29,9 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { setMemberPhoto } from '@beanpool/engine';
 import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
+import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { db } from './db/db.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -48,14 +51,25 @@ function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), 'genesis', 'genesis')`).run(pk, callsign);
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+}
+
+/** An owner's key sign-in, as the app's link or the QR pairing ends it: the admin_session cookie's id. */
+function keySession(id: Id): string {
+    const chal = createAdminChallenge();
+    const { signature, signedFor } = adminSigninFields(id.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pub, signature, signedFor });
+    if (!solved.ok) throw new Error(`key sign-in refused: ${solved.error}`);
+    const ex = consumeHandshakeToken(solved.handshakeToken!);
+    if (!ex.ok || !ex.sessionId) throw new Error(`handshake refused: ${ex.error}`);
+    return ex.sessionId;
 }
 
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    return `pubkey=${id.pub}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    return `pubkey=${id.pub}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 function open(url: string): Promise<{ ws: WebSocket; raw: string[] }> {
@@ -81,26 +95,33 @@ async function main() {
     const payer = keypair(), payee = keypair();
     const PAYER_CALLSIGN = 'payerQz' + crypto.randomBytes(2).toString('hex');
     const PAYEE_CALLSIGN = 'payeeXw' + crypto.randomBytes(2).toString('hex');
-    seedGenesisMember(keypair().pub, 'Gwen');
+    // Gwen, the genesis member, is the owner (seedGenesisMember grants it) who watches the log.
+    const gwen = keypair();
+    seedGenesisMember(gwen.pub, 'Gwen');
     seedMember(payer.pub, PAYER_CALLSIGN);
     seedMember(payee.pub, PAYEE_CALLSIGN);
     // A direct send needs Beans held and a completed trade behind the sender (state-engine transfer), as
     // test-blocks-on-beans seeds them.
-    transfer('genesis', payer.pub, 100, 'seed', 'direct', true);
-    const eggs = createPost('offer', 'produce', 'Eggs', 'Eggs, fresh', 10, 'fixed', payee.pub)!;
-    createPost('offer', 'produce', 'Seedlings', 'Seedlings, fresh', 10, 'fixed', payer.pub); // an Offer first: accepting needs one
+    // 100 Beans, and eggs at 10: every figure is whole hundredths of a Bean.
+    transfer('genesis', payer.pub, 10000, 'seed', 'direct', true);
+    const eggs = createPost('offer', 'produce', 'Eggs', 'Eggs, fresh', 1000, 'fixed', payee.pub)!;
+    createPost('offer', 'produce', 'Seedlings', 'Seedlings, fresh', 1000, 'fixed', payer.pub); // an Offer first: accepting needs one
     completePostTransaction(acceptPost(eggs.id, payer.pub).id, payer.pub);
 
-    const logs = await open(`${WSS}/ws/logs?ticket=${issueWsTicket()}`);
+    const ticket = issueWsTicket(keySession(gwen));
+    if (!ticket) throw new Error("the owner's key session got no logs ticket");
+    const logs = await open(`${WSS}/ws/logs?ticket=${ticket}`);
     const member = await open(`${WSS}/ws?${signedWsQuery(payer)}`);
     await sleep(200);
     logs.raw.length = 0;
     member.raw.length = 0;
 
-    // A real send, signed by the payer as the apps sign it.
-    const AMOUNT = 3.75;
+    // A real send, signed by the payer as the apps sign it: 87.65 Beans, `amount_c` 8765 on the wire. Four digits no
+    // traffic line's own numbers (a size, a count) come near, so the checks below can't hit one by chance.
+    const AMOUNT_C = 8765;
+    const AMOUNT_BEANS = '87.65';
     const MEMO = 'memo-' + crypto.randomBytes(4).toString('hex');
-    const bodyString = JSON.stringify({ to: payee.pub, amount: AMOUNT, memo: MEMO });
+    const bodyString = JSON.stringify({ to: payee.pub, amount_c: AMOUNT_C, memo: MEMO });
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const res = await fetch(`${BASE}/api/ledger/transfer`, {
@@ -108,14 +129,15 @@ async function main() {
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': payer.pub,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n/api/ledger/transfer\n${ts}\n${nonce}\n${bodyString}`), payer.priv).toString('base64'),
+            'X-Signature': signRequest(payer.priv, { method: 'POST', path: '/api/ledger/transfer', timestamp: ts, nonce, body: bodyString }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
         body: bodyString,
     });
     const resBody = await res.json().catch(() => null) as any;
-    assert(res.status === 200, `the payer sends ${AMOUNT} Beans (got ${res.status} ${JSON.stringify(resBody)})`);
+    assert(res.status === 200, `the payer sends ${AMOUNT_BEANS} Beans (got ${res.status} ${JSON.stringify(resBody)})`);
 
     // A frame the member's socket sends in, with a marker of its own.
     const IN_MARKER = 'in-marker-' + crypto.randomBytes(4).toString('hex');
@@ -142,10 +164,14 @@ async function main() {
         ['the payer\'s key', payer.pub], ['the payee\'s key', payee.pub],
         ['the payer\'s key prefix', payer.pub.slice(0, 16)], ['the payee\'s key prefix', payee.pub.slice(0, 16)],
         ['the payer\'s callsign', PAYER_CALLSIGN], ['the payee\'s callsign', PAYEE_CALLSIGN],
-        ['the amount', String(AMOUNT)], ['the note', MEMO], ['the frame sent in', IN_MARKER],
+        ['the amount in Beans', AMOUNT_BEANS], ['the note', MEMO], ['the frame sent in', IN_MARKER],
     ] as const) {
         assert(!all.includes(secret), `no traffic line holds ${label}`);
     }
+    // The amount as the frame carries it, whole hundredths (`"amount_c":8765`), matched as a JSON number: a timestamp or a
+    // hex id that happens to hold the digits is not a hit.
+    assert(!new RegExp(`[:,\\[]${AMOUNT_C}[,}\\]]`).test(all), 'no traffic line holds the amount in hundredths');
+    assert(!!payFrame && new RegExp(`[:,\\[]${AMOUNT_C}[,}\\]]`).test(payFrame), 'while the transaction frame itself carries it, so the check above can find it');
     assert(lines.every((l: any) => !('preview' in l)), `no traffic line has a preview (got keys ${[...new Set(lines.flatMap((l: any) => Object.keys(l)))].join(', ')})`);
 
     // 4. The frame sent in.

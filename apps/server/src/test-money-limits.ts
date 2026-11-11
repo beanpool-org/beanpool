@@ -110,6 +110,7 @@ import { DEFAULT_GATEWAY_CONFIG } from './config/gateway.js';
 import { WRITER_LIMITS, MONEY_LIMITS } from './config/writer-limits.js';
 import { admitMoneyActs } from './engine/money-limits.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--money-limits-child';
@@ -122,7 +123,11 @@ function assert(cond: boolean, msg: string): void {
 const HOUR = 60 * 60 * 1000, DAY = 24 * HOUR;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
-const r4 = (n: number) => Math.round(n * 10_000) / 10_000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths of a Bean. `hc` turns a Beans figure into hundredths at the
+ * door (a body's `amount_c`, a row's `balance_c`); every balance read back here is whole hundredths, compared exactly.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
 // ── members and signed requests ─────────────────────────────────────────────────────────────────────────────────
 interface Id { pk: string; priv: crypto.KeyObject; name: string }
@@ -149,7 +154,8 @@ async function callAt(base: string, method: Method, id: Id | null, urlPath: stri
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -193,23 +199,24 @@ function member(name: string, balance = 1_000): Id {
                 VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, hc(balance), ledger.getCurrentEpoch());
     return id;
 }
 /** The accounts rows written above, into the ledger's memory. */
 const sync = () => reconcileLedgerFromDb();
+/** `pk`'s balance set to `balance` Beans (whole hundredths in the row). */
 function setBalance(pk: string, balance: number): void {
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(pk, ledger.getCurrentEpoch());
-    db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(balance, ledger.getCurrentEpoch(), pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, ?)').run(pk, ledger.getCurrentEpoch());
+    db.prepare('UPDATE accounts SET balance_c = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(hc(balance), ledger.getCurrentEpoch(), pk);
     sync();
 }
 
 let seq = 0;
-/** A listing as the marketplace stores one. */
+/** A listing as the marketplace stores one, its price `credits` Beans (whole hundredths in the row). */
 function plantPost(author: string, type: 'offer' | 'need', credits = 1, repeatable = true): string {
     const id = `ml-post-${++seq}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable)
-                VALUES (?, ?, 'other', ?, 'test', ?, ?, 'active', ?)`).run(id, type, `${type} ${seq}`, credits, author, repeatable ? 1 : 0);
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, repeatable)
+                VALUES (?, ?, 'other', ?, 'test', ?, ?, 'active', ?)`).run(id, type, `${type} ${seq}`, hc(credits), author, repeatable ? 1 : 0);
     return id;
 }
 /**
@@ -220,27 +227,28 @@ function plantPost(author: string, type: 'offer' | 'need', credits = 1, repeatab
 function completedTrade(buyer: string, seller: string, credits = 50): void {
     const pid = plantPost(seller, 'offer', credits, false);
     db.prepare("UPDATE posts SET status = 'completed' WHERE id = ?").run(pid);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
-                VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`).run(`ml-trade-${++seq}`, pid, buyer, seller, credits, ago(40 * DAY), ago(40 * DAY));
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`).run(`ml-trade-${++seq}`, pid, buyer, seller, hc(credits), ago(40 * DAY), ago(40 * DAY));
 }
 /** A request waiting on the listing's author, exactly the row asking to buy or to help writes (engine/escrow.ts requestPost). */
 function plantRequest(postId: string, buyer: string, seller: string, credits = 1): string {
     const id = crypto.randomUUID();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'requested', ?)`).run(id, postId, buyer, seller, credits, new Date().toISOString());
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'requested', ?)`).run(id, postId, buyer, seller, hc(credits), new Date().toISOString());
     return id;
 }
-/** A crowdfund project (never funded: its goal is far off), as the crowdfund route stores one. */
+/** A crowdfund project (never funded: its goal, 1,000,000 Beans, is far off), as the crowdfund route stores one. */
 function plantProject(creator: string): string {
     const id = `ml-proj-${++seq}`;
-    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, status)
-                VALUES (?, ?, 'A community orchard', 'test', '[]', 1000000, 'ACTIVE')`).run(id, creator);
+    db.prepare(`INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, status)
+                VALUES (?, ?, 'A community orchard', 'test', '[]', ?, 'ACTIVE')`).run(id, creator, hc(1_000_000));
     return id;
 }
 
 /** Every account but the COMMONS_POOL shadow, plus the live Commons: a refusal moves none of it. */
-const nodeTotal = () => r4((db.prepare(`SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact());
-const bal = (pk: string) => r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0);
+const nodeTotal = () => (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as { s: number }).s + getCommonsBalanceExact();
+/** An account's balance, whole hundredths. */
+const bal = (pk: string) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0;
 interface Books { total: number; accounts: number; transactions: number; trades: number; pledges: number; members: number }
 const books = (): Books => ({
     total: nodeTotal(),
@@ -281,11 +289,11 @@ function refused(r: Res, code: string, words: RegExp, before: Books, what: strin
 }
 
 // ── what members do ─────────────────────────────────────────────────────────────────────────────────────────────
-const send = (from: Id, to: string, amount = 1) => call('POST', from, '/api/ledger/transfer', { to, amount });
+const send = (from: Id, to: string, amount = 1) => call('POST', from, '/api/ledger/transfer', { to, amount_c: hc(amount) });
 const accept = (buyer: Id, postId: string) => call('POST', buyer, '/api/marketplace/posts/accept', { postId, buyerPublicKey: buyer.pk });
 const request = (who: Id, postId: string) => call('POST', who, '/api/marketplace/posts/request', { postId, buyerPublicKey: who.pk });
 const approve = (author: Id, transactionId: string) => call('POST', author, '/api/marketplace/transactions/approve', { transactionId, authorPublicKey: author.pk });
-const crowdfund = (who: Id, projectId: string, amount = 1) => call('POST', who, `/api/crowdfund/projects/${projectId}/pledge`, { amount });
+const crowdfund = (who: Id, projectId: string, amount = 1) => call('POST', who, `/api/crowdfund/projects/${projectId}/pledge`, { amount_c: hc(amount) });
 const enterprise = async (keeper: Id, name: string): Promise<string> => {
     const r = await call('POST', keeper, '/api/enterprise', { name, purpose: `${name}, a test enterprise` });
     const pk = r.body?.publicKey as string;
@@ -294,9 +302,9 @@ const enterprise = async (keeper: Id, name: string): Promise<string> => {
     setMemberPhoto(db, pk, 'https://example.com/e.jpg');
     return pk;
 };
-const ownPost = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++seq}`, description: 'An offer', credits: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
+const ownPost = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++seq}`, description: 'An offer', price_c: 0, authorPublicKey: id.pk, photos: TEST_PHOTOS });
 const entOffer = (keeper: Id, ent: string, extra: Record<string, unknown> = {}) =>
-    call('POST', keeper, `/api/treasury/${ent}/offer`, { title: `Eggs ${++seq}`, category: 'food', credits: 1, photos: TEST_PHOTOS, ...extra });
+    call('POST', keeper, `/api/treasury/${ent}/offer`, { title: `Eggs ${++seq}`, category: 'food', price_c: hc(1), photos: TEST_PHOTOS, ...extra });
 
 /** `n` of `keeper`'s writes, as the gateway counts them: their own, or for `ent` (its path) when given. */
 function gatewayWrites(keeper: string, n: number, ent: string | null = null): void {
@@ -314,8 +322,8 @@ function newPeoplePaid(ent: string, keeper: string, n: number): void {
 }
 /** `n` posts `keeper` put up today for `ent`, as the enterprise's offer route stores them (created_by the keeper). */
 function entPosts(ent: string, keeper: string, n: number): void {
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable, created_by, created_at)
-                               VALUES (?, 'offer', 'other', 'Stock', 'test', 1, ?, 'active', 1, ?, ?)`);
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, repeatable, created_by, created_at)
+                               VALUES (?, 'offer', 'other', 'Stock', 'test', 100, ?, 'active', 1, ?, ?)`);
     db.transaction(() => { for (let i = 0; i < n; i++) insert.run(`ml-ent-post-${++seq}`, ent, keeper, new Date().toISOString()); })();
 }
 /** What `keeper` put up in the day for enterprises: the posts they made whose author isn't them. */
@@ -323,8 +331,8 @@ const postsForEnterprises = (keeper: string) =>
     count(`SELECT COUNT(*) AS n FROM posts WHERE created_by = ? AND author_pubkey != ? AND created_at > ?`, keeper, keeper, ago(DAY));
 /** `n` posts of `member`'s own put up today, as the marketplace stores them. */
 function ownPosts(member: string, n: number): void {
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, repeatable, created_at)
-                               VALUES (?, 'offer', 'other', 'Mine', 'test', 1, ?, 'active', 1, ?)`);
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, repeatable, created_at)
+                               VALUES (?, 'offer', 'other', 'Mine', 'test', 100, ?, 'active', 1, ?)`);
     db.transaction(() => { for (let i = 0; i < n; i++) insert.run(`ml-own-post-${++seq}`, member, new Date().toISOString()); })();
 }
 /** `n` of `member`'s own payments (each to someone new, when `newPeople`) or requests today, as the gate records them. */
@@ -348,7 +356,7 @@ const postsAs = (ent: string) => count('SELECT COUNT(*) AS n FROM posts p WHERE 
 /** The sentence a keeper's own refusal adds when the act was for `ent`, whose own day is spent. */
 const spentNote = (ent: string) => new RegExp(`${ent} has reached its own limit for today, so what you do for it counts against yours\\.`);
 const line = (who: Id, ent: string, text = `A line ${++seq}`) => call('POST', who, `/api/treasury/${ent}/thread/message`, { text });
-const sweep = (who: Id, ent: string, amount = 1) => call('POST', who, `/api/treasury/${ent}/sweep`, { amount });
+const sweep = (who: Id, ent: string, amount = 1) => call('POST', who, `/api/treasury/${ent}/sweep`, { amount_c: hc(amount) });
 
 /** The minute throttle off, so what refuses is the rule under test. The day budget is on whatever it says. */
 function minuteThrottleOff(): void {
@@ -363,6 +371,7 @@ function minuteThrottleOff(): void {
 interface Seed {
     owner: string;
     tradie: string;
+    /** `balance` in Beans (whole hundredths in the row). */
     members: { pk: string; name: string; balance: number; trades?: boolean }[];
     /** A trading peer that isn't there: its key, at a closed port on this machine. */
     peer?: { address: string; url: string; peerId: string };
@@ -385,7 +394,7 @@ async function runChild(): Promise<void> {
         insert.run(m.pk, m.name, ago(7 * DAY), seed.owner);
         setMemberPhoto(db, m.pk, 'https://example.com/a.jpg');
         if (first) {
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, hc(m.balance), ledger.getCurrentEpoch());
             if (m.trades) completedTrade(m.pk, seed.tradie);
         }
     }
@@ -394,7 +403,7 @@ async function runChild(): Promise<void> {
         const { addConnector, setConnectorCreditCap } = await import('./connector-manager.js');
         if (first) {
             addConnector(seed.peer.address, 'peer', 'Faraway', seed.peer.url);
-            setConnectorCreditCap(seed.peer.address, 500);
+            setConnectorCreditCap(seed.peer.address, hc(500));
         }
         // This node's own transport, listening on this machine only for the test's life: the purchase route asks it.
         const { startP2P } = await import('./p2p.js');
@@ -406,13 +415,13 @@ async function runChild(): Promise<void> {
         const link = ensureFederationLink(seed.peer.peerId, 'Faraway', createTreasury, seed.link.keeper)!;
         linkPk = link.treasuryPubkey;
         if (first) {
-            setCommissionCeiling(seed.peer.peerId, 500);
-            db.prepare('UPDATE accounts SET balance = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(seed.link.balance, ledger.getCurrentEpoch(), linkPk);
+            setCommissionCeiling(seed.peer.peerId, hc(500));
+            db.prepare('UPDATE accounts SET balance_c = ?, last_demurrage_epoch = ? WHERE public_key = ?').run(hc(seed.link.balance), ledger.getCurrentEpoch(), linkPk);
             // The seller is a member of the other community (a visitor's row with its home), and the listing came from there.
             db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, home_node_url, is_visitor) VALUES (?, 'Far Seller', ?, ?, 1)`)
                 .run(seed.link.seller, ago(7 * DAY), seed.peer.url);
-            db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, origin_node)
-                        VALUES (?, 'offer', 'other', 'A far thing', 'test', 1, ?, 'active', 1, ?)`).run(seed.link.postId, seed.link.seller, seed.peer.url);
+            db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, origin_node)
+                        VALUES (?, 'offer', 'other', 'A far thing', 'test', ?, ?, 'active', 1, ?)`).run(seed.link.postId, hc(1), seed.link.seller, seed.peer.url);
             sync();
         }
     }
@@ -528,7 +537,7 @@ async function main(): Promise<void> {
             `asking again for the offer her first ask still waits on is no new payment: that ask comes back and nothing moves (${show(askedAgain)})`);
         refused(await crowdfund(ann, project), 'money_payments_day', /100 payments/, before, 'a crowdfund pledge past it');
         assert(bal(ann.pk) === annBefore && bal(ben.pk) === benBefore, `neither balance moved (Ann ${annBefore}, Ben ${benBefore})`);
-        await idNotText('a send past it', 'to', ben.pk, ann.pk, (to) => call('POST', ann, '/api/ledger/transfer', { to, amount: 1 }));
+        await idNotText('a send past it', 'to', ben.pk, ann.pk, (to) => call('POST', ann, '/api/ledger/transfer', { to, amount_c: hc(1) }));
         await idNotText('a one-step buy past it', 'postId', sellaOffer, ann.pk, (postId) => call('POST', ann, '/api/marketplace/posts/accept', { postId, buyerPublicKey: ann.pk }));
         await idNotText('asking to buy past it', 'postId', sellaOffer, ann.pk, (postId) => call('POST', ann, '/api/marketplace/posts/request', { postId, buyerPublicKey: ann.pk }));
         const halAgain = plantRequest(annNeed, ann.pk, hal.pk);
@@ -541,10 +550,10 @@ async function main(): Promise<void> {
         const other = await send(cal, ben.pk);
         assert(other.status === 200, `another key is unaffected: Cal sends to Ben (${show(other)})`);
         const gift = await send(cal, ann.pk, 5);
-        assert(gift.status === 200 && bal(ann.pk) === r4(annBefore + 5), `receiving is never limited: Cal sends Ann 5 (${show(gift)}, Ann ${bal(ann.pk)})`);
+        assert(gift.status === 200 && bal(ann.pk) === annBefore + hc(5), `receiving is never limited: Cal sends Ann 5 (${show(gift)}, Ann ${bal(ann.pk)})`);
         const calBuys = await accept(cal, annOffer);
         const done = await call('POST', cal, '/api/marketplace/transactions/complete', { transactionId: calBuys.body?.transaction?.id, confirmerPublicKey: cal.pk });
-        assert(calBuys.status === 200 && done.status === 200 && bal(ann.pk) > r4(annBefore + 5),
+        assert(calBuys.status === 200 && done.status === 200 && bal(ann.pk) > annBefore + hc(5),
             `and a sale's escrow reaches her when the buyer completes (${calBuys.status}, ${show(done)}, Ann ${bal(ann.pk)})`);
     }
 
@@ -560,7 +569,7 @@ async function main(): Promise<void> {
         const newSellerOffer = plantPost(seller.pk, 'offer');
         sync();
         // Three days ago Dan paid Old (the ledger's row, as the send wrote it, moved back in time).
-        const paid = transfer(dan.pk, old.pk, 1, 'three days ago');
+        const paid = transfer(dan.pk, old.pk, hc(1), 'three days ago');
         db.prepare('UPDATE transactions SET timestamp = ? WHERE id = ?').run(ago(3 * DAY), paid!.id);
 
         const first = await many(M.newRecipientsPerDay, 8, (i) => send(dan, people[i].pk));
@@ -626,21 +635,21 @@ async function main(): Promise<void> {
         const ent = await enterprise(fay, 'Fay Farm');
         const project = plantProject(owner.pk);
         const backs = [] as number[];
-        for (let i = 0; i < 10; i++) backs.push((await call('POST', fay, `/api/treasury/${ent}/backing`, { amount: 1 })).status);
+        for (let i = 0; i < 10; i++) backs.push((await call('POST', fay, `/api/treasury/${ent}/backing`, { amount_c: hc(1) })).status);
         const releases = [] as number[];
         const aliases: [Method, string][] = [
             ['POST', `/api/treasury/${ent}/release`], ['DELETE', `/api/treasury/${ent}/pledge`], ['POST', `/api/treasury/${ent}/pledge/release`],
             ['DELETE', `/api/treasury/${ent}/backing`], ['POST', `/api/treasury/${ent}/backing/release`], ['POST', `/api/enterprise/${ent}/release`],
             ['DELETE', `/api/enterprise/${ent}/pledge`], ['POST', `/api/enterprise/${ent}/pledge/release`], ['POST', `/api/enterprise/${ent}/backing/release`],
         ];
-        for (const [method, p] of aliases) releases.push((await call(method, fay, p, { amount: 1 })).status);
+        for (const [method, p] of aliases) releases.push((await call(method, fay, p, { amount_c: hc(1) })).status);
         const pledged = await crowdfund(fay, project);
         assert(backs.every(s => s === 200) && releases.every(s => s === 200) && pledged.status === 200,
             `Fay backs her enterprise 10 times, releases 9 (every alias) and pledges to a crowdfund: 20 (${distinct(backs)} / ${distinct(releases)} / ${pledged.status})`);
         const before = books();
-        refused(await call('POST', fay, `/api/treasury/${ent}/backing`, { amount: 1 }), 'money_pledges_day', /20 pledges/, before, 'the 21st, a backing');
-        refused(await call('POST', fay, `/api/enterprise/${ent}/pledge`, { type: 'backing', amount: 1 }), 'money_pledges_day', /20 pledges/, before, 'a backing by its other door');
-        refused(await call('DELETE', fay, `/api/enterprise/${ent}/backing`, { amount: 1 }), 'money_pledges_day', /20 pledges/, before, 'a release');
+        refused(await call('POST', fay, `/api/treasury/${ent}/backing`, { amount_c: hc(1) }), 'money_pledges_day', /20 pledges/, before, 'the 21st, a backing');
+        refused(await call('POST', fay, `/api/enterprise/${ent}/pledge`, { type: 'backing', amount_c: hc(1) }), 'money_pledges_day', /20 pledges/, before, 'a backing by its other door');
+        refused(await call('DELETE', fay, `/api/enterprise/${ent}/backing`, { amount_c: hc(1) }), 'money_pledges_day', /20 pledges/, before, 'a release');
         refused(await crowdfund(fay, project), 'money_pledges_day', /20 pledges/, before, 'a crowdfund pledge');
         // Applying to keep an enterprise with a pledge: it becomes her backing once the lead says yes.
         const lea = member('Lea');
@@ -648,14 +657,23 @@ async function main(): Promise<void> {
         sync();
         const loom = await enterprise(lea, 'Lea Loom');
         const applications = () => count('SELECT COUNT(*) AS n FROM enterprise_keeper_requests WHERE member_pubkey = ?', fay.pk);
-        for (const field of ['pledgedBacking', 'amount', 'backing']) {
-            const beforeApplying = books();
-            refused(await call('POST', fay, `/api/enterprise/${loom}/keepers/request`, { [field]: 5 }), 'money_pledges_day', /20 pledges/, beforeApplying,
-                `applying to keep Lea Loom with a pledge (${field})`);
-        }
+        // The pledge is `pledgedBacking_c`, whole hundredths: the handler reads it alone (routes/treasury.ts requestJoinHandler),
+        // and the gate counts it as the handler reads it (routes/money-limits-gate.ts). An old name for it is no pledge.
+        const beforeApplying = books();
+        refused(await call('POST', fay, `/api/enterprise/${loom}/keepers/request`, { pledgedBacking_c: hc(5) }), 'money_pledges_day', /20 pledges/, beforeApplying,
+            'applying to keep Lea Loom with a pledge (pledgedBacking_c)');
         assert(applications() === 0, 'and no application is stored');
-        const noPledge = await call('POST', fay, `/api/treasury/${loom}/keepers/request`, { pledgedBacking: 0 });
+        const noPledge = await call('POST', fay, `/api/treasury/${loom}/keepers/request`, { pledgedBacking_c: 0 });
         assert(noPledge.status === 200 && applications() === 1, `applying with no pledge still goes: it pledges nothing (${show(noPledge)})`);
+        // At her limit still, an application carrying the pledge under its old name (pledgedBacking, in Beans) is an app from
+        // before whole hundredths: refused 400 amount_c_required (money-body.ts carriesOldMoneyKey), nothing stored, and not
+        // counted against her 20 (to another of Lea's enterprises: her request to Lea Loom is pending).
+        const loomTwo = await enterprise(lea, 'Lea Loom Two');
+        const actsBeforeOldNames = actsOf(fay.pk);
+        const oldNames = await call('POST', fay, `/api/treasury/${loomTwo}/keepers/request`, { pledgedBacking: 5, amount: 5, backing: 5 });
+        const oldNamesRow = db.prepare('SELECT pledged_backing_c AS p FROM enterprise_keeper_requests WHERE member_pubkey = ? AND enterprise_pubkey = ?').get(fay.pk, loomTwo) as { p: number } | undefined;
+        assert(oldNames.status === 400 && oldNames.body?.code === 'amount_c_required' && oldNamesRow === undefined && actsOf(fay.pk) === actsBeforeOldNames,
+            `an old name for the pledge is refused, amount_c_required: nothing stored, and it is not counted (${show(oldNames)}, ${JSON.stringify(oldNamesRow)}, acts ${actsBeforeOldNames} → ${actsOf(fay.pk)})`);
         const gilPledges = await crowdfund(gil, project);
         assert(gilPledges.status === 200, `another member still pledges (${show(gilPledges)})`);
     }
@@ -672,17 +690,17 @@ async function main(): Promise<void> {
 
         const own = await many(M.paymentsPerDay - 1, 8, () => send(gus, ben.pk));
         assert(own.every(s => s === 200), `Gus, Gus Grocer's keeper, makes 99 payments of his own (${distinct(own)})`);
-        const sweeps = await many(M.enterprisePaymentsPerDay, 8, () => call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 }));
+        const sweeps = await many(M.enterprisePaymentsPerDay, 8, () => call('POST', gus, `/api/treasury/${y}/sweep`, { amount_c: hc(1) }));
         assert(sweeps.every(s => s === 200), `and 1,000 for Gus Grocer, sweeping to the Commons: his own 99 took none of its room (${distinct(sweeps)})`);
         // Round 3 (the director, 2026-09-30): past its 1,000, a keeper's sweep is his own payment. Before, the 1,001st was
         // refused in Gus Grocer's words, and one keeper who spent a shop's day stopped every other.
-        const past = await call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 });
+        const past = await call('POST', gus, `/api/treasury/${y}/sweep`, { amount_c: hc(1) });
         assert(past.status === 200 && actsAs(y, 'payment') === M.enterprisePaymentsPerDay && ownFor(gus.pk, y, 'payment') === 1,
             `Gus Grocer's 1,000 are spent, so its 1,001st sweep is Gus's own payment, his 100th: its 1,000 took none of his (${show(past)}, ${actsAs(y, 'payment')} its own, ${ownFor(gus.pk, y, 'payment')} his for it)`);
         const beforeOwn = books();
         refused(await send(gus, ben.pk), 'money_payments_day', /You can make 100 payments/, beforeOwn, 'and his 101st, a send, is refused in his own words');
         const beforeSweep = books();
-        refused(await call('POST', gus, `/api/treasury/${y}/sweep`, { amount: 1 }), 'money_payments_day', new RegExp(`You can make 100 payments[^]*${spentNote('Gus Grocer').source}`), beforeSweep,
+        refused(await call('POST', gus, `/api/treasury/${y}/sweep`, { amount_c: hc(1) }), 'money_payments_day', new RegExp(`You can make 100 payments[^]*${spentNote('Gus Grocer').source}`), beforeSweep,
             'and so is his next sweep, in his own words, naming Gus Grocer');
 
         // 1,000 approvals of requests on its offer (each buyer's Beans go into escrow: not the enterprise's payment).
@@ -696,7 +714,7 @@ async function main(): Promise<void> {
         assert(pastApproval.status === 200 && actsAs(y, 'request') === M.enterpriseMarketRequestsPerDay && ownFor(gus.pk, y, 'request') === 1,
             `its 1,001st approval is Gus's own deal, and goes (round 3; before, 429 in Gus Grocer's words) (${show(pastApproval)})`);
         // At its 1,000 payments and its 1,000 approvals, a helper on its need: the approval's id must be text, at both doors.
-        const yNeed = (await call('POST', gus, `/api/treasury/${y}/need`, { title: 'Stock the shelves', category: 'other', credits: 1, repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
+        const yNeed = (await call('POST', gus, `/api/treasury/${y}/need`, { title: 'Stock the shelves', category: 'other', price_c: hc(1), repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
         assert(!!yNeed, 'setup: Gus Grocer needs help');
         const yHelper = member('Shelf Helper', 0);
         sync();
@@ -712,7 +730,7 @@ async function main(): Promise<void> {
         const z = await enterprise(zed, 'Zed Works');
         setBalance(z, 5_000);
         assert((await entOffer(zed, z)).status === 200, 'setup: Zed Works lists an offer (a need needs one)');
-        const need = (await call('POST', zed, `/api/treasury/${z}/need`, { title: 'Help at the working bee', category: 'other', credits: 1, repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
+        const need = (await call('POST', zed, `/api/treasury/${z}/need`, { title: 'Help at the working bee', category: 'other', price_c: hc(1), repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
         assert(!!need, 'setup: Zed Works needs help');
         const helpers = Array.from({ length: M.enterpriseNewRecipientsPerDay + 1 }, (_v, i) => member(`Helper ${i}`, 0));
         sync();
@@ -802,14 +820,14 @@ async function main(): Promise<void> {
         const ann = newId('Ann'), ben = newId('Ben');
         const seed: Seed = { owner: newId('Owner').pk, tradie: newId('Tradie').pk, members: [{ pk: ann.pk, name: 'Ann', balance: 1_000, trades: true }, { pk: ben.pk, name: 'Ben', balance: 0 }] };
         const one = await startNode(dir, seed);
-        const firstSixty = await many(60, 8, () => callAt(one.base, 'POST', ann, '/api/ledger/transfer', { to: ben.pk, amount: 1 }));
+        const firstSixty = await many(60, 8, () => callAt(one.base, 'POST', ann, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(1) }));
         assert(firstSixty.every(s => s === 200), `a node takes 60 of Ann's payments (${distinct(firstSixty)})`);
         await one.kill();
         const two = await startNode(dir, seed);
         try {
-            const nextForty = await many(40, 8, () => callAt(two.base, 'POST', ann, '/api/ledger/transfer', { to: ben.pk, amount: 1 }));
+            const nextForty = await many(40, 8, () => callAt(two.base, 'POST', ann, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(1) }));
             assert(nextForty.every(s => s === 200), `killed (SIGKILL) and booted again on the same data, it takes 40 more (${distinct(nextForty)})`);
-            const past = await callAt(two.base, 'POST', ann, '/api/ledger/transfer', { to: ben.pk, amount: 1 });
+            const past = await callAt(two.base, 'POST', ann, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(1) });
             assert(past.status === 429 && past.body?.code === 'money_payments_day', `and refuses the 101st: the restart kept the count (${show(past)})`);
         } finally {
             await two.stop();
@@ -837,15 +855,15 @@ async function main(): Promise<void> {
         const node = await startNode(dir, seed, { FEDERATION_SETTLEMENT: 'true' });
         const their = new Database(path.join(dir, 'state.db'));
         const outbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound' AND buyer_pubkey = ?`).get(jo.pk) as { n: number }).n;
-        const balance = () => r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(jo.pk) as { balance: number }).balance);
-        const purchase = () => callAt(node.base, 'POST', jo, '/api/federation/purchase', { peerAddress, sellerPublicKey: remoteSeller, amount: 1 });
+        const balance = () => (their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(jo.pk) as { balance_c: number }).balance_c;
+        const purchase = () => callAt(node.base, 'POST', jo, '/api/federation/purchase', { peerAddress, sellerPublicKey: remoteSeller, amount_c: hc(1) });
         try {
-            const sends = await many(M.paymentsPerDay - 1, 8, () => callAt(node.base, 'POST', jo, '/api/ledger/transfer', { to: ben.pk, amount: 1 }));
+            const sends = await many(M.paymentsPerDay - 1, 8, () => callAt(node.base, 'POST', jo, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(1) }));
             assert(sends.every(s => s === 200), `Jo makes 99 payments (${distinct(sends)})`);
             const bought = await purchase();
             assert(outbound() === 1 && bought.status !== 429, `and a purchase from another community: it escrows her Beans before it asks, so its settlement is there (${show(bought)}, ${outbound()} outbound)`);
             const afterPurchase = balance();
-            const past = await callAt(node.base, 'POST', jo, '/api/ledger/transfer', { to: ben.pk, amount: 1 });
+            const past = await callAt(node.base, 'POST', jo, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(1) });
             assert(past.status === 429 && past.body?.code === 'money_payments_day', `the purchase counted: her next send is 429 money_payments_day (${show(past)})`);
             const again = await purchase();
             assert(again.status === 429 && again.body?.code === 'money_payments_day' && outbound() === 1 && balance() === afterPurchase,
@@ -855,37 +873,37 @@ async function main(): Promise<void> {
             // enterprise work, which he also spends on an enterprise of his own.
             const link = node.link!;
             const kiosk = (await callAt(node.base, 'POST', kit, '/api/enterprise', { name: 'Kit Kiosk', purpose: 'Kit Kiosk, a test enterprise' })).body?.publicKey as string;
-            const funded = await callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: kiosk, amount: 5 });
+            const funded = await callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: kiosk, amount_c: hc(5) });
             assert(!!kiosk && funded.status === 200, `setup: Kit starts Kit Kiosk and gives it 5 Beans (${show(funded)})`);
             const linkOutbound = () => (their.prepare(`SELECT COUNT(*) AS n FROM settlements WHERE direction = 'outbound' AND buyer_pubkey = ?`).get(link) as { n: number }).n;
-            const sweeps = await many(M.enterprisePaymentsPerDay - 1, 8, () => callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 }));
+            const sweeps = await many(M.enterprisePaymentsPerDay - 1, 8, () => callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount_c: hc(1) }));
             assert(sweeps.every(s => s === 200), `Kit sweeps 999 from the link enterprise to the Commons (${distinct(sweeps)})`);
             const commissioned = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
             assert(linkOutbound() === 1 && commissioned.status !== 429, `and commissions a listing from the other community: its settlement is there, the enterprise's 1,000th payment (${show(commissioned)}, ${linkOutbound()} outbound)`);
-            const kioskSweep = await callAt(node.base, 'POST', kit, `/api/treasury/${kiosk}/sweep`, { amount: 1 });
+            const kioskSweep = await callAt(node.base, 'POST', kit, `/api/treasury/${kiosk}/sweep`, { amount_c: hc(1) });
             assert(kioskSweep.status === 429 && kioskSweep.body?.code === 'money_enterprise_work_payments_day',
                 `and the commission was Kit's 1,000th payment for his enterprises: a sweep from Kit Kiosk, which has made none, is 429 money_enterprise_work_payments_day (${show(kioskSweep)})`);
-            const kitOwn = await callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount: 1 });
+            const kitOwn = await callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(1) });
             assert(kitOwn.status === 200, `the enterprise's 1,000 took none of Kit's: his own payment goes (${show(kitOwn)})`);
             // Round 3: past the link's 1,000, what Kit pays for it is his own payment (before, the next sweep and commission were
             // 429 in the link's words). His own: Kit Kiosk's 5 and the send above, then a sweep, 96 sends, and a commission.
             const ownRows = (kind: string) => their.prepare(`SELECT account, for_enterprise AS forEnt, settlement_key AS key FROM money_acts WHERE account = ? AND kind = ?`).all(kit.pk, kind) as { account: string; forEnt: string | null; key: string | null }[];
-            const linkSweepOwn = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            const linkSweepOwn = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount_c: hc(1) });
             assert(linkSweepOwn.status === 200 && ownRows('payment').filter((r) => r.forEnt === link).length === 1,
                 `the link's day is spent, so Kit's next sweep from it is his own payment, his 3rd, and goes (${show(linkSweepOwn)})`);
-            const kitSends = await many(M.paymentsPerDay - 4, 8, () => callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount: 0.01 }));
+            const kitSends = await many(M.paymentsPerDay - 4, 8, () => callAt(node.base, 'POST', kit, '/api/ledger/transfer', { to: ben.pk, amount_c: hc(0.01) }));
             assert(kitSends.every(s => s === 200), `Kit makes 96 more of his own (${distinct(kitSends)})`);
             const ownCommission = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
             const commissionRow = ownRows('payment').find((r) => r.key !== null);
             assert(ownCommission.status !== 429 && linkOutbound() === 2 && commissionRow?.forEnt === link,
                 `so a commission now is his own 100th payment: it goes, the link's second settlement, and its row is Kit's own for the link (${show(ownCommission)}, ${linkOutbound()} outbound, ${JSON.stringify(commissionRow)})`);
-            const linkBalance = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            const linkBalance = (their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(link) as { balance_c: number }).balance_c;
             const commissionPast = await callAt(node.base, 'POST', kit, '/api/federation/commission', { postId: 'far-post' });
-            const linkAfter = r4((their.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(link) as { balance: number }).balance);
+            const linkAfter = (their.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(link) as { balance_c: number }).balance_c;
             assert(commissionPast.status === 429 && commissionPast.body?.code === 'money_payments_day' && /You can make 100 payments/.test(commissionPast.body?.error ?? '')
                 && /has reached its own limit for today, so what you do for it counts against yours/.test(commissionPast.body?.error ?? '') && linkOutbound() === 2 && linkAfter === linkBalance,
                 `and a commission past it is 429 money_payments_day in his own words, before anything moves: no new settlement, the same balance (${show(commissionPast)}, ${linkOutbound()}, ${linkAfter})`);
-            const sweepPast = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            const sweepPast = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount_c: hc(1) });
             assert(sweepPast.status === 429 && sweepPast.body?.code === 'money_payments_day' && /You can make 100 payments/.test(sweepPast.body?.error ?? ''),
                 `so is the link's next sweep (${show(sweepPast)})`);
             // The link's count leaves out the commission Kit made as his own (purchasesToday; the round-4 review of #1329).
@@ -896,7 +914,7 @@ async function main(): Promise<void> {
                             WHERE account = ? AND keeper = ? AND kind = 'payment' AND settlement_key IS NULL ORDER BY made_at LIMIT 1)`).run(ago(DAY + HOUR), link, kit.pk);
             const linkActs = () => (their.prepare(`SELECT COUNT(*) AS n FROM money_acts WHERE account = ? AND kind = 'payment' AND made_at > ?`).get(link, ago(DAY)) as { n: number }).n;
             const linkActsBefore = linkActs();
-            const roomAgain = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount: 1 });
+            const roomAgain = await callAt(node.base, 'POST', kit, `/api/treasury/${link}/sweep`, { amount_c: hc(1) });
             assert(roomAgain.status === 200 && linkActs() === linkActsBefore + 1 && linkOutbound() === 2,
                 `a sweep of Kit's for the link leaves the day, so the link has room again: his next sweep is the link's 1,000th and goes, as his own commission is his and not the link's (${show(roomAgain)}, link rows ${linkActsBefore} → ${linkActs()})`);
         } finally {
@@ -919,7 +937,7 @@ async function main(): Promise<void> {
         for (const e of [a, b, c]) setBalance(e, 5_000);
         adminAssignTreasuryOperator(a, nell.pk, owner.pk);
         assert((await entOffer(mo, a)).status === 200 && (await entOffer(mo, c)).status === 200, 'setup: Mo Apples and Mo Cycles list offers (a need needs one)');
-        const needOf = async (e: string) => (await call('POST', mo, `/api/treasury/${e}/need`, { title: 'Help out', category: 'other', credits: 1, repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
+        const needOf = async (e: string) => (await call('POST', mo, `/api/treasury/${e}/need`, { title: 'Help out', category: 'other', price_c: hc(1), repeatable: true, photos: TEST_PHOTOS })).body?.post?.id as string;
         const [needA, needC] = [await needOf(a), await needOf(c)];
         assert(!!needA && !!needC, 'setup: and needs');
 
@@ -1085,19 +1103,19 @@ async function main(): Promise<void> {
             const start = async (name: string) => {
                 const r = await callAt(one.base, 'POST', moe, '/api/enterprise', { name, purpose: `${name}, a test enterprise` });
                 if (!r.body?.publicKey) throw new Error(`setup: Moe could not start ${name}: ${show(r)}`);
-                const funded = await callAt(one.base, 'POST', moe, '/api/ledger/transfer', { to: r.body.publicKey, amount: 20 });
+                const funded = await callAt(one.base, 'POST', moe, '/api/ledger/transfer', { to: r.body.publicKey, amount_c: hc(20) });
                 if (funded.status !== 200) throw new Error(`setup: Moe could not fund ${name}: ${show(funded)}`);
                 return r.body.publicKey as string;
             };
             const [x, y] = [await start('Moe Mill'), await start('Moe Mart')];
-            const sweepsAt = (node: Node, e: string, n: number) => many(n, 8, () => callAt(node.base, 'POST', moe, `/api/treasury/${e}/sweep`, { amount: 0.01 }));
+            const sweepsAt = (node: Node, e: string, n: number) => many(n, 8, () => callAt(node.base, 'POST', moe, `/api/treasury/${e}/sweep`, { amount_c: hc(0.01) }));
             const before = [...await sweepsAt(one, x, 300), ...await sweepsAt(one, y, 300)];
             assert(before.every(s => s === 200), `Moe sweeps 300 from each of his two enterprises (${distinct(before)})`);
             await one.kill();
             two = await startNode(dir, seed);
             const after = [...await sweepsAt(two, x, 200), ...await sweepsAt(two, y, 200)];
             assert(after.every(s => s === 200), `killed (SIGKILL) and booted again on the same data, it takes 200 more from each: 1,000 for the two (${distinct(after)})`);
-            const past = await callAt(two.base, 'POST', moe, `/api/treasury/${x}/sweep`, { amount: 0.01 });
+            const past = await callAt(two.base, 'POST', moe, `/api/treasury/${x}/sweep`, { amount_c: hc(0.01) });
             assert(past.status === 429 && past.body?.code === 'money_enterprise_work_payments_day',
                 `and refuses his 1,001st, from Moe Mill, which has made only 500: the restart kept his enterprise work (${show(past)})`);
         } finally {
@@ -1261,15 +1279,15 @@ async function main(): Promise<void> {
         // A deal whose buyer's Beans are held in trust: its escrow account, escrow_<the deal's id>, holds 4.
         const bought = await accept(vic, plantPost(sal.pk, 'offer', 4, false));
         const deal = bought.body?.transaction?.id as string;
-        assert(bal(`escrow_${deal}`) === 4, `setup: Victor buys from Sal, and 4 Beans wait in the deal's escrow (${show(bought)})`);
+        assert(bal(`escrow_${deal}`) === hc(4), `setup: Victor buys from Sal, and 4 Beans wait in the deal's escrow (${show(bought)})`);
 
         const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status;
-        const rowOf = (pk: string) => JSON.stringify(db.prepare('SELECT callsign, bio, is_treasury, status, goal_amount FROM members WHERE public_key = ?').get(pk) ?? null);
+        const rowOf = (pk: string) => JSON.stringify(db.prepare('SELECT callsign, bio, is_treasury, status, goal_amount_c FROM members WHERE public_key = ?').get(pk) ?? null);
         const state = () => JSON.stringify({
             books: books(), projects: count('SELECT COUNT(*) AS n FROM projects'), keepers: count('SELECT COUNT(*) AS n FROM treasury_operators'),
             vic: rowOf(vic.pk), wendy: rowOf(wendy.pk), vats: rowOf(vats), commons: rowOf('COMMONS_POOL'), escrow: bal(`escrow_${deal}`),
         });
-        const start = (id: unknown, goalAmount = 1) => call('POST', mal, '/api/crowdfund/projects', { id, title: `Mallory fund ${++seq}`, description: 'For me', goalAmount });
+        const start = (id: unknown, goalAmount = 1) => call('POST', mal, '/api/crowdfund/projects', { id, title: `Mallory fund ${++seq}`, description: 'For me', goalAmount_c: hc(goalAmount) });
 
         const before = state();
         const ids: [string, string][] = [
@@ -1287,20 +1305,20 @@ async function main(): Promise<void> {
         assert(statusOf(vic.pk) === 'active' && statusOf(vats) === 'active', `Victor and Vera Vats are still active (${statusOf(vic.pk)}, ${statusOf(vats)})`);
         // The same below the route, for any caller: createCrowdfundProject takes only an id nothing else has.
         const refusals = [vic.pk, vats, 'COMMONS_POOL', deal, `escrow_${deal}`].map((id) => {
-            try { createCrowdfundProject(id, mal.pk, 'Mallory fund', 'For me', [], 1, null); return 'made'; } catch (e: any) { return String(e?.message); }
+            try { createCrowdfundProject(id, mal.pk, 'Mallory fund', 'For me', [], hc(1), null); return 'made'; } catch (e: any) { return String(e?.message); }
         });
         assert(refusals.every((m) => /an id nothing else has/.test(m)) && state() === before,
             `and createCrowdfundProject refuses each of them, and the deal's escrow's own name, writing nothing (${refusals.join(' | ')})`);
 
         // A projects row under a person's key, as the route wrote one before it made ids itself: nothing reaches it.
-        const plantBadProject = (pk: string) => db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-            VALUES (?, ?, 'Mallory fund', 'For me', '[]', 1, NULL, 'ACTIVE', ?, ?, ?, ?)`).run(pk, mal.pk, new Date().toISOString(), pk, new Date().toISOString(), new Date().toISOString());
+        const plantBadProject = (pk: string) => db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount_c, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            VALUES (?, ?, 'Mallory fund', 'For me', '[]', 100, NULL, 'ACTIVE', ?, ?, ?, ?)`).run(pk, mal.pk, new Date().toISOString(), pk, new Date().toISOString(), new Date().toISOString());
         plantBadProject(vic.pk);
         plantBadProject(wendy.pk);
         const planted = state();
         const oldPledge = await crowdfund(mal, vic.pk);
-        const oldDoor = await call('POST', mal, `/api/treasury/${vic.pk}/pledge`, { amount: 1, memo: 'For you' });
-        const oldEdit = await call('POST', mal, '/api/crowdfund/projects/update', { id: vic.pk, title: 'Renamed', description: 'Mine now', goalAmount: 1 });
+        const oldDoor = await call('POST', mal, `/api/treasury/${vic.pk}/pledge`, { amount_c: hc(1), memo: 'For you' });
+        const oldEdit = await call('POST', mal, '/api/crowdfund/projects/update', { id: vic.pk, title: 'Renamed', description: 'Mine now', goalAmount_c: hc(1) });
         const oldDelete = await call('POST', mal, '/api/crowdfund/projects/delete', { id: wendy.pk });
         assert(oldPledge.status === 400 && oldDoor.status >= 400 && oldEdit.status === 400 && oldDelete.status === 400,
             `a projects row made before, under Victor's or Wendy's key: pledging at either door, editing it and deleting it are all refused (${show(oldPledge)}, ${show(oldDoor)}, ${show(oldEdit)}, ${show(oldDelete)})`);
@@ -1317,7 +1335,7 @@ async function main(): Promise<void> {
         const vicBefore = bal(vic.pk);
         const first = await crowdfund(vic, pid, 1);
         const second = await crowdfund(mal, pid, 2);
-        assert(first.status === 200 && second.status === 200 && bal(pid) === 3 && statusOf(pid) === 'funded' && bal(vic.pk) === r4(vicBefore - 1),
+        assert(first.status === 200 && second.status === 200 && bal(pid) === hc(3) && statusOf(pid) === 'funded' && bal(vic.pk) === vicBefore - hc(1),
             `pledges of 1 and 2 fund it: its own account holds 3 and it is funded (${show(first)}, ${show(second)}, ${bal(pid)}, ${statusOf(pid)})`);
         assert(statusOf(vic.pk) === 'active' && statusOf(mal.pk) === 'active', `and its backers are still active (${statusOf(vic.pk)}, ${statusOf(mal.pk)})`);
     }

@@ -245,6 +245,7 @@ function AskCard({ ask, busy, myVouching, onSend, onNo }: {
                         onChange={setVouchPreset}
                         budgetLeft={myVouching.budget?.left ?? 0}
                         budgetTotal={myVouching.budget?.level ?? 0}
+                        noLimit={myVouching.noLimit === true}
                     />
                 </View>
             )}

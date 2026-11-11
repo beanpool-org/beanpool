@@ -27,6 +27,8 @@ import {
 } from './federation-settlement-state.js';
 
 const PEER_ID = '12D3KooWByronPeer';
+/** The story's figures are Beans; a settlement row holds whole hundredths (1 Bean = 100). */
+const hc = (beans: number): number => Math.round(beans * 100);
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -49,14 +51,14 @@ async function main() {
     const out = openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
         buyerPubkey: 'buyerpk', buyerHomeNode: 'https://brisbane.beanpool.org',
-        postId: 'post-1', amount: 5, state: 'escrowed',
+        postId: 'post-1', amount_c: hc(5), state: 'escrowed',
     });
-    assert(out.state === 'escrowed' && out.amount === 5, 'an outbound settlement opens in escrowed');
+    assert(out.state === 'escrowed' && out.amount_c === hc(5), 'an outbound settlement opens in escrowed');
 
     advanceSettlement('k-out-1', 'committed', { receipt: 'sig-abc' });
     const replay = openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
-        buyerPubkey: 'buyerpk', postId: 'post-1', amount: 5, state: 'escrowed',
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount_c: hc(5), state: 'escrowed',
     });
     assert(replay.state === 'committed', 'reopening an existing key does NOT reset it — a retry is safe');
     assert(replay.receipt === 'sig-abc', 'and the receipt survives the retry');
@@ -68,23 +70,27 @@ async function main() {
     // silent trade aliasing: the caller proceeds believing the new terms were registered.
     throws(() => openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
-        buyerPubkey: 'buyerpk', amount: 500, state: 'escrowed',
+        buyerPubkey: 'buyerpk', amount_c: hc(500), state: 'escrowed',
     }), /key collision/, 'reusing a key with a DIFFERENT amount is refused, not silently accepted');
     throws(() => openSettlement({
+        key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount_c: hc(5) + 1, state: 'escrowed',
+    }), /key collision/, 'and so is one hundredth more: the same trade is the same integer, no rounding between');
+    throws(() => openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: 'someone-else',
-        buyerPubkey: 'buyerpk', postId: 'post-1', amount: 5, state: 'escrowed',
+        buyerPubkey: 'buyerpk', postId: 'post-1', amount_c: hc(5), state: 'escrowed',
     }), /key collision/, 'and reusing it for a different peer is refused too');
     throws(() => openSettlement({
         key: 'k-out-1', direction: 'outbound', peerId: PEER_ID,
-        buyerPubkey: 'buyerpk', postId: 'a-different-post', amount: 5, state: 'escrowed',
+        buyerPubkey: 'buyerpk', postId: 'a-different-post', amount_c: hc(5), state: 'escrowed',
     }), /key collision/,
         'and for a different POST — otherwise the caller proceeds on new terms while the receipt is built from the old row');
-    assert(getSettlement('k-out-1')!.amount === 5, 'the original row is untouched by the rejected reuse');
+    assert(getSettlement('k-out-1')!.amount_c === hc(5), 'the original row is untouched by the rejected reuse');
 
     // A same-state call carrying NEW metadata must still write it. An early return on state === to dropped
     // it, so a row that reached `held` without its receipt could never have one attached — and the receipt
     // is the only thing that makes the payment replayable.
-    openSettlement({ key: 'k-meta', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b', amount: 1, state: 'reserved' });
+    openSettlement({ key: 'k-meta', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b', amount_c: hc(1), state: 'reserved' });
     advanceSettlement('k-meta', 'held');
     assert(getSettlement('k-meta')!.receipt === null, 'a held row can exist with no receipt yet');
     assert(advanceSettlement('k-meta', 'held', { receipt: 'late-sig' }).receipt === 'late-sig',
@@ -103,7 +109,7 @@ async function main() {
         'a settled settlement is terminal — it cannot later be reversed');
 
     // ── 3. Reversal is a state, not a deletion ──────────────────────────────────
-    openSettlement({ key: 'k-out-2', direction: 'outbound', peerId: PEER_ID, buyerPubkey: 'b2', amount: 9, state: 'escrowed' });
+    openSettlement({ key: 'k-out-2', direction: 'outbound', peerId: PEER_ID, buyerPubkey: 'b2', amount_c: hc(9), state: 'escrowed' });
     advanceSettlement('k-out-2', 'committed', { receipt: 'sig-def' });
     advanceSettlement('k-out-2', 'reversed', { failureReason: 'CAPACITY_LAPSED' });
     const reversed = getSettlement('k-out-2')!;
@@ -112,9 +118,9 @@ async function main() {
     assert(reversed.failureReason === 'CAPACITY_LAPSED', 'and records why');
 
     // ── 4. Boot recovery sees only unfinalised rows ──────────────────────────────
-    openSettlement({ key: 'k-in-1', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b3', amount: 4, state: 'reserved' });
+    openSettlement({ key: 'k-in-1', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b3', amount_c: hc(4), state: 'reserved' });
     advanceSettlement('k-in-1', 'held', { receipt: 'sig-ghi' });
-    openSettlement({ key: 'k-in-2', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b4', amount: 2, state: 'reserved' });
+    openSettlement({ key: 'k-in-2', direction: 'inbound', peerId: PEER_ID, buyerPubkey: 'b4', amount_c: hc(2), state: 'reserved' });
 
     const keys = unfinalisedSettlements().map(r => r.key);
     assert(keys.includes('k-in-1') && keys.includes('k-in-2'), 'held and reserved are unfinalised');

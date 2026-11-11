@@ -53,6 +53,7 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 import { lockedDm } from './dm-test-payload.js';
 import http from 'node:http';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -197,7 +198,7 @@ async function child(): Promise<void> {
             const now = new Date().toISOString();
             db.transaction(() => {
                 for (let i = 0; i < a.n; i++) {
-                    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`)
+                    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 100, ?, ?, ?)`)
                         .run(`flood-${crypto.randomUUID()}`, `Flood ${i}`, a.author, now, now);
                 }
             })();
@@ -255,7 +256,8 @@ async function api(base: string, route: string, as: Id | null, body: unknown = {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(as.priv, { method: 'POST', path: route, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -292,7 +294,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = (pw: string, role: string) => ({
-        ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
         ...(role === 'backup' ? { MAX_IMPORT_ROWS_PER_CATEGORY: String(CAP), BACKUP_RESYNC_RETRY_MS: String(RETRY_MS) } : {}),
     });
     const gwen = newId('Gwen');
@@ -312,7 +314,7 @@ async function main(): Promise<void> {
             built(`${who.name} sets a profile photo (listings need one)`, await api(m, '/api/profile/update', who, { avatar: TINY_PNG }));
         }
         const offer = async (who: Id, title: string) => built(`${who.name} offers ${title}`, await api(m, '/api/marketplace/posts', who, {
-            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits: 3, priceType: 'fixed', authorPublicKey: who.pk,
+            type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: 300, priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
         await offer(ann, 'Honey');

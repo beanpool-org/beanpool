@@ -4,8 +4,8 @@ import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Activit
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, type RequestReportOutcome } from '@beanpool/core';
-import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
+import { dealStateWords, dealStep, formatHundredths, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
+import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -35,6 +35,8 @@ import { makeChatStyles } from '../../components/chat/styles';
 import { ChatMessageList, scrollChatToBottom } from '../../components/chat/ChatMessageList';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
+import { ChatAboutBanner, ChatAboutCard } from '../../components/chat/ChatAbout';
+import { useAboutListings } from '../../utils/about-listings';
 import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line-trade';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
@@ -43,7 +45,6 @@ import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, messageTime, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, requestDecisionFailureWords, requestIsGone, type ChatViewer,
 } from '../../utils/chat-actions';
-import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
 // db.ts and the DM line checks never reach the words layer: the sentences they write are translated where shown.
 import { chatLineWords } from '../../utils/chat-line-words';
@@ -56,7 +57,7 @@ import { reportedAlertBody } from '../../utils/reportReasons';
 import { reportRequestAndBlock, ReportedNotBlockedError, requestLineIn, wordsOfLine } from '../../utils/request-report';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
-// the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
+// the composer all moved to utils/chat-actions, components/chat/* and core's chat-links (chat parity,
 // 2026-09-23), so a group chat behaves the same way rather than nearly the same way.
 
 // History window (WhatsApp-style): open with the newest page, grow by a page each
@@ -160,7 +161,8 @@ function ChatScreen({ id }: { id: string }) {
     // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
-    const [pendingTx, setPendingTx] = useState<{ id: string; amount: number; isPayer: boolean } | null>(null);
+    // `amount_c`: what the deal holds, whole hundredths of a Bean (null when the phone holds no figure for it).
+    const [pendingTx, setPendingTx] = useState<{ id: string; amount_c: number | null; isPayer: boolean } | null>(null);
     const [isDynamicContext, setIsDynamicContext] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
@@ -477,7 +479,8 @@ function ChatScreen({ id }: { id: string }) {
                         title: res.postTitle,
                         status: res.postStatus,
                         priceType: res.price_type,
-                        credits: res.credits
+                        // The listing's price, whole hundredths of a Bean (null: no figure, shown "—").
+                        price_c: res.price_c
                     });
                     setIsDynamicContext(false);
 
@@ -508,7 +511,7 @@ function ChatScreen({ id }: { id: string }) {
                 if (res.pendingTxId && identity.publicKey) {
                     setPendingTx({
                         id: res.pendingTxId,
-                        amount: res.pendingAmount,
+                        amount_c: res.pendingAmount_c ?? null,
                         isPayer: res.txBuyerPubkey === identity.publicKey
                     });
                 } else if (res.postId) {
@@ -777,7 +780,11 @@ function ChatScreen({ id }: { id: string }) {
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
+                // The listing the member came from (Message on a Need or an Offer) goes with this line, sealed beside its words; the
+                // chip is spent once the line is written, and the line itself holds it from there, so a Resend carries it too.
+                const about = chatAboutDrafts.get(String(id));
+                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata, undefined, about), 15_000, t('Sending is taking too long — please try again.'));
+                if (about) chatAboutDrafts.drop(String(id));
                 setReplyToMessage(null);
                 // Written here and on its way: the chat waits only once the node has taken it (the effect above).
                 if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
@@ -935,7 +942,7 @@ function ChatScreen({ id }: { id: string }) {
         // English writes one form for both; a language with more forms has them.
         Alert.alert(
             t('Release Credits'),
-            tn(pendingTx.amount, 'Release {n} Beans to the provider? This action cannot be undone.', 'Release {n} Beans to the provider? This action cannot be undone.'),
+            tn((pendingTx.amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action cannot be undone.', 'Release {n} Beans to the provider? This action cannot be undone.', { n: formatHundredths(pendingTx.amount_c) }),
             [
                 { text: t('Cancel'), style: 'cancel' },
                 {
@@ -1016,18 +1023,26 @@ function ChatScreen({ id }: { id: string }) {
     // answer (core's dealStep `to-answer`: the web's strip carries it too, and Talk's Action Required counts it, so the chat
     // it opens must show it). My own request, a declined one and a stranger's are not here.
     const myKey = identity?.publicKey;
+    // Which deals and which buttons are core's one rule (dealMoves, through utils/deal-rows): a standing deal's rows never
+    // show Release or Cancel, and only its first period asks for a review (DESIGN-standing-deals-upfront-fable §0, §3).
     const activeDeals = React.useMemo(
-        () => deals.filter(d => d.status === 'pending' || (d.status === 'completed' && !d.iRated) || (!!myKey && isRequestToAnswer(d, myKey))),
+        () => (myKey ? deals.filter(d => isChatStripDeal(d, myKey)) : []),
         [deals, myKey]
     );
 
+    // The inline bar's deal, as core reads it: Release and Cancel only where dealMoves offers them. A deal the phone hasn't
+    // read yet shows no bar (never a button the node would refuse).
+    const pendingMoves = React.useMemo(() => {
+        if (!pendingTx || !myKey) return null;
+        const d = deals.find(x => x.txId === pendingTx.id);
+        return d ? localDealMoves(d, myKey) : null;
+    }, [deals, pendingTx, myKey]);
+    const showInlineBar = !!pendingTx && !!pendingMoves?.release && postContext?.status === 'pending';
+
     // Filter out the deal from the top strip if it is currently displayed in the richer bottom Inline Action Bar
     const visibleDeals = React.useMemo(() => {
-        return activeDeals.filter(d => {
-            const isShownInInlineBar = pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && d.txId === pendingTx.id;
-            return !isShownInInlineBar;
-        });
-    }, [activeDeals, pendingTx, postContext]);
+        return activeDeals.filter(d => !(showInlineBar && d.txId === pendingTx?.id));
+    }, [activeDeals, pendingTx, showInlineBar]);
 
     // Reactive dynamic context: if there is no hardcoded postContext (consolidated thread),
     // derive postContext and pendingTx automatically from active deals where the user is the buyer.
@@ -1035,17 +1050,18 @@ function ChatScreen({ id }: { id: string }) {
         if (!isDynamicContext) return;
 
         let selectedDeal = null;
+        const me = identity?.publicKey ?? '';
         if (focusTx) {
-            selectedDeal = deals.find(d => d.txId === focusTx && d.status === 'pending');
+            selectedDeal = deals.find(d => d.txId === focusTx && (localDealMoves(d, me)?.cancelHold || localDealMoves(d, me)?.release));
         }
         if (!selectedDeal) {
-            selectedDeal = deals.find(d => d.status === 'pending' && d.iAmBuyer);
+            selectedDeal = deals.find(d => localDealMoves(d, me)?.release);
         }
 
         if (selectedDeal) {
             setPendingTx({
                 id: selectedDeal.txId,
-                amount: selectedDeal.credits,
+                amount_c: selectedDeal.amount_c ?? null,
                 isPayer: selectedDeal.iAmBuyer
             });
             setPostContext({
@@ -1053,13 +1069,13 @@ function ChatScreen({ id }: { id: string }) {
                 title: selectedDeal.postTitle || t('Deal'),
                 status: selectedDeal.status || 'pending',
                 priceType: 'fixed',
-                credits: selectedDeal.credits
+                price_c: selectedDeal.amount_c ?? null
             });
         } else {
             setPendingTx(null);
             setPostContext(null);
         }
-    }, [deals, isDynamicContext, focusTx]);
+    }, [deals, isDynamicContext, focusTx, identity?.publicKey]);
 
     // postId -> item title, so escrow events can be labelled by deal in the merged timeline.
     const dealTitleByPostId = React.useMemo(() => {
@@ -1068,10 +1084,11 @@ function ChatScreen({ id }: { id: string }) {
         return map;
     }, [deals]);
 
-    const handleReleaseDeal = async (txId: string, amount: number) => {
+    /** `amount_c`: what the deal holds, whole hundredths of a Bean (null: no figure, said "—"). */
+    const handleReleaseDeal = async (txId: string, amount_c: number | null) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert(t('Release Credits'), tn(amount, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.'), [
+        Alert.alert(t('Release Credits'), tn((amount_c ?? 0) / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }), [
             { text: t('Cancel'), style: 'cancel' },
             { text: t('Release'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
@@ -1121,6 +1138,8 @@ function ChatScreen({ id }: { id: string }) {
     // Day pills interleaved, then reversed for the inverted list. Shared with every chat so a group's
     // Today / Yesterday / "Mon, 12 May" reads exactly like a DM's (utils/chat-actions).
     const listItems = React.useMemo(() => buildChatListItems(messages), [messages]);
+    // The listings the messages name (Message on a listing; core chat-about.ts), as this member can read them.
+    const aboutListings = useAboutListings(React.useMemo(() => messages.filter((m) => m.about).map((m) => m.about.postId as string), [messages]));
 
     // Who this member is in this chat. The one place the action rules are asked, so a DM and a group chat
     // can never disagree about what tapping a bubble offers.
@@ -1172,6 +1191,11 @@ function ChatScreen({ id }: { id: string }) {
             iconColor = colors.brand.primary;
             bgColor = colors.chatSystem.releasedBg;
             borderColor = colors.brand.dark;
+        }
+        if (item.systemType === 'STANDING_DEAL') {
+            // A standing deal's record line (due, covered, ended, stopped in the grace): the node's own sentence as its text.
+            iconName = 'repeat';
+            iconColor = colors.brand.primary;
         }
         if (item.systemType === 'ESCROW_CANCELLED') {
             iconName = 'cash-refund';
@@ -1399,6 +1423,9 @@ function ChatScreen({ id }: { id: string }) {
                 onPressUrl={requestMode === 'none' ? openUrl : undefined}
                 editing={editingMessage?.id === item.id}
                 quote={quote}
+                about={item.about ? (
+                    <ChatAboutCard about={item.about} live={aboutListings.get(item.about.postId)} isMe={isMe} onOpen={(postId) => router.push(`/post/${postId}`)} />
+                ) : null}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
                     // (design §4.6, as the web; PR #2540 review 4393642129). Its caption is words, and reads.
@@ -1426,7 +1453,7 @@ function ChatScreen({ id }: { id: string }) {
                                 )}
                             </View>
                         ) : null}
-                        {/* A line the node moved or reordered, or an old-format line (e2e-crypto checkDmThread). */}
+                        {/* A line the node moved or reordered (e2e-crypto checkDmThread). */}
                         {item.integrityNote ? (
                             <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
                                 ⚠️ {chatLineWords(item.integrityNote)}
@@ -1536,29 +1563,36 @@ function ChatScreen({ id }: { id: string }) {
                                     <Text style={styles.dealCardMeta} numberOfLines={1}>{dealStateWords(dealStep(localDealRow(d, identity!.publicKey), identity!.publicKey), null)}</Text>
                                 ) : (
                                     <Text style={styles.dealCardMeta} numberOfLines={1}>
-                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
+                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={formatHundredths(d.amount_c)} style={styles.dealCardMeta} /> }} />
                                     </Text>
                                 )}
+                                {(() => {
+                                const moves = localDealMoves(d, identity!.publicKey);
+                                return (
                                 <View style={styles.dealCardActions}>
-                                    {d.status === 'pending' && d.iAmBuyer && (
+                                    {moves?.release && (
                                         <>
-                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.credits)}>
+                                            <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Release credits for {title}', { title: d.postTitle }) : t('Release credits for deal')} style={[styles.dealBtn, styles.dealBtnRelease]} disabled={actionLoading} onPress={() => handleReleaseDeal(d.txId, d.amount_c ?? null)}>
                                                 <Text style={styles.dealBtnReleaseText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{actionLoading ? '…' : t('Release')}</Text>
                                             </Pressable>
+                                            {moves.cancelHold && (
                                             <Pressable accessibilityRole="button" accessibilityLabel={t('Cancel deal')} style={[styles.dealBtn, styles.dealBtnCancel]} disabled={actionLoading} onPress={() => handleCancelDeal(d.txId)}>
                                                 <Text style={styles.dealBtnCancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                                             </Pressable>
+                                            )}
                                         </>
                                     )}
-                                    {d.status === 'pending' && !d.iAmBuyer && (
+                                    {moves?.step.state === 'to-deliver' && (
                                         <Text style={styles.dealAwaiting}>{t('⏳ Awaiting release')}</Text>
                                     )}
-                                    {d.status === 'completed' && !d.iRated && (
+                                    {moves?.step.state === 'done-to-review' && (
                                         <Pressable accessibilityRole="button" accessibilityLabel={d.postTitle ? t('Leave a review for {title}', { title: d.postTitle }) : t('Leave a review for deal')} style={[styles.dealBtn, styles.dealBtnReview]} onPress={() => handleReviewDeal(d)}>
                                             <Text style={styles.dealBtnReviewText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('⭐ Review')}</Text>
                                         </Pressable>
                                     )}
                                 </View>
+                                );
+                                })()}
                             </Pressable>
                         ))}
                     </ScrollView>
@@ -1573,9 +1607,11 @@ function ChatScreen({ id }: { id: string }) {
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {/* English writes one form for both; a language with more forms has them. */}
-                            {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.priceType === 'hourly'
-                                ? tn(Number(postContext.credits) || 0, '{n} Beans / hr', '{n} Beans / hr')
-                                : tn(Number(postContext.credits) || 0, '{n} Beans', '{n} Beans')}</Text>}
+                            {/* Priced at 0 it reads Free (core listing-price.ts), as on every card, whatever the unit. */}
+                            {/* Whole hundredths (price_c): the figure by formatHundredths, "—" for none, never a number made up. */}
+                            {showsBeans && <Text style={styles.stickyPostCredits}>{freePriceWords(postContext.price_c, null) ?? (postContext.priceType === 'hourly'
+                                ? tn((postContext.price_c ?? 0) / 100, '{n} Beans / hr', '{n} Beans / hr', { n: formatHundredths(postContext.price_c) })
+                                : tn((postContext.price_c ?? 0) / 100, '{n} Beans', '{n} Beans', { n: formatHundredths(postContext.price_c) }))}</Text>}
                         </View>
                     </View>
                     <View style={[styles.statusBadge,
@@ -1592,8 +1628,8 @@ function ChatScreen({ id }: { id: string }) {
                 </Pressable>
             )}
 
-            {/* Inline Action Bar — Release/Cancel when escrow is pending and user is the payer */}
-            {pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && (
+            {/* Inline Action Bar: Release/Cancel only where core's dealMoves offers them (never on a standing deal) */}
+            {showInlineBar && pendingTx && (
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
                         <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
@@ -1613,10 +1649,11 @@ function ChatScreen({ id }: { id: string }) {
                             <MaterialCommunityIcons name="check-circle-outline" size={18} color={colors.text.inverse} style={{ marginRight: 6 }} />
                             <Text style={[styles.inlineActionReleaseText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                                 {actionLoading ? t('Processing...') : (
-                                    <Sentence text={t('Release {amount}')} parts={{ amount: <CurrencyDisplay amount={pendingTx.amount} style={styles.inlineActionReleaseText} /> }} />
+                                    <Sentence text={t('Release {amount}')} parts={{ amount: <CurrencyDisplay amount={formatHundredths(pendingTx.amount_c)} style={styles.inlineActionReleaseText} /> }} />
                                 )}
                             </Text>
                         </Pressable>
+                        {pendingMoves?.cancelHold && (
                         <Pressable
                             accessibilityRole="button"
                             style={[styles.inlineActionBtn, styles.inlineActionCancel]}
@@ -1626,6 +1663,7 @@ function ChatScreen({ id }: { id: string }) {
                             <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.fg} style={{ marginRight: 6 }} />
                             <Text style={[styles.inlineActionCancelText, { flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
+                        )}
                     </View>
                 </View>
             )}
@@ -1684,6 +1722,8 @@ function ChatScreen({ id }: { id: string }) {
                         onCancel={() => { setEditingMessage(null); composerRef.current?.reset(); }}
                     />
                 )}
+
+                {!editingMessage && <ChatAboutBanner conversationId={String(id)} />}
 
                 {replyToMessage && !editingMessage && (() => {
                     // What is being answered, as the thread judged it (dmQuoteFor).

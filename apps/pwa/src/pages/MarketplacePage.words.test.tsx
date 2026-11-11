@@ -83,16 +83,16 @@ const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: '
 const TODAY = new Date().toISOString();
 
 const offer = {
-    id: 'offer-1', type: 'offer', category: 'services', title: 'Bicycle Repair', description: 'Fix gears and brakes', credits: 20,
+    id: 'offer-1', type: 'offer', category: 'services', title: 'Bicycle Repair', description: 'Fix gears and brakes', price_c: 2000,
     priceType: 'hourly', status: 'active', active: true, authorPublicKey: 'david-pk', authorCallsign: 'David', createdAt: TODAY,
     photos: ['/assets/bean.png'], audienceScope: 'group', targetGroupId: 'g1', targetGroupName: 'Gardeners', lat: -28.6, lng: 153.4,
 };
 const need = {
-    id: 'need-1', type: 'need', category: 'transport', title: 'Lift to town', description: 'Tuesday morning', credits: 5,
+    id: 'need-1', type: 'need', category: 'transport', title: 'Lift to town', description: 'Tuesday morning', price_c: 500,
     priceType: 'fixed', status: 'active', active: true, authorPublicKey: 'ada-pk', authorCallsign: 'Ada', createdAt: '2026-09-01T00:00:00Z',
 };
 const poll = {
-    id: 'poll-1', type: 'poll', category: 'general', title: 'Market day?', description: 'Pick one', credits: 0, priceType: 'fixed',
+    id: 'poll-1', type: 'poll', category: 'general', title: 'Market day?', description: 'Pick one', price_c: 0, priceType: 'fixed',
     status: 'active', active: true, authorPublicKey: 'ada-pk', authorCallsign: 'Ada', createdAt: '2026-09-02T00:00:00Z', pollOptions: [],
 };
 
@@ -106,7 +106,7 @@ const OTHERS = [
 const said: string[] = [];
 const tx = (extra: Record<string, unknown>) => ({
     id: 'tx-1', postId: 'offer-1', postTitle: 'Bicycle Repair', buyerPublicKey: ME, buyerCallsign: 'Mia', sellerPublicKey: 'david-pk',
-    sellerCallsign: 'David', credits: 20, status: 'pending', createdAt: TODAY, ...extra,
+    sellerCallsign: 'David', amount_c: 2000, status: 'pending', createdAt: TODAY, ...extra,
 }) as unknown as api.MarketplaceTransaction;
 
 function stubNode(posts: unknown[]) {
@@ -118,7 +118,7 @@ function stubNode(posts: unknown[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [{ callsign: 'Byron', publicUrl: 'https://byron.example.test' }] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([{ id: 'g1', name: 'Gardeners', viewerStatus: 'active', viewerRole: 'convenor' }] as any);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME, area: { lat: -28.5, lng: 153.5 } } as any);
@@ -213,7 +213,7 @@ describe('the Market in the pseudo-locale', () => {
     });
 
     it('a need to fulfil, a fixed price and a free one, and the profile gate', async () => {
-        stubNode([need, { ...need, id: 'need-free', credits: 0 }]);
+        stubNode([need, { ...need, id: 'need-free', price_c: 0 }]);
         await showIn('xx');
         const view = render(<MarketplacePage identity={identity} isMember={true} openPostId="need-1" onPostOpened={() => {}} />);
         await screen.findByRole('heading', { name: /Lift to town/ });
@@ -242,8 +242,8 @@ describe('the Market in the pseudo-locale', () => {
     });
 
     it('a lendable Offer: asked for, never taken in one step (Free and priced), and the borrower waiting for a yes', async () => {
-        const lent = { ...offer, id: 'offer-lend', priceType: 'fixed', credits: 0, lendable: true, audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
-        const priced = { ...lent, id: 'offer-lend-fee', credits: 8 };
+        const lent = { ...offer, id: 'offer-lend', priceType: 'fixed', price_c: 0, lendable: true, audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
+        const priced = { ...lent, id: 'offer-lend-fee', price_c: 800 };
         stubNode([lent, priced]);
         const accept = vi.spyOn(api, 'acceptMarketplacePost').mockResolvedValue({} as any);
         const ask = vi.spyOn(api, 'requestMarketplacePost').mockResolvedValue({} as any);
@@ -276,7 +276,7 @@ describe('the Market in the pseudo-locale', () => {
 
         // Asked: the borrower's request waits for the lender's yes, and can be withdrawn.
         render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lend" onPostOpened={() => {}}
-            transactions={[tx({ id: 'tx-ask', postId: 'offer-lend', credits: 0, status: 'requested' })]} />);
+            transactions={[tx({ id: 'tx-ask', postId: 'offer-lend', amount_c: 0, status: 'requested' })]} />);
         await screen.findByRole('heading', { name: /Bicycle Repair/ });
         expect(await screen.findByText(xx('Asked to borrow'))).toBeInTheDocument();
         expect(screen.getByText(xx('Nothing is held until the lender says yes.'))).toBeInTheDocument();
@@ -286,7 +286,7 @@ describe('the Market in the pseudo-locale', () => {
     });
 
     it('a lendable Offer with a fee per day is never "Free to borrow", not even while its days are cleared or 0', async () => {
-        const daily = { ...offer, id: 'offer-lend-daily', priceType: 'daily', credits: 5, lendable: true, audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
+        const daily = { ...offer, id: 'offer-lend-daily', priceType: 'daily', price_c: 500, lendable: true, audienceScope: 'public', targetGroupId: undefined, targetGroupName: undefined };
         stubNode([daily]);
         await showIn('xx');
         render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lend-daily" onPostOpened={() => {}} />);
@@ -455,7 +455,7 @@ describe('the Market in the pseudo-locale', () => {
 
     it('an Offer to accept before listing one: the contribution card', async () => {
         stubNode([offer]);
-        vi.mocked(api.getBalance).mockResolvedValue({ balance: 0, isBlockedFromTrading: true } as any);
+        vi.mocked(api.getBalance).mockResolvedValue({ balance_c: 0, isBlockedFromTrading: true } as any);
         await showIn('xx');
         render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-1" onPostOpened={() => {}} />);
         await screen.findByRole('heading', { name: /Bicycle Repair/ });

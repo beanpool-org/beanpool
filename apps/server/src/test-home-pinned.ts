@@ -27,6 +27,7 @@ import { db } from './db/db.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -47,7 +48,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -56,10 +57,11 @@ async function signed(method: 'GET' | 'POST', pathAndQuery: string, body: unknow
     const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${pathAndQuery.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: pathAndQuery.split('?')[0], timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts), 'X-Nonce': nonce,
     };
     if (method === 'POST') headers['Content-Type'] = 'application/json';
@@ -93,7 +95,7 @@ async function main(): Promise<void> {
     const post = async (who: Id, body: Record<string, unknown> = {}): Promise<string> => {
         n++;
         const r = await signed('POST', '/api/marketplace/posts', {
-            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', credits: 5, authorPublicKey: who.pubKeyHex,
+            type: 'offer', category: 'Food', title: `Listing ${n}`, description: 'Plenty', price_c: 500, authorPublicKey: who.pubKeyHex,
             photos: TEST_PHOTOS, lat: -33.8688, lng: 151.2093, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;

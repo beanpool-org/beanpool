@@ -47,7 +47,7 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
             const now = new Date().toISOString();
             if (!member) {
                 conn.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, NULL, ?)').run(key, callsign, now, `claim:${claimId}`);
-                conn.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                conn.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             } else if (visitor) {
                 conn.prepare('UPDATE members SET is_visitor = 0, home_node_url = NULL, invited_by = NULL, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?')
                     .run(`claim:${claimId}`, callsign, now, key);

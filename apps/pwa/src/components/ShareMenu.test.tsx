@@ -33,7 +33,7 @@ vi.mock('../lib/identity', async () => {
 
 const listing: MarketplacePost = {
     id: 'post-123', title: 'Ladder for borrowing', type: 'offer', category: 'tools', description: 'A 6m ladder',
-    credits: 0, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob', createdAt: new Date().toISOString(),
+    price_c: 0, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob', createdAt: new Date().toISOString(),
     status: 'active', active: true, audienceScope: 'public', repeatable: false,
 };
 const event = {

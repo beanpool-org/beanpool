@@ -8,7 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
-import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type RemovedLineKind, type WordKey } from '@beanpool/core';
+import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type ChatAbout, type RemovedLineKind, type WordKey } from '@beanpool/core';
 import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 import { chatLineWords } from './chat-line-words';
 
@@ -79,6 +79,8 @@ export interface ChatMessage {
     type?: string;
     systemType?: string | null;
     metadata?: any;
+    /** The listing this message is about, opened from its own sealed part (core chat-about.ts); null or absent for every other line. */
+    about?: ChatAbout | null;
     /** Optimistic-send state; absent once the node has it. */
     sendState?: 'sending' | 'failed';
     outgoing?: boolean;
@@ -95,7 +97,7 @@ export interface ChatMessage {
      * where 320dp with 1.3× text would cut it (review of #1826, NB9).
      */
     authorHint?: string | null;
-    /** A DM line the node moved or reordered, or an old-format line: the one line shown under it. */
+    /** A DM line the node moved or reordered: the one line shown under it. */
     integrityNote?: string | null;
     /** A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed). */
     unattributed?: boolean;
@@ -107,15 +109,15 @@ export interface ChatMessage {
 export interface DmQuoteView {
     author: string;
     text: string;
-    /** The quoted line's own mark (an old-format line, a moved or reordered one), carried with the quote. */
+    /** The quoted line's own mark (a moved or reordered line), carried with the quote. */
     note: string | null;
 }
 
 /**
  * The quote of the message a DM reply answers, from that message as the thread judged it: its words only if they opened,
  * its named author only if the line is theirs, with its mark. The node can rewrite the row a verified reply answers while
- * keeping its id (as a notice, as the admin page's message, or as another old-format line): the quote then says what
- * the row is, never "You" or the other person's name over words it can't confirm.
+ * keeping its id (as a notice, as the admin page's message, or as a line its named sender didn't sign): the quote then
+ * says what the row is, never "You" or the other person's name over words it can't confirm.
  */
 export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: string | null | undefined, peerName: string | null | undefined): DmQuoteView {
     if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null };
@@ -156,6 +158,8 @@ export interface MessageActions {
     editClosed?: boolean;
     /** "Report message": someone else's line in a locked group chat or a DM (set only when on offer). */
     report?: boolean;
+    /** "Copy message": the line's words, as the bubble shows them, onto the clipboard. In every kind of chat, for anyone who can read it. */
+    copy?: boolean;
 }
 
 const NO_ACTIONS: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false };
@@ -307,6 +311,17 @@ export function canReportMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     return !inFlight(m);
 }
 
+/**
+ * Copy (Marty, 9 Nov: "I can't select and copy text from previous messages"): the words of any line the member can read,
+ * in a DM, a group chat, an enterprise thread or an event chat, a chat that is still a request, or a read-only one: copying
+ * sends nothing to anyone. Never a system line, a deleted or removed line, a line that did not open (those are drawn as
+ * nobody's, without a bubble, and never reach here: `unattributed`), or a line with no words (a photo with no caption).
+ */
+export function canCopyMessage(m: ChatMessage): boolean {
+    if (isSystemLine(m) || isTombstone(m) || m.unattributed) return false;
+    return typeof m.text === 'string' && m.text.trim() !== '';
+}
+
 /** Everything tapping this bubble offers. One call so a screen can decide whether to open the bar at all. */
 export function messageActions(m: ChatMessage | null | undefined, viewer: ChatViewer): MessageActions {
     if (!m) return NO_ACTIONS;
@@ -319,11 +334,12 @@ export function messageActions(m: ChatMessage | null | undefined, viewer: ChatVi
         remove: canRemoveMessage(m, viewer),
         ...(closed ? { editClosed: true } : {}),
         ...(canReportMessage(m, viewer) ? { report: true } : {}),
+        ...(canCopyMessage(m) ? { copy: true } : {}),
     };
 }
 
 export function hasAnyAction(a: MessageActions): boolean {
-    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.report;
+    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.report || !!a.copy;
 }
 
 /** WhatsApp-style day label: Today / Yesterday / "Mon 12 May" (core's date, in the member's language). */

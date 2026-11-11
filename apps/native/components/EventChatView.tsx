@@ -39,12 +39,11 @@ import {
     buildChatListItems, hasAnyAction, messageActions, normaliseThreadMessage, shouldFollowNewMessages,
     showsAuthorName, type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
-import { normaliseTappedUrl } from '../utils/chat-links';
 import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';
 import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
-import { t } from '@beanpool/core';
+import { normaliseTappedUrl, t } from '@beanpool/core';
 import { signedRequestWords } from './signed-request-lines';
 
 interface Props {

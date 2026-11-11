@@ -29,11 +29,10 @@ export interface NodeRoleRecord {
  *   - 'key-session': a key session in Settings (a computer's, or the phone's Manage hand-off): "Make a break-glass code",
  *     or the enrolment that made them owner
  *   - 'app': the app's own "Break-glass code" row, signed with the member key (routes/node-admin.ts)
- *   - 'password': the admin password
  *   - 'break-glass': an enrolment opened with another owner's break-glass code
  *   - 'recover': `beanpool recover` on the server (recover-command.ts)
  */
-export type BreakGlassMadeBy = 'key-session' | 'app' | 'password' | 'break-glass' | 'recover';
+export type BreakGlassMadeBy = 'key-session' | 'app' | 'break-glass' | 'recover';
 
 /**
  * The rows whose node role acts: an active member's, not a visitor's (members.is_visitor). A visitor's row never joined,
@@ -329,7 +328,8 @@ export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | nu
 
 /** A role a suspension held aside, given back (decisions-engine restoreSuspendedNodeRole): told as a grant is. */
 export function noteNodeRoleBack(pubkey: string, role: NodeRole, by: RoleChangeBy): void {
-    // An owner or admin given their role back vouches by it again, as one granted it (engine/vouchers.ts; never throws).
+    // An owner given their role back vouches by it again, as one granted it; an admin gets no budget, and one a suspension
+    // took is not brought back (an owner makes an admin a voucher by hand, I5; engine/vouchers.ts; never throws).
     vouchingAfterRoleChange(pubkey, by.actor);
     const actorRole = actorRoleOf(by.actor);
     noteRoleAlert(`Someone was made ${withArticle(role)} again, ${by.how} ${HOW[actorRole]}.`, () => heldNodeRoleOf(pubkey) === role,
@@ -423,10 +423,10 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
                 // come from somewhere — but ONLY if the node has no owner at all. A community Decision
                 // that suspends the sole owner parks their role, which used to read as zero owners and
                 // let any admin key session make itself owner (#1006). `isOwner` above is already true
-                // for 'owner:password', so the operator's password remains the way out of this: the
+                // for 'owner:password'; the way out of this is `beanpool recover` on the server, so the
                 // node is never stranded.
                 if (nodeHasOwner()) {
-                    const err: any = new Error("This node has an owner (currently suspended). Ask the community, or use the node's admin password.");
+                    const err: any = new Error("This node has an owner (currently suspended). Ask the community, or ask the server's operator to run beanpool recover on the server.");
                     err.status = 403;
                     throw err;
                 }
@@ -464,8 +464,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
              VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?, ?)`
         ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass, madeAt, madeBy);
         if (currentRole !== role) noteRoleChanged(targetPubkey);
-        // An owner or admin vouches by the role, with a budget from the day it is granted (actor: who granted it); one made
-        // a moderator loses a budget the role gave, and the credit committee's place (engine/vouchers.ts; never throws).
+        // An owner vouches by the role, with a budget from the day it is granted (actor: who granted it). An admin gets none:
+        // an owner makes an admin a voucher by hand (I5). One made a moderator loses a budget the role gave, and the credit
+        // committee's place (engine/vouchers.ts; never throws).
         vouchingAfterRoleChange(targetPubkey, actorPubkey);
     })();
     bumpMembersVersion();

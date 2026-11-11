@@ -21,7 +21,11 @@ export interface CommunityCard {
     area: { name: string; radiusKm: number | null } | null;
     /** `requests`: it takes requests to join; `open`: anyone may join; `invite`: new members come by invite. */
     joining: 'requests' | 'open' | 'invite';
-    /** The global community's lobby with this community first (`…/?ask=<host>`), or null. */
+    /**
+     * Where Ask to join opens: the community's own web app at `https://<host>/app?door=ask`, where a stranger asks it
+     * directly (DESIGN-shared-listing-door-fable.md §2.1), or null where it takes no requests or knows no address of its
+     * own. Never another community's address: the request goes to this community, and nobody else is in its path.
+     */
     askUrl: string | null;
     /** "Look around the global community": the global community the node names, or null for none. */
     globalUrl: string | null;
@@ -36,15 +40,28 @@ export const COMMUNITY_CARD_WORDS = {
     open: word('Anyone can join'),
     invite: word('Takes new members by invite'),
     ask: word('Ask to join'),
-    /** Under Ask to join where it opens the global community's lobby. */
-    askViaGlobal: word('Look around global first, join there to get an account, then find {name} in Find a community.'),
-    /** Where Ask to join has nowhere to go from a browser: the node names no global community, or isn't listed. */
-    askInApp: word('Ask to join from the BeanPool app.'),
+    /** Ask to join standing away from the community's name (the shared post's page): it says whom it asks. */
+    askName: word('Ask to join {name}'),
+    /** The one line under Ask to join, wherever it is: the account is made here and the request goes to this community. */
+    askNote: word('Makes your account here and sends your request to {name}. Its members decide. No invite needed.'),
+    /** On a phone's browser, under Open in the BeanPool app: the same request, made here in the browser. */
+    askInBrowser: word('or ask here in your browser'),
     join: word('Join', 'button: join a community anyone may join'),
     haveInvite: word('I have an invite'),
     member: word('Already a member'),
     lookAround: word('🌍 Look around the global community'),
+    /** The shared post's page on a computer, after Ask to join: a look first, never the way in. */
+    lookAroundFirst: word('🌍 Look around the global community first'),
 } as const;
+
+/**
+ * Where Ask to join opens, from the community's own published address: `https://<host>/app?door=ask`, or null with none.
+ * One builder for the node's card and both apps, so the door is always this community's own.
+ */
+export function communityAskUrl(host: string | null): string | null {
+    const h = askHost(host);
+    return h ? `https://${h}/app?door=ask` : null;
+}
 
 type CardWords = { t: TFunction; tn: TnFunction };
 
@@ -102,7 +119,7 @@ export function readCommunityCard(raw: unknown): CommunityCard | null {
 }
 
 /**
- * A community's host as `?ask=<host>` names it (a community's card links the global community's lobby so), or null: a
+ * A community's host as `?ask=<host>` names it (the global community's lobby keeps it for after a join there), or null: a
  * host name or a public IPv4 address, with an optional port, nothing else (no scheme, path, user or space), lowercased.
  */
 export function askHost(raw: unknown): string | null {

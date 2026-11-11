@@ -104,7 +104,7 @@ function seedMembers(): void {
 
 let postCount = 0, pollCount = 0;
 function seedPostsTo(posts: number): void {
-    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, lat, lng,
+    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, lat, lng,
                                                    event_start_at, event_end_at, poll_options, audience_scope, target_group_id)
                                 VALUES (?, ?, ?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     db.transaction(() => {
@@ -133,7 +133,7 @@ function seedPostsTo(posts: number): void {
     })();
 }
 function seedTransactions(n: number): void {
-    const insTx = db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount) VALUES (?, ?, ?, 1)');
+    const insTx = db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES (?, ?, ?, 1)');
     db.transaction(() => {
         for (let i = 0; i < n; i++) insTx.run(`perf-tx-${i}`, members[Math.floor(rand() * MEMBERS)], members[Math.floor(rand() * MEMBERS)]);
     })();
@@ -149,7 +149,7 @@ const rowsNear743b5d57: RowsNear = (conn, near, where, whereParams, filter) => {
         SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
                haversine_km(?, ?, p.lat, p.lng) AS distance_km,
-               COALESCE(m.earned_credit, 0) as author_earned_credit,
+               COALESCE(m.earned_credit_c, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t
                       WHERE (t.from_pubkey = m.public_key OR t.to_pubkey = m.public_key)

@@ -24,6 +24,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -62,7 +63,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                         VALUES (?, 'Kimberly', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'INV-K', 'active')`).run(a.member, a.owner);
             for (const key of [a.owner, a.member]) setMemberPhoto(db, key, 'data:image/png;base64,iVBORw0KGgo=');
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.member);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.member);
             db.prepare(`INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)`)
                 .run(crypto.randomBytes(16).toString('hex'), a.member, crypto.randomBytes(16).toString('hex'), a.owner);
             createPost('offer', 'produce', 'Kimberly mends things', 'Repairs', 10, 'fixed', a.member);
@@ -127,7 +128,8 @@ async function signedPost(base: string, route: string, id: Id, body: unknown): P
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'POST', path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
     const res = await fetch(`${base}${route}`, { method: 'POST', headers, body: raw });
     const text = await res.text();
@@ -141,7 +143,7 @@ async function main(): Promise<void> {
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     const dir = (name: string) => path.join(root, name);
     const nodes: NodeProc[] = [];
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const [owen, kim] = ['Owen', 'Kimberly'].map(newId);
 

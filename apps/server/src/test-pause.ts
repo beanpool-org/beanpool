@@ -8,11 +8,7 @@
  * Boots the real server; every request goes over HTTPS through the real signature middleware, an admin's through a real
  * key session.
  *
- *  0. The upgrade: a node from before this version (the board's off-board index and standing trigger in their old shape,
- *     no marker) holds Ella, whom an admin suspended before it, with an offer still on the board. Booted on this version:
- *     the index and the trigger are replaced, Ella's board standing is stamped once (Fern's, active, is not; no
- *     updated_at moves; the marker is written), the board leaves her offer out, and a phone's delta from before the
- *     upgrade carries it as paused.
+ *  (0. The upgrade of a node from before the board's pause rule went with the 1.4.0 gate: db/schema-gate.ts.)
  *  1. An admin pauses Pia (POST /api/local/admin/users/:pubkey/suspend): 'disabled', the record with the reason, her
  *     moderator role held aside, no Bean moved. Her listings leave the board and a delta carries them as paused, but as
  *     they are to Bea, who has a deal open on one, and to Pia herself. She can't invite: no new code, a ticket she signs
@@ -67,15 +63,11 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket, offlineTicketText } from './signed-request-test-helper.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -94,10 +86,11 @@ function keypair(callsign: string): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -136,94 +129,31 @@ async function asAdmin(session: Record<string, string>, p: string, payload: unkn
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pubKeyHex, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.privateKey).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.privateKey, inviter.pubKeyHex);
 }
 
 /** One anyone can write: it names `named` (whose key every ticket they gave out carries) over 64 bytes no key signed. */
 function forgedTicket(named: Id): string {
-    const payload = JSON.stringify({ i: named.pubKeyHex, t: Date.now() });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.randomBytes(64).toString('base64') })).toString('base64');
+    return Buffer.from(JSON.stringify({ p: offlineTicketText(named.pubKeyHex), s: crypto.randomBytes(64).toString('base64') })).toString('base64');
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 /** The phone's feed query (apps/native utils/events.ts EVENT_TYPES_QUERY). */
 const TYPES = 'types=offer,need,poll,event';
-const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+/** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
+const hc = (beans: number) => Math.round(beans * 100);
 const MIN = 60_000;
-const DAY = 24 * 60 * MIN;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-/** The node_config marker of the one-time fill of a paused member's board standing (db.ts). */
-const PAUSED_STANDING_MARKER = 'migration_board_standing_paused_v1';
-/** The two schema objects as a node from before this version holds them (schema.sql before S1). */
-const OLD_OFF_BOARD_INDEX = `CREATE INDEX IF NOT EXISTS idx_members_off_board ON members(public_key)
-    WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed')));`;
-const OLD_STANDING_TRIGGER = `CREATE TRIGGER IF NOT EXISTS members_touch_board_standing
-AFTER UPDATE OF paused, status ON members
-FOR EACH ROW
-WHEN NEW.board_standing_changed_at IS OLD.board_standing_changed_at
-    AND ((OLD.paused IS NULL OR OLD.paused = 0) IS NOT (NEW.paused IS NULL OR NEW.paused = 0)
-        OR (CASE WHEN OLD.status IN ('winding_up', 'completed') THEN OLD.status END)
-            IS NOT (CASE WHEN NEW.status IN ('winding_up', 'completed') THEN NEW.status END))
-BEGIN
-    UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
-END;`;
 
 async function main() {
     console.log('One pause: an emergency suspension and a report\'s are the same pause...\n');
     const dir = process.env.BEANPOOL_DATA_DIR;
     if (!dir) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
 
-    // ── 0. The fixture: a node from before this version ──────────────────────────────────────────────────────────
-    // Booted on this version in its own process (the database module is one per process), then put back as an older
-    // node holds it.
+    // ── This version boots, and serves ──
+    // (Section 0, a node from before the board's pause rule booted on this version, went with the 1.4.0 gate:
+    // db/schema-gate.ts refuses a file that old.)
     fs.mkdirSync(dir, { recursive: true });
-    const script = path.join(dir, 'boot.mjs');
-    fs.writeFileSync(script, `
-        import { initSchema } from ${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))};
-        initSchema();
-        console.log('BOOT_OK');
-    `);
-    const booted = execFileSync(process.execPath, [...process.execArgv, script], {
-        cwd: path.join(__dirname, '..'), env: { ...process.env, BEANPOOL_DATA_DIR: dir }, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    if (!booted.includes('BOOT_OK')) throw new Error(`the fixture's first boot failed: ${booted}`);
-
-    const ella = keypair('EllaPausedBefore'), fern = keypair('FernOnBoard'), rhea = keypair('RheaReader');
-    const fixtureOffers: Record<string, string> = {};
-    const seeded = { ella: ago(90 * MIN), fern: ago(90 * MIN), rhea: ago(180 * MIN) };
-    const cursor = ago(60 * MIN);
-    {
-        const d = new Database(path.join(dir, 'state.db'));
-        d.pragma('foreign_keys = OFF');
-        d.exec('DROP TRIGGER IF EXISTS members_touch_board_standing; DROP INDEX IF EXISTS idx_members_off_board;');
-        d.exec(OLD_OFF_BOARD_INDEX);
-        d.exec(OLD_STANDING_TRIGGER);
-        d.prepare('DELETE FROM node_config WHERE key = ?').run(PAUSED_STANDING_MARKER);
-        const insert = d.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, updated_at)
-                                  VALUES (?, ?, ?, ?, 'seed', ?, ?)`);
-        const restamp = d.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?');
-        const joined = ago(365 * DAY);
-        for (const [id, status, stamp] of [[ella, 'disabled', seeded.ella], [fern, 'active', seeded.fern], [rhea, 'active', seeded.rhea]] as const) {
-            insert.run(id.pubKeyHex, id.callsign, status, joined, `INV-${id.callsign.toUpperCase()}`, stamp);
-            setMemberPhoto(d, id.pubKeyHex, AVATAR);
-            restamp.run(stamp, id.pubKeyHex);
-        }
-        // With search keywords, as every listing posted has them: the boot's keyword backfill writes (and so stamps) a row
-        // that has none (state-engine.ts backfillSearchKeywords).
-        const offer = d.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
-                                 VALUES (?, 'offer', 'food', ?, '', 5, ?, 'active', 1, ?, ?, lower(?))`);
-        for (const [who, id, title] of [['ella', ella, 'Plums'], ['fern', fern, 'Figs']] as const) {
-            fixtureOffers[who] = crypto.randomUUID();
-            offer.run(fixtureOffers[who], title, id.pubKeyHex, ago(240 * MIN), ago(240 * MIN), title);
-        }
-        d.close();
-    }
-
-    // ── The upgrade: this version boots on it, and serves ──
-    const upgradedAt = new Date().toISOString();
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
@@ -247,7 +177,6 @@ async function main() {
     // A pause's record: the node's own Decision about the member (its removal vote, or with votes off the record of the pause).
     const records = (id: Id) => db.prepare("SELECT * FROM decisions WHERE subject = ? AND author_pubkey = 'SYSTEM' ORDER BY created_at").all(id.pubKeyHex) as any[];
     const paramsOf = (r: any) => { try { return JSON.parse(r?.params ?? '{}'); } catch { return {}; } };
-    const objectSql = (type: string, name: string) => (db.prepare('SELECT sql FROM sqlite_master WHERE type = ? AND name = ?').get(type, name) as { sql: string } | undefined)?.sql ?? '';
     const list = (a: Answer): any[] => (Array.isArray(a.body) ? a.body : (a.body?.posts ?? []));
     /** The board as `reader` reads it (the list read every app's Market shows), as ids. */
     const board = async (reader: Id) => new Set(list(await get(`/api/marketplace/posts?limit=500&${TYPES}`, reader)).map((p: any) => p.id as string));
@@ -256,25 +185,6 @@ async function main() {
         const rows = list(await get(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(since)}`, reader));
         return new Map(rows.map((p: any) => [p.id as string, p.status as string]));
     };
-
-    console.log('── 0. the upgrade ──');
-    assert(/'disabled'/.test(objectSql('trigger', 'members_touch_board_standing')),
-        'the upgrade replaces the standing trigger: a pause or its end moves a member\'s board standing');
-    assert(/'disabled'/.test(objectSql('index', 'idx_members_off_board')),
-        'and the off-board index, in the board\'s own expression, so the area set still reads paused authors from it');
-    const standing = (id: Id) => row(id.pubKeyHex)?.board_standing_changed_at as string | null | undefined;
-    assert((standing(ella) ?? '') >= upgradedAt, `Ella, paused before the upgrade, has its time as her board standing (${standing(ella)})`);
-    assert(standing(fern) == null && standing(rhea) == null, `Fern and Rhea, active, have none (${standing(fern)}, ${standing(rhea)})`);
-    assert(row(ella.pubKeyHex)?.updated_at === seeded.ella && row(fern.pubKeyHex)?.updated_at === seeded.fern,
-        'no member\'s updated_at moves: the fill stamps no row for delta sync');
-    assert(!!db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(PAUSED_STANDING_MARKER), 'the one-time marker is written');
-    {
-        const rheaDelta = await delta(rhea, cursor);
-        assert(rheaDelta.get(fixtureOffers.ella) === 'paused', `Rhea's next delta, from before the upgrade, carries Ella's offer as paused (${rheaDelta.get(fixtureOffers.ella)})`);
-        assert(!rheaDelta.has(fixtureOffers.fern), 'and not Fern\'s, which nothing changed since her cursor');
-        const b = await board(rhea);
-        assert(!b.has(fixtureOffers.ella) && b.has(fixtureOffers.fern), `the board leaves Ella's offer out and shows Fern's (${b.has(fixtureOffers.ella)}, ${b.has(fixtureOffers.fern)})`);
-    }
 
     // ── The people ─────────────────────────────────────────────────────────────────────────────────────────────────
     const gen = keypair('GenesisGwen');
@@ -285,8 +195,8 @@ async function main() {
                     VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`)
             .run(id.pubKeyHex, callsign, gen.pubKeyHex, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
-        se.transfer('genesis', id.pubKeyHex, 50, `seed ${callsign}`, 'direct', true);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        se.transfer('genesis', id.pubKeyHex, hc(50), `seed ${callsign}`, 'direct', true);
         return id;
     };
     const otto = seedMember('OwnerOtto');       // a second owner, so Gwen isn't the only one
@@ -317,15 +227,16 @@ async function main() {
         if (!s.ok || !s.sessionId) throw new Error(`could not open Ada's key session: ${s.error}`);
         return { 'X-Admin-Session': s.sessionId };
     })();
-    const offer = (author: Id, title: string) => createPost('offer', 'food', title, `${title}, fresh this week`, 5, 'fixed', author.pubKeyHex)!.id;
+    const offer = (author: Id, title: string) => createPost('offer', 'food', title, `${title}, fresh this week`, hc(5), 'fixed', author.pubKeyHex)!.id;
     const openDeal = (postId: string, author: Id, buyer: Id) => {
         const tx = se.requestPost(postId, buyer.pubKeyHex);
         se.approvePostRequest(tx.id, author.pubKeyHex);
         return tx.id;
     };
     const dealStatus = (txId: string) => (db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(txId) as { status: string } | undefined)?.status;
-    const balanceOf = (id: Id) => Number(se.getBalance(id.pubKeyHex)?.balance);
-    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
+    /** A member's balance, whole hundredths. */
+    const balanceOf = (id: Id) => Number(se.getBalance(id.pubKeyHex)?.balance_c);
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
     const codeUser = (code: string) => (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as { used_by: string | null } | undefined)?.used_by ?? null;
     const codesBy = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?').get(id.pubKeyHex) as { n: number }).n;
     const reportOn = (target: Id, reason: string) => {

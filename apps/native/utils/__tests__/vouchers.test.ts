@@ -51,7 +51,7 @@ describe('Native vouchers utils (slice V3)', () => {
         expect(signedGets.calls[0].path).toBe('/api/vouchers/me');
     });
 
-    it('vouchFromProfile posts memberPubkey, vouchAmount, and raise to /api/vouch', async () => {
+    it('vouchFromProfile posts memberPubkey and vouchAmount to /api/vouch', async () => {
         signedPosts.res = {
             ok: true,
             json: async () => ({
@@ -66,7 +66,6 @@ describe('Native vouchers utils (slice V3)', () => {
         const res = await vouchFromProfile(ANCHOR, ID, {
             memberPubkey: 'target-pk',
             vouchAmount: 50,
-            raise: true,
         });
 
         expect(res.ok).toBe(true);
@@ -74,11 +73,49 @@ describe('Native vouchers utils (slice V3)', () => {
             expect(res.amount).toBe(50);
             expect(res.id).toBe('gift-1');
         }
+        expect(signedPosts.calls[0].path).toBe('/api/vouch');
         expect(signedPosts.calls[0].body).toEqual({
             memberPubkey: 'target-pk',
             vouchAmount: 50,
-            raise: true,
         });
+    });
+
+    it('vouchFromProfile posts a raise as the total it ends at, and reads the difference the node landed (slice I6)', async () => {
+        signedPosts.res = {
+            ok: true,
+            json: async () => ({
+                id: 'gift-2',
+                memberPubkey: 'target-pk',
+                amount: 100,
+                total: 200,
+                budget: { left: 500 },
+            }),
+        };
+
+        const res = await vouchFromProfile(ANCHOR, ID, { memberPubkey: 'target-pk', raiseTo: 200 });
+
+        expect(res.ok).toBe(true);
+        if (res.ok) {
+            expect(res.amount).toBe(100);
+            expect(res.total).toBe(200);
+        }
+        // The target, never an amount to add, and no retired `raise` flag beside it.
+        expect(signedPosts.calls[0].body).toEqual({ memberPubkey: 'target-pk', raiseTo: 200 });
+        expect(Object.keys(signedPosts.calls[0].body as object)).not.toContain('raise');
+        expect(Object.keys(signedPosts.calls[0].body as object)).not.toContain('vouchAmount');
+    });
+
+    it('vouchFromProfile keeps the total a refused raise names, so the card follows it', async () => {
+        signedPosts.res = {
+            ok: false,
+            json: async () => ({ error: 'You’ve vouched 200 Beans for @Sam already. Pick a higher total to raise it to.', code: 'raise_not_above', prior: 200 }),
+        };
+        const res = await vouchFromProfile(ANCHOR, ID, { memberPubkey: 'target-pk', raiseTo: 200 });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+            expect(res.code).toBe('raise_not_above');
+            expect(res.prior).toBe(200);
+        }
     });
 
     it('vouchFromProfile returns node refusal sentence when server refuses', async () => {

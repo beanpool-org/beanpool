@@ -31,6 +31,8 @@ process.env.NODE_PROFILE = 'global';
 
 import crypto from 'node:crypto';
 import { localFetch } from './keepalive-test-fetch.js';
+import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -50,8 +52,8 @@ function keypair(): Id {
 }
 function signedHeaders(id: Id, method: string, path: string, body = ''): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 
 async function main() {
@@ -60,14 +62,13 @@ async function main() {
     const se: any = await import('./state-engine.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { setSwitchOverride, getProfileSwitches } = await import('./config/node-profile.js');
     const pricing: any = await import('./pricing-aggregator.js');
     const { ADMIN_SESSION_COOKIE } = await import('./admin-key-auth.js');
     const { db } = await import('./db/db.js');
     const guestCache: any = await import('./guest-cache.js').catch(() => null);
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const httpPort = await startHttpServer(0);
@@ -81,12 +82,12 @@ async function main() {
     const alice = keypair(), bob = keypair(), stranger = keypair();
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', ?, 'seed', 'seed')`);
-    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
+    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)');
     for (const [id, name] of [[alice, 'AliceEdge'], [bob, 'BobEdge']] as const) {
         insertMember.run(id.pubKeyHex, name, iso(-30 * 86_400_000));
         insertAccount.run(id.pubKeyHex);
     }
-    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, active, status, lat, lng)
+    const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at, active, status, lat, lng)
                 VALUES (?, ?, 'food', ?, 'A listing for the edge cache suite.', 0, ?, ?, ?, 1, 'active', ?, ?)`);
     for (let i = 0; i < 6; i++) {
         insertPost.run(`gec-post-${i}`, i % 2 ? 'need' : 'offer', `Lemons ${i}`, (i % 2 ? bob : alice).pubKeyHex, iso(-i * 60_000), iso(-i * 60_000),
@@ -96,7 +97,7 @@ async function main() {
     const conv = se.createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: no conversation');
     // A line as both apps seal one (engine/messaging.ts isEncryptedDmPayload): the node keeps nothing else in a DM.
-    const sealed = () => [crypto.randomBytes(32).toString('base64'), `x25519-xc20p-v2:${crypto.randomBytes(24).toString('base64')}`] as const;
+    const sealed = () => { const l = lockedDm(); return [l.ciphertext, l.nonce] as const; };
     se.sendMessage(conv.id, alice.pubKeyHex, ...sealed());
 
     type Got = { status: number; cc: string | null; vary: string; view: string | null; etag: string | null; body: string };
@@ -246,11 +247,12 @@ async function main() {
     assert(getProfileSwitches().beans === false, 'setup: Beans are off on the global profile');
     const item = db.prepare("SELECT id, price_beans, confidence_count FROM pricing_guide_items WHERE id = 'ls-001'").get() as { id: string; price_beans: number; confidence_count: number } | undefined;
     assert(!!item, 'setup: the pricing guide has its babysitting item');
-    const insertPriced = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+    const insertPriced = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'care', ?, 'Babysitting for the edge suite', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, 'active')`);
-    insertPriced.run('gec-price-1', 'Babysitting evenings', 20, alice.pubKeyHex);
-    insertPriced.run('gec-price-2', 'Babysitting weekends', 22, alice.pubKeyHex);
-    insertPriced.run('gec-price-3', 'Babysitting after school', 24, alice.pubKeyHex);
+    // Prices of 20, 22 and 24 Beans, as the node keeps them: whole hundredths (the guide reads price_c / 100).
+    insertPriced.run('gec-price-1', 'Babysitting evenings', 2000, alice.pubKeyHex);
+    insertPriced.run('gec-price-2', 'Babysitting weekends', 2200, alice.pubKeyHex);
+    insertPriced.run('gec-price-3', 'Babysitting after school', 2400, alice.pubKeyHex);
     let before = changes();
     decayTick();
     assert(changes() === before, `Beans off: the demurrage tick writes nothing (${changes() - before} rows changed)`);

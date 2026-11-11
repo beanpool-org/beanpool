@@ -29,6 +29,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 
@@ -49,10 +50,11 @@ function keypair(): Identity {
 function signedHeaders(method: string, path: string, signer: Identity, bodyString = ''): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
     return {
         'X-Public-Key': signer.pub,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -99,7 +101,7 @@ async function main() {
         const postId = `post-rp-${i}`, dealId = `deal-rp-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, author_pubkey, title, description, type, category, created_at) VALUES (?, ?, ?, ?, 'offer', 'goods', ?)`)
             .run(postId, ana.pub, `Eggs ${i}`, 'A dozen', new Date().toISOString());
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at) VALUES (?, ?, ?, ?, 10, 'completed', ?)`)
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at) VALUES (?, ?, ?, ?, 10, 'completed', ?)`)
             .run(dealId, postId, i <= 2 ? ben.pub : eve.pub, ana.pub, new Date().toISOString());
         deals.push(dealId);
     }

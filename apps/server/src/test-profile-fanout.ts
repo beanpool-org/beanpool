@@ -35,6 +35,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -50,14 +51,14 @@ function keypair(): Id {
 }
 function signedHeaders(id: Id, method: string, path: string, body = ''): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&nr=1`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}&nr=1`;
 }
 
 type Sock = { ws: WebSocket; events: any[] };
@@ -81,14 +82,13 @@ async function main() {
     const se: any = await import('./state-engine.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { getMembersVersion, getPostsVersion } = await import('./engine/versions.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const httpPort = await startHttpServer(0);
@@ -107,7 +107,7 @@ async function main() {
     // Members two months old, past any new account's limits.
     const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'seed')`);
-    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
+    const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)');
     const member = (callsign: string): Id => {
         const id = keypair();
         insertMember.run(id.pubKeyHex, callsign);

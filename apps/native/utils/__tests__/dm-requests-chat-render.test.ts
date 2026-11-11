@@ -311,10 +311,12 @@ describe('a request waiting for this member, on the phone', () => {
         expect(button('Reply')).toBeNull();
         expect(host.querySelector('button[aria-label^="React with"]')).toBeNull();
         expect(callsOf('toggleMessageReactionApi')).toBe(0);
+        // Copy (9 Nov) is the one thing a tap on the stranger's line now offers: it sends nothing to anyone.
+        expect(button('Copy message')).not.toBeNull();
 
         await tap('Accept');
         expect(host.textContent).not.toContain('Kofi wants to message you');
-        await tapLine('hello Ana');
+        // The line's bar stayed open, so there is no second tap (it would close it): it now has Reply and React as well.
         expect(button('Reply')).not.toBeNull();
         await tap('React');
         await tap('React with 👍');

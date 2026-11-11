@@ -401,6 +401,18 @@ describe('a line on its way', () => {
         expect(screen.queryByText('No messages yet. Say hello! 👋')).toBeNull();
     });
 
+    // Opus review of #2990, finding 2: this bubble is the accent colour with white words, as a sent one is, but had no
+    // bp-bubble-mine, so a link in it kept the page's accent focus ring (accent on accent) and the darker selection.
+    it('with a link in it: the link is drawn, and the bubble is the member\'s own (index.css draws that link\'s ring white there)', async () => {
+        const { composer } = await openDm();
+        await typedNoAnswer(composer, 'The roster is at https://byron.beanpool.org/roster');
+        const bubble = (await screen.findByTestId('chat-line-pending')).querySelector('.bp-bubble-mine');
+        expect(bubble, 'a bubble with the own-bubble class').not.toBeNull();
+        const link = within(bubble as HTMLElement).getByTestId('chat-link');
+        expect(link).toHaveAttribute('href', 'https://byron.beanpool.org/roster');
+        expect(link.style.color).toBe('inherit');
+    });
+
     it('as a reply quotes what it answers, and goes sealed to it, as a reply always did', async () => {
         const asked = sealedDm(ben, 'Are you free Saturday?');
         dm.rows = [asked];
@@ -601,6 +613,16 @@ describe('a line that couldn\'t go', () => {
         expect(screen.getByTestId('chat-line-discard').style.minHeight).toBe('44px');
     });
 
+    it('is the danger chip, not the member\'s own bubble: no own-bubble class, and a link in it takes the chip\'s ink', async () => {
+        const { composer } = await openDm();
+        vi.mocked(sendMessageApi).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        await typed(composer, 'The roster is at https://byron.beanpool.org/roster');
+        const failed = await screen.findByTestId('chat-line-failed');
+        const line = failed.closest('[data-testid="chat-line-pending"]') as HTMLElement;
+        expect(line.querySelector('.bp-bubble-mine')).toBeNull();
+        expect(within(line).getByTestId('chat-link').style.color).toBe('var(--bp-chip-danger-ink)');
+    });
+
     it('folds a long one under a …more in the failed line\'s own ink, never the accent on its tint', async () => {
         installFoldLayout();
         try {
@@ -648,7 +670,8 @@ describe('a refused reply keeps what it answers', () => {
         const [refused, again] = vi.mocked(sendMessageApi).mock.calls;
         expect(metadataOf(refused).replyToId).toBe(asked.id);
         expect(metadataOf(again).replyToId).toBe(asked.id);
-        expect(metadataOf(again).lineSig).toBeTruthy();
+        // Its signature is in its own ciphertext (format 4): nothing of it rides in the metadata.
+        expect(metadataOf(again)).toEqual({ replyToId: asked.id });
         expect(screen.queryByText('Replying to Ben')).toBeNull();
 
         // The node's row for it opens, with the seal over that reply, and quotes the question.

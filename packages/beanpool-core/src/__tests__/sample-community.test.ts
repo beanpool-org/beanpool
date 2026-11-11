@@ -1,3 +1,4 @@
+import { beans, wholeBeansOf } from '../hundredths.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -47,17 +48,19 @@ describe('the sample community (design §2): Example Valley, frozen', () => {
     it('its Levels card adds up with the tiers the screens use: 200 trust is level 2 of 4, earned from the value traded', () => {
         const s = SAMPLE_COMMUNITY;
         expect([s.trust, s.valueTraded, s.partners, s.rating, s.reviews]).toEqual([200, 582, 5, 4.8, 5]);
+        // The sample's figures are whole Beans (showcase words); the protocol counts hundredths, so each is compared as beans(n).
         // The trust backs the floor, and the tiers read it as level 2 of 4 (what memberLevel gives a screen).
         expect(s.trust).toBe(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - s.floor);
         expect(TIER_LEVELS).toHaveLength(s.levels);
-        expect(tierIndexForCredit(s.trust)).toBe(s.level - 1);
-        expect(memberLevel({ floor: s.floor, tierCredit: s.trust })).toEqual({ index: s.level - 1, credit: s.trust });
-        expect(s.trust).toBeLessThan(TIER_LEVELS[s.level].minCredit);
-        // All of it earned by trading: the curve gives exactly the trust for the value traded, and one Bean less falls short.
-        expect(earnedCreditFromValue(s.valueTraded)).toBe(s.trust);
-        expect(earnedCreditFromValue(s.valueTraded - 1)).toBeLessThan(s.trust);
+        expect(tierIndexForCredit(beans(s.trust))).toBe(s.level - 1);
+        expect(memberLevel({ floor_c: beans(s.floor), tierCredit_c: beans(s.trust) })).toEqual({ index: s.level - 1, credit: beans(s.trust) });
+        expect(beans(s.trust)).toBeLessThan(TIER_LEVELS[s.level].minCredit);
+        // All of it earned by trading: the curve (in hundredths, so finer than a Bean) gives the card's whole-Bean trust for
+        // the value traded, and one Bean less falls short of it.
+        expect(wholeBeansOf(earnedCreditFromValue(beans(s.valueTraded)))).toBe(s.trust);
+        expect(earnedCreditFromValue(beans(s.valueTraded - 1))).toBeLessThan(beans(s.trust));
         // Value with any one partner counts up to the cap, so that much value needs at least this many partners.
-        expect(s.partners).toBeGreaterThanOrEqual(Math.ceil(s.valueTraded / PER_COUNTERPARTY_VOLUME_CAP));
+        expect(s.partners).toBeGreaterThanOrEqual(Math.ceil(beans(s.valueTraded) / PER_COUNTERPARTY_VOLUME_CAP));
         expect(s.rating).toBeGreaterThan(0);
         expect(s.rating).toBeLessThanOrEqual(5);
         expect(Number.isInteger(s.reviews) && s.reviews > 0).toBe(true);
@@ -101,7 +104,7 @@ describe('the sample agrees with itself and with the real screens\' rules (globa
     const s = SAMPLE_COMMUNITY;
 
     it('no circulation fee row: a member at 85 Beans never pays one', () => {
-        expect(monthlyCirculation(s.balance)).toBe(0);
+        expect(monthlyCirculation(s.balance * 100)).toBe(0);
         for (const t of s.transactions) expect((t as { kind: string }).kind, t.id).not.toBe('fee');
         expect(s.transactions.some(t => /fee/i.test(t.what))).toBe(false);
         expect(s.transactions).toHaveLength(6);
@@ -286,7 +289,9 @@ describe('the enterprise page and the Commons card in preview: one adapter for b
     });
 
     it('the ledger works back from what it holds: each running balance, the starting balance and the totals agree', () => {
-        for (const [id, balance, rows] of [[e.id, e.balance, e.pnl.rows], [p.id, p.pledged, p.rows]] as const) {
+        // The answer is whole hundredths, as a node's: the sample's Beans times 100.
+        for (const [id, balanceBeans, rows] of [[e.id, e.balance, e.pnl.rows], [p.id, p.pledged, p.rows]] as const) {
+            const balance = balanceBeans * 100;
             const l = sampleEnterpriseLedger(id, NOW);
             // Oldest first, as the node sends a live ledger (state-engine ORDER BY timestamp ASC).
             expect(l.entries.map(x => x.id)).toEqual([...rows].reverse().map(r => r.id));
@@ -304,17 +309,17 @@ describe('the enterprise page and the Commons card in preview: one adapter for b
                 expect(Date.parse(x.timestamp)).toBeLessThan(NOW);
             }
         }
-        expect(sampleEnterpriseLedger(e.id, NOW).summary).toMatchObject({ totalIncome: 180, totalSpend: 60, netChange: 120, startingBalance: 40, endingBalance: 160 });
+        expect(sampleEnterpriseLedger(e.id, NOW).summary).toMatchObject({ totalIncome: 18000, totalSpend: 6000, netChange: 12000, startingBalance: 4000, endingBalance: 16000 });
     });
 
     it('the cards and the page carry the sample\'s numbers, every id a sample id, a neighbour for every keeper', () => {
         const [bakery, project] = sampleEnterpriseCards(NOW);
-        expect(bakery).toMatchObject({ publicKey: e.id, name: e.name, balance: 160, creditLine: 200, liveOffers: 1, earnedSurplus: 90, workingCapitalCeiling: 500, lifecycle: 'ongoing' });
-        expect(project).toMatchObject({ publicKey: p.id, name: p.title, goalAmount: 120, currentAmount: 80, lifecycle: 'bounded' });
+        expect(bakery).toMatchObject({ publicKey: e.id, name: e.name, balance_c: 16000, creditLine_c: 20000, liveOffers: 1, earnedSurplus_c: 9000, workingCapitalCeiling_c: 50000, lifecycle: 'ongoing' });
+        expect(project).toMatchObject({ publicKey: p.id, name: p.title, goalAmount_c: 12000, currentAmount_c: 8000, lifecycle: 'bounded' });
         expect(Date.parse(project.deadlineAt!) - NOW).toBe(p.daysToGo * 24 * 60 * 60 * 1000);
         expect(bakery.keepers).toHaveLength(e.keepers);
         expect(bakery.keepers.map(k => k.role)).toEqual(['lead', 'keeper', 'keeper']);
-        expect(sampleEnterpriseDetail(e.id, NOW).posts.map((x: { title: string; price: number }) => [x.title, x.price])).toEqual([[e.listings[0].title, 12]]);
+        expect(sampleEnterpriseDetail(e.id, NOW).posts.map((x: { title: string; price_c: number }) => [x.title, x.price_c])).toEqual([[e.listings[0].title, 1200]]);
         expect(sampleEnterpriseDetail(p.id, NOW)).toMatchObject({ publicKey: p.id, backersCount: p.backers, posts: [] });
         for (const [path, v] of strings([sampleEnterpriseCards(NOW), sampleEnterpriseDetail(e.id, NOW), sampleEnterpriseDetail(p.id, NOW), sampleEnterpriseLedger(e.id, NOW), sampleEnterpriseLedger(p.id, NOW)])) {
             if (/(publicKey|pubkey|\.id|counterparty)$/.test(path)) expect(isSampleId(v), `${path} ${v}`).toBe(true);

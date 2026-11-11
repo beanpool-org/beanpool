@@ -30,6 +30,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { feeOf } from '@beanpool/core';
 import { db, afterTransactionCommit } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { initTls } from './services/tls.js';
@@ -57,6 +58,7 @@ import {
     persistCommonsBalance,
     reconcileLedgerFromDb,
 } from './state-engine.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 
 let run = 0, passed = 0;
@@ -71,32 +73,31 @@ function assert(cond: boolean, msg: string): void {
     }
 }
 
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
 
 function nodeTotal(): number {
-    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
-    return r4(accounts + getCommonsBalanceExact());
+    const accounts = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    return accounts + getCommonsBalanceExact();
 }
 
 function assertMemoryMatchesDb(pk: string): void {
-    const dbRow = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any;
-    const dbBal = dbRow ? dbRow.balance : 0;
-    const memBal = ledger.getAccount(pk).balance;
-    assert(Math.abs(dbBal - memBal) < 0.0001, `Account ${pk.substring(0, 12)} memory (${memBal}) matches DB (${dbBal})`);
+    const dbRow = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any;
+    const dbBal = dbRow ? dbRow.balance_c : 0;
+    const memBal = ledger.getAccount(pk).balance_c;
+    assert(dbBal === memBal, `Account ${pk.substring(0, 12)} memory (${memBal}) matches DB (${dbBal})`);
 }
 
 function assertCommonsMatchesDb(): void {
-    const dbRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    const dbBal = dbRow ? dbRow.balance : 0;
+    const dbRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
+    const dbBal = dbRow ? dbRow.balance_c : 0;
     const memBal = getCommonsBalanceExact();
-    assert(Math.abs(dbBal - memBal) < 0.0001, `Commons pool memory (${memBal}) matches DB (${dbBal})`);
+    assert(dbBal === memBal, `Commons pool memory (${memBal}) matches DB (${dbBal})`);
 }
 
 function assertConservation(stepName: string): void {
     const audit = runLedgerAudit();
     assert(audit.ok, `[${stepName}] Ledger audit passed`);
-    assert(Math.abs(audit.drift) < 0.0001, `[${stepName}] Ledger conservation preserved (drift=${audit.drift})`);
-    assert(Math.abs(nodeTotal()) < 0.0001, `[${stepName}] Node total is zero (${nodeTotal()})`);
+    assert(audit.drift === 0, `[${stepName}] Ledger conservation preserved (drift=${audit.drift})`);
+    assert(nodeTotal() === 0, `[${stepName}] Node total is zero (${nodeTotal()})`);
     assertCommonsMatchesDb();
 }
 
@@ -108,14 +109,14 @@ function makeMember(callsign: string, initialBalance = 0): string {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
     setMemberPhoto(db, pk, AVATAR);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
                 VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);
     if (initialBalance > 0) {
         transfer('genesis', pk, initialBalance, `seed ${callsign}`, 'direct', true);
     }
     // Give at least 1 trade / earned credit so sender gates pass
-    createPost('offer', 'general', `${callsign} service`, 'Help', 5, 'fixed', pk, undefined, undefined, undefined, true);
+    createPost('offer', 'general', `${callsign} service`, 'Help', 500, 'fixed', pk, undefined, undefined, undefined, true);
     return pk;
 }
 
@@ -131,9 +132,9 @@ let tradeSeq = 0;
  */
 function giveEarnedCredit(seller: string, buyer: string, credits: number): void {
     const postId = `atomic-post-${tradeSeq++}`;
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                 VALUES (?, 'offer', 'misc', 'atomic', 'atomic', ?, ?, 'completed')`).run(postId, credits, seller);
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
                 VALUES (?, ?, ?, ?, ?, 'completed')`).run(`atomic-mtx-${tradeSeq++}`, postId, buyer, seller, credits);
 }
 
@@ -181,19 +182,19 @@ function abortSkipsSeen(name: string): number {
  * `getAllAccounts()` returns the map as it stands.
  */
 function memBalanceRaw(pk: string): number {
-    return ledger.getAllAccounts().find(a => a.id === pk)?.balance ?? 0;
+    return ledger.getAllAccounts().find(a => a.id === pk)?.balance_c ?? 0;
 }
 
 /** A snapshot of everything a transfer would move, taken from the ROWS — what a restart would rebuild from. */
 function snapshotRows(pks: string[]): { accounts: Record<string, { balance: number; epoch: number }>; commons: number; total: number } {
     const accounts: Record<string, { balance: number; epoch: number }> = {};
     for (const pk of pks) {
-        const r = db.prepare('SELECT balance, last_demurrage_epoch AS epoch FROM accounts WHERE public_key = ?').get(pk) as any;
-        accounts[pk] = { balance: r ? r.balance : 0, epoch: r ? r.epoch : 0 };
+        const r = db.prepare('SELECT balance_c, last_demurrage_epoch AS epoch FROM accounts WHERE public_key = ?').get(pk) as any;
+        accounts[pk] = { balance: r ? r.balance_c : 0, epoch: r ? r.epoch : 0 };
     }
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    const sum = (db.prepare(`SELECT COALESCE(SUM(balance), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
-    return { accounts, commons: commonsRow ? commonsRow.balance : 0, total: r4(sum + (commonsRow ? commonsRow.balance : 0)) };
+    const commonsRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
+    const sum = (db.prepare(`SELECT COALESCE(SUM(balance_c), 0) t FROM accounts WHERE public_key != 'COMMONS_POOL'`).get() as any).t;
+    return { accounts, commons: commonsRow ? commonsRow.balance_c : 0, total: sum + (commonsRow ? commonsRow.balance_c : 0) };
 }
 
 /**
@@ -207,10 +208,10 @@ function assertNothingPersisted(label: string, before: ReturnType<typeof snapsho
     for (const pk of pks) {
         assert(after.accounts[pk].balance === before.accounts[pk].balance,
             `[${label}] Account ${pk.substring(0, 12)} row unchanged (${after.accounts[pk].balance})`);
-        assert(Math.abs(memBalanceRaw(pk) - after.accounts[pk].balance) < 0.0001,
+        assert(memBalanceRaw(pk) === after.accounts[pk].balance,
             `[${label}] Account ${pk.substring(0, 12)} memory matches its row`);
     }
-    assert(Math.abs(after.total - before.total) < 0.0001,
+    assert(after.total === before.total,
         `[${label}] Node total unchanged (${before.total} → ${after.total})`);
 }
 
@@ -218,11 +219,12 @@ function assertNothingPersisted(label: string, before: ReturnType<typeof snapsho
 function signedHeaders(path: string, body: string, pubHex: string, privateKey: crypto.KeyObject): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${body}`), privateKey).toString('base64');
+    const sig = signRequest(privateKey, { method: 'POST', path, timestamp: ts, nonce, body });
     return {
         'Content-Type': 'application/json',
         'X-Public-Key': pubHex,
         'X-Signature': sig,
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -278,10 +280,10 @@ async function main() {
     console.log('\n── Part 2: moveToCommons rollback ──');
     {
         const { publicKey: treasury } = createTreasury('RollbackTreasury', AVATAR, 200);
-        transfer('genesis', treasury, 100, 'seed treasury', 'direct', true);
+        transfer('genesis', treasury, 10000, 'seed treasury', 'direct', true);
         assertConservation('Pre-moveToCommons');
 
-        const balBefore = ledger.getAccount(treasury).balance;
+        const balBefore = ledger.getAccount(treasury).balance_c;
         const commonsBefore = getCommonsBalanceExact();
         let threw = false;
         try {
@@ -296,7 +298,7 @@ async function main() {
         assert(threw, 'conservingTransaction caught and rethrew');
         assertMemoryMatchesDb(treasury);
         assertCommonsMatchesDb();
-        assert(ledger.getAccount(treasury).balance === balBefore, 'Treasury in-memory balance unwound to pre-crash value');
+        assert(ledger.getAccount(treasury).balance_c === balBefore, 'Treasury in-memory balance unwound to pre-crash value');
         assert(getCommonsBalanceExact() === commonsBefore, 'Commons in-memory balance unwound to pre-crash value');
         assertConservation('Post-moveToCommons-rollback');
     }
@@ -306,20 +308,22 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 3: approvePostRequest rollback ──');
     {
-        const { publicKey: enterprise } = createTreasury('NeedBakery', AVATAR, 200);
-        const keeper1 = makeMember('NeedKeeper1', 100);
-        const keeper2 = makeMember('NeedKeeper2', 100);
-        const supplier = makeMember('FlourSupplier', 100);
+        const { publicKey: enterprise } = createTreasury('NeedBakery', AVATAR, 20000);
+        // An enterprise's line is its keepers' pledges only (E29 gone): it pays for its flour from Beans it holds.
+        transfer('genesis', enterprise, 5000, 'seed NeedBakery', 'direct', true);
+        const keeper1 = makeMember('NeedKeeper1', 10000);
+        const keeper2 = makeMember('NeedKeeper2', 10000);
+        const supplier = makeMember('FlourSupplier', 10000);
         adminAssignTreasuryOperator(enterprise, keeper1, 'admin');
         adminAssignTreasuryOperator(enterprise, keeper2, 'admin');
 
         // Enterprise has active offer and creates a Need
-        createPost('offer', 'food', 'Enterprise Bread', 'Fresh bread', 5, 'fixed', enterprise, undefined, undefined, undefined, true);
-        const need = createPost('need', 'goods', 'Organic flour', '10kg flour', 30, 'fixed', enterprise)!;
+        createPost('offer', 'food', 'Enterprise Bread', 'Fresh bread', 500, 'fixed', enterprise, undefined, undefined, undefined, true);
+        const need = createPost('need', 'goods', 'Organic flour', '10kg flour', 3000, 'fixed', enterprise)!;
         const bid = requestPost(need.id, supplier);
 
-        const entBalBefore = ledger.getAccount(enterprise).balance;
-        const supBalBefore = ledger.getAccount(supplier).balance;
+        const entBalBefore = ledger.getAccount(enterprise).balance_c;
+        const supBalBefore = ledger.getAccount(supplier).balance_c;
 
         let threw = false;
         try {
@@ -335,9 +339,9 @@ async function main() {
         assertMemoryMatchesDb(enterprise);
         assertMemoryMatchesDb(supplier);
         assertMemoryMatchesDb(`escrow_${bid.id}`);
-        assert(ledger.getAccount(enterprise).balance === entBalBefore, 'Enterprise balance unwound');
-        assert(ledger.getAccount(supplier).balance === supBalBefore, 'Supplier balance unwound');
-        assert(ledger.getAccount(`escrow_${bid.id}`).balance === 0, 'Escrow in-memory balance unwound to 0');
+        assert(ledger.getAccount(enterprise).balance_c === entBalBefore, 'Enterprise balance unwound');
+        assert(ledger.getAccount(supplier).balance_c === supBalBefore, 'Supplier balance unwound');
+        assert(ledger.getAccount(`escrow_${bid.id}`).balance_c === 0, 'Escrow in-memory balance unwound to 0');
         const txRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(bid.id) as any;
         assert(txRow.status === 'requested', 'Transaction row status rolled back to requested');
         assertConservation('Post-approvePostRequest-rollback');
@@ -348,12 +352,12 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 4: acceptPost rollback ──');
     {
-        const seller = makeMember('OfferSeller', 50);
-        const buyer = makeMember('OfferBuyer', 100);
-        const offer = createPost('offer', 'skills', 'Woodworking', 'Chairs', 40, 'fixed', seller, undefined, undefined, undefined, true)!;
+        const seller = makeMember('OfferSeller', 5000);
+        const buyer = makeMember('OfferBuyer', 10000);
+        const offer = createPost('offer', 'skills', 'Woodworking', 'Chairs', 4000, 'fixed', seller, undefined, undefined, undefined, true)!;
 
-        const buyerBalBefore = ledger.getAccount(buyer).balance;
-        const sellerBalBefore = ledger.getAccount(seller).balance;
+        const buyerBalBefore = ledger.getAccount(buyer).balance_c;
+        const sellerBalBefore = ledger.getAccount(seller).balance_c;
 
         let threw = false;
         try {
@@ -368,8 +372,8 @@ async function main() {
         assert(threw, 'conservingTransaction caught and rethrew error');
         assertMemoryMatchesDb(buyer);
         assertMemoryMatchesDb(seller);
-        assert(ledger.getAccount(buyer).balance === buyerBalBefore, 'Buyer in-memory balance unwound');
-        assert(ledger.getAccount(seller).balance === sellerBalBefore, 'Seller in-memory balance unwound');
+        assert(ledger.getAccount(buyer).balance_c === buyerBalBefore, 'Buyer in-memory balance unwound');
+        assert(ledger.getAccount(seller).balance_c === sellerBalBefore, 'Seller in-memory balance unwound');
         const postRow = db.prepare('SELECT status, accepted_by FROM posts WHERE id = ?').get(offer.id) as any;
         assert(postRow.status === 'active', 'Post status rolled back to active');
         assert(postRow.accepted_by === null, 'Post accepted_by rolled back to NULL');
@@ -381,17 +385,17 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 5: completePostTransaction rollback & duplicate completion CAS ──');
     {
-        const seller = makeMember('CompleteSeller', 50);
-        const buyer = makeMember('CompleteBuyer', 100);
-        const offer = createPost('offer', 'skills', 'Carpentry', 'Shelves', 30, 'fixed', seller, undefined, undefined, undefined, true)!;
+        const seller = makeMember('CompleteSeller', 5000);
+        const buyer = makeMember('CompleteBuyer', 10000);
+        const offer = createPost('offer', 'skills', 'Carpentry', 'Shelves', 3000, 'fixed', seller, undefined, undefined, undefined, true)!;
         const deal = acceptPost(offer.id, buyer);
         assert(deal.status === 'pending', 'Deal is pending');
         assertMemoryMatchesDb(buyer);
         assertMemoryMatchesDb(`escrow_${deal.id}`);
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 30, '30 beans in escrow');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 3000, '30 beans in escrow');
 
         // (5a) Forced rollback on completion
-        const sellerBalBefore = ledger.getAccount(seller).balance;
+        const sellerBalBefore = ledger.getAccount(seller).balance_c;
         let threw = false;
         try {
             conservingTransaction(() => {
@@ -406,8 +410,8 @@ async function main() {
         assertMemoryMatchesDb(seller);
         assertMemoryMatchesDb(buyer);
         assertMemoryMatchesDb(`escrow_${deal.id}`);
-        assert(ledger.getAccount(seller).balance === sellerBalBefore, 'Seller did not keep payout on rollback');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 30, 'Escrow retains 30 beans on rollback');
+        assert(ledger.getAccount(seller).balance_c === sellerBalBefore, 'Seller did not keep payout on rollback');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 3000, 'Escrow retains 30 beans on rollback');
         const dealRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
         assert(dealRow.status === 'pending', 'Deal status rolled back to pending');
         assertConservation('Post-completePostTransaction-rollback');
@@ -415,26 +419,26 @@ async function main() {
         // (5b) Successful completion
         const completed = completePostTransaction(deal.id, buyer);
         assert(completed !== null && completed.status === 'completed', 'Deal completed successfully');
-        const sellerBalAfter = ledger.getAccount(seller).balance;
+        const sellerBalAfter = ledger.getAccount(seller).balance_c;
         // Payout: 30 - 1.5% fee (0.45) = 29.55 beans
-        assert(sellerBalAfter === sellerBalBefore + 29.55, 'Seller received payout minus 1.5% fee');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 0, 'Escrow account drained to 0');
+        assert(sellerBalAfter === sellerBalBefore + 3000 - feeOf(3000), 'Seller received payout minus 1.5% fee (29.55)');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 0, 'Escrow account drained to 0');
         assertConservation('Post-first-completion');
 
         // (5c) Sequential second completion returns alreadyCompleted: true without extra payout
         const secondRes = completePostTransaction(deal.id, buyer);
         assert(secondRes !== null && secondRes.alreadyCompleted === true, 'Sequential second completion returns alreadyCompleted: true');
-        assert(ledger.getAccount(seller).balance === sellerBalAfter, 'Seller received NO extra payout on second completion attempt');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 0, 'Escrow balance remains 0');
+        assert(ledger.getAccount(seller).balance_c === sellerBalAfter, 'Seller received NO extra payout on second completion attempt');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 0, 'Escrow balance remains 0');
         assertMemoryMatchesDb(seller);
         assertMemoryMatchesDb(buyer);
         assertConservation('Post-duplicate-completion-sequential');
 
         // (5d) Concurrent race: CAS status update fails closed before any transfer
-        const offer2 = createPost('offer', 'skills', 'Carpentry 2', 'Shelves 2', 30, 'fixed', seller, undefined, undefined, undefined, true)!;
+        const offer2 = createPost('offer', 'skills', 'Carpentry 2', 'Shelves 2', 3000, 'fixed', seller, undefined, undefined, undefined, true)!;
         const deal2 = acceptPost(offer2.id, buyer);
         completePostTransaction(deal2.id, buyer);
-        const sellerBalAfter2 = ledger.getAccount(seller).balance;
+        const sellerBalAfter2 = ledger.getAccount(seller).balance_c;
 
         let concurrentThrew = false;
         let concurrentMsg = '';
@@ -443,7 +447,7 @@ async function main() {
                 const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`)
                     .run(new Date().toISOString(), deal2.id);
                 if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
-                transfer(`escrow_${deal2.id}`, seller, 30, 'Escrow payout', 'escrow', false);
+                transfer(`escrow_${deal2.id}`, seller, 3000, 'Escrow payout', 'escrow', false);
             });
         } catch (e: any) {
             concurrentThrew = true;
@@ -451,7 +455,7 @@ async function main() {
         }
         assert(concurrentThrew, 'Concurrent second transaction throws on CAS update');
         assert(concurrentMsg.includes('Deal was already completed or cancelled'), 'CAS update throws expected message');
-        assert(ledger.getAccount(seller).balance === sellerBalAfter2, 'Seller received NO second payout on race');
+        assert(ledger.getAccount(seller).balance_c === sellerBalAfter2, 'Seller received NO second payout on race');
         assertMemoryMatchesDb(seller);
         assertConservation('Post-concurrent-race-completion');
     }
@@ -461,15 +465,15 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 6: cancelPostTransaction rollback & duplicate cancellation CAS ──');
     {
-        const seller = makeMember('CancelSeller', 50);
-        const buyer = makeMember('CancelBuyer', 100);
-        const offer = createPost('offer', 'goods', 'Pottery bowl', 'Handmade', 25, 'fixed', seller, undefined, undefined, undefined, true)!;
+        const seller = makeMember('CancelSeller', 5000);
+        const buyer = makeMember('CancelBuyer', 10000);
+        const offer = createPost('offer', 'goods', 'Pottery bowl', 'Handmade', 2500, 'fixed', seller, undefined, undefined, undefined, true)!;
         const deal = acceptPost(offer.id, buyer);
         assert(deal.status === 'pending', 'Deal is pending');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 25, '25 beans in escrow');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 2500, '25 beans in escrow');
 
         // (6a) Forced rollback on cancel
-        const buyerBalBefore = ledger.getAccount(buyer).balance;
+        const buyerBalBefore = ledger.getAccount(buyer).balance_c;
         let threw = false;
         try {
             conservingTransaction(() => {
@@ -483,8 +487,8 @@ async function main() {
         assert(threw, 'conservingTransaction caught and rethrew error');
         assertMemoryMatchesDb(buyer);
         assertMemoryMatchesDb(`escrow_${deal.id}`);
-        assert(ledger.getAccount(buyer).balance === buyerBalBefore, 'Buyer did not keep refund on rollback');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 25, 'Escrow retains 25 beans on rollback');
+        assert(ledger.getAccount(buyer).balance_c === buyerBalBefore, 'Buyer did not keep refund on rollback');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 2500, 'Escrow retains 25 beans on rollback');
         const dealRow = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(deal.id) as any;
         assert(dealRow.status === 'pending', 'Deal status rolled back to pending');
         assertConservation('Post-cancelPostTransaction-rollback');
@@ -492,24 +496,24 @@ async function main() {
         // (6b) Successful cancellation
         const cancelled = cancelPostTransaction(deal.id, buyer);
         assert(cancelled !== null && cancelled.status === 'cancelled', 'Deal cancelled successfully');
-        const buyerBalAfter = ledger.getAccount(buyer).balance;
-        assert(buyerBalAfter === buyerBalBefore + 25, 'Buyer received full refund');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 0, 'Escrow account drained to 0');
+        const buyerBalAfter = ledger.getAccount(buyer).balance_c;
+        assert(buyerBalAfter === buyerBalBefore + 2500, 'Buyer received full refund');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 0, 'Escrow account drained to 0');
         assertConservation('Post-first-cancellation');
 
         // (6c) Sequential second cancel returns null without moving funds
         const secondCancel = cancelPostTransaction(deal.id, buyer);
         assert(secondCancel === null, 'Sequential second cancellation returns null without moving funds');
-        assert(ledger.getAccount(buyer).balance === buyerBalAfter, 'Buyer received NO extra refund on second cancel attempt');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 0, 'Escrow balance remains 0');
+        assert(ledger.getAccount(buyer).balance_c === buyerBalAfter, 'Buyer received NO extra refund on second cancel attempt');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 0, 'Escrow balance remains 0');
         assertMemoryMatchesDb(buyer);
         assertConservation('Post-duplicate-cancellation-sequential');
 
         // (6d) Concurrent cancel race condition: CAS status update fails before transfer
-        const offer2 = createPost('offer', 'goods', 'Pottery bowl 2', 'Handmade 2', 25, 'fixed', seller, undefined, undefined, undefined, true)!;
+        const offer2 = createPost('offer', 'goods', 'Pottery bowl 2', 'Handmade 2', 2500, 'fixed', seller, undefined, undefined, undefined, true)!;
         const deal2 = acceptPost(offer2.id, buyer);
         cancelPostTransaction(deal2.id, buyer);
-        const buyerBalAfter2 = ledger.getAccount(buyer).balance;
+        const buyerBalAfter2 = ledger.getAccount(buyer).balance_c;
 
         let concurrentCancelThrew = false;
         let concurrentCancelMsg = '';
@@ -518,7 +522,7 @@ async function main() {
                 const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'pending'`)
                     .run(new Date().toISOString(), deal2.id);
                 if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
-                transfer(`escrow_${deal2.id}`, buyer, 25, 'Escrow refund', 'escrow', true);
+                transfer(`escrow_${deal2.id}`, buyer, 2500, 'Escrow refund', 'escrow', true);
             });
         } catch (e: any) {
             concurrentCancelThrew = true;
@@ -526,7 +530,7 @@ async function main() {
         }
         assert(concurrentCancelThrew, 'Concurrent second cancellation throws on CAS update');
         assert(concurrentCancelMsg.includes('Deal was already completed or cancelled'), 'CAS update throws expected message on cancel race');
-        assert(ledger.getAccount(buyer).balance === buyerBalAfter2, 'Buyer received NO extra refund on cancel race');
+        assert(ledger.getAccount(buyer).balance_c === buyerBalAfter2, 'Buyer received NO extra refund on cancel race');
         assertMemoryMatchesDb(buyer);
         assertConservation('Post-concurrent-race-cancellation');
     }
@@ -536,13 +540,13 @@ async function main() {
     // ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── Part 7: adminDeletePost rollback with pending escrow ──');
     {
-        const seller = makeMember('AdminDelSeller', 50);
-        const buyer = makeMember('AdminDelBuyer', 100);
-        const offer = createPost('offer', 'goods', 'Abusive item', 'Bad listing', 20, 'fixed', seller, undefined, undefined, undefined, false)!;
+        const seller = makeMember('AdminDelSeller', 5000);
+        const buyer = makeMember('AdminDelBuyer', 10000);
+        const offer = createPost('offer', 'goods', 'Abusive item', 'Bad listing', 2000, 'fixed', seller, undefined, undefined, undefined, false)!;
         const deal = acceptPost(offer.id, buyer);
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 20, '20 beans in escrow');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 2000, '20 beans in escrow');
 
-        const buyerBalBefore = ledger.getAccount(buyer).balance;
+        const buyerBalBefore = ledger.getAccount(buyer).balance_c;
 
         // Forced rollback inside adminDeletePost
         let threw = false;
@@ -558,8 +562,8 @@ async function main() {
         assert(threw, 'conservingTransaction caught and rethrew error');
         assertMemoryMatchesDb(buyer);
         assertMemoryMatchesDb(`escrow_${deal.id}`);
-        assert(ledger.getAccount(buyer).balance === buyerBalBefore, 'Buyer did not keep refund on rollback');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 20, 'Escrow retains 20 beans on rollback');
+        assert(ledger.getAccount(buyer).balance_c === buyerBalBefore, 'Buyer did not keep refund on rollback');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 2000, 'Escrow retains 20 beans on rollback');
         const postRow = db.prepare('SELECT active, status FROM posts WHERE id = ?').get(offer.id) as any;
         assert(postRow.active === 1 && postRow.status === 'pending', 'Post row active and status rolled back');
         assertConservation('Post-adminDeletePost-rollback');
@@ -567,8 +571,8 @@ async function main() {
         // Successful adminDeletePost
         const deleted = adminDeletePost(offer.id);
         assert(deleted, 'adminDeletePost succeeded');
-        assert(ledger.getAccount(buyer).balance === buyerBalBefore + 20, 'Buyer refunded upon post deletion');
-        assert(ledger.getAccount(`escrow_${deal.id}`).balance === 0, 'Escrow drained to 0');
+        assert(ledger.getAccount(buyer).balance_c === buyerBalBefore + 2000, 'Buyer refunded upon post deletion');
+        assert(ledger.getAccount(`escrow_${deal.id}`).balance_c === 0, 'Escrow drained to 0');
         assertConservation('Post-adminDeletePost-success');
     }
 
@@ -581,11 +585,11 @@ async function main() {
         //     This is the bean-destroying case. The sender's row is written first, so before this fix a
         //     crash here left the debit durable with no matching credit, and boot rebuilds memory from
         //     exactly those rows.
-        const alice = makeMember('AtomicAlice', 100);
-        const bob = makeMember('AtomicBob', 10);
+        const alice = makeMember('AtomicAlice', 10000);
+        const bob = makeMember('AtomicBob', 1000);
         const carol = makeMember('AtomicCarol');
-        giveEarnedCredit(alice, carol, 50);
-        giveEarnedCredit(bob, carol, 50);
+        giveEarnedCredit(alice, carol, 5000);
+        giveEarnedCredit(bob, carol, 5000);
         assertConservation('Pre-transfer-atomicity');
 
         {
@@ -594,7 +598,7 @@ async function main() {
             const disarm = armAbort('abort_on_to', 'UPDATE', bob);
             let threw = '';
             try {
-                transfer(alice, bob, 25, memo, 'direct', true);
+                transfer(alice, bob, 2500, memo, 'direct', true);
             } catch (e: any) {
                 threw = e?.message || String(e);
             } finally {
@@ -612,7 +616,7 @@ async function main() {
             const disarm = armAbort('abort_on_from', 'UPDATE', alice);
             let threw = '';
             try {
-                transfer(alice, bob, 25, memo, 'direct', true);
+                transfer(alice, bob, 2500, memo, 'direct', true);
             } catch (e: any) {
                 threw = e?.message || String(e);
             } finally {
@@ -626,8 +630,8 @@ async function main() {
         // (b cont.) …and on the COMMONS_POOL row, with a real decay in flight so the last two steps
         //          (persistDecayEvents + persistCommonsBalance) are actually reached.
         {
-            const dave = makeMember('AtomicDave', 5000);
-            giveEarnedCredit(dave, carol, 50);
+            const dave = makeMember('AtomicDave', 500000);
+            giveEarnedCredit(dave, carol, 5000);
             persistDecayEvents();
             persistCommonsBalance();
             // Backdate the window so dave's next read owes demurrage — the decay rows are step 4 of 5.
@@ -644,7 +648,7 @@ async function main() {
             const disarm = armAbort('abort_on_commons', 'INSERT', 'COMMONS_POOL', 1);
             let threw = '';
             try {
-                transfer(dave, bob, 25, memo, 'direct', true);
+                transfer(dave, bob, 2500, memo, 'direct', true);
             } catch (e: any) {
                 threw = e?.message || String(e);
             } finally {
@@ -659,12 +663,12 @@ async function main() {
             assertConservation('Post-abort-on-commons');
 
             // The successful version of the same send: decay settles, beans move, books still balance.
-            const daveBefore = ledger.getAccount(dave).balance;
-            const bobBefore = ledger.getAccount(bob).balance;
-            const ok = transfer(dave, bob, 25, 'atomic probe: commons path succeeds', 'direct', true);
+            const daveBefore = ledger.getAccount(dave).balance_c;
+            const bobBefore = ledger.getAccount(bob).balance_c;
+            const ok = transfer(dave, bob, 2500, 'atomic probe: commons path succeeds', 'direct', true);
             assert(!!ok, 'The same send succeeds once the forced failure is disarmed');
-            assert(Math.abs(ledger.getAccount(dave).balance - (daveBefore - 25)) < 0.0001, 'Sender debited exactly 25 Beans');
-            assert(Math.abs(ledger.getAccount(bob).balance - (bobBefore + 25)) < 0.0001, 'Recipient credited exactly 25 Beans');
+            assert(ledger.getAccount(dave).balance_c === daveBefore - 2500, 'Sender debited exactly 25 Beans');
+            assert(ledger.getAccount(bob).balance_c === bobBefore + 2500, 'Recipient credited exactly 25 Beans');
             assertMemoryMatchesDb(dave);
             assertMemoryMatchesDb(bob);
             assertConservation('Post-successful-send');
@@ -687,9 +691,9 @@ async function main() {
         // Memory came out FINE before the fix (the catch restores the global), which is why the cases above
         // do not see it — so this one reads the ROWS, which are what a restart rebuilds from.
         {
-            const ivy = makeMember('AtomicIvy', 5000);
-            const jack = makeMember('AtomicJack', 10);
-            giveEarnedCredit(ivy, carol, 50);
+            const ivy = makeMember('AtomicIvy', 500000);
+            const jack = makeMember('AtomicJack', 1000);
+            giveEarnedCredit(ivy, carol, 5000);
             persistDecayEvents();
             persistCommonsBalance();
             db.prepare('UPDATE accounts SET last_demurrage_epoch = ? WHERE public_key = ?')
@@ -698,10 +702,10 @@ async function main() {
 
             // Queue the decay with an ordinary READ, BEFORE transfer() is ever called.
             const read = getBalance(ivy);
-            assert(read.balance < 5000, `A plain balance read settled demurrage in memory (${read.balance})`);
+            assert(read.balance_c < 500000, `A plain balance read settled demurrage in memory (${read.balance_c})`);
             assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
                 '…and wrote no row for it: the debit is queued in memory only');
-            const queued = r4(5000 - memBalanceRaw(ivy));
+            const queued = 500000 - memBalanceRaw(ivy);
             assert(queued > 0, `Decay of ${queued} Beans is sitting unflushed before the send`);
 
             const memo = 'atomic probe: pre-flush torn write';
@@ -709,7 +713,7 @@ async function main() {
             const disarm = armAbort('abort_preflush', 'INSERT', 'COMMONS_POOL');
             let threw = '';
             try {
-                transfer(ivy, jack, 25, memo, 'direct', true);
+                transfer(ivy, jack, 2500, memo, 'direct', true);
             } catch (e: any) {
                 threw = e?.message || String(e);
             } finally {
@@ -720,7 +724,7 @@ async function main() {
                 'and it fired on the PRE-FLUSH — the very first commons write, before BEGIN');
             // The finding in one assertion: the debit must not be durable without its credit.
             const after = snapshotRows([ivy, jack]);
-            assert(Math.abs(after.total - before.total) < 0.0001,
+            assert(after.total === before.total,
                 `[pre-flush] Nothing destroyed ON DISK — rows still total the same (${before.total} → ${after.total})`);
             assert(!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
                 '[pre-flush] No Circulation fee row was committed on its own');
@@ -731,10 +735,10 @@ async function main() {
             // Disarmed, the same send goes through and the decay lands with its credit, in one commit.
             const ivyBefore = memBalanceRaw(ivy);
             const jackBefore = memBalanceRaw(jack);
-            const ok = transfer(ivy, jack, 25, 'atomic probe: pre-flush path succeeds', 'direct', true);
+            const ok = transfer(ivy, jack, 2500, 'atomic probe: pre-flush path succeeds', 'direct', true);
             assert(!!ok, 'The same send succeeds once the forced failure is disarmed');
-            assert(memBalanceRaw(ivy) < ivyBefore - 25, 'Sender paid the 25 Beans AND the demurrage it owed');
-            assert(Math.abs(memBalanceRaw(jack) - (jackBefore + 25)) < 0.0001, 'Recipient credited exactly 25 Beans');
+            assert(memBalanceRaw(ivy) < ivyBefore - 2500, 'Sender paid the 25 Beans AND the demurrage it owed');
+            assert(memBalanceRaw(jack) === jackBefore + 2500, 'Recipient credited exactly 25 Beans');
             assert(!!db.prepare("SELECT id FROM transactions WHERE from_pubkey = ? AND memo LIKE 'Circulation fee%'").get(ivy),
                 'and the Circulation fee row is on disk this time');
             assertMemoryMatchesDb(ivy);
@@ -746,9 +750,9 @@ async function main() {
         //     must leave the OUTER transaction's earlier work intact when the caller swallows it, and the
         //     outer's post-commit hooks must fire exactly once, at the outer commit.
         {
-            const erin = makeMember('AtomicErin', 200);
-            const frank = makeMember('AtomicFrank', 10);
-            giveEarnedCredit(erin, carol, 50);
+            const erin = makeMember('AtomicErin', 20000);
+            const frank = makeMember('AtomicFrank', 1000);
+            giveEarnedCredit(erin, carol, 5000);
             assertConservation('Pre-nested-transfer');
 
             const memo = 'atomic probe: nested abort';
@@ -759,13 +763,13 @@ async function main() {
 
             conservingTransaction(() => {
                 // Outer work that MUST survive the inner failure.
-                db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+                db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
                             VALUES ('atomic-outer-post', 'offer', 'misc', 'outer', 'outer', 1, ?, 'active')`).run(erin);
                 afterTransactionCommit(() => { hookFired++; });
 
                 const disarm = armAbort('abort_nested', 'UPDATE', frank);
                 try {
-                    transfer(erin, frank, 25, memo, 'direct', true);
+                    transfer(erin, frank, 2500, memo, 'direct', true);
                 } catch (e: any) {
                     innerThrew = e?.message || String(e);
                 } finally {
@@ -793,11 +797,11 @@ async function main() {
         // the inner block flushed the debit INSIDE the savepoint, and a rollback then restored the credit
         // with its debit gone — minting beans. Measured at 208.58 Beans on one failed send before the fix.
         {
-            const gita = makeMember('AtomicGita', 60);
-            const hugo = makeMember('AtomicHugo', 10);
-            giveEarnedCredit(gita, carol, 50);
+            const gita = makeMember('AtomicGita', 6000);
+            const hugo = makeMember('AtomicHugo', 1000);
+            giveEarnedCredit(gita, carol, 5000);
             // A fat, stale bystander that decays the moment anything reads it.
-            const stale = makeMember('AtomicStale', 5000);
+            const stale = makeMember('AtomicStale', 500000);
             persistDecayEvents();
             persistCommonsBalance();
             db.prepare('UPDATE accounts SET last_demurrage_epoch = ? WHERE public_key = ?')
@@ -808,10 +812,10 @@ async function main() {
             conservingTransaction(() => {
                 // Touching the stale account queues decay that is not yet in any row.
                 const decayed = ledger.getAccount(stale);
-                assert(decayed.balance < 5000, 'Bystander account decayed in memory but not yet in its row');
+                assert(decayed.balance_c < 500000, 'Bystander account decayed in memory but not yet in its row');
                 const disarm = armAbort('abort_mint', 'INSERT', 'COMMONS_POOL');
                 try {
-                    transfer(gita, hugo, 5, 'atomic probe: mint regression', 'direct', true);
+                    transfer(gita, hugo, 500, 'atomic probe: mint regression', 'direct', true);
                 } catch { /* swallowed by the caller, exactly as the hazard requires */ }
                 finally { disarm(); }
             });
@@ -819,7 +823,7 @@ async function main() {
             persistDecayEvents();
             persistCommonsBalance();
             const after = snapshotRows([gita, hugo, stale]);
-            assert(Math.abs(after.total - before.total) < 0.0001,
+            assert(after.total === before.total,
                 `No beans minted by the nested rollback (${before.total} → ${after.total})`);
             assertConservation('Post-nested-mint-regression');
         }
@@ -836,23 +840,23 @@ async function main() {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
                         VALUES (?, 'AtomicRoute', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(senderHex);
             setMemberPhoto(db, senderHex, AVATAR);
-            db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(senderHex);
+            db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(senderHex);
             ledger.initializeGenesisAccount(senderHex);
-            transfer('genesis', senderHex, 100, 'seed route sender', 'direct', true);
-            giveEarnedCredit(senderHex, carol, 50);
-            const recipient = makeMember('AtomicRouteRecipient', 10);
+            transfer('genesis', senderHex, 10000, 'seed route sender', 'direct', true);
+            giveEarnedCredit(senderHex, carol, 5000);
+            const recipient = makeMember('AtomicRouteRecipient', 1000);
             assertConservation('Pre-route-send');
 
             // A successful send still works end to end.
             {
-                const senderBefore = ledger.getAccount(senderHex).balance;
-                const recipientBefore = ledger.getAccount(recipient).balance;
-                const body = JSON.stringify({ from: senderHex, to: recipient, amount: 7, memo: 'route send ok' });
+                const senderBefore = ledger.getAccount(senderHex).balance_c;
+                const recipientBefore = ledger.getAccount(recipient).balance_c;
+                const body = JSON.stringify({ from: senderHex, to: recipient, amount_c: 700, memo: 'route send ok' });
                 const res = await fetch(`${base}${path}`, { method: 'POST', headers: signedHeaders(path, body, senderHex, privateKey), body });
                 const json: any = await res.json().catch(() => ({}));
                 assert(res.status === 200 && json?.success === true, `Signed send returns 200 (got ${res.status} ${JSON.stringify(json)})`);
-                assert(Math.abs(ledger.getAccount(senderHex).balance - (senderBefore - 7)) < 0.0001, 'Route send debited the sender by 7 Beans');
-                assert(Math.abs(ledger.getAccount(recipient).balance - (recipientBefore + 7)) < 0.0001, 'Route send credited the recipient by 7 Beans');
+                assert(ledger.getAccount(senderHex).balance_c === senderBefore - 700, 'Route send debited the sender by 7 Beans');
+                assert(ledger.getAccount(recipient).balance_c === recipientBefore + 700, 'Route send credited the recipient by 7 Beans');
                 assertMemoryMatchesDb(senderHex);
                 assertMemoryMatchesDb(recipient);
                 assertConservation('Post-route-send-success');
@@ -862,7 +866,7 @@ async function main() {
             {
                 const before = snapshotRows([senderHex, recipient]);
                 const memo = 'route send torn';
-                const body = JSON.stringify({ from: senderHex, to: recipient, amount: 7, memo });
+                const body = JSON.stringify({ from: senderHex, to: recipient, amount_c: 700, memo });
                 const disarm = armAbort('abort_route', 'UPDATE', recipient);
                 let res: Response;
                 try {

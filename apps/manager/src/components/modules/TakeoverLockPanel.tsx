@@ -6,7 +6,6 @@ import {
     makeRecoveryCode,
     checkRecoveryCodeApi,
     getTfaSessionToken,
-    TakeoverRequestError,
     type TakeoverStatus,
     type BackupLockStatus,
     type MadeRecoveryCode,
@@ -124,9 +123,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
             setStatusError(null);
         } catch (e) {
             setStatus(null);
-            setStatusError(e instanceof TakeoverRequestError && e.status === 404
-                ? 'This node is too old to lock its take-over keys. Update it to the latest release.'
-                : `Could not read who can unlock this community: ${e instanceof Error ? e.message : 'the node did not answer'}.`);
+            setStatusError(`Could not read who can unlock this community: ${e instanceof Error ? e.message : 'the node did not answer'}.`);
         }
         try {
             setBackupLock((await fetchBackupLock(activeNode.url, nodeCredential(activeNode), tfa)) ?? 'unknown');

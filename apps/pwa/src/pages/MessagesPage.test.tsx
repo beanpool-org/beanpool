@@ -52,8 +52,7 @@ vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
 }));
 
-// What a line's words go with: the identities here are not real keys, and the signing itself is core's own to test.
-const LINE_SIG = vi.hoisted(() => ({ sig: 'c2ln', at: '2026-11-01T00:00:00.000Z' }));
+// The identities here are not real keys: sealing and signing a line (format 4, one call) is core's own to test.
 vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     // The thread's order is the real one: by the node's timestamps (core dmThreadInShownOrder).
     dmThreadInShownOrder: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmThreadInShownOrder,
@@ -65,8 +64,7 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     decodePlaintext: vi.fn((c: string) => c),
     encodePlaintext: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
     sealDmLine: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
-    signDmLine: vi.fn(() => LINE_SIG),
-    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 4, after: null, conversationId: '', moved: false })),
     checkDmThread: vi.fn(() => new Map()),
     dmAfterReference: vi.fn(() => null),
     dmLineMarkText: vi.fn(() => null),
@@ -882,7 +880,7 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         return screen.findByRole('dialog');
     };
     const nodeSays = (features: Record<string, unknown>) => {
-        vi.mocked(communityInfoOnce).mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: features.beans === false ? 'global' : 'local', features } as never);
+        vi.mocked(communityInfoOnce).mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: features.beans === false ? 'global' : 'local', features } as never);
         onTestFinished(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => { throw new Error('offline'); }); });
     };
 
@@ -1099,7 +1097,7 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
             'the back fence', '00000',        // the caption, encrypted into the message body
             'image',
             { data: 'data:image/jpeg;base64,resized', nonce: '00000', mime: 'image/jpeg' },
-            JSON.stringify({ lineSig: LINE_SIG }),   // the caption's signature: the photo itself is not signed
+            undefined,   // nothing beside the line: each part's signature is in its own ciphertext (format 4)
             picture.messageId,
         );
 
@@ -1507,7 +1505,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         const sealedTo = vi.mocked(sealDmLine).mock.calls.at(-1)![2];
         expect(sealedTo.senderPubHex).toBe('my-pubkey');
         expect(sealedTo.messageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, JSON.stringify({ lineSig: LINE_SIG }), sealedTo.messageId);
+        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, undefined, sealedTo.messageId);
         expect(encodePlaintext).not.toHaveBeenCalled();
         await waitFor(() => expect(said()).toBeNull());
         expect(composer.value).toBe('');
@@ -1549,7 +1547,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         vi.mocked(editMessageApi).mockResolvedValueOnce({ success: true } as any);
         await pressEnter(composer);
         await waitFor(() => expect(editMessageApi).toHaveBeenCalledTimes(1));
-        expect(editMessageApi).toHaveBeenCalledWith('msg-mine', 'my-pubkey', 'locked:actually 7', LOCKED_NONCE, LINE_SIG);
+        expect(editMessageApi).toHaveBeenCalledWith('msg-mine', 'my-pubkey', 'locked:actually 7', LOCKED_NONCE);
         // An edit is sealed to its own line's id.
         expect(vi.mocked(sealDmLine).mock.calls.at(-1)![2]).toMatchObject({ senderPubHex: 'my-pubkey', messageId: 'msg-mine' });
         expect(encodePlaintext).not.toHaveBeenCalled();
@@ -1739,7 +1737,11 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
     });
 });
 
-describe('MessagesPage: links in a message stay plain text (G11-e: a new account is not handed clickable links)', () => {
+// G11-e (26 Sep) pinned "a new account is not handed clickable links" with a chat that was NOT a request: the web showed every
+// link as plain words. On 9 Nov Marty made the web link as the phone does (core's chat-links.ts; PR #2990), and the phone links in
+// an ordinary chat and leaves links out only while the chat is still a request (chat/[id].tsx: onPressUrl={requestMode === 'none' ? openUrl : undefined}).
+// So the stranger rule is kept where the phone keeps it, with the original assertions unchanged; the ordinary chat links.
+describe('MessagesPage: links in a message (plain text from someone who is only asking; links in a chat, as on the phone)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockConversations = [{
@@ -1761,12 +1763,32 @@ describe('MessagesPage: links in a message stay plain text (G11-e: a new account
         }));
     });
 
-    it('a URL, a www. address and an <a> tag in a message are shown as text, never as a link', async () => {
+    it('in a request from someone the reader has not accepted: a URL, a www. address and an <a> tag are shown as text, never as a link', async () => {
+        mockConversations = [{ ...mockConversations[0], request: { state: 'pending', from: 'peer-pubkey', at: '2026-09-14T00:00:00Z' } } as Conversation];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
         const { container } = render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
         expect(await screen.findByText(/Cheap deals at https:\/\/phish\.example\/win/)).toBeInTheDocument();
         expect(container.textContent).toContain('<a href="https://phish.example/x">click</a>');
         expect(container.querySelectorAll('a[href*="phish.example"]')).toHaveLength(0);
         expect(Array.from(container.querySelectorAll('a')).filter(a => /phish/.test(a.textContent ?? ''))).toHaveLength(0);
+    });
+
+    it('in a chat that is not a request: the URL and the www. address are links, and an <a> tag typed into the words is still words, never an element', async () => {
+        const { container } = render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        await screen.findAllByTestId('chat-link');
+        // The typed tag is shown character for character.
+        expect(container.textContent).toContain('<a href="https://phish.example/x">click</a>');
+        const anchors = Array.from(container.querySelectorAll('a'));
+        // Every anchor is one this page drew from the words (ChatLinkedText), each one text only, none a tag the sender typed.
+        expect(anchors.length).toBeGreaterThan(0);
+        for (const a of anchors) {
+            expect(a).toHaveAttribute('data-testid', 'chat-link');
+            expect(a.childElementCount).toBe(0);
+            expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+        }
+        expect(anchors.map((a) => a.getAttribute('href'))).toContain('https://phish.example/win');
+        expect(anchors.map((a) => a.getAttribute('href'))).toContain('https://www.phish.example');
+        expect(anchors.filter((a) => a.textContent === 'click')).toHaveLength(0);
     });
 });
 

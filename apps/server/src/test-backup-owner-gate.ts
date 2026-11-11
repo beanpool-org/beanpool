@@ -4,19 +4,22 @@
  *
  * Over the real HTTPS server, through every middleware a node runs:
  *  1. An admin's key session is refused (403, in words), with nothing changed, on the restore (the live database's roles
- *     and members as they were, no upload left), /backup, the snapshot download, the replication token's generate, mode
- *     and clear (the standby's token still works), replication-config/save, a
- *     change to the snapshot settings, a copy through the admin-password path
- *     (an admin's session wins over any X-Admin-Password header), and every off-box backup route (status, settings, run,
- *     list, download). A moderator's session too. An owner's key session and the node password get each of them (the copy
- *     source asks a fresh proof, design case 18 S2b: a computer's session is sent to the phone, which saves it). No
+ *     and members as they were, no upload left), /backup, the snapshot download, the replication token's generate and
+ *     clear (the standby's token still works), replication-config/save, a
+ *     change to the snapshot settings, and every off-box backup route (status, settings, run,
+ *     list, download). A moderator's session too. An owner's key session gets each of them (the copy
+ *     source asks a fresh proof, design case 18 S2b: a computer's session is sent to the phone, which saves it). The
+ *     node has no admin password (Marty, 11 Nov 2026): an older install's is no credential on /backup (401), and the
+ *     copy routes are the standby's alone: a key session of any role, an old password header beside it or not, is
+ *     refused there (401) and gets no database. No
  *     route deletes a snapshot (design case 18, A3): 404 to an owner, an admin and a moderator, the file still there. The
  *     fleet manager's backup downloads are gone (deleted 2026-10-02): nobody gets a database there, an owner neither.
  *  2. The replication token alone, on every /api/local/admin/* route the node serves: it gets what
  *     no credential gets, and never a database, except on the standby's own routes (the copy routes, replication-access
  *     and the take-over envelope), where it is taken. With backups readable (no recovery code) and locked (one).
- *  3. A readable backup's node_config.json carries no credential (the admin hash and salt, the 2FA secret, the token's
- *     hash, a standby's token, a legacy plain-text password), from a legacy data/node_config.json too; nor do its bytes.
+ *  3. A readable backup's node_config.json carries no credential (the token's hash, a standby's token, and what an
+ *     older install's local-config.json may still hold though nothing reads it: the admin hash and salt, the 2FA secret
+ *     and backup codes, a legacy plain-text password), from a legacy data/node_config.json too; nor do its bytes.
  *  4. A restore (of a sealed file, opened with the recovery code: Settings restores no plain archive, design case 18 §3.1)
  *     refuses, the live database and the data folder as they were: a gzip bomb past the unpacked cap, past the
  *     member cap, and a member whose header alone is past the real 4 GB cap; a hard link (busybox's case: out to
@@ -143,10 +146,9 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig, getLocalConfig, setReplicationToken, verifyReplicationToken, hasReplicationToken } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig, setReplicationToken, verifyReplicationToken, hasReplicationToken } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { createSnapshot, writeDbSnapshot, getAutoSnapshotConfig } = await import('./services/snapshot-scheduler.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const { initTls } = await import('./services/tls.js');
@@ -158,9 +160,8 @@ async function main(): Promise<void> {
     await ensureGenesis();
     // A node key, so a recovery code can lock backups (step 2's second sweep).
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
+    // What an older install's admin password looked like: no credential now.
     const PW = 'Owner-Gate-Pw-4471!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, replicationTokenOnly: false });
     const TOKEN = 'owner-gate-replication-token-' + crypto.randomBytes(16).toString('hex');
     setReplicationToken(TOKEN);
 
@@ -172,7 +173,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[admin, 'Adam'], [moderator, 'Mo']]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);
@@ -210,10 +211,6 @@ async function main(): Promise<void> {
     const asOwner = { 'x-admin-session': ownerSession };
     const asAdmin = { 'x-admin-session': adminSession };
     const asMod = { 'x-admin-session': modSession };
-    // Step 7c: with the node's 2FA off the password alone opens no admin route. Step 1 checks that, then sends the node
-    // password with a code (2FA on, for that loop only); the later steps' owner requests use the owner's key session.
-    let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
-    const asPassword = (): Record<string, string> => (tfa ? tfa.headers() : { 'x-admin-password': PW });
 
     const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all());
     const memberCount = () => (db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n;
@@ -270,8 +267,6 @@ async function main(): Promise<void> {
         { what: 'the snapshot download', method: 'GET', route: `/api/local/admin/snapshots/download?name=${encodeURIComponent(snapA.name)}`, unchanged: () => null },
         { what: 'replication-token/generate', method: 'POST', route: '/api/local/admin/replication-token/generate',
             unchanged: () => getLocalConfig().replicationTokenHash === tokenHashBefore ? null : 'the token changed' },
-        { what: 'replication-token/mode', method: 'POST', route: '/api/local/admin/replication-token/mode', body: JSON.stringify({ tokenOnly: true }),
-            unchanged: () => getLocalConfig().replicationTokenOnly === false ? null : 'token-only mode changed' },
         { what: 'replication-token/clear', method: 'POST', route: '/api/local/admin/replication-token/clear',
             unchanged: () => hasReplicationToken() && getLocalConfig().replicationTokenHash === tokenHashBefore ? null : 'the token is gone' },
         { what: 'replication-config/save', method: 'POST', route: '/api/local/admin/replication-config/save',
@@ -280,7 +275,6 @@ async function main(): Promise<void> {
         // A keep the floor allows (keep 1 is refused 400 to everyone now, design case 18 A4), so the refusal is the role's.
         { what: 'a snapshot settings change', method: 'POST', route: '/api/local/admin/snapshots/config', body: JSON.stringify({ keep: 5 }),
             unchanged: () => JSON.stringify(getAutoSnapshotConfig()) === snapshotConfigBefore ? null : 'the settings changed' },
-        { what: 'a copy through the admin-password path', method: 'GET', route: '/api/local/admin/sync-snapshot', headers: { 'x-admin-password': 'anything at all' }, unchanged: () => null },
         { what: 'the off-box backups status', method: 'POST', route: '/api/local/admin/offbox-backups/status', unchanged: () => null },
         { what: 'an off-box backups settings change', method: 'POST', route: '/api/local/admin/offbox-backups/settings', body: JSON.stringify({ retentionDays: 1 }),
             unchanged: () => fs.existsSync(path.join(dataDir!, 'offbox-backups.json')) ? 'the off-box settings were written' : null },
@@ -309,20 +303,31 @@ async function main(): Promise<void> {
         const r = await call('POST', route, asAdmin, body);
         assert(r.status === 200, `1. an admin still reads ${route} (${r.status})`);
     }
-    // An owner, by key session and by the password, gets each (the restore is step 5's).
+    // The node has no admin password: an older install's, sent with no session, is no credential here.
     {
-        const alone = await call('POST', '/api/local/admin/backup', asPassword());
-        assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa' && !isGzip(alone.bytes),
-            `1. /backup: the node password alone, 2FA off, is refused (password_needs_2fa) (${alone.status})`);
+        const old = await call('POST', '/api/local/admin/backup', { 'x-admin-password': PW });
+        assert(old.status === 401 && old.json?.notSignedIn === true && !isGzip(old.bytes) && !old.bytes.includes(SQLITE),
+            `1. /backup: an old admin password is no credential (401 notSignedIn), and carries nothing (${old.status})`);
     }
-    for (const [who, credsOf] of [["an owner's key session", () => asOwner], ['the node password', () => { tfa ??= turnOn2faForTests(PW); return asPassword(); }]] as const) {
+    // The copy routes are the standby's alone (the replication token, step 2): a key session of any role, an old admin
+    // password header beside it or not, is refused there and gets no database. Until the node had no admin password the
+    // copy also took the password (owner level), an owner's session with any X-Admin-Password header passed its gate,
+    // and an admin's was refused 403 in words; this suite asserted all three.
+    for (const [who, creds] of [['an owner', asOwner], ['an admin', asAdmin], ['a moderator', asMod]] as const) {
+        for (const [how, extra] of [['alone', {}], ['with an old password header', { 'x-admin-password': 'anything at all' }]] as const) {
+            const copy = await call('GET', '/api/local/admin/sync-snapshot', { ...creds, ...extra });
+            assert(copy.status === 401 && !isGzip(copy.bytes) && !copy.bytes.includes(SQLITE),
+                `1. a copy: ${who}'s key session ${how} is refused, no database (${copy.status}: ${copy.json?.error ?? ''})`);
+        }
+    }
+    // An owner, by key session, gets each (the restore is step 5's).
+    {
+        const who = "an owner's key session";
+        const credsOf = () => asOwner;
         const bk = await call('POST', '/api/local/admin/backup', credsOf());
         assert(bk.status === 200 && isGzip(bk.bytes), `1. /backup: ${who} gets the backup (${bk.status})`);
         const sd = await call('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snapA.name)}`, credsOf());
         assert(sd.status === 200 && isGzip(sd.bytes), `1. the snapshot download: ${who} gets it (${sd.status})`);
-        // (credsOf() already carries the node password for that row; a second header of the same name would join the two.)
-        const copy = await call('GET', '/api/local/admin/sync-snapshot', { ...credsOf(), ...(who === 'the node password' ? {} : { 'x-admin-password': 'anything at all' }) });
-        assert(copy.status !== 401 && copy.status !== 403, `1. a copy through the admin-password path: ${who} passes the gate (${copy.status})`);
         // The fleet manager's backup routes are gone (2026-10-02): no database there for anyone, an owner included.
         const mdb = await call('GET', '/api/manager/backups/download-db?nodeId=local', credsOf());
         assert(mdb.status >= 400 && mdb.status < 500 && !isGzip(mdb.bytes) && !mdb.bytes.includes(SQLITE),
@@ -332,18 +337,12 @@ async function main(): Promise<void> {
         const cfg = await call('POST', '/api/local/admin/snapshots/config', credsOf(), JSON.stringify({ keep: getAutoSnapshotConfig().keep }));
         assert(cfg.status === 200, `1. a snapshot settings change: ${who} makes it (${cfg.status})`);
         const save = await call('POST', '/api/local/admin/replication-config/save', credsOf(), JSON.stringify({ primaryUrl: '' }));
-        if (who === 'the node password') {
-            assert(save.status === 200, `1. replication-config/save: ${who}, with a current code, saves it (${save.status})`);
-        } else {
-            // Which server a standby copies from asks a fresh proof (S2b): the computer's session is sent to the phone.
-            assert(save.status === 403 && save.json?.code === 'phone_required' && !getLocalConfig().backupPrimaryUrl,
-                `1. replication-config/save: ${who} from a computer is sent to the phone, nothing changed (${save.status})`);
-            const ex = consumeHandshakeToken(mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
-            const fromPhone = await call('POST', '/api/local/admin/replication-config/save', { 'x-admin-session': ex.sessionId! }, JSON.stringify({ primaryUrl: '' }));
-            assert(fromPhone.status === 200, `1. replication-config/save: the owner's phone, Manage pressed just now, saves it (${fromPhone.status})`);
-        }
-        const mode = await call('POST', '/api/local/admin/replication-token/mode', credsOf(), JSON.stringify({ tokenOnly: false }));
-        assert(mode.status === 200, `1. replication-token/mode: ${who} sets it (${mode.status})`);
+        // Which server a standby copies from asks a fresh proof (S2b): the computer's session is sent to the phone.
+        assert(save.status === 403 && save.json?.code === 'phone_required' && !getLocalConfig().backupPrimaryUrl,
+            `1. replication-config/save: ${who} from a computer is sent to the phone, nothing changed (${save.status})`);
+        const ex = consumeHandshakeToken(mintHandshakeToken(owner, 'owner').handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
+        const fromPhone = await call('POST', '/api/local/admin/replication-config/save', { 'x-admin-session': ex.sessionId! }, JSON.stringify({ primaryUrl: '' }));
+        assert(fromPhone.status === 200, `1. replication-config/save: the owner's phone, Manage pressed just now, saves it (${fromPhone.status})`);
         const gen = await call('POST', '/api/local/admin/replication-token/generate', credsOf());
         assert(gen.status === 200 && typeof gen.json?.token === 'string' && await verifyReplicationToken(gen.json.token),
             `1. replication-token/generate: ${who} makes a token that works (${gen.status})`);
@@ -352,9 +351,6 @@ async function main(): Promise<void> {
         assert(clear.status === 200 && !hasReplicationToken(), `1. replication-token/clear: ${who} removes it (${clear.status})`);
         setReplicationToken(TOKEN);
     }
-    // The node's 2FA off again, as the rest of this suite was written for.
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
-    tfa = null;
     // No route deletes a snapshot any more (design case 18, A3): an owner, an admin and a moderator all get 404, and it stays.
     for (const [who, creds] of [['an owner', asOwner], ['an admin', asAdmin], ['a moderator', asMod]] as const) {
         const del = await call('POST', '/api/local/admin/snapshots/delete', creds, JSON.stringify({ name: snapB.name }));
@@ -412,16 +408,21 @@ async function main(): Promise<void> {
     // ── 3. A readable backup carries no credential ───────────────────────────────────────────────────────────────
     console.log('\n— 3. no credential in a readable backup —');
     {
-        const secrets = {
+        // What an older install's local-config.json may still hold though nothing reads it (deleting it is the operator's
+        // hand step), and a standby's own token.
+        const leftovers = {
+            adminHash: crypto.randomBytes(64).toString('hex'),
+            salt: crypto.randomBytes(32).toString('hex'),
+            totpEnabled: false,
             totpSecret: 'JBSWY3DPEHPK3PXPOWNERGATE',
             totpBackupCodesHashes: ['b'.repeat(64)],
             backupAdminPassword: 'legacy-standby-plaintext-pw-4471',
-            backupReplicationToken: 'a-standbys-own-token-4471',
         };
-        updateLocalConfig({ ...secrets, totpEnabled: false });
+        const secrets = { ...leftovers, backupReplicationToken: 'a-standbys-own-token-4471' };
+        updateLocalConfig(secrets as any);
         const cfg = getLocalConfig();
         const needles: [string, string][] = [
-            ['the admin hash', cfg.adminHash!], ['its salt', cfg.salt!], ['the 2FA secret', secrets.totpSecret],
+            ['the admin hash', leftovers.adminHash], ['its salt', leftovers.salt], ['the 2FA secret', secrets.totpSecret],
             ['a 2FA backup code hash', secrets.totpBackupCodesHashes[0]], ['the replication token hash', cfg.replicationTokenHash!],
             ["a standby's token", secrets.backupReplicationToken], ['the legacy plain-text password', secrets.backupAdminPassword],
         ];
@@ -448,7 +449,8 @@ async function main(): Promise<void> {
             && !legacy.tar.includes(Buffer.from('legacy-file-plaintext-4471')),
             `3. from a legacy node_config.json too: its settings go, its credentials do not (${JSON.stringify(legacy.config)})`);
         fs.rmSync(legacyFile, { force: true });
-        updateLocalConfig({ totpSecret: null, totpBackupCodesHashes: [], backupAdminPassword: null, backupReplicationToken: null });
+        updateLocalConfig({ adminHash: undefined, salt: undefined, totpEnabled: undefined, totpSecret: undefined, totpBackupCodesHashes: undefined,
+            backupAdminPassword: undefined, backupReplicationToken: null } as any);
     }
 
     // Locked backups from here on, and the sweep again.
@@ -520,7 +522,7 @@ async function main(): Promise<void> {
             } },
         { what: 'a state.db carrying a trigger this server does not have', status: 400, words: /does not have \(trigger "mint_on_every_update"\)/,
             archive: () => plainArchive(databaseCopy((h) => h.exec(
-                `CREATE TRIGGER mint_on_every_update AFTER UPDATE ON members BEGIN UPDATE accounts SET balance = balance + 1000; END;`))) },
+                `CREATE TRIGGER mint_on_every_update AFTER UPDATE ON members BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END;`))) },
     ];
     for (const c of refusals) {
         const archive = c.archive();
@@ -542,7 +544,7 @@ async function main(): Promise<void> {
     // ── 5. An owner's restore; a rewritten trigger does not survive it ───────────────────────────────────────────
     console.log("\n— 5. an owner's restore —");
     const realTrigger = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`).get(TRIGGER) as { sql: string }).sql;
-    const rewritten = `CREATE TRIGGER ${TRIGGER} AFTER UPDATE ON posts BEGIN UPDATE accounts SET balance = balance + 1000; END`;
+    const rewritten = `CREATE TRIGGER ${TRIGGER} AFTER UPDATE ON posts BEGIN UPDATE accounts SET balance_c = balance_c + 1000; END`;
     const backup = plainArchive(databaseCopy((h) => {
         h.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'RestoredMarker', ?, ?, 'TEST')`)
             .run(pubkey(), new Date().toISOString(), owner);

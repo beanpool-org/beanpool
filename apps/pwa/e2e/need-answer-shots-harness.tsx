@@ -16,7 +16,7 @@ else document.documentElement.classList.remove('dark', 'dark-theme');
 const ME = 'me-key';
 const identity: BeanPoolIdentity = { publicKey: ME, privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-09-01T00:00:00.000Z' };
 const request: MarketplaceTransaction = {
-    id: 'tx-req', postId: 'p-stall', postTitle: 'Help at the market stall', credits: 20, status: 'requested', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi',
+    id: 'tx-req', postId: 'p-stall', postTitle: 'Help at the market stall', amount_c: 2000, status: 'requested', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi',
     sellerPublicKey: ME, sellerCallsign: 'Ana', createdAt: '2026-10-24T10:00:00.000Z',
 };
 const view = q.get('view') || 'confirm';

@@ -35,6 +35,7 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { dmPublicKeyOf, sealGroupLine } from '@beanpool/core';
 import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -90,7 +91,7 @@ async function child(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active')`).run(a.pk, a.name, a.owner);
             setMemberPhoto(db, a.pk, `https://example.org/${a.name}.jpg`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
             return true;
         },
         'make-group': async (a: { name: string; createdBy: string; members: string[] }) => {
@@ -202,7 +203,8 @@ async function call(base: string, method: 'GET' | 'POST', signer: Id, p: string,
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -223,7 +225,7 @@ async function main(): Promise<void> {
     const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
     const nodes: NodeProc[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const anna = newId('Anna');
     const ben = newId('Ben');
     const cat = newId('Cat');

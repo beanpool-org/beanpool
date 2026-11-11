@@ -1,13 +1,13 @@
 /**
  * Test Suite: moving a node's images out of state.db, and everything that must not change when it happens.
  *
- * This suite starts from a state.db in the shape a node ALREADY RUNNING carries — `photo_data TEXT NOT NULL`,
- * `data TEXT NOT NULL`, every image inline — because that is what the upgrade ladder and the evacuation job
- * actually meet on mullum and castlemaine. Everything after that is the same node, one version later.
+ * This suite starts from a state.db a kept node holds at the cutover (the 1.2.36 schema, the oldest file the 1.4.0 gate
+ * opens), with every image still inline, which is what the evacuation job meets. Everything after that is the same node,
+ * one version later.
  *
  * Verifies:
- *   1. The upgrade ladder rebuilds post_photos and message_attachments so the inline column may be NULL,
- *      without losing a row or a byte.
+ *   1. The boot keeps post_photos and message_attachments as 1.2.36 left them, the inline column optional, without losing
+ *      a row or a byte.
  *   2. A NEW photo is written straight to the store: storage_key set, photo_data null, sha256 correct.
  *   3. Serving is byte-identical before and after evacuation, with the same content type and the same
  *      cache headers, on the same URL.
@@ -42,9 +42,11 @@ delete process.env.CF_RECORD_NAME;
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -96,45 +98,18 @@ const FIXTURE_PHOTOS = 32;
 const FIXTURE_ATTACHMENTS = 10;
 
 /**
- * Build a state.db in the OLD shape, before anything imports db.ts. `CREATE TABLE IF NOT EXISTS` in
- * schema.sql is a no-op on a table that already exists, so this is the only way to exercise the rebuild the
- * live nodes will go through.
+ * Build a state.db a kept node holds at the cutover (__fixtures__/schema-v1.2.36.sql at user_version 4, the oldest file
+ * the 1.4.0 gate opens: db/schema-gate.ts), its photos and chat pictures still inline, before anything imports db.ts.
+ * (The rebuild that made the inline columns optional on a file from before 1.2.26 went with the gate.)
  */
 function seedLegacyDatabase(): { photos: { postId: string; order: number; value: string }[]; attachments: { id: string; data: string; nonce: string }[]; photoTableBytes: number; payloadBytes: number } {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const legacy = new Database(path.join(DATA_DIR, 'state.db'));
     legacy.pragma('journal_mode = WAL');
-    // As the node runs (db.ts: an accepted risk, documented there). Without it these two tables cannot even
-    // be written to until `posts` and `messages` exist, and creating stubs for them here would make
-    // schema.sql's CREATE TABLE IF NOT EXISTS skip the real ones.
+    // As the node runs (db.ts: an accepted risk, documented there): the photos' posts are written after the boot.
     legacy.pragma('foreign_keys = OFF');
-    legacy.exec(`
-        CREATE TABLE IF NOT EXISTS post_photos (
-            post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-            photo_data TEXT NOT NULL,
-            order_num INTEGER NOT NULL,
-            updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            PRIMARY KEY (post_id, order_num)
-        );
-        CREATE TABLE IF NOT EXISTS message_attachments (
-            message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-            data TEXT NOT NULL,
-            nonce TEXT NOT NULL,
-            mime TEXT,
-            created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
-        -- A live node has this trigger and this index already, created by an earlier boot's schema.sql.
-        -- The rebuild DROPs the table, which takes its trigger and index with it, and schema.sql puts them
-        -- back afterwards. Without them here the fixture would rebuild an easier table than the real one.
-        CREATE TRIGGER IF NOT EXISTS post_photos_touch_updated_at
-        AFTER UPDATE ON post_photos
-        FOR EACH ROW
-        WHEN NEW.updated_at IS OLD.updated_at
-        BEGIN
-            UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
-        END;
-    `);
+    legacy.exec(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'schema-v1.2.36.sql'), 'utf8'));
+    legacy.pragma('user_version = 4');
     const photos: { postId: string; order: number; value: string }[] = [];
     const insertPhoto = legacy.prepare(
         `INSERT INTO post_photos (post_id, photo_data, order_num, updated_at) VALUES (?, ?, ?, ?)`);
@@ -198,14 +173,14 @@ async function main(): Promise<void> {
     // as orphaned media and prune it.
     const authorKey = crypto.randomBytes(32).toString('hex');
     const insertPost = db.prepare(`
-        INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
         VALUES (?, 'offer', 'food', ?, 'from before the upgrade', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
     `);
     for (const p of fixture.photos) insertPost.run(p.postId, `Legacy ${p.postId}`, authorKey);
 
-    // ── 1. the upgrade ladder ──────────────────────────────────────────────────────────────────
+    // ── 1. the photo tables as the boot leaves a 1.2.36 file's ───────────────────────────────────
     const photoDdl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string;
-    assert(!/photo_data\s+TEXT\s+NOT\s+NULL/i.test(photoDdl), 'post_photos.photo_data is no longer NOT NULL after the upgrade');
+    assert(!/photo_data\s+TEXT\s+NOT\s+NULL/i.test(photoDdl), 'post_photos.photo_data is optional after the boot');
     assert(/storage_key/.test(photoDdl) && /sha256/.test(photoDdl) && /\bbytes\b/.test(photoDdl) && /\bmime\b/.test(photoDdl),
         'post_photos gained storage_key, sha256, bytes and mime');
     const attachDdl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='message_attachments'").get() as any)?.sql as string;
@@ -214,25 +189,24 @@ async function main(): Promise<void> {
     assert(/nonce\s+TEXT\s+NOT\s+NULL/i.test(attachDdl), 'the nonce is still required — it never leaves the row');
 
     const survived = (db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c as number;
-    assert(survived === fixture.photos.length, `every photo row survived the rebuild (${survived}/${fixture.photos.length})`);
+    assert(survived === fixture.photos.length, `every photo row survived the boot (${survived}/${fixture.photos.length})`);
     const sampleAfterUpgrade = (db.prepare('SELECT photo_data FROM post_photos WHERE post_id = ?').get(fixture.photos[0].postId) as any).photo_data;
-    assert(sampleAfterUpgrade === fixture.photos[0].value, 'a rebuilt row holds exactly the characters it held before');
+    assert(sampleAfterUpgrade === fixture.photos[0].value, 'a row holds exactly the characters it held before');
     assert((db.prepare('SELECT COUNT(*) AS c FROM message_attachments').get() as any).c === FIXTURE_ATTACHMENTS,
-        'every attachment row survived the rebuild');
+        'every attachment row survived the boot');
     assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_post_photos_updated_at'").get(),
-        'the updated_at index was rebuilt with the table');
-    // DROP TABLE takes the table's triggers with it. schema.sql runs after the rebuild and puts this one
-    // back; if it did not, `updated_at` would stop being maintained on every edit and the `?v=` in every
-    // photo URL would freeze — a photo change nobody would ever see.
+        'the updated_at index is there');
+    // Without this trigger `updated_at` would stop being maintained on every edit and the `?v=` in every photo URL would
+    // freeze — a photo change nobody would ever see.
     assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='post_photos_touch_updated_at'").get(),
-        'the touch-updated_at trigger came back after the rebuild');
+        'the touch-updated_at trigger is there');
     {
         // And it still works: an edit that does not name updated_at gets it stamped.
         const probe = fixture.photos[0];
         const was = (db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ?').get(probe.postId) as any).updated_at;
         db.prepare("UPDATE post_photos SET mime = 'image/jpeg' WHERE post_id = ?").run(probe.postId);
         const now = (db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ?').get(probe.postId) as any).updated_at;
-        assert(now !== was, 'and it fires on an edit, exactly as it did before the rebuild');
+        assert(now !== was, 'and it fires on an edit');
         db.prepare('UPDATE post_photos SET updated_at = ?, mime = NULL WHERE post_id = ?').run(was, probe.postId);
     }
 
@@ -242,7 +216,7 @@ async function main(): Promise<void> {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(author);
     setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const freshBytes = makePhoto('fresh');
     const freshValue = dataUrl(freshBytes);
     const fresh = createPost('offer', 'food', 'Sourdough', 'Baked this morning', 3, 'fixed', author, undefined, undefined, [freshValue], true);
@@ -286,7 +260,7 @@ async function main(): Promise<void> {
     const { publicKey: pKey, privateKey: privKey } = crypto.generateKeyPairSync('ed25519');
     const participantPubkey = pKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Attacher', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(participantPubkey);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(participantPubkey);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(participantPubkey);
     const convId = crypto.randomUUID();
     db.prepare(`INSERT OR IGNORE INTO conversations (id, type, created_by, created_at) VALUES (?, 'dm', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(convId, participantPubkey);
     db.prepare(`INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`).run(convId, participantPubkey);
@@ -296,10 +270,11 @@ async function main(): Promise<void> {
     const signAttach = () => {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `GET\n${attachPath}\n${ts}\n${nonce}\n`;
+        const canonical = { method: 'GET', path: attachPath, timestamp: ts, nonce };
         return {
             'X-Public-Key': participantPubkey,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), privKey).toString('base64'),
+            'X-Signature': signRequest(privKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         };
@@ -580,7 +555,7 @@ async function main(): Promise<void> {
         };
 
         const incomingId = crypto.randomUUID();
-        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        db.prepare(`INSERT OR IGNORE INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                     VALUES (?, 'offer', 'food', 'Imported', 'from a peer', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')`)
             .run(incomingId, authorKey);
         const incomingBytes = [makePhoto('import-a'), makePhoto('import-b'), makePhoto('import-c')];
@@ -732,7 +707,7 @@ async function main(): Promise<void> {
     {
         const sameMsPostId = crypto.randomUUID();
         db.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
             VALUES (?, 'offer', 'food', 'Same-ms watermark', 'test', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
         `).run(sameMsPostId, authorKey);
 

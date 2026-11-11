@@ -3,7 +3,7 @@
  *
  * A backup is the tar.gz it always was — `state.db`, `node_config.json` — plus the take-over bundle
  * (`takeover-bundle.json`: node key, community key, genesis, connectors, the recovery-seal key that opens members'
- * sign-in recovery copies, the open door's key, admin and 2FA fields, roles, the public
+ * sign-in recovery copies, the open door's key, the recovery code's record, roles, the public
  * address), streamed through a `bpseal/v1` envelope of kind `backup` locked to the same people as the take-over
  * envelope: every owner, plus the printed recovery code. One file restores a whole community, and nobody who
  * finds the file can read it.
@@ -98,7 +98,7 @@ import {
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
-    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, bundledLocalConfigUpdates,
+    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES,
     type TakeoverBundle,
 } from './takeover-envelope.js';
 import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
@@ -513,7 +513,7 @@ function writeMissingManifest(stage: string, staged: StagedImages): void {
  * The backup's node_config.json, without this server's credentials (redactLocalConfig): a readable backup is a file
  * anyone who holds it can read, and a locked one's credentials travel in its take-over bundle instead. From the legacy
  * data/node_config.json when one is still there (an older node's, which may carry a standby's plain-text admin
- * password), else from the local config. Nothing reads this file back: a restore puts it beside the database, inert.
+ * password, left out like every credential), else from the local config. Nothing reads this file back: a restore puts it beside the database, inert.
  */
 function writeBackupConfig(stage: string): void {
     let config: LocalConfig = getLocalConfig();
@@ -949,22 +949,21 @@ function writeAtomic(file: string, data: Buffer, mode: number): void {
 }
 
 /**
- * Write the bundle's identity files and admin fields into this server's data dir. The database already carries
+ * Write the bundle's identity files and its recovery code's record into this server's data dir. The database already carries
  * the roles and the public address (they are rows in state.db). Names come from the fixed list, never the file.
  * Returns what was written, for the log.
  */
 export function applyBundle(bundle: TakeoverBundle): string[] {
     const dir = dataDir();
     const written: string[] = [];
-    // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
-    // server signs owners in with the community's password and keeps locking to the same paper. Everything else
-    // in this server's config (its own replication token, callsign, gateway) stays.
+    // local-config.json: the community's recovery code's public record, so this server keeps locking to the same paper.
+    // The node has no admin password (owners sign in with their keys, which are roles in state.db), so nothing else of
+    // the community's is written here: an older bundle's admin or 2FA keys are never read. Everything else in this
+    // server's config (its own replication token, callsign, gateway) stays.
     // Read and merged BEFORE any identity file is written: a config that can't be read (broken, with no good last
     // copy) stops the restore with nothing written, never half applied. A broken file is read from its last good
     // copy, never as empty: that would drop this server's address and settings.
     const config = readLocalConfigFileIn(dir);
-    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
-    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
     if (bundle.recoveryCode) {
         config.recoveryCode = bundle.recoveryCode;
         config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
@@ -988,6 +987,6 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     if (doorKey.outcome === 'installed' || doorKey.outcome === 'same') written.push(OPEN_JOIN_KEY_FILE);
     else if (doorKey.outcome === 'replaced') written.push(`${OPEN_JOIN_KEY_FILE} (this server's own kept as ${doorKey.retiredAs})`);
     writeLocalConfigFileIn(dir, config, 0o600);
-    written.push('local-config.json (admin, 2FA, recovery code record)');
+    written.push('local-config.json (recovery code record)');
     return written;
 }

@@ -10,7 +10,7 @@
  *
  *   1. A keeper bound to enterprise A cannot post/approve/complete/sweep on enterprise B.
  *   2. Admin can assign and revoke per-enterprise, effective without a restart.
- *   3. Existing operators keep working after migration.
+ *   3. The node-wide operator flag alone grants nothing (the seed from it went with the 1.4.0 gate).
  *   4. Members can see who keeps a given enterprise.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-treasury-keepership.ts
@@ -30,12 +30,15 @@ import {
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
+import { db } from './db/db.js';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 let run = 0, passed = 0;
+/** The story's figures are Beans; prices, balances, sweeps and claims are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
 function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
@@ -46,7 +49,7 @@ function makeIdentity(callsign: string) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -54,10 +57,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -75,10 +79,13 @@ async function main() {
     BASE = `https://localhost:${PORT}`;
 
     // Two enterprises and two members.
-    const eggs = createTreasury('CommunityEggs', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
-    const wood = createTreasury('FirewoodCoop', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const eggs = createTreasury('CommunityEggs', 'data:image/png;base64,iVBORw0KGgo=', hc(200)).publicKey;
+    const wood = createTreasury('FirewoodCoop', 'data:image/png;base64,iVBORw0KGgo=', hc(200)).publicKey;
     const doone = makeIdentity('doone');
     const river = makeIdentity('riverbend');
+    // Eggs pays for its Needs from Beans it holds: an enterprise's credit line is its keepers' pledges now, and the opening
+    // line createTreasury once granted is gone (E29, Marty's yes, 10 Nov 2026; engine trust.ts enterpriseAllowance).
+    transfer('genesis', eggs, hc(50), 'its own Beans, to pay for its Needs', 'direct', true);
 
     // ── 1. Scoping — the whole point of the issue ────────────────────────────────
     adminAssignTreasuryOperator(eggs, doone.pubKeyHex, 'admin');
@@ -90,14 +97,21 @@ async function main() {
     assert(canOperateTreasury(river.pubKeyHex, eggs) === false, 'a keeper of Firewood may NOT drive Eggs');
 
     // Every operator-gated route, not just one — a scope check is only as good as its coverage.
-    const offer = { title: 'Dozen eggs', category: 'food', credits: 12, photos: TEST_PHOTOS };
+    const offer = { title: 'Dozen eggs', category: 'food', price_c: hc(12), photos: TEST_PHOTOS };
     const own = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, offer);
-    assert(own.status === 200, `keeper posts an Offer on their OWN enterprise (got ${own.status} ${own.error ?? ''})`);
+    assert(own.status === 200 && own.body?.post?.price_c === hc(12), `keeper posts an Offer on their OWN enterprise, priced 12 (got ${own.status} ${own.error ?? ''} ${own.body?.post?.price_c})`);
+    // A price is whole hundredths, `price_c`. The old `credits` key (an app from before whole hundredths) is refused, as
+    // the marketplace route refuses it, never posted Free for anyone to take for nothing.
+    for (const route of ['offer', 'need'] as const) {
+        const oldApp = await signedFetch('POST', `/api/treasury/${eggs}/${route}`, doone, { title: `Old-app ${route}`, category: 'food', credits: 12, photos: TEST_PHOTOS });
+        assert(oldApp.status === 400 && oldApp.body?.code === 'amount_c_required',
+            `a keeper's ${route} sent with the old credits key is refused 400 amount_c_required, never posted Free (got ${oldApp.status} ${JSON.stringify(oldApp.body)?.slice(0, 160)})`);
+    }
     const offerRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(own.body.post.id) as any;
     assert(offerRow?.created_by === doone.pubKeyHex, 'offer post created_by records acting operator');
 
     // Keeper posts a Need, worker bids, keeper approves and completes — verifying audit trail
-    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', credits: 20, photos: TEST_PHOTOS });
+    const needRes = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Tend chickens', category: 'work', price_c: hc(20), photos: TEST_PHOTOS });
     assert(needRes.status === 200, `keeper posts a Need on enterprise (got ${needRes.status})`);
     const needRow = db.prepare('SELECT created_by FROM posts WHERE id=?').get(needRes.body.post.id) as any;
     assert(needRow?.created_by === doone.pubKeyHex, 'need post created_by records acting operator');
@@ -133,8 +147,8 @@ async function main() {
 
     // Sweep test with audit trail
     // Give eggs a positive balance to sweep via genesis transfer
-    transfer('genesis', eggs, 50, 'seed test', 'direct', true);
-    const sweepRes = await signedFetch('POST', `/api/treasury/${eggs}/sweep`, doone, { amount: 15 });
+    transfer('genesis', eggs, hc(50), 'seed test', 'direct', true);
+    const sweepRes = await signedFetch('POST', `/api/treasury/${eggs}/sweep`, doone, { amount_c: hc(15) });
     assert(sweepRes.status === 200, `keeper sweeps surplus from enterprise (got ${sweepRes.status})`);
     const sweepTxRow = db.prepare("SELECT auth_signer FROM transactions WHERE from_pubkey=? AND to_pubkey='COMMONS_POOL' ORDER BY timestamp DESC LIMIT 1").get(eggs) as any;
     assert(sweepTxRow?.auth_signer === doone.pubKeyHex, 'sweep transaction auth_signer records acting operator');
@@ -142,16 +156,16 @@ async function main() {
     // Privacy gating on deferred wage claims:
     // Insert 1 pending claim and 1 paid claim with sensitive keeper details
     db.prepare(`
-        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at)
-        VALUES ('claim-priv-pending', ?, ?, 'post-priv-1', 'tx-priv-1', 25.0, 'pending', '2026-09-14T00:00:00Z', NULL),
-               ('claim-priv-paid', ?, ?, 'post-priv-2', 'tx-priv-2', 50.0, 'paid', '2026-09-13T00:00:00Z', '2026-09-14T00:00:00Z')
-    `).run(eggs, doone.pubKeyHex, eggs, doone.pubKeyHex);
+        INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount_c, status, created_at, paid_at)
+        VALUES ('claim-priv-pending', ?, ?, 'post-priv-1', 'tx-priv-1', ?, 'pending', '2026-09-14T00:00:00Z', NULL),
+               ('claim-priv-paid', ?, ?, 'post-priv-2', 'tx-priv-2', ?, 'paid', '2026-09-13T00:00:00Z', '2026-09-14T00:00:00Z')
+    `).run(eggs, doone.pubKeyHex, hc(25), eggs, doone.pubKeyHex, hc(50));
 
     const pubDetail = (await signedFetch('GET', `/api/treasury/${eggs}`, onlooker)).body;
     assert(Array.isArray(pubDetail.deferredClaims), 'public read returns deferredClaims array');
     assert(pubDetail.deferredClaims.length === 1, 'public read only sees pending claims, NOT historical paid claims');
     assert(pubDetail.deferredClaims[0].id === 'claim-priv-pending', 'public read sees pending claim id');
-    assert(pubDetail.deferredClaims[0].amount === 25.0, 'public read sees pending claim amount');
+    assert(pubDetail.deferredClaims[0].amount_c === hc(25), `public read sees pending claim amount (${pubDetail.deferredClaims[0].amount_c} hundredths)`);
     assert(pubDetail.deferredClaims[0].status === 'pending', 'public read sees pending claim status');
     assert(pubDetail.deferredClaims[0].created_at !== undefined, 'public read sees pending claim created_at');
     assert(pubDetail.deferredClaims[0].keeper_pubkey === undefined, 'public read hides sensitive keeper_pubkey');
@@ -167,10 +181,10 @@ async function main() {
 
     for (const [route, payload] of [
         ['offer', offer],
-        ['need', { title: 'Tend the chickens', category: 'food', credits: 40 }],
+        ['need', { title: 'Tend the chickens', category: 'food', price_c: hc(40) }],
         ['approve', { transactionId: 'does-not-matter' }],
         ['complete', { transactionId: 'does-not-matter' }],
-        ['sweep', { amount: 1 }],
+        ['sweep', { amount_c: hc(1) }],
     ] as Array<[string, any]>) {
         const r = await signedFetch('POST', `/api/treasury/${wood}/${route}`, doone, payload);
         assert(r.status === 403, `cross-enterprise ${route} is REFUSED (got ${r.status} ${r.error ?? ''})`);
@@ -220,29 +234,14 @@ async function main() {
     try { adminAssignTreasuryOperator(eggs, wood, 'admin'); } catch (e: any) { threw = e.message; }
     assert(/cannot keep another treasury/i.test(threw), `a treasury cannot keep another treasury (got "${threw}")`);
 
-    // ── 7. Migration — existing operators keep working ──────────────────────────
-    // Simulate a pre-#106 node: legacy flag set, no bindings.
-    db.prepare('DELETE FROM treasury_operators').run();
+    // ── 7. The node-wide flag alone grants nothing ──────────────────────────
+    // (The seed of bindings from that flag, for a node from before #106, went with the 1.4.0 gate: db/schema-gate.ts.)
     adminSetOperator(doone.pubKeyHex, true);
-    assert(canOperateTreasury(doone.pubKeyHex, eggs) === false, 'pre-migration: the legacy flag alone grants nothing');
-
-    // Expect the rule (legacy operators × enterprises), not a magic number — earlier steps in this
-    // file change how many members hold the flag.
-    const legacyCount = (db.prepare('SELECT COUNT(*) AS c FROM members WHERE can_operate = 1').get() as any).c;
-    const treasuryCount = (db.prepare('SELECT COUNT(*) AS c FROM members WHERE is_treasury = 1').get() as any).c;
-    const written = seedTreasuryOperatorsFromLegacyFlag();
-    assert(
-        written === legacyCount * treasuryCount,
-        `migration over-grants one row per enterprise: ${legacyCount} keeper(s) × ${treasuryCount} enterprise(s) = ${legacyCount * treasuryCount} (wrote ${written})`,
-    );
-    assert(canOperateTreasury(doone.pubKeyHex, eggs) === true, 'post-migration: an existing operator keeps Eggs');
-    assert(canOperateTreasury(doone.pubKeyHex, wood) === true, 'post-migration: and keeps Firewood — pruning is the admin\'s job');
-
-    // Re-running must not resurrect what an admin pruned.
-    adminRevokeTreasuryOperator(wood, doone.pubKeyHex);
-    const again = seedTreasuryOperatorsFromLegacyFlag();
-    assert(again === 0, `migration is a no-op once the table is non-empty (wrote ${again})`);
-    assert(canOperateTreasury(doone.pubKeyHex, wood) === false, 'a pruned binding STAYS pruned across re-runs');
+    assert(canOperateTreasury(doone.pubKeyHex, eggs) === false, 'the operator flag alone grants nothing: no binding, no authority');
+    // Where the sections below start from: Doone keeps Eggs, by an assignment.
+    adminAssignTreasuryOperator(eggs, doone.pubKeyHex, 'admin');
+    assert(canOperateTreasury(doone.pubKeyHex, eggs) === true && canOperateTreasury(doone.pubKeyHex, wood) === false,
+        'assigned, Doone keeps Eggs and not Firewood');
 
     // ── 8. Admin cannot SPEND an enterprise's money; administration/moderation preserved ──
     const admin = makeIdentity('genesis-admin');
@@ -256,11 +255,11 @@ async function main() {
 
     // Refused on all 5 spending routes on live server:
     for (const [route, payload] of [
-        ['offer', { title: 'Admin eggs', category: 'food', credits: 10 }],
-        ['need', { title: 'Admin need', category: 'food', credits: 20 }],
+        ['offer', { title: 'Admin eggs', category: 'food', price_c: hc(10) }],
+        ['need', { title: 'Admin need', category: 'food', price_c: hc(20) }],
         ['approve', { transactionId: 'any-id' }],
         ['complete', { transactionId: 'any-id' }],
-        ['sweep', { amount: 1 }],
+        ['sweep', { amount_c: hc(1) }],
     ] as Array<[string, any]>) {
         const r = await signedFetch('POST', `/api/treasury/${eggs}/${route}`, admin, payload);
         assert(r.status === 403, `admin without keeper binding is REFUSED on /api/treasury/:treasury/${route} (got ${r.status} ${r.error ?? ''})`);
@@ -268,10 +267,10 @@ async function main() {
 
     // Repair and moderation actions succeed for admin:
     adminSetUserStatus(eggs, 'disabled');
-    const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', credits: 10, photos: TEST_PHOTOS });
+    const pausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Paused eggs', category: 'food', price_c: hc(10), photos: TEST_PHOTOS });
     assert(pausedOffer.status === 403 && Boolean(pausedOffer.error?.startsWith('This enterprise has been closed')), `pausing enterprise blocks route operations (got ${pausedOffer.status} "${pausedOffer.error}")`);
     adminSetUserStatus(eggs, 'active');
-    const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', credits: 10, photos: TEST_PHOTOS });
+    const unpausedOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Unpaused eggs', category: 'food', price_c: hc(10), photos: TEST_PHOTOS });
     assert(unpausedOffer.status === 200, 'unpausing enterprise restores keeper operations');
 
     // Admin legitimately appointed to keep an enterprise:
@@ -282,7 +281,7 @@ async function main() {
     assert(keeperOf(admin.pubKeyHex).includes(eggs), 'appointed admin lists Eggs in keeperOf');
 
     // Appointed admin can now spend:
-    const adminOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin posted offer', category: 'food', credits: 15, photos: TEST_PHOTOS });
+    const adminOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin posted offer', category: 'food', price_c: hc(15), photos: TEST_PHOTOS });
     assert(adminOffer.status === 200, `appointed admin can post offer (got ${adminOffer.status})`);
     if (adminOffer.body?.post?.id) {
         const deleted = adminDeletePost(adminOffer.body.post.id);
@@ -294,27 +293,27 @@ async function main() {
     // Revoking removes spending again:
     adminRevokeTreasuryOperator(eggs, admin.pubKeyHex);
     assert(canOperateTreasury(admin.pubKeyHex, eggs) === false, 'revoking admin appointment removes spending authority');
-    const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', credits: 15, photos: TEST_PHOTOS });
+    const afterRevokeOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, admin, { title: 'Admin post after revoke', category: 'food', price_c: hc(15), photos: TEST_PHOTOS });
     assert(afterRevokeOffer.status === 403, `revoked admin is REFUSED again on spend route (got ${afterRevokeOffer.status})`);
 
     // ── 9. Two-person rule & self-dealing guard for enterprise Needs ───────────
-    const bakery = createTreasury('CommunityBakery', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const bakery = createTreasury('CommunityBakery', 'data:image/png;base64,iVBORw0KGgo=', hc(200)).publicKey;
     const alice = makeIdentity('alice');
     const bob = makeIdentity('bob');
 
     adminAssignTreasuryOperator(bakery, alice.pubKeyHex, 'admin');
 
     // Keeper Alice posts Offer then Need for Bakery
-    const bakeryOffer = await signedFetch('POST', `/api/treasury/${bakery}/offer`, alice, { title: 'Sourdough loaf', category: 'food', credits: 8, photos: TEST_PHOTOS });
+    const bakeryOffer = await signedFetch('POST', `/api/treasury/${bakery}/offer`, alice, { title: 'Sourdough loaf', category: 'food', price_c: hc(8), photos: TEST_PHOTOS });
     assert(bakeryOffer.status === 200, 'Alice posts offer on Bakery');
-    const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', credits: 30, photos: TEST_PHOTOS });
+    const bakeryNeed = await signedFetch('POST', `/api/treasury/${bakery}/need`, alice, { title: 'Bake morning bread', category: 'work', price_c: hc(30), photos: TEST_PHOTOS });
     assert(bakeryNeed.status === 200, 'Alice posts need on Bakery');
 
     // Under Rules 5 & 6 (PR #775), enterprises cannot borrow into credit to pay keepers;
     // keeper wages require positive balance and earned surplus. Seed Bakery with surplus
     // so the two-person rule approval/completion workflow can be exercised.
-    transfer('genesis', bakery, 100, 'seed bakery balance', 'direct', true);
-    db.prepare('UPDATE members SET earned_surplus = 100 WHERE public_key = ?').run(bakery);
+    transfer('genesis', bakery, hc(100), 'seed bakery balance', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus_c = ? WHERE public_key = ?').run(hc(100), bakery);
 
     // Keeper Alice bids on the need from her personal account
     const aliceBid = await signedFetch('POST', '/api/marketplace/posts/request', alice, { postId: bakeryNeed.body.post.id, buyerPublicKey: alice.pubKeyHex });
@@ -341,15 +340,16 @@ async function main() {
     // Keeper Bob completes and pays Alice -> SUCCEEDS
     const bobComplete = await signedFetch('POST', `/api/treasury/${bakery}/complete`, bob, { transactionId: selfDealTxId });
     assert(bobComplete.status === 200, `second keeper Bob completes deal paying Alice (got ${bobComplete.status})`);
-    // Alice receives payout (30 minus 1.5% fee = 29.55)
-    assert(getBalance(alice.pubKeyHex).balance === 29.55, 'Alice received payment minus fee');
+    // Alice receives payout (30 minus 1.5% fee = 29.55: 3000 hundredths less a fee of 45)
+    assert(getBalance(alice.pubKeyHex).balance_c === hc(29.55), `Alice received payment minus fee (${getBalance(alice.pubKeyHex).balance_c} hundredths)`);
 
     // Single-keeper enterprise: sole keeper cannot approve own bid -> REFUSED
-    const solo = createTreasury('SoloEnterprise', 'data:image/png;base64,iVBORw0KGgo=', 200).publicKey;
+    const solo = createTreasury('SoloEnterprise', 'data:image/png;base64,iVBORw0KGgo=', hc(200)).publicKey;
+    transfer('genesis', solo, hc(50), 'its own Beans, to pay for its Needs (no opening line since E29)', 'direct', true);
     const charlie = makeIdentity('charlie');
     adminAssignTreasuryOperator(solo, charlie.pubKeyHex, 'admin');
-    await signedFetch('POST', `/api/treasury/${solo}/offer`, charlie, { title: 'Solo item', category: 'goods', credits: 10, photos: TEST_PHOTOS });
-    const soloNeed = await signedFetch('POST', `/api/treasury/${solo}/need`, charlie, { title: 'Solo errand', category: 'work', credits: 20, photos: TEST_PHOTOS });
+    await signedFetch('POST', `/api/treasury/${solo}/offer`, charlie, { title: 'Solo item', category: 'goods', price_c: hc(10), photos: TEST_PHOTOS });
+    const soloNeed = await signedFetch('POST', `/api/treasury/${solo}/need`, charlie, { title: 'Solo errand', category: 'work', price_c: hc(20), photos: TEST_PHOTOS });
     const soloBid = await signedFetch('POST', '/api/marketplace/posts/request', charlie, { postId: soloNeed.body.post.id, buyerPublicKey: charlie.pubKeyHex });
     const soloApprove = await signedFetch('POST', `/api/treasury/${solo}/approve`, charlie, { transactionId: soloBid.body.transaction.id });
     assert(soloApprove.status === 403, `single keeper cannot approve own bid (got ${soloApprove.status})`);
@@ -357,9 +357,9 @@ async function main() {
         'single keeper gets friendly copy naming enterprise');
 
     // Non-enterprise deals (peer to peer) are UNTOUCHED by this rule:
-    transfer('genesis', charlie.pubKeyHex, 100, 'seed charlie for escrow', 'direct', true);
-    createPost('offer', 'help', 'Charlie gardening', 'Garden help', 10, 'fixed', charlie.pubKeyHex);
-    const peerNeed = createPost('need', 'help', 'Help Charlie move', 'Moving boxes', 15, 'fixed', charlie.pubKeyHex);
+    transfer('genesis', charlie.pubKeyHex, hc(100), 'seed charlie for escrow', 'direct', true);
+    createPost('offer', 'help', 'Charlie gardening', 'Garden help', hc(10), 'fixed', charlie.pubKeyHex);
+    const peerNeed = createPost('need', 'help', 'Help Charlie move', 'Moving boxes', hc(15), 'fixed', charlie.pubKeyHex);
     assert(peerNeed !== null, 'Charlie creates personal need');
     const dave = makeIdentity('dave');
     const daveBid = await signedFetch('POST', '/api/marketplace/posts/request', dave, { postId: peerNeed!.id, buyerPublicKey: dave.pubKeyHex });
@@ -370,9 +370,9 @@ async function main() {
     assert(peerComplete.status === 200, `peer-to-peer personal need completion succeeds (got ${peerComplete.status})`);
 
     // ── 8. Active deals on enterprise Offers (sales) visible to operator ────────────
-    transfer('genesis', river.pubKeyHex, 50, 'seed river for offer purchase', 'direct', true);
-    createPost('offer', 'help', 'River gardening', 'Garden help', 10, 'fixed', river.pubKeyHex);
-    const freshOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Fresh dozen eggs', category: 'food', credits: 12, photos: TEST_PHOTOS });
+    transfer('genesis', river.pubKeyHex, hc(50), 'seed river for offer purchase', 'direct', true);
+    createPost('offer', 'help', 'River gardening', 'Garden help', hc(10), 'fixed', river.pubKeyHex);
+    const freshOffer = await signedFetch('POST', `/api/treasury/${eggs}/offer`, doone, { title: 'Fresh dozen eggs', category: 'food', price_c: hc(12), photos: TEST_PHOTOS });
     assert(freshOffer.status === 200, 'keeper posts fresh offer for sale test');
     const riverOfferReq = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: freshOffer.body.post.id, buyerPublicKey: river.pubKeyHex });
     assert(riverOfferReq.status === 200, `buyer requests enterprise offer (got ${riverOfferReq.status} ${riverOfferReq.error ?? ''})`);
@@ -386,7 +386,7 @@ async function main() {
     assert(activeOfferDeal?.peer_callsign === 'riverbend', 'peer callsign resolved to buyer');
 
     // ── 9. CAS guard on rejectPostRequest ──────────────────────────────────────────
-    const rejNeed = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Paint the fence', category: 'work', credits: 18, photos: TEST_PHOTOS });
+    const rejNeed = await signedFetch('POST', `/api/treasury/${eggs}/need`, doone, { title: 'Paint the fence', category: 'work', price_c: hc(18), photos: TEST_PHOTOS });
     assert(rejNeed.status === 200, 'keeper posts fresh need for reject test');
     const rejNeedRes = await signedFetch('POST', '/api/marketplace/posts/request', river, { postId: rejNeed.body.post.id, buyerPublicKey: river.pubKeyHex });
     assert(rejNeedRes.status === 200, 'worker requests enterprise need for reject test');
@@ -430,10 +430,10 @@ async function main() {
     }
     for (const rp of fullSync.posts ?? []) {
         replicaDb.prepare(`
-            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, created_by)
+            INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-            rp.id, rp.type, rp.category, rp.title, rp.description, rp.credits,
+            rp.id, rp.type, rp.category, rp.title, rp.description, rp.price_c,
             rp.authorPublicKey, rp.createdAt, rp.active ? 1 : 0, rp.status,
             rp.repeatable ? 1 : 0, rp.lat ?? null, rp.lng ?? null,
             rp.originNode || 'node', rp.priceType || 'fixed',

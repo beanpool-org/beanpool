@@ -5,17 +5,19 @@
  *
  *   1. `/` for a browser with no account here is the card, not a redirect to a sign-in form: plain HTML, no script,
  *      under the web app's document policy, with Open Graph tags; the community's name, its member count, its area
- *      and "takes requests to join"; Ask to join to the global community's lobby with this community first, I have an
- *      invite, Already a member, Look around the global community
+ *      and "takes requests to join"; Ask to join to this community's own ask door (`/app?door=ask`, at its own address),
+ *      with the line under it, I have an invite, Already a member, Look around the global community
  *   2. what a stranger reads (Marty, 28 Sep): the card's HTML and GET /api/community/card, unsigned and signed by a key
  *      that is no member, carry no member's name or key, no face, no listing, no balance and no point (not the place,
  *      not rounded); the JSON is the card's fields and nothing else
  *   3. the switches: no member count with "Share member count" off; no area with "Share Location & Radius" off, or
- *      with no town or area named; "by invite" with requests to join off, or the door admins-only; no Ask to join link
- *      while the community isn't listed; a community with no name of its own shows its host
- *   4. the self-hosted node: GLOBAL_COMMUNITY_URL=off, its own domain: "Ask to join from the BeanPool app", and nothing
- *      that links to beanpool.org
- *   5. an Android phone's Ask to join opens the app's card screen, falling back to the lobby
+ *      with no town or area named; "by invite" with requests to join off, or the door admins-only; the same Ask to join
+ *      while the community isn't listed (nobody else is in its path); a community with no name of its own shows its host
+ *   4. the self-hosted node: GLOBAL_COMMUNITY_URL=off, its own domain: the same Ask to join, to its own address, and
+ *      nothing that links to beanpool.org; a node naming another global community still asks at its own address
+ *   5. an Android phone's Ask to join opens the app's card screen, falling back to this community's ask door
+ *   8. the card names no other host (DESIGN-shared-listing-door-fable.md A1): every link on the page is this address's
+ *      or the named global community's Look around; and a knock from a fresh key, addressed here, is taken (201)
  *   6. who still goes to the web app: a browser that keeps an account here (the web app's hint cookie), any other query
  *      (`?post=`, a sign-in's return), the global community's lobby; `?lang=` and Accept-Language pick the words
  *   7. the owner's town or area: saved by the node config route (text, cut; null clears; anything else refused), and
@@ -36,9 +38,9 @@ delete process.env.PRIVATE_PREVIEW;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1/directory-register';
 const ADMIN_PASSWORD = 'CommunityCardAdmin123!';
-process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -49,6 +51,8 @@ function assert(cond: boolean, msg: string): void {
 
 // Unique enough that a substring can only be these.
 const HOST = 'card-test.example.org';
+// The node takes this as its name from the config below; before that it takes any host, so every request is signed for it.
+setSignedForHost(HOST);
 const NAME = 'Sentinelvale Commons';
 const AREA = 'Sentinelvale and around';
 // The place, and what a stranger's rounding of it would print: neither may appear.
@@ -71,7 +75,8 @@ async function get(path: string, opts: { id?: Id | null; headers?: Record<string
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`), opts.id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.id.priv, { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -89,7 +94,7 @@ const hasDoor = (html: string, door: string) => new RegExp(`data-door="${door}"`
 async function main(): Promise<void> {
     console.log('\n=== A stranger at a community\'s door: the public card (S15) ===\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { initStateEngine, updateNodeConfig } = se;
     const { wrapCreatePost, TEST_PHOTO } = await import('./post-test-helper.js');
@@ -104,7 +109,6 @@ async function main(): Promise<void> {
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
 
     await initTls();
-    initAdminPassword();
     initStateEngine();
     const ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -114,14 +118,14 @@ async function main(): Promise<void> {
         const id = newId();
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 30 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, 0);
         setMemberPhoto(db, id.pk, TEST_PHOTO);
         return id;
     };
     const alice = member('SentinelAlice');
     const bob = member('SentinelBob');
     const carol = member('SentinelCarol');
-    db.prepare('UPDATE accounts SET balance = ? WHERE public_key = ?').run(BALANCE, alice.pk);
+    db.prepare('UPDATE accounts SET balance_c = ? WHERE public_key = ?').run(BALANCE, alice.pk);
     createPost('offer', 'tools', 'Sentinel ladder to lend', 'Sentinel ladder, described', 5, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
     const outsider = newId();
     const members = [alice, bob, carol];
@@ -161,8 +165,11 @@ async function main(): Promise<void> {
     assert(page.text.includes(`data-fact="members">${memberCount} members<`), `the card says how many members (${memberCount}), with the count shared`);
     assert(page.text.includes(`data-fact="area" dir="auto">${AREA}, within about 12 km<`), "the card names the area in the owner's words, with the radius");
     assert(page.text.includes('Takes requests to join'), 'the card says it takes requests to join');
-    assert(askHref(page.text) === `https://global.beanpool.org/?ask=${HOST}`,
-        `Ask to join opens the global community's lobby with this community first (got ${askHref(page.text)})`);
+    assert(askHref(page.text) === `https://${HOST}/app?door=ask`,
+        `Ask to join opens this community's own ask door, at its own address (got ${askHref(page.text)})`);
+    assert(page.text.includes(`<p class="note" data-door="ask-note">Makes your account here and sends your request to ${NAME}. Its members decide. No invite needed.</p>`),
+        'the line under Ask to join says the account is made here and the request goes to this community');
+    assert(!page.text.includes('Look around global first') && !page.text.includes('?ask='), 'nothing sends a stranger to join the global community first');
     assert(/data-door="invite" href="\/app\?door=invite"/.test(page.text), 'I have an invite opens the invite form');
     assert(/data-door="signin" href="\/app\?door=signin"/.test(page.text), 'Already a member opens the sign-in');
     assert(/data-door="global" href="https:\/\/global\.beanpool\.org"/.test(page.text), 'Look around the global community is there');
@@ -214,8 +221,8 @@ async function main(): Promise<void> {
     updateNodeConfig({ lastDirectoryPush: undefined } as any);
     p = await get('/');
     j = (await get('/api/community/card')).body;
-    assert(j?.joining === 'requests' && j?.askUrl === null && askHref(p.text) === null && p.text.includes('Ask to join from the BeanPool app.'),
-        "not in the directory yet: the lobby couldn't show it, so no lobby link; Ask to join from the BeanPool app");
+    assert(j?.joining === 'requests' && j?.askUrl === `https://${HOST}/app?door=ask` && askHref(p.text) === `https://${HOST}/app?door=ask`,
+        `not in the directory yet: the same Ask to join, to this community, since nobody else is in its path (${j?.askUrl})`);
     updateNodeConfig({ lastDirectoryPush: new Date().toISOString() });
 
     updateLocalConfig({ communityName: 'BeanPool Community' } as any);
@@ -231,23 +238,15 @@ async function main(): Promise<void> {
     process.env.GLOBAL_COMMUNITY_URL = 'off';
     p = await get('/');
     j = (await get('/api/community/card')).body;
-    assert(j?.askUrl === null && j?.globalUrl === null, 'GLOBAL_COMMUNITY_URL=off: no lobby link and no global community in the JSON');
-    assert(p.text.includes('Ask to join from the BeanPool app.') && askHref(p.text) === null && !hasDoor(p.text, 'global'),
-        'the self-hosted card says "Ask to join from the BeanPool app", with no link to a global community');
+    assert(j?.askUrl === `https://${HOST}/app?door=ask` && j?.globalUrl === null, `GLOBAL_COMMUNITY_URL=off: Ask to join at its own address, and no global community in the JSON (${j?.askUrl})`);
+    assert(askHref(p.text) === `https://${HOST}/app?door=ask` && hasDoor(p.text, 'ask-note') && !hasDoor(p.text, 'global'),
+        'the self-hosted card has the same Ask to join and its line, with no link to a global community');
     assert(!/beanpool\.org/i.test(p.text), 'the self-hosted card links nothing of beanpool.org');
     process.env.GLOBAL_COMMUNITY_URL = 'https://lobby.example.net';
+    p = await get('/');
     j = (await get('/api/community/card')).body;
-    assert(j?.askUrl === `https://lobby.example.net/?ask=${HOST}` && j?.globalUrl === 'https://lobby.example.net',
-        "a node that names its own global community sends strangers there, not to ours");
-    for (const [named, ask] of [
-        ['https://lobby.example.net/', `https://lobby.example.net/?ask=${HOST}`],
-        ['https://lobby.example.net/lobby/', `https://lobby.example.net/lobby/?ask=${HOST}`],
-        ['https://lobby.example.net/?a=b#top', `https://lobby.example.net/?ask=${HOST}`],
-    ]) {
-        process.env.GLOBAL_COMMUNITY_URL = named;
-        j = (await get('/api/community/card')).body;
-        assert(j?.askUrl === ask, `GLOBAL_COMMUNITY_URL=${named}: Ask to join is ${ask}, never a doubled slash or a second query (${j?.askUrl})`);
-    }
+    assert(j?.askUrl === `https://${HOST}/app?door=ask` && j?.globalUrl === 'https://lobby.example.net' && hasDoor(p.text, 'global'),
+        'a node that names its own global community links it to look around, and still takes requests at its own address');
     delete process.env.GLOBAL_COMMUNITY_URL;
 
     // ── 5. an Android phone ───────────────────────────────────────────────────────────────────────────────────
@@ -255,8 +254,8 @@ async function main(): Promise<void> {
     p = await get('/', { headers: { 'User-Agent': ANDROID } });
     const href = askHref(p.text) ?? '';
     assert(href.startsWith(`intent://community-card?node=${encodeURIComponent(`https://${HOST}`)}#Intent;scheme=beanpool;package=org.beanpool.pillar;`)
-        && href.includes(`S.browser_fallback_url=${encodeURIComponent(`https://global.beanpool.org/?ask=${HOST}`)};`) && href.endsWith('end'),
-        `on Android, Ask to join opens the app's card screen, else the lobby (${href.slice(0, 90)}…)`);
+        && href.includes(`S.browser_fallback_url=${encodeURIComponent(`https://${HOST}/app?door=ask`)};`) && href.endsWith('end'),
+        `on Android, Ask to join opens the app's card screen, else this community's ask door (${href.slice(0, 90)}…)`);
     assert(p.headers.get('vary')?.toLowerCase().includes('user-agent') === true, 'the answer varies by User-Agent, so no cache hands a computer the phone\'s');
 
     // ── 6. who still goes to the web app ──────────────────────────────────────────────────────────────────────
@@ -294,6 +293,46 @@ async function main(): Promise<void> {
     updateNodeConfig({ publishLocation: false });
     const cfgOff = await get('/api/node/config');
     assert(cfgOff.body?.areaName === null && cfgOff.body?.serviceRadius === null, 'and nothing of it with the place off, as the place');
+
+    // ── 8. the card names no other host, and a stranger asks here ─────────────────────────────────────────────────
+    updateNodeConfig({ publishLocation: true });
+    delete process.env.GLOBAL_COMMUNITY_URL;
+    for (const ua of ['', ANDROID]) {
+        const html = (await get('/', ua ? { headers: { 'User-Agent': ua } } : {})).text;
+        const hosts = [...html.matchAll(/href="([^"]+)"/g)].map(m => m[1].replace(/&amp;/g, '&'))
+            .flatMap(h => [h, ...[...h.matchAll(/S\.browser_fallback_url=([^;]+);/g)].map(f => decodeURIComponent(f[1]))])
+            .filter(h => /^https:\/\//.test(h))
+            .map(h => new URL(h).host)
+            .filter(h => h !== HOST && h !== 'global.beanpool.org');
+        assert(hosts.length === 0, `${ua ? 'Android: ' : ''}the card's links name only this community (and Look around the global community): ${hosts.join(', ') || 'none other'}`);
+    }
+    const cardJson = (await get('/api/community/card')).body;
+    const otherHosts = [cardJson?.askUrl].filter(Boolean).map((u: string) => new URL(u).host).filter(h => h !== HOST);
+    assert(otherHosts.length === 0, `the card's JSON sends Ask to join to no other host (${cardJson?.askUrl})`);
+
+    const knock = async (id: Id, extra: Record<string, unknown>) => {
+        beforeCall();
+        try { db.prepare('UPDATE join_requests SET ip_hash = NULL').run(); } catch { /* no table yet */ }
+        const path = '/api/join/knock';
+        const raw = JSON.stringify({ callsign: 'Stranger', message: 'I read a shared listing.', fromNode: HOST, ...extra });
+        const ts = Date.now();
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const res = await fetch(`${BASE}${path}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
+                'X-Signature': signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: raw }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
+            },
+            body: raw,
+        });
+        return res.status;
+    };
+    const fresh = newId();
+    const asked = await knock(fresh, { toNode: HOST });
+    assert(asked === 201, `a knock from a fresh key (a browser that just made it), addressed to this community, is taken: 201 (${asked})`);
+    const again = await knock(fresh, { toNode: HOST });
+    assert(again === 409, `the same key asking again while its request is open is answered knock_open, not a second request (${again})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -7,16 +7,17 @@
  *      registrar's answer carried beyond the named fields; the answer says only that an owner can see it.
  *   2. An admin cannot claim, rename or release the address (operators/setup/signing-in.md: the community's name and
  *      address are an owner's), and the refusal carries no token.
- *   3. An owner, by key or by the admin password, still gets the token (the manager's PublicAddressPanel shows it),
- *      and still never anything the registrar sent beyond the named fields.
+ *   3. An owner, signed in by key on a computer or from the phone's Manage, still gets the token (the manager's
+ *      PublicAddressPanel shows it), and still never anything the registrar sent beyond the named fields. The node has
+ *      no admin password (Marty, 11 Nov 2026): an old one in the header is no credential and reads no token.
  *   4. The tunnel keeps running on the token from the node's config, whoever reads the status.
  *   5. A notice from the address service: an admin reads its words, but its one-use reply link is an owner's too, and the
  *      admin is told only that an owner can reply (#2151 review 4306457093).
  *
  * The registrar is a local stub; Cloudflare's edge probe is refused in-process; cloudflared is the test fake.
  */
+/** What an older install's admin password looked like: no credential now. */
 const ADMIN_PASSWORD = 'Tunnel-Token-Owner-Only-1!';
-process.env.ADMIN_PASSWORD = ADMIN_PASSWORD;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.PUBLIC_ADDRESS_NAME;
@@ -26,6 +27,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -81,7 +83,7 @@ async function keySession(who: Identity): Promise<{ sid: string; role: string }>
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
         challengeId: chal.body?.challengeId,
         memberPubkey: who.pub,
-        signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), who.priv).toString('base64'),
+        ...adminSigninFields(who.priv, chal.body?.challengeId ?? '', undefined, 'base64'),
     });
     const ex = await call('POST', '/api/local/admin/auth/exchange', { token: solved.body?.handshakeToken });
     const sid = (ex.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1];
@@ -92,20 +94,18 @@ async function keySession(who: Identity): Promise<{ sid: string; role: string }>
 async function main() {
     console.log('Only an owner reads the tunnel token (real HTTPS, real admin auth)...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { initStateEngine, getNodeConfig, grantNodeRole } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
     const { db } = await import('./db/db.js');
     const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
     const { tunnelConnectorForTests, resetTunnelConnectorForTests } = await import('./services/tunnel-connector.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
 
     refuseEdge();
     await initTls();
-    initAdminPassword();
     initStateEngine();
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false } as any);
     const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
     await useFakeCloudflared(path.join(DATA_DIR, 'fake-cloudflared'));
     // The registrar signs with the node's key, so the identity is loaded (ephemeral ports, no peers).
@@ -147,7 +147,7 @@ async function main() {
     const seed = (who: Identity, callsign: string, role: 'owner' | 'admin') => {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(who.pub, callsign);
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(who.pub);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(who.pub);
         grantNodeRole(who.pub, role, 'SYSTEM');
     };
     const owner = keypair(); seed(owner, 'tokOwner', 'owner');
@@ -158,12 +158,9 @@ async function main() {
     const UPDATE = '/api/local/admin/public-address/update';
     const OFFLINE = '/api/local/admin/public-address/offline';
     const password = { 'X-Admin-Password': ADMIN_PASSWORD };
-    // Step 7c: with 2FA off the password alone opens no admin route; the owner's password goes with a code. Each such call
-    // turns 2FA on (admin-auth-test-harness turnOn2faForTests) and off again, so the key-session calls run as before.
-    const withPassword = async (method: 'GET' | 'POST', p: string, body?: unknown) => {
-        const tfa = turnOn2faForTests(ADMIN_PASSWORD);
-        try { return await call(method, p, body, tfa.headers()); } finally { updateLocalConfig({ totpEnabled: false, totpSecret: null }); }
-    };
+    // The owner from the phone's Manage hand-off, just unlocked: the session an owner's fresh proof takes (taking the
+    // address offline asks it), minted for each request so it is never older than its 90 seconds.
+    const fromPhone = (method: 'GET' | 'POST', p: string, body?: unknown) => call(method, p, body, ownerPhoneSessionHeaders(owner.pub));
     const leaks = (text: string) => text.includes(TUNNEL_TOKEN) || /tunnelToken"\s*:/.test(text);
 
     try {
@@ -204,11 +201,11 @@ async function main() {
         assert(ownerStatus.body?.seen_from === '198.51.100.77', 'an owner by key reads seen_from');
         assert(!ownerStatus.text.includes(EXTRA_SECRET) && !('tunnelTokenOwnerOnly' in (ownerStatus.body || {})), 'and only the named fields');
         const pwAlone = await call('GET', STATUS, undefined, password);
-        assert(pwAlone.status === 403 && pwAlone.body?.code === 'password_needs_2fa' && !leaks(pwAlone.text),
-            `step 7c: the admin password alone (2FA off) is refused as needing 2FA, with no token (${pwAlone.status} ${pwAlone.body?.code})`);
-        const pwStatus = await withPassword('GET', STATUS);
-        assert(pwStatus.status === 200 && pwStatus.body?.tunnelToken === TUNNEL_TOKEN, `the admin password (an owner) reads the token (${pwStatus.status})`);
-        assert(pwStatus.body?.seen_from === '198.51.100.77', 'the admin password (an owner) reads seen_from');
+        assert(pwAlone.status === 401 && pwAlone.body?.notSignedIn === true && !leaks(pwAlone.text),
+            `an old admin password in the header is no credential: 401, with no token (${pwAlone.status} ${pwAlone.text.slice(0, 120)})`);
+        const phoneStatus = await fromPhone('GET', STATUS);
+        assert(phoneStatus.status === 200 && phoneStatus.body?.tunnelToken === TUNNEL_TOKEN, `an owner from the phone's Manage reads the token (${phoneStatus.status})`);
+        assert(phoneStatus.body?.seen_from === '198.51.100.77', 'an owner from the phone\'s Manage reads seen_from');
         assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN && (getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'after every read the tunnel still runs on the token in the node config');
 
@@ -230,8 +227,8 @@ async function main() {
             const ownerNotices = await call('GET', NOTICES, undefined, asOwner);
             assert(ownerNotices.status === 200 && ownerNotices.body?.notices?.[0]?.link === REPLY && !ownerNotices.text.includes('replyOwnerOnly'),
                 `an owner by key is given the link (${ownerNotices.status})`);
-            const pwNotices = await withPassword('GET', NOTICES);
-            assert(pwNotices.status === 200 && pwNotices.body?.notices?.[0]?.link === REPLY, `and so is the admin password, an owner (${pwNotices.status})`);
+            const phoneNotices = await fromPhone('GET', NOTICES);
+            assert(phoneNotices.status === 200 && phoneNotices.body?.notices?.[0]?.link === REPLY, `and so is an owner from the phone's Manage (${phoneNotices.status})`);
             assert((getLocalConfig() as any).registrarNotices?.[0]?.link === REPLY, 'an admin\'s read changes nothing kept');
         } finally { updateLocalConfig({ registrarNotices: null } as any); }
 
@@ -273,11 +270,11 @@ async function main() {
         const adminRelease = await call('POST', '/api/local/admin/public-address/release-name', { name: 'other-name' }, asAdmin);
         assert(adminExtra.status === 403 && adminRelease.status === 403 && regStatus === 'live',
             `nor list or release the names it holds besides it (${adminExtra.status} ${adminRelease.status})`);
-        const pwUpdate = await withPassword('POST', UPDATE, { communityName: 'Tok Vale' });
-        assert(pwUpdate.status === 200 && !pwUpdate.text.includes(EXTRA_SECRET), `the admin password renames it, named fields only (${pwUpdate.status})`);
-        const pwOffline = await withPassword('POST', OFFLINE, {});
-        assert(pwOffline.status === 200 && pwOffline.body?.status === 'none' && !pwOffline.text.includes(EXTRA_SECRET),
-            `the admin password releases it, named fields only (${pwOffline.status} ${pwOffline.text.slice(0, 120)})`);
+        const ownerUpdate = await fromPhone('POST', UPDATE, { communityName: 'Tok Vale' });
+        assert(ownerUpdate.status === 200 && !ownerUpdate.text.includes(EXTRA_SECRET), `an owner renames it, named fields only (${ownerUpdate.status})`);
+        const ownerOffline = await fromPhone('POST', OFFLINE, {});
+        assert(ownerOffline.status === 200 && ownerOffline.body?.status === 'none' && !ownerOffline.text.includes(EXTRA_SECRET),
+            `an owner releases it from the phone, named fields only (${ownerOffline.status} ${ownerOffline.text.slice(0, 120)})`);
     } finally {
         registrar.close();
         await resetTunnelConnectorForTests();

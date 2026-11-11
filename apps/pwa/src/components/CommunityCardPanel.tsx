@@ -1,17 +1,52 @@
+import { useState } from 'react';
 import { COMMUNITY_CARD_WORDS as W, communityCardFacts, communityCardName, t, tn, type CommunityCard } from '@beanpool/core';
-import { askDoor, onAndroid } from '../lib/community-card';
+import type { BeanPoolIdentity } from '../lib/identity';
+import { askDoor, lookAroundUrl, onAndroid } from '../lib/community-card';
+import { AskHere } from './AskHere';
+
+/** How the panel offers Ask to join, where its page shows it (DESIGN-shared-listing-door-fable.md §2.3). */
+export interface PanelAsk {
+    /** The request went: this browser holds the key it asked with, and waits (App shows the waiting page). */
+    onAsked: (identity: BeanPoolIdentity) => void;
+    /** The form open from the start: `/app?door=ask`, where the card's own Ask to join (or its Android fallback) lands. */
+    open?: boolean;
+    /** The shared post's page, where the button stands away from the name: "Ask to join {name}". */
+    named?: boolean;
+    /** A phone's browser under the page's own Open in the BeanPool app: "or ask here in your browser", no app link. */
+    appAbove?: boolean;
+    /** The shared post's link ticket, sent with the request (shared-listing door A3): who answers reads where it came from. */
+    peek?: string;
+}
 
 /**
- * A local community's public card (front doors S15), above the welcome page's invite form: what a stranger at its
- * address reads, as the node's own page at `/` says it (apps/server routes/community-card.ts), with its doors: Ask to
- * join, Already a member (the ways back) and Look around the global community. The form below is "I have an invite".
+ * A local community's public card (front doors S15), above the welcome page's invite form and on the shared post's page:
+ * what a stranger at its address reads, as the node's own page at `/` says it (apps/server routes/community-card.ts), with
+ * its doors in the order §2.3 sets: Ask to join (the form, right here: the browser asks this community directly, never
+ * through another one), I have an invite (where the page asks for it: `onInvite`), Already a member, and Look around
+ * the global community (with `?ask=<host>`). On an Android phone at the bare card, Ask to join opens the app's card
+ * screen, and "or ask here in your browser" opens the form.
  * `compact`: the name and the facts only, for a visitor who came from the card's own "I have an invite".
  */
-export function CommunityCardPanel({ card, onSignIn, compact = false }: { card: CommunityCard; onSignIn: () => void; compact?: boolean }) {
+export function CommunityCardPanel({ card, onSignIn, onInvite, inviteTestId = 'community-card-invite', ask, lookFirst = false, compact = false }: {
+    card: CommunityCard;
+    onSignIn: () => void;
+    onInvite?: () => void;
+    inviteTestId?: string;
+    ask?: PanelAsk;
+    lookFirst?: boolean;
+    compact?: boolean;
+}) {
     const name = communityCardName(card, { t });
     const facts = communityCardFacts(card, { t, tn });
-    const ask = askDoor(card, onAndroid());
-    const door = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
+    const door = askDoor(card, onAndroid());
+    const [formOpen, setFormOpen] = useState(!!ask?.open);
+    const global = lookAroundUrl(card);
+    const base = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
+    const primary = `${base} no-underline border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer`;
+    const secondary = `${base} bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer`;
+    // The app's card screen, where the page has no app door of its own and the browser is an Android phone's.
+    const appLink = door?.href && !ask?.appAbove ? door.href : null;
+    const browserAskLabel = ask?.appAbove || appLink ? t(W.askInBrowser) : ask?.named ? t(W.askName, { name }) : t(W.ask);
     return (
         <section data-testid="community-card" aria-label={name} className="text-left mb-6 pb-6 border-b border-nature-200 dark:border-nature-800">
             <p className="m-0 mb-1 text-sm font-semibold text-bp-ink-accent">{t(W.kicker)}</p>
@@ -23,19 +58,29 @@ export function CommunityCardPanel({ card, onSignIn, compact = false }: { card: 
             </ul>
             {!compact && (
                 <div className="grid gap-3">
-                    {ask.href && (
-                        <a href={ask.href} data-testid="community-card-ask" className={`${door} no-underline bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on`}>
-                            {t(W.ask)}
-                        </a>
+                    {door && ask && (formOpen ? (
+                        <AskHere name={name} peek={ask.peek} onAsked={ask.onAsked} onClose={() => setFormOpen(false)} testId="community-card-ask-form" />
+                    ) : (
+                        <>
+                            {appLink && (
+                                <a href={appLink} data-testid="community-card-ask-app" className={primary}>{t(W.ask)}</a>
+                            )}
+                            <button type="button" data-testid="community-card-ask" onClick={() => setFormOpen(true)}
+                                className={ask.appAbove || appLink ? secondary : primary}>
+                                {browserAskLabel}
+                            </button>
+                            <p data-testid="community-card-ask-note" className="m-0 text-sm break-words text-text-primary">{t(W.askNote, { name })}</p>
+                        </>
+                    ))}
+                    {onInvite && (
+                        <button type="button" data-testid={inviteTestId} onClick={onInvite} className={secondary}>{t(W.haveInvite)}</button>
                     )}
-                    {ask.note === W.askViaGlobal && <p className="m-0 text-sm break-words text-text-primary">{t(W.askViaGlobal, { name })}</p>}
-                    {ask.note === W.askInApp && <p data-testid="community-card-ask-app" className="m-0 text-sm break-words text-text-primary">{t(W.askInApp)}</p>}
-                    <button type="button" onClick={onSignIn} data-testid="community-card-signin" className={`${door} bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer`}>
+                    <button type="button" onClick={onSignIn} data-testid="community-card-signin" className={secondary}>
                         {t(W.member)}
                     </button>
-                    {card.globalUrl && (
-                        <a href={card.globalUrl} rel="noopener noreferrer" data-testid="community-card-global" className={`${door} text-bp-ink-brand underline font-semibold`}>
-                            {t(W.lookAround)}
+                    {global && (
+                        <a href={global} rel="noopener noreferrer" data-testid="community-card-global" className={`${base} text-bp-ink-brand underline font-semibold`}>
+                            {lookFirst ? t(W.lookAroundFirst) : t(W.lookAround)}
                         </a>
                     )}
                 </div>

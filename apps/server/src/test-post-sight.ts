@@ -100,13 +100,13 @@ function main() {
     const postId2 = 'post_2';
     const postId3 = 'post_3';
 
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, target_group_id)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to, target_group_id)
                 VALUES (?, 'offer', 'general', 'Public Post', '', 0, ?, 'public', NULL, NULL, NULL)`).run(postId1, author);
 
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, target_group_id)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to, target_group_id)
                 VALUES (?, 'offer', 'general', 'Direct Post', '', 0, ?, 'direct', ?, ?, NULL)`).run(postId2, author, target, assigned);
 
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, audience_scope, target_pubkey, assigned_to, target_group_id)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, audience_scope, target_pubkey, assigned_to, target_group_id)
                 VALUES (?, 'offer', 'general', 'Group Post', '', 0, ?, 'group', NULL, NULL, ?)`).run(postId3, author, groupId);
 
     const sqlCondition = postInSightSql('p', '?');

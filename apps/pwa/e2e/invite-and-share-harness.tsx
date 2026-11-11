@@ -12,7 +12,7 @@ import '../src/index.css';
 const identity: any = { publicKey: 'a'.repeat(64), privateKey: '', callsign: 'Robin', createdAt: '2026-10-01T00:00:00.000Z' };
 const post: any = {
     id: '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34', title: 'Ladder for borrowing', type: 'offer', category: 'tools', description: 'A 6 m ladder',
-    credits: 0, authorPublicKey: 'b'.repeat(64), status: 'active', active: true, audienceScope: 'public',
+    price_c: 0, authorPublicKey: 'b'.repeat(64), status: 'active', active: true, audienceScope: 'public',
 };
 
 void importIdentity(identity).catch(() => {}).then(() => showLanguage(new URLSearchParams(location.search).get('lang') ?? 'en')).finally(() => {

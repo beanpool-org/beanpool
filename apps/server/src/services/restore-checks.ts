@@ -46,6 +46,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import Database from 'better-sqlite3';
+import { readSchemaGate } from '../db/schema-gate.js';
 
 export interface ArchiveLimits {
     /** What the members' contents may add up to, unpacked. */
@@ -438,9 +439,11 @@ function triggersAndViews(handle: Database.Database): SchemaObject[] {
  * The triggers and views an older release made that this version does not, each with the table it is on (review of
  * #2050 N1). Built from every release's db/schema.sql, v1.1.34 … v1.2.28, each run into an empty database, and from
  * the ones those releases made in code (posts_ai/ad/au, members_touch_updated_at, posts_cleanup_on_group_delete, all of
- * which this version still makes): keeper recovery's trigger, in v1.1.34 … v1.2.18, is the only one. A backup a node of
- * those releases made carries it, so it is dropped from the copy and never runs. Under its name on another table it is
- * not this, and refuses the backup. A release that retires a trigger or view adds it here.
+ * which this version still makes): keeper recovery's trigger, in v1.1.34 … v1.2.18, is the only one. No boot drops it, so
+ * a node that ran those releases and was then updated still carries it next to node_roles, and so does its backup: it is
+ * dropped from the copy and never runs. (A backup made by those releases themselves has no node_roles and is refused,
+ * {@link CORE_TABLES}.) Under its name on another table it is not this, and refuses the backup. A release that retires a
+ * trigger or view adds it here.
  */
 export const RETIRED_SCHEMA_OBJECTS: Readonly<Record<string, string>> = {
     'trigger recovery_requests_touch_updated_at': 'recovery_requests',
@@ -452,15 +455,17 @@ function quoteName(name: string): string {
 
 /**
  * The tables, and their key columns, without which a database is not a community's: a file that lacks one would boot as an
- * empty community with no owner, or not boot at all (verified review H2). Checked by name, so any version's backup that
- * holds a community passes: all of these are in the first schema (2026-07-01). Not node_roles, which came on 2026-09-14
- * (v1.2.26): the boot makes it when it is missing and seeds the owner from the genesis member, and every backup of a
- * release before it lacks it (review of #2050 B1).
+ * empty community with no owner, or not boot at all (verified review H2). Checked by name. node_roles holds who owns the
+ * community: it came on 2026-09-14 (v1.2.26), and nothing at boot makes an owner from older data, so a backup of a release
+ * before it (v1.2.15 … v1.2.18 among them) would boot with no owner and is refused (conversion-s0: no conversion code;
+ * the 1.4.0 cutover will take no database older than 1.2.36).
  */
 export const CORE_TABLES: Record<string, readonly string[]> = {
     members: ['public_key', 'callsign'],
-    accounts: ['public_key', 'balance'],
+    // The key column only: the money column is the boot's (db/hundredths-step.ts makes `balance_c` on an older shape).
+    accounts: ['public_key'],
     node_config: [],
+    node_roles: ['member_pubkey', 'role'],
 };
 
 /** The first core table or column `handle` lacks, in words, or null when it has them all. */
@@ -527,6 +532,10 @@ export function checkRestoreDatabase(candidate: string, live: Database.Database,
             throw refuse(`has a schema this server cannot read (${e?.message || e})`);
         }
         if (notCommunity) throw refuse(`is not a BeanPool database (${notCommunity})`);
+        // The database's gate (db/schema-gate.ts), which reads only: a backup this release would not open is refused here,
+        // before anything is restored, in the gate's own words. Put in place, it would stop the node's next start.
+        const gate = readSchemaGate(handle);
+        if (gate.kind === 'refused') throw new RestoreRefused(gate.line.replace(/^This database/, "This backup's state.db"), 400);
 
         const id = (o: SchemaObject) => `${o.type} ${o.name}`;
         const known = new Map(triggersAndViews(live).map((o) => [id(o), o.sql]));

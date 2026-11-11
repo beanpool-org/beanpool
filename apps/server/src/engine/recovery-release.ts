@@ -441,6 +441,16 @@ export function openCollection(ownerPubkey: string, requesterEphemeralPubkey: st
     return opened;
 }
 
+/**
+ * Delete a session that released nothing: one a collect by a find's hold opened for a release that then did not happen
+ * (routes/recovery-collect.ts), so no session is left open, on the owner's banner, for a sign-in that is not their copy's.
+ * One that released anything stays (evidence). Sessions are each server's own (engine/replication-manifest.ts), so no
+ * tombstone.
+ */
+export function discardUnreleasedCollection(id: string): void {
+    db.prepare('DELETE FROM recovery_collections WHERE id = ? AND id NOT IN (SELECT collection_id FROM recovery_releases)').run(id);
+}
+
 export function getCollection(id: string): Collection | null {
     if (!id) return null;
     const row = db.prepare('SELECT * FROM recovery_collections WHERE id = ?')

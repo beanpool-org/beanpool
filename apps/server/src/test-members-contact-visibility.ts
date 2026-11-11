@@ -33,12 +33,11 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
-process.env.ADMIN_PASSWORD = 'ContactTest123!'; // read by initAdminPassword
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
-const ADMIN_PW = 'ContactTest123!';
 let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -57,10 +56,11 @@ function keypair(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -88,8 +88,8 @@ async function post(path: string, payload: unknown, id?: Id): Promise<{ status: 
 function signedWsQuery(id: Id): string {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 function openSocket(url: string): Promise<{ ws: WebSocket; events: any[]; raw: string[] }> {
@@ -109,11 +109,9 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { issueRekeyCode } = await import('./engine/member-wizards.js');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -124,7 +122,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, contact_value, contact_visibility)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`, contact?.value ?? null, contact?.visibility ?? null);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
 
@@ -318,9 +316,7 @@ async function main() {
         // now be signed by the key it names (Fable's review, LOW 4), so unsigned is refused with no card at all, and the
         // card goes only to the member's own signed redeem (a phone re-entering).
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-PROBE-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
-        const payload = JSON.stringify({ i: stranger.pubKeyHex, t: Date.now() });
-        const sig = crypto.sign(null, Buffer.from(payload), stranger.privateKey).toString('base64');
-        const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
+        const ticketB64 = offlineTicket(stranger.privateKey, stranger.pubKeyHex);
         const CARD = ['avatarUrl', 'callsign', 'joinedAt', 'publicKey'].join(',');
         for (const [k, o] of Object.entries(owners)) {
             for (const [route, body] of [
@@ -363,17 +359,16 @@ async function main() {
 
     console.log('\n── the admin dashboard\'s member list ──');
     {
-        // Step 7c: with the node's 2FA off the password alone reads nothing; with 2FA on it goes with a fresh code.
-        const alone = await post('/api/local/admin/data', { password: ADMIN_PW });
-        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && secretsIn(alone.text).size === 0,
-            `2FA off: the password alone → 403 password_needs_2fa, no member rows (got ${alone.status} ${alone.body?.code})`);
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        const tfa = turnOn2faForTests(ADMIN_PW);
-        const r = await post('/api/local/admin/data', { password: ADMIN_PW, totpCode: tfa.code() });
-        assert(r.status === 200, `the admin reads /api/local/admin/data (got ${r.status})`);
-        // The password proves no member, and Community, Trade Partners and Friends all need a member viewer.
+        // The node has no admin password: an owner reads the list with their key session, a member's own key. The admin
+        // rows carry no contact details all the same, whatever a member viewer could read elsewhere (Community, say).
+        const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+        const asOwner = ownerSessionHeaders();
+        const res = await fetch(`${BASE}/api/local/admin/data`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: '{}' });
+        const text = await res.text();
+        const r = { status: res.status, text, body: (() => { try { return JSON.parse(text); } catch { return undefined; } })() as any };
+        assert(r.status === 200, `an owner reads /api/local/admin/data (got ${r.status})`);
         const seen = secretsIn(r.text);
-        assert(seen.size === 0, `an admin, signed in with the password and no member key, is sent no contact details (saw ${fmt(seen)})`);
+        assert(seen.size === 0, `an owner, signed in with their key, is sent no contact details in the admin rows (saw ${fmt(seen)})`);
         const row = (r.body?.members || []).find((m: any) => m.publicKey === owners.hidden.pubKeyHex);
         assert(!!row && !('contactValue' in row) && !('contactVisibility' in row), 'the admin member rows carry no contact fields');
         assert(!!row && row.invitedBy === 'seed' && typeof row.status === 'string', 'the admin rows still carry what the manager draws from (invitedBy, status)');

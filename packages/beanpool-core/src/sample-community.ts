@@ -392,12 +392,14 @@ export const SAMPLE_COMMUNITY: SampleCommunity = deepFreeze({
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const at = (now: number, days: number) => new Date(now + days * DAY_MS).toISOString();
+/** The sample's figures are written in Beans; a node's answer carries whole hundredths (`*_c`, hundredths.ts). */
+const toC = (beans: number) => Math.round(beans * 100);
 
 /** A card as the Commons list reads it: the fields both apps' card and page use. */
 export interface SampleEnterpriseCard {
-    publicKey: string; name: string; avatar: null; avatarUrl: null; balance: number; creditLine: number;
-    liveOffers: number; earnedSurplus: number; workingCapitalCeiling: number | null; purpose: string; goalAmount: number;
-    currentAmount: number | null; deadlineAt: string | null; lifecycle: string; status: string; paused: boolean;
+    publicKey: string; name: string; avatar: null; avatarUrl: null; balance_c: number; creditLine_c: number;
+    liveOffers: number; earnedSurplus_c: number; workingCapitalCeiling_c: number | null; purpose: string; goalAmount_c: number;
+    currentAmount_c: number | null; deadlineAt: string | null; lifecycle: string; status: string; paused: boolean;
     keepers: Array<{ pubkey: string; publicKey: string; callsign: string; role: string }>;
 }
 
@@ -418,14 +420,14 @@ export function sampleEnterpriseCards(now = Date.now()): [SampleEnterpriseCard, 
     return [
         {
             publicKey: e.id, name: t(e.name), avatar: null, avatarUrl: null,
-            balance: e.balance, creditLine: e.creditLine, liveOffers: e.liveOffers, earnedSurplus: e.earnedSurplus,
-            workingCapitalCeiling: e.capitalCeiling, purpose: t(e.what), goalAmount: 0, currentAmount: null, deadlineAt: null,
+            balance_c: toC(e.balance), creditLine_c: toC(e.creditLine), liveOffers: e.liveOffers, earnedSurplus_c: toC(e.earnedSurplus),
+            workingCapitalCeiling_c: e.capitalCeiling === null ? null : toC(e.capitalCeiling), purpose: t(e.what), goalAmount_c: 0, currentAmount_c: null, deadlineAt: null,
             lifecycle: 'ongoing', status: e.lifecycle.status, paused: false, keepers: sampleKeepers(e.keepers),
         },
         {
             publicKey: p.id, name: t(p.title), avatar: null, avatarUrl: null,
-            balance: p.pledged, creditLine: 0, liveOffers: 0, earnedSurplus: 0, workingCapitalCeiling: null, purpose: t(p.what),
-            goalAmount: p.goal, currentAmount: p.pledged, deadlineAt: at(now, p.daysToGo), lifecycle: 'bounded', status: 'active',
+            balance_c: toC(p.pledged), creditLine_c: 0, liveOffers: 0, earnedSurplus_c: 0, workingCapitalCeiling_c: null, purpose: t(p.what),
+            goalAmount_c: toC(p.goal), currentAmount_c: toC(p.pledged), deadlineAt: at(now, p.daysToGo), lifecycle: 'bounded', status: 'active',
             paused: false, keepers: sampleKeepers(1),
         },
     ];
@@ -436,7 +438,7 @@ const isSampleProject = (id: string | undefined) => id === SAMPLE_COMMUNITY.proj
 
 /** Its recent activity as the page lists it: the P&L's rows, newest first. */
 function sampleFlow(rows: readonly SamplePnlRow[], now: number) {
-    return rows.map(r => ({ id: r.id, memo: t(r.what), amount: Math.abs(r.amount), incoming: r.amount > 0, timestamp: at(now, -r.daysAgo) }));
+    return rows.map(r => ({ id: r.id, memo: t(r.what), amount_c: toC(Math.abs(r.amount)), incoming: r.amount > 0, timestamp: at(now, -r.daysAgo) }));
 }
 
 /** One enterprise or project as the enterprise page reads it (GET /api/treasury/:key): the project's for its id, else the Bakery's. */
@@ -449,7 +451,7 @@ export function sampleEnterpriseDetail(id: string | undefined, now = Date.now())
     const e = SAMPLE_COMMUNITY.enterprises[0];
     return {
         ...enterprise, id: e.id, description: enterprise.purpose,
-        posts: e.listings.map(l => ({ id: l.id, title: t(l.title), type: l.type, credits: l.price, price: l.price, description: '', repeatable: true })),
+        posts: e.listings.map(l => ({ id: l.id, title: t(l.title), type: l.type, price_c: toC(l.price), description: '', repeatable: true })),
         flow: sampleFlow(e.pnl.rows, now), pendingBids: [], activeDeals: [], deferredClaims: [],
     };
 }
@@ -463,22 +465,23 @@ export function sampleEnterpriseLedger(id: string | undefined, now = Date.now())
     const project = isSampleProject(id);
     const e = SAMPLE_COMMUNITY.enterprises[0];
     const p = SAMPLE_COMMUNITY.projects[0];
-    const rows = project ? p.rows : e.pnl.rows;
-    const balance = project ? p.pledged : e.balance;
+    // Every figure whole hundredths, as the node answers (amount_c, fee_c; the totals and running balances in hundredths).
+    const rows = (project ? p.rows : e.pnl.rows).map(r => ({ ...r, amount: toC(r.amount) }));
+    const balance = toC(project ? p.pledged : e.balance);
     const cameIn = rows.filter(r => r.amount > 0).reduce((n, r) => n + r.amount, 0);
     const wentOut = rows.filter(r => r.amount < 0).reduce((n, r) => n - r.amount, 0);
     let running = balance;
     const entries = rows.map(r => {
         const entry = {
             id: r.id, timestamp: at(now, -r.daysAgo), direction: (r.amount > 0 ? 'income' : 'spend') as 'income' | 'spend',
-            amount: Math.abs(r.amount), fee: 0, netAmount: r.amount, counterparty: 'sample-member-neighbour',
+            amount_c: Math.abs(r.amount), fee_c: 0, netAmount: r.amount, counterparty: 'sample-member-neighbour',
             counterpartyName: t('a neighbour'), memo: t(r.what), runningBalance: running, authSigner: null,
         };
         running -= r.amount;
         return entry;
     }).reverse();
     return {
-        enterprise: { publicKey: project ? p.id : e.id, name: project ? t(p.title) : t(e.name), purpose: project ? t(p.what) : t(e.what), status: project ? 'active' : e.lifecycle.status, paused: false, balance },
+        enterprise: { publicKey: project ? p.id : e.id, name: project ? t(p.title) : t(e.name), purpose: project ? t(p.what) : t(e.what), status: project ? 'active' : e.lifecycle.status, paused: false, balance_c: balance },
         period: { since: null, until: null },
         summary: { totalIncome: cameIn, totalSpend: wentOut, netChange: cameIn - wentOut, startingBalance: running, endingBalance: balance, transactionCount: rows.length },
         entries,

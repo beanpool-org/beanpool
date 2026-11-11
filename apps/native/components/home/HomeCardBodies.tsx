@@ -17,7 +17,7 @@ import {
     askedFacts, communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, freePriceWords, inviteAskNoticeHere, isHundredths, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -182,9 +182,10 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
     if (typeof card.keepers === 'number') {
         const lifecycleWord = card.lifecycle === 'bounded' ? t('project') : t('enterprise');
         const nameLine = t('{name} · {lifecycle}', { name: card.name, lifecycle: lifecycleWord });
-        const balanceLine = typeof card.balance === 'number'
+        // Every figure on the card is whole hundredths of a Bean (`*_c`); one that isn't draws no line (isHundredths).
+        const balanceLine = isHundredths(card.balance_c)
             ? t('Balance {balance} · {keepers}', {
-                balance: beansAmount(card.balance),
+                balance: beansAmount(card.balance_c),
                 keepers: tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers }),
             })
             : tn(card.keepers, '{n} keeper', '{n} keepers', { n: card.keepers });
@@ -194,21 +195,21 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
         if (card.month) {
             monthLine = t('This month: {trades} · +{in} in · −{out} out', {
                 trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
-                in: formatBeans(card.month.in),
-                out: formatBeans(card.month.out),
+                in: formatBeans(card.month.in_c),
+                out: formatBeans(card.month.out_c),
             });
         }
 
         let latestLine: string | null = null;
-        if (card.latest) {
-            const sign = card.latest.amount > 0 ? '+' : '';
-            const amountStr = `${sign}${beansAmount(card.latest.amount)}`;
+        if (card.latest && isHundredths(card.latest.amount_c)) {
+            const sign = card.latest.amount_c > 0 ? '+' : '';
+            const amountStr = `${sign}${beansAmount(card.latest.amount_c)}`;
             const when = timeAgoInWords(card.latest.at);
             const who = card.latest.who
                 ?? (card.latest.kind === 'commons' ? t('the Commons')
                     : card.latest.kind === 'deal' ? t('a deal')
                     : null);
-            if (card.latest.amount < 0) {
+            if (card.latest.amount_c < 0) {
                 if (who && when) {
                     latestLine = t('Latest: {amount} to {who} · {when}', { amount: amountStr, who, when });
                 } else if (who) {
@@ -247,7 +248,7 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
                 <HomeRow
                     colors={colors}
                     text={balanceLine}
-                    a11y={typeof card.balance === 'number'
+                    a11y={isHundredths(card.balance_c)
                         ? t('{line}. Opens the enterprise ledger.', { line: balanceLine })
                         : (card.lifecycle === 'bounded'
                             ? t('{line}. Opens the project.', { line: balanceLine })
@@ -403,7 +404,8 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
     const s = homeStyles(colors);
     const type = p.type === 'need' ? colors.market.need : colors.market.offer;
     const word = p.type === 'need' ? t('NEED') : t('OFFER');
-    const price = showsBeans && typeof p.credits === 'number' && p.credits > 0 ? beansAmount(p.credits) : null;
+    // A listing priced at 0 reads Free, as on the Market's card (core listing-price.ts); a price never sent draws nothing.
+    const price = showsBeans && isHundredths(p.price_c) ? (freePriceWords(p.price_c, p.type) ?? beansAmount(p.price_c)) : null;
     const far = formatDistance(p.distanceKm);
     const copy = eventCopyOf(p);
     const facts = [copy ? copyPriceLine(copy) : price, far].filter(Boolean).join(' · ');
@@ -640,13 +642,13 @@ export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans
         const monthText = card.month.more
             ? t('This month (partial): {trades} · +{in} in · −{out} out', {
                 trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
-                in: formatBeans(card.month.in),
-                out: formatBeans(card.month.out),
+                in: formatBeans(card.month.in_c),
+                out: formatBeans(card.month.out_c),
             })
             : t('This month: {trades} · +{in} in · −{out} out', {
                 trades: tn(card.month.trades, '{n} trade', '{n} trades', { n: formatCount(card.month.trades) }),
-                in: formatBeans(card.month.in),
-                out: formatBeans(card.month.out),
+                in: formatBeans(card.month.in_c),
+                out: formatBeans(card.month.out_c),
             });
         const tier = card.tier && Object.prototype.hasOwnProperty.call(TIER_WORDS, card.tier) ? t(TIER_WORDS[card.tier as keyof typeof TIER_WORDS]) : card.tier || null;
         const tierKey = card.tier ? card.tier.toLowerCase() : undefined;
@@ -730,7 +732,7 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
 }) {
     const shapeSummary = communityShapeSummary(features);
     const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
-    const hasNarrowSlice = !isFirstMember && card && (card.joined7d !== undefined || card.commonsPot !== undefined || card.eventsSoon !== undefined || (profile === 'global' && card.listings !== undefined));
+    const hasNarrowSlice = !isFirstMember && card && (card.joined7d !== undefined || card.commonsPot_c !== undefined || card.eventsSoon !== undefined || (profile === 'global' && card.listings !== undefined));
     if (hasNarrowSlice) {
         const membersStr = tn(card.members, '{n} member', '{n} members', { n: formatCount(card.members) });
         const joinedStr = typeof card.joined7d === 'number'
@@ -741,8 +743,8 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
         const tradesStr = typeof card.tradesThisMonth === 'number'
             ? tn(card.tradesThisMonth, '{n} trade this month', '{n} trades this month', { n: formatCount(card.tradesThisMonth) })
             : null;
-        const potStr = typeof card.commonsPot === 'number'
-            ? t('Commons pot {amount}', { amount: beansAmount(card.commonsPot) })
+        const potStr = isHundredths(card.commonsPot_c)
+            ? t('Commons pot {amount}', { amount: beansAmount(card.commonsPot_c) })
             : null;
         const communitiesStr = typeof card.communities === 'number'
             ? communitiesListed(card.communities)

@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { pollLineReportWaitsSql, takeBackPollLine } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -31,6 +31,8 @@ import { assertPollStartRoom } from './poll-week.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
+import { endStandingDealsOnRemovedListing, stopStandingDealsOnListing, tellStanding, type StandingNotice } from './standing-deals.js';
+import type { KeptNoticePushOptions } from './kept-notices.js';
 import {
     canonicalZone,
     parseRepeatPattern,
@@ -230,6 +232,8 @@ type PushFn = (
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
     kind: PushNoticeKind,
+    rehearsal?: boolean,
+    options?: KeptNoticePushOptions,
 ) => void;
 
 export const EVENT_PUSH_CATEGORY = 'marketplace' as const;
@@ -487,7 +491,7 @@ export function createPost(
     category: string,
     title: string,
     description: string,
-    credits: number,
+    price_c: number,
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | string,
     authorPublicKey: string,
     lat?: number,
@@ -698,7 +702,7 @@ export function createPost(
 
         // Enforce poll isolation defaults
         category = 'community';
-        credits = 0;
+        price_c = 0;
         priceType = 'fixed';
         repeatable = false;
         lat = undefined;
@@ -760,7 +764,7 @@ export function createPost(
         // What polls force, less the pin and photos an event keeps. Reach is local until the listings pull
         // carries event fields (§2.4).
         category = 'community';
-        credits = 0;
+        price_c = 0;
         priceType = 'fixed';
         repeatable = false;
         cashAlsoNeeded = false;
@@ -821,13 +825,13 @@ export function createPost(
         }
 
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
+            id, type, category, title, description, price_c, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
             lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
+            finalId, type, category, title, description, price_c, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
             cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
@@ -889,7 +893,7 @@ export function createPost(
     // Nor a member's copy: the feed names who posted, and a copy names nobody (engine/event-copy.ts).
     if (audienceScope === 'public' && !options?.shownCopy) {
         try {
-            recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, credits });
+            recordActivity('post_created', authorPublicKey, null, { postId: finalId, title, type, category, price_c });
         } catch (e) {
             console.warn('[ActivityFeed] Could not record post_created:', e);
         }
@@ -951,11 +955,14 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     // prune, and a pending re-key leaves them on the old key.
     if (!isDirectAuthor) assertNodeMember(callerPublicKey);
 
-    const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
+    // A standing deal's period held doesn't stop its author removing the listing (DESIGN-standing-deals-fable §1.5): the
+    // standing deal stops after its current period, which is still paid at its end, and the listing hides at once.
+    const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' AND standing_id IS NULL`).get(id) as any;
     const dealSides = openDealSides(id);
     if (pendingTx && pendingTx.c > 0) throw new Error(word('This post has a deal in escrow — complete or cancel the deal before deleting it'));
 
     let removed = false;
+    let standingTold: StandingNotice[] = [];
     db.transaction(() => {
         const shopId = (db.prepare('SELECT shop_id FROM posts WHERE id = ?').get(id) as { shop_id: string | null } | undefined)?.shop_id;
         const result = db.prepare(`
@@ -975,6 +982,9 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
+        // Its standing deals stop after their current period (engine/standing-deals.ts), at once where nothing is held; the
+        // other side of each is told.
+        standingTold = stopStandingDealsOnListing(id, callerPublicKey);
         // Ended while its shop is closed for now: the shop's pause no longer holds it.
         if (shopId) forgetPausedPost(shopId, id);
         cancelPostFollowOns(id);
@@ -982,7 +992,18 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!removed) return false;
     bumpPostsVersion();
     announcePostCancelled(broadcast, postRow, dealSides, push, callerPublicKey);
+    tellStanding(standingHooksOf(broadcast, push), standingTold);
     return true;
+}
+
+/** The two things tellStanding sends a standing deal's notices with, from a removal's own: no push where none was given. */
+function standingHooksOf(broadcast: BroadcastFn, push: PushFn | undefined): Parameters<typeof tellStanding>[0] {
+    return {
+        broadcast: (event, recipients) => broadcast(event, recipients),
+        // Every argument through: a standing deal's notice names its kept copy for the bell (options.detailsFor).
+        dispatchPushNotification: (to, actor, title, body, data, category, kind, rehearsal, options) =>
+            push?.(to, actor, title, body, data, category, kind, rehearsal, options),
+    };
 }
 
 /** What a cancelled post takes with it, in the caller's transaction (removePost; a group's close, cancelClosedGroupPosts). */
@@ -1056,11 +1077,13 @@ export const PRICE_FROZEN_ERROR = word('This post has a deal in progress, so its
  * refused: an edit that sends the same price back (every edit form does) goes through. Before anything is written.
  */
 function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates: Partial<MarketplacePost>): void {
-    const creditsChange = updates.credits !== undefined && Number(updates.credits) !== Number(existingPost.credits);
+    const creditsChange = updates.price_c !== undefined && Number(updates.price_c) !== Number(existingPost.price_c);
     const unitChange = updates.priceType !== undefined && updates.priceType !== existingPost.priceType;
     if (!creditsChange && !unitChange) return;
+    // A standing deal's periods don't freeze it (DESIGN-standing-deals-fable §2.4): the standing deal keeps the price per
+    // period its payer signed for (standing_deals.beans_per_period_c), whatever the listing says after.
     const open = db.prepare(
-        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1"
+        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') AND standing_id IS NULL LIMIT 1"
     ).get(id);
     if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
@@ -1276,7 +1299,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             }
         }
         // Enforce poll isolation during updates
-        delete updates.credits;
+        delete updates.price_c;
         delete updates.lat;
         delete updates.lng;
         delete updates.photos;
@@ -1303,7 +1326,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     // Set when it went from ticked to unticked: the chat so far opens to everyone Going, and a line in it says so.
     let hostOpenedChat = false;
     if (existingPost.type === 'event') {
-        delete updates.credits;
+        delete updates.price_c;
         delete updates.category;
         delete updates.priceType;
         delete updates.repeatable;
@@ -1493,7 +1516,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
     if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
     if (updates.category !== undefined) { fields.push('category = ?'); values.push(updates.category); }
-    if (updates.credits !== undefined) { fields.push('credits = ?'); values.push(updates.credits); }
+    if (updates.price_c !== undefined) { fields.push('price_c = ?'); values.push(updates.price_c); }
     if (updates.priceType !== undefined) { fields.push('price_type = ?'); values.push(updates.priceType); }
     if (updates.repeatable !== undefined) { fields.push('repeatable = ?'); values.push(updates.repeatable ? 1 : 0); }
     // The string "false" is truthy, so a stringified payload could never CLEAR the flag.
@@ -2291,8 +2314,8 @@ export interface EscrowRefundShortfall {
 /** A shortfall in words, for the moderator who made the removal. */
 export function describeRefundShortfall(s: EscrowRefundShortfall): string {
     return s.owed === null
-        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${s.refunded}`
-        : `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`;
+        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${formatHundredths(s.refunded, 'en')} Beans`
+        : `trade ${s.transactionId} owed ${formatHundredths(s.owed, 'en')} Beans, refunded ${formatHundredths(s.refunded, 'en')}`;
 }
 
 /** How much this escrow account actually holds. Supplied by the host, which owns the ledger. */
@@ -2328,13 +2351,17 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     const holdsDeal = !!transferFn && !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
     const dealSides = openDealSides(postId);
     const runTx = conservingTxn && holdsDeal ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
+    // A standing deal's notices, kept in the transaction and sent after it (engine/standing-deals.ts).
+    let standingTold: StandingNotice[] = [];
     runTx(() => {
+        standingTold = [];
+        const at = new Date().toISOString();
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
             for (const tx of pending) {
                 const escrowAccount = `escrow_${tx.id}`;
                 // REFUND WHAT THE ESCROW HOLDS, NOT WHAT THE ROW CLAIMS. This loop used to refund
-                // `tx.credits` outright and ignore the result, so a trade row pointing at an escrow that
+                // `tx.amount_c` outright and ignore the result, so a trade row pointing at an escrow that
                 // held nothing paid the buyer out of thin air — measured on the test node (2026-09-24):
                 // two escrow accounts left at -5 and -10 by a single moderator removal, each with no hold
                 // ever recorded against it. A removal is a tidy-up; it must never create Beans.
@@ -2344,7 +2371,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                 // Beans stayed in an escrow of a cancelled deal, which nothing else can reach (sync check F1,
                 // 2026-10-02). Nobody can say what such a row owed, so its buyer gets everything the escrow holds. An
                 // escrow that isn't a number of Beans itself (NaN, NULL, below 0) gives back nothing.
-                const owed = isBeanAmount(tx.credits) ? tx.credits : null;
+                const owed = isBeanAmount(tx.amount_c) ? tx.amount_c : null;
                 const rawHeld = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : owed ?? 0;
                 const held = isBeanAmount(rawHeld) ? rawHeld : 0;
                 const refund = owed === null ? held : Math.min(owed, held);
@@ -2355,7 +2382,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                     if (!refunded) throw new Error(`Escrow refund failed for trade ${tx.id} (${refund} from ${escrowAccount})`);
                 }
                 if (owed === null || refund < owed) {
-                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.credits)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
+                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.amount_c)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
                     hooks?.onRefundShortfall?.({
                         transactionId: tx.id,
                         postId,
@@ -2373,8 +2400,11 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
             deleted = true;
             db.prepare("UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'").run(postId);
             if (eventRow) db.prepare("UPDATE posts SET event_state = 'cancelled' WHERE id = ?").run(postId);
+            // Every standing deal still running on it ends now (nothing of one is held: each period was paid at its start).
+            standingTold.push(...endStandingDealsOnRemovedListing(postId, at));
         }
     });
+    tellStanding(standingHooksOf(broadcast, push), standingTold);
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId, audienceScope: audienceRow?.audience_scope ?? 'public' }, audienceRow?.audience_scope === 'direct'
         ? Array.from(new Set([audienceRow.author_pubkey, audienceRow.target_pubkey, audienceRow.assigned_to].filter(Boolean) as string[]))

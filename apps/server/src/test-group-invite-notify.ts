@@ -36,6 +36,7 @@ import { db } from './db/db.js';
 import { addBlocks } from './engine/member-blocks.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here, so every push is measured without leaving this machine; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -65,8 +66,8 @@ function makeMember(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
     const joinedAt = new Date(Date.now() - 30 * DAY).toISOString();
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`).run(pubKeyHex, callsign, joinedAt);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`).run(pubKeyHex, callsign, joinedAt);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 50, 0)`).run(pubKeyHex);
     const token = `ExponentPushToken[gi-${callsign}-${pubKeyHex.slice(0, 6)}]`;
     registerPushToken(pubKeyHex, token, 'android');
     return { pubKeyHex, privateKey, name: callsign, token };
@@ -99,7 +100,8 @@ async function signedFetch(method: 'GET' | 'POST' | 'DELETE', path: string, body
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -277,7 +279,7 @@ async function main(): Promise<void> {
     // ── 6. An invitation wave: the guard stays at its size ─────────────────────────────────────────────────────
     // Straight to the engine, not over HTTPS: the size is what's measured, and 10,000 signed round trips would only be slow.
     const wave = makeGroup('Big Choir', 'invite_only', cleo);
-    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit) VALUES (?, ?, ?, 'active', 100)`);
+    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit_c) VALUES (?, ?, ?, 'active', 100)`);
     const many: string[] = [];
     db.transaction(() => {
         for (let i = 0; i < GROUP_INVITE_PUSHES_KEPT + 50; i++) {

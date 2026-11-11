@@ -21,11 +21,11 @@
  *     setting, never the value; an http:// endpoint off this machine is refused; docker-compose.yml passes every .env
  *     setting through.
  *  6. A standby: sends nothing and touches no bucket (not even a listing); no health line.
- *  7. Round trip: a FRESH server (child process: its own data dir, genesis, key, password) is given the destination in
+ *  7. Round trip: a FRESH server (child process: its own data dir, genesis, key, and the owner who claimed it) is given the destination in
  *     Settings, lists it (the lost community's backups, not its own), downloads the newest through its own route (hash
  *     checked), restores it with the recovery code, and its database is the backup's, table by table.
  *  8. Owner only: an admin's and a moderator's key session are refused, in words, on every route, with nothing changed and
- *     no request to any store; no credential at all is 401.
+ *     no request to any store; no credential at all is 401, and an older install's admin password is none (401).
  *  9. The operator manual's backups page quotes the server's own sentences, retention and schedule, and says that a
  *     Change of place, like a Remove, leaves the old copies where they were (with a lifecycle rule as the safety net).
  * 10. A failure leaves nothing behind (review of #1427): a store that refuses before the body, answers 503s, is not
@@ -97,8 +97,8 @@ async function fresh(): Promise<void> {
     const { initStateEngine } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
     const { setRestoreRestartForTests } = await import('./routes/backup.js');
@@ -108,13 +108,9 @@ async function fresh(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const pw = 'Fresh-Offbox-Pw-318!';
-    const { hash, salt } = hashPassword(pw);
-    updateLocalConfig({ adminHash: hash, salt });
-    // Step 7c: with 2FA off the password alone opens no admin route. A fresh server's operator turns 2FA on and sends the
-    // password with a code (a fresh server has no member yet, so no owner key to sign in with).
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const twoFa = turnOn2faForTests(pw);
+    // A fresh server has no admin password: its first owner claims it (the claim code) and signs in with their key, its
+    // only member (install, claim, restore).
+    const asOwner = ownerSessionHeaders();
     const ownCommunity = JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf8')).communityId;
     setRestoreRestartForTests(() => { /* the test reads the data dir instead of restarting */ });
     await initTls();
@@ -123,7 +119,7 @@ async function fresh(): Promise<void> {
     const call = async (method: string, route: string, body?: unknown, extra: Record<string, string> = {}) => {
         resetAdminAuthTarpit();
         https.resetAdminRateLimit();
-        const headers: Record<string, string> = { ...twoFa.headers(), ...extra };
+        const headers: Record<string, string> = { ...asOwner, ...extra };
         let payload: BodyInit | undefined;
         if (Buffer.isBuffer(body)) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; payload = new Uint8Array(body); }
         else if (method !== 'GET') { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body ?? {}); }
@@ -189,7 +185,6 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
@@ -205,9 +200,8 @@ async function main(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
+    // What an older install's admin password looked like: no credential now.
     const PW = 'Offbox-Main-Pw-6620!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
     const community = JSON.parse(fs.readFileSync(path.join(dataDir!, 'genesis.json'), 'utf8')).communityId as string;
 
     const pubkey = () => crypto.randomBytes(32).toString('hex');
@@ -218,7 +212,7 @@ async function main(): Promise<void> {
     for (const [pk, callsign] of [[admin, 'Adam'], [moderator, 'Mo'], ['ab'.repeat(32), 'OffboxMarker']]) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), owner, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
     grantNodeRole(admin, 'admin', owner);
     grantNodeRole(moderator, 'moderator', owner);
@@ -233,7 +227,7 @@ async function main(): Promise<void> {
     const asOwnerPhone = () => ({ 'x-admin-session': session(owner, 'owner', true) });
     const asAdmin = { 'x-admin-session': session(admin, 'admin') };
     const asMod = { 'x-admin-session': session(moderator, 'moderator') };
-    const asPassword = { 'x-admin-password': PW };
+    const asOldPassword = { 'x-admin-password': PW };
 
     await initTls();
     const port = await https.startHttpsServer(0);
@@ -573,20 +567,17 @@ async function main(): Promise<void> {
     await new Promise((r) => setTimeout(r, 200));
     assert(fs.readFileSync(settingsFile, 'utf8') === settingsBefore && (await storeA.log()).length === 0 && (await storeB.log()).length === 0,
         '8. …nothing changed, and no store was asked anything');
-    // Step 7c: with the node's 2FA off, the password alone reads nothing (it used to read both); with 2FA on, the
-    // password and a code read them as the owner's key session does. 2FA goes off again after.
-    const aloneS = await call('POST', '/api/local/admin/offbox-backups/status', asPassword);
-    const aloneL = await call('POST', '/api/local/admin/offbox-backups/list', asPassword, { destination: idB });
-    assert(aloneS.status === 403 && aloneS.json?.code === 'password_needs_2fa' && aloneL.status === 403 && aloneL.json?.code === 'password_needs_2fa' && !aloneL.json?.backups,
-        `8. with 2FA off the node password alone is refused (${aloneS.status} ${aloneS.json?.code}, ${aloneL.status} ${aloneL.json?.code})`);
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const twoFa = turnOn2faForTests(PW);
-    for (const [who, creds] of [["an owner's key session", () => asOwner], ['the node password with a code', () => twoFa.headers()]] as const) {
-        const s = await call('POST', '/api/local/admin/offbox-backups/status', creds());
-        const l = await call('POST', '/api/local/admin/offbox-backups/list', creds(), { destination: idB });
-        assert(s.status === 200 && l.status === 200 && l.json.backups.length > 0, `8. ${who} reads the status and the list (${s.status}, ${l.status})`);
+    // The node has no admin password (Marty, 11 Nov 2026): an older install's reads nothing (it read both until step 7c,
+    // and with a code until then), 401 as no credential; the owner's key session reads them.
+    const aloneS = await call('POST', '/api/local/admin/offbox-backups/status', asOldPassword);
+    const aloneL = await call('POST', '/api/local/admin/offbox-backups/list', asOldPassword, { destination: idB });
+    assert(aloneS.status === 401 && aloneS.json?.notSignedIn === true && aloneL.status === 401 && aloneL.json?.notSignedIn === true && !aloneL.json?.backups,
+        `8. an old admin password is no credential (${aloneS.status} ${aloneS.json?.error}, ${aloneL.status} ${aloneL.json?.error})`);
+    {
+        const s = await call('POST', '/api/local/admin/offbox-backups/status', asOwner);
+        const l = await call('POST', '/api/local/admin/offbox-backups/list', asOwner, { destination: idB });
+        assert(s.status === 200 && l.status === 200 && l.json.backups.length > 0, `8. an owner's key session reads the status and the list (${s.status}, ${l.status})`);
     }
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
     const run = await call('POST', '/api/local/admin/offbox-backups/run', asOwner);
     assert(run.status === 200 && run.json?.started === true, '8. an owner sends one now');
     for (let i = 0; i < 100 && (await status()).running; i++) await new Promise((r) => setTimeout(r, 100));

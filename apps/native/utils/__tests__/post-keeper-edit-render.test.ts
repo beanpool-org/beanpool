@@ -164,7 +164,7 @@ const NEW_PHOTO = 'data:image/jpeg;base64,SEVOUw==';
 /** The enterprise's Offer: written by the enterprise, listed by a keeper, with one photo already. */
 const EGGS = {
     id: 'p-eggs', type: 'offer', status: 'active', title: 'Dozen eggs', description: 'Laid this week', category: 'food',
-    author_pubkey: ENT, author_callsign: 'Mullum Eggs', credits: 6, price_type: 'fixed', photos: JSON.stringify([OWN_PHOTO]), repeatable: 1,
+    author_pubkey: ENT, author_callsign: 'Mullum Eggs', price_c: 600, price_type: 'fixed', photos: JSON.stringify([OWN_PHOTO]), repeatable: 1,
     audience_scope: 'public', created_at: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
 };
 
@@ -255,7 +255,7 @@ describe("a keeper editing their enterprise's Offer", () => {
         await click(button('💾 Save'), 'Save');
         expect(net.calls).toContain('db.updatePost');
         expect(net.args.get('updatePost')).toEqual(['p-eggs', {
-            type: 'offer', category: 'food', title: 'Dozen free-range eggs', description: 'Laid this week', credits: 6, price_type: 'fixed',
+            type: 'offer', category: 'food', title: 'Dozen free-range eggs', description: 'Laid this week', price_c: 600, price_type: 'fixed',
             repeatable: true, photos: JSON.stringify([OWN_PHOTO, NEW_PHOTO]),
         }]);
         // Saved: out of the form, the Offer as the node now has it.

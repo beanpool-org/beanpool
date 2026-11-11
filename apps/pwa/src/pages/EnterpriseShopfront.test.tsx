@@ -61,22 +61,22 @@ function leadsView(over: Record<string, unknown> = {}) {
     return {
         publicKey: ENT, name: NAME, purpose: PURPOSE, about: ABOUT, since: '2026-09-03T10:00:00.000Z', offerCategories: ['baking', 'tools'],
         avatar: null, lifecycle: 'ongoing', status: 'active', paused: false,
-        balance: 40, creditLine: 100, liveOffers: 2, earnedSurplus: 7, workingCapitalCeiling: 400,
+        balance_c: 4000, creditLine_c: 10000, liveOffers: 2, earnedSurplus_c: 700, workingCapitalCeiling_c: 40000,
         isLeadOrSoleKeeperOrAdmin: true, availableToBack: 40, shop: SHOP, lat: null, lng: null,
         keepers: [
             { publicKey: ME, callsign: 'Ana', role: 'lead', avatarUrl: null, tier: 'Resident', rating: { average: 4.6, count: 9 }, trades: 14, offerCategories: ['baking'] },
-            { publicKey: KOFI, callsign: 'Kofi', role: 'keeper', backing: 20, tier: 'Newcomer', rating: { average: 0, count: 0 }, trades: 2, offerCategories: ['tools'] },
+            { publicKey: KOFI, callsign: 'Kofi', role: 'keeper', backing_c: 2000, tier: 'Newcomer', rating: { average: 0, count: 0 }, trades: 2, offerCategories: ['tools'] },
             { publicKey: MIA, callsign: 'Mia', role: 'keeper', tier: 'Newcomer', rating: { average: 0, count: 0 }, trades: 0, offerCategories: [] },
         ],
-        keeperRequests: [{ id: 'r1', memberPubkey: '5'.repeat(64), callsign: 'Ivo', pledgedBacking: 15, canBackPledge: true }],
-        keeperChanges: [{ id: 'c1', kind: 'add', memberPubkey: ZOE, memberCallsign: 'Zoe', proposedBy: KOFI, proposedByCallsign: 'Kofi', pledgedBacking: 10, appliesAt: iso(now + 2 * DAY) }],
+        keeperRequests: [{ id: 'r1', memberPubkey: '5'.repeat(64), callsign: 'Ivo', pledgedBacking: 1500, canBackPledge: true }],
+        keeperChanges: [{ id: 'c1', kind: 'add', memberPubkey: ZOE, memberCallsign: 'Zoe', proposedBy: KOFI, proposedByCallsign: 'Kofi', pledgedBacking: 1000, appliesAt: iso(now + 2 * DAY) }],
         deferredClaims: [],
-        posts: [{ id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', credits: 4, price_type: 'fixed', status: 'active' }],
+        posts: [{ id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', price_c: 400, price_type: 'fixed', status: 'active' }],
         flow: [],
-        pendingBids: [{ id: 'b1', post_title: 'Oven repair', peer_callsign: 'Ivo', credits: 30 }],
+        pendingBids: [{ id: 'b1', post_title: 'Oven repair', peer_callsign: 'Ivo', amount_c: 3000 }],
         activeDeals: [
-            { id: 'x1', post_id: 'p1', post_title: 'Sourdough loaf', peer_callsign: 'Zoe', credits: 4, action_required: 'fulfill' },
-            { id: 'x2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: 'Mia', credits: 30, action_required: 'pay', price_type: 'fixed' },
+            { id: 'x1', post_id: 'p1', post_title: 'Sourdough loaf', peer_callsign: 'Zoe', amount_c: 400, action_required: 'fulfill' },
+            { id: 'x2', post_id: 'p2', post_title: 'Oven repair', peer_callsign: 'Mia', amount_c: 3000, action_required: 'pay', price_type: 'fixed' },
         ],
         pledges: [],
         leadInactivity: null,
@@ -89,7 +89,7 @@ function membersView(over: Record<string, unknown> = {}) {
     return leadsView({
         isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], pendingBids: [], activeDeals: [],
         keepers: [
-            { publicKey: KOFI, callsign: 'Kofi', role: 'lead', backing: 20, tier: 'Resident', rating: { average: 4.6, count: 9 }, trades: 14, offerCategories: ['baking'] },
+            { publicKey: KOFI, callsign: 'Kofi', role: 'lead', backing_c: 2000, tier: 'Resident', rating: { average: 4.6, count: 9 }, trades: 14, offerCategories: ['baking'] },
             { publicKey: MIA, callsign: 'Mia', role: 'keeper', tier: 'Newcomer', rating: { average: 0, count: 0 }, trades: 2, offerCategories: [] },
         ],
         ...over,
@@ -106,7 +106,7 @@ function visitorsView() {
 /** A project whose leader has gone quiet, as one of its other collaborators reads it. */
 function quietProject(over: Record<string, unknown> = {}) {
     return leadsView({
-        lifecycle: 'bounded', status: 'active', isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], goalAmount: 500, currentAmount: 120,
+        lifecycle: 'bounded', status: 'active', isLeadOrSoleKeeperOrAdmin: false, keeperRequests: [], keeperChanges: [], goalAmount_c: 50000, currentAmount_c: 12000,
         keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }, { publicKey: ZOE, callsign: 'Zoe', role: 'keeper' }],
         leadInactivity: { isEligible: true, leadPubkey: KOFI, leadCallsign: 'Kofi', daysInactive: 34 },
         succession: { proposals: [] },
@@ -118,11 +118,11 @@ const THREAD = [{ id: 'm1', type: 'text', ciphertext: b64('see you at the stall'
 const DECISIONS = { decisions: [], canPropose: true, rollSize: 3 };
 /** What `author=` answers a keeper: three of its Offers in its shop (one featured), one not in it yet, one Need. */
 const OFFERS = [
-    { id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', credits: 4, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: SHOP_ID, photos: ['/api/marketplace/posts/p1/photos/0'] },
-    { id: 'p3', type: 'offer', category: 'baking', title: 'Rye loaf', credits: 5, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
-    { id: 'p4', type: 'offer', category: 'baking', title: 'Seed bread', credits: 6, priceType: 'hourly', status: 'pending', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
-    { id: 'p5', type: 'offer', category: 'baking', title: 'Fruit buns', credits: 3, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null },
-    { id: 'n1', type: 'need', category: 'tools', title: 'A new oven door', credits: 30, priceType: 'fixed', status: 'active', audienceScope: 'public', shopId: null },
+    { id: 'p1', type: 'offer', category: 'baking', title: 'Sourdough loaf', price_c: 400, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: SHOP_ID, photos: ['/api/marketplace/posts/p1/photos/0'] },
+    { id: 'p3', type: 'offer', category: 'baking', title: 'Rye loaf', price_c: 500, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
+    { id: 'p4', type: 'offer', category: 'baking', title: 'Seed bread', price_c: 600, priceType: 'hourly', status: 'pending', audienceScope: 'public', featuredAt: null, shopId: SHOP_ID },
+    { id: 'p5', type: 'offer', category: 'baking', title: 'Fruit buns', price_c: 300, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null },
+    { id: 'n1', type: 'need', category: 'tools', title: 'A new oven door', price_c: 3000, priceType: 'fixed', status: 'active', audienceScope: 'public', shopId: null },
 ];
 
 type Answer = { status: number; body?: unknown } | 'down';
@@ -168,7 +168,7 @@ beforeEach(() => {
             return answer((node.write ?? okWrites)(method, path, body));
         }
         if (path === `/api/treasury/${ENT}`) return answer({ status: 200, body: node.detail ?? leadsView() });
-        if (path === `/api/ledger/balance/${ME}`) return answer({ status: 200, body: { balance: 10, keeperOf: node.keeperOf ?? [ENT] } });
+        if (path === `/api/ledger/balance/${ME}`) return answer({ status: 200, body: { balance_c: 1000, keeperOf: node.keeperOf ?? [ENT] } });
         if (path === `/api/enterprise/${ENT}/ledger`) return answer({ status: 200, body: { summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 40, endingBalance: 40, transactionCount: 0 }, entries: [] } });
         if (path === `/api/treasury/${ENT}/thread`) return answer({ status: 200, body: { conversation: null, messages: THREAD, readOnly: false } });
         if (path === `/api/enterprise/${ENT}/decisions`) return answer({ status: 200, body: DECISIONS });
@@ -389,9 +389,9 @@ describe('from one enterprise to another', () => {
     const MILL = '8'.repeat(64);
     const millsView = () => membersView({
         publicKey: MILL, name: 'River Mill', shop: { ...SHOP, id: 'shop-2', name: 'River Mill', ownerPublicKey: MILL, ownerName: 'River Mill' },
-        posts: [{ id: 'f2', type: 'offer', category: 'baking', title: 'Rye flour', credits: 3, price_type: 'fixed', status: 'active' }],
+        posts: [{ id: 'f2', type: 'offer', category: 'baking', title: 'Rye flour', price_c: 300, price_type: 'fixed', status: 'active' }],
     });
-    const MILLS = [{ id: 'f1', type: 'offer', category: 'baking', title: 'Wholemeal flour', credits: 3, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: 'shop-2' }];
+    const MILLS = [{ id: 'f1', type: 'offer', category: 'baking', title: 'Wholemeal flour', price_c: 300, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: iso(now - DAY), shopId: 'shop-2' }];
     /** The node answers for the mill too; a read named in `held` waits until its gate opens. */
     function serveTheMillToo(held: Record<string, Promise<void>>) {
         const base = fetchMock.getMockImplementation()!;
@@ -510,7 +510,7 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpInitiatedAt: iso(now - 8 * DAY), windUpGraceEndsAt: iso(now - 3600_000) }),
     // A project its leader reads: the node says they may cancel it (apps/server db.ts mayCancelProject, `mayCancel`).
-    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: true }),
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount_c: 50000, currentAmount_c: 12000, mayCancel: true }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -578,7 +578,7 @@ describe("the keepers' Manage tab", () => {
 
     it("a project's cancel is drawn from the node's word alone, for whoever it names (Marty's answers CF-Q1, CF-Q2)", async () => {
         const cancel = ACTIONS.find((a) => a.what === 'cancel an initiative and refund its backers')!;
-        const project = { lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 };
+        const project = { lifecycle: 'bounded', status: 'active', goalAmount_c: 50000, currentAmount_c: 12000 };
         // Its leader, whom the node no longer lets cancel it (operator access switched off): none.
         await open({ detail: leadsView({ ...project, mayCancel: false }) });
         const off = await manage();
@@ -677,9 +677,9 @@ describe("the keepers' Manage tab", () => {
             detail: VIEWS.windingUp(),
             write: (method, path, body) => {
                 if (path !== `/api/enterprise/${ENT}/wind-up/finalise`) return okWrites(method, path, body);
-                node.detail = leadsView({ status: 'completed', windUpFinalisedAt: iso(now), balance: 0, isLeadOrSoleKeeperOrAdmin: false, keepers: [] });
+                node.detail = leadsView({ status: 'completed', windUpFinalisedAt: iso(now), balance_c: 0, isLeadOrSoleKeeperOrAdmin: false, keepers: [] });
                 node.keeperOf = [];
-                return { status: 200, body: { success: true, status: 'completed', finalisedAt: iso(now), sweptAmount: 40 } };
+                return { status: 200, body: { success: true, status: 'completed', finalisedAt: iso(now), sweptAmount: 4000 } };
             },
         });
         panel = await manage();
@@ -831,7 +831,7 @@ describe("the keepers' Manage tab", () => {
                 write: (method, path, body) => {
                     if (path !== `/api/enterprise/${ENT}/keepers/requests/r1/approve`) return okWrites(method, path, body);
                     opts.detail = leadsView({ keeperRequests: [] });
-                    return { status: 200, body: { success: true, backing: 15, applied: false, change: null } };
+                    return { status: 200, body: { success: true, backing_c: 1500, applied: false, change: null } };
                 },
             };
             // The node takes a moment to answer the read again, as a real one does: the page has a frame to draw meanwhile.
@@ -920,7 +920,7 @@ describe("the keepers' Manage tab", () => {
         });
 
         it('six on the shelf: the rest wait, said once; one comes off with a tap', async () => {
-            const seven = Array.from({ length: 7 }, (_, i) => ({ id: `q${i}`, type: 'offer', title: `Loaf ${i}`, credits: 4, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: i < 6 ? iso(now - i * 1000) : null, shopId: SHOP_ID }));
+            const seven = Array.from({ length: 7 }, (_, i) => ({ id: `q${i}`, type: 'offer', title: `Loaf ${i}`, price_c: 400, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: i < 6 ? iso(now - i * 1000) : null, shopId: SHOP_ID }));
             await open({ offers: seven });
             const panel = await manage();
             await within(panel).findByTestId('manage-featured');
@@ -949,7 +949,7 @@ describe("the keepers' Manage tab", () => {
         };
 
         it('an Offer posted from Manage shows on the shelf without opening the tab again; a pause takes its Offers off', async () => {
-            const HONEY = { id: 'p6', type: 'offer', category: 'food', title: 'Honey cake', credits: 7, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null };
+            const HONEY = { id: 'p6', type: 'offer', category: 'food', title: 'Honey cake', price_c: 700, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null };
             await open({
                 // The node's next read of its listings answers what each change made.
                 write: (method, path, body) => {

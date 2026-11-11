@@ -77,7 +77,7 @@ const HOUR = 3_600_000;
 const iso = (ms) => new Date(Date.now() + ms).toISOString();
 const person = { authorPublicKey: 'hidden', authorCallsign: '', authorAvatarUrl: null, authorEnergyCycled: 0, authorFoundingNeeded: false };
 const listing = (over) => ({
-    type: 'offer', category: 'food', credits: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false,
+    type: 'offer', category: 'food', price_c: 0, priceType: 'fixed', status: 'active', active: true, repeatable: false,
     audienceScope: 'public', photos: [], createdAt: iso(-3 * HOUR), updatedAt: iso(-3 * HOUR), ...person, ...over,
 });
 // Cell centres (0.1°), as the node sends a guest.
@@ -125,7 +125,6 @@ async function main() {
                 });
                 // The visitor shared a point (the Market's Distance sheet), so distances show.
                 localStorage.setItem('beanpool-radius', JSON.stringify({ lat: -28.52, lng: 153.52, radiusKm: 50, label: 'Mullumbimby' }));
-                localStorage.setItem('beanpool-theme-default-light-v1', 'done');
                 localStorage.setItem('beanpool-theme-mode', dark ? 'dark' : 'light');
                 document.addEventListener('DOMContentLoaded', () => {
                     const s = document.createElement('style');
@@ -146,7 +145,7 @@ async function main() {
                 const reply = (status, body) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
                 if (p === '/api/community/info') {
                     return reply(200, {
-                        memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'global',
+                        memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance_c: 0, profile: 'global',
                         features: { openJoin: true, guestListingsOnly: true, beans: false, distanceSearch: true },
                         addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org',
                     });

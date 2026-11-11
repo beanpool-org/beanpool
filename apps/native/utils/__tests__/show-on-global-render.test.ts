@@ -337,13 +337,13 @@ describe('the door', () => {
 });
 
 describe('a copy of an Offer or a Need', () => {
-    const POST = { id: 'c1', type: 'offer', title: 'Sourdough loaves', description: 'Fresh', author_pubkey: 'hidden', photos: '[]', tags: '', shownCopy: true, shownFrom: FROM, shownPrice: '20 fixed' };
+    const POST = { id: 'c1', type: 'offer', title: 'Sourdough loaves', description: 'Fresh', author_pubkey: 'hidden', photos: '[]', tags: '', shownCopy: true, shownFrom: FROM, shownPrice: '2000 fixed' };
     const LINE = `20 Beans in ${LONG_NAME} · You can't buy or take this until ${LONG_NAME} welcomes you.`;
 
     it.each([['light', lightColors], ['dark', darkColors]])('the card\'s line stays inside 320 dp at 1.3× text, %s', async (scheme, colors) => {
         theme.scheme = scheme;
         theme.colors = colors;
-        await draw(createElement(ListingCopyLine, { copy: { from: FROM, price: { beans: 20, per: 'fixed' } } }));
+        await draw(createElement(ListingCopyLine, { copy: { from: FROM, price: { price_c: 2000, per: 'fixed' } } }));
         const line = byId('listing-copy-line')!;
         expect(line.textContent).toBe(LINE);
         const box = layOut(byId('floor')!, { width: WIDTH, height: 568 }, { fontScale: 1.3 }).box(line);
@@ -355,6 +355,8 @@ describe('a copy of an Offer or a Need', () => {
         await draw(createElement(ListingCopyDetail, { post: POST }));
         const page = byId('listing-copy')!;
         expect(byId('event-copy-door')!.textContent).toContain(LINE);
+        // The home price in whole hundredths (2000): 20 Beans, never a hundredth read as a Bean ("0.20 Beans" holds LINE too).
+        expect(byId('event-copy-door')!.textContent).not.toContain('0.20 Beans');
         expect(byId('event-copy-ask')!.textContent).toContain(`Ask to join ${LONG_NAME}`);
         await press('event-copy-ask');
         expect(world.pushed).toHaveLength(1);
@@ -461,15 +463,15 @@ describe('a copy of an Offer or a Need', () => {
     });
 
     it('the row the phone holds reads as show-on-global reads a listing', () => {
-        expect(listingForCopy({ id: 'h', type: 'need', category: 'food', title: 'T', description: 'D', credits: 5, price_type: 'hourly', author_pubkey: 'k', lat: 1, lng: 2, tags: 'food.eggs', free_tags: '', status: 'paused' }, ['/p/0']))
-            .toMatchObject({ id: 'h', type: 'need', credits: 5, priceType: 'hourly', authorPublicKey: 'k', audienceScope: 'public', lat: 1, lng: 2, photos: ['/p/0'], tags: ['food.eggs'], status: 'paused' });
+        expect(listingForCopy({ id: 'h', type: 'need', category: 'food', title: 'T', description: 'D', price_c: 500, price_type: 'hourly', author_pubkey: 'k', lat: 1, lng: 2, tags: 'food.eggs', free_tags: '', status: 'paused' }, ['/p/0']))
+            .toMatchObject({ id: 'h', type: 'need', price_c: 500, priceType: 'hourly', authorPublicKey: 'k', audienceScope: 'public', lat: 1, lng: 2, photos: ['/p/0'], tags: ['food.eggs'], status: 'paused' });
     });
 });
 
 describe('the door on a copy (slice GD)', () => {
     const KEY = 'ef'.repeat(32);
     const LABEL = 'Take questions about this on the global community';
-    const OPEN = { id: 'c1', type: 'offer', title: 'Sourdough loaves', description: 'Fresh', author_pubkey: KEY, author_callsign: 'Robin Sellerton of the Valley', photos: '[]', tags: '', shownCopy: true, shownFrom: FROM, shownPrice: '20 fixed', takesQuestions: true };
+    const OPEN = { id: 'c1', type: 'offer', title: 'Sourdough loaves', description: 'Fresh', author_pubkey: KEY, author_callsign: 'Robin Sellerton of the Valley', photos: '[]', tags: '', shownCopy: true, shownFrom: FROM, shownPrice: '2000 fixed', takesQuestions: true };
     const SHUT = { ...OPEN, author_pubkey: 'hidden', author_callsign: '', takesQuestions: undefined };
     const EVENT = { id: 'home-1', title: 'Loaves', authorPublicKey: world.identity.publicKey };
 

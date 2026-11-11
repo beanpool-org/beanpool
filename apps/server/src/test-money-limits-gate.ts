@@ -17,6 +17,7 @@ import {
 } from './routes/money-limits-gate.js';
 import { MoneyLimitError } from './engine/money-limits.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -45,25 +46,27 @@ function makeIdentity(): Identity {
     return { pub, priv: privateKey };
 }
 
-function insertMember(id: Identity, callsign: string, balance = 1000): void {
+/** A member with a balance in whole hundredths of a Bean (100000 is 1,000 Beans). */
+function insertMember(id: Identity, callsign: string, balance = 100000): void {
     db.prepare(
         `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(id.pub, callsign);
     setMemberPhoto(db, id.pub, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(
-        `INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`
+        `INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`
     ).run(id.pub, balance);
 }
 
+/** A completed trade, its price in whole hundredths (`price_c`, `amount_c`). */
 function completedTrade(buyer: string, seller: string, credits: number) {
     const pid = `mlg-post-${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status)
          VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')`
     ).run(pid, credits, seller);
     db.prepare(
-        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status)
+        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status)
          VALUES (?, ?, ?, ?, ?, 'completed')`
     ).run(`mlg-mtx-${crypto.randomBytes(4).toString('hex')}`, pid, buyer, seller, credits);
 }
@@ -79,9 +82,10 @@ async function sendRequest(
     if (signer) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -193,16 +197,16 @@ async function main() {
 
     const memberA = makeIdentity();
     const memberB = makeIdentity();
-    insertMember(memberA, 'member_a', 1000);
-    insertMember(memberB, 'member_b', 1000);
-    completedTrade(memberA.pub, memberB.pub, 50);
+    insertMember(memberA, 'member_a', 100000);
+    insertMember(memberB, 'member_b', 100000);
+    completedTrade(memberA.pub, memberB.pub, 5000);
     reconcileLedgerFromDb();
 
     // Test malformed ID rejection (number)
     const resBadNum = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: 12345, amount: 10 },
+        { to: 12345, amount_c: 1000 },
         memberA
     );
     assert(resBadNum.status === 400, 'POST /api/ledger/transfer with numeric "to" returns 400');
@@ -215,7 +219,7 @@ async function main() {
     const resBadArr = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: [memberB.pub], amount: 10 },
+        { to: [memberB.pub], amount_c: 1000 },
         memberA
     );
     assert(resBadArr.status === 400, 'POST /api/ledger/transfer with array "to" returns 400');
@@ -228,7 +232,7 @@ async function main() {
     const resBadEmpty = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: '', amount: 10 },
+        { to: '', amount_c: 1000 },
         memberA
     );
     assert(resBadEmpty.status === 400, 'POST /api/ledger/transfer with empty string "to" returns 400');
@@ -241,7 +245,7 @@ async function main() {
     const resValid = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: memberB.pub, amount: 10, memo: 'Test transfer' },
+        { to: memberB.pub, amount_c: 1000, memo: 'Test transfer' },
         memberA
     );
     assert(resValid.status === 200, 'POST /api/ledger/transfer with valid parameters returns 200');
@@ -251,10 +255,10 @@ async function main() {
     const resFail = await sendRequest(
         'POST',
         '/api/ledger/transfer',
-        { to: memberB.pub, amount: -50 },
+        { to: memberB.pub, amount_c: -5000 },
         memberA
     );
-    assert(resFail.status === 400, 'POST /api/ledger/transfer with negative amount returns 400');
+    assert(resFail.status === 400 && resFail.body?.code === 'amount_c_required', 'POST /api/ledger/transfer with negative amount returns 400 amount_c_required');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

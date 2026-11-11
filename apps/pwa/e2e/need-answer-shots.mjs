@@ -29,14 +29,14 @@ const AT = '2026-10-24T10:00:00.000Z';
 const PHOTO = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#9cb98a"/><circle cx="300" cy="320" r="120" fill="#c0392b"/></svg>');
 const need = (over) => ({
     id: 'p', type: 'need', category: 'labour', title: 'Help at the market stall', description: 'Saturday mornings, setting up the stall and packing down.',
-    credits: 20, priceType: 'fixed', status: 'active', active: true, repeatable: true, authorPublicKey: 'kofi-key', authorCallsign: 'Kofi',
+    price_c: 2000, priceType: 'fixed', status: 'active', active: true, repeatable: true, authorPublicKey: 'kofi-key', authorCallsign: 'Kofi',
     createdAt: AT, photos: [PHOTO], audienceScope: 'public', ...over,
 });
 const POSTS = [
     need({ id: 'p-stall' }),
-    need({ id: 'p-hours', title: 'Dig a vegetable bed', priceType: 'hourly', credits: 20 }),
-    need({ id: 'p-free', title: 'Carry chairs to the hall', credits: 0 }),
-    need({ id: 'p-nameless', title: 'Mend the fence', credits: 40, authorCallsign: '' }),
+    need({ id: 'p-hours', title: 'Dig a vegetable bed', priceType: 'hourly', price_c: 2000 }),
+    need({ id: 'p-free', title: 'Carry chairs to the hall', price_c: 0 }),
+    need({ id: 'p-nameless', title: 'Mend the fence', price_c: 4000, authorCallsign: '' }),
 ];
 
 const SCENES = [
@@ -80,7 +80,7 @@ try {
                         const id = url.searchParams.get('id');
                         return json(route, id ? POSTS.filter((x) => x.id === id) : (url.searchParams.get('author') ? [] : POSTS));
                     }
-                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, isBlockedFromTrading: false, keeperOf: [] });
+                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance_c: 10000, floor_c: -50000, isBlockedFromTrading: false, keeperOf: [] });
                     if (p === '/api/marketplace/transactions') return json(route, []);
                     // The profile gate: a name (the harness's) and a photo, so tapping "I can do this" opens the confirmation.
                     if (p.startsWith('/api/profile/')) return json(route, { avatar: '/avatars/ana.png' });

@@ -52,6 +52,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { localFetch } from './keepalive-test-fetch.js';
 import { requestNonces } from './engine/member-signature.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -70,10 +71,11 @@ function keypair(): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -146,7 +148,7 @@ async function main() {
             pk, callsign, status: o.status ?? 'active', joined: iso(t0 + 1000 * joinedN++), treasury: o.treasury ?? 0,
             lat: o.area?.lat ?? null, lng: o.area?.lng ?? null, areaAt: o.area ? iso(t0) : null, profile: null,
         });
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
         return { ...id, pubKeyHex: pk };
     };
     const area = (c: { lat: number; lng: number }, km: number) => {
@@ -388,7 +390,7 @@ async function main() {
     const SYNC = '/api/marketplace/posts?limit=200&sync=true&types=offer,need,poll,event&nearby=1';
     const author = people[3];      // has a face
     const other = people[1];
-    const postInsert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, lat, lng)
+    const postInsert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, lat, lng)
                                    VALUES (?, 'offer', 'food', ?, '', 5, ?, 'active', 1, ?, ?, ?, ?)`);
     const old = iso(Date.now() - 3 * 86_400_000);
     for (let i = 0; i < 3; i++) postInsert.run(`face-${i}`, `Bread ${i}`, author.pubKeyHex, old, old, BUSY.lat + 0.01 * i, BUSY.lng);

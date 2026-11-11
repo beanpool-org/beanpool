@@ -40,7 +40,9 @@
  *     didn't serve, never why, in draw order and each entry alike; and the two together still check out.
  *  7. The line: 99 in the pool is decided by everyone, 100 by a jury; Everyone set is everyone at 150.
  *  8. Votes off: a pause opens no vote and draws nobody.
- *  9. A node from before: decision_electors' CHECK gains the jury's statuses at boot, its rows kept.
+ *  9. A juror can be stood aside on a roll. (The rebuild that gave a node from before decision_electors' jury statuses
+ *     at boot, its rows kept, went in the 1.4.0 cutover: 1.2.36 has the table in this shape, and the gate opens nothing
+ *     older.)
  * 10. J2c, branch juries (DESIGN-removal-jury-j2-calls-fable.md call 4): under Automatic at 150 an owner's branch pause
  *     (removal by vote S5) of three draws one jury of 12 for the root's key, from the day's pool without the accounts its
  *     card names (the listed and the established left off); the root's inviter, the subtree's other accounts (an admin, an
@@ -71,6 +73,7 @@ for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_') || 
 
 import crypto from 'node:crypto';
 import { checkJuryDraw, juryOrder, juryRosterHash, jurySnapshotAt, jurySnapshotDate } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Expo is answered here; nothing else off this machine is reached.
 const realFetch = globalThis.fetch;
@@ -108,10 +111,11 @@ function keypair(callsign: string): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -138,7 +142,6 @@ async function signed(method: 'GET' | 'POST', p: string, id: Id | null, payload?
 const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 const DAY = 24 * 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
-const ADMIN_PW = 'Removal-Jury-Admin-Pw-71!';
 
 async function main() {
     console.log('Removal by a drawn jury (J1): the draw, the roll, the tally over it, the route and the setting...\n');
@@ -151,7 +154,7 @@ async function main() {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
@@ -163,8 +166,7 @@ async function main() {
     await initTls();
     se.initStateEngine();
     setSimulatedDiskUsageForTesting(10);
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Jury Test Commons' });
+    updateLocalConfig({ communityName: 'Jury Test Commons' });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     const fresh = () => { resetAdminAuthTarpit(); resetAdminRateLimit(); resetGatewayRateLimit(); };
@@ -179,7 +181,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pk, callsign, ago(joinedDaysAgo * DAY), gen.pk, `INV-${callsign.toUpperCase()}`);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         se.registerPushToken(id.pk, id.token, 'android');
         return id;
     };
@@ -344,16 +346,17 @@ async function main() {
     const at = (i: number) => byKey.get(heads[i])!;
     // The head of the draw, each with a conflict only this node knows of. at(9)'s deal with Sam is older than 90 days.
     const post = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
-                VALUES (?, 'offer', 'food', 'Plums', '', 5, ?, 'active', 1, ?, ?, 'plums')`).run(post, sam.pk, ago(DAY), ago(DAY));
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
+                VALUES (?, 'offer', 'food', 'Plums', '', 500, ?, 'active', 1, ?, ?, 'plums')`).run(post, sam.pk, ago(DAY), ago(DAY));
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status, created_at) VALUES (?, ?, ?, ?, 'A report of the plums', 'pending', ?)`)
         .run(crypto.randomUUID(), at(0).pk, gen.pk, post, ago(DAY));
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(at(1).pk, sam.pk);
     db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(sam.pk, at(2).pk);
     const block = db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey) VALUES (?, ?)');
     block.run(at(4).pk, sam.pk);
-    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, updated_at)
-                             VALUES (?, ?, ?, ?, 5, ?, ?, ?, ?)`);
+    // Each deal for 5 Beans, as the listings ask: 500 whole hundredths.
+    const deal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at, updated_at)
+                             VALUES (?, ?, ?, ?, 500, ?, ?, ?, ?)`);
     deal.run(crypto.randomUUID(), post, at(5).pk, sam.pk, 'completed', ago(20 * DAY), ago(20 * DAY), ago(20 * DAY));
     // at(6) asked for Sam's plums: an open deal they opened.
     deal.run(crypto.randomUUID(), post, at(6).pk, sam.pk, 'pending', ago(DAY), null, ago(DAY));
@@ -374,28 +377,28 @@ async function main() {
     db.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, timestamp) VALUES (?, ?, ?, 'c', 'n', ?)")
         .run(crypto.randomUUID(), unanswered, sam.pk, ago(DAY));
     const theirPost = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
-                VALUES (?, 'offer', 'food', 'Pears', '', 5, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
+                VALUES (?, 'offer', 'food', 'Pears', '', 500, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
     deal.run(crypto.randomUUID(), theirPost, sam.pk, at(14).pk, 'requested', ago(DAY), null, ago(DAY));
     // And Sam accepts at(17)'s free Offer in one step and confirms it as the buyer, through the real escrow code: a completed
     // deal, and its trade chat, Sam made alone (reviews of #2793 rounds 2 and 3). It stands nobody aside. Sam may accept: the
     // Plums are a listed Offer of Sam's.
     const freeOffer = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Free lemons', '', 0, ?, 'active', 1, ?, ?, 'lemons')`).run(freeOffer, at(17).pk, ago(DAY), ago(DAY));
     const lemons = se.acceptPost(freeOffer, sam.pk);
     const lemonsDone = se.completePostTransaction(lemons.id, sam.pk);
-    const lemonsRow = db.prepare('SELECT buyer_pubkey, seller_pubkey, credits, status FROM marketplace_transactions WHERE id = ?')
-        .get(lemons.id) as { buyer_pubkey: string; seller_pubkey: string; credits: number; status: string } | undefined;
+    const lemonsRow = db.prepare('SELECT buyer_pubkey, seller_pubkey, amount_c, status FROM marketplace_transactions WHERE id = ?')
+        .get(lemons.id) as { buyer_pubkey: string; seller_pubkey: string; amount_c: number; status: string } | undefined;
     assert(lemonsDone?.status === 'completed' && lemonsRow?.status === 'completed' && lemonsRow.buyer_pubkey === sam.pk
-        && lemonsRow.seller_pubkey === at(17).pk && lemonsRow.credits === 0,
+        && lemonsRow.seller_pubkey === at(17).pk && lemonsRow.amount_c === 0,
         `Sam's one-step accept of at(17)'s free lemons is completed, Sam the buyer, 0 Beans (${JSON.stringify(lemonsRow)})`);
     // A loan (J2a, call 3): Sam asks to borrow at(19)'s drill, at(19) says yes, and Sam gives it back, through the real escrow
     // code. A loan is always asked for and its lender says yes first, so at(19) made this deal too and stands aside. at(20)
     // lent Sam a ladder 120 days ago, and is seated.
     const lendable = (lender: Id, title: string) => {
         const id = crypto.randomUUID();
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, lendable, repeatable, created_at, updated_at, search_keywords)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active, lendable, repeatable, created_at, updated_at, search_keywords)
                     VALUES (?, 'offer', 'tools', ?, '', 0, ?, 'active', 1, 1, 1, ?, ?, ?)`).run(id, title, lender.pk, ago(DAY), ago(DAY), title.toLowerCase());
         return id;
     };
@@ -510,7 +513,8 @@ async function main() {
     const list = await signed('GET', '/api/commons/decisions', jurors[0]);
     const listed = (list.body?.decisions ?? []).find((d: any) => d.id === samVote);
     assert(listed && !('yesWeight' in listed.tally) && listed.tally.totalVoters === 9, 'the list says the same, to a juror too');
-    assert(listed && listed.params?.debt !== undefined && !('debt' in ((card.body?.decision?.params) ?? {})),
+    // The removal's params carry the member's balance and debt in whole hundredths, balance_c and debt_c.
+    assert(listed && listed.params?.debt_c !== undefined && !('debt_c' in ((card.body?.decision?.params) ?? {})) && !('balance_c' in ((card.body?.decision?.params) ?? {})),
         "the member's balance goes to the jury, as it went to a vote's voters, and not to a member not drawn");
     await settle(500);
     // Since J2b the jurors' "a vote opened" is the jury's own push, decision.jury: they were drawn, and are asked to answer.
@@ -663,38 +667,11 @@ async function main() {
         `a pause with votes off opens no vote and draws nobody (${row(yanVote).effect})`);
     setSwitchOverride('decisions', true);
 
-    // ── 9. A node from before: its roll's CHECK is rebuilt at boot ──────────────────────────────────────────────────
-    console.log("\n9. A node from before: decision_electors' CHECK gains the jury's statuses at boot, its rows kept");
-    const { initSchema } = await import('./db/db.js');
-    const tableSql = () => (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'decision_electors'").get() as { sql: string }).sql;
-    const triggers = () => (db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'decision_electors' ORDER BY name").all() as Array<{ name: string }>).map(r => r.name);
-    const triggersBefore = triggers();
-    const kept = db.prepare("SELECT decision_id, member_pubkey FROM decision_electors WHERE status IN ('on', 'left') ORDER BY decision_id, member_pubkey").all();
-    db.exec(`
-        CREATE TABLE decision_electors_old (
-            decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
-            member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
-            role_at_open  TEXT NOT NULL,
-            status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
-            created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-            PRIMARY KEY (decision_id, member_pubkey)
-        );
-        INSERT INTO decision_electors_old SELECT decision_id, member_pubkey, role_at_open, status, created_at, updated_at
-            FROM decision_electors WHERE status IN ('on', 'left');
-        DROP TABLE decision_electors;
-        ALTER TABLE decision_electors_old RENAME TO decision_electors;
-    `);
-    assert(!tableSql().includes("'stood_aside'"), "the table is as a node from before has it: 'on' and 'left' only");
-    initSchema();
-    assert(tableSql().includes("'stood_aside'") && tableSql().includes("'silent'"), "after boot its CHECK takes 'stood_aside' and 'silent'");
-    assert(JSON.stringify(db.prepare("SELECT decision_id, member_pubkey FROM decision_electors ORDER BY decision_id, member_pubkey").all()) === JSON.stringify(kept),
-        `every row it held is kept (${kept.length})`);
-    assert(JSON.stringify(triggers()) === JSON.stringify(triggersBefore) && !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_decision_electors_member'").get(),
-        `its index and its triggers are back (${triggers().join(', ') || 'no triggers'})`);
+    // ── 9. A juror stood aside ──────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n9. A juror can be stood aside on a roll');
     // Wil's roll, which section 7 drew; with none, this fails here rather than throwing, so the sections after it still run.
     db.prepare("UPDATE decision_electors SET status = 'stood_aside' WHERE decision_id = ? AND member_pubkey = ?").run(wilVote, rollOf(wilVote)[0]?.k ?? '');
-    assert(rollOf(wilVote)[0]?.status === 'stood_aside', 'and a juror can be stood aside in it');
+    assert(rollOf(wilVote)[0]?.status === 'stood_aside', 'a juror can be stood aside on the roll');
 
     // ── 10. Branch juries (J2c) ─────────────────────────────────────────────────────────────────────────────────────
     // DESIGN-removal-jury-j2-calls-fable.md call 4 (Marty, 4 Nov "All Fable's picks"): under a jury rule an owner's branch
@@ -826,7 +803,7 @@ async function main() {
     const branchCardOf = async (who: Id) => { fresh(); return signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, who); };
     const jurorCard = jurorsB[0] ? await branchCardOf(jurorsB[0]) : null;
     const offCard = await branchCardOf(notSeated);
-    const owing = (a: Answer | null) => (a?.body?.decision?.params?.branch ?? []).filter((e: any) => 'debt' in e && 'balance' in e).length;
+    const owing = (a: Answer | null) => (a?.body?.decision?.params?.branch ?? []).filter((e: any) => 'debt_c' in e && 'balance_c' in e).length;
     assert(jurorCard?.status === 200 && owing(jurorCard) === 3 && 'branchDebt' in (jurorCard.body.decision.params ?? {})
         && offCard.status === 200 && owing(offCard) === 0 && !('branchDebt' in (offCard.body?.decision?.params ?? {})),
         `each account's balance and debt, and their total, go to the jury, not to a member not seated (${owing(jurorCard)}, ${owing(offCard)})`);

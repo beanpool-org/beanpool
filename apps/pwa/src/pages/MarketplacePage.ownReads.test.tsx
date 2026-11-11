@@ -28,7 +28,7 @@ vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
 
 const identity: BeanPoolIdentity = { publicKey: 'viewer-pubkey', privateKey: 'mock-private-key-hex', callsign: 'Viewer', createdAt: '2026-09-17T00:00:00.000Z' };
 const need = {
-    id: 'p-need', title: 'Help moving a sofa', description: 'Saturday', type: 'need', category: 'services', credits: 0, status: 'active', active: true,
+    id: 'p-need', title: 'Help moving a sofa', description: 'Saturday', type: 'need', category: 'services', price_c: 0, status: 'active', active: true,
     authorPublicKey: 'member-ana', authorCallsign: 'Ana', createdAt: '2026-09-14T00:00:00Z',
 };
 const WORLDWIDE = { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true };
@@ -39,7 +39,7 @@ beforeEach(() => {
     vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getMyMarketplaceTransactions').mockResolvedValue([]);
     vi.spyOn(api, 'getMemberProfile').mockResolvedValue(null as any);
     vi.spyOn(api, 'getMemberRatings').mockResolvedValue({ average: 0, count: 0, ratings: [] } as any);
@@ -66,36 +66,5 @@ describe("the Market and a listing: the member's own balance and deals", () => {
         await openNeed();
         expect(api.getBalance).toHaveBeenCalledWith('viewer-pubkey');
         await waitFor(() => expect(api.getMyMarketplaceTransactions).toHaveBeenCalledWith('viewer-pubkey'));
-    });
-});
-
-// Review of #2035, N1: where the light statuses read fails, the Market read the whole enterprise list instead. On the
-// global node (enterprises a preview) that read is refused too, and there is no enterprise to hide: never asked. A local
-// community whose node is older (no statuses route): asked, as before.
-describe("the Market's enterprise list where the statuses read fails (review of #2035, N1)", () => {
-    const refusal = (code?: string) => Object.assign(new Error('Not found'), { status: 404, ...(code ? { code } : {}) });
-    const openMarket = async (statusesError: Error) => {
-        vi.spyOn(api, 'getEnterpriseStatuses').mockRejectedValue(statusesError);
-        render(<MarketplacePage identity={identity} isMember />);
-        await screen.findByText('Help moving a sofa');
-        await settle();
-    };
-
-    it('global, the statuses refused as feature_off: the list is not asked', async () => {
-        info.value = { profile: 'global', features: WORLDWIDE };
-        await openMarket(refusal('feature_off'));
-        expect(api.getEnterpriseStatuses).toHaveBeenCalled();
-        expect(api.getTreasuries).not.toHaveBeenCalled();
-    });
-
-    it('global, the statuses read failing any other way: not asked either (enterprises are a preview)', async () => {
-        info.value = { profile: 'global', features: WORLDWIDE };
-        await openMarket(new TypeError('Failed to fetch'));
-        expect(api.getTreasuries).not.toHaveBeenCalled();
-    });
-
-    it('local, an older node with no statuses route: the list is asked, as before', async () => {
-        await openMarket(refusal());
-        await waitFor(() => expect(api.getTreasuries).toHaveBeenCalled());
     });
 });

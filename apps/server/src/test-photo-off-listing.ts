@@ -47,6 +47,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let BASE = '';
@@ -66,10 +67,11 @@ function newId(): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -83,10 +85,10 @@ async function call(method: 'GET' | 'HEAD', p: string, id?: Id): Promise<Res> {
     const text = method === 'HEAD' ? '' : await res.text();
     let body: any;
     try { body = JSON.parse(text); } catch { /* not JSON */ }
-    // Every photo asked for is asked for its list-sized copy too (`size=thumb`, storage/photo-thumbnails.ts), by the same
+    // Every photo asked for is asked for its list-sized copy too (`size=thumb2`, storage/photo-thumbnails.ts), by the same
     // reader: refused exactly when the photo is, under the same cache header.
     if (/^\/api\/marketplace\/posts\/[^/]+\/photos\/\d+/.test(p) && !/[?&]size=thumb/.test(p)) {
-        const small = await call(method, `${p}${p.includes('?') ? '&' : '?'}size=thumb`, id);
+        const small = await call(method, `${p}${p.includes('?') ? '&' : '?'}size=thumb2`, id);
         assert(small.status === res.status && small.cache === res.headers.get('cache-control'),
             `…its small copy too: ${small.status} "${small.cache}" (the photo ${res.status} "${res.headers.get('cache-control')}")`);
     }
@@ -118,7 +120,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, 'seed', ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pk, TINY_PNG);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
     const alice = member('OffAlice');

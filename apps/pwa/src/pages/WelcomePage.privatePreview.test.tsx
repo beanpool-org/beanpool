@@ -20,7 +20,7 @@ function json(status: number, body: unknown): Response {
 
 /** What global answers in a preview; the door switches left on, as an operator may, to show the flag alone decides. */
 const PREVIEW: CommunityInfo = {
-    memberCount: 2, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global',
+    memberCount: 2, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global',
     features: { openJoin: true, wordsDoor: true, guestListingsOnly: true, beans: false, privatePreview: true },
 };
 

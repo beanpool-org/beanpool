@@ -46,45 +46,49 @@ const EPOCH_MS = 24 * 60 * 60 * 1000;   // one epoch = one day, matching LedgerM
 const nowEpoch = () => Math.floor(Date.now() / EPOCH_MS);
 
 /**
- * Two accounts holding the same balance for the same interval owe the same demurrage, so agreement with the
- * control is exact bar float noise. 0.05 beans is 2.5% of the ~2 the control charges and 0.02% of the ~223
- * the bug charged — it cannot confuse the two. It also absorbs the one-day shift if the suite happens to
- * straddle a UTC midnight; the row-level epoch assertions are immune to that either way.
+ * Every figure here is whole hundredths of a Bean (1 Bean = 100), as the node keeps them; `hc` makes one from Beans, and
+ * the messages print Beans (`/ 100`, exact for whole hundredths).
+ *
+ * Two accounts holding the same balance for the same interval owe the same demurrage: the circulation charge is truncated
+ * to whole hundredths once (core circulationChargeOf), so agreement with the control is EXACT, and the charge itself is a
+ * whole number of hundredths. (The old 0.05-Bean slack absorbed float noise, and a run straddling a UTC midnight, which
+ * reads the control and a case a day apart; that rare run now fails loudly and is rerun. The row-level epoch assertions are
+ * immune to it either way.) The ~2-Bean fair charge and the ~223 the bug charged can't be confused.
  */
-const SAME_CHARGE = 0.05;
+const hc = (beans: number) => Math.round(beans * 100);
 
 const STALE_DAYS = 60;
-const OPENING = 300;        // 100 beans above the Green Zone → a small but real, recordable decay
-const PAYOUT = 5_000;       // large enough that taxing it retrospectively is unmistakable
+const OPENING = hc(300);    // 100 beans above the Green Zone → a small but real, recordable decay
+const PAYOUT = hc(5_000);   // large enough that taxing it retrospectively is unmistakable
 /**
  * Inside the tax-free Green Zone, so however long it sits it owes NOTHING and queues no decay event. That is
  * the case a settlement built on `persistDecayEvents()` alone cannot reach — it returns early on an empty
  * queue, leaving the stale epoch in the row for the incoming credit to be taxed against. Nearly every real
  * member is here today, so it is the most likely shape of the bug, not an edge case.
  */
-const GREEN_ZONE_HOLDING = 199;
+const GREEN_ZONE_HOLDING = hc(199);
 /**
  * More than an unsettled `OPENING + PAYOUT` row can honestly afford, less than the row says. 5,300 held for
  * 60 days owes ~223.40, so the true balance is ~5,076.60 and this sits in the gap — the only band in which a
  * pledge's affordability check can be caught reading a pre-decay row.
  */
-const PLEDGE_OVER_SETTLED = 5_200;
+const PLEDGE_OVER_SETTLED = hc(5_200);
 /** Small enough that two backers each keep a decayable OPENING after pledging (path 2b). */
-const PLEDGE_SMALL = 100;
+const PLEDGE_SMALL = hc(100);
 
 function seedMember(pk: string, balance: number, staleDays: number): void {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(pk, pk.slice(0, 10));
     db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch)
         VALUES (?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET balance=excluded.balance, last_demurrage_epoch=excluded.last_demurrage_epoch
+        ON CONFLICT(public_key) DO UPDATE SET balance_c=excluded.balance_c, last_demurrage_epoch=excluded.last_demurrage_epoch
     `).run(pk, balance, nowEpoch() - staleDays);
 }
 
 const row = (pk: string) =>
-    db.prepare(`SELECT balance, last_demurrage_epoch AS epoch FROM accounts WHERE public_key=?`).get(pk) as
-        { balance: number; epoch: number } | undefined;
+    db.prepare(`SELECT balance_c, last_demurrage_epoch AS epoch FROM accounts WHERE public_key=?`).get(pk) as
+        { balance_c: number; epoch: number } | undefined;
 
 /**
  * The whole ledger as one number. Every account row EXCEPT the COMMONS_POOL shadow, plus the live global —
@@ -92,9 +96,10 @@ const row = (pk: string) =>
  * Demurrage moves value between an account and the Commons, so this figure must not move at all.
  */
 const nodeTotal = (): number => {
-    const s = (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
+    const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
-    return Math.round((s + getCommonsBalanceExact()) * 10000) / 10000;
+    // Whole hundredths sum exactly: no rounding.
+    return s + getCommonsBalanceExact();
 };
 
 const id = (prefix: string) => `${prefix}-${crypto.randomBytes(6).toString('hex')}`;
@@ -125,14 +130,14 @@ async function main() {
     seedMember(backerTwo, OPENING + PLEDGE_SMALL, 0);
     seedMember(emptyHanded, 0, 0);
 
-    setCommonsBalance(50_000);
+    setCommonsBalance(hc(50_000));
     reconcileLedgerFromDb();            // pull the seeded rows in, as boot would
     const baseline = nodeTotal();
 
     // ── The control: what this interval genuinely costs ────────────────────────────────────────────
-    const fairCharge = OPENING - getBalance(control).balance;
-    assert(fairCharge > 0.5,
-        `control: ${OPENING} beans held ${STALE_DAYS} days genuinely owes ${fairCharge.toFixed(4)} — a real, `
+    const fairCharge = OPENING - getBalance(control).balance_c;
+    assert(Number.isSafeInteger(fairCharge) && fairCharge > hc(0.5),
+        `control: ${OPENING / 100} beans held ${STALE_DAYS} days genuinely owes ${fairCharge / 100}, whole hundredths — a real, `
         + 'recordable decay, so every comparison below can actually fail');
 
     // ── Path 1: crowdfund escrow sweep to the enterprise account (Slice 3) ─────────────────────────
@@ -144,16 +149,16 @@ async function main() {
     assert(creatorRow.epoch === nowEpoch(),
         'path 1: the escrow sweep left the creator\'s demurrage window CLOSED in the row');
     // Row-level, creator personal balance reflects only the fair charge (sweep lands in enterprise account per Slice 3)
-    assert(Math.abs((OPENING - creatorRow.balance) - fairCharge) < SAME_CHARGE,
-        `path 1: the stored balance reflects only the fair ${fairCharge.toFixed(4)}, with creator personal funds protected`);
+    assert(OPENING - creatorRow.balance_c === fairCharge,
+        `path 1: the stored balance reflects only the fair ${fairCharge / 100}, with creator personal funds protected (charged ${(OPENING - creatorRow.balance_c) / 100})`);
     const fundedRow = row(funded)!;
-    assert(Math.abs(fundedRow.balance - PAYOUT) < 1e-9,
-        `path 1: the enterprise account received the full ${PAYOUT} payout (demurrage-exempt)`);
+    assert(fundedRow.balance_c === PAYOUT,
+        `path 1: the enterprise account received the full ${PAYOUT / 100} payout (demurrage-exempt)`);
 
     reconcileLedgerFromDb();   // what the balance-mutation hook, or any restart, does
-    const creatorCharge = OPENING - getBalance(creator).balance;
-    assert(Math.abs(creatorCharge - fairCharge) < SAME_CHARGE,
-        `path 1: reading the creator after the payout costs ${creatorCharge.toFixed(4)}, matching the control`);
+    const creatorCharge = OPENING - getBalance(creator).balance_c;
+    assert(creatorCharge === fairCharge,
+        `path 1: reading the creator after the payout costs ${creatorCharge / 100}, matching the control`);
 
     // ── Path 1b: the same sweep, with a creator inside the Green Zone ────────────────────────────────
     const quietProject = id('proj');
@@ -162,16 +167,16 @@ async function main() {
 
     const quietRow = row(quiet)!;
     assert(quietRow.epoch === nowEpoch(),
-        `path 1b: a creator holding ${GREEN_ZONE_HOLDING} owes nothing and queues no decay event, and the `
+        `path 1b: a creator holding ${GREEN_ZONE_HOLDING / 100} owes nothing and queues no decay event, and the `
         + 'window is STILL closed in the row — persisting only when there is an event to persist would leave '
         + 'the commonest case broken');
-    assert(Math.abs(quietRow.balance - GREEN_ZONE_HOLDING) < 1e-9,
-        `path 1b: creator inside Green Zone untouched — holds ${GREEN_ZONE_HOLDING}`);
+    assert(quietRow.balance_c === GREEN_ZONE_HOLDING,
+        `path 1b: creator inside Green Zone untouched — holds ${GREEN_ZONE_HOLDING / 100}`);
     const quietProjectRow = row(quietProject)!;
-    assert(Math.abs(quietProjectRow.balance - PAYOUT) < 1e-9,
-        `path 1b: enterprise received ${PAYOUT} payout (demurrage-exempt)`);
+    assert(quietProjectRow.balance_c === PAYOUT,
+        `path 1b: enterprise received ${PAYOUT / 100} payout (demurrage-exempt)`);
     reconcileLedgerFromDb();
-    assert(Math.abs(getBalance(quiet).balance - GREEN_ZONE_HOLDING) < 1e-9,
+    assert(getBalance(quiet).balance_c === GREEN_ZONE_HOLDING,
         'path 1b: and the next read charges nothing against creator');
 
     // ── Path 1c: the payer side — a pledge may not be afforded out of beans demurrage has taken ─────
@@ -188,9 +193,9 @@ async function main() {
 
     const spenderRow = row(spender)!;
     assert(refusal === 'Insufficient balance for pledge',
-        `path 1c: a ${overspend} pledge against a settled balance of ${spenderRow.balance.toFixed(2)} is REFUSED `
-        + `— the row said ${OPENING + PAYOUT}, which is the pre-decay figure (got: ${refusal ?? 'no error'})`);
-    assert(spenderRow.epoch === nowEpoch() && spenderRow.balance < overspend,
+        `path 1c: a ${overspend / 100} pledge against a settled balance of ${spenderRow.balance_c / 100} is REFUSED `
+        + `— the row said ${(OPENING + PAYOUT) / 100}, which is the pre-decay figure (got: ${refusal ?? 'no error'})`);
+    assert(spenderRow.epoch === nowEpoch() && spenderRow.balance_c < overspend,
         'path 1c: and the settlement is durable even though the pledge was refused — settling runs before the '
         + 'affordability read and outside the pledge transaction, so the refusal does not undo it');
 
@@ -209,8 +214,8 @@ async function main() {
     reconcileLedgerFromDb();
 
     const beforeRefund = row(refundee)!;
-    assert(Math.abs(beforeRefund.balance - OPENING) < 1e-9 && beforeRefund.epoch === nowEpoch() - STALE_DAYS,
-        `path 2 setup: the backer sits on ${OPENING} with a ${STALE_DAYS}-day window open when the project is `
+    assert(beforeRefund.balance_c === OPENING && beforeRefund.epoch === nowEpoch() - STALE_DAYS,
+        `path 2 setup: the backer sits on ${OPENING / 100} with a ${STALE_DAYS}-day window open when the project is `
         + 'abandoned — pledged long ago, refunded today');
 
     // SEPARATE PRE-EXISTING BUG, found while writing this (#139): deleting a project that has pledges ALWAYS
@@ -238,12 +243,12 @@ async function main() {
     reconcileLedgerFromDb();
     // Count only what was actually credited, so the arithmetic is the same whether or not the refund landed.
     const refunded = (db.prepare(
-        `SELECT COALESCE(SUM(amount),0) AS s FROM transactions WHERE to_pubkey=? AND id LIKE 'refund_%'`,
+        `SELECT COALESCE(SUM(amount_c),0) AS s FROM transactions WHERE to_pubkey=? AND id LIKE 'refund_%'`,
     ).get(refundee) as { s: number }).s;
-    const refundCharge = OPENING + refunded - getBalance(refundee).balance;
-    assert(Math.abs(refundCharge - fairCharge) < SAME_CHARGE,
-        `path 2: the backer is charged ${refundCharge.toFixed(4)} — the fair cost of the ${OPENING} they `
-        + `actually held, with ${refunded} refunded on top and taxed at nothing`);
+    const refundCharge = OPENING + refunded - getBalance(refundee).balance_c;
+    assert(refundCharge === fairCharge,
+        `path 2: the backer is charged ${refundCharge / 100} — the fair cost of the ${OPENING / 100} they `
+        + `actually held, with ${refunded / 100} refunded on top and taxed at nothing`);
 
     // ── Path 2b: settling a whole refund batch is ALL-OR-NOTHING ───────────────────────────────────
     // A refund settles every backer of the project, so the loop was one WAL commit per member (review
@@ -277,26 +282,26 @@ async function main() {
     assert(settleFailed === 'settle blocked by test',
         `path 2b: the batch aborted on the second account, not on the delete's own FK (${settleFailed})`);
     const after2b = [firstSettled, blockedSettle].map(pk => row(pk)!);
-    assert(after2b.every((r, i) => r.epoch === before2b[i].epoch && Math.abs(r.balance - before2b[i].balance) < 1e-9),
+    assert(after2b.every((r, i) => r.epoch === before2b[i].epoch && r.balance_c === before2b[i].balance_c),
         `path 2b: NEITHER window was closed — settling ${settleOrder.length} backers is one transaction, so the `
         + 'first is rolled back with the second instead of being left settled beside an unsettled peer');
 
     // ── Conservation: none of the above may move the ledger ────────────────────────────────────────
-    assert(Math.abs(nodeTotal() - baseline) < 0.005,
-        `conservation: sum(accounts) + Commons is unchanged (${nodeTotal().toFixed(4)} vs ${baseline.toFixed(4)}) — `
+    assert(nodeTotal() === baseline,
+        `conservation: sum(accounts) + Commons is unchanged (${nodeTotal()} vs ${baseline} hundredths) — `
         + 'every settlement moved value between an account and the pot, and minted none');
 
     // ── And it survives a restart, which is where an un-persisted half shows up ─────────────────────
     // The live COMMONS_BALANCE is thrown away and rebuilt from the COMMONS_POOL row, exactly as
     // initStateEngine does on boot. Any decay debit that was committed to an account row while its
     // matching Commons movement stayed in memory reappears here as drift.
-    const commonsRow = (db.prepare(`SELECT balance FROM accounts WHERE public_key='COMMONS_POOL'`)
-        .get() as { balance: number }).balance;
+    const commonsRow = (db.prepare(`SELECT balance_c FROM accounts WHERE public_key='COMMONS_POOL'`)
+        .get() as { balance_c: number }).balance_c;
     setCommonsBalance(commonsRow);
     reconcileLedgerFromDb();
-    assert(Math.abs(nodeTotal() - baseline) < 0.005,
-        `durability: rebuilding the pot from its row conserves too (${nodeTotal().toFixed(4)} vs `
-        + `${baseline.toFixed(4)}) — every credit taken in memory reached a row`);
+    assert(nodeTotal() === baseline,
+        `durability: rebuilding the pot from its row conserves too (${nodeTotal()} vs `
+        + `${baseline} hundredths) — every credit taken in memory reached a row`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -53,8 +53,9 @@ const KEY = '7'.repeat(64);
 
 /** An active project short of its goal, whose deadline's instant was `before` ms before now. */
 const project = (before: number) => ({
-    publicKey: KEY, name: 'Village Well', callsign: 'Village Well', purpose: 'Clean water', balance: 5, creditLine: 0, liveOffers: 0,
-    goalAmount: 20, currentAmount: 5, lifecycle: 'bounded', status: 'active', paused: false, keepers: [],
+    // Every figure whole hundredths of a Bean, as the node's /api/treasuries row sends them: 5 raised of a goal of 20.
+    publicKey: KEY, name: 'Village Well', callsign: 'Village Well', purpose: 'Clean water', balance_c: 500, creditLine_c: 0, liveOffers: 0,
+    goalAmount_c: 2000, currentAmount_c: 500, lifecycle: 'bounded', status: 'active', paused: false, keepers: [],
     deadlineAt: new Date(NOW - before).toISOString(),
 });
 const CHAT = {

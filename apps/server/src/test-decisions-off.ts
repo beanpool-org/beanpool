@@ -28,10 +28,10 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 process.env.NODE_PROFILE = 'global';
-process.env.ADMIN_PASSWORD = 'Decisions-Off-Admin-61!';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -58,7 +58,8 @@ async function call(method: 'GET' | 'POST', path: string, body: unknown, id: Id 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -76,9 +77,7 @@ const show = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify
 async function main() {
     const { db, initSchema } = await import('./db/db.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     initSchema();
-    initAdminPassword();
     const se = await import('./state-engine.js');
     await se.initStateEngine();
     const { initTls } = await import('./services/tls.js');
@@ -103,11 +102,11 @@ async function main() {
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code, earned_credit, last_active_at)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code, earned_credit_c, last_active_at)
                     VALUES (?, ?, 'active', ?, ?, 'seed', 'seed', 1, ?)`)
             .run(pk, callsign, joined, joined, new Date().toISOString());
         setMemberPhoto(db, pk, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return { pk, privateKey, callsign };
     };
     const olga = member('Olga'), alice = member('Alice'), bob = member('Bob'), carol = member('Carol'), dave = member('Dave');
@@ -123,7 +122,7 @@ async function main() {
     // which the wash rule counts for nothing (engine trust.ts qualifiedTradeValue).
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key IN (?, ?)').run(new Date(Date.now() - 60 * DAY).toISOString(), bob.pk, carol.pk);
     const tradedAt = new Date().toISOString();
-    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), bob.pk, carol.pk, tradedAt, tradedAt);
 
     // A Decision already on this node, as if opened before the switch went off.

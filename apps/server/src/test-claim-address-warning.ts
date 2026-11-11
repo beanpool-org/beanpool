@@ -80,7 +80,7 @@ async function claim(args: string[], answers: string[] | null = null, dir = node
     };
     const code = await runClaim(args, io, dir);
     const at = (pred: (l: string) => boolean) => lines.findIndex(pred);
-    // The QR: the first line of terminal blocks after the code.
+    // The QR: the first line of terminal blocks, which now comes before the code.
     const qr = at(l => /[▀▄█]/.test(l));
     const warnings = lines.filter(l => l.startsWith('WARNING:'));
     return { code, lines, text: lines.join('\n'), qr, warnings, at };

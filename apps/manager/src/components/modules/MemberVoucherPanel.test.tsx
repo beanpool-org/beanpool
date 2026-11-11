@@ -12,35 +12,35 @@ const FIXTURE_ENTRY_CARD: VoucherCard = {
     memberPubkey: ALICE_PK,
     callsign: 'alice',
     source: 'entry',
-    left: 550,
-    level: 1000,
+    left: 55000,
+    level: 100000,
     held: 100,
     vouched: 350,
     history: [
         {
             kind: 'grant',
-            amount: 1000,
+            amount_c: 100000,
             actor: 'node:claim',
             actorCallsign: null,
             at: '2026-11-05T12:00:00.000Z',
         },
         {
             kind: 'top_up',
-            amount: 500,
+            amount_c: 50000,
             actor: 'm'.repeat(64),
             actorCallsign: 'marty',
             at: '2026-11-05T13:00:00.000Z',
         },
         {
             kind: 'lower',
-            amount: -200,
+            amount_c: -20000,
             actor: 'm'.repeat(64),
             actorCallsign: 'marty',
             at: '2026-11-05T14:00:00.000Z',
         },
         {
             kind: 'hold',
-            amount: -100,
+            amount_c: -10000,
             actor: ALICE_PK,
             actorCallsign: 'alice',
             at: '2026-11-05T15:00:00.000Z',
@@ -48,7 +48,7 @@ const FIXTURE_ENTRY_CARD: VoucherCard = {
         },
         {
             kind: 'hold',
-            amount: -50,
+            amount_c: -5000,
             actor: ALICE_PK,
             actorCallsign: 'alice',
             at: '2026-11-05T16:00:00.000Z',
@@ -57,7 +57,7 @@ const FIXTURE_ENTRY_CARD: VoucherCard = {
         },
         {
             kind: 'return',
-            amount: 100,
+            amount_c: 10000,
             actor: 'node',
             actorCallsign: null,
             at: '2026-11-05T17:00:00.000Z',
@@ -66,7 +66,7 @@ const FIXTURE_ENTRY_CARD: VoucherCard = {
         },
         {
             kind: 'return',
-            amount: 100,
+            amount_c: 10000,
             actor: 'node',
             actorCallsign: null,
             at: '2026-11-05T17:30:00.000Z',
@@ -75,7 +75,7 @@ const FIXTURE_ENTRY_CARD: VoucherCard = {
         },
         {
             kind: 'return',
-            amount: 100,
+            amount_c: 10000,
             actor: 'node',
             actorCallsign: null,
             at: '2026-11-05T17:45:00.000Z',
@@ -84,21 +84,21 @@ const FIXTURE_ENTRY_CARD: VoucherCard = {
         },
         {
             kind: 'grant',
-            amount: 1000,
+            amount_c: 100000,
             actor: 'migration:vouchers',
             actorCallsign: null,
             at: '2026-11-05T18:00:00.000Z',
         },
         {
             kind: 'stop',
-            amount: 0,
+            amount_c: 0,
             actor: 'server:recover',
             actorCallsign: null,
             at: '2026-11-05T19:00:00.000Z',
         },
         {
             kind: 'top_up',
-            amount: 250,
+            amount_c: 25000,
             actor: BOB_HEX,
             actorCallsign: null,
             at: '2026-11-05T20:00:00.000Z',
@@ -166,6 +166,21 @@ describe('MemberVoucherPanel', () => {
 
         expect(screen.getByTestId('voucher-panel-header').textContent).toBe(
             'Voucher · 550 of 1,000 left · by role'
+        );
+    });
+
+    it('an admin an owner made a voucher reads "made by @owner", never "by role" (review, 10 Nov; I5)', () => {
+        render(
+            <MemberVoucherPanel
+                nodeUrl={NODE}
+                pubkey={ALICE_PK}
+                displayName="Alice"
+                initialCard={{ ...FIXTURE_ROLE_CARD, noLimit: false, madeBy: 'b'.repeat(64), madeByCallsign: 'owen' }}
+            />
+        );
+
+        expect(screen.getByTestId('voucher-panel-header').textContent).toBe(
+            'Voucher · 550 of 1,000 left · made by @owen'
         );
     });
 

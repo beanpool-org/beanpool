@@ -19,10 +19,11 @@
  *  5. The alert channel changed, then removed: the last message goes to the OLD channel each time; a new or cleared token
  *     for the same channel sends the old token's holder one line saying so, not "the last alert sent here".
  *  6. sec.members: an admin's removals are one counted line ("2 members were removed in the last day"), an offboard too;
- *     a repeat, a non-member or an owner's or the password's removal is not counted; a branch pruned by an owner is; one
- *     admin removing 30 moderators is one line that says 30, and 60 with the channel down leave the admin's earlier rename in
- *     place; removed role holders never use the admin's pushes (a grant after them is pushed, a rename and a callsign
- *     after one are both told); a count's day opens at its first removal, and a later day's line never replaces it.
+ *     a repeat, a non-member or an owner's removal (a prune or an offboard) is not counted; a branch pruned by an owner
+ *     is; one admin removing 30 moderators is one line that says 30, and 60 with the channel down leave the admin's
+ *     earlier rename in place; removed role holders never use the admin's pushes (a grant after them is pushed, a rename
+ *     and a callsign after one are both told); a count's day opens at its first removal, and a later day's line never
+ *     replaces it.
  *  7. sec.settings: an admin renaming the community, its callsign or its contacts is told, low; the owner's own is not.
  *  8. No alert, in the book or on the channel, says a member's callsign or key, the address, the new callsign or a contact.
  *  9. The community's name in a title: a hostile callsign standing in for it is cleaned (#2033 N6).
@@ -138,12 +139,11 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { noteNameStandingForTests } = await import('./services/registrar-name-watch.js');
     const { recordRegistrarAnswer } = await import('./engine/registrar-names.js');
     const { noteSecurityEvent } = await import('./services/security-signal.js');
@@ -156,10 +156,8 @@ async function main(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const PW = 'Owner-Alerts-Pw-5521!';
-    const { hash, salt } = hashPassword(PW);
     const COMMUNITY = 'Riverbend Commons';
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: COMMUNITY, callsign: 'RIVBND' } as any);
+    updateLocalConfig({ communityName: COMMUNITY, callsign: 'RIVBND' } as any);
 
     const pubkey = () => crypto.randomBytes(32).toString('hex');
     const owner = pubkey();
@@ -173,7 +171,7 @@ async function main(): Promise<void> {
     const join = (pk: string, callsign: string, by: string) => {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, callsign, new Date().toISOString(), by, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     };
     join(admin, CALLSIGNS[1], owner);
     join(plainA, CALLSIGNS[2], owner);
@@ -294,17 +292,39 @@ async function main(): Promise<void> {
 
     // ── 2. sec.name widened ────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 2. sec.address —');
-    const notices = () => (db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>);
+    const rowsOf = (pk: string) => db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' AND recipient = ? ORDER BY rowid`)
+        .all(pk) as Array<{ title: string; body: string }>;
+    /**
+     * What the members were told, one row per telling. Every member told keeps their own copy, a phone or not (the bell,
+     * web notifications W0, DESIGN-web-notifications-fable.md §2.1 a), so the table holds one row per member per telling:
+     * the tellings are the owner's rows (their phone is the one buzzed, the only rows before the bell), and every other
+     * member told must hold exactly the same. One who doesn't (told twice, told what the owner wasn't, told without the
+     * owner) answers the whole table and one row more, saying so, which fails every count here (the row more: one member
+     * told once without the owner is a table of one). test-rename-main-name reads its tellings so.
+     */
+    const notices = () => {
+        const told = (db.prepare(`SELECT DISTINCT recipient FROM push_notices WHERE kind = 'community.notice'`).all() as Array<{ recipient: string }>)
+            .map((r) => r.recipient);
+        const owners = rowsOf(owner);
+        const alike = told.every((pk) => JSON.stringify(rowsOf(pk)) === JSON.stringify(owners));
+        if (alike) return owners;
+        const all = db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>;
+        return [...all, { title: 'the members were not told alike', body: '' }];
+    };
     let n0 = notices().length;
+    const plainA0 = rowsOf(plainA).length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'tunnel', hostname: null, status: 'live' } } as any);
     const claimed = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
     let n = lines('sec.address');
     const told2a = notices().slice(n0);
+    const toldPlainA = rowsOf(plainA).slice(plainA0);
     assert(claimed.status === 200 && n.length === 1 && /address was changed, by an owner/.test(n[0].detail) && (n[0].high === true || n[0].priority >= 4),
         `2a. a new name claimed over the live one: sec.address told once, high, "changed, by an owner" (${claimed.status} ${JSON.stringify(claimed.json?.error ?? '')} ${JSON.stringify(n.map((e) => e.detail))})`);
     assert(lines('sec.name').length === 0, `2a. not on sec.name, the hijack's row (${lines('sec.name').length})`);
     assert(told2a.length === 1 && told2a[0].body === "This community's address changed. Open the app to follow it.",
         `2c. the members get the critical announcement "This community's address changed. Open the app to follow it." (${JSON.stringify(told2a)})`);
+    assert(toldPlainA.length === 1 && toldPlainA[0].body === "This community's address changed. Open the app to follow it.",
+        `2c. a member with no phone has it on their bell too, once (${JSON.stringify(toldPlainA)})`);
     fresh();
     // A live direct name replaced keeps working (rename S1, services/address-notice.ts): the softer words, and the owners
     // told as before. test-rename-main-name has the rest.
@@ -520,20 +540,17 @@ async function main(): Promise<void> {
     assert(off1.status === 200 && m.length === 1 && m[0].detail === 'A member was removed in the last day, by an admin.',
         `6d. an admin's offboard counted, its retry not (${off1.status} ${off2.status} ${JSON.stringify(off1.json?.error ?? '')} ${JSON.stringify(m.map((e) => e.detail))})`);
     fresh();
-    // An owner's removals are not "by an admin" (#2033 B3): an owner's key session and the admin password say nothing.
+    // An owner's removals are not "by an admin" (#2033 B3): an owner's key session says nothing, a prune or an offboard.
     const plainD = pubkey();
     const plainE = pubkey();
     join(plainD, 'Plainmemt', owner);
     join(plainE, 'Plainmemu', owner);
     const ownPrune = await call(`/api/local/admin/users/${plainD}/prune`, asOwner);
-    // The password opens Settings only with 2FA on: on for this one.
-    turnOn2faForTests(PW);
-    const pwOff = await call(`/api/local/admin/members/${plainE}/offboard`, { 'x-admin-session': createPasswordSession().sessionId }, { resolution: 'prune_zero_balance' });
-    updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
-    const pwPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(plainE) as any)?.status;
+    const ownOff = await call(`/api/local/admin/members/${plainE}/offboard`, asOwner, { resolution: 'prune_zero_balance' });
+    const offPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(plainE) as any)?.status;
     assert(ownPrune.status === 200 && lines('sec.members').length === 0, `6e. an owner's prune: no "by an admin" line (${ownPrune.status} ${JSON.stringify(lines('sec.members').map((e) => e.detail))})`);
-    assert(pwOff.status === 200 && pwPruned === 'pruned' && lines('sec.members').length === 0,
-        `6f. the admin password's offboard: no "by an admin" line (${pwOff.status} ${JSON.stringify(pwOff.json?.error ?? '')} ${pwPruned} ${JSON.stringify(lines('sec.members').map((e) => e.detail))})`);
+    assert(ownOff.status === 200 && offPruned === 'pruned' && lines('sec.members').length === 0,
+        `6f. an owner's offboard: no "by an admin" line (${ownOff.status} ${JSON.stringify(ownOff.json?.error ?? '')} ${offPruned} ${JSON.stringify(lines('sec.members').map((e) => e.detail))})`);
     fresh();
     const br = await call(`/api/local/admin/branches/${branchRoot}/prune`, asOwner);
     m = lines('sec.members');

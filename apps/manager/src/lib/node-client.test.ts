@@ -79,6 +79,9 @@ import {
     writeOffStrandedEscrow,
     StrandedEscrowWriteOffError,
     checkRecoveryCodeApi,
+    fetchBranchPruneFigures,
+    fetchKnownFloorMarks,
+    generateNodeInvite,
 } from './node-client';
 import { FreshProofRequiredError } from './fresh-proof';
 
@@ -292,11 +295,12 @@ describe('checkRecoveryCodeApi', () => {
 
 describe('stranded escrows helpers', () => {
     it('fetchStrandedEscrows queries /api/local/admin/stranded-escrows with cache no-store and returns data', async () => {
+        // As engine/escrow-write-off.ts listStrandedEscrows answers: whole hundredths, in `*_c` fields.
         const mockData = {
             success: true,
-            commonsBalance: 10,
+            commonsBalance_c: 1000,
             escrows: [],
-            commonsAfterAll: 10,
+            commonsAfterAll_c: 1000,
             eligibleCount: 0,
         };
         const fetchMock = vi.fn().mockResolvedValue({
@@ -329,11 +333,11 @@ describe('stranded escrows helpers', () => {
             success: true,
             escrowId: 'esc-123',
             tradeId: 'tr-456',
-            amount: 5,
+            amount_c: 500,
             transactionId: 'tx-789',
             memo: 'writeoff memo',
-            commonsBefore: 10,
-            commonsAfter: 5,
+            commonsBefore_c: 1000,
+            commonsAfter_c: 500,
         };
         const fetchMock = vi.fn().mockResolvedValue({
             ok: true,
@@ -362,8 +366,8 @@ describe('stranded escrows helpers', () => {
             json: async () => ({
                 error: 'Commons deficit must be confirmed',
                 code: 'deficit_unconfirmed',
-                commonsBalance: 2,
-                commonsAfter: -3,
+                commonsBalance_c: 200,
+                commonsAfter_c: -300,
             }),
         });
         vi.stubGlobal('fetch', fetchMock);
@@ -379,9 +383,50 @@ describe('stranded escrows helpers', () => {
         const writeOffErr = caught as StrandedEscrowWriteOffError;
         expect(writeOffErr.message).toBe('Commons deficit must be confirmed');
         expect(writeOffErr.code).toBe('deficit_unconfirmed');
-        expect(writeOffErr.commonsBalance).toBe(2);
-        expect(writeOffErr.commonsAfter).toBe(-3);
+        // The deficit refusal's figures, whole hundredths as the node sends them (escrow-write-off.ts deficit_unconfirmed).
+        expect(writeOffErr.commonsBalance_c).toBe(200);
+        expect(writeOffErr.commonsAfter_c).toBe(-300);
 
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('money reads in whole hundredths (DESIGN-atomic-beans)', () => {
+    it('fetchBranchPruneFigures reads badDebt_c / surplus_c / net_c, and refuses an answer in the old names or in floats', async () => {
+        const answer = (body: unknown) => vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
+        vi.stubGlobal('fetch', answer({ members: 3, badDebt_c: 30040, surplus_c: 1000, net_c: -29040 }));
+        await expect(fetchBranchPruneFigures('https://node.example', 'pk-root', 'pw')).resolves.toEqual({ members: 3, badDebt_c: 30040, surplus_c: 1000, net_c: -29040 });
+        vi.stubGlobal('fetch', answer({ members: 3, badDebt: 300.4, surplus: 10, net: -290.4 }));
+        await expect(fetchBranchPruneFigures('https://node.example', 'pk-root', 'pw')).rejects.toThrow("The node's answer has no figures for this branch");
+        vi.stubGlobal('fetch', answer({ members: 3, badDebt_c: 300.4, surplus_c: 10, net_c: -290.4 }));
+        await expect(fetchBranchPruneFigures('https://node.example', 'pk-root', 'pw')).rejects.toThrow("The node's answer has no figures for this branch");
+        vi.unstubAllGlobals();
+    });
+
+    it("fetchKnownFloorMarks reads each exception's amount_c (whole hundredths), and never the old amount", async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({
+            confirmation: true,
+            exceptions: [
+                { memberPubkey: 'pk-kim', amount_c: 29950, frozen: false },
+                { memberPubkey: 'pk-lee', amount_c: null, frozen: true },
+                { memberPubkey: 'pk-old', amount: 300, frozen: false },
+            ],
+        }) }));
+        await expect(fetchKnownFloorMarks('https://node.example', 'pw')).resolves.toEqual({
+            'pk-kim': { amount_c: 29950, frozen: false },
+            'pk-lee': { amount_c: null, frozen: true },
+            'pk-old': { amount_c: null, frozen: false },
+        });
+        vi.unstubAllGlobals();
+    });
+
+    it('generateNodeInvite sends a vouch only as whole hundredths', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true, code: 'INV-1', type: 'standard', vouchAmount: 2500 }) });
+        vi.stubGlobal('fetch', fetchMock);
+        await generateNodeInvite('https://node.example', 'pw', 'standard', undefined, 2500);
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ type: 'standard', vouchAmount: 2500 });
+        await generateNodeInvite('https://node.example', 'pw', 'standard', undefined, 25.5);
+        expect(JSON.parse(fetchMock.mock.calls[1][1].body)).not.toHaveProperty('vouchAmount');
         vi.unstubAllGlobals();
     });
 });
@@ -1296,7 +1341,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
 
         const res = await createNodeTreasury(
             'https://node.example.com',
-            { name: 'Reserve', avatar: 'sprout', creditLine: 1000 },
+            { name: 'Reserve', avatar: 'sprout', creditLine_c: 100050 },
             'adminpass',
             'tfa123'
         );
@@ -1306,10 +1351,11 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         expect(url).toContain('/api/local/admin/treasury');
         expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
         expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        // The credit line as the node takes it: `creditLine_c`, whole hundredths (routes/treasury.ts optionalHundredthsOf).
         expect(JSON.parse((init as any).body)).toEqual({
             name: 'Reserve',
             avatar: 'sprout',
-            creditLine: 1000,
+            creditLine_c: 100050,
             password: 'adminpass',
         });
     });
@@ -1319,10 +1365,10 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         await expect(createNodeTreasury('https://node.example.com', { name: '', avatar: '' }, 'pw')).rejects.toThrow('name and avatar are required');
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found', json: async () => ({ error: 'Not a treasury' }) });
-        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1, photos: [PHOTO] }, 'pw')).rejects.toThrow('Not a treasury');
+        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', price_c: 100, photos: [PHOTO] }, 'pw')).rejects.toThrow('Not a treasury');
 
         fetchMock.mockResolvedValueOnce({ ok: false, status: 502, statusText: 'Bad Gateway', json: async () => { throw new Error('not json'); } });
-        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', credits: 1, photos: [PHOTO] }, 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
+        await expect(seedTreasuryOffer('https://node.example.com', 'x', { title: 't', category: 'food', price_c: 100, photos: [PHOTO] }, 'pw')).rejects.toThrow('HTTP 502: Bad Gateway');
     });
 
     it('seedTreasuryOffer sends POST to seed an offer with 2FA session token', async () => {
@@ -1334,7 +1380,7 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         const res = await seedTreasuryOffer(
             'https://node.example.com',
             'treasury-pubkey-123',
-            { title: 'Farm Eggs', category: 'food', credits: 10, photos: [PHOTO], description: 'Fresh eggs', repeatable: true },
+            { title: 'Farm Eggs', category: 'food', price_c: 1025, photos: [PHOTO], description: 'Fresh eggs', repeatable: true },
             'adminpass',
             'tfa123'
         );
@@ -1344,10 +1390,11 @@ describe('node client login, treasury, snapshot, and replication helpers', () =>
         expect(url).toContain('/api/local/admin/treasury/treasury-pubkey-123/offer');
         expect(headersOf(init)['X-Admin-Password']).toBe('adminpass');
         expect(headersOf(init)['X-Admin-2FA-Session']).toBe('tfa123');
+        // The price as the node takes it: `price_c`, whole hundredths (the route refuses `credits`, routes/treasury.ts).
         expect(JSON.parse((init as any).body)).toEqual({
             title: 'Farm Eggs',
             category: 'food',
-            credits: 10,
+            price_c: 1025,
             photos: [PHOTO],
             description: 'Fresh eggs',
             repeatable: true,
@@ -1876,7 +1923,7 @@ describe('report normalisation keeps enterprise reports off the post line', () =
 
 describe('app addresses (Settings → Network)', () => {
     it("sends the host the node is reached at, so the node can say when the directory lists it (4114569450)", async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 } }) });
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ addresses: [], unconfirmed: [] }) });
         vi.stubGlobal('fetch', fetchMock);
         await getAppAddresses('https://Community.Example.org:8443', 'pw');
         await confirmAppAddress('https://Community.Example.org:8443', 'bp.example.net', 'pw');

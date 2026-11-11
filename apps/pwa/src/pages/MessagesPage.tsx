@@ -19,13 +19,15 @@ import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
+import { AboutCard, AboutChipBar } from '../components/ChatAbout';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
-import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
+import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -60,10 +62,12 @@ import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute
 import { EventChat } from '../components/EventChat';
 import { notifyConversationRead } from '../lib/conversation-read';
 import { FoldedChatText } from '../components/FoldedChatText';
+import { CopyMessageButton } from '../components/CopyMessageButton';
+import { copyableChatText } from '../lib/copy-chat-text';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { ListPhoto } from '../components/ListPhoto';
-import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -131,11 +135,12 @@ function conversationDate(iso: string): string {
 }
 
 /**
- * A trade line's amount for tn(): a number, written the language's way; anything else the node sent, exactly as given
- * (`{ n }` in the values wins over the count).
+ * A trade line's amount for tn(), from the node's whole hundredths (the system line's `amount_c`, engine/escrow.ts): the count
+ * in Beans picks the form, `{ n }` is the figure as every figure is written (formatHundredths). Null for no amount, 0 or
+ * anything that is not whole hundredths: the line then says it without a figure.
  */
-function tradeAmount(amount: unknown): { n: number; values?: { n: string } } {
-    return typeof amount === 'number' ? { n: amount } : { n: Number(amount), values: { n: String(amount) } };
+function tradeAmount(amount_c: unknown): { n: number; values: { n: string } } | null {
+    return isHundredths(amount_c) && amount_c > 0 ? { n: amount_c / 100, values: { n: formatHundredths(amount_c) } } : null;
 }
 
 interface Props {
@@ -155,8 +160,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
         if (msg.metadata) metaObj = JSON.parse(msg.metadata);
     } catch {}
 
-    const amount = metaObj?.amount ?? '';
-    const sum = tradeAmount(amount);
+    const sum = tradeAmount(metaObj?.amount_c);
 
     const getSellerPublicKey = (postId?: string) => {
         if (!postId) return undefined;
@@ -167,7 +171,7 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     };
 
     if (msg.systemType === 'ESCROW_FUNDED') {
-        return amount ? tn(sum.n, '{n} Beans held in trust.', '{n} Beans held in trust.', sum.values) : t('Beans held in trust.');
+        return sum ? tn(sum.n, '{n} Beans held in trust.', '{n} Beans held in trust.', sum.values) : t('Beans held in trust.');
     }
 
     if (msg.systemType === 'ESCROW_RELEASED') {
@@ -176,9 +180,9 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
         
         const isSeller = sellerPubkey === myPubkey;
         if (isSeller) {
-            return amount ? tn(sum.n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', sum.values) : t('Payment of Beans released to you.');
+            return sum ? tn(sum.n, 'Payment of {n} Beans released to you.', 'Payment of {n} Beans released to you.', sum.values) : t('Payment of Beans released to you.');
         } else {
-            return amount ? tn(sum.n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', sum.values) : t('Payment of Beans released to the provider.');
+            return sum ? tn(sum.n, 'Payment of {n} Beans released to the provider.', 'Payment of {n} Beans released to the provider.', sum.values) : t('Payment of Beans released to the provider.');
         }
     }
 
@@ -206,12 +210,12 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
 
 /**
  * Lazily fetch + decrypt an encrypted image attachment, then render it. The photo opens only as part of its message:
- * bound to the author and id the node shows the message under, and in the format its words opened in
- * (`bodyFormat`, from the thread check), so no other line's photo, and no old-format picture, can stand in for it.
- * Words that didn't open (`bodyFormat` null) leave the photo locked too.
+ * bound to the author and id the node shows the message under, and signed by that author (format 4), so no other line's
+ * photo, and no picture the other person sealed in the author's name, can stand in for it. Words that didn't open
+ * (`bodyFormat` null, from the thread check) leave the photo locked too.
  */
 function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, onOpen }:
-    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 2 | 3 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void }) {
+    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 4 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
@@ -221,7 +225,7 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
                 if (!bodyFormat) throw new Error('not verified');
                 const att = await getMessageAttachmentApi(messageId);
                 const dataUri = openDmLine({ ciphertext: att.data, nonce: att.nonce }, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex },
-                    { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }, [bodyFormat]).text;
+                    { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }).text;
                 if (active) setUri(dataUri);
             } catch { if (active) setFailed(true); }
         })();
@@ -570,7 +574,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     );
     // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
     // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
-    // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;
+    // name that isn't an encrypted line never either, nor one its named sender didn't sign; one the node moved or reordered, marked;
     // the admin page's message shown as the community admins'. Only the node's own notices are left out.
     const lineViews = useMemo(() => {
         if (!activeConv || !isDmThread) return null;
@@ -579,6 +583,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp,
         })), ctx ? { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex } : null, ctx?.conversationId ?? activeConv.id);
     }, [shownMessages, activeConv, identity, isDmThread]);
+    // The listing each line is about, opened once per load (core chat-about.ts) and not on every redraw, which the member's
+    // every keystroke is: a key derivation and a decrypt a card. Only a line whose words opened (checkDmThread gives a
+    // deleted line, one that did not open and one not from this pair no format), and never a deleted one, as the phone's
+    // getMessages and ChatBubble do.
+    const aboutOfLines = useMemo(() => {
+        const found = new Map<string, ChatAbout>();
+        if (!activeConv || !isDmThread || !lineViews) return found;
+        const ctx = dmKeyContext(activeConv, identity);
+        if (!ctx) return found;
+        const keys = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex };
+        for (const m of shownMessages) {
+            if (m.type === 'removed' || lineViews.get(m.id)?.format == null || !hasChatAbout(m.metadata)) continue;
+            const about = chatAboutOfLine(keys, { conversationId: ctx.conversationId, senderPubHex: m.authorPubkey, messageId: m.id, metadata: m.metadata });
+            if (about) found.set(m.id, about);
+        }
+        return found;
+    }, [shownMessages, lineViews, activeConv, identity, isDmThread]);
     const userTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -593,14 +614,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return activeConv.participants?.find(p => p !== identity.publicKey) || '';
     }, [activeConv, identity.publicKey]);
     // ⚡ Bolt: memoized pending transaction for active conversation to avoid O(T) array scan on render
+    // The Trust Hold banner's deal: Beans of mine held that core's one rule lets me release (dealMoves). Never a standing
+    // deal's row, whatever its status says: nothing of one is held (DESIGN-standing-deals-upfront-fable §0, §3).
     const activePendingTransaction = useMemo(() => {
         if (!activeConv) return null;
         return userTransactions.find(t =>
-            t.status === 'pending' &&
-            ((t.buyerPublicKey === identity.publicKey && (t.sellerPublicKey === activePeerPubkey || !activePeerPubkey)) ||
-             (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
+            !!dealMoves(t, identity.publicKey)?.release &&
+            ((t.sellerPublicKey === activePeerPubkey || !activePeerPubkey) || (!!t.postId && t.postId === activeConv.postId))
         ) || null;
     }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
+    const activePendingMoves = useMemo(
+        () => (activePendingTransaction ? dealMoves(activePendingTransaction, identity.publicKey) : null),
+        [activePendingTransaction, identity.publicKey],
+    );
     // The deals with the open DM's other person that ask something of the chat, newest first: Beans held (either side's), a
     // finished trade I haven't rated, or a request on my listing waiting for my answer (the list's Action Required counts it,
     // so the chat it opens must show it: DESIGN-deals-fable §2.2, every surface opens the deal). The phone's pinned strip
@@ -611,7 +637,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const me = identity.publicKey;
         return userTransactions
             .filter(tx => ((tx.buyerPublicKey === me && tx.sellerPublicKey === activePeerPubkey) || (tx.sellerPublicKey === me && tx.buyerPublicKey === activePeerPubkey))
-                && (tx.status === 'pending' || (tx.status === 'completed' && !iRated(tx, me)) || (tx.status === 'requested' && dealStep(tx, me).state === 'to-answer'))
+                && ((tx.status === 'pending' && !tx.standingId) || (tx.status === 'completed' && !iRated(tx, me) && dealStep(tx, me).state === 'done-to-review') || (tx.status === 'requested' && dealStep(tx, me).state === 'to-answer'))
                 && tx.id !== activePendingTransaction?.id)
             .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     }, [activeConv?.type, userTransactions, identity.publicKey, activePeerPubkey, activePendingTransaction?.id]);
@@ -781,8 +807,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     const [actionLoading, setActionLoading] = useState(false);
 
-    async function handleReleaseCredits(txId: string, amount: number) {
-        if (!confirm(tn(amount, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.'))) return;
+    /** `amount_c`: the deal's whole hundredths (tx.amount_c), asked about as every figure is written. */
+    async function handleReleaseCredits(txId: string, amount_c: number) {
+        if (!confirm(tn(amount_c / 100, 'Release {n} Beans to the provider? This action is final.', 'Release {n} Beans to the provider? This action is final.', { n: formatHundredths(amount_c) }))) return;
         setActionLoading(true);
         try {
             await completeMarketplaceTransaction(txId, identity.publicKey);
@@ -1308,8 +1335,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Nothing is sent when a DM can't be locked (caught by lineSender). A DM line is sealed to its message id and
             // to the line it was written after.
             const seal: DmLineSeal = { messageId: line.id, after: lineAfter(conv.id).dm, replyToId: line.replyToId };
-            const { ciphertext, nonce, lineSig } = await payloadFor(line.text, conv, seal);
-            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, lineMetadata(line.replyToId ?? undefined, lineSig), line.id);
+            const { ciphertext, nonce } = await payloadFor(line.text, conv, seal);
+            let metadata = lineMetadata(line.replyToId ?? undefined);
+            if (line.about) {
+                // The listing it is about is sealed as its own part of this line, to the same key and message id, and travels in
+                // the metadata as sealed bytes: the node reads nothing new (core chat-about.ts).
+                const ctx = dmKeyContext(conv, identity) ?? dmKeyContext(await freshConversation(conv), identity);
+                if (!ctx) throw new DmNotLockedError();
+                metadata = metadataWithAbout(metadata, sealChatAbout(line.about, ctx, { senderPubHex: identity.publicKey, messageId: line.id, replyToId: line.replyToId }));
+            }
+            await sendMessageApi(conv.id, identity.publicKey, ciphertext, nonce, undefined, undefined, metadata, line.id);
             ownLineTaken(conv.id);
             return 'taken';
         }
@@ -1345,9 +1380,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      */
     function lineSender(line: NewChatLine, conv: Conversation): SendChatLine {
         const mentionCandidates = (openGroup?.roster ?? []).map((r) => ({ pubkey: r.memberPubkey, callsign: r.callsign }));
-        // A refused line back in the composer: its words and what they answer, or a Send from there would seal them without
-        // it, past repair. Both or neither, so words written since never become a reply, nor these words someone else's. What
-        // it answers isn't loaded: the composer can't show it, so all of it stays on the line, whose Retry sends it whole.
+        // A refused line back in the composer: its words and what they answer, and the listing it was about, or a Send from there
+        // would seal them without it, past repair. All or none, so words written since never become a reply, nor these words
+        // someone else's. What it answers isn't loaded: the composer can't show it, so all of it stays on the line, whose Retry
+        // sends it whole.
         const wordsBack = () => {
             if (activeConvIdRef.current !== conv.id || !isPendingChatLine(line.id)) return;
             if (draftRef.current?.value || replyToRef.current) return;
@@ -1355,6 +1391,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (answered === undefined) return;
             setDraft(prev => prev || line.text);
             if (answered) setReplyToMessage(prev => prev ?? answered);
+            // The listing it was about, with the words: or a Send from the composer would seal them without it, past repair.
+            if (line.about && !chatAboutDrafts.get(conv.id)) chatAboutDrafts.set(conv.id, line.about);
         };
         return async () => {
             try {
@@ -1391,6 +1429,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setDraft('');
             if (replyToMessage?.id === line.replyToId) setReplyToMessage(null);
         }
+        // The line carries its listing under its own id: the same listing waiting as a chip is spent with it, not sent twice.
+        if (line.about && chatAboutDrafts.get(activeConv.id)?.postId === line.about.postId) chatAboutDrafts.drop(activeConv.id);
         setChatRefusal(null);
         retryChatLine(line.id, lineSender(line, activeConv));
     }
@@ -1510,7 +1550,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     after: lineViews?.get(wasEditing.id)?.after ?? null,
                     replyToId: dmReplyToOf(wasEditing.metadata) ?? null,
                 };
-                const { ciphertext, nonce, lineSig } = await payloadFor(draft.trim(), activeConv, line);
+                const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv, line);
 
                 const prevMessages = messages;
                 const nowIso = new Date().toISOString();
@@ -1522,7 +1562,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 } : m));
 
                 try {
-                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce, lineSig);
+                    await editMessageApi(wasEditing.id, identity.publicKey, ciphertext, nonce);
                     setEditingMessage(null);
                     setDraft('');
                     setChatRefusal(null);
@@ -1541,10 +1581,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
 
         // A new line shows at once, and the composer is the member's again; what becomes of the line is the line's to say.
-        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null };
+        // The listing the member came from (Message on a Need or an Offer) goes with this line, and the chip is spent: the line
+        // itself holds it from here, so a Retry carries it too.
+        const about = activeConv.type === 'dm' ? chatAboutDrafts.get(activeConv.id) : null;
+        const line: NewChatLine = { id: newDmMessageId(), conversationId: activeConv.id, owner: identity.publicKey, text: draft.trim(), replyToId: replyToMessage?.id ?? null, ...(about ? { about } : {}) };
         setDraft('');
         setReplyToMessage(null);
         setChatRefusal(null);
+        if (about) chatAboutDrafts.drop(activeConv.id);
         sendChatLine(line, lineSender(line, activeConv));
     }
 
@@ -1571,12 +1615,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Locked or not sent, the picture and its caption alike; one more try with the node's copy of the chat.
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
             await chatSettled(conv.id);
-            // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.
+            // Both sealed to the message's own id, each as its own part, so neither can stand in for the other, and each signed by
+            // me (format 4), so the other person can't put a picture in my name.
             const messageId = newDmMessageId();
             const replyToId = replyToMessage?.id ?? null;   // sealed into both parts, as the metadata below names it
             const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment', replyToId });       // big blob -> lazy attachment
             const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: lineAfter(conv.id).dm, replyToId });   // caption (often empty) -> message body
-            const metadata = lineMetadata(replyToMessage?.id, encCap.lineSig);
+            const metadata = lineMetadata(replyToMessage?.id);
             await sendMessageApi(activeConv.id, identity.publicKey, encCap.ciphertext, encCap.nonce, 'image',
                 { data: encImg.ciphertext, nonce: encImg.nonce, mime: 'image/jpeg' }, metadata, messageId);
             ownLineTaken(activeConv.id);
@@ -1755,8 +1800,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     /**
      * The quote of the message a reply answers, from that message as the thread judged it (core dmQuoteFrom): its words
      * only if they opened, its named author only if the line is theirs, with its mark. In a DM the node can rewrite the
-     * row a verified reply answers while keeping its id (as a notice, the admin page's message, or another old-format
-     * line): the quote then says what the row is, never "You" or the other person's name over words it can't confirm.
+     * row a verified reply answers while keeping its id (as a notice, the admin page's message, or a line its named sender
+     * didn't sign): the quote then says what the row is, never "You" or the other person's name over words it can't confirm.
      */
     function quoteOf(parent: ApiMessage | undefined): { author: string; text: string; note: string | null; named: boolean } {
         if (!parent) return { author: t('Someone'), text: t('Message not found'), note: null, named: false };
@@ -2333,7 +2378,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             showsBeans={beansOn}
                             busy={actionLoading}
                             onOpen={tx => { if (tx.postId) onNavigate?.('marketplace', tx.postId, tx.id); }}
-                            onRelease={tx => handleReleaseCredits(tx.id, tx.credits)}
+                            onRelease={tx => handleReleaseCredits(tx.id, tx.amount_c)}
                             onCancel={tx => handleCancelCredits(tx.id)}
                             onReview={tx => onNavigate?.('marketplace-review', tx.id)}
                         />
@@ -2359,8 +2404,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     {(() => {
                         const pendingTx = activePendingTransaction;
 
-                        if (!pendingTx) return null;
-                        const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
+                        if (!pendingTx || !activePendingMoves) return null;
+                        // Release and Cancel only as core's dealMoves offers them (never on a standing deal's row).
+                        const isBuyer = activePendingMoves.release;
 
                         return (
                             <div style={{
@@ -2375,7 +2421,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             }}>
                                 <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
                                     <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
-                                        {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
+                                        {tn(pendingTx.amount_c / 100, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans', { n: formatHundredths(pendingTx.amount_c) })}
                                     </div>
                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                                         {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
@@ -2384,7 +2430,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 {isBuyer ? (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
                                         <button
-                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
+                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.amount_c)}
                                             disabled={actionLoading}
                                             style={{
                                                 background: 'var(--bp-commit-fill)',
@@ -2399,7 +2445,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             {actionLoading ? '…' : t('✅ Release Credits')}
                                         </button>
-                                        <button
+                                        {activePendingMoves.cancelHold && <button
                                             onClick={() => handleCancelCredits(pendingTx.id)}
                                             disabled={actionLoading}
                                             style={{
@@ -2414,7 +2460,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             }}
                                         >
                                             {t('Cancel')}
-                                        </button>
+                                        </button>}
                                     </div>
                                 ) : (
                                     <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
@@ -2549,6 +2595,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             if (msg.systemType === 'ESCROW_FUNDED') icon = '🔐';
                             if (msg.systemType === 'ESCROW_RELEASED') icon = '✅';
                             if (msg.systemType === 'ESCROW_CANCELLED') icon = '🚫';
+                            // A standing deal's record line: the node's own sentence (due, covered, ended, stopped).
+                            if (msg.systemType === 'STANDING_DEAL') icon = '🔁';
 
                             return (
                                 <div key={msg.id} style={{
@@ -2583,7 +2631,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         const hasRated = relatedTx ? iRated(relatedTx, identity.publicKey) : false;
                                         // A trade this page doesn't hold (older than the node's page of trades) can't be rated from
                                         // here: the line opens its post, as the funded line's View Post does (review #1980 N2).
-                                        const canRate = !!relatedTx && !hasRated;
+                                        // A standing deal is reviewed once, on its first period: a later period's line opens
+                                        // the post (core's dealStep, design §3).
+                                        const canRate = !!relatedTx && !hasRated && dealStep(relatedTx, identity.publicKey).state === 'done-to-review';
                                         return (
                                             <button
                                                 onClick={() => canRate
@@ -2597,7 +2647,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}
                                             >
-                                                {!relatedTx
+                                                {!relatedTx || (!hasRated && !canRate)
                                                     ? <><span aria-hidden="true">🏷️ </span><span>{t('View Post')}</span></>
                                                     : hasRated ? t('✓ Rating Submitted') : <><span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span></>}
                                             </button>
@@ -2651,6 +2701,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const isTopMessage = index < 2;
                         // A long message folds with "…more" (FoldedChatText); never a removed line, nor one being edited.
                         const foldable = !isTombstone && editingMessage?.id !== msg.id;
+                        // What Copy puts on the clipboard: the words as the bubble shows them. Nothing for a deleted or removed
+                        // line, a line that did not open, or a photo with no caption.
+                        const copyWords = copyableChatText(isTombstone ? null : decryptMessage(msg), { removed: isTombstone, unreadable: UNREADABLE_BODIES });
+                        // Links in the words open, as on the phone (chat-links.ts): never in a line that did not open or was
+                        // deleted (no words to copy), nor in a chat that is still a request (the phone's onPressUrl is left out
+                        // there too: a stranger's first words are not a way out of the app).
+                        const linkable = copyWords !== null && !inRequest;
 
                         return (
                             <div
@@ -2721,7 +2778,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         ))}
                                     </div>
                                 )}
-                                <div style={{
+                                {/* The words are selectable with the mouse and copyable by hand; only the time and the chips are not
+                                    (userSelect below). A member's own bubble is the accent colour, so its selection is drawn in a darker
+                                    shade of it (index.css .bp-bubble-mine): the global accent one vanished on it. */}
+                                <div className={isMe ? 'bp-bubble-mine' : undefined} data-testid="chat-bubble" style={{
                                     background: isMe ? 'var(--accent)' : 'var(--bg-card)',
                                     color: isMe ? '#fff' : 'var(--text-primary)',
                                     borderRadius: isMe
@@ -2732,7 +2792,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     lineHeight: 1.3,
                                     border: isMe ? 'none' : '1px solid var(--border-primary)',
                                     wordBreak: 'break-word',
+                                    userSelect: 'text',
+                                    WebkitUserSelect: 'text',
                                 }}>
+                                    {/* The listing this line is about, opened from its own sealed part (aboutOfLines): a card at the top of the bubble it
+                                        belongs to, never a header over the chat. Never on a deleted line. */}
+                                    {!isTombstone && aboutOfLines.get(msg.id) && (
+                                        <AboutCard about={aboutOfLines.get(msg.id)!} tone={isMe ? 'mine' : 'other'} onOpen={(postId) => onNavigate?.('marketplace', postId)} />
+                                    )}
                                     {metaObj && metaObj.replyToId && replyQuote(metaObj.replyToId, isMe)}
                                     <div dir="auto" style={{ display: 'inline', whiteSpace: 'pre-wrap' }}>
                                         {msg.type === 'image' ? (() => {
@@ -2752,7 +2819,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         />
                                                         {groupLine.text && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                <FoldedChatText text={groupLine.text} enabled={foldable} display="block" mine={isMe} />
+                                                                <FoldedChatText text={groupLine.text} enabled={foldable} display="block" mine={isMe} links={linkable} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2774,7 +2841,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         <span style={{ fontStyle: 'italic', opacity: 0.8 }}><span aria-hidden="true">🖼️ </span>{closedPhotoWords()}</span>
                                                         {caption && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
+                                                                <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} links={linkable} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2794,12 +2861,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                            <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
+                                                            <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} links={linkable} />
                                                         </div>
                                                     )}
                                                 </>
                                             );
-                                        })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} />}
+                                        })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} links={linkable} />}
                                     </div>
                                     {groupLine?.details && (
                                         <div data-testid="group-line-details" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
@@ -2807,7 +2874,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         </div>
                                     )}
                                     {(() => {
-                                        // A line the node moved or reordered, or an old-format line (checkDmThread).
+                                        // A line the node moved or reordered (checkDmThread).
                                         const note = chatLineWords(dmLineMarkText(lineView?.mark));
                                         return note ? (
                                             <div data-testid="dm-line-note" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
@@ -2919,6 +2986,28 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </button>
                                         )}
                                         </>}
+                                        {/* Open to a chat that is still a request too: copying sends nothing to anyone. */}
+                                        {copyWords !== null && (
+                                            <CopyMessageButton
+                                                text={copyWords}
+                                                style={{
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    font: 'inherit',
+                                                    fontSize: '0.75rem',
+                                                    lineHeight: 1,
+                                                    padding: '4px 6px',
+                                                    minHeight: '24px',
+                                                    cursor: 'pointer',
+                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    fontWeight: 600,
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    textDecoration: 'underline',
+                                                    textUnderlineOffset: '2px',
+                                                }}
+                                            />
+                                        )}
                                         {canDelete && (
                                             <button
                                                 type="button"
@@ -3096,7 +3185,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 className="max-w-[85%] md:max-w-[70%]"
                                 style={{ alignSelf: 'flex-end', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}
                             >
-                                <div style={{
+                                {/* A line still going is the accent bubble with white words, as a sent one is, so it takes the same class: the
+                                    selection and a link's focus ring are drawn for it (index.css .bp-bubble-mine). A failed one is the danger chip. */}
+                                <div className={failed ? undefined : 'bp-bubble-mine'} style={{
                                     // A line that hasn't gone is never drawn as one that has: on a failed one, the danger chip's own pair.
                                     background: failed ? 'var(--bp-chip-danger-tint)' : 'var(--accent)',
                                     color: failed ? 'var(--bp-chip-danger-ink)' : '#fff',
@@ -3107,9 +3198,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     lineHeight: 1.3,
                                     wordBreak: 'break-word',
                                 }}>
+                                    {line.about && <AboutCard about={line.about} tone={failed ? 'failed' : 'mine'} onOpen={(postId) => onNavigate?.('marketplace', postId)} />}
                                     {line.replyToId && (failed ? replyQuote(line.replyToId, false, 'var(--bp-chip-danger-ink)') : replyQuote(line.replyToId, true))}
                                     <div dir="auto" style={{ whiteSpace: 'pre-wrap' }}>
-                                        <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} />
+                                        <FoldedChatText text={line.text} mine={!failed} ink={failed ? 'var(--bp-chip-danger-ink)' : undefined} links={!inRequest} />
                                     </div>
                                     {failed && (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: '4px 8px', marginTop: '4px' }}>
@@ -3178,6 +3270,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         </button>
                     </div>
                 )}
+
+                {/* The listing this message is about (Message on a Need or an Offer): stays until sent or dropped. */}
+                {activeConv?.type === 'dm' && !editingMessage && <AboutChipBar conversationId={activeConv.id} />}
 
                 {/* Reply Preview */}
                 {replyToMessage && !editingMessage && (

@@ -13,10 +13,7 @@
  *
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
-import {
-    SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, formatNumber, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word,
-    type ShopCategory, type TierName, type WordKey,
-} from '@beanpool/core';
+import { SHOP_FEATURED_MAX, TIER_LEVELS, formatCount, formatDate, freePriceWords, isShopCategory, normalizeCategory, t, tierIndexForName, tn, word, type ShopCategory, type TierName, type WordKey, formatHundredths } from '@beanpool/core';
 import { getMarketplacePosts, signedFetch } from './api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
 import { readShop, type MyShop } from './shop';
@@ -29,7 +26,8 @@ export interface ShopfrontListing {
     type: 'offer' | 'need';
     title: string;
     category: string | null;
-    credits: number;
+    /** The price, whole hundredths of a Bean. */
+    price_c: number;
     /** 'fixed' for a total, else by the hour, day, week or month. */
     priceType: string;
     status: string;
@@ -60,7 +58,7 @@ export function readShopfrontListing(raw: unknown): ShopfrontListing | null {
         type: p.type,
         title: typeof p.title === 'string' ? p.title : '',
         category: text(p.category),
-        credits: typeof p.credits === 'number' && Number.isFinite(p.credits) ? p.credits : 0,
+        price_c: typeof p.price_c === 'number' && Number.isSafeInteger(p.price_c) ? p.price_c : 0,
         priceType: typeof p.priceType === 'string' ? p.priceType : 'fixed',
         status: typeof p.status === 'string' ? p.status : 'active',
         lendable: p.lendable === true,
@@ -128,12 +126,14 @@ export function shopSectionsOf(listings: readonly ShopfrontListing[]): ShopSecti
 /** Its price in words, or null where the community shows no Beans. */
 export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): string | null {
     if (!showsBeans) return null;
-    const amount = formatNumber(l.credits);
+    // Priced at 0 it is Free whatever its unit (core listing-price.ts): "Free", never "0 🫘 an hour".
+    const free = freePriceWords(l.price_c, l.type);
+    if (free) return free;
+    const amount = formatHundredths(l.price_c);
     if (l.priceType === 'hourly') return t('{amount} 🫘 an hour', { amount });
     if (l.priceType === 'daily') return t('{amount} 🫘 a day', { amount });
     if (l.priceType === 'weekly') return t('{amount} 🫘 a week', { amount });
     if (l.priceType === 'monthly') return t('{amount} 🫘 a month', { amount });
-    if (l.credits === 0) return t('Free', undefined, 'a listing with no price');
     return t('{amount} 🫘', { amount });
 }
 
@@ -166,7 +166,7 @@ export interface ShopfrontKeeper {
     tier: TierName | null;
     rating: { average: number; count: number } | null;
     trades: number | null;
-    /** What they back it with, in Beans (0 when the node says none). */
+    /** What they back it with, whole hundredths of a Bean (the node's backing_c; 0 when the node says none). */
     backing: number;
 }
 
@@ -197,7 +197,7 @@ export function readKeepers(raw: unknown): ShopfrontKeeper[] {
             tier: tierIndexForName(k.tier as string) >= 0 ? k.tier as TierName : null,
             rating: rating && typeof rating.average === 'number' && typeof rating.count === 'number' ? { average: rating.average, count: rating.count } : null,
             trades: typeof k.trades === 'number' && Number.isFinite(k.trades) ? k.trades : null,
-            backing: Number(k.backing) > 0 ? Number(k.backing) : 0,
+            backing: typeof k.backing_c === 'number' && Number.isSafeInteger(k.backing_c) && k.backing_c > 0 ? k.backing_c : 0,
         });
     }
     return rows.sort((a, b) => Number(b.isLead) - Number(a.isLead));
@@ -272,8 +272,9 @@ export function categorySinceLine(category: ShopCategory | null, since: string |
 }
 
 /** The money in one line (round 3 §0 row 9): its balance and its credit line. */
-export function moneyLine(balance: number, creditLine: number): string {
-    return t('{balance} 🫘 · credit line {credit} 🫘', { balance: formatNumber(balance), credit: formatNumber(creditLine) });
+export function moneyLine(balance_c: number, creditLine_c: number): string {
+    // Whole hundredths each (the detail's balance_c and creditLine_c), written as every figure is.
+    return t('{balance} 🫘 · credit line {credit} 🫘', { balance: formatHundredths(balance_c), credit: formatHundredths(creditLine_c) });
 }
 
 /** Whether an enterprise's detail is from a node with the shopfront (E2: it says `about` and `since`). */

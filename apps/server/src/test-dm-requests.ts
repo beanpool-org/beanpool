@@ -66,7 +66,6 @@ const LOCAL_RUN = !!process.env.DM_REQUESTS_LOCAL_NODE;
 if (LOCAL_RUN) delete process.env.NODE_PROFILE; else process.env.NODE_PROFILE = 'global';
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'DmRequestsPass123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -81,7 +80,6 @@ import {
     ensureTransactionConversation, dispatchPushNotification, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -93,6 +91,7 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { useCatalogsForTests } from './member-words.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -142,7 +141,7 @@ function member(name: string, opts: { words?: boolean } = {}): Id {
                 VALUES (?, ?, ?, ?, 'TEST', 'active', 0)`)
         .run(id.pk, name, iso(Date.now() - 30 * DAY), owner.pk);
     setMemberPhoto(db, id.pk, `https://example.org/${name}.jpg`);
-    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     // A member who came in by the 12-words door (engine/probation.ts WORDS_PROBATION), joined just now.
     if (opts.words) {
         db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(iso(Date.now()), id.pk);
@@ -161,7 +160,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -178,8 +178,8 @@ type Sock = { ws: WebSocket; events: any[] };
 function socket(id: Id): Promise<Sock> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
-    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.priv, ts, nonce);
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const s: Sock = { ws, events: [] };
@@ -252,7 +252,6 @@ async function senderSees(sender: Id, conv: string, firstLine: string, receiver:
 
 async function main(): Promise<void> {
     console.log(`\n=== Message requests (${LOCAL_RUN ? 'local' : 'global'} profile) ===\n`);
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -716,7 +715,7 @@ async function globalRun(): Promise<void> {
     yulSock.ws.close();
     // A trade between Ann and Sid opening accepts it for both, as a trade accepts any request: it is a chat of hers.
     const sidPost = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'general', 'Eggs', 'A dozen', 5, ?, ?, 1, 'active')`).run(sidPost, ann.pk, iso(Date.now()));
     const sidSock = await socket(sid);
     await sleep(50);
@@ -848,7 +847,7 @@ async function globalRun(): Promise<void> {
     const adaReply = await send(adaConv, ann);
     const adaBefore = entryOf(await listOf(ada), adaConv)?.request?.state;
     const adaPost = crypto.randomUUID();
-    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                 VALUES (?, 'offer', 'general', 'Jam', 'Two jars', 5, ?, ?, 1, 'active')`).run(adaPost, ann.pk, iso(Date.now()));
     const adaSock = await socket(ada);
     await sleep(50);
@@ -1221,12 +1220,12 @@ async function localRun(): Promise<void> {
     console.log('── 17. trades go straight through ──');
     const post = (author: Id) => {
         const id = crypto.randomUUID();
-        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, active, status)
                     VALUES (?, 'offer', 'general', 'Eggs', 'A dozen', 5, ?, ?, 1, 'active')`).run(id, author.pk, iso(Date.now()));
         return id;
     };
     const trade = (buyer: Id, seller: Id, status: string) => db.prepare(
-        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 5, ?)`)
+        `INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status) VALUES (?, ?, ?, ?, 5, ?)`)
         .run(crypto.randomUUID(), post(seller), buyer.pk, seller.pk, status);
     const dee = member('Dee');
     const tradeConv = attempt(() => ensureTransactionConversation(post(ann), dee.pk, ann.pk));

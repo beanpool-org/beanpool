@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
 import { fixtureWords } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -102,7 +103,7 @@ async function child(): Promise<void> {
             if (a.addMember) {
                 db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                             VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'github-removed-test', 'TEST')`).run(pk, a.callsign);
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
             }
             const b64 = (n: number) => crypto.randomBytes(n).toString('base64');
             const shares: any[] = a.carry ? getCurrentSharesToCarry(pk).map((s) => ({
@@ -162,7 +163,7 @@ async function child(): Promise<void> {
             const now = new Date().toISOString();
             db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                         VALUES (?, ?, 'active', ?, ?, NULL)`).run(a.pk, a.callsign, now, `open:${a.provider}`);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
             db.prepare(`INSERT OR IGNORE INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at) VALUES (?, ?, ?, ?, NULL, ?)`)
                 .run(a.pk, a.provider, crypto.randomBytes(32).toString('base64url'), now, now);
             return true;
@@ -222,7 +223,8 @@ async function child(): Promise<void> {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Public-Key': pkOf(a.seedHex),
-                    'X-Signature': crypto.sign(null, Buffer.from(`POST\n${a.path}\n${ts}\n${nonce}\n${bodyString}`), priv).toString('base64'),
+                    'X-Signature': signRequest(priv, { method: 'POST', path: a.path, timestamp: ts, nonce, body: bodyString }),
+                    [SIGNED_FOR_HEADER]: signedForHost(),
                     'X-Timestamp': String(ts),
                     'X-Nonce': nonce,
                 },
@@ -328,7 +330,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server holding every shape of GitHub row ──
         console.log('\n— 1. a main server whose members hold GitHub copies, released copies and open-door records —');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
@@ -364,7 +366,7 @@ async function main(): Promise<void> {
         await main.send('reseal');
         fs.mkdirSync(dirs.a, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.a, 'genesis.json'));
-        a = await spawnNode(SCRIPT, dirs.a, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        a = await spawnNode(SCRIPT, dirs.a, { NODE_ROLE: 'backup' });
         nodes.push(a);
         await a.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await a.send('resync');
@@ -380,7 +382,7 @@ async function main(): Promise<void> {
         require_((await a.send('state')).joins.length === 2, 'standby A holds Mia\'s GitHub record as a standby from before this change would');
         await a.kill('SIGTERM');
         copyDir(dirs.a, dirs.b);
-        a = await spawnNode(SCRIPT, dirs.a, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        a = await spawnNode(SCRIPT, dirs.a, { NODE_ROLE: 'backup' });
         nodes.push(a);
         require_(a.ready.role === 'backup', 'standby A starts again, as the standby');
         const aLines = a.output().match(githubLine) ?? [];
@@ -396,7 +398,7 @@ async function main(): Promise<void> {
         // ── 3. The main server starts again ──
         console.log('\n— 3. the main server starts again: every GitHub row goes, and nothing else changes —');
         await main.kill('SIGTERM');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         require_(main.ready.role === 'primary', 'it starts as the main server');
         const lines = main.output().match(githubLine) ?? [];
@@ -474,7 +476,7 @@ async function main(): Promise<void> {
         // A second start removes nothing.
         const beforeSecond = await main.send('state');
         await main.kill('SIGTERM');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         assert((main.output().match(githubLine) ?? []).length === 0, 'the next start finds nothing to remove, and says nothing');
         const again = await main.send('state');
@@ -508,7 +510,7 @@ async function main(): Promise<void> {
         console.log('\n— 5. the main server dies, and standby B, which still holds every GitHub row, takes over —');
         await a.kill('SIGTERM');
         await main.kill('SIGKILL');
-        b = await spawnNode(SCRIPT, dirs.b, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        b = await spawnNode(SCRIPT, dirs.b, { NODE_ROLE: 'backup' });
         nodes.push(b);
         require_(b.ready.role === 'backup', 'standby B starts as a standby');
         assert((b.output().match(githubLine) ?? []).some((l) => /removed 0 GitHub recovery copies[^\n]*1 open-door join record\b/.test(l)),
@@ -525,7 +527,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await b.exited;
         assert(exit === 0, `standby B restarts itself (exit ${exit})`);
-        b = await spawnNode(SCRIPT, dirs.b, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        b = await spawnNode(SCRIPT, dirs.b, { NODE_ROLE: 'backup' });
         nodes.push(b);
         require_(b.ready.role === 'primary', 'it is the main server');
         const bLines = b.output().match(githubLine) ?? [];

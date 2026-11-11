@@ -44,17 +44,17 @@ const DEAL_OPEN_WORDS = 'You already have a deal under way on this. Finish or ca
 
 /** A recurring Offer: on the board while its deals run. */
 const course = {
-    id: 'offer-course', type: 'offer', category: 'education', title: 'Pottery course', description: 'Six weeks on the wheel', credits: 45,
+    id: 'offer-course', type: 'offer', category: 'education', title: 'Pottery course', description: 'Six weeks on the wheel', price_c: 4500,
     priceType: 'fixed', status: 'active', active: true, repeatable: true, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', createdAt: TODAY,
 };
 /** A recurring Need of Ada's. */
 const stall = {
-    id: 'need-stall', type: 'need', category: 'labour', title: 'Help at the market stall', description: 'Saturday mornings', credits: 20,
+    id: 'need-stall', type: 'need', category: 'labour', title: 'Help at the market stall', description: 'Saturday mornings', price_c: 2000,
     priceType: 'fixed', status: 'active', active: true, repeatable: true, authorPublicKey: 'ada-pk', authorCallsign: 'Ada', createdAt: TODAY,
 };
 const deal = (extra: Record<string, unknown>) => ({
     id: 'tx-course', postId: 'offer-course', postTitle: 'Pottery course', buyerPublicKey: ME, buyerCallsign: 'Mia', sellerPublicKey: 'damo-pk',
-    sellerCallsign: 'Damo', credits: 45, status: 'pending', createdAt: TODAY, ...extra,
+    sellerCallsign: 'Damo', amount_c: 4500, status: 'pending', createdAt: TODAY, ...extra,
 }) as unknown as api.MarketplaceTransaction;
 /** What lib/api's request throws for the node's answer (its refusalError). */
 const refused = (body: Record<string, unknown>, status = 409) =>
@@ -71,7 +71,7 @@ function stubNode(posts: unknown[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);
@@ -209,7 +209,7 @@ describe('a deal already under way on the listing (deal_open)', () => {
         expect(screen.queryByText('I can do this')).toBeNull();
 
         view.rerender(<MarketplacePage identity={identity} isMember={true} openPostId="need-stall" onPostOpened={onPostOpened}
-            transactions={[deal({ id: 'tx-stall', postId: 'need-stall', postTitle: 'Help at the market stall', buyerPublicKey: 'ada-pk', buyerCallsign: 'Ada', sellerPublicKey: ME, sellerCallsign: 'Mia', credits: 20 })]}
+            transactions={[deal({ id: 'tx-stall', postId: 'need-stall', postTitle: 'Help at the market stall', buyerPublicKey: 'ada-pk', buyerCallsign: 'Ada', sellerPublicKey: ME, sellerCallsign: 'Mia', amount_c: 2000 })]}
             onRefreshTransactions={onRefreshTransactions} />);
         await settle();
         expect(screen.queryByText('✋ I can do this')).toBeNull();
@@ -240,5 +240,35 @@ describe('a deal already under way on the listing (deal_open)', () => {
         await waitFor(() => expect(said).toEqual(['Insufficient balance to accept this offer']));
         expect(onRefreshTransactions).not.toHaveBeenCalled();
         expect(screen.getByText('Accept this Offer?')).toBeInTheDocument();
+    });
+});
+
+// The deciding review of #3033 (MarketplacePage.tsx): core's feeOf and dealAmountFor throw on a figure that isn't whole
+// hundredths, and the open listing computes both on every render. A listing without a price_c (a peer's from before them,
+// or its kept copy) or an absurd number of hours typed took the page to the error boundary; now it draws, with no figure.
+describe('an open listing never throws on a figure that is not whole hundredths', () => {
+    it("a listing with no price_c (a peer's from before whole hundredths) opens", async () => {
+        const old = { ...course, id: 'offer-old', title: 'Old peer jam', price_c: undefined, credits: 12 };
+        stubNode([old]);
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-old" onPostOpened={() => {}}
+            transactions={[]} onRefreshTransactions={vi.fn()} />);
+        expect(await screen.findByRole('heading', { name: /Old peer jam/ })).toBeInTheDocument();
+        await settle();
+        expect(screen.getByRole('heading', { name: /Old peer jam/ })).toBeInTheDocument();
+    });
+
+    it('an hourly Offer with 100,000,000,000 hours typed: no sentence for a total past what a deal holds, and no throw', async () => {
+        const lessons = { ...course, id: 'offer-lessons', title: 'Wheel lessons', priceType: 'hourly', price_c: 4000, repeatable: false };
+        stubNode([lessons]);
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-lessons" onPostOpened={() => {}}
+            transactions={[]} onRefreshTransactions={vi.fn()} />);
+        await screen.findByRole('heading', { name: /Wheel lessons/ });
+        await settle();
+        fireEvent.click(screen.getByText('🤝 Accept Offer'));
+        await screen.findByText('Accept this Offer?');
+        fireEvent.change(screen.getByDisplayValue('1'), { target: { value: '100000000000' } });
+        await settle();
+        expect(screen.getByText('Accept this Offer?')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /Wheel lessons/ })).toBeInTheDocument();
     });
 });

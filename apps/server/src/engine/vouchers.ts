@@ -4,17 +4,24 @@
  * member's profile, and the credit line (room) a vouch gives.
  *
  * ## Who is a voucher (`vouchers`)
- * - An owner or admin, by role (`source` 'role'): from the day the role is granted (node-roles.ts grantNodeRole, a role a
- *   suspension held aside and gave back) and, for every owner and admin who never had a budget, at boot (actor
- *   `migration:vouchers`: Byron's owners and admins vouch on day one). The budget ends with the role.
+ * - An owner, by role (`source` 'role'): from the day the role is granted (node-roles.ts grantNodeRole, a role a suspension
+ *   held aside and gave back) and, for every owner who never had a budget, at boot (actor `migration:vouchers`). The
+ *   budget ends with the role.
+ * - An admin only when an owner makes them one (Marty, 10 Nov; DESIGN-invites-vouching-review-fable.md §3 ask 1, slice
+ *   I5): from the vouchers block's sheet, with no names-list entry (`source` 'role', actor the owner: the role is the
+ *   owner's vouch for them), or from their confirmed entry. Being made admin gives no budget. An admin's budget, whatever
+ *   its source, is an owner's to make and to stop (Stop vouching from the card); it ends with the role as a role budget
+ *   does. A budget an admin held before this rule stays until an owner stops it: nothing here stops it for them.
  * - A member whose confirmed names-list entry an owner or a credit-committee admin made one (`entry`). It ends on Stop
  *   vouching, a revoked confirmation, or with the account. Making a role voucher one from their entry allocates nothing
  *   and only moves the source to the entry, so losing the role later changes nothing.
  * Being on the list makes nobody a voucher; a moderator isn't one. One budget per member.
  *
- * An owner or admin vouches by the role whatever their budget's source (amend2 §2(b)): while they hold the role, Stop
- * vouching refuses their budget, and a revoked entry or a step-back moves its source back to the role (a `voucher_source`
- * line, entry → role) instead of stopping it, the same left and held. Only an owner lowers an owner's budget.
+ * An owner vouches by the role whatever their budget's source (amend2 §2(b)): while they hold the role, Stop vouching
+ * refuses their budget. A revoked entry or a step-back moves an owner's or admin's entry budget back to the role (a
+ * `voucher_source` line, entry → role) instead of stopping it, the same left and held. Nobody sets an owner's budget: an
+ * owner vouches with no limit (Marty, 9 Nov; OWNER_VOUCH_ACTOR), and what the role gave them waits, whole, for a step down
+ * to admin, where it is an admin's budget like any other: an owner may stop it.
  * The credit-committee flag is an admin's: any role change that leaves them no admin (made owner included) clears it, logged.
  *
  * ## The budget (`voucher_allocations`, never updated or deleted)
@@ -38,7 +45,10 @@
  * ## The vouch
  * A preset (core VOUCH_PRESETS), never another amount. One voucher's vouches for one person: a first vouch, then raises,
  * VOUCH_MAX (100) in all, each raise a further hold and room_gifts row on the same pair (§9 rule 1). At most
- * VOUCHES_PER_PERSON (3) vouchers' vouches count for one person (rule 2). Never from a profile for a member below zero now,
+ * VOUCHES_PER_PERSON (3) vouchers' vouches count for one person (rule 2), 300 in all.
+ * An owner (Marty, 9 Nov) vouches with no budget limit, from OWNER_VOUCH_PRESETS (200 and 500 too, nobody else's), up to
+ * 500 for one person; their hold is recorded (OWNER_VOUCH_ACTOR) and never drawn from a budget. A person an owner vouched for
+ * may hold 500 in all, and the three-vouchers rule never refuses an owner's vouch. Never from a profile for a member below zero now,
  * read from the stored balance (rule 3). A vouch on an invite lands at the redeem, in its transaction (the joiner is new,
  * so it is their first, and it is that voucher's one vouch for them); an offline ticket never carries one.
  *
@@ -50,14 +60,15 @@
 import crypto from 'node:crypto';
 import {
     VOUCH_MAX, VOUCHES_PER_PERSON, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_DEFAULT, MEMBER_GIFT_DEFAULT, VOUCH_PRESETS,
-    isVouchPreset, isBudgetLevel, isMemberGiftSetting, word, wordsFor,
+    isVouchPreset, isOwnerVouchPreset, isBudgetLevel, isMemberGiftSetting, vouchPresetsFor, vouchMaxFor, personVouchMax, word, wordsFor, formatHundredths,
 } from '@beanpool/core';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { db } from '../db/db.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, carriesOldMoneyKey } from '../money-body.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
-import { assertBeansOn, getProfileSwitches } from '../config/node-profile.js';
+import { assertBeansOn, getProfileSwitches, getNodeProfile } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin, heldPrivilegedRole, NODE_ROLE_ACTS } from './node-roles.js';
-import { keepNotice } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
 import { ownCoreLockRow } from '../config/core-settings.js';
 
 // A refusal with values in it, in English as a template literal wrote it, marked for the way out (member-words.ts).
@@ -69,6 +80,13 @@ export const MEMBER_GIFT_KEY = 'member_gift';
 export const VOUCHERS_MIGRATION_ACTOR = 'migration:vouchers';
 /** The actor of the first owner's grant, made by the community's claim code. */
 export const CLAIM_ACTOR = 'node:claim';
+/**
+ * The actor of a `hold` an owner made (Marty, 9 Nov: owners vouch with no budget limit). The line records the vouch as any
+ * hold does (whose budget: member_pubkey; on whom: ref, the room_gifts id or the invite code; how much: amount), and no budget
+ * sum counts it, nor its `return`: an owner's vouch never draws a budget down, so the budget an owner holds by the role is
+ * whole if they step down to admin. The other holds' actor is the voucher's own key, which member_pubkey already says.
+ */
+export const OWNER_VOUCH_ACTOR = 'role:owner';
 
 /** An invite lives 30 days (engine/invites.ts redeemInvite): a hold on a code older than that is back in the budget. */
 const INVITE_LIFE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -84,7 +102,10 @@ export class VoucherError extends Error {
 export const VOUCHER_WORDS = {
     notAVoucher: word('You aren’t a voucher here, so you can’t vouch for anyone. An owner or the credit committee makes vouchers.'),
     badAmount: word('A vouch is 25, 50, 75 or 100 Beans.'),
+    badOwnerAmount: word('An owner’s vouch is 25, 50, 75, 100, 200 or 500 Beans.'),
+    ownerAmountOnly: word('Only an owner can vouch 200 or 500 Beans.'),
     ownVouch: word('You can’t vouch for yourself.'),
+    vouchOrRaise: word('Send either an amount to vouch or a total to raise to, not both.'),
     notMember: word('Only an active member of this community can be vouched for.'),
     committeeOnly: word('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'),
     ownBudget: word('Another owner or credit committee admin makes you a voucher or sets your budget.'),
@@ -92,6 +113,8 @@ export const VOUCHER_WORDS = {
     awaitingSecond: word('This confirmation waits for a second admin. Make them a voucher once it is confirmed.'),
     badLevel: word('A budget is 100 to 2,000 Beans, in steps of 100.'),
     notAdmin: word('Only an admin can be put on the credit committee. Every owner is on it already.'),
+    adminOwnerOnly: word('Only an owner makes an admin a voucher or stops an admin’s budget.'),
+    notAdminToMake: word('Only an admin can be made a voucher without a names-list entry. Anyone else needs a confirmed name on the names list.'),
     ownerOnly: word('Only an owner changes this.'),
     badGift: word('A member’s credit-line gift is 0 (off) to 100 Beans.'),
     giftInCoreSettings: word('Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.'),
@@ -101,25 +124,27 @@ export const VOUCHER_WORDS = {
     noticeStopped: word('Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.'),
 } as const;
 
-const notEnough = (left: number, amount: number) => tr('You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.', { left, amount });
+/** A figure (whole hundredths) in these English words. */
+const B = (c: number) => formatHundredths(c, 'en');
+const notEnough = (left: number, amount: number) => tr('You have {left} Beans of budget left, so you can’t vouch {amount}. Pick a smaller vouch, or ask an owner for more.', { left: B(left), amount: B(amount) });
 const alreadyVouched = (name: string) => tr('You’ve already vouched for @{name}.', { name });
 const threeVouches = (name: string) => tr('@{name} has three vouches.', { name });
 const belowZero = (name: string) => tr('@{name} is below zero: a credit-line gift or a Decision can help.', { name });
 const noVouchYet = (name: string) => tr('You haven’t vouched for @{name} yet, so there is no vouch to raise.', { name });
-const overMax = (name: string, total: number) => tr('Your vouch for @{name} can come to {max} Beans at most, and it is {total} now.', { name, max: VOUCH_MAX, total });
+const raiseNotAbove = (name: string, total: number) => tr('You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.', { name, total: B(total) });
+const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total: B(total), max: B(max) });
 const alreadyVoucher = (name: string) => tr('@{name} is a voucher already.', { name });
 const notVoucher = (name: string) => tr('@{name} isn’t a voucher.', { name });
-const roleVoucher = (name: string) => tr('@{name} vouches as an owner or admin while they hold that role, so their budget can’t be stopped. You can lower it instead.', { name });
-const ownerVoucher = (name: string) => tr('@{name} vouches as an owner while they hold that role, so their budget can’t be stopped, and only another owner can lower it.', { name });
-const ownerBudget = (name: string) => tr('@{name} is an owner: only another owner can lower their budget.', { name });
-const belowHeld = (name: string, held: number) => tr('@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.', { name, held });
-const overCeiling = () => tr('A voucher has at most {max} Beans in hand, left and held together.', { max: VOUCHER_BUDGET_MAX });
-const openDebt = (amount: number) => tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount });
+const ownerVoucher = (name: string) => tr('@{name} vouches as an owner while they hold that role, with no limit, so there is no budget to stop or set.', { name });
+const ownerNoLimit = (name: string) => tr('@{name} is an owner: owners vouch with no limit, so there is no budget to set.', { name });
+const belowHeld = (name: string, held: number) => tr('@{name} has {held} Beans held on invites not used yet, so their budget can’t go below that.', { name, held: B(held) });
+const overCeiling = () => tr('A voucher has at most {max} Beans in hand, left and held together.', { max: B(VOUCHER_BUDGET_MAX) });
+const openDebt = (amount: number) => tr('The person on this entry left owing the Commons {amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.', { amount: B(amount) });
 const raisePaused = (name: string) => tr('@{name}’s account is paused, so their budget can’t be raised while it lasts. You can still lower it.', { name });
 const raiseFrozen = (name: string) => tr('@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.', { name });
-const noticeMade = (level: number) => tr('You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.', { level, max: VOUCH_MAX });
-const noticeRaised = (level: number, left: number) => tr('Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.', { level, left });
-const noticeLowered = (level: number, left: number) => tr('Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.', { level, left });
+const noticeMade = (level: number) => tr('You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.', { level: B(level), max: B(VOUCH_MAX) });
+const noticeRaised = (level: number, left: number) => tr('Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
+const noticeLowered = (level: number, left: number) => tr('Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
 
 const now = () => new Date().toISOString();
 const newId = () => crypto.randomBytes(16).toString('hex');
@@ -179,6 +204,7 @@ export function voucherSettings() {
     return {
         voucherBudget: voucherBudgetSetting(), memberGift: memberGiftSetting(),
         presets: [...VOUCH_PRESETS], vouchMax: VOUCH_MAX, vouchesPerPerson: VOUCHES_PER_PERSON, budgetMax: VOUCHER_BUDGET_MAX,
+        ownerPresets: [...vouchPresetsFor(true)], ownerVouchMax: vouchMaxFor(true), personMax: personVouchMax(false), personMaxWithOwner: personVouchMax(true),
     };
 }
 
@@ -245,7 +271,7 @@ export interface Budget {
      * the same. Never what a voucher can't use: a vouch checks it, and a read shows it, without waiting for the prune.
      */
     left: number;
-    /** On invites not used yet and in date. */
+    /** On invites not used yet and in date. An owner's holds are in neither `left` nor `held` (OWNER_VOUCH_ACTOR). */
     held: number;
     heldInvites: number;
     /** The vouches that landed. */
@@ -264,22 +290,26 @@ const LAPSED_HOLD = `${OPEN_HOLD}
 
 const lifeCutoff = (at: number) => new Date(at - INVITE_LIFE_MS).toISOString();
 
+/** A line of the budget `a`: every line but an owner's hold (OWNER_VOUCH_ACTOR) and its `return`, which share its ref. */
+const BUDGET_LINE = (a: string) => `NOT EXISTS (SELECT 1 FROM voucher_allocations o WHERE o.member_pubkey = ${a}.member_pubkey
+    AND o.kind = 'hold' AND o.actor = '${OWNER_VOUCH_ACTOR}' AND o.ref = ${a}.ref)`;
+
 export function budgetOf(pk: string, at = Date.now()): Budget {
     const cutoff = lifeCutoff(at);
-    const lines = (db.prepare('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?').get(pk) as { n: number }).n;
-    const lapsed = (db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${LAPSED_HOLD}`).get(pk, cutoff) as { n: number }).n;
+    const lines = (db.prepare(`SELECT COALESCE(SUM(a.amount_c), 0) AS n FROM voucher_allocations a WHERE a.member_pubkey = ? AND ${BUDGET_LINE('a')}`).get(pk) as { n: number }).n;
+    const lapsed = (db.prepare(`SELECT COALESCE(SUM(-h.amount_c), 0) AS n FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${LAPSED_HOLD}`).get(pk, cutoff) as { n: number }).n;
     const left = lines + lapsed;
-    const held = db.prepare(`SELECT COALESCE(SUM(-h.amount), 0) AS n, COUNT(*) AS c FROM voucher_allocations h
+    const held = db.prepare(`SELECT COALESCE(SUM(-h.amount_c), 0) AS n, COUNT(*) AS c FROM voucher_allocations h
         JOIN invite_codes ic ON ic.code = h.ref
-        WHERE h.member_pubkey = ? AND ${OPEN_HOLD} AND ic.used_by IS NULL AND ic.created_at > ?`).get(pk, cutoff) as { n: number; c: number };
-    const vouched = db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts
+        WHERE h.member_pubkey = ? AND h.actor != '${OWNER_VOUCH_ACTOR}' AND ${OPEN_HOLD} AND ic.used_by IS NULL AND ic.created_at > ?`).get(pk, cutoff) as { n: number; c: number };
+    const vouched = db.prepare(`SELECT COALESCE(SUM(amount_c), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts
         WHERE from_pubkey = ? AND kind = 'vouch'`).get(pk) as { n: number; c: number };
     return { left, held: held.n, heldInvites: held.c, vouched: vouched.n, peopleVouched: vouched.c, level: left + held.n };
 }
 
-function addLine(pk: string, kind: 'grant' | 'top_up' | 'lower' | 'hold' | 'return' | 'stop', amount: number, actor: string, ref: string | null = null): void {
-    db.prepare('INSERT INTO voucher_allocations (id, member_pubkey, kind, amount, actor, ref, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(newId(), pk, kind, amount, actor, ref, now());
+function addLine(pk: string, kind: 'grant' | 'top_up' | 'lower' | 'hold' | 'return' | 'stop', amount: number, actor: string, ref: string | null = null, at: string = now()): void {
+    db.prepare('INSERT INTO voucher_allocations (id, member_pubkey, kind, amount_c, actor, ref, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(newId(), pk, kind, amount, actor, ref, at);
 }
 
 /** Inside a writer's transaction: the level after it, refused above the ceiling (the allocation's own transaction, §10). */
@@ -294,10 +324,10 @@ function assertUnderCeiling(pk: string): void {
  */
 export function returnLapsedHolds(pk: string | null = null, at = Date.now()): number {
     if (getNodeRole() !== 'primary') return 0;
-    const lapsed = db.prepare(`SELECT h.member_pubkey AS pk, h.ref AS ref, -h.amount AS amount FROM voucher_allocations h
+    const lapsed = db.prepare(`SELECT h.member_pubkey AS pk, h.ref AS ref, -h.amount_c AS amount_c FROM voucher_allocations h
         WHERE ${LAPSED_HOLD} AND (? IS NULL OR h.member_pubkey = ?)`)
-        .all(lifeCutoff(at), pk, pk) as { pk: string; ref: string; amount: number }[];
-    db.transaction(() => { for (const l of lapsed) addLine(l.pk, 'return', l.amount, 'node', l.ref); })();
+        .all(lifeCutoff(at), pk, pk) as { pk: string; ref: string; amount_c: number }[];
+    db.transaction(() => { for (const l of lapsed) addLine(l.pk, 'return', l.amount_c, 'node', l.ref); })();
     return lapsed.length;
 }
 
@@ -306,9 +336,9 @@ export function returnLapsedHolds(pk: string | null = null, at = Date.now()): nu
  * line for what is left, and the row stopped. Room already given stays given.
  */
 function stopBudget(pk: string, actor: string, reason: 'role_lost' | 'stopped' | 'revoked' | 'departed'): void {
-    const open = db.prepare(`SELECT h.ref AS ref, -h.amount AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${OPEN_HOLD}
-          AND NOT EXISTS (SELECT 1 FROM invite_codes ic WHERE ic.code = h.ref AND ic.used_by IS NOT NULL)`).all(pk) as { ref: string; amount: number }[];
-    for (const o of open) addLine(pk, 'return', o.amount, actor, o.ref);
+    const open = db.prepare(`SELECT h.ref AS ref, -h.amount_c AS amount_c FROM voucher_allocations h WHERE h.member_pubkey = ? AND ${OPEN_HOLD}
+          AND NOT EXISTS (SELECT 1 FROM invite_codes ic WHERE ic.code = h.ref AND ic.used_by IS NOT NULL)`).all(pk) as { ref: string; amount_c: number }[];
+    for (const o of open) addLine(pk, 'return', o.amount_c, actor, o.ref);
     const { left } = budgetOf(pk);
     if (left > 0) addLine(pk, 'stop', -left, actor);
     db.prepare('UPDATE vouchers SET stopped_at = ?, stopped_by = ?, stop_reason = ? WHERE member_pubkey = ? AND stopped_at IS NULL').run(now(), actor, reason, pk);
@@ -343,7 +373,8 @@ export interface VoucherNotice { to: string; title: string; body: string; id: st
 export type TellVoucher = (notice: VoucherNotice) => void;
 export interface VoucherNoticeHooks {
     broadcast: (event: any, recipients?: string[]) => unknown;
-    dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'marketplace', kind: 'community.notice') => unknown;
+    dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'marketplace', kind: 'community.notice',
+        rehearsal?: boolean, options?: KeptNoticePushOptions) => unknown;
 }
 
 /** Inside a committee writer's transaction: the voucher's kept copy (keepNotice never throws; its id null when not kept). */
@@ -365,7 +396,8 @@ export function tellVoucherNotice(n: VoucherNotice, hooks: VoucherNoticeHooks): 
         console.warn('[Vouchers] A live notice failed:', (e as Error)?.message || e);
     }
     try {
-        hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, n.data, 'marketplace', 'community.notice');
+        // Its push notice names the kept copy: the alert acknowledged takes the bell's row off, and the other way round.
+        hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, n.data, 'marketplace', 'community.notice', false, keptNoticeDetails([n]));
     } catch (e) {
         console.warn('[Vouchers] A push failed:', (e as Error)?.message || e);
     }
@@ -375,9 +407,11 @@ export function tellVoucherNotice(n: VoucherNotice, hooks: VoucherNoticeHooks): 
 
 /**
  * After a member's node role changed (granted, revoked, demoted, dropped by a suspension, a removal or their account
- * deleted, given back after a suspension), inside the change's transaction where there is one: an owner or admin with no
- * live budget gets one (the community's setting, actor who granted it); anyone else loses a budget whose source is the
- * role. The place on the credit committee is an admin's (§5.4: the flag clears with the role): any change that leaves them
+ * deleted, given back after a suspension), inside the change's transaction where there is one: an owner with no live
+ * budget gets one (the community's setting, actor who granted it); an admin keeps what they hold and is given nothing
+ * (an owner makes an admin a voucher by hand: Marty, 10 Nov, slice I5), so an owner stepping down to admin keeps the
+ * budget the role gave them until an owner stops it; anyone else loses a budget whose source is the role. The place on
+ * the credit committee is an admin's (§5.4: the flag clears with the role): any change that leaves them
  * no admin clears it with a `committee` line, a promotion to owner too (an owner is on it by role), so a later demotion
  * back to admin never brings it back unasked. Never throws; nothing on a standby or with Beans off.
  */
@@ -390,10 +424,11 @@ export function vouchingAfterRoleChange(pk: string, actor: string | undefined): 
             const committee = db.prepare('UPDATE members SET credit_committee = 0 WHERE public_key = ? AND credit_committee = 1').run(pk);
             if (committee.changes > 0) logLine(by, 'committee', pk, 'on', 'off');
         }
-        if (role === 'owner' || role === 'admin') {
+        if (role === 'owner') {
             if (!liveVoucher(pk) && getProfileSwitches().beans) startBudget(pk, 'role', null, voucherBudgetSetting(), by);
             return;
         }
+        if (role === 'admin') return;
         const row = voucherRow(pk);
         if (row && !row.stopped_at && row.source === 'role') {
             const status = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined)?.status;
@@ -404,16 +439,16 @@ export function vouchingAfterRoleChange(pk: string, actor: string | undefined): 
 
 /**
  * At boot on a main server with Beans on, the catch-all for a role changed outside grantNodeRole (the shell's claim or
- * recover, which write node_roles on their own connection): every owner and admin whose role acts and who has no LIVE
- * budget gets one, actor `migration:vouchers`; and anyone on the credit committee whose acting role is not admin leaves it,
- * with its `committee` line, as vouchingAfterRoleChange does inside the server. On a node from before vouchers, that is
- * every owner and admin, once; later boots find only the shell's, or none. A stopped budget on a current owner or admin
- * always comes from before the role they hold now (nothing in the server stops one while they hold it), so it is granted.
+ * recover, which write node_roles on their own connection): every owner whose role acts and who has no LIVE budget gets
+ * one, actor `migration:vouchers` (never an admin: an owner makes an admin a voucher by hand, slice I5); and anyone on the
+ * credit committee whose acting role is not admin leaves it, with its `committee` line, as vouchingAfterRoleChange does
+ * inside the server. A stopped budget on a current owner always comes from before the role they hold now (nothing in the
+ * server stops an owner's while they hold it), so it is granted.
  */
 export function grantMissingRoleBudgets(): number {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().beans) return 0;
     const keys = (db.prepare(`SELECT nr.member_pubkey AS pk FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
-        WHERE nr.role IN ('owner', 'admin') AND ${NODE_ROLE_ACTS} AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = nr.member_pubkey AND v.stopped_at IS NULL)
+        WHERE nr.role = 'owner' AND ${NODE_ROLE_ACTS} AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = nr.member_pubkey AND v.stopped_at IS NULL)
         ORDER BY nr.granted_at ASC, nr.member_pubkey ASC`).all() as { pk: string }[]).map((r) => r.pk);
     const amount = voucherBudgetSetting();
     const committee = (db.prepare('SELECT public_key AS pk FROM members WHERE credit_committee = 1').all() as { pk: string }[])
@@ -444,37 +479,64 @@ function memberKey(raw: unknown): string {
 }
 
 /**
- * Make a voucher (POST /api/names/vouchers `{ entryId, amount? }`): the member confirmed against the entry, with a budget of
- * `amount` (100 to 2,000 in 100s; the community's setting when left out). A role voucher made one from their entry gets
- * nothing new: their budget's source moves to the entry, so losing the role later leaves it. Never yourself. A new budget
- * is a notice to its voucher, kept in the transaction and told by `tell` after it.
+ * An admin's budget is an owner's to make and to stop (Marty, 10 Nov; slice I5): refused for anyone else. An owner's is
+ * no one's (they vouch by the role); anyone else's, the committee's.
  */
-export function makeVoucher(actor: string, body: { entryId?: unknown; amount?: unknown }, tell?: TellVoucher) {
+function assertMayMakeOrStop(actor: string, pk: string): void {
+    if (heldPrivilegedRole(pk) === 'admin' && !isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.adminOwnerOnly);
+}
+
+/**
+ * Make a voucher (POST /api/names/vouchers): `{ entryId, amount_c? }`, the member confirmed against the entry; or
+ * `{ memberPubkey, amount_c? }`, an admin with no names-list entry (an owner only: the role is the owner's vouch for them,
+ * so the budget's source is the role and it ends with it). A budget of `amount` (100 to 2,000 in 100s; the community's
+ * setting when left out; whole hundredths, as every budget is). An admin is made a voucher by an owner only, either way (slice I5). A role voucher made one from
+ * their entry gets nothing new: their budget's source moves to the entry, so losing the role later leaves it. Never
+ * yourself. A new budget is a notice to its voucher, kept in the transaction and told by `tell` after it.
+ */
+export function makeVoucher(actor: string, body: { entryId?: unknown; memberPubkey?: unknown; amount_c?: unknown }, tell?: TellVoucher) {
     assertCommittee(actor);
-    if (typeof body.entryId !== 'string' || !/^[0-9a-f]{32}$/.test(body.entryId)) throw new VoucherError(400, 'bad_entry', 'An entry id is 32 hexadecimal characters.');
-    const conf = db.prepare('SELECT member_pubkey, needs_second, seconded_at FROM confirmations WHERE entry_id = ? AND revoked_at IS NULL')
-        .get(body.entryId) as { member_pubkey: string; needs_second: number; seconded_at: string | null } | undefined;
-    if (!conf) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
-    if (conf.needs_second && !conf.seconded_at) throw new VoucherError(409, 'awaiting_second', VOUCHER_WORDS.awaitingSecond);
-    const debt = db.prepare("SELECT amount FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(body.entryId) as { amount: number } | undefined;
-    if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount));
-    const pk = conf.member_pubkey;
+    // The budget is `amount_c`, whole hundredths: an app from before them sends `amount` in Beans, refused rather than read as
+    // absent (which would make the voucher with the community's default budget instead of the one asked for).
+    if (carriesOldMoneyKey(body, ['amount'])) throw new VoucherError(400, AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT);
+    if (body.memberPubkey !== undefined && body.entryId !== undefined) throw new VoucherError(400, 'entry_or_member', 'Send an entry id or an admin’s key, not both.');
+    const byRole = body.memberPubkey !== undefined;
+    let pk: string;
+    let entryId: string | null = null;
+    if (byRole) {
+        pk = memberKey(body.memberPubkey);
+        if (!isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.adminOwnerOnly);
+        if (actingRole(pk) !== 'admin') throw new VoucherError(409, 'not_admin', VOUCHER_WORDS.notAdminToMake);
+    } else {
+        if (typeof body.entryId !== 'string' || !/^[0-9a-f]{32}$/.test(body.entryId)) throw new VoucherError(400, 'bad_entry', 'An entry id is 32 hexadecimal characters.');
+        entryId = body.entryId;
+        const conf = db.prepare('SELECT member_pubkey, needs_second, seconded_at FROM confirmations WHERE entry_id = ? AND revoked_at IS NULL')
+            .get(entryId) as { member_pubkey: string; needs_second: number; seconded_at: string | null } | undefined;
+        if (!conf) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
+        if (conf.needs_second && !conf.seconded_at) throw new VoucherError(409, 'awaiting_second', VOUCHER_WORDS.awaitingSecond);
+        const debt = db.prepare("SELECT amount_c FROM names_debts WHERE entry_id = ? AND status = 'open' ORDER BY removed_at DESC LIMIT 1").get(entryId) as { amount_c: number } | undefined;
+        if (debt) throw new VoucherError(409, 'open_debt', openDebt(debt.amount_c));
+        pk = conf.member_pubkey;
+    }
     const m = getMember(db, pk);
-    if (!m || m.status !== 'active' || isVisitorKey(db, pk) || m.isTreasury) throw new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
+    if (!m || m.status !== 'active' || isVisitorKey(db, pk) || m.isTreasury) {
+        throw byRole ? new VoucherError(409, 'not_admin', VOUCHER_WORDS.notAdminToMake) : new VoucherError(409, 'not_confirmed', VOUCHER_WORDS.notConfirmed);
+    }
     if (pk === actor) throw new VoucherError(403, 'own_budget', VOUCHER_WORDS.ownBudget);
-    const amount = body.amount === undefined ? voucherBudgetSetting() : body.amount;
+    assertMayMakeOrStop(actor, pk);
+    const amount = body.amount_c === undefined ? voucherBudgetSetting() : body.amount_c;
     if (!isBudgetLevel(amount)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
     const live = liveVoucher(pk);
-    if (live?.source === 'entry') throw new VoucherError(409, 'already_voucher', alreadyVoucher(m.callsign));
+    if (live && (byRole || live.source === 'entry')) throw new VoucherError(409, 'already_voucher', alreadyVoucher(m.callsign));
     const notice = db.transaction((): VoucherNotice | undefined => {
         returnLapsedHolds(pk);
         if (live) {
-            db.prepare("UPDATE vouchers SET source = 'entry', entry_id = ?, made_by = ?, made_at = ? WHERE member_pubkey = ?").run(body.entryId, actor, now(), pk);
+            db.prepare("UPDATE vouchers SET source = 'entry', entry_id = ?, made_by = ?, made_at = ? WHERE member_pubkey = ?").run(entryId, actor, now(), pk);
             logLine(actor, 'voucher_made', pk, 'role', 'entry');
             return undefined;
         }
-        logLine(actor, 'voucher_made', pk, null, 'entry');
-        startBudget(pk, 'entry', body.entryId as string, amount, actor);
+        logLine(actor, 'voucher_made', pk, null, byRole ? 'role' : 'entry');
+        startBudget(pk, byRole ? 'role' : 'entry', entryId, amount, actor);
         return keepVoucherNotice(pk, 'made', noticeMade(amount), amount);
     })();
     if (notice) tell?.(notice);
@@ -488,19 +550,30 @@ function openBudgetRow(pk: string): VoucherRow | undefined {
 }
 
 /**
- * Stop vouching (DELETE /api/names/vouchers/:member): a list budget only. A role budget ends with the role, and an owner
- * or admin (their role held, or held aside by a suspension) vouches by it whatever the budget's source, so theirs is
- * refused too: one made a voucher from their entry keeps vouching while they hold the role (amend2 §2(b)). A notice to them.
+ * Whether `viewer` may stop `pk`'s budget now (the card's `canStop`, stopVoucher's own rule): an open budget, not their
+ * own, the viewer on the committee; never an owner's (they vouch by the role, with no limit: amend2 §2(b)); an admin's by
+ * an owner only (slice I5), whatever its source, a budget the role gave them before that rule included.
+ */
+function mayStop(viewer: string, pk: string): boolean {
+    if (!viewer || viewer === pk || !isOnCreditCommittee(viewer) || !openBudgetRow(pk)) return false;
+    const held = heldPrivilegedRole(pk);
+    return held === 'owner' ? false : held === 'admin' ? isNodeOwner(viewer) : true;
+}
+
+/**
+ * Stop vouching (DELETE /api/names/vouchers/:member): every open hold back (the codes stay valid and carry nothing), one
+ * `stop` line, the row stopped; room already given stays given. An owner's budget is refused (409 `role_voucher`): they
+ * vouch by the role. An admin's is an owner's to stop (403 `owner_only` for a committee admin), whatever its source: a
+ * budget the role gave an admin before slice I5 stays until an owner stops it here. A member's, the committee's. A notice
+ * to them.
  */
 export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) {
     assertCommittee(actor);
     const pk = memberKey(member);
     const live = openBudgetRow(pk);
     if (!live) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
-    const held = heldPrivilegedRole(pk);
-    if (live.source === 'role' || held) {
-        throw new VoucherError(409, 'role_voucher', held === 'owner' && !isNodeOwner(actor) ? ownerVoucher(callsignOf(pk)) : roleVoucher(callsignOf(pk)));
-    }
+    if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'role_voucher', ownerVoucher(callsignOf(pk)));
+    assertMayMakeOrStop(actor, pk);
     const notice = db.transaction(() => {
         stopBudget(pk, actor, 'stopped');
         return keepVoucherNotice(pk, 'stopped', VOUCHER_WORDS.noticeStopped, 0);
@@ -514,8 +587,8 @@ export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) 
  * and held together, 100 to 2,000 in 100s. A raise writes `top_up` +n, a lower `lower` −n, never below what is held on
  * unused invites; room already given is never touched. The same level again writes nothing. Never your own. A raise only
  * for a voucher whose account is active and whose credit line isn't frozen (§5.6 step 3); a lower whatever their state.
- * An owner's budget (their role held, or held aside by a suspension) is lowered only by another owner: a committee admin
- * may raise it, never take from it (403 `owner_only`). These routes take a member's own signature and nothing else (no
+ * An owner (their role held, or held aside by a suspension) vouches with no limit (Marty, 9 Nov), so nobody sets their
+ * budget while they hold the role (409 `no_limit`): what the role gave them waits, whole, for a step down to admin. These routes take a member's own signature and nothing else (no
  * admin session or automation token reaches /api/names), so the signer here is who acts.
  * Each change is a notice to the voucher (§10.2), kept in the transaction and told by `tell` after it.
  */
@@ -526,13 +599,13 @@ export function setBudgetLevel(actor: string, member: unknown, body: { level?: u
     if (pk === actor) throw new VoucherError(403, 'own_budget', VOUCHER_WORDS.ownBudget);
     const level = body.level;
     if (!isBudgetLevel(level)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
+    if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'no_limit', ownerNoLimit(callsignOf(pk)));
     const notice = db.transaction((): VoucherNotice | undefined => {
         returnLapsedHolds(pk);
         const before = budgetOf(pk);
         if (level < before.held) throw new VoucherError(409, 'below_held', belowHeld(callsignOf(pk), before.held));
         const n = level - before.level;
         if (n === 0) return undefined;
-        if (n < 0 && heldPrivilegedRole(pk) === 'owner' && !isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', ownerBudget(callsignOf(pk)));
         if (n > 0) {
             const m = getMember(db, pk);
             if (!m || m.status !== 'active') throw new VoucherError(409, 'paused', raisePaused(callsignOf(pk)));
@@ -597,20 +670,26 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
 
 /** The stored balance, never read through the ledger (memory boot-getbalance-before-exemptions): below zero now? */
 function belowZeroNow(pk: string): boolean {
-    return ((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as { balance: number } | undefined)?.balance ?? 0) < 0;
+    return ((db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as { balance_c: number } | undefined)?.balance_c ?? 0) < 0;
 }
 
-/** What one voucher's vouches for one person come to, and how many vouchers' vouches the person has. */
-function pairOf(voucher: string, person: string): { total: number; vouchers: number } {
-    const total = (db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND to_pubkey = ?`).get(voucher, person) as { n: number }).n;
-    const vouchers = (db.prepare(`SELECT COUNT(DISTINCT from_pubkey) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?`).get(person) as { n: number }).n;
-    return { total, vouchers };
+/**
+ * What one voucher's vouches for one person come to, how many vouchers' vouches the person has, what every vouch for them
+ * comes to (`personTotal`), and whether an owner vouched for them (`ownerVouched`: a vouch whose hold an owner made,
+ * OWNER_VOUCH_ACTOR, from a profile or on an invite), which lifts what they may hold in all from 300 to 500.
+ */
+function pairOf(voucher: string, person: string): { total: number; vouchers: number; personTotal: number; ownerVouched: boolean } {
+    const total = (db.prepare(`SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND to_pubkey = ?`).get(voucher, person) as { n: number }).n;
+    const all = db.prepare(`SELECT COUNT(DISTINCT from_pubkey) AS c, COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?`).get(person) as { c: number; n: number };
+    const ownerVouched = !!db.prepare(`SELECT 1 FROM room_gifts g WHERE g.kind = 'vouch' AND g.to_pubkey = ? AND EXISTS (SELECT 1 FROM voucher_allocations h
+        WHERE h.member_pubkey = g.from_pubkey AND h.kind = 'hold' AND h.actor = ? AND h.ref IN (g.id, g.invite_code)) LIMIT 1`).get(person, OWNER_VOUCH_ACTOR);
+    return { total, vouchers: all.c, personTotal: all.n, ownerVouched };
 }
 
 /** Inside a vouch's transaction: the vouch's room_gifts row, from the voucher's budget (its hold written by the caller). */
 function addVouchRow(voucher: string, person: string, amount: number, inviteCode: string | null): string {
     const id = newId();
-    db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount, invite_code, at) VALUES (?, ?, ?, ?, 'vouch', ?, ?, ?)`)
+    db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount_c, invite_code, at) VALUES (?, ?, ?, ?, 'vouch', ?, ?, ?)`)
         .run(id, voucher, person, voucher, amount, inviteCode, now());
     return id;
 }
@@ -618,48 +697,79 @@ function addVouchRow(voucher: string, person: string, amount: number, inviteCode
 /**
  * The checks of a vouch from `voucher`, before any write and again inside its transaction: a voucher, a preset, a budget
  * not frozen, at most what is left (a hold whose code lapsed counted back, as budgetOf counts it). Beans on, a main
- * server. Throws VoucherError, or Beans off's own refusal.
+ * server. An owner whose role acts now (Marty, 9 Nov) picks from the owner presets (200 and 500 too, refused from anyone
+ * else) and is never refused for budget: their hold is recorded with OWNER_VOUCH_ACTOR and no budget counts it. Throws
+ * VoucherError, or Beans off's own refusal. `owner`: whether this vouch is an owner's. `target`: the number is the total a raise
+ * ends at (a preset, as an amount is); the budget is then checked by the caller against the difference it lands.
  */
-function assertMayVouch(voucher: string, amount: unknown): number {
+function assertMayVouch(voucher: string, amount: unknown, target = false): { amount_c: number; owner: boolean } {
     assertPlainTablesWritable();
     assertBeansOn();
     if (!liveVoucher(voucher)) throw new VoucherError(403, 'not_a_voucher', VOUCHER_WORDS.notAVoucher);
-    if (!isVouchPreset(amount)) throw new VoucherError(400, 'bad_amount', VOUCHER_WORDS.badAmount);
+    const owner = isNodeOwner(voucher);
+    if (owner) {
+        if (!isOwnerVouchPreset(amount)) throw new VoucherError(400, 'bad_amount', VOUCHER_WORDS.badOwnerAmount);
+    } else if (!isVouchPreset(amount)) {
+        if (isOwnerVouchPreset(amount)) throw new VoucherError(403, 'owner_amount', VOUCHER_WORDS.ownerAmountOnly);
+        throw new VoucherError(400, 'bad_amount', VOUCHER_WORDS.badAmount);
+    }
+    const n = amount as number;
     if (isFrozen(voucher)) throw new VoucherError(409, 'frozen', VOUCHER_WORDS.frozen);
-    const { left } = budgetOf(voucher);
-    if (amount > left) throw new VoucherError(409, 'not_enough', notEnough(left, amount));
-    return amount;
+    if (!owner && !target) {
+        const { left } = budgetOf(voucher);
+        if (n > left) throw new VoucherError(409, 'not_enough', notEnough(left, n));
+    }
+    return { amount_c: n, owner };
 }
 
+/** The hold's actor: the voucher's own key, or OWNER_VOUCH_ACTOR for an owner's vouch (recorded, drawn from no budget). */
+const holdActor = (voucher: string, owner: boolean) => (owner ? OWNER_VOUCH_ACTOR : voucher);
+
 /**
- * A vouch from a member's profile (POST /api/vouch `{ memberPubkey, vouchAmount, raise? }`, §4 Q1 and §9), landing at once:
- * a `hold` with the room_gifts id and the room_gifts row, in one transaction that checks every rule again. Without `raise`,
- * the voucher's one vouch for this person; with it, a further vouch on top of theirs, the two together at most 100.
+ * A vouch from a member's profile (POST /api/vouch `{ memberPubkey, vouchAmount }` or `{ memberPubkey, raiseTo }`, §4 Q1 and
+ * §9; raise as a target: DESIGN-invites-vouching-review-fable.md §4, slice I6), landing at once: a `hold` with the room_gifts
+ * id and the room_gifts row, in one transaction that checks every rule again. `vouchAmount` is the voucher's one vouch for
+ * this person (a preset). `raiseTo` is a raise: the total their vouches for this person end at (a preset of theirs, so an
+ * owner's 200 or 500 and nobody else's), never an amount to add. The server lands the difference, from the budget; a target at
+ * or below what they have vouched already is refused (`raise_not_above`), so a repeated tap lands once. The two together at
+ * most 100 (an owner's: 500). Every vouch for one person comes to 300 at most, or 500 once an owner vouched for them or is
+ * vouching now (Marty, 9 Nov). The three-vouchers rule never refuses an owner's vouch: theirs may top a person up to 500.
  */
-export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown; vouchAmount?: unknown; raise?: unknown }) {
+export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown; vouchAmount?: unknown; raiseTo?: unknown }) {
     const person = memberKey(body.memberPubkey);
-    assertMayVouch(voucher, body.vouchAmount);
-    const amount = body.vouchAmount as number;
-    if (body.raise !== undefined && typeof body.raise !== 'boolean') throw new VoucherError(400, 'bad_raise', "'raise' is true or false.");
-    const raise = body.raise === true;
+    const raise = body.raiseTo !== undefined;
+    if (raise && body.vouchAmount !== undefined) throw new VoucherError(400, 'bad_body', VOUCHER_WORDS.vouchOrRaise);
+    const asked = raise ? body.raiseTo : body.vouchAmount;
+    assertMayVouch(voucher, asked, raise);
     if (person === voucher) throw new VoucherError(403, 'own_vouch', VOUCHER_WORDS.ownVouch);
     const m = getMember(db, person);
     if (!m || m.status !== 'active' || isVisitorKey(db, person) || m.isTreasury) throw new VoucherError(404, 'not_member', VOUCHER_WORDS.notMember);
     let id = '';
+    let amount = asked as number;
     db.transaction(() => {
         returnLapsedHolds(voucher);
-        assertMayVouch(voucher, amount);
+        const { owner } = assertMayVouch(voucher, asked, raise);
         if (belowZeroNow(person)) throw new VoucherError(409, 'below_zero', belowZero(m.callsign));
         const pair = pairOf(voucher, person);
         if (raise) {
+            const target = asked as number;
             if (pair.total === 0) throw new VoucherError(409, 'no_vouch_yet', noVouchYet(m.callsign));
-            if (pair.total + amount > VOUCH_MAX) throw new VoucherError(409, 'over_max', overMax(m.callsign, pair.total), { prior: pair.total });
+            if (target <= pair.total) throw new VoucherError(409, 'raise_not_above', raiseNotAbove(m.callsign, pair.total), { prior: pair.total });
+            amount = target - pair.total;
+            if (!owner) {
+                const { left } = budgetOf(voucher);
+                if (amount > left) throw new VoucherError(409, 'not_enough', notEnough(left, amount));
+            }
         } else {
             if (pair.total > 0) throw new VoucherError(409, 'already_vouched', alreadyVouched(m.callsign), { prior: pair.total });
-            if (pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));
+            if (!owner && pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));
+        }
+        const personMax = personVouchMax(owner || pair.ownerVouched);
+        if (pair.personTotal + amount > personMax) {
+            throw new VoucherError(409, 'over_person_max', overPerson(m.callsign, pair.personTotal, personMax), { personTotal: pair.personTotal, personMax });
         }
         id = addVouchRow(voucher, person, amount, null);
-        addLine(voucher, 'hold', -amount, voucher, id);
+        addLine(voucher, 'hold', -amount, holdActor(voucher, owner), id);
     })();
     return { id, memberPubkey: person, amount, total: pairOf(voucher, person).total, budget: budgetOf(voucher) };
 }
@@ -669,14 +779,14 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
  * Throws as a profile vouch does. The hold itself is written with the code, in one transaction ({@link holdForInvite}).
  */
 export function checkInviteVouch(maker: string, amount: unknown): number {
-    return assertMayVouch(maker, amount);
+    return assertMayVouch(maker, amount).amount_c;
 }
 
-/** Inside generateInvite's transaction, with the code's row: the hold, after every check again. */
+/** Inside generateInvite's transaction, with the code's row: the hold, after every check again (an owner's: OWNER_VOUCH_ACTOR). */
 export function holdForInvite(maker: string, code: string, amount: number): void {
     returnLapsedHolds(maker);
-    assertMayVouch(maker, amount);
-    addLine(maker, 'hold', -amount, maker, code);
+    const { owner } = assertMayVouch(maker, amount);
+    addLine(maker, 'hold', -amount, holdActor(maker, owner), code);
 }
 
 /**
@@ -686,12 +796,14 @@ export function holdForInvite(maker: string, code: string, amount: number): void
  * refusal: the joiner joins either way. With Beans switched off since the code was made (before any Bean moved: the ledger
  * keeps them on after), no room lands either, and the hold goes back to its maker. Nor while the maker's credit line or
  * known floor is frozen (nothing more out of a frozen budget): the hold goes back, and once unfrozen the maker may vouch
- * for the joiner from their profile, this pair having no vouch yet.
+ * for the joiner from their profile, this pair having no vouch yet. An owner's hold (OWNER_VOUCH_ACTOR) carries one of the
+ * owner presets, and lands as it was made, whatever their role at the redeem: it was an owner's vouch when they made it.
  */
 export function landInviteVouch(maker: string, code: string, joiner: string, amount: number): { landed: number } | { ended: string } {
-    const hold = db.prepare(`SELECT -h.amount AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
-        .get(maker, code) as { amount: number } | undefined;
-    if (!hold || hold.amount !== amount || !isVouchPreset(amount)) return { ended: VOUCHER_WORDS.voucherEnded };
+    const hold = db.prepare(`SELECT -h.amount_c AS amount_c, h.actor AS actor FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
+        .get(maker, code) as { amount_c: number; actor: string } | undefined;
+    const preset = hold?.actor === OWNER_VOUCH_ACTOR ? isOwnerVouchPreset(amount) : isVouchPreset(amount);
+    if (!hold || hold.amount_c !== amount || !preset) return { ended: VOUCHER_WORDS.voucherEnded };
     const pair = pairOf(maker, joiner);
     if (!getProfileSwitches().beans || isFrozen(maker) || pair.total > 0 || pair.vouchers >= VOUCHES_PER_PERSON) {
         addLine(maker, 'return', amount, 'node', code);
@@ -725,6 +837,29 @@ export function checkInviteVoucherLevel(maker: string, level: unknown): number {
 /** Inside generateInvite's transaction, with the code's row: the promise's line (who, which entry, what level). Never the code. */
 export function promiseInviteVoucher(maker: string, entryId: string, level: number): void {
     logLine(maker, 'voucher_promised', null, entryId, level);
+}
+
+/**
+ * An unused invite revoked (engine/invites.ts revokeInvite; invites-vouching I2), inside its transaction, before its row goes.
+ * The vouch its code holds comes back to `holder` (the maker, or the admin a seed invite was issued by): one `return` line,
+ * actor the revoker, ref the code, beside one `invite_revoked` line in the log stamped the same moment (how the budget's
+ * history tells it from a stop). Only while the hold is open: the hourly prune, a budget writer (a lapsed code) or a budget
+ * stopped may have returned it already, and nothing comes back twice. Returns what came back (0 if nothing was open). An
+ * owner's hold (OWNER_VOUCH_ACTOR) is closed the same way and, as ever, moves no budget.
+ */
+export function returnHoldOnRevoke(holder: string, code: string, revoker: string): number {
+    const hold = db.prepare(`SELECT -h.amount_c AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
+        .get(holder, code) as { amount: number } | undefined;
+    if (!hold) return 0;
+    const at = now();
+    addLine(holder, 'return', hold.amount, revoker, code, at);
+    logLine(revoker, 'invite_revoked', holder, null, hold.amount, at);
+    return hold.amount;
+}
+
+/** The voucher budget a revoked bound invite promised (invites-vouching I2), in its transaction: one `voucher_promise_ended` line. */
+export function endPromiseOnRevoke(revoker: string, entryId: string, level: number): void {
+    logLine(revoker, 'voucher_promise_ended', null, entryId, level);
 }
 
 /** A `voucher_not_made` line (old: the entry, new: why), never throwing: a redeem goes on whatever happens here. */
@@ -784,11 +919,11 @@ export function landInviteVoucher(maker: string, entryId: string, joiner: string
  * never lands with its invite still saying it waits.
  */
 export function landAwaitingInviteVoucher(member: string, entryId: string): VoucherNotice | undefined {
-    const inv = db.prepare(`SELECT code, created_by, voucher_level FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
-        AND voucher_outcome = 'awaiting_second' AND voucher_level IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
-        { code: string; created_by: string; voucher_level: number } | undefined;
+    const inv = db.prepare(`SELECT code, created_by, voucher_level_c FROM invite_codes WHERE used_by = ? AND names_entry_id = ?
+        AND voucher_outcome = 'awaiting_second' AND voucher_level_c IS NOT NULL ORDER BY used_at DESC LIMIT 1`).get(member, entryId) as
+        { code: string; created_by: string; voucher_level_c: number } | undefined;
     if (!inv) return undefined;
-    const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level);
+    const r = landVoucher(inv.created_by, entryId, member, inv.voucher_level_c);
     db.prepare('UPDATE invite_codes SET voucher_outcome = ? WHERE code = ?').run(r.outcome, inv.code);
     return r.notice;
 }
@@ -838,9 +973,9 @@ export function vouchingOnDeparture(pk: string, actor: string, balance: number):
         if (row && !row.stopped_at) stopBudget(pk, actor, 'departed');
         // In cents, as Beans are kept: the debt the Commons paid, shared over the pieces they still held, oldest first.
         let debtCents = balance < 0 ? Math.round(-balance * 100) : 0;
-        const pieces = db.prepare(`SELECT g.id, g.amount - COALESCE((SELECT SUM(p.amount) FROM room_gifts p WHERE p.source_gift_id = g.id), 0) AS open
-            FROM room_gifts g WHERE g.to_pubkey = ? AND g.written_off IS NULL ORDER BY g.at ASC, g.id ASC`).all(pk) as { id: string; open: number }[];
-        const stamp = db.prepare('UPDATE room_gifts SET written_off = ?, written_off_at = ? WHERE id = ?');
+        const pieces = db.prepare(`SELECT g.id, g.amount_c - COALESCE((SELECT SUM(p.amount_c) FROM room_gifts p WHERE p.source_gift_id = g.id), 0) AS open
+            FROM room_gifts g WHERE g.to_pubkey = ? AND g.written_off_c IS NULL ORDER BY g.at ASC, g.id ASC`).all(pk) as { id: string; open: number }[];
+        const stamp = db.prepare('UPDATE room_gifts SET written_off_c = ?, written_off_at = ? WHERE id = ?');
         const at = now();
         for (const p of pieces) {
             const shareCents = Math.max(0, Math.min(debtCents, Math.round(p.open * 100)));
@@ -885,18 +1020,24 @@ function tradingOf(pk: string): Map<string, TradingMark> {
  * a piece whose holder left was stamped written off and counts in the written-off line, not here. No balance figure:
  * "below zero" marks the room, never by how much.
  */
-function passedOnOf(pk: string): { amount: number; people: number; belowZero: number } {
+function passedOnOf(pk: string): { amount_c: number; people: number; belowZero: number } {
     const pieces = (db.prepare(`SELECT g.to_pubkey AS holder,
-            g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
-        FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off IS NULL`).all(pk) as { holder: string; open: number }[])
+            g.amount_c - COALESCE((SELECT SUM(c.amount_c) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
+        FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off_c IS NULL`).all(pk) as { holder: string; open: number }[])
         .filter((p) => p.open > 0);
     const holders = new Set(pieces.map((p) => p.holder));
     const below = new Set([...holders].filter((h) => belowZeroNow(h)));
     return {
-        amount: pieces.reduce((s, p) => s + p.open, 0),
+        amount_c: pieces.reduce((s, p) => s + p.open, 0),
         people: holders.size,
         belowZero: pieces.filter((p) => below.has(p.holder)).reduce((s, p) => s + p.open, 0),
     };
+}
+
+/** What this voucher's vouches that landed since `sinceMs` add up to, in hundredths (room_gifts of kind 'vouch'): the card's last-30-days figure. */
+function vouchedSince(pk: string, sinceMs: number): number {
+    return (db.prepare("SELECT COALESCE(SUM(amount_c), 0) AS n FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? AND at > ?")
+        .get(pk, new Date(sinceMs).toISOString()) as { n: number }).n;
 }
 
 /** One voucher's numbers (the vouchers block's row, the card's head). No balance figure: "below zero" is a count. */
@@ -905,32 +1046,133 @@ export function voucherSummary(pk: string) {
     const b = budgetOf(pk);
     const people = db.prepare(`SELECT DISTINCT to_pubkey AS pk FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ?`).all(pk) as { pk: string }[];
     const below = people.filter((p) => belowZeroNow(p.pk)).length;
-    const writtenOff = (db.prepare('SELECT COALESCE(SUM(written_off), 0) AS n FROM room_gifts WHERE root_pubkey = ?').get(pk) as { n: number }).n;
-    const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount IS NOT NULL').get(pk) as { n: number }).n;
+    const writtenOff = (db.prepare('SELECT COALESCE(SUM(written_off_c), 0) AS n FROM room_gifts WHERE root_pubkey = ?').get(pk) as { n: number }).n;
+    const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount_c IS NOT NULL').get(pk) as { n: number }).n;
     const marks = [...tradingOf(pk).values()];
     return {
+        // The card's headline: "Vouched 350 to 4 people · 100 in the last 30 days · …". A sum of vouch amounts, never a balance.
+        vouchedLast30Days: vouchedSince(pk, Date.now() - 30 * DAY_MS),
         memberPubkey: pk, callsign: callsignOf(pk), source: row?.source ?? null, entryId: row?.entry_id ?? null,
         madeBy: row?.made_by ?? null, madeByCallsign: callsignOf(row?.made_by), madeAt: row?.made_at ?? null,
         stoppedAt: row?.stopped_at ?? null, stopReason: row?.stop_reason ?? null,
+        // An owner vouches with no limit (Marty, 9 Nov): the apps read "No limit" for them, never left or level.
+        noLimit: isNodeOwner(pk),
         ...b, belowZero: below, writtenOff, passedOn: passedOnOf(pk), invitesWithVouch: sent,
         trading: { withOthers: marks.filter((m) => m === 'others').length, insideOnly: marks.filter((m) => m === 'inside').length },
     };
 }
 
 /**
- * The vouchers block (GET /api/names/vouchers, owners and committee admins): every live voucher with their numbers, by
- * callsign. The names list orders entries by the names its admins' phones open, which this server never reads: each row
- * carries its entry id, and the phone puts the block in the list's own order.
+ * A voucher budget promised on an invite nobody has used yet (invites-vouching I4, DESIGN §3 ask 5(b)): it lands when the
+ * invited person joins and is confirmed, so until then they are "waiting to join". By entry id: the name is sealed in the
+ * names list, which this server never reads, so the committee's phone opens it. Never the code (a live code in another
+ * admin's hands could be self-redeemed; names-list.ts readBoundInvites says the same), and never a balance. `level` and
+ * `vouchAmount` are whole hundredths, as every voucher budget figure is.
  */
-export function vouchersBlock() {
+export interface WaitingVoucher {
+    entryId: string; level: number; vouchAmount: number | null;
+    madeBy: string; madeByCallsign: string; madeAt: string; expiresAt: string;
+}
+
+/** Every unused, in-date invite bound to an entry that promises a voucher budget, newest first, one per entry. */
+export function waitingToJoin(at = Date.now()): WaitingVoucher[] {
+    const rows = db.prepare(`SELECT names_entry_id AS entryId, voucher_level_c AS level, vouch_amount_c AS vouchAmount, created_by AS madeBy, created_at AS madeAt
+        FROM invite_codes WHERE used_by IS NULL AND voucher_level_c IS NOT NULL AND names_entry_id IS NOT NULL AND created_at > ?
+        ORDER BY created_at DESC, code ASC`).all(lifeCutoff(at)) as { entryId: string; level: number; vouchAmount: number | null; madeBy: string; madeAt: string }[];
+    const seen = new Set<string>();
+    const out: WaitingVoucher[] = [];
+    for (const r of rows) {
+        if (seen.has(r.entryId)) continue;
+        seen.add(r.entryId);
+        out.push({ ...r, madeByCallsign: callsignOf(r.madeBy), expiresAt: new Date(Date.parse(r.madeAt) + INVITE_LIFE_MS).toISOString() });
+    }
+    return out;
+}
+
+/** Someone "+ Make someone a voucher" offers (slice I5): who, and the entry they are confirmed against when it is that section. */
+export interface VoucherCandidate { memberPubkey: string; callsign: string; entryId?: string }
+
+/**
+ * Whom "+ Make someone a voucher" offers `viewer` (slice I5, DESIGN-invites-vouching-review-fable.md §3 ask 1), and nobody
+ * else: `admins`, every admin whose role acts, with no live budget (an owner's to make, so empty for a committee admin,
+ * and `adminsOffered` says which: true for an owner, whose empty `admins` means every admin is a voucher already);
+ * `confirmed`, every member confirmed on the names list (seconded where two admins confirm) whom makeVoucher's entry path
+ * takes: active, no live budget, no open debt on the entry, never an owner or admin (an admin is in `admins`, and an owner
+ * vouches by the role). Never the viewer. By callsign: the names are sealed in the list, so the phone opens them by entry id.
+ */
+function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confirmed: VoucherCandidate[]; adminsOffered: boolean } {
+    const noBudget = (col: string) => `NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = ${col} AND v.stopped_at IS NULL)`;
+    const adminsOffered = isNodeOwner(viewer);
+    const admins = adminsOffered
+        ? db.prepare(`SELECT nr.member_pubkey AS memberPubkey, m.callsign AS callsign FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
+            WHERE nr.role = 'admin' AND ${NODE_ROLE_ACTS} AND nr.member_pubkey != ? AND ${noBudget('nr.member_pubkey')}
+            ORDER BY m.callsign COLLATE NOCASE ASC, nr.member_pubkey ASC`).all(viewer) as VoucherCandidate[]
+        : [];
+    const confirmed = (db.prepare(`SELECT c.member_pubkey AS memberPubkey, m.callsign AS callsign, c.entry_id AS entryId FROM confirmations c
+            JOIN members m ON m.public_key = c.member_pubkey
+            WHERE c.revoked_at IS NULL AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL) AND m.status = 'active' AND m.is_visitor = 0
+              AND c.member_pubkey != ? AND ${noBudget('c.member_pubkey')}
+              AND NOT EXISTS (SELECT 1 FROM node_roles nr WHERE nr.member_pubkey = c.member_pubkey AND nr.role IN ('owner', 'admin'))
+              AND NOT EXISTS (SELECT 1 FROM names_debts d WHERE d.entry_id = c.entry_id AND d.status = 'open')
+            ORDER BY m.callsign COLLATE NOCASE ASC, c.member_pubkey ASC`).all(viewer) as VoucherCandidate[])
+        .filter((c) => !getMember(db, c.memberPubkey)?.isTreasury);
+    return { admins, confirmed, adminsOffered };
+}
+
+/**
+ * The vouchers block (GET /api/names/vouchers, owners and committee admins): every live voucher with their numbers, owners
+ * first (they vouch by role, with no limit: "Owners · no limit") and then by callsign, `waiting`: the promised budgets of
+ * invites not used yet, and `candidates`: whom "+ Make someone a voucher" offers this viewer (voucherCandidates). The
+ * names list orders entries by the names its admins' phones open, which this server never reads: each row carries its
+ * entry id, and the phone puts the block in the list's own order.
+ */
+export function vouchersBlock(viewer: string) {
     const keys = db.prepare(`SELECT v.member_pubkey AS pk FROM vouchers v JOIN members m ON m.public_key = v.member_pubkey
         WHERE v.stopped_at IS NULL AND m.status = 'active' AND m.is_visitor = 0 ORDER BY m.callsign COLLATE NOCASE ASC, v.member_pubkey ASC`).all() as { pk: string }[];
-    return { vouchers: keys.map((k) => voucherSummary(k.pk)), settings: voucherSettings() };
+    const vouchers = keys.map((k) => voucherSummary(k.pk));
+    return {
+        vouchers: [...vouchers.filter((v) => v.noLimit), ...vouchers.filter((v) => !v.noLimit)],
+        waiting: waitingToJoin(),
+        candidates: voucherCandidates(viewer),
+        settings: voucherSettings(),
+    };
+}
+
+/**
+ * The button a profile shows an owner or admin, following the person's state (invites-vouching I4, DESIGN §3 ask 2):
+ *   add       not on the names list (no live confirmation): "Add to the names list", the one-step add-and-confirm form
+ *   make      confirmed, and the viewer is on the credit committee (an owner, for an admin: slice I5): "Make a voucher"
+ *   voucher   a voucher now: "Voucher · 400 left ›" (an owner: no limit), opening the card
+ * A plain admin (off the committee) gets Add and the voucher card but never Make; a confirmation still waiting for its
+ * second admin offers nothing. Null for anyone who is not an owner or admin, for their own profile, where a community keeps
+ * no names list (the worldwide one), for an account that can't be a voucher, and wherever Beans are off: a voucher is a budget of
+ * Beans (every voucher writer calls assertBeansOn), so that community has no voucher, no Make and no card to open, and its
+ * names-list step is offered no more than the web offers it (the web reads this only where Beans are live). A left-over figure
+ * is a budget, not a balance.
+ */
+export type ProfileVoucherButton =
+    | { state: 'add' }
+    | { state: 'make' }
+    | { state: 'voucher'; left: number; noLimit: boolean };
+
+export function profileVoucherButton(viewer: string | null | undefined, target: string): ProfileVoucherButton | null {
+    if (!viewer || viewer === target || !isNodeAdmin(viewer)) return null;
+    if (getNodeProfile() === 'global' || !getProfileSwitches().beans) return null;
+    const m = getMember(db, target);
+    if (!m || m.status !== 'active' || isVisitorKey(db, target) || m.isTreasury) return null;
+    if (liveVoucher(target)) return { state: 'voucher', left: budgetOf(target).left, noLimit: isNodeOwner(target) };
+    const conf = db.prepare('SELECT needs_second, seconded_at FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL')
+        .get(target) as { needs_second: number; seconded_at: string | null } | undefined;
+    if (!conf) return { state: 'add' };
+    if (conf.needs_second && !conf.seconded_at) return null;
+    // An admin is made a voucher by an owner only (slice I5): a committee admin gets no Make for another admin.
+    if (heldPrivilegedRole(target) === 'admin' && !isNodeOwner(viewer)) return null;
+    return isOnCreditCommittee(viewer) ? { state: 'make' } : null;
 }
 
 /** One line of a Budget history: what moved, by whose hand, and for what, never which invite code. */
 export interface HistoryLine {
-    kind: string; amount: number; actor: string; actorCallsign: string | null; at: string;
+    kind: string; amount_c: number; actor: string; actorCallsign: string | null; at: string;
     /** A hold or a return: an invite's vouch, or one from a member's profile. Absent on a grant, a level or a stop. */
     for?: 'invite' | 'profile';
     /** An invite's: when it was made (its hold's moment, written with the code). */
@@ -938,7 +1180,7 @@ export interface HistoryLine {
     /** An invite's hold: still held, landed on someone (`vouched`), or back in the budget (expired, stopped or not landed). */
     outcome?: 'held' | 'vouched' | 'back';
     /** A return: the invite lapsed unused (`expired`), the budget stopped first, or the vouch didn't land at the redeem. */
-    why?: 'expired' | 'stopped' | 'not_landed';
+    why?: 'expired' | 'stopped' | 'not_landed' | 'revoked';
     /** Who the vouch went to: a profile vouch's person, an invite's joiner once it landed. Someone the card's people name. */
     person?: { memberPubkey: string; callsign: string } | null;
 }
@@ -951,24 +1193,26 @@ export interface HistoryLine {
  */
 function historyOf(pk: string, limit = 200): HistoryLine[] {
     const cutoff = lifeCutoff(Date.now());
-    const rows = db.prepare('SELECT kind, amount, actor, ref, at FROM voucher_allocations WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, limit) as
-        { kind: string; amount: number; actor: string; ref: string | null; at: string }[];
+    const rows = db.prepare('SELECT kind, amount_c, actor, ref, at FROM voucher_allocations WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, limit) as
+        { kind: string; amount_c: number; actor: string; ref: string | null; at: string }[];
     const giftTo = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE id = ? AND from_pubkey = ? AND kind = 'vouch'");
     const landedOn = db.prepare("SELECT to_pubkey AS pk FROM room_gifts WHERE invite_code = ? AND from_pubkey = ? AND kind = 'vouch' LIMIT 1");
     const holdAt = db.prepare("SELECT at FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'hold' AND ref = ? ORDER BY rowid LIMIT 1");
     const returned = db.prepare("SELECT 1 FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'return' AND ref = ?");
+    const revokedAt = db.prepare("SELECT 1 FROM known_floor_log WHERE action = 'invite_revoked' AND member_pubkey = ? AND at = ?");
     const codeRow = db.prepare('SELECT used_by, created_at FROM invite_codes WHERE code = ?');
     const personOf = (who: string) => ({ memberPubkey: who, callsign: callsignOf(who) });
     return rows.map((r): HistoryLine => {
-        const line: HistoryLine = { kind: r.kind, amount: r.amount, actor: r.actor, actorCallsign: callsignOf(r.actor) || null, at: r.at };
+        const line: HistoryLine = { kind: r.kind, amount_c: r.amount_c, actor: r.actor, actorCallsign: callsignOf(r.actor) || null, at: r.at };
         if (!r.ref || (r.kind !== 'hold' && r.kind !== 'return')) return line;
         const gift = r.kind === 'hold' ? giftTo.get(r.ref, pk) as { pk: string } | undefined : undefined;
         if (gift) return { ...line, for: 'profile', person: personOf(gift.pk) };
         const code = codeRow.get(r.ref) as { used_by: string | null; created_at: string } | undefined;
         if (r.kind === 'return') {
             // The node writes a return when a code lapses (the prune, a writer first) or its vouch can't land at the redeem;
-            // anyone else's is a budget stopped with the code still out.
-            const why = r.actor !== 'node' ? 'stopped' : code?.used_by ? 'not_landed' : 'expired';
+            // anyone else's is an invite revoked (its `invite_revoked` log line stamped the same moment) or a budget stopped
+            // with the code still out.
+            const why = r.actor !== 'node' ? (revokedAt.get(pk, r.at) ? 'revoked' : 'stopped') : code?.used_by ? 'not_landed' : 'expired';
             return { ...line, for: 'invite', inviteMadeAt: (holdAt.get(pk, r.ref) as { at: string } | undefined)?.at ?? null, why };
         }
         const to = (landedOn.get(r.ref, pk) as { pk: string } | undefined)?.pk;
@@ -978,19 +1222,19 @@ function historyOf(pk: string, limit = 200): HistoryLine[] {
 }
 
 /**
- * The people one voucher vouched for, one level, newest first: how much, raised or not, below zero now (a mark, no figure),
+ * The people one voucher vouched for, one level, newest first: how much (`amount_c`, whole hundredths), raised or not, below zero now (a mark, no figure),
  * and where their completed trades reach (`trading`, tradingOf).
  */
 function peopleOf(pk: string) {
     const trading = tradingOf(pk);
-    return (db.prepare(`SELECT to_pubkey AS pk, SUM(amount) AS amount, COUNT(*) AS pieces, MIN(at) AS first_at, MAX(invite_code IS NOT NULL) AS by_invite,
-            SUM(COALESCE(written_off, 0)) AS written_off FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? GROUP BY to_pubkey ORDER BY first_at DESC`).all(pk) as
-        { pk: string; amount: number; pieces: number; first_at: string; by_invite: number; written_off: number }[])
+    return (db.prepare(`SELECT to_pubkey AS pk, SUM(amount_c) AS amount_c, COUNT(*) AS pieces, MIN(at) AS first_at, MAX(invite_code IS NOT NULL) AS by_invite,
+            SUM(COALESCE(written_off_c, 0)) AS written_off_c FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ? GROUP BY to_pubkey ORDER BY first_at DESC`).all(pk) as
+        { pk: string; amount_c: number; pieces: number; first_at: string; by_invite: number; written_off_c: number }[])
         .map((r) => {
             const m = getMember(db, r.pk);
             return {
-                memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount: r.amount, raised: r.pieces > 1,
-                byInvite: r.by_invite === 1, belowZero: m?.status === 'active' && belowZeroNow(r.pk), left: m?.status !== 'active', writtenOff: r.written_off,
+                memberPubkey: r.pk, callsign: m?.callsign ?? '', joinedAt: m?.joinedAt ?? null, amount_c: r.amount_c, raised: r.pieces > 1,
+                byInvite: r.by_invite === 1, belowZero: m?.status === 'active' && belowZeroNow(r.pk), left: m?.status !== 'active', writtenOff: r.written_off_c,
                 vouchesForMe: pairOf(r.pk, pk).total > 0, trading: trading.get(r.pk) ?? 'none',
             };
         });
@@ -1003,7 +1247,8 @@ export function voucherCard(pk: string) {
 
 /**
  * The card for an owner or admin (owners and admins read it: §3, §5), a look logged in the known floor's log, which every
- * owner and admin reads, once per viewer and voucher a day. `canChange`: whether this viewer makes, stops and sets budgets.
+ * owner and admin reads, once per viewer and voucher a day. `canChange`: whether this viewer sets budgets; `canStop`: whether
+ * they may stop this one now (never an owner's; an admin's by an owner only).
  */
 export function readVoucherCard(viewer: string, member: unknown) {
     const pk = memberKey(member);
@@ -1014,19 +1259,23 @@ export function readVoucherCard(viewer: string, member: unknown) {
     if (!db.prepare("SELECT 1 FROM known_floor_log WHERE actor_pubkey = ? AND action = 'voucher_looked' AND member_pubkey = ? AND at > ?").get(viewer, pk, since)) {
         logLine(viewer, 'voucher_looked', pk, null, null);
     }
-    return { ...voucherCard(pk), canChange: isOnCreditCommittee(viewer) && viewer !== pk };
+    return { ...voucherCard(pk), canChange: isOnCreditCommittee(viewer) && viewer !== pk, canStop: mayStop(viewer, pk) };
 }
 
-/** GET /api/vouchers/me: whether the signer is a voucher now, their numbers and history, the presets (any member). */
+/**
+ * GET /api/vouchers/me: whether the signer is a voucher now, their numbers and history, the presets they pick from (any
+ * member). An owner (Marty, 9 Nov): `noLimit`, the six owner presets, and 500 for one person; the apps show "No limit".
+ */
 export function myVouching(pk: string) {
     const live = !!liveVoucher(pk);
+    const owner = live && isNodeOwner(pk);
     return {
         voucher: live,
         ...(live ? { budget: budgetOf(pk), source: voucherRow(pk)!.source, history: historyOf(pk, 50) } : {}),
-        presets: [...VOUCH_PRESETS], vouchMax: VOUCH_MAX, budgetMax: VOUCHER_BUDGET_MAX,
+        noLimit: owner, presets: [...vouchPresetsFor(owner)], vouchMax: vouchMaxFor(owner), budgetMax: VOUCHER_BUDGET_MAX,
         // The vouches people gave the signer, as their Ledger shows them (§6 `vouchedBy`).
-        vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount) AS amount, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
-            GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount: number; at: string }[])
-            .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount: r.amount, at: r.at })),
+        vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount_c) AS amount_c, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
+            GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount_c: number; at: string }[])
+            .map((r) => ({ memberPubkey: r.pk, callsign: callsignOf(r.pk), amount_c: r.amount_c, at: r.at })),
     };
 }

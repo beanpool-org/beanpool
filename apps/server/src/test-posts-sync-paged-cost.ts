@@ -65,7 +65,7 @@ function seed(): { carol: string; bob: string; deltaFrom: string } {
     const club = createGroup({ name: 'Cost club', createdBy: carol }).id;
     const other = createGroup({ name: 'Not carol', createdBy: members[2] }).id;
 
-    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active,
+    const insPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active,
                                     created_at, updated_at, audience_scope, target_group_id, target_pubkey, event_start_at, event_end_at, event_state)
                                 VALUES (?, ?, 'food', ?, '', 5, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const deltaFromMs = BASE + (LISTINGS - 450) * 60_000;
@@ -94,11 +94,11 @@ function seed(): { carol: string; bob: string; deltaFrom: string } {
                 type === 'event' && cancelled ? 'cancelled' : null);
         }
     })();
-    const insTx = db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount) VALUES (?, ?, ?, 1)');
+    const insTx = db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c) VALUES (?, ?, ?, 1)');
     db.transaction(() => {
         for (let i = 0; i < LEDGER; i++) insTx.run(`cost-tx-${i}`, members[Math.floor(rand() * MEMBERS)], members[Math.floor(rand() * MEMBERS)]);
     })();
-    const insDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
+    const insDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
                                 VALUES (?, ?, ?, ?, 5, 'completed', '2026-06-01T00:00:00.000Z')`);
     db.transaction(() => {
         for (let i = 0; i < DEALS; i++) {

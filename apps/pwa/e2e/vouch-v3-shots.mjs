@@ -38,6 +38,10 @@ const cases = [
     { view: 'notice', theme: 'dark', name: 'pwa-make-voucher-320px-dark.png' },
     { view: 'profile', theme: 'light', prior: 75, name: 'pwa-profile-raise-320px-light.png' },
     { view: 'profile', theme: 'dark', prior: 75, name: 'pwa-profile-raise-320px-dark.png' },
+    // An owner vouches with no limit (Marty, 9 Nov): 200 and 500 too, "From your budget: No limit", and an owner's card
+    // and row read No limit with no Set budget to.
+    ...['light', 'dark'].flatMap((theme) => ['invite', 'profile', 'card', 'budget'].map((view) => (
+        { view, theme, owner: true, name: `pwa-owner-${view}-320px-${theme}.png` }))),
 ];
 
 try {
@@ -56,15 +60,17 @@ try {
                     contentType: 'application/json',
                     body: JSON.stringify({
                         voucher: true,
-                        budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-                        presets: [25, 50, 75, 100],
-                        vouchMax: 100,
-                        budgetMax: 2000,
-                        vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount: 100, at: '2026-11-01' }],
+                        // The budget's figures keep their names and are whole hundredths, as the node sends them (heldInvites and peopleVouched are counts).
+                        budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+                        noLimit: !!c.owner,
+                        presets: c.owner ? [2500, 5000, 7500, 10000, 20000, 50000] : [2500, 5000, 7500, 10000],
+                        vouchMax: c.owner ? 50000 : 10000,
+                        budgetMax: 200000,
+                        vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount_c: 10000, at: '2026-11-01' }],
                         history: [
-                            { kind: 'grant', amount: 1000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
-                            { kind: 'hold', amount: -100, actor: 'me', actorCallsign: 'Alice', at: '2026-11-02T00:00:00Z', for: 'invite', outcome: 'held' },
-                            ...(c.prior ? [{ kind: 'hold', amount: -c.prior, actor: 'me', actorCallsign: 'Alice', at: '2026-11-03T00:00:00Z', for: 'profile', person: { memberPubkey: 's'.repeat(64), callsign: 'sam' } }] : []),
+                            { kind: 'grant', amount_c: 100000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
+                            { kind: 'hold', amount_c: -10000, actor: 'me', actorCallsign: 'Alice', at: '2026-11-02T00:00:00Z', for: 'invite', outcome: 'held' },
+                            ...(c.prior ? [{ kind: 'hold', amount_c: -c.prior * 100, actor: 'me', actorCallsign: 'Alice', at: '2026-11-03T00:00:00Z', for: 'profile', person: { memberPubkey: 's'.repeat(64), callsign: 'sam' } }] : []),
                         ],
                     }),
                 });
@@ -77,23 +83,24 @@ try {
                         memberPubkey: 'a'.repeat(64),
                         callsign: 'Jane Albury',
                         madeByCallsign: 'marty',
-                        left: 550,
-                        level: 1000,
-                        vouched: 350,
+                        noLimit: !!c.owner,
+                        left: 55000,
+                        level: 100000,
+                        vouched: 35000,
                         peopleVouched: 4,
-                        held: 100,
+                        held: 10000,
                         heldInvites: 1,
                         invitesWithVouch: 5,
                         belowZero: 1,
                         writtenOff: 0,
                         trading: { withOthers: 2, insideOnly: 1 },
-                        passedOn: { amount: 50, people: 1 },
+                        passedOn: { amount_c: 5000, people: 1 },
                         canChange: true,
                         history: [
-                            { kind: 'grant', amount: 1000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
+                            { kind: 'grant', amount_c: 100000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
                         ],
                         people: [
-                            { memberPubkey: 'p1', callsign: 'sam', amount: 100, raised: false, byInvite: true, belowZero: true, trading: 'others' },
+                            { memberPubkey: 'p1', callsign: 'sam', amount_c: 10000, raised: false, byInvite: true, belowZero: true, trading: 'others' },
                         ],
                     }),
                 });
@@ -107,14 +114,15 @@ try {
                             {
                                 memberPubkey: 'a'.repeat(64),
                                 callsign: 'Jane Albury',
-                                left: 550,
-                                level: 1000,
-                                vouched: 350,
+                                noLimit: !!c.owner,
+                                left: 55000,
+                                level: 100000,
+                                vouched: 35000,
                                 peopleVouched: 4,
                                 belowZero: 1,
                             },
                         ],
-                        settings: { voucherBudget: 1000, memberGift: 100 },
+                        settings: { voucherBudget: 100000, memberGift: 10000 },
                     }),
                 });
             }
@@ -148,12 +156,10 @@ try {
                     status: 200,
                     contentType: 'application/json',
                     body: JSON.stringify({
-                        balance: 150,
-                        earnedCredit: 50,
-                        allowance: 100,
-                        usableAllowance: 100,
+                        balance_c: 15000,
+                        earnedCredit_c: 5000,
                         vouchedBy: [
-                            { memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount: 100, at: '2026-11-01T00:00:00.000Z' },
+                            { memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount_c: 10000, at: '2026-11-01T00:00:00.000Z' },
                         ],
                     }),
                 });
@@ -213,7 +219,7 @@ try {
         });
 
         const page = await ctx.newPage();
-        await page.goto(`${origin}/e2e/vouch-v3-shots-harness.html?view=${c.view === 'notice' ? 'invite' : c.view}&theme=${c.theme}`, { waitUntil: 'load' });
+        await page.goto(`${origin}/e2e/vouch-v3-shots-harness.html?view=${c.view === 'notice' ? 'invite' : c.view}&theme=${c.theme}${c.owner ? '&owner=1' : ''}`, { waitUntil: 'load' });
         await page.waitForFunction(() => document.documentElement.dataset.harnessReady === 'true');
         await page.addStyleTag({
             content: `*, *::before, *::after { transition: none !important; } html { font-size: 130% !important; }`,
@@ -223,7 +229,10 @@ try {
         if (c.view === 'notice') await page.click('[data-testid="make-voucher-button"]');
         await page.waitForTimeout(c.view === 'notice' ? 300 : 0);
         // The part each shot is for, scrolled into view inside its own scrolling box (#2915 round 4).
-        const focus = { card: '[data-testid="voucher-level-500"]', profile: '[data-testid="profile-vouch"]' }[c.view];
+        // An owner's card has no Set budget to: its No limit box is the part; an owner's invite, the presets.
+        const focus = c.owner
+            ? { invite: '[data-testid="invite-vouch"]', profile: '[data-testid="profile-vouch"]' }[c.view]
+            : { card: '[data-testid="voucher-level-500"]', profile: '[data-testid="profile-vouch"]' }[c.view];
         if (focus) {
             await page.waitForSelector(focus, { timeout: 5000 }).catch(() => {});
             await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), focus);

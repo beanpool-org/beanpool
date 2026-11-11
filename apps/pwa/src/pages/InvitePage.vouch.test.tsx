@@ -14,10 +14,10 @@ vi.mock('../lib/api', async (importOriginal) => {
         getInviteTree: vi.fn(async () => []),
         getMyVouching: vi.fn(async () => ({
             voucher: true,
-            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 55000, held: 10000, heldInvites: 1, vouched: 35000, peopleVouched: 4, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         })),
         getVouchersBlock: vi.fn(async () => ({
@@ -32,15 +32,15 @@ vi.mock('../lib/api', async (importOriginal) => {
                     madeAt: '2026-11-01T00:00:00.000Z',
                     stoppedAt: null,
                     stopReason: null,
-                    left: 550,
-                    held: 100,
+                    left: 55000,
+                    held: 10000,
                     heldInvites: 1,
-                    vouched: 350,
+                    vouched: 35000,
                     peopleVouched: 4,
-                    level: 1000,
+                    level: 100000,
                     belowZero: 1,
                     writtenOff: 0,
-                    passedOn: { amount: 0, people: 0 },
+                    passedOn: { amount_c: 0, people: 0 },
                     invitesWithVouch: 4,
                     trading: { withOthers: 0, insideOnly: 0 },
                 },
@@ -52,7 +52,7 @@ vi.mock('../lib/api', async (importOriginal) => {
 
 vi.mock('../lib/visitor-lobby-gate', () => ({
     communityInfoOnce: vi.fn(async () => ({
-        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { invites: true, beans: true },
+        memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { invites: true, beans: true },
     })),
 }));
 
@@ -84,9 +84,9 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
     it('does not render presets when member is not a voucher', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: false,
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         });
 
@@ -98,10 +98,10 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
     it('greys out presets above what budget is left', async () => {
         vi.mocked(getMyVouching).mockResolvedValueOnce({
             voucher: true,
-            budget: { left: 40, held: 0, heldInvites: 0, vouched: 960, peopleVouched: 10, level: 1000 },
-            presets: [25, 50, 75, 100],
-            vouchMax: 100,
-            budgetMax: 2000,
+            budget: { left: 4000, held: 0, heldInvites: 0, vouched: 96000, peopleVouched: 10, level: 100000 },
+            presets: [2500, 5000, 7500, 10000],
+            vouchMax: 10000,
+            budgetMax: 200000,
             vouchedBy: [],
         });
 
@@ -122,10 +122,11 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
 
         await waitFor(() => {
+            // The vouch goes as whole hundredths, as the node takes it (core isVouchPreset): 50 Beans.
             expect(generateInvite).toHaveBeenCalledWith(
                 IDENTITY.publicKey,
                 undefined,
-                50,
+                5000,
             );
         });
     });
@@ -189,27 +190,30 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         await waitFor(() => expect(screen.getByTestId('vouchers-block')).toBeInTheDocument());
 
         expect(screen.getByText('Vouchers')).toBeInTheDocument();
-        expect(screen.getByText(/Jane Albury/)).toBeInTheDocument();
-        expect(screen.getByText(/4 vouched/)).toBeInTheDocument();
-        expect(screen.getByText(/1 below zero/)).toBeInTheDocument();
+        // A row says only what matters (invites-vouching I4): who, and what is left. The numbers are on the card.
+        const row = screen.getByTestId('voucher-row-Jane Albury');
+        expect(row).toHaveTextContent(/^@Jane Albury · 550 left ›$/);
+        expect(row.textContent).not.toMatch(/vouched|below zero/);
         expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument();
     });
 
-    it('"+ Make someone a voucher" says one plain sentence, no developer words, and closes on Escape (#2915 round 4)', async () => {
+    it('"+ Make someone a voucher" opens the sheet of whom the node offers (I5), named by its heading, no developer words, and closes on Escape (#2915 round 4)', async () => {
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
         await waitFor(() => expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument());
 
         const row = screen.getByTestId('make-voucher-button');
         row.focus();
         fireEvent.click(row);
-        const dialog = screen.getByRole('dialog', { name: '+ Make someone a voucher' });
-        expect(dialog).toHaveTextContent('Make vouchers on the names list in the phone app.');
+        const dialog = screen.getByRole('dialog', { name: 'Make someone a voucher' });
+        // This node's block offers nobody (no `candidates`): one plain sentence says so. (Before I5 the web only said the
+        // phone made vouchers; Marty's 10 Nov rule gives the web the sheet too.)
+        expect(dialog).toHaveTextContent('Nobody to offer: every admin and everyone confirmed on the names list is a voucher already.');
         // Never a repo folder, a slice code or a promise of screens to come.
         expect(dialog.textContent).not.toMatch(/apps\/|manager|\bS\d\b|coming soon/i);
-        expect(document.activeElement).toBe(screen.getByRole('heading', { name: '+ Make someone a voucher' }));
+        expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Make someone a voucher' }));
 
         fireEvent.keyDown(window, { key: 'Escape' });
-        expect(screen.queryByRole('dialog', { name: '+ Make someone a voucher' })).toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Make someone a voucher' })).toBeNull();
         expect(document.activeElement).toBe(row);
     });
 

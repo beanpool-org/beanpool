@@ -10,8 +10,7 @@ import { MembersModule } from './components/modules/MembersModule';
 /**
  * The owner console reads the node's members and posts a page at a time (capacity fix 3): POST /api/local/admin/data
  * with `lists: 'none'` is the summary and its counts, and /admin/data/members and /data/posts are the pages. The screens
- * count from the counts, list the pages read so far, and offer the next with Load more. A node from before the pages
- * sends the lists whole, and the console shows them as it always did.
+ * count from the counts, list the pages read so far, and offer the next with Load more.
  */
 
 const ok = (body: unknown) => Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) });
@@ -20,7 +19,7 @@ const member = (i: number) => ({ publicKey: key(i), callsign: `Member ${i}`, inv
 
 const SUMMARY = {
     health: { flags: [] }, reports: [], reportCount: 0, escrowDisputesCount: 0, knockCount: 0,
-    tradeTotals: { deals: 3, volume: 12, cancelled: 0 }, commonsBalance: 5,
+    tradeTotals: { deals: 3, volume: 1200, cancelled: 0 }, commonsBalance: 500,
     counts: { members: 3_500, treasuries: 1, doorMembers: 40, owners: 2, platforms: { ios: 10, android: 20, web: 0, unknown: 3_470 } },
 };
 
@@ -57,21 +56,20 @@ describe('the console reads the node a page at a time', () => {
         expect(data.membersTotal).toBe(3_500);
     });
 
-    it('a node from before the pages: its whole lists as they came, counts made from them, nothing more to load', async () => {
+    it('lists a summary happens to carry are not kept: the console always reads the pages, and counts only from the node\'s counts', async () => {
         const fetchMock = vi.fn().mockImplementation((url: string) => {
             const u = String(url);
-            if (u.endsWith('/api/local/admin/data')) {
-                return ok({ ...SUMMARY, counts: undefined, members: [member(0), member(1), { ...member(2), isTreasury: true, invitedBy: 'open:google' }], profiles: [], posts: [{ id: 'p1' }], memberStats: {} });
-            }
-            throw new Error(`an older node has no ${u}`);
+            if (u.endsWith('/api/local/admin/data/members')) return ok({ members: [member(5)], profiles: [], memberStats: {}, nextCursor: null, total: 1 });
+            if (u.endsWith('/api/local/admin/data/posts')) return ok({ posts: [{ id: 'p9' }], nextCursor: null });
+            if (u.endsWith('/api/local/admin/data')) return ok({ ...SUMMARY, members: [member(0), member(1)], posts: [{ id: 'p1' }] });
+            throw new Error(`unexpected ${u}`);
         });
         vi.stubGlobal('fetch', fetchMock);
-        const data = await fetchNodeData('https://old-node.example');
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(data.members).toHaveLength(3);
-        expect(data.counts).toMatchObject({ members: 3, treasuries: 1, doorMembers: 1 });
-        expect(data.membersNext).toBeNull();
-        expect(data.postsNext).toBeNull();
+        const data = await fetchNodeData('https://node.example');
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        expect(data.members?.map((m) => m.publicKey)).toEqual([key(5)]);
+        expect(data.posts).toEqual([{ id: 'p9' }]);
+        expect(data.counts?.members).toBe(3_500);
     });
 
     it('a walk of the pages holds each member once, even when a page is read twice', () => {
@@ -173,11 +171,12 @@ describe("the prune-branch dialog confirms on the node's figures for the whole b
         expect(document.getElementById('prune-members-affected')?.textContent).toBe('…');
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-        await act(async () => { answer({ members: 2_400, badDebt: 812.5, surplus: 40, net: -772.5 }); });
+        // The node's figures are whole hundredths of a Bean (server branchPrunePreview): 81250 is 812.50 Beans.
+        await act(async () => { answer({ members: 2_400, badDebt_c: 81250, surplus_c: 4000, net_c: -77250 }); });
         await waitFor(() => expect(document.getElementById('prune-members-affected')?.textContent).toBe('2400'));
-        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('812.5 🫘 bad debt');
+        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('812.50 🫘 bad debt');
         expect(document.getElementById('prune-credit-confiscated')?.textContent).toBe('40 🫘 credit');
-        expect(document.getElementById('prune-net-impact')?.textContent).toBe('-772.5 🫘');
+        expect(document.getElementById('prune-net-impact')?.textContent).toBe('−772.50 🫘');
         expect(confirm).toBeEnabled();
         const asked = fetchMock.mock.calls.find(([u]) => String(u).endsWith(`/branches/${key(0)}/prune`));
         expect((asked?.[1] as RequestInit | undefined)?.method ?? 'GET').toBe('GET');

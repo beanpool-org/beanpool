@@ -41,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, recoverySealCommands, type NodeProc } from './takeover-test-harness.js';
 import { fixtureWords } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -87,7 +88,7 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                         VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'recovery-tombstones-test', 'TEST')`).run(a.pk, a.callsign);
-            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(a.pk);
             return true;
         },
         // A request to this node's own HTTPS server, signed by the member as the apps sign one.
@@ -109,7 +110,8 @@ async function child(): Promise<void> {
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Public-Key': pkOf(a.seedHex),
-                    'X-Signature': crypto.sign(null, Buffer.from(`${a.method}\n${a.path}\n${ts}\n${nonce}\n${bodyString}`), priv).toString('base64'),
+                    'X-Signature': signRequest(priv, { method: a.method, path: a.path, timestamp: ts, nonce, body: bodyString }),
+                    [SIGNED_FOR_HEADER]: signedForHost(),
                     'X-Timestamp': String(ts),
                     'X-Nonce': nonce,
                 },
@@ -254,7 +256,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server and its standby ──
         console.log('\n— 1. a main server, whose members connect their sign-in; and its standby —');
-        main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
@@ -264,7 +266,7 @@ async function main(): Promise<void> {
         await main.send('reseal');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');
@@ -358,7 +360,7 @@ async function main(): Promise<void> {
         const ivyBefore = (await standby.send('copies')).filter((r: any) => r.owner === ivy.pk).length;
         require_(ivyBefore === 1, `the standby has recorded it, and still holds her copy (${ivyBefore})`);
         await standby.kill('SIGTERM');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         require_(standby.ready.role === 'backup', 'it starts again as the standby');
         const ivyAfter = (await standby.send('copies')).filter((r: any) => r.owner === ivy.pk).length;
@@ -385,7 +387,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         require_(standby.ready.role === 'primary', 'it is the main server');
 

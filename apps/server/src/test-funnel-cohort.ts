@@ -65,7 +65,7 @@ function addMember(
 
 function addPost(id: string, author: string, at: string, originNode: string | null = null): void {
     db.prepare(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, origin_node)
+        `INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, status, origin_node)
          VALUES (?, 'offer', 'general', ?, '', 0, ?, ?, 'active', ?)`
     ).run(id, id, author, at, originNode);
 }

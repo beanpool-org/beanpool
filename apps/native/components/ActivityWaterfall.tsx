@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
 import { withJitter } from '../utils/jitter';
 import { signedGet } from '../utils/db';
-import { t, tn, activityTarget } from '@beanpool/core';
+import { t, tn, activityTarget, formatHundredths, isHundredths } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 export interface ActivityFeedItem {
@@ -221,15 +221,16 @@ export function ActivityWaterfall({ onCreatePostPress, onOpenPost, onOpenProfile
                             break;
                         case 'trade_completed': {
                             emoji = '✅';
-                            const credits = item.metadata?.credits;
-                            summaryText = credits
-                                ? tn(Number(credits), '{actor} traded with {target} for {n} Beans', '{actor} traded with {target} for {n} Beans', names)
+                            // What the deal paid, whole hundredths of a Bean (the node's amount_c); anything else says no figure.
+                            const amount_c = isHundredths(item.metadata?.amount_c) && item.metadata.amount_c > 0 ? item.metadata.amount_c : null;
+                            summaryText = amount_c !== null
+                                ? tn(amount_c / 100, '{actor} traded with {target} for {n} Beans', '{actor} traded with {target} for {n} Beans', { ...names, n: formatHundredths(amount_c) })
                                 : t('{actor} traded with {target}', names);
                             content = (
                                 <Text style={[styles.itemText, { color: colors.text.body }]}>
                                     <Sentence text={t('{actor} traded with {target}')} parts={{ actor, target }} />
-                                    {credits ? (
-                                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}> (🫘 {credits})</Text>
+                                    {amount_c !== null ? (
+                                        <Text style={{ fontWeight: 'bold', color: colors.brand.primary }}> (🫘 {formatHundredths(amount_c)})</Text>
                                     ) : null}
                                 </Text>
                             );

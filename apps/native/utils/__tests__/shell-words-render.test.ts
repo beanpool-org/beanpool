@@ -96,10 +96,14 @@ vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck:
 vi.mock('../../modules/boot-clock', () => ({ bootClockMs: () => null }));
 vi.mock('../community-switch', () => ({ onCommunitySwitched: () => () => {}, communitySwitched: () => {} }));
 /** The update gate shows the block at once, at this version. */
+/** What the gate puts up: this app below the floor (the default), or the community's server too old (`nodeTooOld`). */
+const gateShows = vi.hoisted(() => ({ block: { version: '1.3.0' } as { version: string; nodeTooOld?: true } }));
 vi.mock('../force-update', () => ({
-    createForceUpdateGate: ({ show }: { show: (b: { version: string }) => void }) => ({ start: async () => { show({ version: '1.3.0' }); }, appStateChanged: async () => {}, communitySwitched: async () => {} }),
+    createForceUpdateGate: ({ show }: { show: (b: { version: string; nodeTooOld?: true }) => void }) => ({ start: async () => { show(gateShows.block); }, appStateChanged: async () => {}, communitySwitched: async () => {}, refused: () => {}, serverTooOld: () => {}, serverCurrent: () => {} }),
     checkCommunityForUpdate: async () => null,
     appVersionHeaderValue: () => '1.2.70',
+    onAppRefused: () => () => {},
+    followCommunityForUpdate: () => () => {},
 }));
 vi.mock('../identity', () => ({ hasMnemonic: () => who.words }));
 vi.mock('../LocalAuth', () => ({
@@ -181,6 +185,7 @@ beforeEach(() => {
     store.map.clear();
     who.identity = { publicKey: '9'.repeat(64), privateKey: '8'.repeat(64), callsign: 'Wren' };
     who.words = true;
+    gateShows.block = { version: '1.3.0' };
     out.others = [{ url: 'https://lismore.example', name: 'Lismore Commons' }];
     out.plan = { hereName: 'Mullum Commons', next: { url: 'https://lismore.example', name: 'Lismore Commons' } };
     out.switchError = null;
@@ -338,6 +343,33 @@ describe('"Update required" in the pseudo-locale: every page, every word through
         expect(unfit(host, 320 - 32 - 40, WRITTEN)).toEqual([]);
         await click(buttonReading(xx('Leave this community')), 'Leave');
         expect(unfit(host, 320 - 32 - 40, WRITTEN)).toEqual([]);
+    });
+
+    it("a community whose server is older than this app talks to (1.2.37): the one card, its operator named, no store button, the same ways out", async () => {
+        gateShows.block = { version: '1.2.37', nodeTooOld: true };
+        await renderIn('xx', createElement(ForceUpdateBlock));
+        expect(host.textContent).toContain(xx('Server update needed'));
+        expect(host.textContent).toContain(xx("This community's server runs BeanPool {version}. This app needs {minimum} or newer. Its operator must update.")
+            .replace('{version}', '1.2.37').replace('{minimum}', '1.4.0'));
+        // Nothing the member can install fixes it: no store button, no "Update required".
+        expect(byLabel(xx('Update BeanPool in the App Store'))).toBeNull();
+        expect(host.textContent).not.toContain(xx('Update required'));
+        // The ways out stay: another community, the words, leaving.
+        expect(byLabel(xx('Use {name}').replace('{name}', 'Lismore Commons'))).not.toBeNull();
+        expect(host.textContent).toContain(xx('See my 12 words'));
+        expect(host.textContent).toContain(xx('Leave this community'));
+        expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
+        // At 320 dp with 1.3× text, as every page of the block.
+        expect(unfit(host, 320 - 32 - 40, WRITTEN)).toEqual([]);
+    });
+
+    it('the server card in English, word for word', async () => {
+        gateShows.block = { version: '1.2.37', nodeTooOld: true };
+        await renderIn('en', createElement(ForceUpdateBlock));
+        expect(bracketed(host)).toBe(0);
+        expect(host.textContent).toContain('Server update needed');
+        expect(host.textContent).toContain("This community's server runs BeanPool 1.2.37. This app needs 1.4.0 or newer. Its operator must update.");
+        expect(byLabel('Update BeanPool in the App Store')).toBeNull();
     });
 
     it('a language picked while it is up redraws it (it is outside the navigator a pick redraws)', async () => {

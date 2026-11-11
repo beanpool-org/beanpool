@@ -76,7 +76,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
             memberCount: 3,
             postCount: 0,
             transactionCount: 0,
-            commonsBalance: 100,
+            commonsBalance_c: 10000,
             profile: 'local',
             features: { beans: true, enterprises: true, decisions: true },
         } as any);
@@ -92,27 +92,27 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 name: 'Garden Crew',
                 purpose: 'Community food production',
                 avatar: null,
-                balance: 150,
-                creditLine: 200,
-                usableFloor: -200,
-                pausedFloorSnapshot: -200,
+                balance_c: 15000,
+                creditLine_c: 20000,
+                usableFloor_c: -20000,
+                pausedFloorSnapshot_c: -20000,
                 paused: true,
                 pausedAt: '2026-09-15T00:00:00.000Z',
                 pauseExpiresAt: '2026-12-14T00:00:00.000Z',
                 pauseDaysRemaining: 90,
                 status: 'active',
                 liveOffers: 2,
-                earnedSurplus: 50,
+                earnedSurplus_c: 5000,
                 keepers: [{ publicKey: 'keeper-alice-pubkey', callsign: 'Alice' }],
                 posts: [
-                    { id: 'post-1', type: 'offer', title: 'Fresh Kale', credits: 5, category: 'food' },
+                    { id: 'post-1', type: 'offer', title: 'Fresh Kale', price_c: 500, category: 'food' },
                 ],
                 flow: [],
             };
 
             vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
             vi.spyOn(api, 'getBalance').mockResolvedValue({
-                balance: 50,
+                balance_c: 5000,
                 keeperOf: ['enterprise-garden-pubkey'],
             } as any);
             vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
@@ -122,15 +122,15 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     purpose: null,
                     status: 'active',
                     paused: true,
-                    balance: 150,
+                    balance_c: 15000,
                 },
                 period: { since: null, until: null },
                 summary: {
-                    totalIncome: 120,
-                    totalSpend: 40,
-                    netChange: 80,
-                    startingBalance: 70,
-                    endingBalance: 150,
+                    totalIncome: 12000,
+                    totalSpend: 4000,
+                    netChange: 8000,
+                    startingBalance: 7000,
+                    endingBalance: 15000,
                     transactionCount: 2,
                 },
                 entries: [
@@ -138,13 +138,13 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                         id: 'tx-1',
                         timestamp: '2026-09-10T10:00:00.000Z',
                         direction: 'income',
-                        amount: 120,
-                        fee: 1.8,
-                        netAmount: 118.2,
+                        amount_c: 12000,
+                        fee_c: 180,
+                        netAmount: 11820,
                         counterparty: 'member-bob',
                         counterpartyName: 'Bob',
                         memo: 'Veggie box delivery',
-                        runningBalance: 150,
+                        runningBalance: 15000,
                         authSigner: null,
                     },
                 ],
@@ -174,8 +174,9 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
             expect(screen.getAllByText(/Came in/i).length).toBeGreaterThanOrEqual(1);
             expect(screen.getAllByText(/Went out/i).length).toBeGreaterThanOrEqual(1);
             expect(screen.getByText(/Net change/i)).toBeInTheDocument();
-            expect(screen.getAllByText(/\+120\.00 🫘/i).length).toBeGreaterThanOrEqual(1);
-            expect(screen.getByText(/-40\.00 🫘/i)).toBeInTheDocument();
+            // Every figure as formatHundredths writes it: no decimals when whole, a true minus.
+            expect(screen.getAllByText(/\+120 🫘/i).length).toBeGreaterThanOrEqual(1);
+            expect(screen.getByText(/−40 🫘/i)).toBeInTheDocument();
             expect(screen.getByText(/Veggie box delivery/i)).toBeInTheDocument();
             expect(screen.getByText(/Bob/i)).toBeInTheDocument();
         });
@@ -186,7 +187,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 name: 'Garden Crew',
                 purpose: 'Community food production',
                 avatar: null,
-                balance: 41.50,
+                balance_c: 4150,
                 status: 'winding_up',
                 windUpInitiatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
                 windUpInitiatedBy: 'keeper-alice-pubkey',
@@ -198,13 +199,13 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
 
             vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
             vi.spyOn(api, 'getBalance').mockResolvedValue({
-                balance: 50,
+                balance_c: 5000,
                 keeperOf: ['enterprise-garden-pubkey'],
             } as any);
             vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
-                enterprise: { publicKey: 'enterprise-garden-pubkey', name: 'Garden Crew', purpose: null, status: 'winding_up', paused: false, balance: 41.5 },
+                enterprise: { publicKey: 'enterprise-garden-pubkey', name: 'Garden Crew', purpose: null, status: 'winding_up', paused: false, balance_c: 4150 },
                 period: { since: null, until: null },
-                summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 41.5, endingBalance: 41.5, transactionCount: 0 },
+                summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 4150, endingBalance: 4150, transactionCount: 0 },
                 entries: [],
             });
 
@@ -228,7 +229,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 name: 'Garden Crew',
                 purpose: 'Community food production',
                 avatar: null,
-                balance: 41.50,
+                balance_c: 4150,
                 status: 'active',
                 keepers: [
                     { publicKey: 'keeper-alice-pubkey', callsign: 'Alice' },
@@ -241,13 +242,13 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
 
             vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
             vi.spyOn(api, 'getBalance').mockResolvedValue({
-                balance: 50,
+                balance_c: 5000,
                 keeperOf: ['enterprise-garden-pubkey'],
             } as any);
             vi.spyOn(api, 'getEnterpriseLedger').mockResolvedValue({
-                enterprise: { publicKey: 'enterprise-garden-pubkey', name: 'Garden Crew', purpose: null, status: 'active', paused: false, balance: 41.5 },
+                enterprise: { publicKey: 'enterprise-garden-pubkey', name: 'Garden Crew', purpose: null, status: 'active', paused: false, balance_c: 4150 },
                 period: { since: null, until: null },
-                summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 41.5, endingBalance: 41.5, transactionCount: 0 },
+                summary: { totalIncome: 0, totalSpend: 0, netChange: 0, startingBalance: 4150, endingBalance: 4150, transactionCount: 0 },
                 entries: [],
             });
 
@@ -282,7 +283,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     description: 'Fix gears and flat tires',
                     type: 'offer',
                     category: 'services',
-                    credits: 20,
+                    price_c: 2000,
                     status: 'active',
                     authorPublicKey: 'member-david',
                     authorCallsign: 'David',
@@ -294,7 +295,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     description: 'Pasture raised chicken eggs',
                     type: 'offer',
                     category: 'food',
-                    credits: 6,
+                    price_c: 600,
                     status: 'active',
                     authorPublicKey: 'enterprise-farm-pubkey',
                     authorCallsign: 'Community Farm',
@@ -308,15 +309,17 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     name: 'Community Farm',
                     paused: true,
                     status: 'active',
-                    balance: 100,
-                    creditLine: 200,
+                    balance_c: 10000,
+                    creditLine_c: 20000,
                     liveOffers: 2,
                 },
             ];
 
             vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue(mockPosts as any);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: mockTreasuries });
-            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, isBlockedFromTrading: false } as any);
+            // The light statuses read is how the feed learns which enterprises are paused.
+            vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: mockTreasuries.map(({ publicKey, name, paused, status }) => ({ publicKey, name, paused, status })) } as any);
+            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, isBlockedFromTrading: false } as any);
             vi.spyOn(api, 'getMembers').mockResolvedValue([]);
             vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
 
@@ -337,7 +340,7 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 description: 'Pasture raised chicken eggs',
                 type: 'offer',
                 category: 'food',
-                credits: 6,
+                price_c: 600,
                 priceType: 'fixed',
                 status: 'active',
                 active: true,
@@ -352,15 +355,15 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                 name: 'Community Farm',
                 paused: true,
                 status: 'active',
-                balance: 100,
-                creditLine: 200,
+                balance_c: 10000,
+                creditLine_c: 20000,
                 liveOffers: 2,
             };
 
             vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([mockPost]);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [mockTreasury] });
             vi.spyOn(api, 'getTreasury').mockResolvedValue(mockTreasury);
-            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, isBlockedFromTrading: false } as any);
+            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, isBlockedFromTrading: false } as any);
             vi.spyOn(api, 'getMemberProfile').mockResolvedValue({} as any);
             vi.spyOn(api, 'getMemberRatings').mockResolvedValue({ average: 5, count: 10 } as any);
             vi.spyOn(api, 'getMembers').mockResolvedValue([]);
@@ -388,8 +391,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     name: 'Community Farm',
                     paused: true,
                     status: 'active',
-                    balance: 100,
-                    creditLine: 200,
+                    balance_c: 10000,
+                    creditLine_c: 20000,
                     liveOffers: 2,
                 },
                 {
@@ -397,8 +400,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     name: 'Tool Shed',
                     paused: false,
                     status: 'winding_up',
-                    balance: 50,
-                    creditLine: 100,
+                    balance_c: 5000,
+                    creditLine_c: 10000,
                     liveOffers: 0,
                 },
                 {
@@ -406,8 +409,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
                     name: 'Commons Bakery',
                     paused: true,
                     status: 'completed',
-                    balance: 0,
-                    creditLine: 0,
+                    balance_c: 0,
+                    creditLine_c: 0,
                     liveOffers: 0,
                 },
             ];
@@ -415,8 +418,8 @@ describe('Enterprise Season & Lifecycle (PWA)', () => {
             vi.spyOn(api, 'getAllMembers').mockResolvedValue([]);
             vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: mockTreasuries });
             vi.spyOn(api, 'getDecisions').mockResolvedValue({ decisions: [], myPoolVoting: null } as any);
-            vi.spyOn(api, 'getCommonsBalance').mockResolvedValue({ balance: 1000 } as any);
-            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 50, earnedCredit: 50 } as any);
+            vi.spyOn(api, 'getCommonsBalance').mockResolvedValue({ balance_c: 100000 } as any);
+            vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 5000, earnedCredit_c: 5000 } as any);
 
             render(<ProjectsPage identity={mockIdentity} />);
 

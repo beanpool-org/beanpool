@@ -28,7 +28,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -42,7 +41,6 @@ import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harnes
 import { grantNodeRole } from './engine/node-roles.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -51,6 +49,7 @@ import { setSwitchOverride } from './config/node-profile.js';
 import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -65,6 +64,12 @@ const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 type Id = { pk: string; priv: crypto.KeyObject; name: string };
 type Res = { status: number; body: any; text: string };
 const show = (r: Res) => `${r.status} ${r.text.slice(0, 200)}`;
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -76,7 +81,7 @@ function makeMember(name: string): Id {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(200 * DAY));
     setMemberPhoto(db, id.pk, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }
 
@@ -104,7 +109,8 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -119,7 +125,6 @@ const logRows = () => (db.prepare('SELECT COUNT(*) AS n FROM health_access_log')
 
 async function main(): Promise<void> {
     console.log('The Community health panel over HTTPS\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;
@@ -143,9 +148,9 @@ async function main(): Promise<void> {
     const vic = makeMember('Vicenza');    // confirmed long ago, steps back in the 14 days, 800 in debit on a 200 line
     const zed = makeMember('Zephyrine');  // confirmed, steps back after the start, 800 in debit on a 200 line
     const wes = makeMember('Wesley');     // confirmed, steps back within their line, 100 in debit on a 200 line
-    const ordinaryLine = (m: Id, beans: number) => db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(beans, m.pk);
+    const ordinaryLine = (m: Id, beans: number) => db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(beans), m.pk);
     for (const m of [vic, zed, wes]) ordinaryLine(m, 200);
-    for (const m of [kim, una, lea, neo, ned, ugo, rex, tia, vic, zed, wes]) createPost('offer', 'produce', `${m.name} mends things`, 'Repairs', 10, 'fixed', m.pk);
+    for (const m of [kim, una, lea, neo, ned, ugo, rex, tia, vic, zed, wes]) createPost('offer', 'produce', `${m.name} mends things`, 'Repairs', hc(10), 'fixed', m.pk);
     const kimEntry = confirm(kim, ada);
     confirm(una, ada);
     const leaEntry = confirm(lea, ada);
@@ -157,14 +162,14 @@ async function main(): Promise<void> {
     confirm(wes, ada);
     // A member who left owing 300: the open record on their entry (engine/names-debts.ts).
     const goneEntry = crypto.randomBytes(16).toString('hex');
-    db.prepare("INSERT INTO names_debts (id, entry_id, amount, reason, removed_at) VALUES (?, ?, 300, 'removed', ?)").run('debt-gone', goneEntry, ago(10 * DAY));
+    db.prepare("INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at) VALUES (?, ?, ?, 'removed', ?)").run('debt-gone', goneEntry, hc(300), ago(10 * DAY));
     const owner = ownerSessionHeaders();
     const health = (who: Id | null) => call('GET', who, '/api/names/health');
     const exceptions = (who: Id | null) => call('GET', who, '/api/names/health/exceptions');
 
     // ── 1. the totals ─────────────────────────────────────────────────────────────────────────────
     console.log('── 1. the totals ──');
-    transfer('genesis', sam.pk, 50, 'seed Samwise', 'direct', true);
+    transfer('genesis', sam.pk, hc(50), 'seed Samwise', 'direct', true);
     // The dial is on by default (Marty, 21 Oct: "Yes, on by default"): a fresh node is a known community, until its owner
     // switches the dial off, as here for section 2.
     const fresh = await health(ada);
@@ -172,7 +177,7 @@ async function main(): Promise<void> {
     const dialOff = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }, owner);
     assert(dialOff.status === 200 && dialOff.body?.shape?.settings?.knownFloor?.value?.on === false, `the owner switches the dial off (${show(dialOff)})`);
     const t0 = await health(ada);
-    assert(t0.status === 200 && t0.body?.totals?.sumOfCredit >= 50 && typeof t0.body?.totals?.commonsPot === 'number'
+    assert(t0.status === 200 && t0.body?.totals?.sumOfCredit_c >= hc(50) && typeof t0.body?.totals?.commonsPot_c === 'number'
         && t0.body?.totals?.tradesThisMonth === 0 && t0.body?.known === false,
         `an admin reads the totals; the dial is off, so this is no known community (${show(t0)})`);
     const t0o = await health(founder);
@@ -205,15 +210,15 @@ async function main(): Promise<void> {
     const ugoConf = confirm(ugo, ada);
     confirm(tia, ada, 0);
     for (const [m, beans] of [[kim, 600], [una, 600], [ugo, 600], [rex, 600], [tia, 600], [lea, 100], [neo, 100], [ned, 100], [vic, 800], [zed, 800], [wes, 100]] as Array<[Id, number]>) {
-        const post = createPost('offer', 'produce', `Samwise's ${beans}-Bean basket for ${m.name}`, 'Veg', beans, 'fixed', sam.pk)!;
+        const post = createPost('offer', 'produce', `Samwise's ${beans}-Bean basket for ${m.name}`, 'Veg', hc(beans), 'fixed', sam.pk)!;
         const buy = await call('POST', m, '/api/marketplace/posts/accept', { postId: post.id, buyerPublicKey: m.pk });
-        assert(buy.status === 200 && getBalance(m.pk).balance === -beans, `${m.name} buys a ${beans}-Bean basket (${show(buy)})`);
+        assert(buy.status === 200 && getBalance(m.pk).balance_c === -hc(beans), `${m.name} buys a ${beans}-Bean basket (${show(buy)})`);
     }
     db.prepare('DELETE FROM confirmations WHERE entry_id = ?').run(ugoConf);
     db.prepare('UPDATE confirmations SET revoked_at = ?, revoked_by = ? WHERE member_pubkey = ?').run(ago(DAY), ada.pk, rex.pk);
-    assert(getBalance(kim.pk).balance === -600 && getBalance(kim.pk).floor !== 0, `Kimberly is 600 in debit with a known floor (${JSON.stringify(getBalance(kim.pk)).slice(0, 120)})`);
+    assert(getBalance(kim.pk).balance_c === hc(-600) && getBalance(kim.pk).floor_c !== 0, `Kimberly is 600 in debit with a known floor (${JSON.stringify(getBalance(kim.pk)).slice(0, 120)})`);
     const rule = await call('GET', null, '/api/community/known-rule');
-    assert(rule.status === 200 && rule.body?.known === true && rule.body?.knownFloor === 1000 && rule.body?.debtLinePct === 50 && rule.body?.quietDays === 60
+    assert(rule.status === 200 && rule.body?.known === true && rule.body?.knownFloor === hc(1000) && rule.body?.debtLinePct === 50 && rule.body?.quietDays === 60
         && rule.body?.debtLineFrom === null && rule.body?.quietDaysFrom === null
         && Object.keys(rule.body).sort().join() === 'debtLineFrom,debtLinePct,known,knownFloor,quietDays,quietDaysFrom',
         `the join screen reads the rule's numbers before joining, and no sentence: the words are the app's (${show(rule)})`);
@@ -255,16 +260,16 @@ async function main(): Promise<void> {
         `Kimberly, confirmed, 600 past half her floor, is listed by key and entry id (${show(ex)})`);
     assert(byKey.get(lea.pk)?.reasons?.join() === 'quiet_in_debit' && byKey.get(lea.pk)?.entryId === leaEntry,
         'Leander, 100 in debit with no sale in 60 days, is listed as quiet');
-    assert((ex.body?.exceptions ?? []).every((e: any) => Object.keys(e).sort().join() === 'balance,entryId,floor,memberPubkey,reasons'),
+    assert((ex.body?.exceptions ?? []).every((e: any) => Object.keys(e).sort().join() === 'balance_c,entryId,floor_c,memberPubkey,reasons'),
         `an exception says only which line was crossed: no trade fact (a last sale) on the wire (${show(ex)})`);
     assert(byKey.get(una.pk)?.reasons?.includes('past_debt_line'), 'Unaleigh, confirmed with no consent to her name, is listed past the line: being confirmed is enough');
-    assert(byKey.get(vic.pk)?.reasons?.join() === 'stepped_back_owing' && byKey.get(vic.pk)?.balance === -800 && byKey.get(vic.pk)?.floor === 200,
+    assert(byKey.get(vic.pk)?.reasons?.join() === 'stepped_back_owing' && byKey.get(vic.pk)?.balance_c === hc(-800) && byKey.get(vic.pk)?.floor_c === hc(200),
         `Vicenza, who stepped back in the 14 days owing 800 on a 200 line, is listed from the start, as the step-back told her (${JSON.stringify(byKey.get(vic.pk))})`);
     assert(!byKey.has(ugo.pk), 'Ugolino, never confirmed, is not listed');
     assert(!byKey.has(rex.pk), 'Rexford, whose confirmation was revoked, is not listed');
     assert(!byKey.has(neo.pk), 'Neopolis, confirmed yesterday, is not yet quiet');
     assert(!byKey.has(sam.pk), 'Samwise, in credit, is not listed');
-    assert((ex.body?.departed ?? []).some((d: any) => d.id === 'debt-gone' && d.entryId === goneEntry && d.amount === 300),
+    assert((ex.body?.departed ?? []).some((d: any) => d.id === 'debt-gone' && d.entryId === goneEntry && d.amount_c === hc(300)),
         'the open debt of a member who left is listed by entry id');
     const names = [kim, una, lea, neo, ugo, rex, sam, ada].map(m => m.name);
     assert(!names.some(n => ex.text.includes(n)), 'no callsign or name of anyone is on the wire');
@@ -277,9 +282,9 @@ async function main(): Promise<void> {
         && (afterDial.body?.exceptions ?? []).some((e: any) => e.memberPubkey === kim.pk),
         `the dial going back on is the rule at once: Kimberly, confirmed before it, is listed (${show(afterDial)})`);
     const dot = makeMember('Dorothea');
-    createPost('offer', 'produce', `${dot.name} mends things`, 'Repairs', 10, 'fixed', dot.pk);
+    createPost('offer', 'produce', `${dot.name} mends things`, 'Repairs', hc(10), 'fixed', dot.pk);
     confirm(dot, ada, 0);
-    const dotPost = createPost('offer', 'produce', `Samwise's 600-Bean basket for ${dot.name}`, 'Veg', 600, 'fixed', sam.pk)!;
+    const dotPost = createPost('offer', 'produce', `Samwise's 600-Bean basket for ${dot.name}`, 'Veg', hc(600), 'fixed', sam.pk)!;
     await call('POST', dot, '/api/marketplace/posts/accept', { postId: dotPost.id, buyerPublicKey: dot.pk });
     assert(((await exceptions(ada)).body?.exceptions ?? []).some((e: any) => e.memberPubkey === dot.pk),
         'and a member confirmed after it is listed too, as Tiana was');
@@ -362,8 +367,8 @@ async function main(): Promise<void> {
     setNodeRole(role6);
     assert(onStandby.status === 409 && onStandby.body?.code === 'standby' && !confirmedRow(zed).revoked_at, `a standby takes no step-back (${show(onStandby)})`);
 
-    const zedFloor = getBalance(zed.pk).floor;
-    assert(zedFloor === -1200, `Zephyrine holds the known floor on her ordinary line (${zedFloor})`);
+    const zedFloor = getBalance(zed.pk).floor_c;
+    assert(zedFloor === hc(-1200), `Zephyrine holds the known floor on her ordinary line (${beansOf(zedFloor)})`);
     const zedBack = await stepBack(zed);
     const zedRow = confirmedRow(zed);
     assert(zedBack.status === 200 && zedBack.body?.status === 'revoked' && zedBack.body?.owing === true && zedBack.body?.id === zedRow.id,
@@ -372,26 +377,26 @@ async function main(): Promise<void> {
     const zedLog = db.prepare("SELECT actor_pubkey, entry_id, subject_pubkey FROM names_access_log WHERE action = 'revoke' ORDER BY at DESC, rowid DESC LIMIT 1").get() as any;
     assert(zedLog?.actor_pubkey === zed.pk && zedLog?.subject_pubkey === zed.pk && zedLog?.entry_id === zedRow.entry_id, `the names log has her own line, beside the admins' (${JSON.stringify(zedLog)})`);
     const zedBalance = getBalance(zed.pk);
-    assert(zedBalance.floor === -200 && zedBalance.frozen === true && zedBalance.balance === -800, `the floor is her ordinary line, and she is spend-frozen below it (${zedBalance.floor}, ${zedBalance.frozen})`);
+    assert(zedBalance.floor_c === hc(-200) && zedBalance.frozen === true && zedBalance.balance_c === hc(-800), `the floor is her ordinary line, and she is spend-frozen below it (${beansOf(zedBalance.floor_c)}, ${zedBalance.frozen})`);
     const zedMe = await call('GET', zed, '/api/community/me');
     assert(zedMe.body?.confirmed === false && zedMe.body?.confirmedAt === null, 'her own standing says she is not confirmed now');
     const again = await stepBack(zed);
     assert(again.status === 409 && again.body?.code === 'not_confirmed', `stepping back twice is refused (${show(again)})`);
     const zedListed = (await listed()).get(zed.pk);
-    assert(zedListed?.reasons?.join() === 'stepped_back_owing' && zedListed?.balance === -800 && zedListed?.floor === 200 && zedListed?.entryId === zedRow.entry_id,
+    assert(zedListed?.reasons?.join() === 'stepped_back_owing' && zedListed?.balance_c === hc(-800) && zedListed?.floor_c === hc(200) && zedListed?.entryId === zedRow.entry_id,
         `she is listed with the new reason, her line the ordinary one (${JSON.stringify(zedListed)})`);
-    transfer('genesis', zed.pk, 599, 'a sale, say', 'direct', true);
-    assert((await listed()).get(zed.pk)?.balance === -201, 'at 201 she is still past her line, and still listed');
-    transfer('genesis', zed.pk, 1, 'a sale, say', 'direct', true);
-    assert(getBalance(zed.pk).balance === -200 && !(await listed()).has(zed.pk), 'at 200 she is back within it, and off the list');
+    transfer('genesis', zed.pk, hc(599), 'a sale, say', 'direct', true);
+    assert((await listed()).get(zed.pk)?.balance_c === hc(-201), 'at 201 she is still past her line, and still listed');
+    transfer('genesis', zed.pk, hc(1), 'a sale, say', 'direct', true);
+    assert(getBalance(zed.pk).balance_c === hc(-200) && !(await listed()).has(zed.pk), 'at 200 she is back within it, and off the list');
     ordinaryLine(zed, 0);
-    assert(getBalance(zed.pk).floor === 0 && !(await listed()).has(zed.pk), 'and she stays off it when her line falls later: she came back within it once');
+    assert(getBalance(zed.pk).floor_c === 0 && !(await listed()).has(zed.pk), 'and she stays off it when her line falls later: she came back within it once');
 
     const wesBack = await stepBack(wes);
     assert(wesBack.status === 200 && wesBack.body?.owing === false && confirmedRow(wes).stepped_back_owing === 0, `Wesley steps back owing 100 on a 200 line, within it (${show(wesBack)})`);
     assert(!(await listed()).has(wes.pk), 'and the admins do not see him');
     ordinaryLine(wes, 0);
-    assert(getBalance(wes.pk).floor === 0 && !(await listed()).has(wes.pk),
+    assert(getBalance(wes.pk).floor_c === 0 && !(await listed()).has(wes.pk),
         'nor when his line falls below what he owes: he stepped back within it, and was told nothing else (an admin freezing a line can\'t bring a member back into view)');
 
     // Q-F: an admin may confirm a member again, without asking; a member who stepped back with a debt then reads as confirmed.
@@ -400,12 +405,12 @@ async function main(): Promise<void> {
     assert((await listed()).get(vic.pk)?.reasons?.join() === 'stepped_back_owing', 'a new confirmation waiting for a second admin changes nothing yet: she stays listed as stepped back');
     const vicNew = confirmedRow(vic).id;
     db.prepare("UPDATE confirmations SET seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), seconded_by = ? WHERE id = ?").run(bea.pk, vicNew);
-    assert(getBalance(vic.pk).floor === -1200, `confirmed again, she holds the known floor (${getBalance(vic.pk).floor})`);
+    assert(getBalance(vic.pk).floor_c === hc(-1200), `confirmed again, she holds the known floor (${beansOf(getBalance(vic.pk).floor_c)})`);
     assert((await call('GET', vic, '/api/community/me')).body?.confirmedAt === confirmedRow(vic).seconded_at, 'her confirmedAt is new, so her app shows the card again');
     // Her limit set under what she owes, so that "back within it" can't take the old step-back off the list on its own.
-    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by) VALUES (?, 100, 0, ?)").run(vic.pk, ada.pk);
+    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by) VALUES (?, ?, 0, ?)").run(vic.pk, hc(100), ada.pk);
     const vicLines = ((await exceptions(ada)).body?.exceptions ?? []).filter((e: any) => e.memberPubkey === vic.pk);
-    assert(getBalance(vic.pk).floor === -300 && vicLines.length === 1 && !vicLines[0].reasons.includes('stepped_back_owing'),
+    assert(getBalance(vic.pk).floor_c === hc(-300) && vicLines.length === 1 && !vicLines[0].reasons.includes('stepped_back_owing'),
         `owing past even that, she is one line, read as confirmed: the step-back before it is over (${JSON.stringify(vicLines)})`);
     db.prepare("UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoked_by = ?, revoke_reason = 'admin' WHERE id = ?").run(ada.pk, vicNew);
     assert(!(await listed()).has(vic.pk), 'an admin revoking that one ends it: her older step-back is not read again');
@@ -414,22 +419,22 @@ async function main(): Promise<void> {
     const lou = makeMember('Louisa');
     const louEntry = confirm(lou, ada);
     assert((await stepBack(lou)).status === 200, 'Louisa steps back');
-    dropNamesListHoldOf(lou.pk, 'account_deleted', -350);
-    assert((db.prepare("SELECT amount, reason FROM names_debts WHERE entry_id = ? AND status = 'open'").get(louEntry) as any)?.amount === 350,
+    dropNamesListHoldOf(lou.pk, 'account_deleted', hc(-350));
+    assert((db.prepare("SELECT amount_c, reason FROM names_debts WHERE entry_id = ? AND status = 'open'").get(louEntry) as any)?.amount_c === hc(350),
         'and leaves owing 350: the debt note goes on the entry she stepped back from, as if she had stayed confirmed');
     const mae = makeMember('Maelys');
     const maeEntry = confirm(mae, ada);
     assert((await stepBack(mae)).status === 200, 'Maelys steps back');
     const maeLater = confirm(mae, ada, 0);
     db.prepare("UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'admin' WHERE member_pubkey = ? AND revoked_at IS NULL").run(mae.pk);
-    dropNamesListHoldOf(mae.pk, 'account_deleted', -350);
+    dropNamesListHoldOf(mae.pk, 'account_deleted', hc(-350));
     assert(!db.prepare('SELECT 1 FROM names_debts WHERE entry_id IN (?, ?)').get(maeEntry, maeLater), 'but an older step-back behind an admin\'s later revoke is no reason for a note, on either entry, as for any revoked member');
 
     // A work-off ends with the step-back, as with an admin's revoke: the debt stays open on the entry, with nobody repaying.
     const wyn = makeMember('Wynifred');
     const wynEntry = confirm(wyn, ada);
-    db.prepare("INSERT INTO names_debts (id, entry_id, amount, reason, removed_at, repaying_pubkey, work_off_confirmation_id) VALUES ('debt-wyn', ?, 40, 'removed', ?, ?, ?)")
-        .run(wynEntry, ago(DAY), wyn.pk, confirmedRow(wyn).id);
+    db.prepare("INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at, repaying_pubkey, work_off_confirmation_id) VALUES ('debt-wyn', ?, ?, 'removed', ?, ?, ?)")
+        .run(wynEntry, hc(40), ago(DAY), wyn.pk, confirmedRow(wyn).id);
     assert((await stepBack(wyn)).status === 200, 'Wynifred, working a debt off, steps back');
     const wynDebt = db.prepare("SELECT status, repaying_pubkey, work_off_confirmation_id FROM names_debts WHERE id = 'debt-wyn'").get() as any;
     assert(wynDebt?.status === 'open' && wynDebt?.repaying_pubkey === null && wynDebt?.work_off_confirmation_id === null, `the repayment ends and the debt stays open (${JSON.stringify(wynDebt)})`);
@@ -509,7 +514,7 @@ async function main(): Promise<void> {
     const lastLine = () => db.prepare('SELECT actor_pubkey, action, subject_pubkey FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT 1').get() as any;
     const before8 = logRows();
     const prev = await call('GET', null, `/api/local/admin/members/${una.pk}/offboard/preview`, undefined, adaSession);
-    assert(prev.status === 200 && typeof prev.body?.balance === 'number', `an admin starting to remove Unaleigh sees her balance, to settle it (${show(prev)})`);
+    assert(prev.status === 200 && typeof prev.body?.balance_c === 'number', `an admin starting to remove Unaleigh sees her balance, to settle it (${show(prev)})`);
     const l1 = lastLine();
     assert(logRows() === before8 + 1 && l1?.action === 'offboard_preview' && l1?.actor_pubkey === ada.pk && l1?.subject_pubkey === una.pk,
         `that look is a line in the access log: who, whose balance, why (${JSON.stringify(l1)})`);
@@ -568,38 +573,38 @@ async function main(): Promise<void> {
     const adminCard = (r: Res) => (r.body?.decisions ?? []).find((d: any) => d.id === removal.id);
     const asVoterAdmin = await call('POST', null, '/api/local/admin/decisions', {}, adaSession);
     const voterCard = adminCard(asVoterAdmin);
-    assert(asVoterAdmin.status === 200 && voterCard?.params?.balance === -600 && voterCard?.params?.debt === 600 && !voterCard?.balanceHidden,
+    assert(asVoterAdmin.status === 200 && voterCard?.params?.balance_c === hc(-600) && voterCard?.params?.debt_c === hc(600) && !voterCard?.balanceHidden,
         `an admin who can vote in it sees the balance and the debt in the admin Decisions list (${show(asVoterAdmin)})`);
     const asLateAdmin = await call('POST', null, '/api/local/admin/decisions', {}, lateSession);
     const lateCard = adminCard(asLateAdmin);
-    assert(asLateAdmin.status === 200 && !!lateCard && lateCard.balanceHidden === true && !('balance' in (lateCard.params ?? {})) && !('debt' in (lateCard.params ?? {}))
+    assert(asLateAdmin.status === 200 && !!lateCard && lateCard.balanceHidden === true && !('balance_c' in (lateCard.params ?? {})) && !('debt_c' in (lateCard.params ?? {}))
         && lateCard.params?.memberName === 'Kimberly' && lateCard.subjectName === 'Kimberly',
         `an admin who can't vote in it gets the vote without the balance or the debt, and is told it is hidden (${show(asLateAdmin)})`);
-    assert(!/-600|"debt":600/.test(asLateAdmin.text), 'the number is nowhere in that answer');
+    assert(!/-60000|"debt_c":60000/.test(asLateAdmin.text), 'the number is nowhere in that answer');
     const asOwner = await call('POST', null, '/api/local/admin/decisions', {}, owner);
-    assert(asOwner.status === 200 && adminCard(asOwner)?.params?.balance === -600 && !adminCard(asOwner)?.balanceHidden,
+    assert(asOwner.status === 200 && adminCard(asOwner)?.params?.balance_c === hc(-600) && !adminCard(asOwner)?.balanceHidden,
         `an owner who can vote in it sees it, as any voter does (${show(asOwner)})`);
     const lateOwner = makeMember('Lateowner');   // an owner who joined after the vote opened: can't vote in it
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() + 1000).toISOString(), lateOwner.pk);
     grantNodeRole(lateOwner.pk, 'owner', 'SYSTEM');
     const asLateOwner = await call('POST', null, '/api/local/admin/decisions', {}, ownerSessionHeaders(lateOwner.pk));
     const ownerCard = adminCard(asLateOwner);
-    assert(asLateOwner.status === 200 && ownerCard?.balanceHidden === true && !('balance' in (ownerCard?.params ?? {})) && !('debt' in (ownerCard?.params ?? {})),
+    assert(asLateOwner.status === 200 && ownerCard?.balanceHidden === true && !('balance_c' in (ownerCard?.params ?? {})) && !('debt_c' in (ownerCard?.params ?? {})),
         `being the owner is no reason either: an owner who can't vote in it gets it hidden (${show(asLateOwner)})`);
     const asSignedLate = await call('POST', lateAdmin, '/api/local/admin/decisions', {}, lateSession);
-    assert(adminCard(asSignedLate)?.balanceHidden === true && !/-600/.test(asSignedLate.text), `signing the request as well changes nothing for an admin who can't vote (${show(asSignedLate)})`);
+    assert(adminCard(asSignedLate)?.balanceHidden === true && !/-60000/.test(asSignedLate.text), `signing the request as well changes nothing for an admin who can't vote (${show(asSignedLate)})`);
     // #1613's deciding review, finding 1: a token is a script, not a voter. One made by an owner who can vote in it
     // still gets the vote without the balance or the debt.
     const asVoterToken = await call('POST', null, '/api/local/admin/decisions', {}, ownerTokenHeaders('admin', founder.pk));
     const tokenCard = adminCard(asVoterToken);
-    assert(asVoterToken.status === 200 && tokenCard?.balanceHidden === true && !('balance' in (tokenCard?.params ?? {})) && !('debt' in (tokenCard?.params ?? {}))
-        && !/-600|"debt":600/.test(asVoterToken.text),
+    assert(asVoterToken.status === 200 && tokenCard?.balanceHidden === true && !('balance_c' in (tokenCard?.params ?? {})) && !('debt_c' in (tokenCard?.params ?? {}))
+        && !/-60000|"debt_c":60000/.test(asVoterToken.text),
         `an automation token gets it hidden, even one made by an owner who can vote in it (${show(asVoterToken)})`);
     const asVoter = await call('GET', sam, `/api/commons/decisions/${removal.id}`);
-    assert(asVoter.status === 200 && asVoter.body?.decision?.params?.balance === -600 && asVoter.body?.decision?.params?.debt === 600,
+    assert(asVoter.status === 200 && asVoter.body?.decision?.params?.balance_c === hc(-600) && asVoter.body?.decision?.params?.debt_c === hc(600),
         `a plain member who can vote in it still sees the balance and the debt (${show(asVoter)})`);
     const asLateMember = await call('GET', lateAdmin, `/api/commons/decisions/${removal.id}`);
-    assert(asLateMember.status === 200 && !('balance' in (asLateMember.body?.decision?.params ?? {})), `nor through the members' route (${show(asLateMember)})`);
+    assert(asLateMember.status === 200 && !('balance_c' in (asLateMember.body?.decision?.params ?? {})), `nor through the members' route (${show(asLateMember)})`);
     assert(logRows() === before8c, 'a look at the balance in a vote is not a line in the access log, as the texts say (section 9)');
 
     // ── 9. the texts say what the node does ────────────────────────────────────────────────────────
@@ -710,9 +715,9 @@ async function main(): Promise<void> {
     const washB9 = makeMember('Washertwo');
     for (const [buyer, seller] of [[washA9.pk, washB9.pk], [washB9.pk, washA9.pk]]) {
         const postId = 'wash9-post-' + crypto.randomBytes(4).toString('hex');
-        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', 600, ?, 'completed')").run(postId, seller);
-        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 600, 'completed', ?)")
-            .run('wash9-' + crypto.randomBytes(4).toString('hex'), postId, buyer, seller, new Date().toISOString());
+        db.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', ?, ?, 'completed')").run(postId, hc(600), seller);
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at) VALUES (?, ?, ?, ?, ?, 'completed', ?)")
+            .run('wash9-' + crypto.randomBytes(4).toString('hex'), postId, buyer, seller, hc(600), new Date().toISOString());
     }
     clearWashTradingCache();
     const before9b = logRows();
@@ -788,7 +793,7 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM abuse_reports WHERE id = ?').run(reportId9);
     // An escrow left stuck by a member's removal on an older node: reading the list is a look, logged like the disputes.
     // It gets a line of its own (stranded_escrows_read), so the log says which view the admin opened.
-    db.prepare("INSERT INTO accounts (public_key, balance) VALUES ('escrow_t9-stranded', -5)").run();
+    db.prepare("INSERT INTO accounts (public_key, balance_c) VALUES ('escrow_t9-stranded', ?)").run(hc(-5));
     const strandedBefore9 = logRows();
     const stranded9 = await call('GET', null, '/api/local/admin/stranded-escrows', undefined, adaSession);
     const strandedLine9 = lastLines(1)[0];
@@ -801,7 +806,7 @@ async function main(): Promise<void> {
     assert(Object.keys(stats9).length > 0 && Object.values(stats9).every((s) => !('deals' in s) && !('volume' in s) && !('cancelled' in s))
         && typeof stats9[kim.pk]?.posts === 'number' && typeof stats9[kim.pk]?.messages === 'number',
         `member stats carry no member's trades (deals, volume, cancelled), only their posts and messages (${JSON.stringify(stats9[kim.pk])})`);
-    const sums9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0), 2) AS volume,
+    const sums9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_c ELSE 0 END), 0) AS volume,
         SUM(status = 'cancelled') AS cancelled FROM marketplace_transactions`).get() as any;
     const totals9 = data9.body?.tradeTotals;
     assert(totals9 && totals9.deals === (sums9.deals ?? 0) && totals9.volume === sums9.volume && totals9.cancelled === (sums9.cancelled ?? 0),
@@ -878,9 +883,10 @@ async function main(): Promise<void> {
     // list can show (round 4, item 1), and its chat is the two members' one-to-one chat, never a group they share (item 3).
     const ivy = makeMember('Ivy');
     const jon = makeMember('Jonquil');
-    const stall = createPost('offer', 'produce', 'Jonquil\'s jam', 'Preserves', 5, 'fixed', jon.pk)!;
-    const trade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, dispute_resolution)
-                              VALUES (?, ?, ?, ?, 5, ?, ?, ?)`);
+    const stall = createPost('offer', 'produce', 'Jonquil\'s jam', 'Preserves', hc(5), 'fixed', jon.pk)!;
+    // Each trade here is for 5 Beans (500 hundredths).
+    const trade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, dispute_resolution)
+                              VALUES (?, ?, ?, ?, 500, ?, ?, ?)`);
     trade.run('t9-done', stall.id, ivy.pk, jon.pk, 'completed', ago(20 * DAY), null);
     trade.run('t9-cancelled', stall.id, ivy.pk, jon.pk, 'cancelled', ago(20 * DAY), null);
     trade.run('t9-settled', stall.id, ivy.pk, jon.pk, 'completed', ago(20 * DAY), 'release_to_seller');
@@ -901,11 +907,11 @@ async function main(): Promise<void> {
     // With finished and cancelled trades on the books (Ivy and Jonquil's), the totals still count each trade once, and
     // neither member's stats carry them.
     const dataT9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
-    const sumsT9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0), 2) AS volume,
+    const sumsT9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_c ELSE 0 END), 0) AS volume,
         SUM(status = 'cancelled') AS cancelled FROM marketplace_transactions`).get() as any;
     const totT9 = dataT9.body?.tradeTotals;
     const statsT9 = (dataT9.body?.memberStats ?? {}) as Record<string, Record<string, unknown>>;
-    assert(dataT9.status === 200 && sumsT9.deals >= 2 && sumsT9.cancelled >= 1 && sumsT9.volume >= 10
+    assert(dataT9.status === 200 && sumsT9.deals >= 2 && sumsT9.cancelled >= 1 && sumsT9.volume >= hc(10)
         && totT9?.deals === sumsT9.deals && totT9?.volume === sumsT9.volume && totT9?.cancelled === sumsT9.cancelled
         && [ivy, jon].every((m) => statsT9[m.pk] && !('deals' in statsT9[m.pk]) && !('volume' in statsT9[m.pk]) && !('cancelled' in statsT9[m.pk])),
         `with trades finished and cancelled, the totals equal the sums and no member's stats carry them (${JSON.stringify(totT9)} vs ${JSON.stringify(sumsT9)})`);
@@ -931,14 +937,14 @@ async function main(): Promise<void> {
     // disputed one; the notices go where the node puts them (injectSystemMessage), next to a line the two wrote.
     const max = makeMember('Maxine');
     const nia = makeMember('Niamh');
-    const oldPost = createPost('offer', 'produce', 'Niamh\'s old bread', 'Baking', 7, 'fixed', nia.pk)!;
-    const newPost = createPost('offer', 'produce', 'Niamh\'s honey', 'Preserves', 9, 'fixed', nia.pk)!;
+    const oldPost = createPost('offer', 'produce', 'Niamh\'s old bread', 'Baking', hc(7), 'fixed', nia.pk)!;
+    const newPost = createPost('offer', 'produce', 'Niamh\'s honey', 'Preserves', hc(9), 'fixed', nia.pk)!;
     chatOf.run('c9-pair', 'dm', null, max.pk);
     for (const m of [max, nia]) inChat.run('c9-pair', m.pk);
     trade.run('t9-old', oldPost.id, max.pk, nia.pk, 'completed', ago(40 * DAY), null);
-    // Each notice carries its trade's transactionId, as engine/escrow.ts writes it.
-    const notice = (post: { id: string }, txId: string, type: string, amount: number, extra: object = {}) =>
-        injectSystemMessage(post.id, type, { amount, postId: post.id, transactionId: txId, buyerPubkey: max.pk, sellerPubkey: nia.pk, ...extra } as any, max.pk, nia.pk);
+    // Each notice carries its trade's transactionId, as engine/escrow.ts writes it, and its amount in whole hundredths (amount_c).
+    const notice = (post: { id: string }, txId: string, type: string, beans: number, extra: object = {}) =>
+        injectSystemMessage(post.id, type, { amount_c: hc(beans), postId: post.id, transactionId: txId, buyerPubkey: max.pk, sellerPubkey: nia.pk, ...extra } as any, max.pk, nia.pk);
     notice(oldPost, 't9-old', 'ESCROW_FUNDED', 7);
     notice(oldPost, 't9-old', 'ESCROW_RELEASED', 7);
     line.run('m9-pair', 'c9-pair', max.pk, 'a line the pair wrote');
@@ -958,12 +964,12 @@ async function main(): Promise<void> {
     // A repeatable listing (a weekly box) the same pair traded before shares the post id with the disputed trade, so a
     // notice is this trade's only by its transactionId (review r4177209847): the earlier trade's notices, a ruling on
     // another trade with its reason, and a notice with no transactionId all stay out.
-    const boxPost = createPost('offer', 'produce', 'Niamh\'s weekly box', 'Produce', 13, 'fixed', nia.pk, undefined, undefined, undefined, true)!;
+    const boxPost = createPost('offer', 'produce', 'Niamh\'s weekly box', 'Produce', hc(13), 'fixed', nia.pk, undefined, undefined, undefined, true)!;
     trade.run('t9-box-old', boxPost.id, max.pk, nia.pk, 'completed', ago(30 * DAY), null);
     notice(boxPost, 't9-box-old', 'ESCROW_FUNDED', 13);
     notice(boxPost, 't9-box-old', 'ESCROW_RELEASED', 13);
     notice(boxPost, 't9-box-ruled', 'ESCROW_DISPUTE_RESOLVED', 11, { resolution: 'refund', resolvedByName: 'Ada', reason: 'an older ruling' });
-    injectSystemMessage(boxPost.id, 'ESCROW_FUNDED', { amount: 17, postId: boxPost.id, buyerPubkey: max.pk, sellerPubkey: nia.pk } as any, max.pk, nia.pk);
+    injectSystemMessage(boxPost.id, 'ESCROW_FUNDED', { amount_c: hc(17), postId: boxPost.id, buyerPubkey: max.pk, sellerPubkey: nia.pk } as any, max.pk, nia.pk);
     trade.run('t9-box-new', boxPost.id, max.pk, nia.pk, 'pending', ago(10 * DAY), null);
     notice(boxPost, 't9-box-new', 'ESCROW_FUNDED', 5);
     const boxOne = await one9('t9-box-new');

@@ -50,8 +50,8 @@ const mockActiveNode: NodeProfile = {
 const mockTreasuryWithCoords: NodeTreasury = {
     publicKey: 'pubkey-12345',
     name: 'Mullum Enterprise',
-    balance: 1000,
-    creditLine: 500,
+    balance_c: 100000,
+    creditLine_c: 50000,
     liveOffers: 2,
     lat: -28.55,
     lng: 153.50,
@@ -60,8 +60,8 @@ const mockTreasuryWithCoords: NodeTreasury = {
 const mockTreasuryWithoutCoords: NodeTreasury = {
     publicKey: 'pubkey-67890',
     name: 'Unlocated Enterprise',
-    balance: 500,
-    creditLine: 0,
+    balance_c: 50000,
+    creditLine_c: 0,
     liveOffers: 0,
     lat: null,
     lng: null,

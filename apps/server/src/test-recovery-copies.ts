@@ -28,6 +28,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // The flags the server reads at import, set before anything is imported (every import below is dynamic).
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -119,7 +120,7 @@ async function main(): Promise<void> {
         const id = keypair(name);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
                     VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 30 * DAY).toISOString());
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     }
     async function call(method: string, id: Id | null, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
@@ -133,7 +134,8 @@ async function main(): Promise<void> {
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             headers['X-Public-Key'] = id.pk;
-            headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+            headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }

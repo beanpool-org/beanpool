@@ -14,7 +14,7 @@ vi.mock('../lib/features', async (importOriginal) => ({
     useFeatureMode: vi.fn(() => 'live'),
 }));
 vi.mock('../lib/visitor-lobby-gate', () => ({
-    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} })),
+    communityInfoOnce: vi.fn(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} })),
 }));
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../components/ImageLightbox', () => ({ ImageLightbox: () => null }));
@@ -23,7 +23,7 @@ vi.mock('../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => n
 vi.mock('../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false), blockUser: vi.fn(), unblockUser: vi.fn(),
-    onBlocklistUpdated: vi.fn(() => () => {}), getBlocklistFullNote: vi.fn(() => null),
+    onBlocklistUpdated: vi.fn(() => () => {}),
 }));
 
 const PHOTOS = ['/api/marketplace/posts/p1/photos/0?v=1&k=KEY0', '/api/marketplace/posts/p1/photos/1?v=1&k=KEY1'];
@@ -47,6 +47,8 @@ vi.mock('../lib/api', () => ({
     submitRating: vi.fn(),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
     getMyVouching: vi.fn(async () => null),
+    // The profile's inviter card (I3) reads the trust profile; none here, so no card.
+    getTrustProfile: vi.fn(async () => null),
 }));
 
 const me: BeanPoolIdentity = { publicKey: 'my-pubkey', privateKey: 'k', callsign: 'Alice', createdAt: '2026-01-01T00:00:00.000Z' };

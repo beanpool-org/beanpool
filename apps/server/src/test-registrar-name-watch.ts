@@ -462,7 +462,7 @@ async function main(): Promise<void> {
         console.log('Proof drops a name, and its own key brings it back\n');
 
         // ── Node P ──
-        const P = await spawnNode(SCRIPT, dirs.p, { ...noAgent, ADMIN_PASSWORD: PW_P, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
+        const P = await spawnNode(SCRIPT, dirs.p, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
         nodes.push(P);
         const pSetup = await P.send('setup', { ownerSeedHex });
         const pBase: string = pSetup.https;
@@ -738,7 +738,7 @@ async function main(): Promise<void> {
         // ── 12 ──
         console.log('\n— 12. a node whose only name is its registrar name —');
         await section('12', async () => {
-            const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, ADMIN_PASSWORD: PW_U, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
+            const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(U);
             const uSetup = await U.send('setup', { ownerSeedHex });
             const uAdmin: Record<string, string> = await U.send('owner-session');
@@ -783,14 +783,14 @@ async function main(): Promise<void> {
         // ── 13 ──
         console.log('\n— 13. a promoted standby refuses a lost name at once, and restores it on its own key —');
         await section('13', async () => {
-            const N = await spawnNode(SCRIPT, dirs.n, { ...noAgent, ADMIN_PASSWORD: PW_N, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
+            const N = await spawnNode(SCRIPT, dirs.n, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(N);
             const nSetup = await N.send('setup', { ownerSeedHex, replicationToken });
             assert((await claim(nSetup.https, N, 'sname')).status === 200, 'N claims sname');
 
             fs.mkdirSync(dirs.standby, { recursive: true });
             fs.copyFileSync(path.join(dirs.n, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-            let standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined });
+            let standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined });
             nodes.push(standby);
             await standby.send('setup-standby', { primaryUrl: N.base, replicationToken, primaryPeerId: N.ready.peerId });
 
@@ -809,7 +809,7 @@ async function main(): Promise<void> {
             const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body?.preview?.sessionId, confirm: true }, standbyOwner);
             assert(confirmed.status === 200, `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
             assert((await standby.exited) === 0, 'the standby restarts itself');
-            standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined });
+            standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined });
             nodes.push(standby);
             assert(standby.ready.role === 'primary', 'it is the main server now');
             const sStart = await standby.send('start');
@@ -915,7 +915,7 @@ async function main(): Promise<void> {
         // ── 15 ──
         console.log("\n— 15. a status newer than the registrar's last `you`: watched every 5 minutes again —");
         await section('15', async () => {
-            const Q = await spawnNode(SCRIPT, dirs.q, { ...noAgent, ADMIN_PASSWORD: PW_Q, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
+            const Q = await spawnNode(SCRIPT, dirs.q, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(Q);
             const qSetup = await Q.send('setup', { ownerSeedHex });
             const qAdmin: Record<string, string> = await Q.send('owner-session');
@@ -984,7 +984,7 @@ async function main(): Promise<void> {
                 `P has ${lostBefore.length} names lost, envname among them, and the owners' address alert is on (${JSON.stringify(before.active)})`);
 
             await P.kill('SIGKILL');
-            const P2 = await spawnNode(SCRIPT, dirs.p, { ...noAgent, ADMIN_PASSWORD: PW_P, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
+            const P2 = await spawnNode(SCRIPT, dirs.p, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
             nodes.push(P2);
             pNow = P2;
             const p2 = await P2.send('start');
@@ -1013,7 +1013,7 @@ async function main(): Promise<void> {
                 await pNow.kill('SIGKILL');
                 for (const ext of ['', '-wal', '-shm']) fs.rmSync(path.join(dirs.p, `state.db${ext}`), { force: true });
                 fs.copyFileSync(from, path.join(dirs.p, 'state.db'));
-                const next = await spawnNode(SCRIPT, dirs.p, { ...noAgent, ADMIN_PASSWORD: PW_P, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
+                const next = await spawnNode(SCRIPT, dirs.p, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'p2.test,envname.beanpool.org' });
                 nodes.push(next);
                 pNow = next;
                 await next.send('start');

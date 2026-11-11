@@ -7,8 +7,9 @@
 import { describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, pseudoLocalise, setLanguage, t } from '@beanpool/core';
-import { sealDmLine, newDmMessageId, encryptDmFormat2 } from './e2e-crypto';
+import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, formatHundredths, pluralKey, pseudoLocalise, setLanguage, t } from '@beanpool/core';
+import { sealDmLine, newDmMessageId } from './e2e-crypto';
+import { DM_LINE_VECTORS, DM_REFUSED_LINES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '@beanpool/core/dm-line-vectors';
 import { sealLine } from './group-chat-crypto';
 import { CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown } from './home-cards';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
@@ -38,7 +39,7 @@ const market = { items: [{ id: 'p1', type: 'offer' as const, title: 'Sourdough',
 const events = { items: [{ id: 'e1', title: 'Seed swap', startsAt: daysAgo(-1), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: null };
 const community = { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 };
 const pulse = { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk', category: 'education', url: null }] };
-const beans = { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false };
+const beans = { balance_c: 0, room_c: 0, tier: 'Newcomer', activated: false, frozen: false };
 
 /** A list holding every card in the catalogue's order, as version 1 drew by default; `without` leaves some out. */
 const every = (...without: string[]): HomeLayoutV2 => ({
@@ -76,7 +77,7 @@ describe('what each person sees, top down (§3.2)', () => {
             deals: { open: 2, waiting: 1, waitingOnMe: { txId: 't1', postId: 'p1', title: 'Sourdough' } },
             events, market, decide: { open: 1, soonestClosesAt: daysAgo(-2), polls: 2, pollsMore: false },
             groups: { items: [{ id: 'g', kind: 'group', name: 'Garden Group', unread: 4, muted: false }], total: 1 }, pulse,
-            beans: { balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false }, community,
+            beans: { balance_c: -3500, room_c: 16500, tier: 'Resident', activated: true, frozen: false }, community,
         }, { me: me({ joinedAt: daysAgo(90), interests: ['food'], firstOffer: true }) });
         expect(shown(a, { now: NOW })).toEqual(['needs', 'deals', 'events', 'market', 'decide', 'groups', 'pulse', 'beans', 'invite', 'community']);
     });
@@ -151,25 +152,25 @@ describe('the words (§3.1, §9)', () => {
 
     it('Beans: their own balance, plain for a new member, the tier as a word only', () => {
         expect(beansLines(beans)).toEqual({ line: '0 Beans · nothing to repay', note: 'Your credit opens with a first trade.' });
-        expect(beansLines({ balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false })).toEqual({ line: '−35 Beans · room to spend 165', note: 'Resident' });
-        expect(beansLines({ balance: 1, room: 200, tier: 'Resident', activated: true, frozen: false }).line).toBe('1 Bean · room to spend 200');
-        expect(beansLines({ balance: 12, room: 0, tier: 'Resident', activated: true, frozen: true }).line).toBe('12 Beans · spending paused');
+        expect(beansLines({ balance_c: -3500, room_c: 16500, tier: 'Resident', activated: true, frozen: false })).toEqual({ line: '−35 Beans · room to spend 165', note: 'Resident' });
+        expect(beansLines({ balance_c: 100, room_c: 20000, tier: 'Resident', activated: true, frozen: false }).line).toBe('1 Bean · room to spend 200');
+        expect(beansLines({ balance_c: 1200, room_c: 0, tier: 'Resident', activated: true, frozen: true }).line).toBe('12 Beans · spending paused');
     });
 
-    it('Beans: a balance of a thousand or more is grouped in English with its cents too, as it always was', () => {
-        const at = (balance: number) => beansLines({ balance, room: 2310, tier: 'Resident', activated: true, frozen: false }).line;
-        expect(at(1234)).toBe('1,234 Beans · room to spend 2,310');
-        expect(at(1234.5)).toBe('1,234.5 Beans · room to spend 2,310');
-        expect(at(-1234.56)).toBe('−1,234.56 Beans · room to spend 2,310');
-        expect(at(1234567.89)).toBe('1,234,567.89 Beans · room to spend 2,310');
-        expect(at(-0.5)).toBe('−0.5 Beans · room to spend 2,310');
-        expect(at(12.5)).toBe('12.5 Beans · room to spend 2,310');
-        // Elsewhere amounts are the digits alone, with the language's decimal separator (core formatNumber).
+    it('Beans: a balance of a thousand or more is grouped in English with its cents too, two decimals whenever there are cents (formatHundredths)', () => {
+        const at = (balance_c: number) => beansLines({ balance_c, room_c: 231000, tier: 'Resident', activated: true, frozen: false }).line;
+        expect(at(123400)).toBe('1,234 Beans · room to spend 2,310');
+        expect(at(123450)).toBe('1,234.50 Beans · room to spend 2,310');
+        expect(at(-123456)).toBe('−1,234.56 Beans · room to spend 2,310');
+        expect(at(123456789)).toBe('1,234,567.89 Beans · room to spend 2,310');
+        expect(at(-50)).toBe('−0.50 Beans · room to spend 2,310');
+        expect(at(1250)).toBe('12.50 Beans · room to spend 2,310');
+        // Elsewhere amounts are the digits alone, with the language's decimal separator (core formatHundredths).
         addDateWords('fr', frDates);
         setLanguage('fr');
         try {
-            expect(at(1234.5).startsWith('1234,5 ')).toBe(true);
-            expect(at(-0.5).startsWith('−0,5 ')).toBe(true);
+            expect(at(123450).startsWith('1234,50 ')).toBe(true);
+            expect(at(-50).startsWith('−0,50 ')).toBe(true);
         } finally {
             setLanguage('en');
         }
@@ -432,19 +433,19 @@ describe('a pinned Find your community on the web (#1517)', () => {
 
 describe('enterprise latest line: positive incoming ("from"), negative outgoing ("to")', () => {
     it('member: positive incoming is "from", negative outgoing is "to"', () => {
-        expect(enterpriseLatestLine({ kind: 'member', amount: 12, who: 'Ana', at: '' })).toBe('Latest: +12 Beans from Ana');
-        expect(enterpriseLatestLine({ kind: 'member', amount: -50, who: 'Ana', at: '' })).toBe('Latest: −50 Beans to Ana');
-        expect(enterpriseLatestLine({ kind: 'member', amount: -1, who: 'Ana', at: '' })).toBe('Latest: −1 Bean to Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount_c: 1200, who: 'Ana', at: '' })).toBe('Latest: +12 Beans from Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount_c: -5000, who: 'Ana', at: '' })).toBe('Latest: −50 Beans to Ana');
+        expect(enterpriseLatestLine({ kind: 'member', amount_c: -100, who: 'Ana', at: '' })).toBe('Latest: −1 Bean to Ana');
     });
 
     it('deal / held in trust: positive is "released from trust", negative is "held in trust"', () => {
-        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: '' })).toBe('Latest: +25 Beans released from trust');
-        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: '' })).toBe('Latest: −25 Beans held in trust');
+        expect(enterpriseLatestLine({ kind: 'deal', amount_c: 2500, who: null, at: '' })).toBe('Latest: +25 Beans released from trust');
+        expect(enterpriseLatestLine({ kind: 'deal', amount_c: -2500, who: null, at: '' })).toBe('Latest: −25 Beans held in trust');
     });
 
     it('commons: positive is "from Commons", negative is "to Commons"', () => {
-        expect(enterpriseLatestLine({ kind: 'commons', amount: 10, who: null, at: '' })).toBe('Latest: +10 Beans from Commons');
-        expect(enterpriseLatestLine({ kind: 'commons', amount: -10, who: null, at: '' })).toBe('Latest: −10 Beans to Commons');
+        expect(enterpriseLatestLine({ kind: 'commons', amount_c: 1000, who: null, at: '' })).toBe('Latest: +10 Beans from Commons');
+        expect(enterpriseLatestLine({ kind: 'commons', amount_c: -1000, who: null, at: '' })).toBe('Latest: −10 Beans to Commons');
     });
 });
 
@@ -472,20 +473,20 @@ describe('deal title line: deleted listing fallback label', () => {
 
 describe('month summary line: partial month indication when more is set', () => {
     it('shows exact monthly figures when more is falsy', () => {
-        expect(monthSummaryLine({ trades: 3, in: 40, out: 25 })).toBe('This month: 3 trades · +40 in · −25 out');
-        expect(monthSummaryLine({ trades: 3, in: 40, out: 25, more: false })).toBe('This month: 3 trades · +40 in · −25 out');
+        expect(monthSummaryLine({ trades: 3, in_c: 4000, out_c: 2500 })).toBe('This month: 3 trades · +40 in · −25 out');
+        expect(monthSummaryLine({ trades: 3, in_c: 4000, out_c: 2500, more: false })).toBe('This month: 3 trades · +40 in · −25 out');
     });
 
     it('shows partial indicator when more is true', () => {
-        expect(monthSummaryLine({ trades: 200, in: 500, out: 300, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
+        expect(monthSummaryLine({ trades: 200, in_c: 50000, out_c: 30000, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
     });
 });
 
 describe('Asked near you, and the First steps line for a Need (cold-start N2)', () => {
     const need = (id: string, over: Partial<NonNullable<HomeCards['asked']>['items'][number]> = {}) =>
-        ({ id, title: `Need ${id}`, category: 'labour', credits: 20, createdAt: new Date(NOW - 2 * 3_600_000).toISOString(), photoUrl: null, ...over });
+        ({ id, title: `Need ${id}`, category: 'labour', price_c: 2000, createdAt: new Date(NOW - 2 * 3_600_000).toISOString(), photoUrl: null, ...over });
     const onList: HomeLayoutV2 = { ...every(), cards: [...every().cards, { id: 'asked', type: 'asked' }] };
-    const beansWords = (n: number) => `${n} Beans`;
+    const beansWords = (c: number) => `${formatHundredths(c)} Beans`;
 
     it('the card is drawn while the node sent a row, never empty', () => {
         const base = { steps, market, community };
@@ -502,29 +503,29 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     });
 
     it('the second line: what the Need pays, then how long ago; Free asks nothing; no Beans, no price; no figure sent, none made up', () => {
-        expect(askedFacts(need('a', { credits: 20 }), true, beansWords)).toMatch(/^20 Beans · .+/);
-        expect(askedFacts(need('a', { credits: 0 }), true, beansWords)).toMatch(/^Free · .+/);
-        expect(askedFacts(need('a', { credits: 20 }), false, beansWords)).not.toMatch(/Beans|Free/);
-        expect(askedFacts(need('a', { credits: undefined }), true, beansWords)).not.toMatch(/Beans|Free/);
+        expect(askedFacts(need('a', { price_c: 2000 }), true, beansWords)).toMatch(/^20 Beans · .+/);
+        expect(askedFacts(need('a', { price_c: 0 }), true, beansWords)).toMatch(/^Free · .+/);
+        expect(askedFacts(need('a', { price_c: 2000 }), false, beansWords)).not.toMatch(/Beans|Free/);
+        expect(askedFacts(need('a', { price_c: undefined }), true, beansWords)).not.toMatch(/Beans|Free/);
         expect(askedFacts(need('a', { createdAt: 'nonsense' }), true, beansWords)).toBe('20 Beans');
     });
 
     it('a Need priced by the hour, day, week or month keeps its unit (the Market card\'s own words); a fixed price, Free and no price carry none', () => {
         const at = (over: Partial<NonNullable<HomeCards['asked']>['items'][number]>) => askedFacts(need('a', over), true, beansWords);
-        expect(at({ credits: 20, priceType: 'hourly' })).toMatch(/^20 Beans \/hr · .+/);
-        expect(at({ credits: 15, priceType: 'daily' })).toMatch(/^15 Beans \/day · .+/);
-        expect(at({ credits: 90, priceType: 'weekly' })).toMatch(/^90 Beans \/wk · .+/);
-        expect(at({ credits: 300, priceType: 'monthly' })).toMatch(/^300 Beans \/mo · .+/);
+        expect(at({ price_c: 2000, priceType: 'hourly' })).toMatch(/^20 Beans \/hr · .+/);
+        expect(at({ price_c: 1500, priceType: 'daily' })).toMatch(/^15 Beans \/day · .+/);
+        expect(at({ price_c: 9000, priceType: 'weekly' })).toMatch(/^90 Beans \/wk · .+/);
+        expect(at({ price_c: 30000, priceType: 'monthly' })).toMatch(/^300 Beans \/mo · .+/);
         // A fixed price is a total: the line is as it was.
-        expect(at({ credits: 20, priceType: 'fixed' })).toMatch(/^20 Beans · .+/);
-        expect(at({ credits: 20 })).toMatch(/^20 Beans · .+/);
+        expect(at({ price_c: 2000, priceType: 'fixed' })).toMatch(/^20 Beans · .+/);
+        expect(at({ price_c: 2000 })).toMatch(/^20 Beans · .+/);
         // Free says Free, never "Free /hr"; no Beans and no figure draw no unit either.
-        expect(at({ credits: 0, priceType: 'hourly' })).toMatch(/^Free · .+/);
-        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), false, beansWords)).not.toMatch(/\/|Beans|Free/);
-        expect(at({ credits: undefined, priceType: 'hourly' })).not.toMatch(/\/|Beans|Free/);
+        expect(at({ price_c: 0, priceType: 'hourly' })).toMatch(/^Free · .+/);
+        expect(askedFacts(need('a', { price_c: 2000, priceType: 'hourly' }), false, beansWords)).not.toMatch(/\/|Beans|Free/);
+        expect(at({ price_c: undefined, priceType: 'hourly' })).not.toMatch(/\/|Beans|Free/);
         // A kind this build does not know says no unit rather than a made-up one.
-        expect(at({ credits: 20, priceType: 'yearly' })).toMatch(/^20 Beans · .+/);
-        expect(at({ credits: 20, priceType: 'hourly', createdAt: 'nonsense' })).toBe('20 Beans /hr');
+        expect(at({ price_c: 2000, priceType: 'yearly' })).toMatch(/^20 Beans · .+/);
+        expect(at({ price_c: 2000, priceType: 'hourly', createdAt: 'nonsense' })).toBe('20 Beans /hr');
     });
 
     it('First steps: the Need line follows the interests line, once there is an Offer, with the invite line after it', () => {
@@ -630,15 +631,22 @@ describe('the chat card', () => {
         expect(out.some(l => l.text.includes('not sealed'))).toBe(false);
     });
 
-    it("an older app's DM line (format 2) is the warning alone, nobody's, even served in the other person's name (#2945 round 2)", () => {
-        // Ana's own old line, which the node serves as Ben's: format 2 binds no sender, so it opens either way.
-        const id = newDmMessageId();
-        const old = encryptDmFormat2('I will pay you 50 Beans', { myEdPrivHex: ana.privateKey, peerEdPubHex: ben.publicKey, conversationId: DM });
-        const line = { id, author: ben.publicKey, who: 'Ben', at: at(5), type: 'text', systemType: null, sealed: { ciphertext: old.ciphertext, nonce: old.nonce, metadata: null } };
-        const out = shown(dmCard([line]))!;
-        expect(out.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, "Sent from an older version of the app: BeanPool can't confirm who wrote it."]]);
-        expect(out.some(l => l.text.includes('50 Beans'))).toBe(false);
-        expect(chatLineText(out[0])).not.toMatch(/^Ben, /);
+    it("a line its named sender didn't sign, or of an older format, is nobody's and never its words, as either person (format 4)", () => {
+        // The frozen vectors (core dm-line-vectors.ts): a line Ana sealed in Ben's name and signed herself (the seal opens for
+        // both, as they share its key), and Ana's format-3 line as a 1.3.x app sent it, its signature beside it.
+        const P = DM_VECTOR_PEOPLE;
+        const [forged, old] = [DM_REFUSED_LINES[1], DM_REFUSED_LINES[0]];
+        const genuine = DM_LINE_VECTORS[1];   // Ben's own line, signed by him: the control
+        const row = (id: string, by: 'ana' | 'ben', p: { ciphertext: string; nonce: string }, metadata: string | null, min: number) =>
+            ({ id, author: P[by].publicKey, who: by === 'ana' ? 'Ana' : 'Ben', at: at(min), type: 'text', systemType: null, sealed: { ...p, metadata } });
+        const lines = [row(old.messageId, 'ana', old.payload, old.metadata, 7), row(forged.messageId, 'ben', forged.payload, null, 6), row(genuine.messageId, 'ben', genuine.payload, null, 5)];
+        const conv = inst('dm', DM_VECTOR_CONVERSATION);
+        const asAna = shown({ cards: { 'chat-1': { kind: 'dm', name: 'Ben', unread: 2, muted: false, lines, peer: P.ben.publicKey } } }, conv, { publicKey: P.ana.publicKey, privateKey: P.ana.pkcs8Hex })!;
+        expect(asAna.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, '🔒 Message'], [null, false, '🔒 Message'], ['Ben', false, 'ok']]);
+        expect(chatLineText(asAna[1])).not.toMatch(/^Ben, /);
+        const asBen = shown({ cards: { 'chat-1': { kind: 'dm', name: 'Ana', unread: 2, muted: false, lines, peer: P.ana.publicKey } } }, conv, { publicKey: P.ben.publicKey, privateKey: P.ben.seedHex })!;
+        expect(asBen.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, '🔒 Message'], [null, false, '🔒 Message'], ['You', true, 'ok']]);
+        expect([...asAna, ...asBen].some(l => /500 Beans|seedlings/.test(l.text))).toBe(false);
     });
 
     it("the node's own line is its words, nobody's", () => {

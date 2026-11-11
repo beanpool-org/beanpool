@@ -25,7 +25,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import selfsigned from 'selfsigned';
 import { audienceOf } from '@beanpool/core';
-import { certCovers, certTimes, readPair, readState, storedHosts, writePair, type CertPair } from './acme/store.js';
+import { certCovers, certTimes, readPair, readState, storedHosts, type CertPair } from './acme/store.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const TLS_DIR = path.join(DATA_DIR, 'tls');
@@ -33,9 +33,6 @@ const CA_CERT_PATH = path.join(TLS_DIR, 'ca.pem');
 const CA_KEY_PATH = path.join(TLS_DIR, 'ca-key.pem');
 const SERVER_CERT_PATH = path.join(TLS_DIR, 'server.pem');
 const SERVER_KEY_PATH = path.join(TLS_DIR, 'server-key.pem');
-/** Where the fleet's Let's Encrypt pair lived before each identifier had a folder (copied into it; kept for one release). */
-const LE_CERT_PATH = path.join(TLS_DIR, 'le-cert.pem');
-const LE_KEY_PATH = path.join(TLS_DIR, 'le-key.pem');
 
 let caCertPem: string = '';
 let serverCertPem: string = '';
@@ -275,7 +272,6 @@ export async function initTls(): Promise<void> {
     served.clear();
     checked.clear();
     heldMemo = null;
-    adoptLegacyFleetCertificate();
     const now = clock();
     for (const host of storedHosts(DATA_DIR)) {
         const pair = readPair(DATA_DIR, host);
@@ -288,32 +284,6 @@ export async function initTls(): Promise<void> {
 
     if (served.size) console.log(`🔒 TLS: certificates for ${[...served.keys()].join(', ')}; self-signed (beanpool.local) for any other name`);
     else console.log('🔒 TLS: Self-signed (beanpool.local)');
-}
-
-/**
- * The fleet's pair from before each identifier had a folder (tls/le-*.pem), copied into data/tls/acme/<CF_RECORD_NAME>/
- * when that has none, or an older one (an older image ran here after a rollback and renewed le-cert.pem).
- *
- * The old files are kept for one release: v1.2.29 and older read only them, and without them order from Let's Encrypt
- * inside initTls, before the listeners are up, using one of the 5 certificates a week for the name. The release after
- * the first one that ships this copy (v1.2.31, if it is v1.2.30) may delete them, and this function with them; the boot
- * sweep keeps le-key.pem 0600 until then (boot-file-safety.ts).
- */
-function adoptLegacyFleetCertificate(): void {
-    const fleet = fleetIdentifier();
-    if (!fleet) return;
-    try {
-        const cert = readOrError(LE_CERT_PATH);
-        const key = readOrError(LE_KEY_PATH);
-        if (cert instanceof Error || key instanceof Error) return;
-        if (serverPairProblem(cert, key) || !certCovers(cert, fleet)) return;
-        const held = readPair(DATA_DIR, fleet);
-        if (held && (certTimes(held.cert)?.notAfter ?? 0) >= (certTimes(cert)?.notAfter ?? 0)) return;
-        writePair(DATA_DIR, fleet, { cert, key });
-        console.log(`🔐 TLS: the Let's Encrypt certificate for ${fleet} copied to data/tls/acme/ (tls/le-*.pem kept for a rollback)`);
-    } catch (err) {
-        console.error(`❌ TLS: could not copy the Let's Encrypt certificate for ${fleet}:`, (err as Error).message);
-    }
 }
 
 // --- Self-Signed Certs (LAN / Fallback) ---

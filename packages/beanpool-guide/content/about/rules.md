@@ -153,7 +153,7 @@ Your community's server has owners and admins. They look after it.
 - If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
 - An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.
 - An admin cannot remove a member without the community's vote. Where too few members can vote, an owner may decide it (see "A small community"). Where the people who run the server have switched community votes off, the admins remove members themselves.
-- Owners and credit-committee admins can make a confirmed member a voucher on the names list.
+- Owners and credit-committee admins can make a confirmed member a voucher on the names list. Only an owner makes an admin a voucher, and only an owner stops an admin's budget.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
 - Admins sort out stuck trades, but never one they are part of.
 
@@ -201,6 +201,10 @@ A group is run by its convenors, and one of them is its **lead convenor**. Whoev
 
 ## Vouching
 
-Owners and admins are vouchers by role, and an owner or credit-committee admin can make a confirmed member a voucher on the names list. Each voucher receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans).
+Owners are vouchers by role. An admin is a voucher only when an owner makes them one, with no names-list entry needed: being made an admin gives no budget on its own. An owner or credit-committee admin can make a confirmed member a voucher on the names list. Each admin an owner makes a voucher and each voucher on the names list receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans). Owners have no budget limit: their vouches are still recorded on their voucher card, but nothing is taken from a budget, and nobody sets one for them.
 
-Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Each voucher can vouch for a person once (raisable up to 100 Beans total), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Trust badges never give this right.
+Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Owners can also choose 200 or 500 Beans. Each voucher can vouch for a person once (raisable up to 100 Beans total, or 500 for an owner), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Once an owner has vouched for someone, that person can hold up to 500 Beans of vouches in all, and an owner's vouch can top up someone who already has 3 vouchers, to 500 at most. Trust badges never give this right.
+
+- **Owner:** 25, 50, 75, 100, 200 or 500 Beans, no budget limit, up to 500 for one person.
+- **Admin an owner made a voucher:** 25, 50, 75 or 100 Beans, a budget of 100 to 2,000, up to 100 for one person.
+- **Voucher on the names list:** the same as an admin.

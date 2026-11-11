@@ -12,15 +12,14 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestRejectAdmin123!';
 
 import { initTls } from './services/tls.js';
 import { initStateEngine, createProject, getAllProjects } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -33,12 +32,11 @@ function assert(cond: boolean, msg: string): void {
 
 function seedMember(pk: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 async function main() {
     console.log('Running commons reject project endpoint integration tests...\n');
-    initAdminPassword();
 
     await initTls();
     initStateEngine();
@@ -110,9 +108,9 @@ async function main() {
     seedMember(readerPk);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`GET\n/api/commons/projects\n${ts}\n${nonce}\n`), privateKey).toString('base64');
+    const sig = signRequest(privateKey, { method: 'GET', path: '/api/commons/projects', timestamp: ts, nonce });
     const getRes = await fetch(`${BASE}/api/commons/projects`, {
-        headers: { 'X-Public-Key': readerPk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
+        headers: { 'X-Public-Key': readerPk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
     });
     assert(getRes.status === 200, `GET /api/commons/projects returns 200 to a member (got ${getRes.status})`);
     const getBody = await getRes.json() as any;

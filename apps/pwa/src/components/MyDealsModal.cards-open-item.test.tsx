@@ -36,13 +36,13 @@ const ME = 'user-pubkey-123';
 const identity = { publicKey: ME };
 
 const POSTS: MarketplacePost[] = [{
-    id: 'post-1', title: 'Organic Sourdough Bread', description: '', category: 'food', type: 'offer', credits: 15, priceType: 'fixed',
+    id: 'post-1', title: 'Organic Sourdough Bread', description: '', category: 'food', type: 'offer', price_c: 1500, priceType: 'fixed',
     photos: ['/api/marketplace/posts/post-1/photos/0', '/api/marketplace/posts/post-1/photos/1'], authorPublicKey: ME, authorCallsign: 'baker-alice',
     status: 'active', active: true, repeatable: false, createdAt: '2026-10-10T00:00:00Z',
 }];
 const heldDeal = {
     id: 'tx-held', postId: 'post-2', postTitle: 'Heirloom Tomato Seeds', buyerPublicKey: ME, buyerCallsign: 'gardener-bob',
-    sellerPublicKey: 'seller-pubkey-456', sellerCallsign: 'seed-keeper', credits: 10, status: 'pending', createdAt: '2026-10-15T12:00:00Z',
+    sellerPublicKey: 'seller-pubkey-456', sellerCallsign: 'seed-keeper', amount_c: 1000, status: 'pending', createdAt: '2026-10-15T12:00:00Z',
     coverImage: '/api/marketplace/posts/post-2/photos/0',
 } as MarketplaceTransaction;
 const doneDeal = {
@@ -102,6 +102,13 @@ describe('Your deals: a row\'s photo opens what the row opens', () => {
         expect(onNavigateToPost).toHaveBeenCalledWith('post-1');
         expect(onClose).toHaveBeenCalledTimes(1);
         noPhotoViewer();
+    });
+
+    it('My Posts: a listing shows its own price, price_c in Beans (1500 is 15), never "?" (a listing has no amount_c: a deal does)', () => {
+        drawLocal('active');
+        const row = screen.getByRole('button', { name: 'View post: Organic Sourdough Bread' });
+        expect(within(row).getByText('15')).toBeTruthy();
+        expect(within(row).queryByText('?')).toBeNull();
     });
 
     it('Escape after a press on a photo closes Your deals at once: there is no photo viewer to close first', () => {

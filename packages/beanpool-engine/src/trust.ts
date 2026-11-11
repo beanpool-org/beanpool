@@ -105,7 +105,7 @@ export const WASH_BFS_STEP_NODES = 5000;
 export interface ThirtyDayTrade {
     buyer_pubkey: string;
     seller_pubkey: string;
-    credits: number;
+    amount_c: number;
 }
 
 /**
@@ -119,14 +119,14 @@ export interface ThirtyDayTrade {
 export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): Generator<ThirtyDayTrade[]> {
     const { since } = db.prepare(`SELECT datetime('now', '-30 days') AS since`).get() as { since: string };
     const firstPage = db.prepare(`
-        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, credits
+        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, amount_c
         FROM marketplace_transactions
         WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
           AND completed_at > ?
         ORDER BY completed_at, rowid LIMIT ?
     `);
     const nextPage = db.prepare(`
-        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, credits
+        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, amount_c
         FROM marketplace_transactions
         WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
           AND completed_at >= ? AND (completed_at > ? OR rowid > ?)
@@ -181,7 +181,7 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
                 WHERE buyer_pubkey > ? AND status = 'completed' ORDER BY buyer_pubkey LIMIT ?)
         `);
         const pageTotals = db.prepare(`
-            SELECT buyer_pubkey, seller_pubkey, SUM(credits) as vol
+            SELECT buyer_pubkey, seller_pubkey, SUM(amount_c) as vol
             FROM marketplace_transactions
             WHERE buyer_pubkey >= ? AND buyer_pubkey <= ? AND status = 'completed' AND buyer_pubkey != seller_pubkey
             GROUP BY buyer_pubkey, seller_pubkey
@@ -247,7 +247,7 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
                 adj.get(v)!.add(u);
 
                 const key = u < v ? `${u}|${v}` : `${v}|${u}`;
-                edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+                edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.amount_c);
             }
             yield;
         }
@@ -317,7 +317,7 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
                     let totalVol = 0;
                     try {
                         const allTimeRes = db.prepare(`
-                            SELECT COALESCE(SUM(credits), 0) as s FROM marketplace_transactions
+                            SELECT COALESCE(SUM(amount_c), 0) as s FROM marketplace_transactions
                             WHERE status = 'completed' AND (buyer_pubkey IN (${placeholders}) OR seller_pubkey IN (${placeholders}))
                         `).get(...comp, ...comp) as any;
                         totalVol = allTimeRes ? allTimeRes.s : 0;
@@ -686,14 +686,14 @@ export function qualifiedTradeValue(db: Db, publicKey: string, wash: WashAnalysi
     const { flaggedPairs, flaggedClusters } = wash;
 
     const rows = prepared(db, `
-        SELECT counterparty, COALESCE(SUM(credits), 0) as v,
-            COALESCE(SUM(CASE WHEN bought THEN credits END), 0) AS bought,
-            COALESCE(SUM(CASE WHEN bought THEN NULL ELSE credits END), 0) AS sold
+        SELECT counterparty, COALESCE(SUM(amount_c), 0) as v,
+            COALESCE(SUM(CASE WHEN bought THEN amount_c END), 0) AS bought,
+            COALESCE(SUM(CASE WHEN bought THEN NULL ELSE amount_c END), 0) AS sold
         FROM (
-            SELECT seller_pubkey AS counterparty, credits, 1 AS bought FROM marketplace_transactions
+            SELECT seller_pubkey AS counterparty, amount_c, 1 AS bought FROM marketplace_transactions
                 WHERE buyer_pubkey = ? AND status = 'completed' AND seller_pubkey != ?
             UNION ALL
-            SELECT buyer_pubkey AS counterparty, credits, 0 AS bought FROM marketplace_transactions
+            SELECT buyer_pubkey AS counterparty, amount_c, 0 AS bought FROM marketplace_transactions
                 WHERE seller_pubkey = ? AND status = 'completed' AND buyer_pubkey != ?
         ) GROUP BY counterparty
     `).all(publicKey, publicKey, publicKey, publicKey) as { counterparty: string; v: number; bought: number; sold: number }[];
@@ -782,11 +782,11 @@ export function getMemberTrustStats(db: Db, publicKey: string): TrustStats {
     };
 }
 
+/** An enterprise's limit and floor, whole hundredths. */
 export interface EnterpriseFloorInfo {
     allowance: number;
     floor: number;
     derivedAllowance: number;
-    legacyFloor: number;
     activated: boolean;
 }
 
@@ -810,7 +810,7 @@ export function clearEnterpriseFloorCache(db?: Db, enterprisePubkey?: string): v
 export function enterpriseEarnedPledges(db: Db, enterprisePubkey: string, exceptKeeper?: string): number {
     try {
         const row = db.prepare(`
-            SELECT COALESCE(SUM(p.amount), 0) as total
+            SELECT COALESCE(SUM(p.amount_c), 0) as total
             FROM enterprise_pledges p
             JOIN members m ON m.public_key = p.keeper
             WHERE p.enterprise = ?
@@ -829,11 +829,10 @@ export function enterpriseEarnedPledges(db: Db, enterprisePubkey: string, except
 /**
  * An enterprise's limit, the one rule every reader takes: its floor here (the badge, tier and enterprise page), the spend
  * check (state-engine getEnterpriseUnderlyingFloor), the release covenant and an unbinding's lock (docs/the-commons.md §2.4,
- * §6 Slice 4). It is the bigger of its opening line or its keepers' pledges, never both (Marty, 21 Oct): the line
- * (members.legacy_credit_floor) is a starting limit until keepers pledge, and their pledges take over; once their earned
- * pledges reach it, it is cleared. The pledges are the earned rows plus the known rows as the known floor counts them
- * (known-floor.ts), all under the community's cap. The enterprise's own members.earned_credit, which createTreasury sets
- * to its opening line, is no part of it: the spend check once added it, and so stacked the line on the pledges (#2313).
+ * §6 Slice 4). It is its keepers' pledges: the earned rows plus the known rows as the known floor counts them
+ * (known-floor.ts), all under the community's cap. The grandfathered opening line is gone (E29, Marty's yes, 10 Nov 2026:
+ * no trades to protect). The enterprise's own members.earned_credit_c is no part of it: the spend check once added it, and
+ * so stacked a line on the pledges (#2313).
  *
  * `exceptKeeper`: as if that keeper's pledges were gone (what the others would still back if they left). Read fresh every
  * time, and blind to a freeze or a wind-up, which readEnterpriseFloor takes to 0.
@@ -841,24 +840,14 @@ export function enterpriseEarnedPledges(db: Db, enterprisePubkey: string, except
 export function enterpriseAllowance(db: Db, enterprisePubkey: string, exceptKeeper?: string): {
     allowance: number;
     derivedAllowance: number;
-    legacyFloor: number;
     knownShare: number;
 } {
     const derivedAllowance = enterpriseEarnedPledges(db, enterprisePubkey, exceptKeeper);
-    const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-
-    // Auto-clear legacy floor once keepers' derived pledges reach or exceed it (Slice 4).
-    // Strictly read-only here: persistent database UPDATE is executed inside state mutation endpoints.
-    if (legacyFloor > 0 && derivedAllowance >= legacyFloor) {
-        legacyFloor = 0;
-    }
-
     // The known floor (slice 4): the keepers' known pledges (known-floor.ts, recorded and locked like any pledge) and the
     // community's cap, only with the confirmation dial on; off, both are main's (share 0, cap CREDIT_FLOOR_CAP).
     const knownShare = enterpriseKnownShareOf(db, enterprisePubkey, exceptKeeper);
-    const allowance = Math.min(creditCap(db), Math.max(legacyFloor, derivedAllowance + knownShare));
-    return { allowance, derivedAllowance, legacyFloor, knownShare };
+    const allowance = Math.min(creditCap(db), derivedAllowance + knownShare);
+    return { allowance, derivedAllowance, knownShare };
 }
 
 /**
@@ -869,13 +858,12 @@ export function readEnterpriseFloor(db: Db, enterprisePubkey: string): Enterpris
     const memberRow = db.prepare(
         "SELECT COALESCE(credit_frozen, 0) as credit_frozen, status FROM members WHERE public_key = ?"
     ).get(enterprisePubkey) as any;
-    const { allowance: limit, derivedAllowance, legacyFloor, knownShare } = enterpriseAllowance(db, enterprisePubkey);
+    const { allowance: limit, derivedAllowance, knownShare } = enterpriseAllowance(db, enterprisePubkey);
     const allowance = memberRow?.credit_frozen === 1 || memberRow?.status === 'completed' ? 0 : limit;
     return {
         allowance,
         floor: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - allowance,
         derivedAllowance,
-        legacyFloor,
         activated: allowance > 0,
         knownShare,
     };
@@ -883,9 +871,6 @@ export function readEnterpriseFloor(db: Db, enterprisePubkey: string): Enterpris
 
 /**
  * Enterprise Derived Credit Floor (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4): readEnterpriseFloor, kept.
- *
- * Grandfathering: existing enterprises keep their fixed line as a legacy floor until
- * keepers' pledges reach or exceed it, at which point the legacy floor is auto-cleared (enterpriseAllowance).
  *
  * O(1) reads via an in-memory cache WeakMap per DB handle. The spend check never reads the cache: readEnterpriseFloor.
  */
@@ -898,12 +883,11 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
     const cached = cache.get(enterprisePubkey);
     if (cached) return cached;
 
-    const { allowance, floor, derivedAllowance, legacyFloor, activated } = readEnterpriseFloor(db, enterprisePubkey);
+    const { allowance, floor, derivedAllowance, activated } = readEnterpriseFloor(db, enterprisePubkey);
     const result: EnterpriseFloorInfo = {
         allowance,
         floor,
         derivedAllowance,
-        legacyFloor,
         activated,
     };
 
@@ -918,14 +902,14 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
  * The credit line people gave this member (DESIGN-invites-and-names-list-amend2-fable.md §6): every piece of room they
  * received (`room_gifts.to_pubkey`: a voucher's vouch, a member's gift) less what they passed on to someone else (their own
  * gifts, kind 'gift'). A voucher's vouches come out of their budget (`voucher_allocations`), never out of their own line,
- * so a vouch they gave counts nothing here. Whole Beans, never below 0. 0 on a database from before the table: the boot's
+ * so a vouch they gave counts nothing here. Whole hundredths, never below 0. 0 on a database from before the table: the boot's
  * vouching reset (apps/server db/vouch-reset.ts) reads profiles before schema.sql makes it.
  */
 export function roomHeldOf(db: Db, publicKey: string): number {
     try {
-        const r = prepared(db, `SELECT COALESCE((SELECT SUM(amount) FROM room_gifts WHERE to_pubkey = ?), 0)
-            - COALESCE((SELECT SUM(amount) FROM room_gifts WHERE from_pubkey = ? AND kind = 'gift'), 0) AS held`).get(publicKey, publicKey) as { held: number | null } | undefined;
-        return Math.max(0, Math.floor(r?.held ?? 0));
+        const r = prepared(db, `SELECT COALESCE((SELECT SUM(amount_c) FROM room_gifts WHERE to_pubkey = ?), 0)
+            - COALESCE((SELECT SUM(amount_c) FROM room_gifts WHERE from_pubkey = ? AND kind = 'gift'), 0) AS held`).get(publicKey, publicKey) as { held: number | null } | undefined;
+        return Math.max(0, Number(r?.held ?? 0));
     } catch (e) {
         if (/no such table/i.test((e as Error)?.message ?? '')) return 0;
         throw e;
@@ -936,10 +920,10 @@ export function roomHeldOf(db: Db, publicKey: string): number {
  * Who vouched for this member and how much each, oldest first (§6 `vouchedBy`): the member's own `room_gifts` rows of kind
  * 'vouch', each voucher's first vouch and raises together. Only for the member's own Ledger (never a public profile).
  */
-export function vouchesFor(db: Db, publicKey: string): Array<{ voucher: string; amount: number }> {
+export function vouchesFor(db: Db, publicKey: string): Array<{ voucher: string; amount_c: number }> {
     try {
-        return (prepared(db, `SELECT from_pubkey AS voucher, SUM(amount) AS amount FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'
-            GROUP BY from_pubkey ORDER BY MIN(at) ASC, from_pubkey ASC`).all(publicKey) as Array<{ voucher: string; amount: number }>);
+        return (prepared(db, `SELECT from_pubkey AS voucher, SUM(amount_c) AS amount_c FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'
+            GROUP BY from_pubkey ORDER BY MIN(at) ASC, from_pubkey ASC`).all(publicKey) as Array<{ voucher: string; amount_c: number }>);
     } catch (e) {
         if (/no such table/i.test((e as Error)?.message ?? '')) return [];
         throw e;
@@ -984,7 +968,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
 } {
     const stats = getMemberTrustStats(db, publicKey);
 
-    const memberRow = prepared(db, "SELECT earned_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = prepared(db, "SELECT earned_credit_c, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
     const isTreasury = memberRow?.is_treasury === 1;
 
     // Enterprise Derived Floor model (docs/the-commons.md §2.4, §6 Slice 4)
@@ -994,14 +978,14 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
         // Its tier leaves out what its keepers' known pledges add (enterpriseKnownShareOf): a known pledge is carved from a
         // keeper's confirmation, which stays private (Marty, 21 Oct), so a keeper's confirmation never moves the enterprise's
         // badge. Without one (and always with the dial off) this is the line itself, as before.
-        const tierCredit = memberRow?.credit_frozen === 1 ? 0 : Math.min(creditCap(db), Math.max(ef.legacyFloor, ef.derivedAllowance));
+        const tierCredit = memberRow?.credit_frozen === 1 ? 0 : Math.min(creditCap(db), ef.derivedAllowance);
         const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - tierCredit);
         return {
             stats,
             floor,
             tier,
             earnedCredit: ef.allowance,
-            grantedCredit: ef.legacyFloor,
+            grantedCredit: 0,
             knownGrant: 0,
             roomHeld: 0,
             otherAllowance: ef.allowance,
@@ -1015,11 +999,11 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
         };
     }
 
-    // GRANTED-credit lane: genesis pre-seed + admin Elder grants (adminSetElder).
-    // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
+    // GRANTED-credit lane: genesis pre-seed + admin tier-badge grants (adminSetTier).
+    // Stored in members.earned_credit_c (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
-    const grantedCredit = memberRow?.earned_credit || 0;
+    const grantedCredit = memberRow?.earned_credit_c || 0;
     const isCreditFrozen = memberRow?.credit_frozen === 1;
 
     const c = PROTOCOL_CONSTANTS;

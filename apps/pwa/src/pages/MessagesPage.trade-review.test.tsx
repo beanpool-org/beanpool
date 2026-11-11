@@ -54,7 +54,7 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     decodePlaintext: vi.fn((c: string) => c),
     encodePlaintext: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
     sealDmLine: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
-    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 4, after: null, conversationId: '', moved: false })),
     checkDmThread: vi.fn(() => new Map()),
     dmAfterReference: vi.fn(() => null),
     dmLineMarkText: vi.fn(() => null),
@@ -122,7 +122,7 @@ function tx(id: string, postId: string, rated: boolean, completedAt: string): Ma
     // I bought from Bob each time.
     return {
         id, postId, postTitle: 'Bread', buyerPublicKey: 'my-pubkey', buyerCallsign: 'Alice', sellerPublicKey: 'peer-pubkey',
-        sellerCallsign: 'Bob', credits: 5, status: 'completed', createdAt: completedAt, completedAt, ratedByBuyer: rated, ratedBySeller: false,
+        sellerCallsign: 'Bob', amount_c: 500, status: 'completed', createdAt: completedAt, completedAt, ratedByBuyer: rated, ratedBySeller: false,
     };
 }
 
@@ -130,7 +130,7 @@ function released(id: string, t: MarketplaceTransaction, at: string): ApiMessage
     return {
         id, conversationId: 'conv-1', authorPubkey: 'SYSTEM', ciphertext: 'Payment of 5 Beans released to the provider.', nonce: '',
         type: 'system', systemType: 'ESCROW_RELEASED' as any, timestamp: at,
-        metadata: JSON.stringify({ amount: 5, postId: t.postId, transactionId: t.id, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
+        metadata: JSON.stringify({ amount_c: 500, postId: t.postId, transactionId: t.id, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
     };
 }
 
@@ -147,7 +147,7 @@ function oldLine(id: string, t: MarketplaceTransaction, at: string): ApiMessage 
     return {
         id, conversationId: 'conv-1', authorPubkey: 'SYSTEM', ciphertext: 'Payment of 5 Beans released to the provider.', nonce: '',
         type: 'system', systemType: 'ESCROW_RELEASED' as any, timestamp: at,
-        metadata: JSON.stringify({ amount: 5, postId: t.postId, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
+        metadata: JSON.stringify({ amount_c: 500, postId: t.postId, actorPubkey: 'my-pubkey', buyerPubkey: t.buyerPublicKey, sellerPubkey: t.sellerPublicKey }),
     };
 }
 const lineButtons = () => screen.queryAllByRole('button', { name: /Rate your partner|Rating Submitted|View Post/ }).map(b => b.textContent?.trim());

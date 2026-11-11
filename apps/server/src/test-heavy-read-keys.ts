@@ -41,6 +41,7 @@ delete process.env.HEAVY_READ_BUDGET_MB;
 import crypto from 'node:crypto';
 import https from 'node:https';
 import type http from 'node:http';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MB = 2 ** 20;
 const LIGHT_BYTES = 512 * 1024;
@@ -68,12 +69,12 @@ function newKey(): Key {
     return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey };
 }
 
-/** A member's signature on a GET, as the apps send one (the older request format, which every node still takes). */
+/** A member's signature on a GET, as the apps send one (format 2, through signed-request-test-helper.ts). */
 function signed(route: string, key: Key): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`GET\n${route.split('?')[0]}\n${ts}\n${nonce}\n`), key.priv);
-    return { 'X-Public-Key': key.pk, 'X-Signature': sig.toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    const sig = Buffer.from(signRequest(key.priv, { method: 'GET', path: route.split('?')[0], timestamp: ts, nonce }), 'base64');
+    return { 'X-Public-Key': key.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig.toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 
 interface Answer { status: number | 'error'; headers: http.IncomingHttpHeaders; bytes: number; sha: string; text: string; ms: number }
@@ -127,7 +128,6 @@ const rows = (a: Answer): number => { try { return JSON.parse(a.text).length; } 
 async function main(): Promise<void> {
     console.log('A heavy read is weighed by its own key: a small answer never stands in for the big one...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
@@ -136,7 +136,6 @@ async function main(): Promise<void> {
     const { heavyReadStats, setHeavyReadsForTests } = await import('./heavy-reads.js');
     const { setRosterSnapshotsForTests } = await import('./roster-snapshots.js');
     const { SNAPSHOT_SEND_WEIGHT } = await import('./members-snapshot.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
 

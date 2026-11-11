@@ -43,8 +43,6 @@ export function StandbyReplicationPanel({
     const [loadingStatus, setLoadingStatus] = useState(false);
     const [primaryUrl, setPrimaryUrl] = useState('');
     const [primaryToken, setPrimaryToken] = useState('');
-    // Set when this standby still holds the main server's admin password (legacy set-up).
-    const [credentialWarning, setCredentialWarning] = useState<string | null>(null);
     const [hasExistingToken, setHasExistingToken] = useState(false);
     const [clearExistingToken, setClearExistingToken] = useState(false);
     const [savingConfig, setSavingConfig] = useState(false);
@@ -104,8 +102,6 @@ export function StandbyReplicationPanel({
                 if (cfg.primaryUrl && typeof cfg.primaryUrl === 'string') {
                     setPrimaryUrl(cfg.primaryUrl);
                 }
-                const warning = cfg.credential && typeof cfg.credential.warning === 'string' ? cfg.credential.warning : null;
-                setCredentialWarning(warning);
                 setHasExistingToken(Boolean(cfg.hasToken));
             }
         } catch (err: unknown) {
@@ -328,16 +324,6 @@ export function StandbyReplicationPanel({
                     >
                         {configMsg.isError ? '❌ ' : '✓ '}
                         {configMsg.text}
-                    </div>
-                )}
-
-                {credentialWarning && (
-                    <div
-                        role="alert"
-                        id="standby-credential-banner"
-                        className="p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 text-xs font-semibold"
-                    >
-                        ⚠️ {credentialWarning}
                     </div>
                 )}
 

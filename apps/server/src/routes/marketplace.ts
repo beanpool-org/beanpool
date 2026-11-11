@@ -16,7 +16,9 @@ import {
     closePoll, votePoll, rsvpEvent, letInEvent, isReportRateLimited,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
     nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
+    stopStandingDeal, extendStandingDeal,
 } from '../state-engine.js';
+import { STANDING_AUTH_CODE, type StandingStart } from '../engine/standing-deals.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
@@ -64,6 +66,7 @@ import { newListingCategory } from '../engine/shops.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, livePinIds, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT } from '../money-body.js';
 import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
 import { FREE_TAGS_MAX, POST_ID_TAKEN_CODE, SEARCH_TAGS_MAX, TAG_ID_PATTERN, freeTagRefusal, freeTagStored, word } from '@beanpool/core';
 
@@ -160,7 +163,8 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
         }
     }
 
-    // The small copy for the lists (`size=thumb2` or legacy `size=thumb`, storage/photo-thumbnails.ts): asked only here,
+    // The small copy for the lists (`size=thumb2`, storage/photo-thumbnails.ts; the `size=thumb` of phones before 1 Nov is
+    // not read: cutover N2, audit E14): asked only here,
     // after every gate above, so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
     // row, one it can't read) is answered with the photo itself, as is one whose small copy the store can't give now:
     // the photo's own path below says what a missing or unreachable photo means. That photo is cached for 5 minutes, not
@@ -168,7 +172,7 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // list's URL, on the phone and for a public listing in a shared cache, until the photo changed (review opus-1742 #5).
     let served: Awaited<ReturnType<typeof openPhotoOf>> = null;
     let thumbNotServed = false;
-    if (ctx.query.size === 'thumb' || ctx.query.size === 'thumb2') {
+    if (ctx.query.size === 'thumb2') {
         try {
             served = await openThumbnailOf(getImageStore(), photo.photo_data ? null : photo.storage_key);
         } catch (e) {
@@ -784,8 +788,14 @@ router.post('/api/marketplace/posts', async (ctx) => {
     // A member's copy holds only what a copy may (engine/event-copy.ts); every other post is the body as it came.
     const requestBody = copyBody((ctx as any).requestBody || {});
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
+    const { id, type, category, title, description, price_c, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
         lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } = requestBody;
+    // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them.
+    if ((ctx as any).requestBody && 'credits' in (ctx as any).requestBody) {
+        ctx.status = 400;
+        ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+        return;
+    }
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
         ctx.body = { error: 'type, title, and authorPublicKey are required' };
@@ -849,7 +859,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             type, category || newListingCategory(shopId) || 'other', title, description || '',
             // A loan's fee may be per day or per week too (S3), and is passed as sent, so one priced by the hour or the month
             // is refused in the engine's words rather than made one fee. Any other listing is one fee or by the hour, as before.
-            Number(credits) || 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            price_c ?? 0, lendable === true ? (priceType ?? 'fixed') : priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
             // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
@@ -992,6 +1002,12 @@ router.post('/api/marketplace/posts/takes-questions', async (ctx) => {
 router.post('/api/marketplace/posts/update', async (ctx) => {
     try {
         const { id, authorPublicKey, ...updates } = (ctx as any).requestBody || {};
+        // The price is whole hundredths, `price_c` (money-body.ts): an edit with the old `credits` is refused, never ignored.
+        if ('credits' in updates) {
+            ctx.status = 400;
+            ctx.body = { error: AMOUNT_C_REQUIRED_TEXT, code: AMOUNT_C_REQUIRED };
+            return;
+        }
         if (!id || !authorPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'id and authorPublicKey are required' };
@@ -1493,9 +1509,34 @@ function respondDealOpen(ctx: any, err: any): boolean {
     return true;
 }
 
+/**
+ * A standing deal's `standing` from a body (DESIGN-standing-deals-fable §2.3), with the host this request came to: never the
+ * body's own, and only the fields the engine reads. Undefined when the body has none (today's one-off deal).
+ */
+function standingFromBody(ctx: any, standing: any): StandingStart | undefined {
+    if (standing === undefined || standing === null) return undefined;
+    const s = typeof standing === 'object' ? standing : {};
+    return {
+        authorisation: { payload: s.authorisation?.payload, signature: s.authorisation?.signature },
+        untilStopped: s.untilStopped === true ? true : undefined,
+        periods: typeof s.periods === 'number' ? s.periods : undefined,
+        startsAt: typeof s.startsAt === 'string' ? s.startsAt : undefined,
+        requestHost: typeof ctx.request?.host === 'string' ? ctx.request.host : undefined,
+    };
+}
+
+/** A standing deal's own refusals: their status and code with their words (engine/standing-deals.ts, engine/escrow.ts). */
+const STANDING_CODES = new Set([STANDING_AUTH_CODE, 'standing_keeper', 'standing_gone', 'standing_payer_only']);
+function respondStandingRefusal(ctx: any, err: any): boolean {
+    if (!STANDING_CODES.has(err?.code)) return false;
+    ctx.status = typeof err.status === 'number' ? err.status : 400;
+    ctx.body = { error: err.message, code: err.code };
+    return true;
+}
+
 router.post('/api/marketplace/posts/accept', async (ctx) => {
     try {
-        const { postId, buyerPublicKey, hours } = (ctx as any).requestBody || {};
+        const { postId, buyerPublicKey, hours, standing } = (ctx as any).requestBody || {};
         if (!postId || !buyerPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'postId and buyerPublicKey are required' };
@@ -1503,7 +1544,9 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const actor = ctx.state?.actor as string | undefined;
-        const tx = acceptPost(postId, buyerPublicKey, dealQuantityFromBody(hours), actor ? { authSigner: actor } : undefined);
+        const standingStart = standingFromBody(ctx, standing);
+        const tx = acceptPost(postId, buyerPublicKey, standingStart ? undefined : dealQuantityFromBody(hours),
+            actor || standingStart ? { authSigner: actor, standing: standingStart } : undefined);
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -1517,6 +1560,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
             return;
         }
         if (respondCopyNoDeal(ctx, err)) return;
+        if (respondStandingRefusal(ctx, err)) return;
         // A post taken or changed since the app showed it: the 400 it always was, with its code (engine/escrow.ts).
         if (err?.code === POST_GONE_CODE) {
             ctx.status = 400;
@@ -1556,7 +1600,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
 
 router.post('/api/marketplace/transactions/approve', async (ctx) => {
     try {
-        const { transactionId, authorPublicKey } = (ctx as any).requestBody || {};
+        const { transactionId, authorPublicKey, standing } = (ctx as any).requestBody || {};
         if (!transactionId || !authorPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'transactionId and authorPublicKey are required' };
@@ -1564,7 +1608,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, authorPublicKey)) return;
         const actor = ctx.state?.actor as string;
-        const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor });
+        const tx = approvePostRequest(transactionId, authorPublicKey, { authSigner: actor, standing: standingFromBody(ctx, standing) });
         if (!tx) {
             ctx.status = 400;
             ctx.body = { error: word('Cannot approve — request not found or unauthorized') };
@@ -1573,6 +1617,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         if (respondCopyNoDeal(ctx, err)) return;
+        if (respondStandingRefusal(ctx, err)) return;
         respondSettlementAware(ctx, err, 'Failed to approve request');
     }
 });
@@ -1651,6 +1696,29 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         ctx.body = { error: memberErrorText(e, word('Escrow release failed')) };
     }
 });
+
+// A standing deal's Stop (either side: after the period paid, or at once in the grace) and Extend (the payer, a new signed
+// authorisation): signed requests, the signer named by the middleware; a keeper acts for an enterprise side
+// (engine/standing-deals.ts).
+async function standingStep(ctx: any, step: (id: string, actor: string, body: any) => Record<string, unknown>): Promise<void> {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    if (!membersOnlyHere(ctx)) return;
+    try {
+        ctx.body = { success: true, standing: step(String(ctx.params.id), actor, (ctx as any).requestBody || {}) };
+    } catch (err: any) {
+        if (respondStandingRefusal(ctx, err)) return;
+        respondSettlementAware(ctx, err, 'Failed to change the standing deal');
+    }
+}
+
+router.post('/api/marketplace/standing/:id/stop', (ctx) => standingStep(ctx, (id, actor) => stopStandingDeal(id, actor)));
+router.post('/api/marketplace/standing/:id/extend', (ctx) => standingStep(ctx, (id, actor, body) =>
+    extendStandingDeal(id, actor, standingFromBody(ctx, body.standing ?? body) ?? { authorisation: { payload: '', signature: '' } })));
 
 router.post('/api/marketplace/transactions/cancel', async (ctx) => {
     try {

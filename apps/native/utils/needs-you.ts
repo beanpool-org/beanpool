@@ -4,7 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { capitalFirst, dealsNeedingMe, fitNeedsYou, inviteAskNeedsLine, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
+import { capitalFirst, dealsNeedingMe, fitNeedsYou, formatDate, standingNeedsLines, type StandingPeriodUnit, type StandingPhase, inviteAskNeedsLine, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
@@ -100,6 +100,12 @@ export interface NeedsYouEntry {
     /** In words, for screen readers and the "Needs you" sheet. */
     label: string;
     target: NeedsYouTarget;
+    /**
+     * A short standing deal's live line (DESIGN-standing-deals-upfront-amend-fable §2): one per deal per side, written fresh
+     * from the row on every draw; the payer's is amber and counts, the payee's is listed and calm. ✕ and Clear all never touch
+     * it; it leaves when the period is paid or the deal ends.
+     */
+    standingId?: string;
 }
 
 export const VOTE_ACCENT_WINDOW_MS = 48 * 3600_000;
@@ -117,6 +123,19 @@ export interface NeedsYouTransaction {
     createdAt?: string | null;
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
+    /** A standing deal's current row carries it (utils/standing-row.ts): its live line when it is short. */
+    postTitle?: string | null;
+    buyerCallsign?: string | null;
+    sellerCallsign?: string | null;
+    standingId?: string | null;
+    periodNo?: number | null;
+    standingPhase?: StandingPhase | null;
+    /** Per period, whole hundredths of a Bean (the node's standingBeans_c). */
+    standingBeans_c?: number | null;
+    standingUnit?: StandingPeriodUnit | null;
+    standingStartsAt?: string | null;
+    standingShortSince?: string | null;
+    standingStopped?: boolean;
 }
 
 export interface NeedsYouConversation {
@@ -216,9 +235,22 @@ export function closesInWords(closesAt: string, now: number): string {
     return tn(days, 'closes in {n} day', 'closes in {n} days');
 }
 
-/** A step that is the member's to take: accept a request made to them, or release Beans on a deal in progress. */
+/**
+ * A step that is the member's to take: accept a request made to them, or release Beans on a deal in progress. A standing
+ * deal still running has its own live line (standingEntries), never this one, as the node's Home answer does.
+ */
 function dealsWaiting(txns: NeedsYouTransaction[], me: string, now: number = Date.now()): NeedsYouTransaction[] {
-    return dealsNeedingMe(txns, me, now);
+    return dealsNeedingMe(txns, me, now).filter(tx => !(tx.standingId && tx.standingPhase));
+}
+
+const standingDay = (iso: string) => formatDate(new Date(iso), 'day-month');
+
+/** One live line per short standing deal the member is a side of, in core's words (standingNeedsLines), oldest due first. */
+function standingEntries(txns: NeedsYouTransaction[], me: string, now: number): NeedsYouEntry[] {
+    return standingNeedsLines(txns, me, now, standingDay).map((line): NeedsYouEntry => ({
+        kind: 'deal', count: 1, accent: line.accent, label: line.label, standingId: line.standingId,
+        target: line.postId && line.txId ? { to: 'deal', postId: line.postId, txId: line.txId } : { to: 'my-deals' },
+    }));
 }
 
 export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
@@ -257,6 +289,7 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
             target: deals.length === 1 && first.postId ? { to: 'deal', postId: first.postId, txId: first.id } : { to: 'my-deals' },
         });
     }
+    out.push(...standingEntries(i.transactions || [], i.me, i.now));
 
     if (i.decisions?.signed) {
         const blocked = poolVoteBlocker(i.decisions.myPoolVoting) !== null;

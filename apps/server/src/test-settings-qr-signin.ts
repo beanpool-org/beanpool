@@ -12,7 +12,7 @@
  *      A moderator is let in (happy path), with a session that reaches reports and is refused everything else.
  *   5. Expiry: an expired pairing can be neither approved nor redeemed. A role revoked between approval and
  *      redemption gives no session.
- *   6. The node's 2FA code is still asked for, on the phone.
+ *   6. No code is asked for on the phone: the phone's unlock is the key's factor (the node has no server 2FA).
  *   7. Decline, and the brakes: creation per client, approvals through the auth limiter.
  *   8. The phone is told the computer's address as the node saw it, how long ago it asked, the time left, and
  *      "same network" when the phone's address matches.
@@ -36,14 +36,12 @@ import { resolveClientIp, setTrustConfigForTests } from './client-ip.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode } from './totp.js';
 import {
     approvePairing,
     confirmPairing,
     createPairing,
     describePairing,
     redeemPairing,
-    pairingMessage,
     bindingCookieName,
     resetPairingsForTests,
     PAIRING_TTL_MS,
@@ -51,6 +49,7 @@ import {
     PAIRING_MAX_REFUSALS,
     PAIRING_CONFIRM_TTL_MS,
 } from './settings-signin-pairing.js';
+import { settingsSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -71,7 +70,7 @@ const signText = (who: Identity, text: string) => crypto.sign(null, Buffer.from(
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
-    db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
 /** Every scenario comes from its own client address (loopback is a trusted proxy), so limiters don't bleed. */
@@ -120,7 +119,7 @@ async function approve(pairingId: string, shortCode: string, signer: Identity, o
     const r = await call('POST', `/api/local/admin/auth/pairing/${pairingId}/approve`, {
         body: {
             memberPubkey: opts.claimed ?? signer.pub,
-            signature: signText(signer, pairingMessage('approve', pairingId, shortCode)),
+            ...settingsSigninFields(signer.priv, 'approve', pairingId, shortCode),
             ...(opts.totpCode ? { totpCode: opts.totpCode } : {}),
             ...(opts.olderApp ? {} : { confirm: true }),
         },
@@ -176,7 +175,7 @@ async function main() {
     grantNodeRole(owner.pub, 'owner', 'SYSTEM');
     grantNodeRole(admin.pub, 'admin', owner.pub);
     grantNodeRole(moderator.pub, 'moderator', owner.pub);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'QR Test' } as any);
+    updateLocalConfig({ communityName: 'QR Test' });
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -286,7 +285,7 @@ async function main() {
         const b = await newPairing();
         const body = {
             memberPubkey: owner.pub,
-            signature: signText(owner, pairingMessage('approve', b.pairingId, b.shortCode)),
+            ...settingsSigninFields(owner.priv, 'approve', b.pairingId, b.shortCode),
             confirm: true,
         };
         const first = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, { body, headers: via(freshIp()) });
@@ -301,7 +300,7 @@ async function main() {
         assert((await poll(b2)).body.status === 'waiting', 'and that other pairing is still waiting');
 
         const wrongCode = await call('POST', `/api/local/admin/auth/pairing/${b2.pairingId}/approve`, {
-            body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', b2.pairingId, 'AAAAAA')), confirm: true },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', b2.pairingId, 'AAAAAA'), confirm: true },
             headers: via(freshIp()),
         });
         assert(wrongCode.status === 403, 'an approval over a different short code is refused');
@@ -350,7 +349,7 @@ async function main() {
         const late = approvePairing({
             pairingId: b.pairingId,
             memberPubkey: owner.pub,
-            signature: signText(owner, pairingMessage('approve', b.pairingId, b.shortCode)),
+            ...settingsSigninFields(owner.priv, 'approve', b.pairingId, b.shortCode),
             now: Date.now() + PAIRING_TTL_MS + 1_000,
         });
         assert(!late.ok && late.reason === 'expired', 'an approval after two minutes is refused');
@@ -375,24 +374,21 @@ async function main() {
         grantNodeRole(admin.pub, 'admin', owner.pub);
     }
 
-    // ── 6. The node's 2FA ──
-    console.log("\n6. The node's 2FA code is not asked for on the phone (decision D2: the phone's unlock is the key's factor)");
+    // ── 6. No code on the phone ──
+    console.log("\n6. No code is asked for on the phone (decision D2: the phone's unlock is the key's factor)");
     {
-        const secret = generateTotpSecret();
-        updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
         const b = await newPairing();
         const noCode = await approve(b.pairingId, b.shortCode, owner);
-        assert(noCode.status === 200 && noCode.body.totpRequired === undefined, `with 2FA on, the phone approves without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
+        assert(noCode.status === 200 && noCode.body.totpRequired === undefined, `the phone approves without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
         assert((await typeDigits(b)).body.status === 'signed-in', 'and the browser is signed in');
         const b2 = await newPairing();
-        const stale = await approve(b2.pairingId, b2.shortCode, admin, { totpCode: '000000' === generateTotpCode(secret) ? '111111' : '000000' });
+        const stale = await approve(b2.pairingId, b2.shortCode, admin, { totpCode: '000000' });
         assert(stale.status === 200, 'a code an older app still sends is not looked at');
         const b3 = await newPairing();
         const forged = await approve(b3.pairingId, b3.shortCode, member, { claimed: owner.pub });
         assert(forged.status === 403 && forged.body.reason === 'bad-signature' && forged.body.totpRequired === undefined,
-            `with 2FA on, an approval signed by another key is still refused (got ${forged.status})`);
+            `an approval signed by another key is still refused (got ${forged.status})`);
         assert((await poll(b3)).body.status === 'waiting', 'and that pairing is still waiting');
-        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
     }
 
     // ── 7. Decline, and the brakes ──
@@ -400,12 +396,12 @@ async function main() {
     {
         const b = await newPairing();
         const badDecline = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/decline`, {
-            body: { memberPubkey: owner.pub, signature: signText(member, pairingMessage('decline', b.pairingId, b.shortCode)) },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(member.priv, 'decline', b.pairingId, b.shortCode) },
             headers: via(freshIp()),
         });
         assert(badDecline.status === 403, 'a decline with a wrong signature is refused');
         const decline = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/decline`, {
-            body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('decline', b.pairingId, b.shortCode)) },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'decline', b.pairingId, b.shortCode) },
             headers: via(freshIp()),
         });
         assert(decline.status === 200, 'the phone declines');
@@ -462,7 +458,7 @@ async function main() {
         const byOutsider = await signedLookup(b.pairingId, outsider, via(b.ip));
         assert(byOutsider.status === 200 && !('fromAddress' in byOutsider.body), 'nor one signed by a key that is no member here');
         const byOwner = await signedLookup(b.pairingId, owner, via(b.ip));
-        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16) } });
+        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16), 'X-Signed-For': 'localhost' } });
         assert(byOwner.status === 200 && 'fromAddress' in byOwner.body && forged.status === 200 && !('fromAddress' in forged.body),
             'nor one that names an owner\'s key without the owner\'s signature');
 
@@ -494,7 +490,7 @@ async function main() {
     // ── 9. Number matching: the computer types the two digits the phone shows (design §5 fix 3) ──
     console.log('\n9. Two digits typed on the computer');
     const approveNew = (b: Browser, signer: Identity) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
-        body: { memberPubkey: signer.pub, signature: signText(signer, pairingMessage('approve', b.pairingId, b.shortCode)), confirm: true },
+        body: { memberPubkey: signer.pub, ...settingsSigninFields(signer.priv, 'approve', b.pairingId, b.shortCode), confirm: true },
         headers: via(freshIp()),
     });
     const confirmDigits = (b: Browser, code: string, cookie: string | null = b.cookie) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
@@ -552,13 +548,30 @@ async function main() {
             'and the same pairing then signs in from an app that shows the digits');
     }
     {
+        // An app from before request binding signs the old v1 text and names no host: refused as too old, unchecked
+        // (the cutover, 1.4.0, CUT4), with the words that tell the member to update. The pairing still waits.
+        const b = await newPairing();
+        const v1 = `beanpool-settings-signin:v1:approve:${b.pairingId}:${b.shortCode}`;
+        const old = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
+            body: { memberPubkey: owner.pub, signature: signText(owner, v1), confirm: true },
+            headers: via(freshIp()),
+        });
+        assert(old.status === 426 && old.body.code === 'app_too_old' && old.body.reason === 'app-too-old' && !('confirmCode' in old.body),
+            `an approval signed in the old v1 form is refused, 426 app_too_old (${old.status} ${JSON.stringify(old.body)})`);
+        assert(/too old/.test(old.body.error || '') && /update BeanPool/i.test(old.body.error || ''), `and it says the app is too old, to update it (${old.body.error})`);
+        const r = await poll(b);
+        assert(r.body.status === 'waiting' && !r.sessionId, 'the browser is not signed in: the pairing still waits');
+        assert((await approve(b.pairingId, b.shortCode, owner)).status === 200 && (await typeDigits(b)).body.status === 'signed-in',
+            'and the same pairing then signs in from an app that signs format 2');
+    }
+    {
         // Expiry, at the module level with a clock: 30 s for the digits.
         const t = Date.now();
         const created = createPairing({ clientKey: 'confirm-expiry', requesterAddress: '198.51.100.7', now: t });
         if (!created.ok) throw new Error('create failed');
         const res = approvePairing({
             pairingId: created.pairingId, memberPubkey: owner.pub,
-            signature: signText(owner, pairingMessage('approve', created.pairingId, created.shortCode)), confirm: true, now: t + 1_000,
+            ...settingsSigninFields(owner.priv, 'approve', created.pairingId, created.shortCode), confirm: true, now: t + 1_000,
         });
         assert(res.ok && /^\d{2}$/.test(res.confirmCode || ''), 'the module hands out two digits');
         const code = res.ok ? res.confirmCode! : '';

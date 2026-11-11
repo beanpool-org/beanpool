@@ -40,12 +40,12 @@ const identity: BeanPoolIdentity = { publicKey: ME, privateKey: 'k', callsign: '
 const TODAY = new Date().toISOString();
 
 const course = {
-    id: 'offer-course', type: 'offer', category: 'education', title: 'Pottery course', description: 'Six weeks on the wheel', credits: 45,
+    id: 'offer-course', type: 'offer', category: 'education', title: 'Pottery course', description: 'Six weeks on the wheel', price_c: 4500,
     priceType: 'fixed', status: 'active', active: true, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', createdAt: TODAY,
 };
 const poll = {
     id: 'poll-shed', type: 'poll', category: 'community', title: 'Where does the tool shed go?', description: 'North gate or south barn',
-    credits: 0, priceType: 'fixed', status: 'active', active: true, authorPublicKey: 'ada-pk', authorCallsign: 'Ada', createdAt: TODAY,
+    price_c: 0, priceType: 'fixed', status: 'active', active: true, authorPublicKey: 'ada-pk', authorCallsign: 'Ada', createdAt: TODAY,
     pollOptions: [{ id: 'a', text: 'North gate', votes: 1, percentage: 50 }, { id: 'b', text: 'South barn', votes: 1, percentage: 50 }],
     pollClosesAt: new Date(Date.now() + 86_400_000).toISOString(), totalVotes: 2, userVotedOptionId: null,
 };
@@ -65,7 +65,7 @@ function stubNode(posts: unknown[]) {
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
     vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 10000, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getGroups').mockResolvedValue([]);
     vi.spyOn(api, 'getCommissionCapacity').mockResolvedValue({ links: [] });
     vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ publicKey: ME } as any);

@@ -137,14 +137,15 @@ export type CircleKnockTrouble = 'later' | 'refused';
 
 /**
  * What a knock's answer means for the button, or null when nothing went wrong (it went, or the person is already known there).
- * A 429 or a 5xx says nothing about this person: a proxy's 502, a 503 while a new server boots, a day's limit. A community
+ * A 426 (a server older than this app talks to), a 429 or a 5xx says nothing about this person: a proxy's 502, a 503 while a new server boots, a day's limit. A community
  * that has only just started is the one most likely to answer that way, so those keep the wish and the button. An address
  * that can't be used may be mended in the directory. A try again is the member's own tap: nothing retries by itself.
  */
 export function circleKnockTrouble(sent: { kind: string; status?: number }): CircleKnockTrouble | null {
     if (sent.kind === 'unreachable' || sent.kind === 'no_address') return 'later';
     if (sent.kind !== 'refused') return null;
-    return sent.status === 429 || (sent.status ?? 0) >= 500 ? 'later' : 'refused';
+    // A 426: the community's server is older than this app talks to (the version gate) — its operator can update it.
+    return sent.status === 426 || sent.status === 429 || (sent.status ?? 0) >= 500 ? 'later' : 'refused';
 }
 
 /** The retired card's line about a knock that didn't go, or null. */

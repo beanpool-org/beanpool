@@ -7,7 +7,8 @@
  * Every id keeps the fixture's `sample-` prefix, which the server refuses on any write (apps/server/src/sample-id-guard.ts).
  */
 import {
-    SAMPLE_COMMUNITY, TIER_LEVELS, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger as coreSampleEnterpriseLedger, sampleRowNote, t, tn,
+    SAMPLE_COMMUNITY, TIER_LEVELS, beans, formatHundredths, sampleEnterpriseCards, sampleEnterpriseDetail, sampleEnterpriseLedger as coreSampleEnterpriseLedger,
+    sampleRowNote, t, tn,
 } from '@beanpool/core';
 import type { DecisionWithTally, EnterpriseLedgerResponse, MyPoolVoting, TreasurySummary } from '../../utils/db';
 
@@ -16,38 +17,45 @@ const when = (daysAgo: number) => (daysAgo === 1 ? t('yesterday') : tn(daysAgo, 
 
 /**
  * The Ledger's balance answer for "an example member": 85 Beans, a floor of −200, level 2 of 4 with 200 trust, spend-freeze
- * off. The trust, value traded, partners and rating are the sample's own (one source with the web's Ledger).
+ * off. The trust, value traded, partners and rating are the sample's own (one source with the web's Ledger). The sample
+ * writes its figures in whole Beans; every money field here is whole hundredths (`*_c`, core `beans`), as db.ts getBalance
+ * answers them.
  */
 export function sampleBalance() {
     const c = SAMPLE_COMMUNITY;
     const tier = TIER_LEVELS[Math.max(0, Math.min(TIER_LEVELS.length - 1, c.level - 1))];
     return {
-        balance: c.balance,
-        floor: c.floor,
-        usableFloor: c.floor,
+        balance_c: beans(c.balance),
+        floor_c: beans(c.floor),
+        usableFloor_c: beans(c.floor),
         liveOffers: c.liveOffers,
         activated: true,
         frozen: false,
         creditFrozen: false,
         knownFrozen: false,
-        knownGrant: 0,
+        knownGrant_c: 0,
+        roomHeld_c: 0,
         tier: { name: tier.name, emoji: tier.emoji },
-        tierCredit: c.trust,
-        earnedCredit: c.trust,
-        qualifiedValue: c.valueTraded,
+        tierCredit_c: beans(c.trust),
+        earnedCredit_c: beans(c.trust),
+        qualifiedValue_c: beans(c.valueTraded),
         avgRating: c.rating,
         reviewCount: c.reviews,
-        commons: c.pool,
+        commons_c: beans(c.pool),
         trustStats: { uniquePartners: c.partners },
     };
 }
 
-/** The Ledger's transaction rows, newest first: "a neighbour", what it was for (a hold: "Held in trust · …"), and when. */
+/**
+ * The Ledger's transaction rows, newest first: "a neighbour", what it was for (a hold: "Held in trust · …"), and when. Each
+ * figure whole hundredths (`amount_c`), as db.ts getTransactions answers its rows.
+ */
 export function sampleTransactions() {
     return SAMPLE_COMMUNITY.transactions.map(row => ({
         id: row.id,
         type: row.amount < 0 ? 'debit' : 'credit',
-        amount: Math.abs(row.amount),
+        amount_c: beans(Math.abs(row.amount)),
+        fee_c: 0,
         peer: t(row.who),
         memo: sampleRowNote(row),
         timestamp: when(row.daysAgo),
@@ -73,11 +81,11 @@ export function sampleDeals(now: number = Date.now()) {
     const posts = SAMPLE_COMMUNITY.deals.filter(d => d.state !== 'completed').map(d => d.state === 'requested'
         ? {
             id: `${d.id}-post`, title: d.what, type: 'need', status: 'active', author_pubkey: me, accepted_by: null,
-            credits: d.amount, photos: '[]', created_at: at(d.daysAgo),
+            price_c: beans(d.amount), photos: '[]', created_at: at(d.daysAgo),
         }
         : {
             id: `${d.id}-post`, title: d.what, type: 'offer', status: 'pending', author_pubkey: SAMPLE_NEIGHBOUR, accepted_by: me,
-            credits: d.amount, photos: '[]', created_at: at(d.daysAgo),
+            price_c: beans(d.amount), photos: '[]', created_at: at(d.daysAgo),
         });
     const transactions = SAMPLE_COMMUNITY.deals.map(d => {
         const bought = d.side === 'bought';
@@ -85,15 +93,15 @@ export function sampleDeals(now: number = Date.now()) {
             id: d.id, postId: `${d.id}-post`, postTitle: d.what, status: d.state,
             buyerPublicKey: bought ? me : SAMPLE_NEIGHBOUR, buyerCallsign: bought ? SAMPLE_COMMUNITY.member : d.who,
             sellerPublicKey: bought ? SAMPLE_NEIGHBOUR : me, sellerCallsign: bought ? d.who : SAMPLE_COMMUNITY.member,
-            credits: d.amount, createdAt: at(d.daysAgo), ratedByBuyer: false, ratedBySeller: false,
+            amount_c: beans(d.amount), createdAt: at(d.daysAgo), ratedByBuyer: false, ratedBySeller: false,
         };
     });
     return { posts, transactions };
 }
 
-/** The Wallet's In Escrow in preview: the Beans the member's held deals hold (the fixture's `inEscrow`). */
+/** The Wallet's In Escrow in preview: what the member's held deals hold (the fixture's `inEscrow`), whole hundredths as getEscrowTotal answers. */
 export function sampleEscrowTotal(): number {
-    return SAMPLE_COMMUNITY.deals.filter(d => d.state === 'pending' && d.side === 'bought').reduce((sum, d) => sum + d.amount, 0);
+    return SAMPLE_COMMUNITY.deals.filter(d => d.state === 'pending' && d.side === 'bought').reduce((sum, d) => sum + beans(d.amount), 0);
 }
 
 /** The member's header over a preview: "Example Valley · an example member". */
@@ -106,6 +114,7 @@ export const SAMPLE_MEMBER = SAMPLE_COMMUNITY.member;
  * (sample-community.ts sampleEnterpriseCards / Detail / Ledger: review of #2063, N5).
  */
 export function sampleEnterprises(): TreasurySummary[] {
+    // Core's sample is in whole hundredths (`balance_c`, `creditLine_c`, …), as the node sends a card.
     return sampleEnterpriseCards();
 }
 
@@ -116,6 +125,7 @@ export function sampleTreasuryDetail(pubkey?: string): any {
 
 /** Its Income & Spend as the enterprise page reads it in preview. */
 export function sampleEnterpriseLedger(pubkey?: string): EnterpriseLedgerResponse {
+    // Whole hundredths, as the node answers it (amount_c, fee_c; the totals and running balances in hundredths).
     return coreSampleEnterpriseLedger(pubkey);
 }
 
@@ -171,11 +181,12 @@ export function sampleDecisions(): DecisionWithTally[] {
         id: d.id,
         authorPubkey: 'sample-member-neighbour',
         title: d.question,
-        description: t('{amount} Beans from the pool: {what}.', { amount: String(d.fromPool), what: c.projects[0].what }),
+        description: t('{amount} Beans from the pool: {what}.', { amount: formatHundredths(beans(d.fromPool)), what: c.projects[0].what }),
         touches: d.touches,
         effect: d.effect,
         subject: d.subject,
-        params: { amount: d.fromPool, subject: d.subject },
+        // As the node carries a grant's figure: whole hundredths, `amount_c` (decisions-engine.ts).
+        params: { amount_c: beans(d.fromPool), subject: d.subject },
         franchise: d.franchise,
         status: 'open',
         opensAt: new Date(now - 4 * DAY_MS).toISOString(),

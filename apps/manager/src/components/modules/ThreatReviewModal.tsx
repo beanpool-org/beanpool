@@ -136,9 +136,10 @@ export function ThreatReviewModal({
 
         if (desc.includes('reciprocal flow ratio')) {
             const ratioMatch = desc.match(/reciprocal flow ratio ([\d\.]+)/);
-            const grossMatch = desc.match(/gross: ([\d\.]+)/);
+            // The node writes the gross already in Beans, grouped (state-engine: formatHundredths(gross, 'en') Beans): "1,234.56".
+            const grossMatch = desc.match(/gross: ([\d.,]+\d)/);
             if (ratioMatch) metrics.push({ label: 'Reciprocal Flow Ratio', value: ratioMatch[1], highlight: true });
-            if (grossMatch) metrics.push({ label: 'Gross Volume', value: `${grossMatch[1]} BP` });
+            if (grossMatch) metrics.push({ label: 'Gross Volume', value: `${grossMatch[1]} Beans` });
             metrics.push({ label: 'Threshold Required', value: '≥ 0.15' });
         } else if (desc.includes('insular')) {
             const insularityMatch = desc.match(/([\d\.]+) insularity/);

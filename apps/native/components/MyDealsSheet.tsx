@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -429,6 +429,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         }
         return map;
     }, [transactions]);
+    // A one-off listing a standing deal took stays off the board ('pending') while the deal runs, yet nothing is held in
+    // trust: each period is paid at its start (DESIGN-standing-deals-upfront-fable §1, §3). Its card says 🔁 STANDING.
+    const standingPostIds = useMemo(() => new Set(transactions
+        .filter(t => !!t.standingId && (t.standingPhase === 'paid' || t.standingPhase === 'short'))
+        .map(t => t.postId)), [transactions]);
 
     // ── Data derivation ──
     const myPosts = posts.filter(p => {
@@ -500,7 +505,13 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const isPending = item.status === 'pending';
             const isRequested = item.status === 'requested';
             const step = dealStep(item, identity?.publicKey || '');
-            const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
+            // A standing deal still running, on its current period's row (DESIGN-standing-deals-fable §2.2): one card with
+            // 🔁 STANDING and its panel's line (the payer's short-funds warning, with the end of its week), as on the web.
+            const standing = dealsTab === 'pending' ? standingPanel(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month')) : null;
+            // Core's rule: a standing deal asks for one review, on its first period (design §3).
+            const needsReview = !standing && isCompleted && step.state === 'done-to-review';
+            // An ended standing deal's History line: stopped in the grace, or its grace run out (amendment §1, §2).
+            const historyLine = dealsTab === 'history' ? standingHistoryLine(item, identity?.publicKey || '', (iso) => formatDate(new Date(iso), 'day-month')) : null;
             const partnerPubkey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
             // No card held for the partner yet (a community that says `membersOnDemand`): the key's first 8 characters,
             // never a blank after "From " (DESIGN-global-members-by-area §2.4).
@@ -529,18 +540,28 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             keeps the right edge and never shrinks, so it drops to its own line whole instead of being pushed
                             off the card by the date. */}
                         <View testID={`deal-top-${item.id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 2 }}>
+                            {/* A standing deal's row out of trust (short: the period last settled) is no finished deal: its card
+                                says 🔁 STANDING only, never COMPLETED (round 2 of #3000), as on the web. */}
+                            {!(standing && !isPending) && (
                             <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
                                 <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
                                     {dealStatusWords(item.status)}
                                 </Text>
                             </View>
+                            )}
+                            {!!standing && (
+                                <View testID={`standing-chip-${item.id}`} style={[styles.statusBadge, styles.statusCompleted]}>
+                                    <Text style={[styles.statusText, styles.statusTextCompleted]}>{standingLines.chip()}</Text>
+                                </View>
+                            )}
                             <Text style={styles.dateText}>
                                 {dealDate(item.createdAt)}
                             </Text>
+                            {/* What the deal holds, whole hundredths, as formatHundredths writes it ("—" for no figure). */}
                             {showsBeans && (
                             <View testID={`deal-amount-${item.id}`} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
                                 <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.primary }]} numberOfLines={1}>
-                                    {isBuyer ? '- ' : '+ '}{item.credits}
+                                    {isBuyer ? '- ' : '+ '}{formatHundredths(item.amount_c)}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>
@@ -548,9 +569,14 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle}</Text>
                         {dealsTab === 'pending' && (
-                            <Text style={styles.dealStateText} numberOfLines={1}>
-                                {dealStateWords(step, partnerCallsign)}
+                            <Text testID={`deal-state-${item.id}`} accessibilityRole={standing?.warning ? 'alert' : undefined}
+                                style={[styles.dealStateText, standing?.warning && { color: colors.feedback.warning.fg, fontWeight: '800' }]}
+                                numberOfLines={standing ? 3 : 1}>
+                                {standing ? standing.status : dealStateWords(step, partnerCallsign)}
                             </Text>
+                        )}
+                        {historyLine && (
+                            <Text testID={`deal-history-${item.id}`} style={styles.dealStateText}>{historyLine}</Text>
                         )}
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
@@ -559,7 +585,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                     <Sentence text={isBuyer ? t('From {name}') : t('To {name}')} parts={{ name: <Text style={styles.partnerName}>{partnerCallsign}</Text> }} />
                                 </Text>
                             </View>
-                            {isCompleted && (
+                            {/* Review (or Edit a review) is for a finished deal; a standing one still running has neither, as on the web. */}
+                            {isCompleted && !standing && (
                                 needsReview ? (
                                     <Pressable
                                         accessibilityRole="button"
@@ -610,7 +637,9 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         // Action Required is drawn bold.
         let actionRequired = false;
 
-        if (item.status === 'pending' || relatedTx?.status === 'pending') {
+        if (item.status === 'pending' && relatedTx?.status !== 'pending' && standingPostIds.has(item.id)) {
+            displayStatusText = standingLines.chip();
+        } else if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = t('🤝 Held in Trust');
             highlightStyle = heldTone;
             if (isDark) statusInk = colors.feedback.success.fg;
@@ -651,10 +680,11 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                                     <View style={styles.pausedBadge}><Text style={styles.pausedBadgeText}>{t('⏸ PAUSED')}</Text></View>
                                 )}
                             </View>
+                            {/* The listing's price, whole hundredths: none sent reads "?", as it always did; one that isn't whole hundredths "—". */}
                             {showsBeans && (
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.creditAmount} numberOfLines={1}>
-                                    {item.credits ?? '?'}
+                                    {item.price_c === undefined ? '?' : formatHundredths(item.price_c)}
                                 </Text>
                                 <Image source={require('../assets/images/bean.png')} style={styles.beanIcon} />
                             </View>

@@ -30,6 +30,7 @@ export type CountedEvent =
     | 'invite_reentry'      // ...or the submitter was already a member (not a rejection,
                             // and not a signup — kept off invite_failed so the dashboard's
                             // failure rate means what it says)
+    | 'invite_revoked'      // an unused invite revoked by its maker or an owner (invites I2)
     | 'open_join_attempt'   // a signed join with a sign-in reached the open door (global
                             // profile) — variant is the provider it claims
     | 'open_join_failed'    // ...and was refused — variant carries the reason. A join that

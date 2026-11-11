@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -27,13 +27,13 @@ import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
+import { noteUnfindableSignInCopiesAtBoot } from './engine/recovery-find.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR, takeVouchResetReport } from './db/db.js';
-import { countsLine } from './db/vouch-reset.js';
+import { db, initSchema, runMainServerSchemaPasses, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -41,10 +41,11 @@ import { join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
+import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT } from './money-body.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
-import { grantMissingRoleBudgets, voucherBudgetSetting, vouchingOnDeparture } from './engine/vouchers.js';
+import { grantMissingRoleBudgets, voucherBudgetSetting, vouchingOnDeparture, profileVoucherButton, type ProfileVoucherButton } from './engine/vouchers.js';
 import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
@@ -62,9 +63,14 @@ import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notify
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
-import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { tidyEndedPins } from './engine/pins.js';
-import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
+import {
+    newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
+    keptNoticeIdsOf, type PushNoticeRow,
+} from './engine/push-notices.js';
+import { sendWebPushes, webPushDelivery, webPushTargetsFor, type WebPushSend } from './engine/web-push-subscriptions.js';
+import type { PushDetailsFor } from './engine/kept-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
@@ -85,6 +91,10 @@ import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
+import {
+    tickStandingDeals, endStandingDealsOf, standingDealBlockingHoliday, stopStandingDeal as stopStandingDealEngine,
+    extendStandingDeal as extendStandingDealEngine, hasShortStandingDeal, payShortStandingDealsOf, type StandingStart, type StandingHooks,
+} from './engine/standing-deals.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine, onHold,
@@ -290,6 +300,7 @@ import {
     type Member,
     type DirectoryRow,
     type InviteCode,
+    type MyInvite,
     type MemberProfile,
     type InviteCheckResult,
     type InviteTreeNode,
@@ -567,8 +578,10 @@ export interface Transaction {
     id: string;
     from: string;
     to: string;
-    amount: number;
-    taxFee?: number;
+    /** Whole hundredths of a Bean (@beanpool/core hundredths.ts): left the payer; amount_c - fee_c reached the payee. */
+    amount_c: number;
+    /** The Commons fee taken from it, whole hundredths, truncated once by the ledger (feeOf). */
+    fee_c?: number;
     memo: string;
     timestamp: string;
     // SRV-20: cryptographic authorship, carried over sync so importing nodes can
@@ -664,7 +677,8 @@ export interface CommunityProject {
     description: string;
     proposerPubkey: string;
     proposerCallsign: string;
-    requestedAmount: number;
+    /** Whole hundredths of a Bean. */
+    requestedAmount_c: number;
     status: 'proposed' | 'active' | 'funded' | 'rejected' | 'completed';
     createdAt: string;
     fundedAt?: string;
@@ -724,29 +738,10 @@ const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
-/**
- * The vouching reset's one system_logs line and the owners' alert (db/vouch-reset.ts, R0), when this boot reset anything:
- * the counts it read before writing, and the rows it changed. Numbers only. Never throws: a boot that reset is a boot.
- */
-function reportVouchResetAtBoot(): void {
-    const r = takeVouchResetReport();
-    if (!r) return;
-    try {
-        const line = `Vouching reset: old vouching is off on this node. Counted first: ${countsLine(r.counts)}. `
-            + `${r.membersReset} member row(s) turned off, ${r.invitesDeleted} unused invite(s) that promised a vouch deleted, `
-            + `and the four vouch columns dropped.`;
-        logger.info('SYS', line, { ...r.counts, membersReset: r.membersReset, invitesDeleted: r.invitesDeleted });
-        void import('./services/alerts.js').then((alerts) => alerts.raiseOnce('reset.vouching', line)).catch(() => { });
-    } catch (e) {
-        console.error('[Boot] Could not log the vouching reset:', e);
-    }
-}
-
 export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
-    reportVouchResetAtBoot();
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);
@@ -755,7 +750,6 @@ export function initStateEngine(): void {
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
     try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
     clearEnterpriseFloorCache();
-    migrateLegacyState();
     // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as
     // global refuses to start under another profile (config/node-profile.ts). Before the ledger is loaded: a node
     // that must not open never reads it.
@@ -791,6 +785,9 @@ export function initStateEngine(): void {
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // How many sign-in copies a restore can't find from the sign-in yet (engine/recovery-find.ts): one line on a main
+    // server, 0 included. Never throws.
+    noteUnfindableSignInCopiesAtBoot({ standby: getNodeRole() === 'backup' });
     // Members' push tokens are locked with a key from the same file (services/push-token-seal.ts): a main server locks
     // the rows stored in the clear before and checks every row opens; a standby drops those rows (it has no key). Never
     // throws.
@@ -818,7 +815,7 @@ export function initStateEngine(): void {
     db.prepare("INSERT OR IGNORE INTO members (public_key, callsign, invited_by, invite_code) VALUES ('SYSTEM', 'System', 'genesis', 'genesis')").run();
 
     // Load ledger accounts into LedgerManager
-    const accounts = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
+    const accounts = db.prepare("SELECT public_key as id, balance_c, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
     if (accounts.length > 0) {
         ledger.loadState(accounts);
     }
@@ -871,25 +868,25 @@ export function initStateEngine(): void {
     // broken pot, a take-over reported the old pot as drift, and a rebaseline accepted it. As NaN it is the non-finite pot
     // every path already handles: nothing writes it (engine/audit.ts persistCommonsBalance), the audit counts the row as
     // a balance that is not a number and names it, the rebaseline refuses, and nothing draws on it.
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
-    const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance) : null;
+    const commonsRow = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance_c: unknown } | undefined;
+    const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance_c) : null;
     //
-    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
-    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // A row of ±Infinity, or any figure that isn't whole hundredths, is the unknown pot too (commonsPotFromRow: NaN) and no
+    // more usable: it gets the same 🛑 line, not "Restored" (and not "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
     // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
     if (restoredPot !== null && !Number.isFinite(restoredPot)) {
         setCommonsBalance(restoredPot);
-        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance)}, not a number of Beans, so `
+        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance_c)}, not a number of Beans, so `
             + 'the pot is unknown. Nothing will be written over the row, and no Beans move at all until it is mended: no deal, '
             + 'refund, removal, account deletion or payment from the Commons. A Decision that comes due meanwhile waits if it '
             + 'moves Beans. Mend it as soon as you see this (operator manual, "A balance that isn\'t a number").');
     } else if (restoredPot !== null) {
         setCommonsBalance(restoredPot);
         const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
-        console.log(`🏛️ Restored Commons Pool balance: ${restoredPot.toFixed(2)}${note}`);
+        console.log(`🏛️ Restored Commons Pool balance: ${String(restoredPot)} hundredths${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
-        db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
+        db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
         console.log(`🏛️ Commons Pool account seeded (starting from 0)`);
     }
 
@@ -940,9 +937,9 @@ export function initStateEngine(): void {
             console.error('╔════════════════════════════════════════════════════════╗');
             console.error('║ ⚠️  LEDGER CONSERVATION WARNING — NODE STARTED WITH DRIFT ║');
             console.error('╠════════════════════════════════════════════════════════╣');
-            console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
-            console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
-            console.error(`║  balances that are not a finite number = ${String(auditResult.badBalances).padEnd(12)} ║`);
+            console.error(`║  sum(balances) = ${String(auditResult.sumBalances).padEnd(10)} baseline = ${String(auditResult.baseline).padEnd(10)}    ║`);
+            console.error(`║  drift         = ${String(auditResult.drift).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error(`║  (whole hundredths)  balances not whole hundredths = ${String(auditResult.badBalances).padEnd(4)} ║`);
             console.error('║                                                        ║');
             console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
             console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
@@ -962,7 +959,6 @@ export function initStateEngine(): void {
     reportBackingFigureDriftAtBoot();
     // How many enterprises lost their opening line to a known pledge before only earned pledges could clear it, counts
     // only: stored rows, no balance read.
-    reportOpeningLinesClearedByKnownPledgesAtBoot();
 
     // Daily ledger conservation audit (also once shortly after boot)
     setTimeout(() => {
@@ -1044,7 +1040,7 @@ function runMainServerMigrations(): void {
     // community's owners and admins vouch on the day this lands. Stored rows only, no balance read; never throws.
     try {
         const granted = grantMissingRoleBudgets();
-        if (granted > 0) logger.info('SYS', `Vouchers: ${granted} owner(s) and admin(s) given a budget of ${voucherBudgetSetting()} Beans to vouch from.`, { granted });
+        if (granted > 0) logger.info('SYS', `Vouchers: ${granted} owner(s) and admin(s) given a budget of ${formatHundredths(voucherBudgetSetting(), 'en')} Beans to vouch from.`, { granted });
     } catch (e) { console.warn('[Vouchers] Could not give owners and admins their budgets:', e); }
 
     // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
@@ -1059,63 +1055,6 @@ function runMainServerMigrations(): void {
         const wiped = wipeReadableGroupLines(getMessagingCb());
         if (wiped > 0) console.log(`[Groups] Removed ${wiped} readable group chat line(s): group chats are end-to-end encrypted now.`);
     } catch (e) { console.warn('[Groups] Could not remove readable group chat lines:', e); }
-}
-
-/**
- * The wait before the first turn of a members' photo move resumed after boot, and before a retry once one stops: short,
- * because phones reconnect right after an upgrade, and until the move ends the members list says "no photo" for those
- * it has not reached (armMemberPhotoMoveResume).
- */
-export const MEMBER_PHOTO_RESUME_MS = 5 * 1000;
-/** The wait between two turns while the resumed move has rows left: the event loop is the members' between batches. */
-export const MEMBER_PHOTO_RESUME_GAP_MS = 250;
-/** The longest wait between retries of a resumed move that keeps stopping (a disk still full). */
-export const MEMBER_PHOTO_RESUME_MAX_MS = 60 * 60 * 1000;
-
-/**
- * How long the resumed members' photo move waits before its next turn (armMemberPhotoMoveResume): a short gap while it
- * has rows left; after `failures` turns in a row that stopped, the first wait doubled each time, never past the longest.
- */
-export function memberPhotoResumeWait(outcome: 'more' | 'stopped', failures: number, first = MEMBER_PHOTO_RESUME_MS): number {
-    if (outcome === 'more') return MEMBER_PHOTO_RESUME_GAP_MS;
-    return Math.min(first * 2 ** Math.min(Math.max(failures - 1, 0), 20), MEMBER_PHOTO_RESUME_MAX_MS);
-}
-
-/**
- * A members' photo move that stopped at boot (a full disk, an I/O error) carries on while the node runs (db.ts
- * resumeMemberPhotoMove, #1482), so its photos reach member_photos without waiting for a restart: one batch a turn,
- * a short gap between turns while rows are left, a longer wait each time a turn stops (memberPhotoResumeWait), and no
- * more turns once the move is done. A node whose move finished at boot does one cheap turn (no old column) and stops.
- * On a main server only, and each turn asks the role again: a standby's copy never writes the old column, and its rows
- * are its main server's (engine/sync.ts MEMBER_PHOTO_COLUMNS). Each turn that clears a row's old value bumps the members'
- * and the listings' versions, so no app is answered 304 from a copy made before: the members list gives a photo still
- * inline a stand-in URL (db.ts MEMBER_PHOTO_INLINE_REF), which changes once the photo moves, or goes once a value that
- * was no photo is cleared.
- */
-function armMemberPhotoMoveResume(): void {
-    const first = Number(process.env.MEMBER_PHOTO_RESUME_MS) || MEMBER_PHOTO_RESUME_MS;
-    let failures = 0;
-    const turn = () => {
-        let wait: number;
-        if (getNodeRole() !== 'primary') {
-            wait = MEMBER_PHOTO_RESUME_MAX_MS;
-        } else {
-            let outcome: 'done' | 'more' | 'stopped';
-            try {
-                const done = resumeMemberPhotoMove();
-                outcome = done.outcome;
-                if (done.cleared > 0) { bumpMembersVersion(); bumpPostsVersion(); }
-            } catch (e) {
-                console.warn("[DB] Members' photos: a turn of the resumed move failed:", e);
-                outcome = 'stopped';
-            }
-            if (outcome === 'done') return;
-            failures = outcome === 'stopped' ? failures + 1 : 0;
-            wait = memberPhotoResumeWait(outcome, failures, first);
-        }
-        setTimeout(turn, wait).unref();
-    };
-    setTimeout(turn, first).unref();
 }
 
 /** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
@@ -1135,7 +1074,6 @@ function armMainServerTimers(): void {
     if (mainServerTimersArmed) return;
     mainServerTimersArmed = true;
     const onMainServer = (tick: () => void) => () => { if (getNodeRole() === 'primary') tick(); };
-    armMemberPhotoMoveResume();
     setTimeout(onMainServer(() => {
         try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
     }), 60 * 1000);
@@ -1173,7 +1111,52 @@ function armMainServerTimers(): void {
         // A project that ended short of its goal gives its backers their Beans back a week after its end date, at the first
         // tick from then on, and tells them and its leader (engine/unfunded-pledges.ts).
         try { returnUnfundedProjectPledges(); } catch (e) { console.warn('[Pledges] Unfunded pledges return failed:', e); }
+        // Standing deals (engine/standing-deals.ts): each period paid to the payee at its start, short ones tried again and
+        // ended when their grace is over, the grace's pushes on their cadence, payers warned ahead. Main server only, like
+        // the rest; Beans off moves nothing.
+        try { runStandingDeals(); } catch (e) { console.warn('[Standing] Standing deals tick failed:', e); }
     }), 60 * 1000);
+}
+
+/**
+ * Run the standing deals that are due (engine/standing-deals.ts tickStandingDeals) with this node's escrow callbacks. The main
+ * server's minute tick calls it; on a standby it does nothing. Never throws.
+ */
+export function runStandingDeals(now?: number, wrap?: (hooks: StandingHooks) => StandingHooks): ReturnType<typeof tickStandingDeals> {
+    const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+    // `wrap`: a suite's way to watch or fail the node's own primitives (a crash in the middle of a step).
+    return tickStandingDeals(wrap ? wrap(hooks) : hooks, now);
+}
+
+/**
+ * A suite's way to watch or fail the hook's primitives too, as runStandingDeals' `wrap` does the tick's, and to pin its clock
+ * as runStandingDeals' `now` does (a suite runs periods that start in the future).
+ */
+let standingHookWrap: ((hooks: StandingHooks) => StandingHooks) | null = null;
+let standingHookNow: (() => number) | null = null;
+export function setStandingHookForTests(wrap: ((hooks: StandingHooks) => StandingHooks) | null, now: (() => number) | null = null): void {
+    standingHookWrap = wrap;
+    standingHookNow = now;
+}
+
+/**
+ * Beans reached `to` and the move that brought them has committed (transfer() and payFromCommons(), the two doors every
+ * credit to a member goes through): each of their short standing deals is paid at once, the whole period, oldest due first
+ * (DESIGN-standing-deals-upfront-amend-fable §3). Run when the batch of after-commit work now running is over, so each
+ * payment is its own transaction, one after another and never nested in another's commit; a payee paid there who is short
+ * on a standing deal of their own is tried in the same way, and every payment moves one deal out of short, so a chain ends.
+ * Main server only (payShortStandingDealsOf); a cheap read first, so a credit to anyone not short costs one indexed lookup.
+ */
+function payShortStandingDealsAfterCredit(to: string): void {
+    if (isSyntheticAccount(to) || to === 'genesis' || to === 'COMMONS_POOL' || !hasShortStandingDeal(to)) return;
+    whenPostCommitBatchOver(() => {
+        try {
+            const hooks: StandingHooks = { ...getEscrowCb(), clearEnterpriseFloorCache };
+            payShortStandingDealsOf(standingHookWrap ? standingHookWrap(hooks) : hooks, to, standingHookNow ? standingHookNow() : Date.now());
+        } catch (e) {
+            console.warn('[Standing] Paying short standing deals after a credit failed:', e);
+        }
+    });
 }
 
 /** The node's own primitives, for the return of an unfunded project's pledges and its notices (engine/unfunded-pledges.ts). */
@@ -1455,7 +1438,7 @@ export function runMarketplaceHygiene(): void {
             [row.buyer_pubkey],
             'SYSTEM',
             loan ? '⏳ Is it back?' : '⏳ Deal Awaiting Completion',
-            loan ? loanNudgeBody(row.seller_callsign, row.post_title, Number(row.credits) > 0)
+            loan ? loanNudgeBody(row.seller_callsign, row.post_title, Number(row.amount_c) > 0)
                 : `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
             // The deal itself, so a recurring listing's tap lands on this one (DESIGN-deals-fable §2.2, slice S4).
             { screen: 'post', postId: row.post_id, txId: row.id },
@@ -1532,54 +1515,12 @@ function sweepSettledEscrowAccounts(): void {
     // Not on a standby: it moves dust into the Commons and deletes accounts, and a standby's ledger is its main server's
     // (config/node-role.ts), whose own sweep reaches it with the next copy.
     if (getNodeRole() === 'backup') return;
-    const DUST_THRESHOLD = 1e-6;
-    // #160: Absorb floating-point dust (< 1e-6) on settled escrow accounts into COMMONS_POOL in SQLite & memory before sweeping.
-    // Uses indexed NOT EXISTS query to avoid unindexed table scans.
-    const dustSumRow = db.prepare(`
-        SELECT COALESCE(SUM(balance), 0) AS dustSum
-        FROM accounts 
-        WHERE public_key LIKE 'escrow_%' 
-          AND ABS(balance) < ? 
-          AND ABS(balance) > 0
-          AND NOT EXISTS (
-              SELECT 1 FROM marketplace_transactions mt 
-              WHERE mt.id = SUBSTR(accounts.public_key, 8) 
-                AND mt.status IN ('pending', 'requested')
-          )
-    `).get(DUST_THRESHOLD) as { dustSum: number };
-
-    // Not while the pot is unknown or not finite (its row holds no number, or ±Infinity): the absorb below is a raw
-    // `balance + ?` on the pot's row, which SQLite reads as 0 + dust for text and would write over it (NB-1 on #1445), and
-    // zeroing the dust without crediting a pot would destroy it. The dust stays where it is until the pot is mended.
-    const potKnown = Number.isFinite(COMMONS_BALANCE);
-    if (potKnown && dustSumRow && dustSumRow.dustSum !== 0) {
-        setCommonsBalance(COMMONS_BALANCE + dustSumRow.dustSum);
-        db.prepare(`
-            UPDATE accounts 
-            SET balance = balance + ?,
-                last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-            WHERE public_key = 'COMMONS_POOL'
-        `).run(dustSumRow.dustSum);
-    }
-
-    if (potKnown) db.prepare(`
-        UPDATE accounts 
-        SET balance = 0,
-            last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE public_key LIKE 'escrow_%' 
-          AND ABS(balance) < ? 
-          AND ABS(balance) > 0
-          AND NOT EXISTS (
-              SELECT 1 FROM marketplace_transactions mt 
-              WHERE mt.id = SUBSTR(accounts.public_key, 8) 
-                AND mt.status IN ('pending', 'requested')
-          )
-    `).run(DUST_THRESHOLD);
-
+    // Whole hundredths (DESIGN-atomic-beans-fable.md §3): a settled escrow drains to exactly 0, so there is no dust to move
+    // into the Commons; only the DELETE of a settled escrow that holds nothing stays.
     const result = db.prepare(`
         DELETE FROM accounts 
         WHERE public_key LIKE 'escrow_%' 
-          AND balance = 0
+          AND balance_c = 0
           AND NOT EXISTS (
               SELECT 1 FROM marketplace_transactions mt 
               WHERE mt.id = SUBSTR(accounts.public_key, 8) 
@@ -1602,7 +1543,7 @@ export function addWsClient(ws: any): void {
             type: 'state_snapshot',
             memberCount: counts.memberCount,
             postCount: counts.postCount,
-            commonsBalance: COMMONS_BALANCE,
+            commonsBalance_c: COMMONS_BALANCE,
         }));
     } catch { /* ignore */ }
 }
@@ -2225,8 +2166,33 @@ export function checkInvite(codeOrTicket: string): ServerInviteCheckResult {
     return result;
 }
 
-export function getInvitesByMember(pubkey: string): InviteCode[] {
-    return getInvitesByMemberEngine(db, pubkey);
+/** An invite as its maker reads it: the engine's row, and two things only this node can add. */
+export interface MyInviteRead extends MyInvite {
+    /** Made when this member said yes to someone's request to join: its note (`intendedFor`) is then the applicant's key, not a name. */
+    forKnock: boolean;
+    /** The callsign of whoever joined with it, once used. */
+    usedByCallsign: string | null;
+}
+
+/** A member's own invites, for their eyes alone (GET /api/invite/mine/:publicKey checks the signer is the maker). */
+export function getInvitesByMember(pubkey: string): MyInviteRead[] {
+    const rows = getInvitesByMemberEngine(db, pubkey);
+    if (rows.length === 0) return [];
+    const knocked = new Set((db.prepare('SELECT invite_code FROM join_requests WHERE decided_by = ? AND invite_code IS NOT NULL').all(pubkey) as { invite_code: string }[])
+        .map((r) => r.invite_code));
+    const callsignOf = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    const joiners = new Map<string, string | null>();
+    return rows.map((r) => {
+        if (r.usedBy && !joiners.has(r.usedBy)) joiners.set(r.usedBy, (callsignOf.get(r.usedBy) as { callsign: string } | undefined)?.callsign ?? null);
+        // The knock row is deleted 30 days after the yes (tidyKnocks, engine/knocks.ts), so a used code is told by its own
+        // columns: while the row lived, redeemInvite admitted only the applicant's key to this code, so a used one has its
+        // note (the applicant's key) equal to the key that used it. A re-key moves used_by and not the note, so a note that
+        // is a key spelling counts too (a maker typing a whole key as a note is the one false positive). A plain invite's note
+        // is the maker's own words.
+        const forKnock = knocked.has(r.code)
+            || (!!r.usedBy && (r.intendedFor === r.usedBy || (r.intendedFor != null && isMemberKeySpelling(r.intendedFor))));
+        return { ...r, forKnock, usedByCallsign: r.usedBy ? joiners.get(r.usedBy) ?? null : null };
+    });
 }
 
 export function getInviteTree(rootPubkey?: string): InviteTreeNode[] {
@@ -2649,12 +2615,25 @@ export interface ViewerTrustProfile {
     mutualCount: number; // mutualConnections.length: the same four-way rule, never a one-way count
     priorTradesWithViewer: number;
     vouchedInBy: {
-        kind: 'member' | 'admin' | 'founder';
+        kind: 'member' | 'founder' | 'card';
         publicKey: string | null; // set only for kind 'member'
         callsign: string | null;  // set only for kind 'member'
         avatarUrl: string | null;
         tier: string | null;
+        role: 'owner' | 'admin' | null; // the inviter's node role now, for kind 'member'; null otherwise
     } | null;
+    /**
+     * How many people this member brought in (members whose invited_by is this member: the first level of GET
+     * /api/invite/tree?root=), for an owner or admin of this node and for the member themself; absent for anyone else.
+     */
+    broughtIn?: number;
+    /**
+     * The button an owner or admin sees on someone else's profile, following that person's state (engine/vouchers.ts
+     * profileVoucherButton; invites-vouching I4): Add to the names list, Make a voucher, or Voucher · n left. Absent for anyone else.
+     */
+    voucherButton?: ProfileVoucherButton;
+    /** The member's own "Show who invited me to other members" switch, to the member themself only. */
+    inviterShown?: boolean;
     risk: TradeRiskAssessment;
     /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
@@ -2665,17 +2644,19 @@ export interface ViewerTrustProfile {
 }
 
 /**
- * "Invited by" — who brought this member in.
+ * "Invited by" — who brought this member in (DESIGN-invites-vouching-review-fable.md §3 ask 2, slice I3).
  *
- * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
- * puts your name on their profile and makes you a reachable reference if a trade goes wrong. When
- * the inviter is the system admin or a founder there is no peer to reach out to, so the kind says
- * so and `publicKey` is null — the UI shows a clear, non-actionable label rather than a dead link.
+ * Every member inviter is returned by name, whatever node role they hold, with that role (`owner`, `admin` or null), so
+ * invitations carry accountability: bringing someone in puts your name on their profile and makes you a reachable
+ * reference if a trade goes wrong. An owner or an admin is no exception: owner tags are on profiles already, and "invited
+ * by the system admin" named nobody while every member an owner invited read it. Two kinds name no person:
+ *  - `founder`: the member the community began with (invited_by 'genesis');
+ *  - `card`: a seed invite made under the node password (invite_codes.issued_by 'owner:password', routes/community.ts):
+ *    an owner made it, and no key says which one. A seed invite made under an owner's or admin's key hangs off that
+ *    person (adminGenerateInvite's `created_by`), so it names them as kind `member`.
+ * Anyone else (no inviter, an open door's `open:<provider>`, a key with no member row here) is null.
  *
- * Shared with the keyholder system (K3), where those null cases are not cosmetic: a member with no
- * human inviter has NOBODY to hold their inviter fragment, and lands at signup with two pieces
- * rather than three. Both callers must agree on who counts as an inviter, so there is one
- * implementation rather than two that drift.
+ * Who may read it is getTrustProfileForViewer's (viewerSeesInviterOf): this names the inviter whatever the switch says.
  */
 export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vouchedInBy'] {
     const member = getMember(targetPubkey);
@@ -2683,20 +2664,73 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     if (!inviterKey || inviterKey === targetPubkey) return null;
 
     if (inviterKey === 'genesis') {
-        return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+        return { kind: 'founder', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null };
     }
-    if (inviterKey === 'SYSTEM' || isAdminPubkey(inviterKey)) {
-        return { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null };
+    // invite_code is the code as the joiner typed it (redeemInvite matches it without case); the codes are made in capitals.
+    const code = member?.inviteCode;
+    if (code) {
+        const issued = (db.prepare('SELECT issued_by FROM invite_codes WHERE code IN (?, UPPER(?))').get(code, code) as { issued_by: string | null } | undefined)?.issued_by;
+        if (issued === 'owner:password') {
+            return { kind: 'card', publicKey: null, callsign: null, avatarUrl: null, tier: null, role: null };
+        }
     }
     const inviter = getMember(inviterKey);
-    if (!inviter) return null;
+    if (!inviter || isVisitorKey(inviterKey)) return null;
+    const role = nodeRoleOf(inviterKey);
     return {
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
         avatarUrl: avatarUrlOf(inviter.publicKey, inviter.avatarRef),
         tier: getMemberTrustProfile(inviterKey).tier.name,
+        role: role === 'owner' || role === 'admin' ? role : null,
     };
+}
+
+/** Whether `viewer` is an owner or admin of this node whose role acts (isNodeAdmin, owners included). */
+function seesWhoInvitedWhom(viewer: string | null | undefined): boolean {
+    return !!viewer && isNodeAdmin(viewer);
+}
+
+/** A member's own "Show who invited me to other members" (members.inviter_shown): on unless they switched it off. */
+export function inviterShownOf(publicKey: string): boolean {
+    const row = db.prepare('SELECT inviter_shown FROM members WHERE public_key = ?').get(publicKey) as { inviter_shown: number | null } | undefined;
+    return !row || row.inviter_shown === null || Number(row.inviter_shown) !== 0;
+}
+
+/**
+ * Whether `viewer` reads who invited `target`: always the target themself, an owner or admin of this node, and the
+ * inviter; any other member only while the target's switch is on (inviterShownOf). A caller with no signed viewer is
+ * any other member (the routes that call this refuse such a caller first).
+ */
+export function viewerSeesInviterOf(viewer: string | null | undefined, target: string, inviterKey: string | null | undefined): boolean {
+    if (viewer && viewer === target) return true;
+    if (viewer && inviterKey && viewer === inviterKey) return true;
+    if (seesWhoInvitedWhom(viewer)) return true;
+    return inviterShownOf(target);
+}
+
+/**
+ * viewerSeesInviterOf for many targets at once (the invite tree): the viewer's role and the switched-off members read
+ * once, not once per member.
+ */
+export function inviterVisibilityFor(viewer: string | null | undefined): (target: string, inviterKey: string | null | undefined) => boolean {
+    if (seesWhoInvitedWhom(viewer)) return () => true;
+    const hidden = new Set((db.prepare('SELECT public_key AS pk FROM members WHERE inviter_shown = 0').all() as { pk: string }[]).map(r => r.pk));
+    return (target, inviterKey) => !hidden.has(target) || (!!viewer && (viewer === target || (!!inviterKey && viewer === inviterKey)));
+}
+
+/** How many people `publicKey` brought in: the first level of their branch of the invite tree (getInviteTree). */
+function broughtInCount(publicKey: string): number {
+    return (db.prepare('SELECT COUNT(*) AS n FROM members WHERE invited_by = ? AND public_key != ?').get(publicKey, publicKey) as { n: number }).n;
+}
+
+export const INVITER_SHOWN_MEMBERS_ONLY_MESSAGE = word('Only a member of this community chooses who sees who invited them.');
+
+/** A member's "Show who invited me to other members", their own (PUT /api/profile/privacy). A member's alone. */
+export function setInviterShown(publicKey: string, shown: boolean): void {
+    if (!isNodeMember(publicKey)) throw new Error(INVITER_SHOWN_MEMBERS_ONLY_MESSAGE);
+    db.prepare('UPDATE members SET inviter_shown = ? WHERE public_key = ?').run(shown ? 1 : 0, publicKey);
 }
 
 /**
@@ -2780,13 +2814,18 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer = priorRow?.count || 0;
     }
 
-    // "Invited by" — who brought this member in. A peer inviter is shown by
-    // name with a tappable link, so invitations carry accountability: bringing
-    // someone in puts your name on their profile and makes you a reachable
-    // reference if a trade goes wrong. When the inviter is the system admin or a
-    // founder there's no peer to reach out to — show a clear, non-actionable
-    // label instead (and never a dead-end tappable link).
-    const vouchedInBy = resolveVouchedInBy(targetPubkey);
+    // "Invited by" — who brought this member in, by name whatever their role (resolveVouchedInBy). A member who switched
+    // "Show who invited me to other members" off (inviter_shown 0) has it left out for a plain member; the member
+    // themself, an owner or admin, and the inviter still read it (viewerSeesInviterOf, I3).
+    // Where invites are off (the global node, config/node-profile.ts) nobody brought anybody in, and neither line shows:
+    // a member there came through the open door, and a row from before the switch names nobody to anyone (I3 STOP rule).
+    const invitesOn = getProfileSwitches().invites;
+    const vouchedInBy = invitesOn && viewerSeesInviterOf(viewerPubkey, targetPubkey, member.invitedBy) ? resolveVouchedInBy(targetPubkey) : null;
+    // "Brought in n people ›": for an owner or admin of this node, and for the member on their own profile (I3).
+    const isSelf = !!viewerPubkey && viewerPubkey === targetPubkey;
+    const broughtIn = invitesOn && (isSelf || seesWhoInvitedWhom(viewerPubkey)) ? broughtInCount(targetPubkey) : undefined;
+    // The names-list / voucher button: for an owner or admin only, on another member's profile (I4).
+    const voucherButton = profileVoucherButton(viewerPubkey, targetPubkey) ?? undefined;
 
     const risk = assessTradeRisk({
         tier,
@@ -2815,33 +2854,43 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer,
         vouchedInBy,
         risk,
+        ...(broughtIn !== undefined ? { broughtIn } : {}),
+        ...(voucherButton ? { voucherButton } : {}),
+        ...(isSelf ? { inviterShown: inviterShownOf(targetPubkey) } : {}),
         ...(member.isTreasury && !nodeOwnAccountKeys().has(targetPubkey) ? { isTreasury: true as const } : {}),
     };
 }
 
 // ===================== LEDGER =====================
 
-/** A member's balance as getBalance gives it, rounded to the cent. */
-function roundedBalance(publicKey: string): number {
-    return Math.round(ledger.getAccount(publicKey).balance * 100) / 100;
+/**
+ * A member's balance answer (GET /api/ledger/balance and every reader of it). Every money figure is whole hundredths of a
+ * Bean, named `*_c` on the wire (@beanpool/core hundredths.ts): the apps check each with isHundredths and show "—" for
+ * anything else.
+ */
+export interface BalanceAnswer {
+    balance_c: number; floor_c: number; usableFloor_c: number; knownGrant_c: number; roomHeld_c: number; liveOffers: number;
+    frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit_c: number; earnedCredit_c: number;
+    commonsBalance_c: number; activated: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null;
 }
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; roomHeld: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+export function getBalance(publicKey: string): BalanceAnswer {
     const { floor, tier, tierCredit, earnedCredit, activated, knownGrant, roomHeld, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
-    const balance = roundedBalance(publicKey);
+    // Whole hundredths as the ledger holds them: no rounding to do.
+    const balance = ledger.getAccount(publicKey).balance_c;
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
     const effectiveFloor = isTreasury ? getEnterpriseUnderlyingFloor(publicKey).floor : floor;
     const uFloor = usableFloor(publicKey);
     return {
-        balance,
-        floor: effectiveFloor,
-        usableFloor: uFloor,
+        balance_c: balance,
+        floor_c: effectiveFloor,
+        usableFloor_c: uFloor,
         // The known floor's part of the limit (community modes slice 4): one live offer unlocks all of it. 0 elsewhere.
-        knownGrant: isTreasury ? 0 : knownGrant,
+        knownGrant_c: isTreasury ? 0 : knownGrant,
         // The credit line a voucher's vouch or a member's gift gave them (amend2 §6): like the known grant, one live offer
         // unlocks all of it (core usableAllowance). 0 elsewhere.
-        roomHeld: isTreasury ? 0 : roomHeld,
+        roomHeld_c: isTreasury ? 0 : roomHeld,
         liveOffers,
         frozen: balance < uFloor,
         // knownFrozen / creditFrozen: the community's admins froze this member's known floor (an exception,
@@ -2853,9 +2902,9 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         // tierCredit: the credit `tier` is read from (earned + granted, never the known grant, so a confirmed
         // member's limit is higher than it; a freeze doesn't move it): the apps' trust figure, so the Levels card reads
         // the same level as the badge (memberLevel in @beanpool/core).
-        tierCredit,
-        earnedCredit,
-        commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
+        tierCredit_c: tierCredit,
+        earnedCredit_c: earnedCredit,
+        commonsBalance_c: COMMONS_BALANCE,
         // activated: has a credit line at all (earned/granted/known) — a brand-new member is false.
         activated,
         // canOperate: this member is a keeper of SOMETHING — a coarse "show the steward layer at all"
@@ -2876,7 +2925,7 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
  *
  * The in-memory ledger is the source of truth for balance reads + floor checks
  * (getBalance, transfer), and `transfer` writes the in-memory balance back to the
- * DB. Crowdfund pledge/refund paths in db.ts mutate `accounts.balance` with raw
+ * DB. Crowdfund pledge/refund paths in db.ts mutate `accounts.balance_c` with raw
  * SQL OUTSIDE the ledger; without this resync the in-memory ledger goes stale and
  * the next `transfer()` clobbers the DB with the stale (pre-mutation) value,
  * erasing the debit → unbacked credit. Registered as db.ts's balance-mutation
@@ -2890,7 +2939,7 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
  * demurrage not yet persisted.
  */
 export function reconcileLedgerFromDb(): void {
-    const accounts = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
+    const accounts = db.prepare("SELECT public_key as id, balance_c, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
     ledger.loadState(accounts);
 }
 
@@ -2922,8 +2971,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
         if (dest?.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
     }
-    // Not an amount of Beans (NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so it is
-    // a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
+    // Not whole hundredths (a float, NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so
+    // it is a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
     // ledger.transfer refuses it again as a primitive.
     if (!isBeanAmount(amount)) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
@@ -2976,7 +3025,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
 
     // Sender's spending limit:
     //  • System wallets (COMMONS_POOL, genesis) — unbounded.
-    //  • Escrow wallets (escrow_*) — only what they hold (`ESCROW_FLOOR`, a hair below zero); see below.
+    //  • Escrow wallets (escrow_*) — only what they hold (`ESCROW_FLOOR`, exactly 0); see below.
     //  • Marketplace / escrow spends — the full earned credit LINE (your floor, may be negative):
     //    the overdraft exists so you can trade for real goods/services, backed by a promise to reciprocate.
     //  • Direct "send credits" gifts — POSITIVE BALANCE ONLY (floor 0). You can only gift beans you
@@ -3023,8 +3072,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // the outer commit is still what makes anything durable. The two callers that did NOT wrap — the
     // member-to-member send route and the old escrow-key boot migration (since removed) — are the ones this closed.
     const txn = conservingTransaction<Transaction | null>(() => {
-        const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
-        if (!success) return null;
+        // The fee is truncated ONCE, by the ledger, and the row is written from what it returns: never recomputed here.
+        const moved = ledger.transfer(from, to, amount, senderFloor, feeExempt);
+        if (!moved.ok) return null;
         // The rows only: ledger.transfer has just made the in-memory account it credited, and persistAccount below
         // writes its balance over the row's 0.
         if (newRecipient) writeVisitorRow(to);
@@ -3033,12 +3083,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             recordActivity(from);
         }
 
-        const taxFee = feeExempt ? 0 : amount * TRANSACTION_FEE_RATE;
-
         const built: Transaction = {
             id: crypto.randomUUID(),
-            from, to, amount,
-            taxFee,
+            from, to, amount_c: amount,
+            fee_c: moved.fee,
             memo: memo || '',
             timestamp: new Date().toISOString(),
         };
@@ -3046,8 +3094,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             // SRV-20: persist the caller's request signature (if supplied) so this
             // transaction's authorship is re-verifiable on import. NULL for
             // system/internal transfers (those become node-signed in a later step).
-            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                built.id, built.from, built.to, built.amount, built.taxFee, withheldNote ? '' : built.memo, built.timestamp,
+            db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                built.id, built.from, built.to, built.amount_c, built.fee_c, withheldNote ? '' : built.memo, built.timestamp,
                 auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
             );
             if (withheldNote) keepWithheldNote(built.id, built.memo);
@@ -3063,16 +3111,16 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         // to be safe only because escrow.ts INSERT OR IGNOREs first. This closes the class rather than one
         // instance of it.
         const persistAccount = db.prepare(`
-            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(public_key) DO UPDATE SET
-                balance = excluded.balance,
+                balance_c = excluded.balance_c,
                 last_demurrage_epoch = excluded.last_demurrage_epoch,
                 last_updated_at = excluded.last_updated_at
         `);
         const nowIso = new Date().toISOString();
-        persistAccount.run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, nowIso);
-        persistAccount.run(to, toAcc.balance, toAcc.lastDemurrageEpoch, nowIso);
+        persistAccount.run(from, fromAcc.balance_c, fromAcc.lastDemurrageEpoch, nowIso);
+        persistAccount.run(to, toAcc.balance_c, toAcc.lastDemurrageEpoch, nowIso);
 
         // Persist demurrage decay rows + commons balance (transfers trigger decay on both accounts)
         persistDecayEvents();
@@ -3090,8 +3138,9 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             sweepEnterpriseCeiling(to);
         } else {
             // What this payment brought them, net of the fee: the hardship shield is read against it.
-            sweepRepayment(to, txn.amount - (txn.taxFee || 0));
+            sweepRepayment(to, txn.amount_c - (txn.fee_c || 0));
         }
+        payShortStandingDealsAfterCredit(to);
     });
 
     const fromMember = getMember(from);
@@ -3150,10 +3199,10 @@ export function settleDemurrage(publicKeys: string[]): void {
     assertLedgerWritable();
 
     const persistAccount = db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+        INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
+            balance_c = excluded.balance_c,
             last_demurrage_epoch = excluded.last_demurrage_epoch,
             last_updated_at = excluded.last_updated_at
     `);
@@ -3174,7 +3223,7 @@ export function settleDemurrage(publicKeys: string[]): void {
     conservingTransaction(() => {
         for (const publicKey of accountIds) {
             const account = ledger.getAccount(publicKey);   // applies + queues any decay, and stamps the epoch
-            persistAccount.run(publicKey, account.balance, account.lastDemurrageEpoch, nowIso);
+            persistAccount.run(publicKey, account.balance_c, account.lastDemurrageEpoch, nowIso);
         }
         persistDecayEvents();
         persistCommonsBalance();
@@ -3278,11 +3327,12 @@ export function conservingTransaction<T>(fn: () => T): T {
 }
 
 /**
- * The Commons pot as its `COMMONS_POOL` row holds it: the row's number (finite or not), or NaN, the unknown pot, for a
- * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
+ * The Commons pot as its `COMMONS_POOL` row holds it: the row's whole hundredths, or NaN, the unknown pot, for a row
+ * holding anything else (NULL, text, a fraction of a hundredth, an infinity). Never 0: a guessed 0 was flushed over the
+ * row and the pot's Beans left the books (NB-1).
  */
 function commonsPotFromRow(balance: unknown): number {
-    return typeof balance === 'number' ? balance : NaN;
+    return isHundredths(balance) ? balance : NaN;
 }
 
 /** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
@@ -3319,8 +3369,8 @@ function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): voi
             setCommonsBalance(commonsSnapshot);
         } else {
             // A row holding no number makes the pot unknown (NaN), as at boot: memory never keeps a pot the rows don't hold.
-            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
-            if (row) setCommonsBalance(commonsPotFromRow(row.balance));
+            const row = db.prepare("SELECT balance_c FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance_c: unknown } | undefined;
+            if (row) setCommonsBalance(commonsPotFromRow(row.balance_c));
         }
     } catch (resyncError: any) {
         // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
@@ -3401,23 +3451,23 @@ export function moveToCommons(
 
         const txn: Transaction = {
             id: crypto.randomUUID(),
-            from, to: 'COMMONS_POOL', amount, taxFee: 0,
+            from, to: 'COMMONS_POOL', amount_c: amount, fee_c: 0,
             memo: memo || '', timestamp: new Date().toISOString(),
             authSigner: opts?.authSigner ?? null,
         };
-        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            txn.id, txn.from, txn.to, txn.amount_c, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null
         );
 
         const fromAcc = ledger.getAccount(from);
         db.prepare(`
-            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(public_key) DO UPDATE SET
-                balance = excluded.balance,
+                balance_c = excluded.balance_c,
                 last_demurrage_epoch = excluded.last_demurrage_epoch,
                 last_updated_at = excluded.last_updated_at
-        `).run(from, fromAcc.balance, fromAcc.lastDemurrageEpoch, txn.timestamp);
+        `).run(from, fromAcc.balance_c, fromAcc.lastDemurrageEpoch, txn.timestamp);
 
         persistDecayEvents();
         persistCommonsBalance();   // must come last — it is what makes the credit durable
@@ -3453,14 +3503,14 @@ export function payFromCommons(
     // standby's rows 2,102.34 Beans over its main server's, and every copy after it was refused (review 4117546944).
     assertLedgerWritable();
     // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
-    const recipientNow = ledger.getAccount(to).balance;
-    if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
+    const recipientNow = ledger.getAccount(to).balance_c;
+    if (!isHundredths(recipientNow) || !Number.isSafeInteger(recipientNow + amount)) return null;
     // A pot that is unknown (its row held no number at boot, so it is NaN) or not finite pays nothing, `allowDeficit` or
     // not, and nothing moves (#1445 confirmation, NB-3). `allowDeficit` used to go on to credit the recipient and write the
     // history row, and only the flush at the end refused the pot: called outside a conservingTransaction, the credit stayed
     // and the pot's debit was never written, Beans minted (measured, test-commons-pot-edges: 1 Bean per call). Before
     // anything moves, so a caller inside a conservingTransaction gets a plain refusal, not a throw and a ledger resync.
-    if (!Number.isFinite(getCommonsBalanceExact())) {
+    if (!isHundredths(getCommonsBalanceExact())) {
         console.warn(`[Commons] Refused to pay ${amount} from a Commons pot that is not a number (${String(getCommonsBalanceExact())}). Memo: ${memo}`);
         return null;
     }
@@ -3480,24 +3530,24 @@ export function payFromCommons(
         }
 
         const toAcc = ledger.getAccount(to);
-        toAcc.balance += amount;
+        toAcc.balance_c += amount;
 
         const built: Transaction = {
             id: crypto.randomUUID(),
-            from: 'COMMONS_POOL', to, amount, taxFee: 0,
+            from: 'COMMONS_POOL', to, amount_c: amount, fee_c: 0,
             memo: memo || '', timestamp: new Date().toISOString(),
             authSigner: opts?.authSigner ?? null,
         };
-        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(built.id, built.from, built.to, built.amount, 0, built.memo, built.timestamp, opts?.authSigner ?? null);
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(built.id, built.from, built.to, built.amount_c, 0, built.memo, built.timestamp, opts?.authSigner ?? null);
         db.prepare(`
-            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch, last_updated_at)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(public_key) DO UPDATE SET
-                balance = excluded.balance,
+                balance_c = excluded.balance_c,
                 last_demurrage_epoch = excluded.last_demurrage_epoch,
                 last_updated_at = excluded.last_updated_at
-        `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, built.timestamp);
+        `).run(to, toAcc.balance_c, toAcc.lastDemurrageEpoch, built.timestamp);
 
         // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this they are
         // stranded and the transactions table drifts from account balances — `moveToCommons` persists them and this must
@@ -3514,8 +3564,9 @@ export function payFromCommons(
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
         } else {
-            sweepRepayment(to, txn.amount);
+            sweepRepayment(to, txn.amount_c);
         }
+        payShortStandingDealsAfterCredit(to);
     });
 
     return txn;
@@ -3533,7 +3584,7 @@ export function getTransactions(publicKey?: string, limit = 50, offset = 0): Tra
     } else {
         rows = db.prepare(`SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(limit, offset) as any[];
     }
-    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: publicKey ? noteAsReadBy(r, publicKey) : r.memo, timestamp: r.timestamp }));
+    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount_c: r.amount_c, fee_c: r.fee_c || 0, memo: publicKey ? noteAsReadBy(r, publicKey) : r.memo, timestamp: r.timestamp }));
 }
 // ===================== MARKETPLACE =====================
 
@@ -3611,9 +3662,9 @@ export function liveOfferCount(publicKey: string): number {
  * An enterprise's underlying credit floor, the one the spend check holds it to (getBalance's floor, usableFloor): the
  * engine's, read fresh (engine trust.ts readEnterpriseFloor), so the spend check, the badge and the enterprise page read
  * one limit. That is the bigger of its opening line or its keepers' pledges, never both (Marty, 21 Oct; engine
- * enterpriseAllowance). Two things were once read here that no other reader counted: treasury_operators.backing, the
+ * enterpriseAllowance). Two things were once read here that no other reader counted: treasury_operators.backing_c, the
  * figure a keeper pledged as they joined (a released pledge kept its floor and a known pledge counted twice, #2309), and
- * the enterprise's own members.earned_credit, which createTreasury sets to its opening line, so the line stacked on the
+ * the enterprise's own members.earned_credit_c, which createTreasury sets to its opening line, so the line stacked on the
  * pledges at spending (200 line + 100 pledged spent to -300 where the engine said -200). An enterprise that already owes
  * more than this is spend-frozen; nothing is clawed back.
  */
@@ -3624,7 +3675,7 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
 }
 
 /**
- * The enterprises getEnterpriseUnderlyingFloor read higher before it stopped reading treasury_operators.backing (unless a
+ * The enterprises getEnterpriseUnderlyingFloor read higher before it stopped reading treasury_operators.backing_c (unless a
  * legacy line or the cap held them anyway): open, unfrozen ones whose active, unfrozen keepers' joining figures add up to
  * more than those keepers' earned pledges standing now (a release since, or a known part, which the floor counts once
  * among the known pledges), as it took the larger of the two. `frozen`: how many of them now owe more than their floor
@@ -3640,20 +3691,20 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
 export function backingFigureDrift(): { enterprises: number; frozen: number } {
     const rows = db.prepare(`
         SELECT o.treasury_pubkey AS pk,
-               COALESCE((SELECT a.balance FROM accounts a WHERE a.public_key = o.treasury_pubkey), 0) AS balance
+               COALESCE((SELECT a.balance_c FROM accounts a WHERE a.public_key = o.treasury_pubkey), 0) AS balance_c
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
           AND e.is_treasury = 1 AND e.status != 'completed' AND COALESCE(e.credit_frozen, 0) = 0
         GROUP BY o.treasury_pubkey
-        HAVING COALESCE(SUM(o.backing), 0) > (
-            SELECT COALESCE(SUM(p.amount), 0) FROM enterprise_pledges p
+        HAVING COALESCE(SUM(o.backing_c), 0) > (
+            SELECT COALESCE(SUM(p.amount_c), 0) FROM enterprise_pledges p
             JOIN members k ON k.public_key = p.keeper
             WHERE p.enterprise = o.treasury_pubkey AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
               AND k.status = 'active' AND COALESCE(k.credit_frozen, 0) = 0)
-    `).all() as { pk: string; balance: number }[];
-    const frozen = rows.filter(r => Math.round(Number(r.balance) * 100) / 100 < usableFloor(r.pk)).length;
+    `).all() as { pk: string; balance_c: number }[];
+    const frozen = rows.filter(r => (Number(r.balance_c)) < usableFloor(r.pk)).length;
     return { enterprises: rows.length, frozen };
 }
 
@@ -3682,59 +3733,6 @@ function reportBackingFigureDriftAtBoot(): void {
     }
 }
 
-/** The line every enterprise of before Slice 4 was given at least (db.ts, the grandfather migration). */
-const GRANDFATHERED_LINE_MIN = 200;
-
-/**
- * The open enterprises whose opening line a known pledge cleared for good, before only earned pledges could clear it
- * (clearOpeningLineOncePledged; Marty, 21 Oct). Nothing is restored: a line comes back only by a decision about it, so this
- * counts them, never who (reportOpeningLinesClearedByKnownPledgesAtBoot).
- *
- * The line is gone (legacy_credit_floor NULL, and not by a wind-up) and the enterprise has had a known pledge. Its line on
- * record is members.earned_credit, which createTreasury writes beside it. It counts in `enterprises` when its keepers'
- * pledges, known ones included, once stood at that line or above while their earned pledges never did, read from the
- * pledge rows' dates (a release keeps its row, dated). `maybe`: the same with the grandfathered 200 for the line, so an
- * enterprise from before Slice 4 with a smaller line on record; one started with no line at all reads the same, so these
- * may have had no line to lose. Reads stored rows only, and no balance.
- */
-export function openingLinesClearedByKnownPledges(): { enterprises: number; maybe: number } {
-    const candidates = db.prepare(`
-        SELECT e.public_key AS pk, COALESCE(e.earned_credit, 0) AS line
-        FROM members e
-        WHERE e.is_treasury = 1 AND e.legacy_credit_floor IS NULL
-          AND e.status NOT IN ('completed', 'pruned', 'deleted')
-          AND EXISTS (SELECT 1 FROM enterprise_pledges k WHERE k.enterprise = e.public_key AND k.id LIKE 'known:%')
-    `).all() as { pk: string; line: number }[];
-    const pledgesOf = db.prepare('SELECT id, amount, pledged_at, released_at FROM enterprise_pledges WHERE enterprise = ?');
-    let enterprises = 0, maybe = 0;
-    for (const c of candidates) {
-        const rows = pledgesOf.all(c.pk) as { id: string; amount: number; pledged_at: string; released_at: string | null }[];
-        // The most ever pledged at once, all and earned only: a clear runs as a pledge is written, so at a pledge's date.
-        let allMost = 0, earnedMost = 0;
-        for (const at of new Set(rows.map(r => r.pledged_at))) {
-            const standing = rows.filter(r => r.pledged_at <= at && (r.released_at == null || r.released_at > at));
-            allMost = Math.max(allMost, standing.reduce((s, r) => s + Number(r.amount), 0));
-            earnedMost = Math.max(earnedMost, standing.filter(r => !r.id.startsWith(engine.KNOWN_PLEDGE_PREFIX)).reduce((s, r) => s + Number(r.amount), 0));
-        }
-        const clearedByKnown = (line: number) => line > 0 && allMost >= line && earnedMost < line;
-        if (clearedByKnown(Number(c.line))) enterprises++;
-        else if (clearedByKnown(Math.max(Number(c.line), GRANDFATHERED_LINE_MIN))) maybe++;
-    }
-    return { enterprises, maybe };
-}
-
-/** Says at boot how many enterprises lost their opening line to a known pledge (openingLinesClearedByKnownPledges). Never throws. */
-function reportOpeningLinesClearedByKnownPledgesAtBoot(): void {
-    try {
-        const { enterprises, maybe } = openingLinesClearedByKnownPledges();
-        if (enterprises > 0 || maybe > 0) {
-            console.log(`[Boot] Enterprise opening lines clear on earned pledges only now: ${enterprises} enterprise(s) lost their opening line to a known pledge before (${maybe} more may have, if they held the grandfathered ${GRANDFATHERED_LINE_MIN}); not restored, nothing moved`);
-        }
-    } catch (e) {
-        console.error('[Boot] Could not count enterprises whose opening line a known pledge cleared:', e);
-    }
-}
-
 /** The keepers' known pledges to this enterprise, as its floor counts them (engine enterpriseKnownShareOf). */
 export function enterpriseKnownShareOf(enterprisePubkey: string): number {
     return engine.enterpriseKnownShareOf(db, enterprisePubkey);
@@ -3750,7 +3748,7 @@ export function usableFloor(publicKey: string): number {
  * counts what it pledges as a keeper, so it ignores the extra.
  */
 function usableFloorWithKnownPledge(publicKey: string, extraKnownPledged: number): number {
-    const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
+    const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot_c, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!m?.is_treasury) {
         const { floor, knownGrant, roomHeld, otherAllowance } = engine.getMemberTrustProfile(db, publicKey, extraKnownPledged);
         if (knownGrant <= 0 && roomHeld <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
@@ -3769,13 +3767,13 @@ function usableFloorWithKnownPledge(publicKey: string, extraKnownPledged: number
     const normalDerivedAllowance = Math.min(underlyingAllowance, covenantAllowance);
 
     // If enterprise is paused (docs/the-commons.md §2.2):
-    if (m.paused === 1 && m.paused_floor_snapshot != null) {
+    if (m.paused === 1 && m.paused_floor_snapshot_c != null) {
         const pausedAt = m.paused_at ? new Date(m.paused_at).getTime() : Date.now();
         const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
         const isExpired = (Date.now() - pausedAt) > ninetyDaysMs;
 
         if (!isExpired) {
-            const snapshotAllowance = Math.abs(Number(m.paused_floor_snapshot));
+            const snapshotAllowance = Math.abs(Number(m.paused_floor_snapshot_c));
             // While paused (up to 90 days):
             // - Covenant floor can never pull it below snapshot (even with 0 offers).
             // - Earned growth still counts (if earned credit raises the floor, use the higher value).
@@ -3922,12 +3920,12 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     avatarUrl: string | null;
     grantedAt: string | null;
     role: string;
-    backing: number;
+    backing_c: number;
     lastActiveAt: string | null;
     suspended: boolean;
 }> {
     return (db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_ref, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
+        SELECT m.public_key, m.callsign, m.avatar_ref, o.granted_at, o.role, o.backing_c, m.last_active_at, m.joined_at,
                m.can_operate, m.status, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
@@ -3939,7 +3937,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
         avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
         grantedAt: r.granted_at ?? null,
         role: r.role || 'keeper',
-        backing: Number(r.backing || 0),
+        backing_c: Number(r.backing_c || 0),
         lastActiveAt: lastActiveForViewer(r.last_active_at || r.joined_at, r.public_key),
         suspended: r.can_operate !== 1 || r.status !== 'active' || !!r.is_visitor,
     }));
@@ -4025,7 +4023,7 @@ function assertPledgeWritable(): void {
 
 function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number {
     const row = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+        "SELECT COALESCE(SUM(amount_c), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
     ).get(memberPubkey, treasuryPubkey) as any;
     return Number(row?.total || 0);
 }
@@ -4033,7 +4031,7 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
 /** The known part of one keeper's active pledge to one enterprise (engine known-floor.ts KNOWN_PLEDGE_PREFIX). */
 function activeKnownPledge(treasuryPubkey: string, memberPubkey: string): number {
     const row = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+        "SELECT COALESCE(SUM(amount_c), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
     ).get(memberPubkey, treasuryPubkey) as any;
     return Number(row?.total || 0);
 }
@@ -4042,24 +4040,9 @@ function activeKnownPledge(treasuryPubkey: string, memberPubkey: string): number
 function earnedPledgeRoom(keeperPubkey: string): number {
     const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
     const row = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id NOT LIKE 'known:%'"
+        "SELECT COALESCE(SUM(amount_c), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id NOT LIKE 'known:%'"
     ).get(keeperPubkey) as any;
     return Math.max(0, earnedCredit - Number(row?.total || 0));
-}
-
-/**
- * The persisted half of the opening line's auto-clear (Slice 4; engine enterpriseAllowance clears it as it reads): once the
- * keepers' EARNED pledges reach the line, it is cleared for good. Known pledges never clear it (Marty, 21 Oct), as no
- * read-time clear counts them: they count only with the confirmation dial on, so a line they cleared would leave the
- * enterprise with neither once the dial went off. Runs inside the caller's transaction, after the pledge rows are written;
- * true when it cleared the line.
- */
-function clearOpeningLineOncePledged(enterprisePubkey: string): boolean {
-    const row = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    const legacyFloor = Number(row?.legacy_credit_floor || 0);
-    if (legacyFloor <= 0 || engine.enterpriseEarnedPledges(db, enterprisePubkey) < legacyFloor) return false;
-    db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
-    return true;
 }
 
 /**
@@ -4070,12 +4053,12 @@ function insertPledgeRows(keeperPubkey: string, enterprisePubkey: string, earned
     let id = '';
     if (earnedPart > 0) {
         id = crypto.randomUUID();
-        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
             .run(id, keeperPubkey, enterprisePubkey, earnedPart, at);
     }
     if (knownPart > 0) {
         const knownId = engine.KNOWN_PLEDGE_PREFIX + crypto.randomUUID();
-        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
             .run(knownId, keeperPubkey, enterprisePubkey, knownPart, at);
         if (!id) id = knownId;
     }
@@ -4093,10 +4076,10 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
     if (amount > earnedRoom + knownRoom) {
         // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
         if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
-            throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({earnedRoom} available to add across all enterprises)', { amount, earnedRoom }));
+            throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({earnedRoom} available to add across all enterprises)', { amount: formatHundredths(amount, 'en'), earnedRoom: formatHundredths(earnedRoom, 'en') }));
         }
         throw new Error(tr('Pledge amount ({amount}) exceeds what you can pledge ({room} available: {earnedRoom} earned credit, {knownRoom} from your known floor)',
-            { amount, room: earnedRoom + knownRoom, earnedRoom, knownRoom }));
+            { amount: formatHundredths(amount, 'en'), room: formatHundredths(earnedRoom + knownRoom, 'en'), earnedRoom: formatHundredths(earnedRoom, 'en'), knownRoom: formatHundredths(knownRoom, 'en') }));
     }
     const earnedPart = Math.min(amount, earnedRoom);
     return { earnedPart, knownPart: amount - earnedPart };
@@ -4107,11 +4090,11 @@ function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: num
  * approving them, or the scheduler storing a failed change), the caller passes `othersRefusal`, a refusal in words.
  */
 function assertKeeperOwnDebtCovered(keeperPubkey: string, othersRefusal?: string): void {
-    const balance = roundedBalance(keeperPubkey);
+    const balance = ledger.getAccount(keeperPubkey).balance_c;
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
         // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
-        throw new KeeperChangeRefused(othersRefusal ?? tr('Your own balance ({balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor ({floor} beans); pay down first or pledge less.', { balance, floor }));
+        throw new KeeperChangeRefused(othersRefusal ?? tr('Your own balance ({balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor ({floor} beans); pay down first or pledge less.', { balance: formatHundredths(balance, 'en'), floor: formatHundredths(floor, 'en') }));
     }
 }
 
@@ -4138,7 +4121,7 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
 
     if (keeperPledge > 0) {
-        const deficit = Math.max(0, -getBalance(treasuryPubkey).balance);
+        const deficit = Math.max(0, -getBalance(treasuryPubkey).balance_c);
         const otherAllowance = allowanceWithoutKeeper(treasuryPubkey, memberPubkey);
         if (otherAllowance >= deficit) {
             db.prepare(
@@ -4215,7 +4198,7 @@ export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string
     const currentUsable = usableFloor(enterprisePubkey);
     const { floor: underlyingFloor } = getEnterpriseUnderlyingFloor(enterprisePubkey);
     const snapshot = currentUsable !== 0 ? currentUsable : underlyingFloor;
-    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = ? WHERE public_key = ?")
+    db.prepare("UPDATE members SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot_c = ? WHERE public_key = ?")
         .run(nowIso, by, snapshot, enterprisePubkey);
     // Its listings leave the board (engine posts.ts leaves a paused author's out). Its callers announce the pause on the
     // member feed only (profile_updated, enterprise_keeper_stepped_down), which a socket off it never gets.
@@ -4247,11 +4230,11 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
     keeper: string;
     callsign: string;
     avatarUrl: string | null;
-    amount: number;
+    amount_c: number;
     pledgedAt: string;
 }> {
     return (db.prepare(`
-        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_ref
+        SELECT p.id, p.keeper, p.amount_c, p.pledged_at, m.callsign, m.avatar_ref
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.keeper
         WHERE p.enterprise = ? AND p.released_at IS NULL
@@ -4261,7 +4244,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
         keeper: r.keeper,
         callsign: r.callsign,
         avatarUrl: avatarUrlOf(r.keeper, r.avatar_ref),
-        amount: Number(r.amount),
+        amount_c: Number(r.amount_c),
         pledgedAt: r.pledged_at,
     }));
 }
@@ -4295,7 +4278,7 @@ export function getEnterprisePledgesForReader(enterprisePubkey: string, reader: 
     keeper: string;
     callsign: string;
     avatarUrl: string | null;
-    amount: number;
+    amount_c: number;
     pledgedAt: string | null;
 }> {
     const pledges = getEnterprisePledges(enterprisePubkey);
@@ -4304,8 +4287,8 @@ export function getEnterprisePledgesForReader(enterprisePubkey: string, reader: 
     const known = pledges.filter(isKnown);
     const named = pledges.filter(p => !isKnown(p));
     if (known.length === 0) return named;
-    const amount = Math.round(known.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
-    return [...named, { id: KNOWN_BACKING_ENTRY_ID, kind: 'known', keeper: '', callsign: '', avatarUrl: null, amount, pledgedAt: null }];
+    const amount = (known.reduce((sum, p) => sum + p.amount_c, 0));
+    return [...named, { id: KNOWN_BACKING_ENTRY_ID, kind: 'known', keeper: '', callsign: '', avatarUrl: null, amount_c: amount, pledgedAt: null }];
 }
 
 /**
@@ -4318,11 +4301,11 @@ export function treasuryKeepersForReader(treasuryPubkey: string, reader: Backing
     const keepers = treasuryKeepers(treasuryPubkey);
     if (reader.nodeAdmin) return keepers;
     const named = new Map((db.prepare(`
-        SELECT keeper, SUM(amount) AS total FROM enterprise_pledges
+        SELECT keeper, SUM(amount_c) AS total FROM enterprise_pledges
         WHERE enterprise = ? AND released_at IS NULL AND id NOT LIKE 'known:%'
         GROUP BY keeper
-    `).all(treasuryPubkey) as { keeper: string; total: number }[]).map(r => [r.keeper, Math.round(Number(r.total) * 100) / 100]));
-    return keepers.map(k => k.publicKey === reader.pubkey ? k : { ...k, backing: named.get(k.publicKey) ?? 0 });
+    `).all(treasuryPubkey) as { keeper: string; total: number }[]).map(r => [r.keeper, (Number(r.total))]));
+    return keepers.map(k => k.publicKey === reader.pubkey ? k : { ...k, backing_c: named.get(k.publicKey) ?? 0 });
 }
 
 /**
@@ -4342,11 +4325,11 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
     enterprise: string;
     callsign: string;
     avatarUrl: string | null;
-    amount: number;
+    amount_c: number;
     pledgedAt: string;
 }> {
     return (db.prepare(`
-        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_ref
+        SELECT p.id, p.enterprise, p.amount_c, p.pledged_at, m.callsign, m.avatar_ref
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.enterprise
         WHERE p.keeper = ? AND p.released_at IS NULL
@@ -4356,7 +4339,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
         enterprise: r.enterprise,
         callsign: r.callsign,
         avatarUrl: avatarUrlOf(r.enterprise, r.avatar_ref),
-        amount: Number(r.amount),
+        amount_c: Number(r.amount_c),
         pledgedAt: r.pledged_at,
     }));
 }
@@ -4369,7 +4352,7 @@ export function pledgeEnterpriseBacking(
     enterprisePubkey: string,
     keeperPubkey: string,
     amount: number
-): { id: string; enterprise: string; keeper: string; amount: number; pledgedAt: string } {
+): { id: string; enterprise: string; keeper: string; amount_c: number; pledgedAt: string } {
     assertPledgeWritable();
     const res = db.transaction(() => {
         const t = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -4390,8 +4373,9 @@ export function pledgeEnterpriseBacking(
             throw new Error(word('You are not an authorized keeper of this enterprise'));
         }
 
-        const parsedAmount = Number(amount);
-        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        // Whole hundredths above 0 (every boundary asks isHundredths; the routes read it through money-body.ts).
+        const parsedAmount = amount;
+        if (!isHundredths(parsedAmount) || parsedAmount <= 0) {
             throw new Error(word('Pledge amount must be a positive number'));
         }
 
@@ -4403,9 +4387,8 @@ export function pledgeEnterpriseBacking(
         const pledgeId = insertPledgeRows(keeperPubkey, enterprisePubkey, earnedPart, knownPart, pledgedAt);
         if (knownPart > 0) assertKeeperOwnDebtCovered(keeperPubkey);
 
-        if (clearOpeningLineOncePledged(enterprisePubkey)) broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
 
-        return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
+        return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount_c: pledgeToAdd, pledgedAt };
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
@@ -4428,7 +4411,7 @@ export function releaseEnterpriseBacking(
         if (!t?.is_treasury) throw new Error(word('Not an enterprise'));
 
         const activeRow = db.prepare(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+            "SELECT COALESCE(SUM(amount_c), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
         ).get(keeperPubkey, enterprisePubkey) as any;
         const currentKeeperPledge = Number(activeRow?.total || 0);
 
@@ -4450,7 +4433,7 @@ export function releaseEnterpriseBacking(
         toRelease = Math.min(toRelease, currentKeeperPledge);
 
         // Covenant check: enterprise balance deficit
-        const balance = getBalance(enterprisePubkey).balance;
+        const balance = getBalance(enterprisePubkey).balance_c;
         const deficit = Math.max(0, -balance);
 
         const remainingPledge = currentKeeperPledge - toRelease;
@@ -4478,7 +4461,7 @@ export function releaseEnterpriseBacking(
         // earned pledges + known pledges as the floor counts them, whichever is bigger); refused, the transaction writes nothing.
         const newAllowance = engine.enterpriseAllowance(db, enterprisePubkey).allowance;
         if (newAllowance < deficit) {
-            throw new Error(tr('Cannot release backing: enterprise is in deficit ({deficit} beans) and remaining allowance ({allowance} beans) would not cover it', { deficit, allowance: newAllowance }));
+            throw new Error(tr('Cannot release backing: enterprise is in deficit ({deficit} beans) and remaining allowance ({allowance} beans) would not cover it', { deficit: formatHundredths(deficit, 'en'), allowance: formatHundredths(newAllowance, 'en') }));
         }
 
         return { releasedAmount: toRelease, remainingPledge };
@@ -4567,21 +4550,22 @@ export function requestToJoinEnterprise(
         throw new Error(word('A pending request already exists for this enterprise'));
     }
 
-    const parsedAmount = Number(pledgedBacking);
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+    // Whole hundredths, 0 or more (the route reads it with optionalHundredthsOf; every other caller is asked the same here).
+    const parsedAmount = pledgedBacking;
+    if (!isHundredths(parsedAmount) || parsedAmount < 0) {
         throw new Error(word('Pledge amount must be non-negative'));
     }
 
     const available = getAvailableBacking(memberPubkey);
     if (parsedAmount > available) {
-        throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({available} available to back across all enterprises)', { amount: parsedAmount, available }));
+        throw new Error(tr('Pledge amount ({amount}) exceeds available earned credit ({available} available to back across all enterprises)', { amount: formatHundredths(parsedAmount, 'en'), available: formatHundredths(available, 'en') }));
     }
 
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
     db.prepare(`
-        INSERT INTO enterprise_keeper_requests (id, enterprise_pubkey, member_pubkey, pledged_backing, status, created_at)
+        INSERT INTO enterprise_keeper_requests (id, enterprise_pubkey, member_pubkey, pledged_backing_c, status, created_at)
         VALUES (?, ?, ?, ?, 'pending', ?)
     `).run(id, enterprisePubkey, memberPubkey, parsedAmount, now);
 
@@ -4603,7 +4587,7 @@ export function requestToJoinEnterprise(
  */
 export function getKeeperRequests(enterprisePubkey: string, filterStatus?: string): KeeperJoinRequest[] {
     let sql = `
-        SELECT r.id, r.enterprise_pubkey, r.member_pubkey, r.pledged_backing, r.status,
+        SELECT r.id, r.enterprise_pubkey, r.member_pubkey, r.pledged_backing_c, r.status,
                r.created_at, r.decided_at, r.decided_by, m.callsign, m.avatar_ref
         FROM enterprise_keeper_requests r
         JOIN members m ON m.public_key = r.member_pubkey
@@ -4623,7 +4607,7 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
 
     return (db.prepare(sql).all(...params) as any[]).map(r => {
         const trust = getMemberTrustProfile(r.member_pubkey);
-        const pledged = Number(r.pledged_backing);
+        const pledged = Number(r.pledged_backing_c);
         return {
             id: r.id,
             enterprisePubkey: r.enterprise_pubkey,
@@ -4705,7 +4689,7 @@ function applicantCanBackPledge(_enterprisePubkey: string, memberPubkey: string,
     const fits = pledged <= earnedRoom + engine.knownPledgeRoom(db, memberPubkey);
     // Split as splitNewPledge does: earned credit first, then the known grant.
     const knownPart = Math.max(0, pledged - Math.min(pledged, earnedRoom));
-    const covered = roundedBalance(memberPubkey) >= usableFloorWithKnownPledge(memberPubkey, knownPart);
+    const covered = ledger.getAccount(memberPubkey).balance_c >= usableFloorWithKnownPledge(memberPubkey, knownPart);
     return !blocked && fits && (knownPart <= 0 || covered);
 }
 
@@ -4747,7 +4731,7 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
     // `backing` records the figure they pledged as they joined, earned and known together, for the keepers list. The pledge
     // itself is the rows written below, which every floor reads; nothing keeps this figure up after a release or a top-up.
     db.prepare(`
-        INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
+        INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing_c)
         VALUES (?, ?, 'keeper', ?, ?)
     `).run(enterprisePubkey, memberPubkey, grantedBy, pledged);
     engine.keepersChanged(db, enterprisePubkey);
@@ -4768,7 +4752,6 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
         insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
         if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey, APPLICANT_STANDING_REFUSAL);
 
-        clearOpeningLineOncePledged(enterprisePubkey);
     }
 }
 
@@ -4789,7 +4772,7 @@ function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): v
  * the scheduler binds the applicant when the window ends, re-checking their pledge then.
  */
 export function approveKeeperRequest(requestId: string, actorPubkey: string): {
-    ok: true; keeper: string; backing: number; applied: boolean; change: KeeperChangeInfo | null;
+    ok: true; keeper: string; backing_c: number; applied: boolean; change: KeeperChangeInfo | null;
 } {
     assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
@@ -4803,7 +4786,7 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
         throw new Error(word('This request is already approved and waiting out its objection window'));
     }
 
-    const pledged = Number(req.pledged_backing || 0);
+    const pledged = Number(req.pledged_backing_c || 0);
     assertApplicantStillEligible(req.enterprise_pubkey, req.member_pubkey, pledged);
 
     const actorIsKeeper = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
@@ -4822,17 +4805,17 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
             bindApprovedKeeper(req.enterprise_pubkey, req.member_pubkey, pledged, actorPubkey);
         })();
         broadcastKeeperBound(req.enterprise_pubkey, req.member_pubkey);
-        return { ok: true, keeper: req.member_pubkey, backing: pledged, applied: true, change: null };
+        return { ok: true, keeper: req.member_pubkey, backing_c: pledged, applied: true, change: null };
     }
 
     const changeId = crypto.randomUUID();
     const appliesAt = new Date(Date.now() + KEEPER_CHANGE_OBJECTION_MS).toISOString();
     db.prepare(`
-        INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, request_id, pledged_backing, proposed_by, status, created_at, applies_at)
+        INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, request_id, pledged_backing_c, proposed_by, status, created_at, applies_at)
         VALUES (?, ?, 'add', ?, ?, ?, ?, 'pending', ?, ?)
     `).run(changeId, req.enterprise_pubkey, req.member_pubkey, requestId, pledged, actorPubkey, now, appliesAt);
     broadcast({ type: 'enterprise_keeper_change_proposed', enterprisePubkey: req.enterprise_pubkey, changeId, kind: 'add', memberPubkey: req.member_pubkey, appliesAt });
-    return { ok: true, keeper: req.member_pubkey, backing: pledged, applied: false, change: getKeeperChange(changeId) };
+    return { ok: true, keeper: req.member_pubkey, backing_c: pledged, applied: false, change: getKeeperChange(changeId) };
 }
 
 /**
@@ -4900,7 +4883,7 @@ function toKeeperChangeInfo(r: any): KeeperChangeInfo {
         memberPubkey: r.member_pubkey,
         memberCallsign: r.member_callsign || r.member_pubkey.slice(0, 8),
         requestId: r.request_id ?? null,
-        pledgedBacking: Number(r.pledged_backing || 0),
+        pledgedBacking: Number(r.pledged_backing_c || 0),
         proposedBy: r.proposed_by,
         proposedByCallsign: r.proposer_callsign ?? null,
         status: r.status,
@@ -4946,7 +4929,7 @@ function boundNamedPledge(enterprisePubkey: string, memberPubkey: string, boundF
     const first = db.prepare('SELECT MIN(pledged_at) AS at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at >= ?')
         .get(enterprisePubkey, memberPubkey, boundFrom) as { at: string | null } | undefined;
     if (!first?.at) return 0;
-    const row = db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at = ? AND id NOT LIKE 'known:%'")
+    const row = db.prepare("SELECT COALESCE(SUM(amount_c), 0) AS total FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at = ? AND id NOT LIKE 'known:%'")
         .get(enterprisePubkey, memberPubkey, first.at) as { total: number };
     return Math.min(pledged, Number(row.total));
 }
@@ -4971,7 +4954,7 @@ function keeperPledgeForReader(
     const named = j.open
         ? Math.min(j.pledged, earnedPledgeRoom(j.memberPubkey))
         : boundNamedPledge(j.enterprisePubkey, j.memberPubkey, j.boundFrom, j.pledged);
-    return { pledgedBacking: Math.round(named * 100) / 100, namedBackingOnly: true };
+    return { pledgedBacking: named, namedBackingOnly: true };
 }
 
 /** A keeper change as `reader` may read it: an addition's pledge by keeperPledgeForReader. */
@@ -5062,7 +5045,7 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
     const now = new Date(nowMs).toISOString();
     const appliesAt = new Date(nowMs + KEEPER_CHANGE_OBJECTION_MS).toISOString();
     db.prepare(`
-        INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, pledged_backing, proposed_by, status, created_at, applies_at)
+        INSERT INTO enterprise_keeper_changes (id, enterprise_pubkey, kind, member_pubkey, pledged_backing_c, proposed_by, status, created_at, applies_at)
         VALUES (?, ?, 'remove', ?, 0, ?, 'pending', ?, ?)
     `).run(changeId, enterprisePubkey, memberPubkey, actorPubkey, now, appliesAt);
     broadcast({ type: 'enterprise_keeper_change_proposed', enterprisePubkey, changeId, kind: 'remove', memberPubkey, appliesAt });
@@ -5117,12 +5100,12 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             if (!isLeadOrSoleKeeperOrAdmin(c.enterprise_pubkey, c.proposed_by)) throw new KeeperChangeRefused(word('The keeper who made this change is no longer the lead'));
 
             if (c.kind === 'add') {
-                assertApplicantStillEligible(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing || 0));
+                assertApplicantStillEligible(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing_c || 0));
                 if (c.request_id) {
                     db.prepare(`UPDATE enterprise_keeper_requests SET status = 'approved', decided_at = ?, decided_by = ?
                                 WHERE id = ? AND status = 'pending'`).run(nowIso, c.proposed_by, c.request_id);
                 }
-                bindApprovedKeeper(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing || 0), c.proposed_by);
+                bindApprovedKeeper(c.enterprise_pubkey, c.member_pubkey, Number(c.pledged_backing_c || 0), c.proposed_by);
             } else {
                 const target = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
                     .get(c.enterprise_pubkey, c.member_pubkey) as any;
@@ -5213,7 +5196,7 @@ export function keeperRemovalByVoteRefusal(enterprisePubkey: string, memberPubke
     if (op.role === 'lead') return 'The lead keeper is replaced by a vote, not removed';
     if (keeperBindingCount(enterprisePubkey) <= 1) return 'They are the only keeper left';
     const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
-    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance);
+    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance_c);
     if (pledge > 0 && allowanceWithoutKeeper(enterprisePubkey, memberPubkey) < deficit) {
         return 'Not yet: their pledge is part of what covers this enterprise\'s debt. They can be removed once the debt is '
             + 'covered without it.';
@@ -5271,14 +5254,14 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     }
 
     const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
-    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance);
+    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance_c);
     const othersCover = allowanceWithoutKeeper(enterprisePubkey, memberPubkey);
     if (pledge > 0 && othersCover < deficit) {
-        const gap = Math.round((deficit - othersCover) * 100) / 100;
-        const dr = Math.round(deficit * 100) / 100;
-        const oc = Math.round(othersCover * 100) / 100;
-        const inDebt = tr('This enterprise is {debt} beans in debt and your pledge is part of what covers it.', { debt: dr });
-        const whenFree = tr('You can step down once the debt is down to {covered} beans, or once the other keepers pledge {gap} beans more.', { covered: oc, gap });
+        const gap = ((deficit - othersCover));
+        const dr = deficit;
+        const oc = othersCover;
+        const inDebt = tr('This enterprise is {debt} beans in debt and your pledge is part of what covers it.', { debt: formatHundredths(dr, 'en') });
+        const whenFree = tr('You can step down once the debt is down to {covered} beans, or once the other keepers pledge {gap} beans more.', { covered: formatHundredths(oc, 'en'), gap: formatHundredths(gap, 'en') });
         throw new Error(`${inDebt} ${whenFree}`);
     }
 
@@ -5783,7 +5766,7 @@ export function createPost(
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
     // number of Beans never reaches a listing, whichever route made it.
-    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng, tags: options?.tags, freeTags: options?.freeTags };
+    const postFields: PostFieldsIn = { title, description, category, price_c: credits, priceType, lat, lng, tags: options?.tags, freeTags: options?.freeTags };
     assertPostFields(postFields, 'create');
     if (options?.tags !== undefined) options = { ...options, tags: postFields.tags };
     if (options?.freeTags !== undefined) options = { ...options, freeTags: postFields.freeTags };
@@ -5851,7 +5834,7 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
     const storedText = db.prepare('SELECT title, description, category, tags, free_tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
-    if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
+    if (updates.price_c !== undefined) updates = { ...updates, price_c: beansOffPrice(updates.price_c) };
     // A keeper may edit their enterprise's Offer or Need signed with their own key: the signed caller only, by the rule the
     // enterprise's create and remove routes use.
     const keeps = actorPubkey ? (enterprise: string) => isTreasuryKey(enterprise) && canOperateTreasury(actorPubkey, enterprise) : undefined;
@@ -5860,8 +5843,9 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
 
 /**
  * A post's Beans price, on a node whose `beans` switch is off: none. Refused rather than quietly dropped, so an
- * author never believes they posted a price nobody will see; anything that isn't a price is stored as 0. Every
- * route that makes or edits a post comes through createPost/updatePost (marketplace, treasury, events).
+ * author never believes they posted a price nobody will see; a price of 0 (or none) is stored as 0. A price that isn't
+ * whole hundredths never gets here: engine/post-fields.ts isListingPrice refuses it first. Every route that makes or
+ * edits a post comes through createPost/updatePost (marketplace, treasury, events).
  */
 function beansOffPrice(credits: unknown): number {
     if (getProfileSwitches().beans) return credits as number;
@@ -5914,23 +5898,23 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
             }
         }
 
-        const { balance } = getBalance(enterprisePubkey);
-        const trow = db.prepare('SELECT earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
-        const earnedSurplus = Number(trow?.earned_surplus) || 0;
+        const { balance_c: balance } = getBalance(enterprisePubkey);
+        const trow = db.prepare('SELECT earned_surplus_c FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+        const earnedSurplus = Number(trow?.earned_surplus_c) || 0;
 
         // Condition: positive balance AND sufficient earned surplus (Rule 5 & Rule 6)
-        if (balance >= claim.amount && earnedSurplus >= claim.amount && balance - claim.amount >= 0) {
+        if (balance >= claim.amount_c && earnedSurplus >= claim.amount_c && balance - claim.amount_c >= 0) {
             let success = false;
             // Whether paying it closed its listing (a one-off one comes off the board).
             let listingDone = false;
             try {
                 success = conservingTransaction(() => {
                     const memo = `Deferred wage claim payout for ${claim.post_id || 'keeper work'}`;
-                    const txn = transfer(enterprisePubkey, claim.keeper_pubkey, claim.amount, memo, 'escrow', false);
+                    const txn = transfer(enterprisePubkey, claim.keeper_pubkey, claim.amount_c, memo, 'escrow', false);
                     if (!txn) return false;
 
-                    db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
-                        .run(claim.amount, enterprisePubkey);
+                    db.prepare('UPDATE members SET earned_surplus_c = COALESCE(earned_surplus_c, 0) - ? WHERE public_key = ?')
+                        .run(claim.amount_c, enterprisePubkey);
                     db.prepare("UPDATE deferred_wage_claims SET status = 'paid', paid_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
                         .run(claim.id);
 
@@ -5938,8 +5922,8 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         const tx = db.prepare('SELECT status FROM marketplace_transactions WHERE id = ?').get(claim.transaction_id) as any;
                         if (tx?.status === 'completed') {
                             // Extra hours adjustment: base hold was already completed, increment credits by deferred diff
-                            db.prepare("UPDATE marketplace_transactions SET credits = credits + ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-                                .run(claim.amount, claim.transaction_id);
+                            db.prepare("UPDATE marketplace_transactions SET amount_c = amount_c + ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+                                .run(claim.amount_c, claim.transaction_id);
                         } else {
                             db.prepare("UPDATE marketplace_transactions SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND status != 'completed'")
                                 .run(claim.transaction_id);
@@ -5965,7 +5949,7 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         claimId: claim.id,
                         enterprise: enterprisePubkey,
                         keeper: claim.keeper_pubkey,
-                        amount: claim.amount,
+                        amount_c: claim.amount_c,
                     }, deferredWageRecipients(enterprisePubkey, claim.keeper_pubkey));
                 } catch { }
                 // deferred_wage_paid goes to its keeper and the enterprise's keepers only; every other socket hears the
@@ -5983,15 +5967,15 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
  * When balance exceeds ceiling, the excess sweeps to COMMONS_POOL via moveToCommons inside a conservingTransaction.
  */
 export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
-    const row = db.prepare('SELECT working_capital_ceiling, is_treasury, earned_surplus FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
-    if (row?.is_treasury === 1 && row.working_capital_ceiling !== null && row.working_capital_ceiling !== undefined) {
-        const ceiling = Number(row.working_capital_ceiling);
+    const row = db.prepare('SELECT working_capital_ceiling_c, is_treasury, earned_surplus_c FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
+    if (row?.is_treasury === 1 && row.working_capital_ceiling_c !== null && row.working_capital_ceiling_c !== undefined) {
+        const ceiling = Number(row.working_capital_ceiling_c);
         if (ceiling >= 0) {
-            const { balance } = getBalance(enterprisePubkey);
-            const earnedSurplus = Math.max(0, Number(row.earned_surplus ?? 0));
+            const { balance_c: balance } = getBalance(enterprisePubkey);
+            const earnedSurplus = Math.max(0, Number(row.earned_surplus_c ?? 0));
             // THE SWEEP TAKES ONLY EARNED SURPLUS, NEVER GRANT MONEY (docs/the-commons.md §2.4 Rule 7).
             // sweepable = max(0, min(balance − working_capital_ceiling, earned_surplus))
-            const excess = Math.round(Math.max(0, Math.min(balance - ceiling, earnedSurplus)) * 100) / 100;
+            const excess = (Math.max(0, Math.min(balance - ceiling, earnedSurplus)));
             if (excess > 0) {
                 let sweptTxn: Transaction | null = null;
                 try {
@@ -5999,9 +5983,9 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
                         const txn = moveToCommons(
                             enterprisePubkey,
                             excess,
-                            `Surplus swept to Commons above working capital ceiling (${ceiling} Beans)`
+                            `Surplus swept to Commons above working capital ceiling (${formatHundredths(ceiling, 'en')} Beans)`
                         );
-                        db.prepare('UPDATE members SET earned_surplus = MAX(0, COALESCE(earned_surplus, 0) - ?) WHERE public_key = ?')
+                        db.prepare('UPDATE members SET earned_surplus_c = MAX(0, COALESCE(earned_surplus_c, 0) - ?) WHERE public_key = ?')
                             .run(excess, enterprisePubkey);
                         return txn;
                     });
@@ -6057,13 +6041,13 @@ const forgetAtBatchEnd = (memberPubkey: string) => whenPostCommitBatchOver(() =>
  * all of them off. Writes only a shield that gets smaller.
  */
 function shrinkWaitingShield(memberPubkey: string, received: number): void {
-    const held = db.prepare(`SELECT id FROM names_debts WHERE repaying_pubkey = ? AND status = 'open' AND hardship_held > 0`).get(memberPubkey) as { id: string } | undefined;
+    const held = db.prepare(`SELECT id FROM names_debts WHERE repaying_pubkey = ? AND status = 'open' AND hardship_held_c > 0`).get(memberPubkey) as { id: string } | undefined;
     if (!held) return;
     const brought = (receivedWaiting.get(memberPubkey) ?? 0) + Math.max(0, received);
     receivedWaiting.set(memberPubkey, brought);
     forgetAtBatchEnd(memberPubkey);
-    const left = Math.max(0, getBalance(memberPubkey).balance - brought);
-    db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ? AND hardship_held > ?').run(left, held.id, left);
+    const left = Math.max(0, getBalance(memberPubkey).balance_c - brought);
+    db.prepare('UPDATE names_debts SET hardship_held_c = ? WHERE id = ? AND hardship_held_c > ?').run(left, held.id, left);
 }
 
 export function sweepRepayment(memberPubkey: string, received = 0): number {
@@ -6072,31 +6056,31 @@ export function sweepRepayment(memberPubkey: string, received = 0): number {
         shrinkWaitingShield(memberPubkey, received);
         return 0;
     }
-    const { balance } = getBalance(memberPubkey);
+    const { balance_c: balance } = getBalance(memberPubkey);
     // Several payments to one member in one transaction run their sweeps one after another, after it commits: the first
     // already swept what the later ones brought, so a later one must not count that again as money it brought (it would
     // read the grant as spent and sweep it). Cleared when that batch of after-commit hooks is over (db.ts), never later.
     const ahead = sweptAhead.get(memberPubkey) ?? 0;
     const own = Math.max(0, received - ahead);
-    const shield = Math.max(0, Math.min(Number(debt.hardship_held) || 0, balance - own));
-    // Down to the cent, never up: rounding up would take a part of a cent below 0.
-    const amount = Math.floor(Math.max(0, Math.min(balance - shield, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
+    const shield = Math.max(0, Math.min(Number(debt.hardship_held_c) || 0, balance - own));
+    // Whole hundredths: never more than they hold above the shield, never more than is left on the debt.
+    const amount = Math.max(0, Math.min(balance - shield, Number(debt.amount_c) - Number(debt.repaid_c)));
     if (!(amount > 0)) return 0;
     try {
         conservingTransaction(() => {
             const txn = moveToCommons(memberPubkey, amount, 'Working off a debt to the Commons', { allowMemberDebit: true });
             if (!txn) throw new Error('the Commons refused the repayment');
             // The same `repaid` a payment made for the debt adds to (engine/names-debts.ts countDebtPayment): never past the amount.
-            const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
+            const counted = db.prepare(`UPDATE names_debts SET repaid_c = repaid_c + ? WHERE id = ? AND status = 'open' AND repaid_c + ? <= amount_c`)
                 .run(amount, debt.id, amount);
             if (counted.changes !== 1) throw new Error('the debt is no longer open, or less is left on it');
             // What is left of the grant: what was spent of it is gone from the shield.
-            db.prepare('UPDATE names_debts SET hardship_held = ? WHERE id = ?').run(shield, debt.id);
-            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?, hardship_held = 0
-                        WHERE id = ? AND status = 'open' AND repaid >= amount`).run(new Date().toISOString(), txn.id, debt.id);
+            db.prepare('UPDATE names_debts SET hardship_held_c = ? WHERE id = ?').run(shield, debt.id);
+            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?, hardship_held_c = 0
+                        WHERE id = ? AND status = 'open' AND repaid_c >= amount_c`).run(new Date().toISOString(), txn.id, debt.id);
         });
     } catch (err) {
-        console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
+        console.error(`[NamesDebts] Failed to sweep ${formatHundredths(amount, 'en')} Beans of a repayment:`, err);
         return 0;
     }
     const over = amount - own;
@@ -6106,7 +6090,7 @@ export function sweepRepayment(memberPubkey: string, received = 0): number {
         forgetAtBatchEnd(memberPubkey);
     }
     // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
-    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
+    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount_c: amount }, [memberPubkey]); } catch { }
     return amount;
 }
 
@@ -6120,7 +6104,7 @@ export function sweepRepayment(memberPubkey: string, received = 0): number {
  * The checks run before the payment's conservingTransaction (a refusal is no ledger rebuild); the id is written inside it.
  */
 export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown, requestId?: unknown): PaidToCommons {
-    const request = moneyRequestOf(memberPubkey, PAY_COMMONS_ROUTE, requestId, { amount, debtId });
+    const request = moneyRequestOf(memberPubkey, PAY_COMMONS_ROUTE, requestId, { amount_c: amount, debtId });
     if (request) {
         const first = priorAnswer<PaidToCommons>(request);
         if (first) return first;
@@ -6129,25 +6113,25 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
         throw Object.assign(new Error(word('Only an active member pays the Commons.')), { status: 403 });
     }
-    if (!isWholeCents(amount)) {
-        throw Object.assign(new Error(WHOLE_CENTS_ERROR), { status: 400 });
+    // Whole hundredths, at least one (the wire's amount_c): a float, a string, 0, a negative or the old `amount` (which
+    // leaves amount_c undefined) is refused as every money body is, 400 amount_c_required (money-body.ts).
+    if (!isHundredths(amount) || amount < 1) {
+        throw Object.assign(new Error(AMOUNT_C_REQUIRED_TEXT), { status: 400, code: AMOUNT_C_REQUIRED });
     }
-    // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
-    const beans = Math.round(amount * 100) / 100;
+    const beans = amount;
     const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans);
-    // The same test as ledger.moveToCommons's guard inside the transaction, on the raw balance (decay leaves fractions of a
-    // cent; getBalance's is rounded): a refusal is here, in plain words, never a rollback and a ledger rebuild.
-    const raw = ledger.getAccount(memberPubkey).balance;
+    // The same test as ledger.moveToCommons's guard inside the transaction: a refusal is here, in plain words, never a
+    // rollback and a ledger rebuild.
+    const raw = ledger.getAccount(memberPubkey).balance_c;
     if (raw - beans < 0) {
-        const held = Math.max(0, Math.floor(raw * 100) / 100);
-        throw Object.assign(new Error(tr('You hold {held} Beans: you can pay the Commons only what you hold.', { held })), { status: 409 });
+        throw Object.assign(new Error(tr('You hold {held} Beans: you can pay the Commons only what you hold.', { held: formatHundredths(Math.max(0, raw), 'en') })), { status: 409 });
     }
     const answer = conservingTransaction(() => {
         const t = moveToCommons(memberPubkey, beans, PAID_TO_COMMONS_MEMO, { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error(word('The Commons refused the payment.')), { status: 409 });
         // Made for a debt: it pays that much off at once, and settles the debt when nothing is left.
         const leftAfter = debt ? countDebtPayment(debt.id, t.id, memberPubkey, beans) : undefined;
-        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount, ...(debt ? { left: debt.left, leftAfter, settled: leftAfter === 0 } : {}) };
+        const paid: PaidToCommons = { transactionId: t.id, amount_c: t.amount_c, ...(debt ? { left_c: debt.left, leftAfter_c: leftAfter, settled: leftAfter === 0 } : {}) };
         if (request) recordAnswer(request, paid);
         return paid;
     });
@@ -6161,9 +6145,10 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
  */
 export interface PaidToCommons {
     transactionId: string;
-    amount: number;
-    left?: number;
-    leftAfter?: number;
+    /** Whole hundredths, as every money field here. */
+    amount_c: number;
+    left_c?: number;
+    leftAfter_c?: number;
     settled?: boolean;
 }
 const PAY_COMMONS_ROUTE = 'POST /api/commons/pay';
@@ -6185,7 +6170,7 @@ export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): 
     pausedFloorSnapshot?: number;
     alreadyPaused?: boolean;
 } {
-    const member = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    const member = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot_c, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!member || !member.is_treasury) throw new Error(word('Not an enterprise'));
     if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
     if (!canAdministerTreasury(actorPubkey, enterprisePubkey)) {
@@ -6197,7 +6182,7 @@ export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): 
             ok: true,
             paused: true,
             pausedAt: member.paused_at,
-            pausedFloorSnapshot: member.paused_floor_snapshot != null ? Number(member.paused_floor_snapshot) : undefined,
+            pausedFloorSnapshot: member.paused_floor_snapshot_c != null ? Number(member.paused_floor_snapshot_c) : undefined,
             alreadyPaused: true,
         };
     }
@@ -6209,7 +6194,7 @@ export function pauseEnterprise(enterprisePubkey: string, actorPubkey: string): 
     const now = new Date().toISOString();
     db.prepare(`
         UPDATE members
-        SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot = ?
+        SET paused = 1, paused_at = ?, paused_by = ?, paused_floor_snapshot_c = ?
         WHERE public_key = ?
     `).run(now, actorPubkey, snapshot, enterprisePubkey);
 
@@ -6253,7 +6238,7 @@ export function resumeEnterprise(enterprisePubkey: string, actorPubkey: string):
 
     db.prepare(`
         UPDATE members
-        SET paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
+        SET paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot_c = NULL
         WHERE public_key = ?
     `).run(enterprisePubkey);
 
@@ -6383,7 +6368,7 @@ export function initiateWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error(word('Only the lead keeper may initiate wind-up'));
     }
 
-    const currentBal = getBalance(enterprisePubkey).balance;
+    const currentBal = getBalance(enterprisePubkey).balance_c;
     if (currentBal < 0) {
         throw new Error(word('Cannot wind up an enterprise in deficit — debt must be resolved or written off first'));
     }
@@ -6497,7 +6482,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         throw new Error(word('Cannot finalise wind-up before 7-day grace period has elapsed'));
     }
 
-    const currentBal = getBalance(enterprisePubkey).balance;
+    const currentBal = getBalance(enterprisePubkey).balance_c;
     if (currentBal < 0) {
         throw new Error(word('Cannot wind up an enterprise in deficit — debt must be resolved or written off first'));
     }
@@ -6523,7 +6508,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
     const now = new Date().toISOString();
 
     conservingTransaction(() => {
-        const bal = ledger.getAccount(enterprisePubkey).balance;
+        const bal = ledger.getAccount(enterprisePubkey).balance_c;
         if (bal > 0) {
             const swept = moveToCommons(enterprisePubkey, bal, `Final wind-up sweep from ${enterprisePubkey.slice(0, 8)}`, { authSigner: actorPubkey });
             if (!swept) throw new Error(word('Failed to sweep remaining balance to Commons'));
@@ -6558,8 +6543,7 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
         db.prepare(`
             UPDATE members
             SET status = 'completed', wind_up_finalised_at = ?,
-                legacy_credit_floor = NULL,
-                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot = NULL
+                paused = 0, paused_at = NULL, paused_by = NULL, paused_floor_snapshot_c = NULL
             WHERE public_key = ?
         `).run(now, enterprisePubkey);
         if (hadLocation) {
@@ -6601,8 +6585,8 @@ export interface EnterpriseLedgerEntry {
     id: string;
     timestamp: string;
     direction: 'income' | 'spend';
-    amount: number;
-    fee: number;
+    amount_c: number;
+    fee_c: number;
     netAmount: number;
     counterparty: string;
     counterpartyName: string;
@@ -6628,7 +6612,7 @@ export interface EnterpriseLedgerResponse {
         purpose: string | null;
         status: string;
         paused: boolean;
-        balance: number;
+        balance_c: number;
     };
     period: {
         since: string | null;
@@ -6652,7 +6636,7 @@ export function getEnterpriseLedger(
     if (!member) throw new Error(word('Not an enterprise'));
 
     const allTxns = db.prepare(`
-        SELECT id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer
+        SELECT id, from_pubkey, to_pubkey, amount_c, fee_c, memo, timestamp, auth_signer
         FROM transactions
         WHERE from_pubkey = ? OR to_pubkey = ?
         ORDER BY timestamp ASC, rowid ASC
@@ -6692,11 +6676,11 @@ export function getEnterpriseLedger(
     for (const tx of allTxns) {
         const txTime = new Date(tx.timestamp).getTime();
         const isIncoming = tx.to_pubkey === enterprisePubkey;
-        const fee = Number(tx.tax_fee) || 0;
-        const gross = Number(tx.amount) || 0;
+        const fee = Number(tx.fee_c) || 0;
+        const gross = Number(tx.amount_c) || 0;
         const netAmount = isIncoming ? (gross - fee) : -gross;
 
-        running = Math.round((running + netAmount) * 100) / 100;
+        running = ((running + netAmount));
 
         const inPeriod = (!sinceTime || txTime >= sinceTime) && (!untilTime || txTime <= untilTime);
 
@@ -6717,9 +6701,9 @@ export function getEnterpriseLedger(
                 id: tx.id,
                 timestamp: tx.timestamp,
                 direction: isIncoming ? 'income' : 'spend',
-                amount: gross,
-                fee,
-                netAmount: Math.round(netAmount * 100) / 100,
+                amount_c: gross,
+                fee_c: fee,
+                netAmount: netAmount,
                 counterparty,
                 counterpartyName: resolveName(counterparty),
                 memo: tx.memo || '',
@@ -6735,7 +6719,7 @@ export function getEnterpriseLedger(
         periodEndingBalance = startingBalance;
     }
 
-    const currentBal = getBalance(enterprisePubkey).balance;
+    const currentBal = getBalance(enterprisePubkey).balance_c;
     const entries = opts?.limit ? filteredEntries.slice(-opts.limit) : filteredEntries;
 
     return {
@@ -6745,18 +6729,18 @@ export function getEnterpriseLedger(
             purpose: member.purpose ?? null,
             status: member.status ?? 'active',
             paused: member.paused === 1,
-            balance: currentBal,
+            balance_c: currentBal,
         },
         period: {
             since: opts?.since ?? null,
             until: opts?.until ?? null,
         },
         summary: {
-            totalIncome: Math.round(periodIncome * 100) / 100,
-            totalSpend: Math.round(periodSpend * 100) / 100,
-            netChange: Math.round((periodEndingBalance - startingBalance) * 100) / 100,
-            startingBalance: Math.round(startingBalance * 100) / 100,
-            endingBalance: Math.round(periodEndingBalance * 100) / 100,
+            totalIncome: periodIncome,
+            totalSpend: periodSpend,
+            netChange: ((periodEndingBalance - startingBalance)),
+            startingBalance: startingBalance,
+            endingBalance: periodEndingBalance,
             transactionCount: filteredEntries.length,
         },
         entries,
@@ -6830,7 +6814,7 @@ export function requestPost(postId: string, requesterPublicKey: string, hours?: 
     return requestPostEngine(getEscrowCb(), postId, requesterPublicKey, hours);
 }
 
-export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string }): MarketplaceTransaction | null {
+export function approvePostRequest(transactionId: string, authorPublicKey: string, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction | null {
     assertLedgerWritable();
     return approvePostRequestEngine(getEscrowCb(), transactionId, authorPublicKey, opts);
 }
@@ -6845,7 +6829,7 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string }): MarketplaceTransaction {
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction {
     assertLedgerWritable();
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
@@ -6862,6 +6846,18 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
 export function cancelPostTransaction(transactionId: string, cancellerPublicKey: string): MarketplaceTransaction | null {
     assertLedgerWritable();
     return cancelPostTransactionEngine(getEscrowCb(), transactionId, cancellerPublicKey);
+}
+
+// A standing deal's Stop and Extend (engine/standing-deals.ts): each writes the arrangement that bounds the node's payments,
+// so each refuses on a standby first, as every step of a trade does.
+export function stopStandingDeal(id: string, actor: string): Record<string, unknown> {
+    assertLedgerWritable();
+    return stopStandingDealEngine(getEscrowCb(), id, actor);
+}
+
+export function extendStandingDeal(id: string, actor: string, standing: StandingStart): Record<string, unknown> {
+    assertLedgerWritable();
+    return extendStandingDealEngine(getEscrowCb(), id, actor, standing);
 }
 
 export type { EscrowDisputeAction };
@@ -6881,7 +6877,7 @@ export function resolveEscrowDispute(
 export interface EscrowDisputeContext {
     id: string;
     postId: string;
-    credits: number;
+    amount_c: number;
     hours?: number;
     status: string;
     createdAt: string;
@@ -6905,7 +6901,7 @@ export interface EscrowDisputeContext {
         type: string;
         category: string;
         priceType: string;
-        credits: number;
+        price_c: number;
         authorPubkey: string;
         photos: string[];
     } | null;
@@ -6989,7 +6985,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     return {
         id: r.id,
         postId: r.post_id,
-        credits: r.credits,
+        amount_c: r.amount_c,
         hours: r.hours ?? undefined,
         status: r.status,
         createdAt: r.created_at,
@@ -7013,7 +7009,7 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
             type: r.post_type || 'offer',
             category: r.post_category || 'general',
             priceType: r.post_price_type || 'fixed',
-            credits: r.post_credits ?? r.credits,
+            price_c: r.post_price_c ?? r.amount_c,
             authorPubkey: r.post_author_pubkey || r.seller_pubkey,
             photos
         } : null,
@@ -7043,7 +7039,7 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
                p.type AS post_type,
                p.category AS post_category,
                p.price_type AS post_price_type,
-               p.credits AS post_credits,
+               p.price_c AS post_price_c,
                p.author_pubkey AS post_author_pubkey,
                p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
@@ -7092,7 +7088,7 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
                p.type AS post_type,
                p.category AS post_category,
                p.price_type AS post_price_type,
-               p.credits AS post_credits,
+               p.price_c AS post_price_c,
                p.author_pubkey AS post_author_pubkey,
                p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
@@ -7130,7 +7126,7 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 // ===================== COMMUNITY INFO =====================
 
-type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
+type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance_c: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
 
 interface CommunityCounts { memberCount: number; postCount: number; transactionCount: number }
 
@@ -7175,7 +7171,7 @@ function communityInfoWith(counts: CommunityCounts, publicKey?: string): Communi
     const { memberCount, postCount } = counts;
     // profile + features are additive: the apps read them to know what this node does; older apps ignore them.
     return {
-        memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
+        memberCount, postCount, transactionCount: txCount, commonsBalance_c: COMMONS_BALANCE,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         // `door` (config/door.ts) last, so older apps ignore it: who may invite here.
         profile: getNodeProfile(), features: { ...getNodeFeatures(), door: getDoor() },
@@ -7255,7 +7251,60 @@ export function getConversation(id: string): Conversation | undefined {
 }
 
 export function markConversationRead(pubkey: string, conversationId: string): void {
-    return markConversationReadEngine(pubkey, conversationId);
+    markConversationReadEngine(pubkey, conversationId);
+    // Opening a chat takes its notices off the bell, on every app the member has open.
+    markBellNoticesSeenWhere(pubkey, 'conversationId', [conversationId]);
+}
+
+/**
+ * One of the bell's socket events (@beanpool/core notice-bell.ts BELL_EVENTS) to the member's own sockets, found by the
+ * socket index's key (an announcement to every member is one lookup each, never every socket per member), and only those
+ * whose app said it reads them (`bell=1` on its connect, https-server.ts `_bell`): an app from before them takes any event
+ * it doesn't know for a doorbell, and an old phone runs a full sync for each. Never a visitor's socket. Never throws.
+ */
+function tellBell(pubkey: string, event: { type: string } & Record<string, unknown>): void {
+    try {
+        const msg = JSON.stringify(event);
+        for (const ws of wsClients.reachable([pubkey], null, 0)) {
+            if (!ws._bell || ws._visitor || ws._memberPubkey !== pubkey) continue;
+            try { ws.send(msg); } catch { wsClients.delete(ws); }
+        }
+    } catch { /* the app's next read catches up */ }
+}
+
+/** The bell's marks told to the member's own sockets, so every open app's count follows. */
+function toldBellSeen(pubkey: string, ids: string[]): string[] {
+    if (ids.length > 0) tellBell(pubkey, { type: 'push_notices_seen', ids });
+    return ids;
+}
+
+/**
+ * A member takes these of their own notices off the bell (a tap on the row or on its ✕: POST /api/notices/push/seen; a tap on
+ * its phone notification: GET /api/notices/push/:id). A kept notice's row marks its alert's kept copy too (engine/kept-notices.ts
+ * keptNoticeDetails), so the web app never shows that alert after.
+ */
+export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): string[] {
+    return afterBellMark(pubkey, markPushNoticesSeen(pubkey, ids));
+}
+
+/** Rows just marked: each kept alert's copy is marked with its row, and the member's sockets hear which. */
+function afterBellMark(pubkey: string, marked: string[]): string[] {
+    const kept = keptNoticeIdsOf(pubkey, marked);
+    if (kept.length > 0) markKeptNoticesSeen(pubkey, kept);
+    return toldBellSeen(pubkey, marked);
+}
+
+/**
+ * "Clear all" (POST /api/notices/push/seen { all: true }): every notice of the member's own off the bell at once, and each
+ * kept alert's copy with it, as a tap on a row does. Their sockets hear which, so every open app's count follows.
+ */
+export function markAllBellNoticesSeen(pubkey: string): string[] {
+    return afterBellMark(pubkey, markAllPushNoticesSeen(pubkey));
+}
+
+/** The member opened the thing these notices are about (a chat; a kept alert acknowledged): off the bell. */
+export function markBellNoticesSeenWhere(pubkey: string, field: 'conversationId' | 'noticeId', values: readonly string[]): string[] {
+    return toldBellSeen(pubkey, markPushNoticesSeenWhere(pubkey, field, values));
 }
 
 export function getUnreadCounts(pubkey: string): Record<string, number> {
@@ -7762,10 +7811,10 @@ export function getMemberStats(keys?: string[]): Record<string, { posts: number;
 export function getTradeTotals(): { deals: number; volume: number; cancelled: number } {
     const r = db.prepare(`SELECT
             COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS deals,
-            COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0) AS volume,
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_c ELSE 0 END), 0) AS volume,
             COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
         FROM marketplace_transactions`).get() as { deals: number; volume: number; cancelled: number };
-    return { deals: r.deals, volume: Math.round(r.volume * 100) / 100, cancelled: r.cancelled };
+    return { deals: r.deals, volume: r.volume, cancelled: r.cancelled };
 }
 
 export function dismissReport(reportId: string): boolean {
@@ -8165,7 +8214,7 @@ function healthBody(counts: HealthCounts, reportCount: number, watchdog: Watchdo
             last30Days: counts.last30Days,
             activeMemberCount: counts.activeMemberCount,
             inactiveMemberCount: counts.inactiveMemberCount,
-            commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
+            commonsBalance_c: COMMONS_BALANCE
         },
         reportCount,
         watchdog
@@ -8233,7 +8282,7 @@ export function getCommunityHealth(): CommunityHealth {
             flags.push({
                 type: 'wash_trading',
                 severity: 'alert',
-                description: `Wash trading detected: reciprocal flow ratio ${r.toFixed(3)} < 0.15 for pair ${callsignA} ↔ ${callsignB} (gross: ${gross.toFixed(1)})`,
+                description: `Wash trading detected: reciprocal flow ratio ${r.toFixed(3)} < 0.15 for pair ${callsignA} ↔ ${callsignB} (gross: ${formatHundredths(gross, 'en')} Beans)`,
                 members: [a, b]
             });
         }
@@ -8259,13 +8308,16 @@ export function getCommunityHealth(): CommunityHealth {
 
     // 3. Sybil Funnel: invitees purchasing from their inviter via marketplace
     try {
+        // The sums are whole hundredths; the owner's threshold is Beans (thresholds.sybilFunnelMinAmount, fractions allowed),
+        // so it is compared in hundredths, to the nearest one.
+        const funnelMin_c = Math.round(t.sybilFunnelMinAmount * HUNDREDTHS_PER_BEAN);
         // Primary: completed marketplace deals where buyer was invited by seller
         const funnelRows = db.prepare(`
-            SELECT 
+            SELECT
                 seller.public_key as farmer_pubkey,
                 seller.callsign as farmer_callsign,
                 COUNT(DISTINCT mt.buyer_pubkey) as puppet_count,
-                ROUND(SUM(mt.credits), 2) as total_funneled,
+                SUM(mt.amount_c) as total_funneled,
                 GROUP_CONCAT(DISTINCT buyer.callsign) as puppet_names,
                 GROUP_CONCAT(DISTINCT buyer.public_key) as puppet_keys
             FROM marketplace_transactions mt
@@ -8277,15 +8329,15 @@ export function getCommunityHealth(): CommunityHealth {
             GROUP BY seller.public_key
             HAVING puppet_count >= ?
                AND total_funneled >= ?
-        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, t.sybilFunnelMinAmount) as any[];
+        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, funnelMin_c) as any[];
 
         // Secondary: direct transfers (for Resident+ accounts that graduated past Ghost)
         const directFunnelRows = db.prepare(`
-            SELECT 
+            SELECT
                 inviter.public_key as farmer_pubkey,
                 inviter.callsign as farmer_callsign,
                 COUNT(DISTINCT txn.from_pubkey) as puppet_count,
-                ROUND(SUM(txn.amount), 2) as total_funneled,
+                SUM(txn.amount_c) as total_funneled,
                 GROUP_CONCAT(DISTINCT puppet.callsign) as puppet_names,
                 GROUP_CONCAT(DISTINCT puppet.public_key) as puppet_keys
             FROM transactions txn
@@ -8301,7 +8353,7 @@ export function getCommunityHealth(): CommunityHealth {
             GROUP BY inviter.public_key
             HAVING puppet_count >= ?
                AND total_funneled >= ?
-        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, t.sybilFunnelMinAmount) as any[];
+        `).all(`-${t.sybilFunnelWindowDays}`, t.sybilFunnelMinInvitees, funnelMin_c) as any[];
 
         // Merge & deduplicate by farmer
         const seen = new Set<string>();
@@ -8343,7 +8395,7 @@ export function getCommunityHealth(): CommunityHealth {
             flags.push({
                 type: 'sybil_funnel',
                 severity: 'alert',
-                description: `Invite funnel: ${row.puppet_count} invitees of "${row.farmer_callsign}" sent ${row.total_funneled}B back (${isolatedPuppets} with 0 other partners)`,
+                description: `Invite funnel: ${row.puppet_count} invitees of "${row.farmer_callsign}" sent ${formatHundredths(row.total_funneled, 'en')} Beans back (${isolatedPuppets} with 0 other partners)`,
                 members: [row.farmer_pubkey, ...(row.puppet_keys?.split(',') || [])]
             });
         }
@@ -8377,12 +8429,13 @@ export function getCommunityHealth(): CommunityHealth {
             const previous = previousMetricRow.metric_value;
             if (previous > 0) {
                 const growthRatio = (current - previous) / previous;
+                // The metric is whole hundredths (engine audit.ts: SUM(balance_c)), so the 500-Bean floor is beans(500).
                 const absoluteGrowth = current - previous;
-                if (growthRatio > 0.20 && absoluteGrowth >= 500) {
+                if (growthRatio > 0.20 && absoluteGrowth >= beans(500)) {
                     flags.push({
                         type: 'aggregate_spike',
                         severity: 'alert',
-                        description: `Aggregate credit spike: total negative balance increased by ${(growthRatio * 100).toFixed(1)}% (+${absoluteGrowth.toFixed(1)}B) in 24h`,
+                        description: `Aggregate credit spike: total negative balance increased by ${(growthRatio * 100).toFixed(1)}% (+${formatHundredths(absoluteGrowth, 'en')} Beans) in 24h`,
                         members: []
                     });
                 }
@@ -8547,18 +8600,6 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolea
 }
 
 /**
- * Admin: promote a member to (or demote from) the Elder tier. Pulls the SAME lever as a genesis
- * "Elder invite" — it sets the member's pre-seeded earned_credit, which lowers their credit floor
- * into the Elder band; tier follows from floor as usual (one source of truth, no separate role).
- * Grants Elder borrowing/gifting standing, but NOT password-admin powers (prune, delete,
- * announcements), which stay behind the admin password.
- *
- * Balance-safe: earned_credit is a borrowing *limit*, not a ledger balance. This makes no
- * transaction and mints/moves no beans — the member keeps their exact balance (positive
- * OR negative) and the double-entry books stay balanced. Granting only widens their credit
- * limit; revoking (back to 0) narrows it, leaving any balance untouched. Idempotent.
- */
-/**
  * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
  * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
  * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
@@ -8569,14 +8610,9 @@ export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     const granted = grantedCreditForTier(tier);
     // profile_updated_at too: the member directory carries the badge (earnedCredit), and a phone's delta read carries only
     // the rows whose profile_updated_at moved (engine getMemberDirectoryRows).
-    db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
+    db.prepare("UPDATE members SET earned_credit_c=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
-}
-
-// Back-compat wrapper: Elder is simply the top tier badge.
-export function adminSetElder(publicKey: string, granted: boolean): { ok: true } {
-    return adminSetTier(publicKey, granted ? 'Elder' : 'Newcomer');
 }
 
 /**
@@ -8650,7 +8686,8 @@ export function createTreasury(
     if (opts.leadKeeperPubkey && isOperatorSwitchedOff(opts.leadKeeperPubkey)) {
         throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     }
-    const line = Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.round(creditLine)));
+    // Whole hundredths: anything else is no line.
+    const line = isHundredths(creditLine) ? Math.max(0, Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, creditLine)) : 0;
     let ceiling: number | null = null;
     if (opts.workingCapitalCeiling !== undefined && opts.workingCapitalCeiling !== null) {
         const num = Number(opts.workingCapitalCeiling);
@@ -8697,14 +8734,13 @@ export function createTreasury(
         // invited_by/invite_code left NULL: a treasury is system-created, it has no inviter
         // (and invited_by is an FK to members — 'genesis' is not itself a member row).
         // Enterprise credit model: earned_surplus = 0, working_capital_ceiling = ceiling (docs/the-commons.md §2.4 Rules 6 & 7)
-        // Grandfather legacy floor: preserved if line > 0, otherwise derived from keepers' pledges.
         const signerVal = opts.locationAuthSigner || opts.leadKeeperPubkey || null;
         const now = new Date().toISOString();
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
-                    VALUES (?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(pubKeyHex, trimmed, now, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit_c, earned_surplus_c, working_capital_ceiling_c, purpose, goal_amount_c, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
+                    VALUES (?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, now, line, ceiling, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
         setMemberPhoto(db, pubKeyHex, avatar);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.leadKeeperPubkey) {
             const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
                         VALUES (?, ?, 'lead', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'creator')`).run(pubKeyHex, opts.leadKeeperPubkey);
@@ -8759,7 +8795,7 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
     const ok = adminDeletePostEngine(broadcast, postId, transfer, conservingTransaction, dispatchPushNotification, {
         // Straight off the in-memory ledger, which is what `transfer()` checks its floor against — a
         // refund capped by any other reading of the balance could still be refused, or still overdraw.
-        balanceOf: (escrowAccount: string) => ledger.getAccount(escrowAccount).balance,
+        balanceOf: (escrowAccount: string) => ledger.getAccount(escrowAccount).balance_c,
         onRefundShortfall,
     });
     if (ok && before && takedown && before.wasLive) recordModeratorRemoval(postId);
@@ -8963,8 +8999,11 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
     // next persistCommonsBalance() would make the wrong figure durable. Reachable, not theoretical —
     // adminPruneBranch drives this recursively over a whole invite subtree.
     conservingTransaction(() => {
+        // Their standing deals end at once (engine/standing-deals.ts): nothing more is held for or from them. A period still
+        // held stays for the other side to close, as every open deal of a removed member does.
+        endStandingDealsOf(publicKey);
         const account = ledger.getAccount(publicKey);
-        const balance = account.balance;
+        const balance = account.balance_c;
 
         // #124. These used to go through `transfer(..., 'COMMONS_POOL', ...)`, which moves the COMMONS_POOL
         // *account* — only the persisted shadow of the `COMMONS_BALANCE` global, rewritten from that global
@@ -9149,9 +9188,11 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     const repliesErased: string[] = [];
     // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
+        // Their standing deals end (engine/standing-deals.ts): the guard above already refused while a period is held.
+        endStandingDealsOf(publicKey);
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
         const account = ledger.getAccount(publicKey);
-        const balance = account.balance;
+        const balance = account.balance_c;
         const who = publicKey.slice(0, 8);
 
         if (balance < 0) {
@@ -9373,10 +9414,10 @@ export function inviteBranchOf(rootPublicKey: string): string[] {
  * What an owner's prune of this branch would do, for its confirmation (GET /api/local/admin/branches/:pubkey/prune): the
  * whole subtree adminPruneBranch walks (inviteBranchOf), not the console's pages. `members` counts the rows it would mark
  * pruned (each one not pruned already). Each one's balance as the prune settles it (adminPruneUser): a debt the Commons
- * pays (`badDebt`), a surplus it takes back (`surplus`), and what the Commons gains or pays overall (`net`), each to the
- * cent. Totals only, and no names; `keys` are the members whose balances they hold, for the route's access-log lines.
+ * pays (`badDebt_c`), a surplus it takes back (`surplus_c`), and what the Commons gains or pays overall (`net_c`), each in
+ * whole hundredths. Totals only, and no names; `keys` are the members whose balances they hold, for the route's access-log lines.
  */
-export function branchPrunePreview(rootPublicKey: string): { members: number; badDebt: number; surplus: number; net: number; keys: string[] } {
+export function branchPrunePreview(rootPublicKey: string): { members: number; badDebt_c: number; surplus_c: number; net_c: number; keys: string[] } {
     const status = db.prepare('SELECT status FROM members WHERE public_key = ?');
     const keys = inviteBranchOf(rootPublicKey).filter((pubkey) => {
         const row = status.get(pubkey) as { status: string } | undefined;
@@ -9385,12 +9426,11 @@ export function branchPrunePreview(rootPublicKey: string): { members: number; ba
     let badDebt = 0;
     let surplus = 0;
     for (const pubkey of keys) {
-        const balance = roundedBalance(pubkey);
+        const balance = ledger.getAccount(pubkey).balance_c;
         if (balance < 0) badDebt += -balance;
         else if (balance > 0) surplus += balance;
     }
-    const cents = (n: number) => Math.round(n * 100) / 100;
-    return { members: keys.length, badDebt: cents(badDebt), surplus: cents(surplus), net: cents(surplus - badDebt), keys };
+    return { members: keys.length, badDebt_c: badDebt, surplus_c: surplus, net_c: surplus - badDebt, keys };
 }
 
 /**
@@ -9489,8 +9529,6 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
             'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
-
-export function migrateAdminConversations() {} // Deprecated, state is clean now.
 
 // ===================== ACTIVITY =====================
 
@@ -9739,12 +9777,12 @@ export function exportLedgerFor(publicKey: string): { balancesCsv: string; trans
 
 // ===================== COMMUNITY COMMONS =====================
 
-export function createProject(proposerPubkey: string, title: string, description: string, requestedAmount: number): CommunityProject | null {
+export function createProject(proposerPubkey: string, title: string, description: string, requestedAmount: unknown): CommunityProject | null {
     const member = getMember(proposerPubkey);
     // A2-5: reject non-finite/non-positive requested amounts (NaN/Infinity would
     // poison the grant + conservation math). The upper bound on what can actually
     // be funded is enforced at round close by deductFromCommons (≤ commons balance).
-    if (!member || !title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return null;
+    if (!member || !title.trim() || !isHundredths(requestedAmount) || requestedAmount <= 0) return null;
     // A project proposal creates an enterprise the proposer leads, so the enterprise-creation rules apply.
     if (member.status !== 'active') throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     // Checked before any write: a member whose operator switch an admin turned off must not get it back by proposing.
@@ -9755,7 +9793,7 @@ export function createProject(proposerPubkey: string, title: string, description
         title: title.trim().slice(0, 100),
         description: description.trim().slice(0, 500),
         proposerPubkey, proposerCallsign: member.callsign,
-        requestedAmount: Math.round(requestedAmount * 100) / 100,
+        requestedAmount_c: requestedAmount,
         status: 'proposed', createdAt: new Date().toISOString()
     };
     
@@ -9778,14 +9816,14 @@ export function createProject(proposerPubkey: string, title: string, description
             db.prepare(`
                 INSERT INTO members (
                     public_key, callsign, joined_at, status,
-                    is_treasury, earned_credit, earned_surplus,
-                    purpose, goal_amount, lifecycle, paused, updated_at
+                    is_treasury, earned_credit_c, earned_surplus_c,
+                    purpose, goal_amount_c, lifecycle, paused, updated_at
                 ) VALUES (?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
             `).run(
                 project.id, callsign, now,
-                project.description || project.title, project.requestedAmount, now
+                project.description || project.title, project.requestedAmount_c, now
             );
-            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
+            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
             ledger.initializeGenesisAccount(project.id);
             ledger.setDecayExempt(project.id);
             if (proposerPubkey) {
@@ -9804,8 +9842,8 @@ export function createProject(proposerPubkey: string, title: string, description
     return project;
 }
 
-export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: number): boolean {
-    if (!title.trim() || !Number.isFinite(requestedAmount) || requestedAmount <= 0) return false;
+export function updateProject(proposerPubkey: string, projectId: string, title: string, description: string, requestedAmount: unknown): boolean {
+    if (!title.trim() || !isHundredths(requestedAmount) || requestedAmount <= 0) return false;
     const row = db.prepare("SELECT value FROM node_config WHERE key='commons_projects'").get() as any;
     const projects: CommunityProject[] = row ? JSON.parse(row.value) : [];
     const index = projects.findIndex(p => p.id === projectId);
@@ -9815,7 +9853,7 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
 
     projects[index].title = title.trim().slice(0, 100);
     projects[index].description = description.trim().slice(0, 500);
-    projects[index].requestedAmount = Math.round(requestedAmount * 100) / 100;
+    projects[index].requestedAmount_c = requestedAmount;
     
     const now = new Date().toISOString();
     // The enterprise row's name, by the one name rule, as at the create (engine projectRowName): the title is kept as typed.
@@ -9825,12 +9863,12 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`
             UPDATE members
-            SET callsign = ?, purpose = ?, goal_amount = ?, updated_at = ?
+            SET callsign = ?, purpose = ?, goal_amount_c = ?, updated_at = ?
             WHERE public_key = ?
         `).run(
             rowName,
             projects[index].description || projects[index].title,
-            projects[index].requestedAmount,
+            projects[index].requestedAmount_c,
             now,
             projectId
         );
@@ -9849,12 +9887,12 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     if (projects[index].proposerPubkey !== proposerPubkey) return false;
     if (projects[index].status !== 'proposed') return false;
 
-    const acc = db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(projectId) as { balance: number } | undefined;
-    if (acc && Math.abs(acc.balance) > 1e-9) {
-        throw new Error(tr('Cannot delete enterprise account with non-zero balance ({balance} Beans). Sweep or refund funds first.', { balance: acc.balance }));
+    const acc = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(projectId) as { balance_c: number } | undefined;
+    if (acc && acc.balance_c !== 0) {
+        throw new Error(tr('Cannot delete enterprise account with non-zero balance ({balance} Beans). Sweep or refund funds first.', { balance: formatHundredths(acc.balance_c, 'en') }));
     }
     const acct = ledger.getAccount(projectId);
-    if (acct && Math.abs(acct.balance) > 0.0001) {
+    if (acct && acct.balance_c !== 0) {
         throw new Error(word('Cannot delete project with non-zero balance: would violate ledger conservation'));
     }
 
@@ -9862,7 +9900,7 @@ export function deleteProject(proposerPubkey: string, projectId: string): boolea
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         if (db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = ?`).run(projectId).changes > 0) engine.keepersChanged(db, projectId);
-        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND ABS(balance) < 0.0001`).run(projectId);
+        db.prepare(`DELETE FROM accounts WHERE public_key = ? AND balance_c = 0`).run(projectId);
         db.prepare(`UPDATE members SET status = 'pruned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(projectId);
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
@@ -9901,7 +9939,7 @@ export function getAllProjects(): CommunityProject[] {
     // Unify with bounded enterprises from members table (docs/the-commons.md §2.1, Slice 3)
     try {
         const enterprises = db.prepare(`
-            SELECT m.public_key, m.callsign, m.bio, m.purpose, m.goal_amount, m.status, m.joined_at,
+            SELECT m.public_key, m.callsign, m.bio, m.purpose, m.goal_amount_c, m.status, m.joined_at,
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                    (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
             FROM members m
@@ -9919,7 +9957,7 @@ export function getAllProjects(): CommunityProject[] {
                 // Keep live values from members table so blob doesn't shadow SQL
                 existing.title = e.callsign || existing.title;
                 existing.description = e.purpose || e.bio || existing.description;
-                if (e.goal_amount != null) existing.requestedAmount = Number(e.goal_amount);
+                if (e.goal_amount_c != null) existing.requestedAmount_c = Number(e.goal_amount_c);
                 if (e.status) existing.status = e.status.toLowerCase() as any;
             } else {
                 blobProjects.push({
@@ -9928,7 +9966,7 @@ export function getAllProjects(): CommunityProject[] {
                     description: e.purpose || e.bio || '',
                     proposerPubkey: lead,
                     proposerCallsign: leadMember?.callsign || e.callsign,
-                    requestedAmount: Number(e.goal_amount || 0),
+                    requestedAmount_c: Number(e.goal_amount_c || 0),
                     status: (e.status || 'proposed').toLowerCase() as any,
                     createdAt: e.joined_at || new Date().toISOString(),
                 });
@@ -9943,16 +9981,12 @@ export function getAllProjects(): CommunityProject[] {
     return blobProjects.filter(p => !prunedIds.has(p.id) && (p.status as string) !== 'pruned' && (p.status as string) !== 'deleted');
 }
 
+/** The Commons pot, whole hundredths (exact: there is nothing to round). */
 export function getCommonsBalance(): number {
-    return Math.round(COMMONS_BALANCE * 100) / 100;
+    return COMMONS_BALANCE;
 }
 
-/**
- * The Commons pot UNROUNDED. For snapshot/restore, not for display.
- *
- * `getCommonsBalance()` rounds to 2dp for presentation, so restoring a snapshot taken through it would
- * itself lose up to half a cent — the pot must be put back exactly as it was found.
- */
+/** The Commons pot, whole hundredths, for snapshot and restore: the same figure as getCommonsBalance. */
 export function getCommonsBalanceExact(): number {
     return COMMONS_BALANCE;
 }
@@ -10065,12 +10099,12 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // signal) on the admin dashboard. Each entry's address is kept 7 days, then
 // null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
     lastPullIp: string | null;
-    lastPullAuth: 'token' | 'admin-pw' | null;
+    lastPullAuth: 'token' | null;
     totalRejected: number;
     lastRejectedAt: number | null;
     lastRejectedIp: string | null;
@@ -10547,9 +10581,12 @@ export function isOnHoliday(publicKey: string): boolean {
 // Holiday mode may only be switched ON when this is zero: going away mid-deal would strand a
 // counterparty's escrow or an open request.
 export function countOpenTrades(publicKey: string): number {
+    // A standing deal's period where this member is the payee doesn't count (DESIGN-standing-deals-fable §2.5): a payee may
+    // go on holiday while their standing deals run. The payer is held back by setHolidayMode's own standing-deal check.
     const row = db.prepare(
-        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')`
-    ).get(publicKey, publicKey) as any;
+        `SELECT COUNT(*) as n FROM marketplace_transactions WHERE (buyer_pubkey = ? OR seller_pubkey = ?) AND status IN ('requested','pending')
+           AND NOT (standing_id IS NOT NULL AND seller_pubkey = ?)`
+    ).get(publicKey, publicKey, publicKey) as any;
     return row?.n || 0;
 }
 
@@ -10569,6 +10606,14 @@ export function assertNotOnHoliday(publicKey: string): void {
  */
 export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true; openTrades: number } {
     if (!getActingMember(publicKey)) throw new Error(word('Member not found'));
+    // A payer with a standing deal still running (between its periods too) stops it first (DESIGN-standing-deals-fable §2.5).
+    const standingTitle = enabled ? standingDealBlockingHoliday(publicKey) : null;
+    if (standingTitle !== null) {
+        const err: any = new Error(standingLines.holidayPayer(standingTitle));
+        err.openTrades = Math.max(1, countOpenTrades(publicKey));
+        err.code = 'standing_deal_running';
+        throw err;
+    }
     const open = countOpenTrades(publicKey);
     if (enabled && open > 0) {
         const err: any = new Error(trn(open, 'You have {n} active trade in progress. Complete or cancel it before switching on holiday mode.',
@@ -10623,8 +10668,24 @@ const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoti
  * the time, the community, the signature), and nothing else. `title`, `body` and `data` are what the sender wrote (who,
  * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
  * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
+ *
+ * Browsers too (services/web-push.ts, DESIGN-web-notifications-fable.md §2.2), after Expo's part, with the same words and
+ * notice, encrypted to the browser: in W1 only `join.answered`, to the browser an applicant asked to be told on
+ * (engine/web-push-subscriptions.ts webPushTargetsFor), for `options.ttlSeconds`.
+ *
+ * Answers how many messages went to the push services (a phone's to Expo, a browser's by web push). {@link deliverPushNotices}
+ * also says how many members were told: a notice kept for them is on their bell (web notifications W0), a phone or not.
  */
-export function dispatchPushNotification(
+export function dispatchPushNotification(...args: Parameters<typeof deliverPushNotices>): number {
+    return deliverPushNotices(...args).sent;
+}
+
+/**
+ * {@link dispatchPushNotification}, answering both counts: `sent`, the messages handed to Expo and to web push, and `told`,
+ * the members a notice was kept for (each one's bell lists it, whether a phone of theirs is registered here or not). A
+ * sender that tells one member instead of another asks `told`: a member with only the web app is told by their bell.
+ */
+export function deliverPushNotices(
     targetPubkeys: string[],
     actorPubkey: string,
     title: string,
@@ -10638,8 +10699,14 @@ export function dispatchPushNotification(
      * request can't tell the two apart (#1403 re-review).
      */
     rehearsal = false,
-): number {
-    if (getNodeRole() === 'backup') return 0;
+    /**
+     * `ttlSeconds`: how long a browser's push may wait (web push W1). `detailsFor`: what one recipient's details carry beside
+     * `data` (their kept copy, `noticeId`: kept-notices.ts keptNoticeDetails), never in the push.
+     */
+    options: { ttlSeconds?: number; detailsFor?: PushDetailsFor } = {},
+): { sent: number; told: number } {
+    const none = { sent: 0, told: 0 };
+    if (getNodeRole() === 'backup') return none;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
     // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
     // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
@@ -10648,7 +10715,7 @@ export function dispatchPushNotification(
     // every other notice still go, whoever caused them (#1403 review).
     const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
-    if (recipients.length === 0) return 0;
+    if (recipients.length === 0) return none;
 
     const prefKey = `notify_${categoryId}`;
     
@@ -10683,6 +10750,7 @@ export function dispatchPushNotification(
     // is here only for the ticket's check, in memory, while this send lasts.
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
+    const webSends: WebPushSend[] = [];
     // The key read once for the whole send (an announcement reaches every member's phones).
     const open = pushTokenOpener();
 
@@ -10690,23 +10758,30 @@ export function dispatchPushNotification(
         // Check user's notification preference for this category
         // Owners and admins are always told someone asked to join (front doors S1, design §5.2): their switch isn't read
         // for it. The role is looked up for that kind only.
-        const alwaysTold = OWNER_SERVER_KINDS.has(kind)
-            || (kind === 'community.knock' && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
+        // The applicant who tapped "Tell me when they answer" asked for exactly this one (web push W1), and has no switches.
+        const alwaysTold = OWNER_SERVER_KINDS.has(kind) || kind === 'join.answered'
+            || ((kind === 'community.knock' || kind === 'community.knock-shared') && ['owner', 'admin'].includes(nodeRoleOf(pk) ?? ''));
         const pref = alwaysTold ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;
         }
 
+        // The bell (DESIGN-web-notifications-fable.md §2.1): the notice is kept for every member here it is for, a phone
+        // or not, so the web app, and a phone with no push, list what the phone is buzzed with. Not for a key that can't
+        // read it here (no member, a visitor's row, a closed account) unless a phone of theirs is registered, as before.
         const tokens = getPushTokens(pk, open);
-        if (tokens.length === 0) continue;
+        const browsers = webPushTargetsFor(pk, kind);
+        if (tokens.length === 0 && browsers.length === 0 && !passesReadGate(pk)) continue;
+
+        // One notice per recipient, the same on each of their phones and browsers.
+        const notice = newPushNotice(kind, pk, sentAt);
+        const extra = options.detailsFor?.(pk);
+        notices.push({ id: notice.id, recipient: pk, kind, title, body, data: extra ? { ...data, ...extra } : data, sentAt });
+        if (tokens.length === 0 && browsers.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const totalUnread = getListedUnreadTotal(pk);
-
-        // One notice per recipient, the same on each of their phones.
-        const notice = newPushNotice(kind, pk, sentAt);
-        notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
 
         for (const { tokenId, token, platform, lang } of tokens) {
             const words = phoneWords(lang);
@@ -10733,11 +10808,22 @@ export function dispatchPushNotification(
             allMessages.push(msg);
             phones.push({ publicKey: pk, tokenId, token });
         }
+
+        for (const { subId, lang, target } of browsers) {
+            const words = phoneWords(lang);
+            webSends.push({
+                publicKey: pk, subId, target, ...webPushDelivery('join.answered', options.ttlSeconds),
+                payload: { title: words.title, body: words.body, data: notice.data, tab: PUSH_NOTICE_KINDS[kind].tab },
+            });
+        }
     }
 
-    if (allMessages.length === 0) return 0;
-    if (rehearsal) return 0;
+    if (rehearsal || notices.length === 0) return none;
     keepPushNotices(notices);
+    // Each member's open apps hear of their own at once (the bell's count): the id and kind, never the words.
+    for (const n of notices) tellBell(n.recipient, { type: 'push_notice', id: n.id, kind: n.kind });
+    const told = notices.length;
+    if (allMessages.length === 0 && webSends.length === 0) return { sent: 0, told };
 
     // Batch send to Expo (max 100 per request)
     for (let i = 0; i < allMessages.length; i += 100) {
@@ -10756,7 +10842,8 @@ export function dispatchPushNotification(
             console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
-    return allMessages.length;
+    sendWebPushes(webSends);
+    return { sent: allMessages.length + webSends.length, told };
 }
 
 /**
@@ -10852,12 +10939,12 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         },
         [SystemMessageType.ESCROW_FUNDED]: {
             title: '🔒 Credits Locked in Escrow',
-            body: `${meta.amount} Beans placed in escrow for "${postTitle}"`,
+            body: `${formatHundredths(meta.amount_c, 'en')} Beans placed in escrow for "${postTitle}"`,
             data: { screen: 'post', postId }
         },
         [SystemMessageType.ESCROW_RELEASED]: {
             title: '✅ Credits Released!',
-            body: `Payment of ${meta.amount} Beans released for "${postTitle}"`,
+            body: `Payment of ${formatHundredths(meta.amount_c, 'en')} Beans released for "${postTitle}"`,
             data: { screen: 'post', postId }
         },
         [SystemMessageType.ESCROW_CANCELLED]: {

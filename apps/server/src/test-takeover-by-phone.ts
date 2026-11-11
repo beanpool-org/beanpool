@@ -45,9 +45,8 @@ import { fixtureWords } from './recovery-seal-test-http.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW_MAIN = 'Main-Server-Pw-907!';
-const PW_STANDBY = 'Standby-Own-Pw-318!';
-const PW_FRESH = 'Fresh-Server-Pw-771!';
+/** What an older install's admin password looked like, the community's: no credential now (7). */
+const OLD_PW_MAIN = 'Main-Server-Pw-907!';
 const TUNNEL_TOKEN = 'eyJ0dW5uZWwiOiJwaG9uZXRvd24ifQ.' + crypto.randomBytes(12).toString('hex');
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -72,7 +71,7 @@ async function child(): Promise<void> {
             for (const [key, callsign] of [[ben, 'Ben'], [cara, 'Cara']]) {
                 db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
                     .run(key, callsign, new Date().toISOString(), anna, 'TEST');
-                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
+                db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             se.grantNodeRole(ben, 'admin', anna);
             // Paid as a real grant is (payFromCommons): transfer() out of COMMONS_POOL made the Beans from nowhere, its row
@@ -169,7 +168,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server and its standby; the main server dies ──
         console.log('\n— 1. a main server, a standby that copies it, and the main server dies —');
-        const mainNode = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const mainNode = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(mainNode);
         const setup = await mainNode.send('setup-primary', { ownerSeedHex, benSeedHex, replicationToken, tunnelToken: TUNNEL_TOKEN });
         const mainPeerId = mainNode.ready.peerId;
@@ -183,7 +182,7 @@ async function main(): Promise<void> {
 
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: mainNode.base, replicationToken, primaryPeerId: mainPeerId });
         const pulled = await standby.send('pull');
@@ -198,8 +197,8 @@ async function main(): Promise<void> {
         console.log('\n— 2. "Take over with an owner\'s phone" on the standby —');
         const noAuth = await post(standby.base, '/api/local/admin/takeover/phone/start', {});
         assert(noAuth.status === 401, `without the standby's admin sign-in → 401 (${noAuth.status})`);
-        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
-        // standby makes (takeover-test-harness.ts owner-session).
+        // The take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session): the
+        // node has no admin password.
         const standbyOwner: Record<string, string> = await standby.send('owner-session');
         const started = await post(standby.base, '/api/local/admin/takeover/phone/start', { serverUrl: standby.base }, standbyOwner);
         assert(started.status === 200 && started.body.qr.startsWith('beanpool-unlock:v1?') && started.body.link.startsWith('beanpool://unlock-keys?'),
@@ -261,7 +260,7 @@ async function main(): Promise<void> {
         const exitCode = await standby.exited;
         standbyOutputs.push(standby.output());
         assert(exitCode === 0, 'the standby restarts itself');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         assert(standby.ready.role === 'primary' && standby.ready.peerId === mainPeerId,
             `it is the main server, with the SAME PeerId as the dead one (${standby.ready.peerId})`);
@@ -308,7 +307,7 @@ async function main(): Promise<void> {
                 recipients: { owners: [{ pubkey: setup.anna, callsign: 'Anna' }] },
             });
             fs.writeFileSync(path.join(heldDir, `${String(Date.now()).padStart(13, '0')}-${core.readSealedHeader(other).envelopeId}.bpseal`), other, { mode: 0o600 });
-            const probe = await spawnNode(SCRIPT, dirs.probe, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            const probe = await spawnNode(SCRIPT, dirs.probe, { NODE_ROLE: 'backup' });
             nodes.push(probe);
             const refused = await post(probe.base, '/api/local/admin/takeover/phone/start', { serverUrl: probe.base }, await probe.send('owner-session'));
             assert(refused.status === 409 && refused.body.wrongCommunity === true, `no session: the keys are another community's (${refused.status} ${refused.body.error})`);
@@ -373,7 +372,7 @@ async function main(): Promise<void> {
             });
             const oldId = core.readSealedHeader(oldEnvelope).envelopeId;
             fs.writeFileSync(path.join(dirs.probeOld, 'held-takeover-envelopes', `${String(Date.now() + 2_000_000).padStart(13, '0')}-${oldId}.bpseal`), oldEnvelope, { mode: 0o600 });
-            let old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            let old = await spawnNode(SCRIPT, dirs.probeOld, { NODE_ROLE: 'backup' });
             nodes.push(old);
             const oldOwner: Record<string, string> = await old.send('owner-session'); // step 7c, as above
             const oStart = await post(old.base, '/api/local/admin/takeover/phone/start', { serverUrl: old.base }, oldOwner);
@@ -390,7 +389,7 @@ async function main(): Promise<void> {
             await old.exited;
             const NO_KEY_LINE = "No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.";
             assert(old.output().includes(`[Takeover] ${NO_KEY_LINE}`), 'the take-over logs the missing-key line');
-            old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+            old = await spawnNode(SCRIPT, dirs.probeOld, { NODE_ROLE: 'backup' });
             nodes.push(old);
             assert(old.ready.role === 'primary' && old.ready.peerId === mainPeerId, 'it is the main server, with the community\'s PeerId');
             assert(/1 of them were locked with another recovery-seal key and cannot be opened here/.test(old.output()), 'its boot names the copy it cannot open');
@@ -404,12 +403,13 @@ async function main(): Promise<void> {
         const dl = await fetch(standby.base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await standby.send('owner-session')) }, body: '{}' });
         const backupBytes = new Uint8Array(await dl.arrayBuffer());
         assert(dl.ok && core.readSealedHeader(backupBytes).kind === 'backup', `a sealed backup from the promoted server (${dl.status}, ${backupBytes.length} bytes)`);
-        let fresh = await spawnNode(SCRIPT, dirs.fresh, { ADMIN_PASSWORD: PW_FRESH, NODE_ROLE: 'primary' });
+        let fresh = await spawnNode(SCRIPT, dirs.fresh, { NODE_ROLE: 'primary' });
         nodes.push(fresh);
         assert(fresh.ready.peerId !== mainPeerId, 'a fresh server, with its own PeerId');
-        // Step 7c: the operator restores with the fresh server's password and a code (2FA on), not the password alone.
+        // The operator restores as the fresh server's own owner (as one who claimed it), with their key session.
+        const freshOwner: Record<string, string> = await fresh.send('owner-session');
         const upload = async (headers: Record<string, string>) => fetch(fresh.base + '/api/local/admin/restore', {
-            method: 'POST', headers: { 'Content-Type': 'application/octet-stream', ...(await fresh.send('password-and-code', { password: PW_FRESH })), ...headers }, body: backupBytes,
+            method: 'POST', headers: { 'Content-Type': 'application/octet-stream', ...freshOwner, ...headers }, body: backupBytes,
         }).then(async (r) => ({ status: r.status, body: await r.json() as any }));
         const inspect = await upload({});
         assert(inspect.status === 400 && inspect.body.ownerPhoneCanOpen === true && /owner's phone/.test(inspect.body.error),
@@ -424,8 +424,8 @@ async function main(): Promise<void> {
         const restored = await send(annaRestore.qr, annaRestore.request);
         assert(restored.status === 200 && restored.body.success && restored.body.purpose === 'restore',
             `@Anna's phone (native raw seed) opens it and the server restores (${restored.status} ${JSON.stringify(restored.body)})`);
-        const ownPwNow = await post(fresh.base, '/api/local/admin/restore/phone/wait', { sessionId: kept.body.phone.sessionId }, pw(PW_FRESH));
-        assert(ownPwNow.status !== 200, `a password sign-in cannot follow it: the database is closed for the restart (${ownPwNow.status})`);
+        const ownSessionNow = await post(fresh.base, '/api/local/admin/restore/phone/wait', { sessionId: kept.body.phone.sessionId }, freshOwner);
+        assert(ownSessionNow.status !== 200, `the fresh server's own sign-in cannot follow it: the database is closed for the restart (${ownSessionNow.status})`);
         const waitRestore = await post(fresh.base, '/api/local/admin/restore/phone/wait', { sessionId: kept.body.phone.sessionId },
             { 'X-Unlock-Follow': kept.body.phone.followToken });
         assert(waitRestore.body.state === 'restored' && waitRestore.body.unlockedBy === '@Anna' && waitRestore.body.result.restoredKeys === true,
@@ -434,20 +434,21 @@ async function main(): Promise<void> {
         assert(wrongToken.status === 401, 'another token does not');
         assert(!fs.readdirSync(dirs.fresh).some((n) => n.startsWith('uploaded-backup.pending-')), 'the kept file is gone');
         await fresh.exited;
-        fresh = await spawnNode(SCRIPT, dirs.fresh, { ADMIN_PASSWORD: PW_FRESH, NODE_ROLE: 'primary' });
+        fresh = await spawnNode(SCRIPT, dirs.fresh, { NODE_ROLE: 'primary' });
         nodes.push(fresh);
         const restoredState = await fresh.send('inspect', { ownerSeedHex });
         assert(fresh.ready.peerId === mainPeerId, `after its restart it is the community's server: the same PeerId (${fresh.ready.peerId})`);
         assert((restoredState.roles as any[]).some((r) => r.member_pubkey === setup.anna && r.role === 'owner') && restoredState.keySignIn.solved,
             "@Anna is its owner and her key signs in");
-        // Step 7c: with 2FA off the community's password alone is refused as needing 2FA, not as a wrong one; with a code it works.
-        const communityPwAlone = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
-        assert(communityPwAlone.status === 403 && communityPwAlone.body?.code === 'password_needs_2fa',
-            `the community's admin password alone is refused as needing 2FA (${communityPwAlone.status} ${communityPwAlone.body?.code})`);
-        const communityPw = await post(fresh.base, '/api/local/admin/takeover/progress', {}, await fresh.send('password-and-code', { password: PW_MAIN }));
-        assert(communityPw.status === 200, "the community's admin password works on it");
-        const freshPw = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(PW_FRESH));
-        assert(freshPw.status === 401, "and the fresh server's own no longer does: why the screen follows the restore with its token");
+        // No admin password comes with a restore (the node has none): the community's old one opens nothing; its owner's key
+        // session does.
+        const communityPwAlone = await post(fresh.base, '/api/local/admin/takeover/progress', {}, pw(OLD_PW_MAIN));
+        assert(communityPwAlone.status === 401 && communityPwAlone.body?.notSignedIn === true,
+            `the community's old admin password opens nothing on it (${communityPwAlone.status} ${JSON.stringify(communityPwAlone.body)?.slice(0, 120)})`);
+        const communityOwner = await post(fresh.base, '/api/local/admin/takeover/progress', {}, await fresh.send('owner-session', { owner: setup.anna }));
+        assert(communityOwner.status === 200, "the community's owner's key session works on it");
+        const freshOwnerNow = await post(fresh.base, '/api/local/admin/takeover/progress', {}, freshOwner);
+        assert(freshOwnerNow.status === 401, "and the fresh server's own sign-in no longer does: why the screen follows the restore with its token");
         const restoredKey = path.join(dirs.fresh, SEAL_KEY);
         assert(fs.readFileSync(restoredKey).equals(mainSealKey) && (fs.statSync(restoredKey).mode & 0o777) === 0o600,
             "S2: the sealed backup brought the community's recovery-seal key, byte for byte, 0600");

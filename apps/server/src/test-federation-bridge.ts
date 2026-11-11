@@ -38,15 +38,23 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-const balanceOf = (pk: string): number =>
-    (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100), the energy balances, the per-peer cap
+ * (compared with them as it stands) and every amount alike. `hc` turns a Beans figure into hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
 
+/** A stored balance, whole hundredths. */
+const balanceOf = (pk: string): number =>
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance_c ?? 0;
+
+/** A member holding `balance` Beans, with 500 of earned credit. */
 function makeMember(callsign: string, balance: number) {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, callsign, hc(500));
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, hc(balance));
     return pk;
 }
 
@@ -77,21 +85,21 @@ async function main() {
     // ledger, rather than routing through member send-gates that are irrelevant here.
     const memberCtl = makeMember('ControlHolder', 1000);
     const funder = makeMember('Funder', 3000);
-    db.prepare('UPDATE accounts SET balance=?, last_demurrage_epoch=? WHERE public_key=?')
-        .run(1000, ledger.getCurrentEpoch(), bridge);
+    db.prepare('UPDATE accounts SET balance_c=?, last_demurrage_epoch=? WHERE public_key=?')
+        .run(hc(1000), ledger.getCurrentEpoch(), bridge);
     reconcileLedgerFromDb();
-    assert(balanceOf(bridge) === 1000, 'the bridge really holds 1000 before the decay run');
+    assert(balanceOf(bridge) === hc(1000), `the bridge really holds 1000 before the decay run (${balanceOf(bridge)} hundredths)`);
 
     // Run the ledger far into the future. A non-exempt balance of 1000 sits in the 1.5%/mo bracket, so
     // a member control MUST erode while the bridge must not — that contrast is what makes this a test
     // rather than a tautology.
     const before = balanceOf(bridge);
     const futureEpoch = ledger.getCurrentEpoch() + 720;   // ~24 months
-    const ctlBefore = ledger.getAccount(memberCtl).balance;
+    const ctlBefore = ledger.getAccount(memberCtl).balance_c;
     (ledger as any).applyDecay?.((ledger as any).accounts?.get(bridge), futureEpoch);
     (ledger as any).applyDecay?.((ledger as any).accounts?.get(memberCtl), futureEpoch);
-    assert(ledger.getAccount(bridge).balance === before, 'a bridge balance does not decay');
-    assert(ledger.getAccount(memberCtl).balance < ctlBefore, 'a MEMBER balance of the same size does decay — the exemption is doing real work');
+    assert(ledger.getAccount(bridge).balance_c === before, 'a bridge balance does not decay');
+    assert(ledger.getAccount(memberCtl).balance_c < ctlBefore, 'a MEMBER balance of the same size does decay — the exemption is doing real work');
     assert(registerBridgeDecayExemptions() >= 1, 'boot re-registration finds existing bridge accounts');
 
     // ── 2b. An UNSEEDED bridge account must still persist (review finding) ──────
@@ -100,49 +108,49 @@ async function main() {
     const UNSEEDED = '12D3KooWNeverSeededPeer';
     const unseededId = bridgeAccountId(UNSEEDED);
     assert(!db.prepare('SELECT 1 FROM accounts WHERE public_key=?').get(unseededId), 'the account genuinely does not exist yet');
-    assert(!!transfer(funder, unseededId, 25, 'settle into an unseeded bridge', 'escrow', true), 'the transfer succeeded');
+    assert(!!transfer(funder, unseededId, hc(25), 'settle into an unseeded bridge', 'escrow', true), 'the transfer succeeded');
     assert(!!db.prepare('SELECT 1 FROM accounts WHERE public_key=?').get(unseededId), 'transferring to an unseeded bridge CREATES the DB row');
-    assert(getEnergyBalance(UNSEEDED) === 25, 'and the balance is readable from SQLite — no memory/DB desync');
+    assert(getEnergyBalance(UNSEEDED) === hc(25), `and the balance is readable from SQLite — no memory/DB desync (${getEnergyBalance(UNSEEDED)} hundredths)`);
 
     // ── 3. Sign convention ──────────────────────────────────────────────────────
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(0, bridge);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(0, bridge);
     assert(getEnergyBalance(PEER_ID) === 0, 'a fresh energy balance is 0 — square');
 
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(40, bridge);
-    assert(getEnergyBalance(PEER_ID) === 40, 'positive = value taken from our member, owed outward');
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(hc(40), bridge);
+    assert(getEnergyBalance(PEER_ID) === hc(40), 'positive = value taken from our member, owed outward');
     assert(creditExtendedTo(PEER_ID) === 0, 'owing outward is NOT credit extended');
 
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(-40, bridge);
-    assert(getEnergyBalance(PEER_ID) === -40, 'negative = we minted locally against a claim');
-    assert(creditExtendedTo(PEER_ID) === 40, 'the negative magnitude IS the credit we have extended');
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(hc(-40), bridge);
+    assert(getEnergyBalance(PEER_ID) === hc(-40), 'negative = we minted locally against a claim');
+    assert(creditExtendedTo(PEER_ID) === hc(40), 'the negative magnitude IS the credit we have extended');
 
     // ── 4. No default cap → fail closed ─────────────────────────────────────────
     addConnector(PEER, 'peer', 'Byron', `https://${PEER}`);
     assert(getConnectorCreditCap(PEER) === null, 'a new peer has NO credit cap — there is no default');
-    const unset = settlementCapacity(PEER_ID, PEER, 5);
+    const unset = settlementCapacity(PEER_ID, PEER, hc(5));
     assert(unset.ok === false && unset.reason === 'no_cap_configured', 'settlement is refused while no cap is set');
     assert(!unset.ok && /limit/i.test(unset.message), 'the refusal explains an operator must choose a limit');
 
     // ── 5. A configured cap, and exhausting it ──────────────────────────────────
-    setConnectorCreditCap(PEER, 100);
-    assert(getConnectorCreditCap(PEER) === 100, 'the cap persists on the connector record');
-    const room = settlementCapacity(PEER_ID, PEER, 5);
-    assert(room.ok === true && room.headroom === 60, `headroom is cap − extended (100 − 40 = 60, got ${room.ok ? room.headroom : 'n/a'})`);
+    setConnectorCreditCap(PEER, hc(100));
+    assert(getConnectorCreditCap(PEER) === hc(100), 'the cap persists on the connector record');
+    const room = settlementCapacity(PEER_ID, PEER, hc(5));
+    assert(room.ok === true && room.headroom === hc(60), `headroom is cap − extended (100 − 40 = 60, got ${room.ok ? room.headroom : 'n/a'} hundredths)`);
 
-    const tooMuch = settlementCapacity(PEER_ID, PEER, 61);
+    const tooMuch = settlementCapacity(PEER_ID, PEER, hc(61));
     assert(tooMuch.ok === false && tooMuch.reason === 'cap_exhausted', 'a request beyond headroom is refused as cap_exhausted');
     assert(!tooMuch.ok && tooMuch.reason === 'cap_exhausted' && /buy from us/i.test(tooMuch.message),
         'the exhausted message points at the cure — they can buy from us');
-    assert(settlementCapacity(PEER_ID, PEER, 60).ok === true, 'exactly the headroom is allowed');
+    assert(settlementCapacity(PEER_ID, PEER, hc(60)).ok === true, 'exactly the headroom is allowed');
 
     // ── 6. The cap is ONE-WAY — the cure is never blocked ───────────────────────
     // Drive the balance to the cap, then confirm movement back toward zero is unaffected.
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(-100, bridge);
-    assert(settlementCapacity(PEER_ID, PEER, 1).ok === false, 'at the cap, extending more is refused');
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(hc(-100), bridge);
+    assert(settlementCapacity(PEER_ID, PEER, 1).ok === false, 'at the cap, extending more (one hundredth) is refused');
 
     // Now the peer's members buy from us: our bridge moves POSITIVE, past zero.
-    db.prepare('UPDATE accounts SET balance=? WHERE public_key=?').run(250, bridge);
-    const wayPositive = settlementCapacity(PEER_ID, PEER, 50);
+    db.prepare('UPDATE accounts SET balance_c=? WHERE public_key=?').run(hc(250), bridge);
+    const wayPositive = settlementCapacity(PEER_ID, PEER, hc(50));
     assert(wayPositive.ok === true, 'a large POSITIVE balance does not trip the cap — it is not abs(balance)');
     assert(wayPositive.ok && wayPositive.extended === 0, 'credit extended is 0 while the balance is positive');
 
@@ -153,38 +161,42 @@ async function main() {
     // `max(0, −balance)` discarded the positive side, so with a small cap the REBALANCING direction — the
     // one §3.2 insists must stay open — was refused. A test can make a bug look deliberate; this is what
     // that looks like.
-    assert(wayPositive.ok && wayPositive.headroom === 350,
+    assert(wayPositive.ok && wayPositive.headroom === hc(350),
         'headroom is measured from the signed balance: 250 owed outward plus a 100 cap = 350');
-    assert(settlementCapacity(PEER_ID, PEER, 350).ok === true, 'so a payment that lands exactly on −cap is allowed');
-    assert(settlementCapacity(PEER_ID, PEER, 350.01).ok === false, 'and one bean past it is not');
+    assert(settlementCapacity(PEER_ID, PEER, hc(350)).ok === true, 'so a payment that lands exactly on −cap is allowed');
+    assert(settlementCapacity(PEER_ID, PEER, hc(350) + 1).ok === false, 'and one hundredth of a bean past it is not');
 
     // The case that matters most: a ZERO cap must still let the balance be paid back down to zero.
     setConnectorCreditCap(PEER, 0);
-    assert(settlementCapacity(PEER_ID, PEER, 250).ok === true,
+    assert(settlementCapacity(PEER_ID, PEER, hc(250)).ok === true,
         'with a cap of ZERO, paying the whole positive balance down to zero is still allowed — it extends nothing');
-    assert(settlementCapacity(PEER_ID, PEER, 250.01).ok === false, 'while a single bean beyond zero is refused');
-    setConnectorCreditCap(PEER, 100);
+    assert(settlementCapacity(PEER_ID, PEER, hc(250) + 1).ok === false, 'while a single hundredth beyond zero is refused');
+    setConnectorCreditCap(PEER, hc(100));
 
     // Clearing the cap returns to fail-closed — an operator kill switch that keeps discovery open.
     setConnectorCreditCap(PEER, null);
     assert(getConnectorCreditCap(PEER) === null, 'a cap can be cleared');
     const recleared = settlementCapacity(PEER_ID, PEER, 1);
     assert(!recleared.ok && recleared.reason === 'no_cap_configured', 'clearing the cap re-closes settlement');
-    setConnectorCreditCap(PEER, 100);
+    setConnectorCreditCap(PEER, hc(100));
 
     // ── 7. Guards + the operator view ───────────────────────────────────────────
     let threw = '';
-    try { setConnectorCreditCap(PEER, -5); } catch (e: any) { threw = e.message; }
-    assert(/non-negative/.test(threw), `a negative cap is rejected rather than coerced (got "${threw}")`);
-    assert(setConnectorCreditCap('nope.example', 10) === null, 'setting a cap on an unknown connector returns null');
+    try { setConnectorCreditCap(PEER, hc(-5)); } catch (e: any) { threw = e.message; }
+    assert(/whole number of hundredths of a Bean, 0 or more/.test(threw), `a negative cap is rejected rather than coerced (got "${threw}")`);
+    threw = '';
+    try { setConnectorCreditCap(PEER, hc(100) + 0.5); } catch (e: any) { threw = e.message; }
+    assert(/whole number of hundredths of a Bean, 0 or more/.test(threw) && getConnectorCreditCap(PEER) === hc(100),
+        `a cap finer than a hundredth is rejected rather than rounded, and the cap stays 100 (got "${threw}")`);
+    assert(setConnectorCreditCap('nope.example', hc(10)) === null, 'setting a cap on an unknown connector returns null');
 
     const listed = listEnergyBalances().find(b => b.address === PEER);
     assert(!!listed, 'the peer appears in the operator energy-balance view');
-    assert(listed!.cap === 100, 'the view carries the configured cap');
+    assert(listed!.cap === hc(100), 'the view carries the configured cap');
     // Never connected in this test, so there is no peerId — and the view must NOT guess by falling back
     // to the address, which would report a different account's position as this peer's.
     assert(listed!.peerId === null, 'an unconnected peer reports no peerId rather than guessing');
-    assert(listed!.balance === 0 && listed!.settleable === false,
+    assert(listed!.balance_c === 0 && listed!.settleable === false,
         'no known peerId means no balance and NOT settleable — fail closed on either missing piece');
     assert(typeof totalEnergyPosition() === 'number', 'the total position is readable for audits');
 

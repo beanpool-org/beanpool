@@ -27,7 +27,6 @@ vi.mock('../lib/blocklist', () => ({
     blockUser: vi.fn(async () => {}),
     unblockUser: vi.fn(async () => {}),
     onBlocklistUpdated: vi.fn(() => () => {}),
-    getBlocklistFullNote: vi.fn(() => null),
 }));
 vi.mock('../lib/api', () => ({
     getMemberProfile: vi.fn(),

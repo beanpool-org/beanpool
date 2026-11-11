@@ -10,7 +10,8 @@
  *   - the global node's 12-words door (two-doors design §3.4, slice S5): the join screens make a key, ask for door work,
  *     and solve it in the Web Worker, which must load from this origin under this policy with no change to it (not a
  *     blob, not the page's fallback), until the work is ready
- * and fails if the browser reports any violation of the policy, or asks any host outside the policy's own list.
+ * and fails if the browser reports any violation of the policy, or asks any host outside the policy's own list, or if a
+ * service worker is registered on load (web push W1: only the waiting page's Tell me tap registers one).
  * A canary inline script is added last on each page; the check fails unless the policy blocks it and the violation
  * is reported, so "no violations" is never a watcher that saw nothing.
  *
@@ -67,7 +68,7 @@ function apiAnswer(pathname, search, me, door = null, signer = '') {
     if (door?.open) {
         // The global node with its 12-words door open, as /api/community/info says it after #1425.
         if (pathname === '/api/community/info') {
-            return { memberCount: 4, postCount: 3, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, wordsDoor: true, beans: false } };
+            return { memberCount: 4, postCount: 3, transactionCount: 0, commonsBalance_c: 0, profile: 'global', features: { openJoin: true, wordsDoor: true, beans: false } };
         }
         if (pathname.startsWith('/api/members/callsign-available/')) return { available: true };
         if (pathname === '/api/join/sso-nonce') return { nonce: 'harness-nonce', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null };
@@ -141,6 +142,14 @@ async function checkView(browser, origin, view, me) {
     } catch {
         failures.push('the welcome page did not draw');
     }
+    // No service worker until a tap asks for one (web push W1, src/lib/web-push.ts): the page has loaded, and nothing registered.
+    const workersOnLoad = async (where) => {
+        await page.waitForTimeout(300);
+        const scopes = await page.evaluate(async () => (navigator.serviceWorker ? (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope) : null));
+        if (scopes === null) failures.push(`${where}: this browser has no navigator.serviceWorker, so "no worker on load" proves nothing`);
+        else if (scopes.length) failures.push(`${where}: a service worker was registered on load (${scopes.join(', ')})`);
+    };
+    await workersOnLoad('the welcome page');
 
     // The global node's 12-words door: the door work runs in a Web Worker from this origin, under this policy.
     const workers = [];
@@ -187,6 +196,7 @@ async function checkView(browser, origin, view, me) {
     } catch {
         failures.push('the Market did not draw its listings');
     }
+    await workersOnLoad("a member's Market");
 
     // The Map: Leaflet and OpenStreetMap's tiles.
     try {

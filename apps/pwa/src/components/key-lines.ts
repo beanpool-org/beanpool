@@ -89,7 +89,6 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you.': word('Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you.'),
     'The recovery kit couldn’t be made in this browser. Write the 12 words down instead.': word('The recovery kit couldn’t be made in this browser. Write the 12 words down instead.'),
     // lib/web-restore.ts: a restore with a sign-in.
-    'That restore timed out on the community. Start again.': word('That restore timed out on the community. Start again.'),
     'Too many tries from this network. Please try again later.': word('Too many tries from this network. Please try again later.'),
     // lib/delete-here.ts: Settings' Permanently Delete Account, and whether this browser's key stays.
     "Permanently purges your account from this community node. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. Your key leaves this browser unless another community this web app opens still has you. The phone app, and other communities' web addresses, keep their own copy.": word("Permanently purges your account from this community node. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. Your key leaves this browser unless another community this web app opens still has you. The phone app, and other communities' web addresses, keep their own copy."),
@@ -173,11 +172,8 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         pattern: /^Lots of people are joining right now, so joining will take (.+) more in this browser\.$/,
         words: (m) => t('Lots of people are joining right now, so joining will take {time} more in this browser.', { time: aboutWords(m[1]) }),
     },
-    // lib/web-restore.ts releaseRefusalMessage and sessionRefusalMessage: a member's name, a sign-in, a status.
-    {
-        pattern: new RegExp(`^That ${PROVIDER} account isn't a way back into (.+)\\. Try the sign-in you joined with, or your 12 words\\.$`, 's'),
-        words: (m) => t("That {provider} account isn't a way back into {name}. Try the sign-in you joined with, or your 12 words.", { provider: m[1], name: m[2] }),
-    },
+    // lib/web-restore.ts findRefusalMessage and collectRefusalMessage: a find or a collect the community refused, with a
+    // sign-in's name or a status (its 503 is doorOutcome's sentence above).
     {
         pattern: new RegExp(`^${PROVIDER} sign-in couldn't be checked or took too long\\. Try again\\.$`),
         words: (m) => t("{provider} sign-in couldn't be checked or took too long. Try again.", { provider: m[1] }),
@@ -186,17 +182,10 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         pattern: /^The community could not bring the account back \((\d+)\)\. Please try again\.$/,
         words: (m) => t('The community could not bring the account back ({status}). Please try again.', { status: m[1] }),
     },
+    // lib/web-restore.ts noAccountMessage (recovery S1): the community by its name, as the page shows it.
     {
-        pattern: /^(.+) has no sign-in to come back with here\. Use your 12 words, or the phone app\.$/s,
-        words: (m) => t('{name} has no sign-in to come back with here. Use your 12 words, or the phone app.', { name: m[1] }),
-    },
-    {
-        pattern: /^More than one account here is called (.+)\. Use your 12 words, or the phone app\.$/s,
-        words: (m) => t('More than one account here is called {name}. Use your 12 words, or the phone app.', { name: m[1] }),
-    },
-    {
-        pattern: /^The community could not start a restore \((\d+)\)\. Please try again in a minute\.$/,
-        words: (m) => t('The community could not start a restore ({status}). Please try again in a minute.', { status: m[1] }),
+        pattern: new RegExp(`^No account at (.+) uses this ${PROVIDER} account\\. Try another community, or your 12 words\\.$`, 's'),
+        words: (m) => t('No account at {community} uses this {provider} account. Try another community, or your 12 words.', { community: m[1], provider: m[2] }),
     },
     // lib/takeover-unlock.ts: a server by its address (the phone's takeover-unlock.ts says the last three the same).
     {

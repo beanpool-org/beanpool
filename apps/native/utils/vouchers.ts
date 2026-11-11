@@ -1,12 +1,18 @@
 /**
  * Native voucher helpers (slice V3): reading the member's budget (GET /api/vouchers/me)
  * and vouching for someone from their profile (POST /api/vouch).
+ *
+ * Every figure is whole hundredths of a Bean, as all credit room is (DESIGN-atomic-beans-fable.md Q3): the budget's
+ * `left`/`held`/`vouched`/`level`, the presets (2500 is a vouch of 25), `vouchMax`, `budgetMax`, a history line's `amount_c`,
+ * a vouched-by row's `amount_c`, and the vouch's answer (`amount`, `total`) and refusal (`prior`), whose names the node kept.
  */
+import { isHundredths } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 
 export interface AllocationHistoryLine {
     kind: string;
-    amount: number;
+    /** Whole hundredths of a Bean, signed as the allocation ledger keeps them. */
+    amount_c: number;
     actor: string;
     actorCallsign: string | null;
     at: string;
@@ -29,13 +35,16 @@ export interface MyVouching {
     };
     source?: 'role' | 'entry';
     history?: AllocationHistoryLine[];
+    /** An owner vouches with no budget limit (Marty, 9 Nov): show "No limit", never left or level; 200 and 500 too. */
+    noLimit?: boolean;
     presets: number[];
     vouchMax: number;
     budgetMax: number;
     vouchedBy: Array<{
         memberPubkey: string;
         callsign: string;
-        amount: number;
+        /** Whole hundredths of a Bean. */
+        amount_c: number;
         at: string;
     }>;
 }
@@ -79,22 +88,31 @@ export async function rereadMyVouching(
     if (second) apply(second);
 }
 
+/**
+ * What a vouch from a profile posts: `vouchAmount` for a first vouch (a preset), or `raiseTo` for a raise, the total the
+ * vouches for this person end at (a preset of the voucher's), never an amount to add. The node lands the difference.
+ */
+export type VouchProfileBody =
+    | { memberPubkey: string; vouchAmount: number }
+    | { memberPubkey: string; raiseTo: number };
+
 export async function vouchFromProfile(
     anchor: string,
     identity: BeanPoolIdentity,
-    body: { memberPubkey: string; vouchAmount: number; raise?: boolean },
+    body: VouchProfileBody,
 ): Promise<VouchProfileResult> {
     try {
         const { signedPost } = await import('./node-post');
         const res = await signedPost(anchor, '/api/vouch', body, identity);
         const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
         if (res.ok && data) {
+            // Whole hundredths (the node kept the names `amount` and `total`); anything else is no figure, 0.
             return {
                 ok: true,
                 id: String(data.id ?? ''),
                 memberPubkey: String(data.memberPubkey ?? ''),
-                amount: Number(data.amount ?? 0),
-                total: Number(data.total ?? 0),
+                amount: isHundredths(data.amount) ? data.amount : 0,
+                total: isHundredths(data.total) ? data.total : 0,
                 budget: data.budget,
             };
         }
@@ -105,7 +123,7 @@ export async function vouchFromProfile(
                   ? data.message
                   : 'Could not vouch.';
         const code = typeof data?.code === 'string' ? data.code : undefined;
-        const prior = typeof data?.prior === 'number' ? data.prior : undefined;
+        const prior = isHundredths(data?.prior) ? data.prior : undefined;
         return { ok: false, message, code, prior };
     } catch {
         return { ok: false, message: 'Could not vouch.' };

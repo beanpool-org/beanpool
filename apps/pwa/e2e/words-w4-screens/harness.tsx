@@ -9,7 +9,8 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { UiLang } from '@beanpool/core';
 import { showLanguage } from '../../src/lib/language';
-import { createIdentity, generateIdentity, savePendingJoin, PENDING_JOIN_TTL_MS, type BeanPoolIdentity } from '../../src/lib/identity';
+import { createIdentity, generateIdentity, savePendingJoin, savePendingRestore, PENDING_JOIN_TTL_MS, PENDING_RESTORE_TTL_MS, type BeanPoolIdentity } from '../../src/lib/identity';
+import { makeEphemeralKey } from '../../src/lib/web-restore';
 import { readAuthReturn } from '../../src/lib/web-join';
 import { lockPinKey } from '../../src/lib/takeover-unlock';
 import type { WebRekeyDeps } from '../../src/lib/web-rekey';
@@ -64,8 +65,11 @@ const SCREENS: Record<string, () => ReactNode> = {
     'join-limited': () => join({ authReturn: googleReturn() }),
     'join-already': () => join({ authReturn: googleReturn() }),
     'join-unknown': () => join({ authReturn: googleReturn() }),
-    'restore-name': () => <Page><WebRestore onRestored={async () => true} onHeld={noop} onExisting={noop} onBack={noop} onOtherWay={noop} navigate={noop} origin={location.origin} authReturn={null} /></Page>,
-    'restore-sign-in': () => <Page><WebRestore onRestored={async () => true} onHeld={noop} onExisting={noop} onBack={noop} onOtherWay={noop} navigate={noop} origin={location.origin} authReturn={null} /></Page>,
+    // Recovery S1: this community and its sign-ins (nothing to type); a server from before the find; and back from Google
+    // with one sign-in that protects two accounts, long-named, to pick from.
+    'restore-sign-in': () => <Page><WebRestore community="Mullumbimby-Brunswick Valley" onRestored={async () => true} onHeld={noop} onExisting={noop} onBack={noop} onOtherWay={noop} navigate={noop} origin={location.origin} authReturn={null} /></Page>,
+    'restore-too-old': () => <Page><WebRestore community="Mullumbimby-Brunswick Valley" onRestored={async () => true} onHeld={noop} onExisting={noop} onBack={noop} onOtherWay={noop} navigate={noop} origin={location.origin} authReturn={null} /></Page>,
+    'restore-pick': () => <Page><WebRestore community="Mullumbimby-Brunswick Valley" onRestored={async () => true} onHeld={noop} onExisting={noop} onBack={noop} onOtherWay={noop} navigate={noop} origin={location.origin} authReturn={googleReturn()} /></Page>,
     'rekey-form': () => <Page><WebRekey initialCode="RK-12" onBound={noop} onBack={noop} deps={rekeyDeps({})} /></Page>,
     'rekey-waiting': () => <Page><WebRekey initialCode="RK-AB12-CD34" onBound={noop} onBack={noop} deps={rekeyDeps({ state: 'waiting', match: '42' })} /></Page>,
     'add-sign-in': () => <Page><AddSignIn identity={me} navigate={noop} origin={location.origin} /></Page>,
@@ -92,6 +96,10 @@ async function main() {
             const now = Date.now();
             await savePendingJoin({ identity: await generateIdentity('Alice'), provider: 'google', nonce: NONCE, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false });
         }
+    } else if (name === 'restore-pick') {
+        // A restore that left for Google with this nonce: back, the find names two accounts.
+        const now = Date.now();
+        await savePendingRestore({ kind: 'restore', ephemeral: makeEphemeralKey(), provider: 'google', nonce: NONCE, startedAt: now, expiresAt: now + PENDING_RESTORE_TTL_MS });
     } else if (!name.startsWith('restore-') && !name.startsWith('rekey-')) {
         me = await createIdentity('Alice');
         // This browser knows it is an owner (the silent open check remembers it): the unlock card shows.

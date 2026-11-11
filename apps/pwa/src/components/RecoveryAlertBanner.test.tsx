@@ -78,23 +78,13 @@ describe('Stop It Now against a pile of sessions', () => {
         expect(cancels().length).toBe(1);
     });
 
-    it('a node from before one Stop: one request per session, and the words count the ones that failed', async () => {
-        let n = 0;
-        node(() => json(200, { collections: listed(3) }), (body) => {
-            if (!body?.collectionId) return json(400, { error: 'Which session?' });
-            return ++n === 2 ? json(429, { error: 'Too many attempts. Try again in 30s' }) : json(200, { cancelled: true });
-        });
+    it('an answer that gives no count of what is still live is a failure, never "all cancelled", and no second request goes', async () => {
+        node(() => json(200, { count: 3, collections: listed(3) }), () => json(200, { cancelled: true }));
         render(<RecoveryAlertBanner />);
         expect(await screen.findByText(/3 active sessions/)).toBeTruthy();
         await pressStop();
-        expect(cancels().map(c => c.body?.collectionId ?? null)).toEqual([null, 'c-0', 'c-1', 'c-2']);
-        expect(alerts[0]).toMatch(/Not all stopped: 1 recovery session is still active/);
-    });
-
-    it('...and "all cancelled" there only when every one went through', async () => {
-        node(() => json(200, { collections: listed(2) }), (body) => (body?.collectionId ? json(200, { cancelled: true }) : json(400, { error: 'Which session?' })));
-        render(<RecoveryAlertBanner />);
-        await pressStop();
-        expect(alerts[0]).toMatch(/All active recovery sessions have been cancelled/);
+        expect(alerts[0]).toMatch(/Failed to stop recovery/);
+        expect(alerts[0]).not.toMatch(/All active recovery sessions have been cancelled/);
+        expect(cancels()).toEqual([{ path: '/api/recovery/collect/cancel', body: {} }]);
     });
 });

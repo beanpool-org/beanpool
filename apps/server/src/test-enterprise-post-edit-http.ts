@@ -35,6 +35,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { getMemberPhotoUsageForTests } from './engine/photo-upload-budget.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -58,7 +59,7 @@ function makeIdentity(callsign: string): Id {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
       .run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, AVATAR);
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -69,9 +70,10 @@ async function signedFetch(method: 'POST' | 'GET', path: string, body: unknown, 
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -87,15 +89,21 @@ const photoCountOf = (id: string) => (db.prepare('SELECT COUNT(*) c FROM post_ph
 const bytesOf = (pk: string) => getMemberPhotoUsageForTests(pk).usedBytes;
 const show = (r: { status: number; error?: string; body?: any }) => `${r.status} ${r.error ?? ''}${r.body?.code ? ` [${r.body.code}]` : ''}`;
 
-/** The phone's edit (apps/native/utils/db.ts updatePost): every field, the member's own key, photos only when it has some. */
-const phoneEdit = (id: string, keeper: Id, fields: { title: string; photos?: string[]; type?: string; category?: string; credits?: number; description?: string }) => ({
+/** The story's Beans as the node's whole hundredths: a listing's price is `price_c` on the wire. */
+const hc = (beans: number) => Math.round(beans * 100);
+
+/**
+ * The phone's edit (apps/native/utils/db.ts updatePost): every field, the member's own key, photos only when it has some.
+ * Its price as whole hundredths, `price_c` (a body with the old `credits` is refused: money-body.ts).
+ */
+const phoneEdit = (id: string, keeper: Id, fields: { title: string; photos?: string[]; type?: string; category?: string; price_c?: number; description?: string }) => ({
     id,
     authorPublicKey: keeper.pubKeyHex,
     type: fields.type ?? 'offer',
     category: fields.category ?? 'food',
     title: fields.title,
     description: fields.description ?? 'Laid this week',
-    credits: fields.credits ?? 6,
+    price_c: fields.price_c ?? hc(6),
     priceType: 'fixed',
     repeatable: true,
     photos: fields.photos,
@@ -122,7 +130,7 @@ async function main(): Promise<void> {
     const keeperBytes0 = bytesOf(keeper.pubKeyHex);
     const enterpriseBytes0 = bytesOf(enterprise);
     const offer = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
-        category: 'food', title: 'Dozen eggs', description: 'Laid this week', credits: 6, priceType: 'fixed', repeatable: true, photos: [PHOTO],
+        category: 'food', title: 'Dozen eggs', description: 'Laid this week', price_c: hc(6), priceType: 'fixed', repeatable: true, photos: [PHOTO],
         tags: ['food.eggs'], freeTags: ['#Free Range', 'limón'],
     }, keeper);
     assert(offer.status === 200 && offer.body?.success === true, `a keeper posts the enterprise's Offer with a photo (${show(offer)})`);
@@ -130,7 +138,7 @@ async function main(): Promise<void> {
     assert(!!offerId && photoCountOf(offerId) === 1, '...and it keeps the photo');
     assert(rowOf(offerId)?.free_tags === '["free range","limón"]' && rowOf(offerId)?.tags === 'food.eggs', "...and the tags the keeper typed, stored, beside the library's");
     const refused = await signedFetch('POST', `/api/treasury/${enterprise}/offer`, {
-        category: 'food', title: 'Refused', credits: 6, priceType: 'fixed', photos: [PHOTO], freeTags: ['me@example.org'],
+        category: 'food', title: 'Refused', price_c: hc(6), priceType: 'fixed', photos: [PHOTO], freeTags: ['me@example.org'],
     }, keeper);
     assert(refused.status === 400 && refused.error === 'A tag is a word to find your listing by, not a contact', `...and a contact is refused in words (${show(refused)})`);
     assert(bytesOf(keeper.pubKeyHex) > keeperBytes0 && bytesOf(enterprise) === enterpriseBytes0,
@@ -166,13 +174,13 @@ async function main(): Promise<void> {
     // ── 4. A Need ───────────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. A Need ──');
     const need = await signedFetch('POST', `/api/treasury/${enterprise}/need`, {
-        category: 'food', title: 'Tend the flock', description: 'Saturday mornings', credits: 10, priceType: 'fixed', photos: [PHOTO], freeTags: ['saturday help'],
+        category: 'food', title: 'Tend the flock', description: 'Saturday mornings', price_c: hc(10), priceType: 'fixed', photos: [PHOTO], freeTags: ['saturday help'],
     }, keeper);
     assert(need.status === 200 && need.body?.success === true, `a keeper posts the enterprise's Need (${show(need)})`);
     const needId: string = need.body?.post?.id;
     assert(rowOf(needId)?.free_tags === '["saturday help"]', '...and the tag the keeper typed');
     const needEdit = await signedFetch('POST', '/api/marketplace/posts/update',
-        phoneEdit(needId, keeper, { type: 'need', title: 'Tend the flock (and the garden)', credits: 10, description: 'Saturday mornings', photos: [PHOTO] }), keeper);
+        phoneEdit(needId, keeper, { type: 'need', title: 'Tend the flock (and the garden)', price_c: hc(10), description: 'Saturday mornings', photos: [PHOTO] }), keeper);
     assert(needEdit.status === 200 && needEdit.body?.success === true, `a keeper edits the enterprise's Need and adds a photo (${show(needEdit)})`);
     const needRow = rowOf(needId);
     assert(needRow?.title === 'Tend the flock (and the garden)' && needRow?.author_pubkey === enterprise && needRow?.type === 'need' && photoCountOf(needId) === 1,
@@ -208,7 +216,7 @@ async function main(): Promise<void> {
 
     // A group's or a direct post keeps today's rule (only its author edits it), whoever wrote it.
     db.prepare("UPDATE posts SET audience_scope = 'direct', target_pubkey = ? WHERE id = ?").run(stranger.pubKeyHex, needId);
-    const direct = await signedFetch('POST', '/api/marketplace/posts/update', phoneEdit(needId, keeper, { type: 'need', title: 'Direct words', credits: 10 }), keeper);
+    const direct = await signedFetch('POST', '/api/marketplace/posts/update', phoneEdit(needId, keeper, { type: 'need', title: 'Direct words', price_c: hc(10) }), keeper);
     assert(direct.status === 404, `a direct post the enterprise wrote is not widened to its keepers (${show(direct)})`);
     db.prepare("UPDATE posts SET audience_scope = 'public', target_pubkey = NULL WHERE id = ?").run(needId);
 
@@ -218,13 +226,13 @@ async function main(): Promise<void> {
     console.log("\n── 6. An edit cannot remove the last photo ──");
     const web = await signedFetch('POST', '/api/marketplace/posts/update', {
         id: offerId, authorPublicKey: keeper.pubKeyHex, type: 'offer', category: 'food', title: 'Eggs, by the dozen',
-        description: 'Laid this week', credits: 6, priceType: 'fixed', repeatable: true, photos: [],
+        description: 'Laid this week', price_c: hc(6), priceType: 'fixed', repeatable: true, photos: [],
     }, keeper);
     assert(web.status === 400 && web.error === 'Add a photo first',
         `an edit taking a post with photos down to zero is refused 400 (${show(web)})`);
     const kept = await signedFetch('POST', '/api/marketplace/posts/update', {
         id: offerId, authorPublicKey: keeper.pubKeyHex, type: 'offer', category: 'food', title: 'Eggs, by the dozen',
-        description: 'Laid this week', credits: 6, priceType: 'fixed', repeatable: true, photos: [PHOTO],
+        description: 'Laid this week', price_c: hc(6), priceType: 'fixed', repeatable: true, photos: [PHOTO],
     }, keeper);
     assert(kept.status === 200 && rowOf(offerId)?.title === 'Eggs, by the dozen' && photoCountOf(offerId) === 1,
         `an edit keeping at least one photo saves (${show(kept)})`);

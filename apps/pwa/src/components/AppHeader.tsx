@@ -8,11 +8,18 @@ import { t } from '@beanpool/core';
 import { SyncStatus } from './SyncStatus';
 import { HeaderControls, HeaderTitle, SidebarControls, useDotOnlyChip } from './HeaderControls';
 import { NeedsYouIcons } from './NeedsYouIcons';
+import { useWideScreen } from '../lib/useWideScreen';
 
 /**
- * The header under 768 px (md:hidden): the sync chip, the tab's name with the needs-you icons beside it (HeaderTitle and
- * its `end`), and the pill. On the map (`title` null) the community's logo is drawn over the middle, and the icons stop
- * short of it. One NeedsYouIcons for every tab, so a change of tab never takes down what measures their room.
+ * The header's row: the sync chip, the tab's name with the bell beside it (HeaderTitle and its `end`), and the pill. On the
+ * map (`title` null) the community's logo is drawn over the middle, and the bell stops short of it. One NeedsYouIcons for
+ * every tab, so a change of tab never takes down what measures their room.
+ *
+ * One set of controls per width (Marty, 9 Nov 2026: "I don't think we need the duplication"): from 768 px the side bar has
+ * the "?", Invite, Settings and the bell beside the profile button, and the row draws neither the pill nor the bell's slot
+ * (md:hidden on the slot); below it there is no side bar and the pill is the set, as on the phone. The row itself still shows
+ * beside the side bar for its chip and the tab's name (its own `md:hidden` loses to its inline display), so the pill is left
+ * out there, not hidden by a rule that can lose.
  */
 export function MobileHeader({
     activeTab, showSettings, title, isGuest, identityPubkey, displayVersion, communityStatus, onTitleClick,
@@ -37,6 +44,8 @@ export function MobileHeader({
 }) {
     // The sync chip as its dot alone where the title wouldn't fit beside the chip's words.
     const [headerRef, chipDotOnly] = useDotOnlyChip(title);
+    // The side bar's controls are the set from 768 px; the pill is drawn only where there is no side bar.
+    const sideBarShows = useWideScreen();
     const overMap = activeTab === 'map' && !showSettings;
     return (
         <header ref={headerRef} className="relative shadow-md md:hidden" style={{
@@ -87,14 +96,16 @@ export function MobileHeader({
                 </div>
             )}
 
-            <HeaderControls
-                showSettings={settingsSeen}
-                setShowSettings={setShowSettings}
-                identityPubkey={identityPubkey}
-                onOpenProfile={onOpenProfile}
-                onNavigate={onNavigate}
-                isMember={!isGuest}
-            />
+            {!sideBarShows && (
+                <HeaderControls
+                    showSettings={settingsSeen}
+                    setShowSettings={setShowSettings}
+                    identityPubkey={identityPubkey}
+                    onOpenProfile={onOpenProfile}
+                    onNavigate={onNavigate}
+                    isMember={!isGuest}
+                />
+            )}
         </header>
     );
 }

@@ -4,9 +4,9 @@
  * opens the vote. Every door that removed someone without it is closed there, and each one that stays is shown working.
  *
  * Boots the real server; every request goes over HTTPS through the real signature middleware and real admin sessions: an
- * admin's key session, an owner's, and the password with a 2FA code.
+ * admin's key session and an owner's (the node has no admin password).
  *
- *  1. Prune, votes on: an admin's key, the password and an owner's key are each refused 400 in words that say what to do
+ *  1. Prune, votes on: an admin's key and an owner's key are each refused 400 in words that say what to do
  *     instead (pause them; the community's vote decides), an owner's of another owner before any fresh proof is asked. For
  *     an owner or an admin the words say no vote removes one, and that an owner takes the role away first (§3.8).
  *     Nothing changes: the member stays active and no Bean moves. The engine refuses underneath, whatever route reaches
@@ -41,6 +41,7 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -51,6 +52,13 @@ function assert(cond: unknown, msg: string): void {
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject; callsign: string };
 
+/**
+ * The story's figures are Beans; the node's are whole hundredths. `hc` turns a Beans figure into hundredths at the door and
+ * `beansOf` turns one back for a message: exact for every figure here, each being whole hundredths.
+ */
+const hc = (beans: number) => Math.round(beans * 100);
+const beansOf = (hundredths: number) => hundredths / 100;
+
 function keypair(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     return { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey, callsign };
@@ -59,10 +67,11 @@ function keypair(callsign: string): Id {
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: p.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -87,7 +96,7 @@ async function signed(method: 'GET' | 'POST', p: string, id: Id, payload?: unkno
     }));
 }
 
-/** An admin route under `session`'s headers (a key session, or the password with a 2FA code). */
+/** An admin route under `session`'s headers (a key session). */
 async function admin(method: 'GET' | 'POST', p: string, session: Record<string, string>, payload?: unknown): Promise<Answer> {
     return answerOf(await fetch(`${BASE}${p}`, {
         method,
@@ -96,7 +105,6 @@ async function admin(method: 'GET' | 'POST', p: string, session: Record<string, 
     }));
 }
 
-const ADMIN_PW = 'Removal-Doors-Admin-Pw-31!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -115,8 +123,7 @@ async function main() {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { executeOffboard } = await import('./engine/member-wizards.js');
@@ -133,9 +140,6 @@ async function main() {
 
     await initTls();
     se.initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    const twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // What the owners are told (services/security-signal.ts): an admin's removals are counted, the community's are not.
@@ -151,8 +155,8 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, ago(30 * DAY), invitedBy, `INV-${callsign.toUpperCase()}`);
         setMemberPhoto(db, id.pubKeyHex, AVATAR);
-        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
-        if (beans > 0) se.transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
+        db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
+        if (beans > 0) se.transfer('genesis', id.pubKeyHex, hc(beans), `seed ${callsign}`, 'direct', true);
         return id;
     };
     const otto = seedMember('OwnerOtto');       // a second owner
@@ -170,12 +174,12 @@ async function main() {
         if (!s.ok || !s.sessionId) throw new Error(`could not open Ada's key session: ${s.error}`);
         return { 'X-Admin-Session': s.sessionId };
     })();
-    const password = () => twoFa.headers();
 
     const row = (id: Id): any => db.prepare('SELECT status, credit_frozen FROM members WHERE public_key = ?').get(id.pubKeyHex);
     const statusOf = (id: Id) => row(id)?.status as string | undefined;
-    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance FROM accounts ORDER BY public_key').all());
-    const exactBalance = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pubKeyHex) as { balance: number } | undefined)?.balance;
+    const accountsNow = () => JSON.stringify(db.prepare('SELECT public_key, balance_c FROM accounts ORDER BY public_key').all());
+    /** A member's balance as the ledger holds it: whole hundredths. */
+    const exactBalance = (id: Id) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(id.pubKeyHex) as { balance_c: number } | undefined)?.balance_c;
     const decision = (id: string): any => db.prepare('SELECT * FROM decisions WHERE id = ?').get(id);
     const removalRows = () => (db.prepare("SELECT COUNT(*) AS n FROM decisions WHERE effect = 'remove_member'").get() as { n: number }).n;
     const looksAt = (id: Id) => (db.prepare('SELECT COUNT(*) AS n FROM health_access_log WHERE subject_pubkey = ?').get(id.pubKeyHex) as { n: number }).n;
@@ -203,7 +207,7 @@ async function main() {
     const pam = seedMember('PlainPam');
     const accountsBefore = accountsNow();
     const pamWords: string[] = [];
-    for (const [who, session] of [['an admin', adaSession], ['the password', password()], ['an owner', gwenSession]] as const) {
+    for (const [who, session] of [['an admin', adaSession], ['an owner', gwenSession]] as const) {
         fresh();
         const r = await admin('POST', `/api/local/admin/users/${pam.pubKeyHex}/prune`, session, {});
         pamWords.push(r.body?.error ?? '');
@@ -241,7 +245,7 @@ async function main() {
     const accountsBeforeOlly = accountsNow();
     fresh();
     const ollyPreview = await admin('GET', `/api/local/admin/members/${olly.pubKeyHex}/offboard/preview`, adaSession);
-    assert(ollyPreview.status === 400 && SAYS_VOTE.test(ollyPreview.body?.error ?? '') && ollyPreview.body?.balance === undefined,
+    assert(ollyPreview.status === 400 && SAYS_VOTE.test(ollyPreview.body?.error ?? '') && ollyPreview.body?.balance_c === undefined,
         `the offboarding preview of Olly, whom no vote removes, is refused 400 in words and shows no balance (${ollyPreview.status} ${ollyPreview.text.slice(0, 200)})`);
     assert(looksAt(olly) === 0, `and no look at Olly's balance is logged (${looksAt(olly)})`);
     for (const [resolution, extra] of [['donate_to_commons', {}], ['gift_to_member', { giftRecipientPubkey: gil.pubKeyHex }]] as const) {
@@ -272,7 +276,7 @@ async function main() {
     assert(decision(halVote.id)?.status === 'execution_pending_grace', `the community votes Yes: Hal's removal waits out its grace window (${decision(halVote.id)?.status})`);
     fresh();
     const halPreview = await admin('GET', `/api/local/admin/members/${hal.pubKeyHex}/offboard/preview`, adaSession);
-    assert(halPreview.status === 200 && halPreview.body?.balance === 37.5 && halPreview.body?.settlesRemoval?.decisionId === halVote.id,
+    assert(halPreview.status === 200 && halPreview.body?.balance_c === hc(37.5) && halPreview.body?.settlesRemoval?.decisionId === halVote.id,
         `in it, the preview answers with his balance and names the removal it settles (${halPreview.status} ${JSON.stringify(halPreview.body?.settlesRemoval)})`);
     const gilBefore = exactBalance(gil)!, halBefore = exactBalance(hal)!, commonsBefore = se.getCommonsBalanceExact();
     const adminRemovalsBefore = adminRemovals();
@@ -280,7 +284,7 @@ async function main() {
     const halOff = await admin('POST', `/api/local/admin/members/${hal.pubKeyHex}/offboard`, adaSession, { resolution: 'gift_to_member', giftRecipientPubkey: gil.pubKeyHex });
     assert(halOff.status === 200 && statusOf(hal) === 'pruned', `Ada offboards Hal in his grace window, giving his Beans to Gil (${halOff.status} ${halOff.text.slice(0, 160)}; ${statusOf(hal)})`);
     assert(exactBalance(gil) === gilBefore + halBefore && exactBalance(hal) === 0 && se.getCommonsBalanceExact() === commonsBefore,
-        `Gil gets exactly Hal's ${halBefore} Beans, Hal holds none, the Commons is unchanged (${exactBalance(gil)}, ${exactBalance(hal)}, ${se.getCommonsBalanceExact()})`);
+        `Gil gets exactly Hal's ${beansOf(halBefore)} Beans, Hal holds none, the Commons is unchanged (hundredths: ${exactBalance(gil)}, ${exactBalance(hal)}, ${se.getCommonsBalanceExact()})`);
     const halDone = decision(halVote.id);
     assert(halDone?.status === 'executed' && /offboard/i.test(halDone?.execution_reason ?? ''),
         `the removal is complete: its Decision is executed, as Accelerate leaves one, and says the offboarding settled it (${halDone?.status}: ${halDone?.execution_reason})`);
@@ -292,9 +296,9 @@ async function main() {
     console.log('\n── 3. Proposing a removal ──');
     const roz = seedMember('ReportedRoz');
     {
-        const tiaPost = createPost('offer', 'food', 'Tia\'s eggs', 'A dozen eggs, fresh', 5, 'fixed', tia.pubKeyHex)!.id;
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at)
-                    VALUES (?, ?, ?, ?, 5, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(crypto.randomUUID(), tiaPost, gil.pubKeyHex, tia.pubKeyHex);
+        const tiaPost = createPost('offer', 'food', 'Tia\'s eggs', 'A dozen eggs, fresh', hc(5), 'fixed', tia.pubKeyHex)!.id;
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, completed_at)
+                    VALUES (?, ?, ?, ?, ?, 'completed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(crypto.randomUUID(), tiaPost, gil.pubKeyHex, tia.pubKeyHex, hc(5));
     }
     const before3 = removalRows();
     for (const [who, author] of [['Tia, a member who has completed a trade', tia], ['Ada, an admin', ada]] as const) {
@@ -358,7 +362,7 @@ async function main() {
     db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
         .run(keypair('StrayInvitee').pubKeyHex.toUpperCase(), 'StrayInvitee', ago(DAY), strayOnly.pubKeyHex, 'OLD-DOOR');
     const accountsBeforeOne = accountsNow();
-    for (const [who, session] of [['an owner', () => gwenSession], ['the password', password]] as const) {
+    for (const [who, session] of [['an owner', () => gwenSession]] as const) {
         for (const [what, one] of [['a member who invited nobody', loner], ['one whose only invitee is gone already', emptied],
             ['one whose only invitee is a row in another spelling of a key', strayOnly]] as const) {
             fresh();
@@ -401,18 +405,16 @@ async function main() {
     type Door = { route: string; method: 'GET' | 'POST'; session: () => Record<string, string>; body?: (pk: string) => unknown; status: number; path: (pk: string) => string };
     const doors: Door[] = [
         { route: 'prune, an admin', method: 'POST', path: pk => `/api/local/admin/users/${pk}/prune`, session: () => adaSession, status: 400 },
-        { route: 'prune, the password', method: 'POST', path: pk => `/api/local/admin/users/${pk}/prune`, session: password, status: 400 },
         { route: 'prune, an owner', method: 'POST', path: pk => `/api/local/admin/users/${pk}/prune`, session: () => gwenSession, status: 400 },
         { route: 'offboard, donate', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => adaSession, body: () => ({ resolution: 'donate_to_commons' }), status: 400 },
         { route: 'offboard, gift', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => adaSession, body: () => ({ resolution: 'gift_to_member', giftRecipientPubkey: gil.pubKeyHex }), status: 400 },
-        { route: 'offboard, write off, the password', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: password, body: () => ({ resolution: 'write_off_commons' }), status: 400 },
+        { route: 'offboard, write off, an owner', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => gwenSession, body: () => ({ resolution: 'write_off_commons' }), status: 400 },
         { route: 'offboard, nothing to settle, an owner', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => gwenSession, body: () => ({ resolution: 'prune_zero_balance' }), status: 400 },
         { route: 'offboard preview', method: 'GET', path: pk => `/api/local/admin/members/${pk}/offboard/preview`, session: () => adaSession, status: 400 },
         { route: 'status pruned', method: 'POST', path: pk => `/api/local/admin/users/${pk}/status`, session: () => adaSession, body: () => ({ status: 'pruned' }), status: 400 },
         { route: 'prune branch, an admin', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: () => adaSession, status: 403 },
         // Each target invited nobody: its branch is one member.
         { route: 'prune branch of one, an owner', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: () => gwenSession, status: 400 },
-        { route: 'prune branch of one, the password', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: password, status: 400 },
         { route: 'burst removal (no open door here)', method: 'POST', path: pk => `/api/local/admin/members/${pk}/burst/remove`, session: () => gwenSession, body: pk => ({ members: [pk], count: 1 }), status: 404 },
         { route: 'accelerate an open vote', method: 'POST', path: () => `/api/local/admin/decisions/${openVote.id}/accelerate`, session: () => adaSession, status: 400 },
     ];
@@ -448,12 +450,12 @@ async function main() {
     assert(adminRemovals() === toldBeforeVera + 1, `and the owners are told an admin removed a member (${adminRemovals() - toldBeforeVera})`);
     fresh();
     const vicPreview = await admin('GET', `/api/local/admin/members/${vic.pubKeyHex}/offboard/preview`, adaSession);
-    assert(vicPreview.status === 200 && vicPreview.body?.balance === 50 && !vicPreview.body?.settlesRemoval,
+    assert(vicPreview.status === 200 && vicPreview.body?.balance_c === hc(50) && !vicPreview.body?.settlesRemoval,
         `the offboarding preview answers with no removal to settle (${vicPreview.status} ${JSON.stringify(vicPreview.body?.settlesRemoval)})`);
     const commonsBeforeVic = se.getCommonsBalanceExact();
     fresh();
     const vicOff = await admin('POST', `/api/local/admin/members/${vic.pubKeyHex}/offboard`, adaSession, { resolution: 'donate_to_commons' });
-    assert(vicOff.status === 200 && statusOf(vic) === 'pruned' && se.getCommonsBalanceExact() === commonsBeforeVic + 50,
+    assert(vicOff.status === 200 && statusOf(vic) === 'pruned' && se.getCommonsBalanceExact() === commonsBeforeVic + hc(50),
         `and offboards Vic, his 50 Beans to the Commons (${vicOff.status} ${vicOff.text.slice(0, 120)}; ${statusOf(vic)})`);
     assert(adminRemovals() === toldBeforeVera + 2, `that is an admin's removal the owners are told of too (${adminRemovals() - toldBeforeVera})`);
     const wynn = seedMember('VotesOffWynn');

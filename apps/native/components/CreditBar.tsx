@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { formatNumber, t, tn } from '@beanpool/core';
+import { CIRCULATION_FREE_BEANS, OFFER_BANDS, beans, formatHundredths, formatNumber, t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 /**
@@ -11,18 +11,17 @@ import { Sentence } from './Sentence';
  * centre via an ANCHORED (non-linear) scale, so the deep floors and big balances compress into
  * the tails and zero stays legible for everyone. The left label is the member's real floor; once
  * past the fee-free zone the marker carries the circulation rate. Strict lanes → nothing overlaps.
+ *
+ * Every money figure is whole hundredths of a Bean (the node's `*_c` fields, @beanpool/core hundredths.ts): the props, the
+ * ladder and the scale's breakpoints, so nothing is ever converted. Each figure it writes goes through formatHundredths.
  */
 
 const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', BEAN_DEEP = '#1c6e30', MARK = '#38bdf8';
 
-// Offer-covenant bands - a faithful copy of @beanpool/core's OFFER_BANDS, where the array INDEX is
-// the live-offer count (index 0 = 0 offers → 0 unlocked, index 3 = 3 offers → -1000).
-// Kept local to avoid dragging Node/libp2p runtime imports into the client packages.
-const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
-
 /**
- * The offer ladder's numbers. `knownGrant` (a confirmed member in a known community, slice 4) is unlocked whole by one live
- * offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
+ * The offer ladder's numbers, in whole hundredths (core's OFFER_BANDS, where the array INDEX is the live-offer count: index
+ * 0 = 0 offers → 0 unlocked, index 3 = 3 offers → −1000 Beans). `knownGrant` (a confirmed member in a known community,
+ * slice 4) is unlocked whole by one live offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
  */
 export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: number) => number; offersForFull: number; rungs: number[] } {
     const limit = Math.abs(floor);
@@ -38,21 +37,24 @@ export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: numb
     return { usableAt, offersForFull, rungs };
 }
 
-// Marginal monthly circulation rate at a positive balance (mirrors the demurrage brackets).
+// Marginal monthly circulation rate at a positive balance in hundredths (mirrors the demurrage brackets).
 function marginalRate(b: number): number {
-    if (b <= 200) return 0;
-    if (b <= 500) return 1;
-    if (b <= 1000) return 1.5;
-    if (b <= 2000) return 2;
+    if (b <= beans(200)) return 0;
+    if (b <= beans(500)) return 1;
+    if (b <= beans(1000)) return 1.5;
+    if (b <= beans(2000)) return 2;
     return 2.5;
 }
 
-// value → percent [0..100] on the anchored scale (zero pinned at 50%).
+/** −200 Beans: where a deep floor's scale changes pace. */
+const DEEP = -beans(200);
+
+// value (hundredths) → percent [0..100] on the anchored scale (zero pinned at 50%).
 function toPct(v: number, floor: number): number {
     const F = Math.min(floor, 0);
     let pct: number;
     if (v >= 0) {
-        const pos: [number, number][] = [[0, 50], [200, 68], [500, 80], [1000, 90], [2000, 98]];
+        const pos: [number, number][] = [[0, 50], [beans(200), 68], [beans(500), 80], [beans(1000), 90], [beans(2000), 98]];
         pct = 99;
         for (let i = 0; i < pos.length - 1; i++) {
             const [v0, p0] = pos[i], [v1, p1] = pos[i + 1];
@@ -60,31 +62,37 @@ function toPct(v: number, floor: number): number {
         }
     } else if (F === 0) {
         pct = 50;
-    } else if (F >= -200) {
+    } else if (F >= DEEP) {
         // shallow floor — linear floor..0 → 6..50
         pct = 6 + (v - F) / (0 - F) * (50 - 6);
-    } else if (v <= -200) {
+    } else if (v <= DEEP) {
         // deep floor, between floor and −200 → 6..34
-        pct = 6 + (v - F) / (-200 - F) * (34 - 6);
+        pct = 6 + (v - F) / (DEEP - F) * (34 - 6);
     } else {
         // deep floor, between −200 and 0 → 34..50
-        pct = 34 + (v + 200) / 200 * (50 - 34);
+        pct = 34 + (v - DEEP) / -DEEP * (50 - 34);
     }
     return Math.max(3, Math.min(98, pct));
 }
 
-/** A balance with its sign, in the language's numbers: "+12", "−3.5" ("+12,5" in French). */
-const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? formatNumber(n) : formatNumber(n, 1)}`;
+/** A balance from whole hundredths, with its sign, in the language's numbers: "+12", "+49.25", "−9.82" ("+12,50" in French). */
+const fmt = (c: number) => `${c >= 0 ? '+' : ''}${formatHundredths(c)}`;
 
-export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloor, liveOffers = 0, knownGrant = 0 }: {
-    balance: number;
-    floor: number;
+/** Every money prop is whole hundredths of a Bean (the node's balance_c, floor_c, usableFloor_c, knownGrant_c). */
+export function CreditBar({ balance_c, floor_c, colors, feeFreeMax_c = CIRCULATION_FREE_BEANS, usableFloor_c, liveOffers = 0, knownGrant_c = 0 }: {
+    balance_c: number;
+    floor_c: number;
     colors: any;
-    feeFreeMax?: number;
-    usableFloor?: number;   // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
-    knownGrant?: number;    // the known floor's part of the limit: one live offer unlocks all of it
-    liveOffers?: number;    // v3: current live-offer count (for the ladder caption)
+    feeFreeMax_c?: number;
+    usableFloor_c?: number;   // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    knownGrant_c?: number;    // the known floor's part of the limit: one live offer unlocks all of it
+    liveOffers?: number;      // v3: current live-offer count (for the ladder caption)
 }) {
+    const balance = balance_c;
+    const floor = floor_c;
+    const feeFreeMax = feeFreeMax_c;
+    const usableFloor = usableFloor_c;
+    const knownGrant = knownGrant_c;
     const [tagW, setTagW] = useState(0);
     const pct = toPct(balance, floor);
     const overFeeFree = balance > feeFreeMax;
@@ -116,9 +124,9 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     const revealT = Math.max(0, Math.min(1, (balance - feeFreeMax / 2) / (feeFreeMax / 2)));
     const showFees = revealT > 0;
     const FEE_ZONES = [
-        { label: '1%', mid: 74, lo: 200, hi: 500 },
-        { label: '1.5%', mid: 85, lo: 500, hi: 1000 },
-        { label: '2%', mid: 94, lo: 1000, hi: 2000 },
+        { label: '1%', mid: 74, lo: beans(200), hi: beans(500) },
+        { label: '1.5%', mid: 85, lo: beans(500), hi: beans(1000) },
+        { label: '2%', mid: 94, lo: beans(1000), hi: beans(2000) },
     ];
     const FEE_TICKS = [80, 90, 98]; // 500 / 1000 / 2000 boundaries
 
@@ -127,7 +135,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
         <View
             style={s.cbar}
             accessible={true}
-            accessibilityLabel={t('Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.', { balance, floor, max: feeFreeMax })}
+            accessibilityLabel={t('Credit balance {balance} Beans, credit limit {floor} Beans, fee-free ceiling {max} Beans.', { balance: formatHundredths(balance), floor: formatHundredths(floor), max: formatHundredths(feeFreeMax) })}
         >
             {/* Lane 2 — the track */}
             <View style={s.track}>
@@ -175,7 +183,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                                 key={r.b}
                                 style={[s.rungLabel, { left: `${r.pct}%`, color: colors.text.body }]}
                             >
-                                −{r.b}
+                                −{formatHundredths(r.b)}
                             </Text>
                         );
                     })}
@@ -201,7 +209,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
             {/* Lane 3 — anchors: left / centre / right (space-between can't collide) */}
             <View style={s.anchors}>
                 <View>
-                    <Text style={[s.aVal, { color: RED }]}>{floor}</Text>
+                    <Text style={[s.aVal, { color: RED }]}>{formatHundredths(floor)}</Text>
                     <Text style={s.aSub}>{t('your limit')}</Text>
                 </View>
                 <View style={{ alignItems: 'center' }}>
@@ -209,7 +217,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                     <Text style={[s.aSub, { color: BEAN_DEEP, opacity: 0.85 }]}>{t('sweet spot')}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={[s.aVal, { color: WARM }]}>+{feeFreeMax}</Text>
+                    <Text style={[s.aVal, { color: WARM }]}>+{formatHundredths(feeFreeMax)}</Text>
                     <Text style={s.aSub}>{t('fee-free')}</Text>
                 </View>
             </View>
@@ -229,8 +237,8 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                             <Sentence
                                 text={nextUnlock
                                     ? tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth} · {more}\u00A0→\u00A0−{next}', '🎣 {offers} unlock\u00A0−{depth} · {more}\u00A0→\u00A0−{next}',
-                                        { depth: Math.abs(uFloor), next: nextUnlock, more: tn(liveOffers + 1, '{n} offer', '{n} offers') })
-                                    : tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth}', '🎣 {offers} unlock\u00A0−{depth}', { depth: Math.abs(uFloor) })}
+                                        { depth: formatHundredths(Math.abs(uFloor)), next: formatHundredths(nextUnlock), more: tn(liveOffers + 1, '{n} offer', '{n} offers') })
+                                    : tn(liveOffers, '🎣 {offers} unlocks\u00A0−{depth}', '🎣 {offers} unlock\u00A0−{depth}', { depth: formatHundredths(Math.abs(uFloor)) })}
                                 parts={{ offers: <Text style={s.ladderStrong}>{tn(liveOffers, '{n} offer', '{n} offers')}</Text> }}
                             />
                         ) : (
@@ -238,7 +246,7 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
                                 text={tn(offersForFull,
                                     '🎣 {post} to open your credit line — {count} offer unlocks your\u00A0full\u00A0−{floor}.',
                                     '🎣 {post} to open your credit line — {count} offers unlock your\u00A0full\u00A0−{floor}.',
-                                    { floor: Math.abs(floor) })}
+                                    { floor: formatHundredths(Math.abs(floor)) })}
                                 parts={{
                                     post: <Text style={s.ladderStrong}>{t('Post an offer')}</Text>,
                                     count: <Text style={s.ladderStrong}>{formatNumber(offersForFull)}</Text>,

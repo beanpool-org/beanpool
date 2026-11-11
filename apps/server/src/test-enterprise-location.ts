@@ -19,7 +19,8 @@
  *     - /api/treasuries, /api/enterprises and the detail endpoints omit coordinates for completed enterprises.
  *     - A node admin can still clear a completed enterprise's location (signed member route and Settings app route);
  *       a stranger cannot.
- *     - The boot migration clears coordinates already stored on completed enterprises and leaves active ones alone.
+ *     (The boot pass that cleared coordinates already stored on completed enterprises, audit A17, went in the 1.4.0
+ *     cutover: every kept node had run it, and the gate opens no database older than 1.2.36.)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-location.ts
  */
@@ -35,13 +36,13 @@ import {
 } from './state-engine.js';
 import { approximateLocation, roundToRoughly100m } from '@beanpool/core';
 import { startHttpsServer } from './https-server.js';
-import { db, initSchema } from './db/db.js';
+import { db } from './db/db.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
-let settingsAdmin: Record<string, string> = {}; // an owner's automation token, made in main() (step 7c)
+let settingsAdmin: Record<string, string> = {}; // an owner's automation token, made in main()
 let BASE = '';
 
 let run = 0, passed = 0;
@@ -58,7 +59,7 @@ function makeIdentity(callsign: string) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -66,10 +67,11 @@ async function signedFetch(method: 'GET' | 'POST' | 'DELETE', path: string, id: 
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -175,14 +177,7 @@ async function main() {
         assert(flockRow.location_auth_signer === adminId.pubKeyHex, 'Flock location_auth_signer recorded as admin');
 
         // Admin can also set location via Settings app endpoint (/api/local/admin/treasury/:treasury/location)
-        const { hash: adminHash, salt } = hashPassword('correct-horse-battery-staple-1234');
-        saveLocalConfig({
-            ...getLocalConfig(),
-            adminHash,
-            salt,
-        });
-        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' route is called with an
-        // owner's automation token.
+        // Settings' route is called with an owner's automation token (the node has no admin password).
         settingsAdmin = ownerTokenHeaders('admin');
         const adminHttpRes = await fetch(`${BASE}/api/local/admin/treasury/${flock}/location`, {
             method: 'POST',
@@ -192,7 +187,7 @@ async function main() {
             },
             body: JSON.stringify({ lat: -28.5525, lng: 153.5045 }),
         });
-        assert(adminHttpRes.ok, `Admin password endpoint successfully updates location (${adminHttpRes.status})`);
+        assert(adminHttpRes.ok, `The Settings endpoint successfully updates location (${adminHttpRes.status})`);
         const flockAdminRow = db.prepare('SELECT lat, lng, location_auth_signer FROM members WHERE public_key = ?').get(flock) as any;
         assert(flockAdminRow.lat === -28.5525 && flockAdminRow.lng === 153.5045, 'Flock location updated via admin endpoint');
 
@@ -398,19 +393,6 @@ async function main() {
         // Setting (not clearing) a location on a completed enterprise stays refused, even for an admin
         const adminSetCompleted = await signedFetch('POST', `/api/enterprise/${adminClearTarget}/location`, adminId, { lat: -28.5, lng: 153.5 });
         assert(adminSetCompleted.status === 403 || adminSetCompleted.status === 400, `Admin cannot SET a location on a completed enterprise (got ${adminSetCompleted.status})`);
-
-        // 8d. Migration clears coordinates already stored on completed enterprises; active ones untouched
-        const migrateTarget = completedWithCoords('MigrateWoundUp', -28.534, 153.524);
-        const activeBefore = db.prepare('SELECT lat, lng, location_auth_signer, location_updated_at FROM members WHERE public_key = ?').get(shed) as any;
-        assert(activeBefore.lat !== null, 'Active enterprise has coordinates before the migration');
-        initSchema();
-        const migratedRow = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(migrateTarget) as any;
-        assert(migratedRow.lat === null && migratedRow.lng === null, `Migration clears coordinates on a pre-existing completed enterprise (got ${migratedRow.lat}, ${migratedRow.lng})`);
-        const activeAfter = db.prepare('SELECT lat, lng, location_auth_signer, location_updated_at FROM members WHERE public_key = ?').get(shed) as any;
-        assert(JSON.stringify(activeAfter) === JSON.stringify(activeBefore), 'Migration leaves an active enterprise’s location untouched');
-        initSchema();
-        const migratedTwice = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(migrateTarget) as any;
-        assert(migratedTwice.lat === null && migratedTwice.lng === null, 'Migration is idempotent (second boot is a no-op)');
 
         console.log(`\nAll ${passed}/${run} enterprise location tests passed!`);
     } finally {

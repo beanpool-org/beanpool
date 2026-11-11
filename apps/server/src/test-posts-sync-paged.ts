@@ -25,6 +25,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -43,10 +44,11 @@ function keypair(): Id {
 function signedHeaders(method: string, path: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -105,13 +107,13 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
             .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
     const carol = seed('ReaderCarol');
     const ann = seed('AuthorAnn');
 
-    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active,
+    const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, status, active,
                                created_at, updated_at) VALUES (?, 'offer', 'food', ?, '', 5, ?, 'active', 1, ?, ?)`);
     const base = Date.parse('2026-08-01T00:00:00.000Z');
     const iso = (ms: number) => new Date(ms).toISOString();

@@ -20,7 +20,7 @@ function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-const COMMUNITY = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} };
+const COMMUNITY = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: {} };
 
 /** The relay: the phone has sent, so polls say "confirming"; /confirm answers from `answers` in turn. */
 function stubRelay(answers: Array<[number, unknown]>, pollStatus = () => 'confirming', pollCode = 200) {

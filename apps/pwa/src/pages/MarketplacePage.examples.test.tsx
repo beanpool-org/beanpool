@@ -32,7 +32,7 @@ const identity: BeanPoolIdentity = {
 };
 
 const GLOBAL_INFO = {
-    memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const,
+    memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'global' as const,
     features: { openJoin: true, guestListingsOnly: true, beans: false, exampleListings: true },
 };
 const LOCAL_INFO = { ...GLOBAL_INFO, profile: 'local' as const, features: { openJoin: false, guestListingsOnly: false, beans: true, exampleListings: false } };

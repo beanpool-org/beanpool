@@ -64,6 +64,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -115,10 +116,11 @@ type Id = { pk: string; privateKey: crypto.KeyObject; callsign: string };
 function signedHeaders(method: string, route: string, body: string, id: Id): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${body}`;
+    const canonical = { method, path: route.split('?')[0], timestamp: ts, nonce, body };
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -150,7 +152,7 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -165,8 +167,7 @@ async function main(): Promise<void> {
     // This machine's own disk may be full enough to alert: the rows here are the report ones.
     setSimulatedDiskUsageForTesting(10);
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const { hash, salt } = hashPassword('Alerts-Rep-Pw-5512!');
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Report Test Commons' });
+    updateLocalConfig({ communityName: 'Report Test Commons' });
 
     const ids: Id[] = [];
     const makeId = (callsign: string): Id => {
@@ -181,7 +182,7 @@ async function main(): Promise<void> {
         const id = makeId(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pk, callsign, new Date().toISOString(), owner.pk, 'TEST');
-        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
+        db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
         return id;
     };
     const admin = join('AdamAdminR');
@@ -735,8 +736,12 @@ async function main(): Promise<void> {
     const st = await adminCall('POST', '/api/local/admin/alerts/status', {});
     assert(st.status === 200 && st.json?.history?.some((e: any) => e.key === 'reports.new'), `13. the Alerts card lists them (${st.status})`);
     const notices = db.prepare(`SELECT recipient, title, body, data FROM push_notices WHERE kind = 'owner.alert'`).all() as any[];
-    assert(notices.some((x) => x.recipient === admin.pk) && notices.every((x) => x.recipient === owner.pk || x.recipient === admin.pk),
-        `13. ${notices.length} owner.alert notices kept, every one for the owner or the admin`);
+    // Kept for every owner and admin, a phone or not (the bell, DESIGN-web-notifications-fable.md §2.1): the owners and
+    // admins made during the run too, who have no phone here; never the moderator, a reporter or a member reported.
+    const roleHolders = new Set([owner, admin, ...newOwners, newAdmin, histAdmin].map((m) => m.pk));
+    const notFor = notices.filter((x) => !roleHolders.has(x.recipient)).map((x) => String(x.recipient).slice(0, 8));
+    assert(notices.some((x) => x.recipient === admin.pk) && notFor.length === 0 && !notices.some((x) => x.recipient === moderator.pk),
+        `13. ${notices.length} owner.alert notices kept, every one for an owner or an admin (${notFor.length} for anyone else: ${JSON.stringify(notFor.slice(0, 5))})`);
     const payloads = [
         ...ntfy.hits.map((h) => JSON.stringify(h.headers) + h.body),
         ...ownerPushes().map((p) => p.title + p.body),

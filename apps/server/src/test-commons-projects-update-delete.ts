@@ -20,8 +20,8 @@ import { initStateEngine, createProject, getAllProjects } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -40,7 +40,7 @@ function makeMember(callsign: string) {
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
     setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
 
@@ -55,10 +55,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const signPath = path.split('?')[0];
-    const canonical = `${method}\n${signPath}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: signPath, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -68,14 +69,14 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: { pubKeyHex
     return { status: res.status, body: json, error: json?.error as string | undefined };
 }
 
+/** The story's figures are Beans; a project's requested amount and goal are whole hundredths (1 Bean = 100). */
+const hc = (beans: number) => Math.round(beans * 100);
+
 async function main() {
     console.log('Running commons projects update and delete integration tests...\n');
 
     await initTls();
     initStateEngine();
-    const ADMIN_PASSWORD = 'correct-horse-battery-staple-1234';
-    const { hash, salt } = hashPassword(ADMIN_PASSWORD);
-    saveLocalConfig({ ...getLocalConfig(), adminHash: hash, salt });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -83,7 +84,7 @@ async function main() {
     const attacker = makeMember('attacker');
 
     // Create a commons project
-    const project = createProject(proposer.pubKeyHex, 'Library Renovation', 'Funding books and seats', 500);
+    const project = createProject(proposer.pubKeyHex, 'Library Renovation', 'Funding books and seats', hc(500));
     assert(project !== null, 'Project created successfully');
     const projectId = project!.id;
 
@@ -104,14 +105,14 @@ async function main() {
     const projectInTreasuries = memberTreasuriesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
     assert(!!projectInTreasuries, 'Another member sees live project in /api/treasuries');
     assert(projectInTreasuries?.lifecycle === 'bounded', 'Project has lifecycle bounded in /api/treasuries');
-    assert(projectInTreasuries?.goalAmount === 500, 'Project has goalAmount 500 in /api/treasuries');
+    assert(projectInTreasuries?.goalAmount_c === hc(500), `Project has goalAmount 500 in /api/treasuries (goalAmount_c ${projectInTreasuries?.goalAmount_c})`);
 
     const memberEnterprisesRes = (await signedFetch('GET', '/api/enterprises', attacker)).body;
     const projectInEnterprises = memberEnterprisesRes?.treasuries?.find((t: any) => t.publicKey === projectId);
     assert(!!projectInEnterprises, 'Another member sees live project in /api/enterprises');
 
     // 0c. Suspended project shows only to its keepers, not other members
-    const suspProj = createProject(proposer.pubKeyHex, 'Suspended Project', 'Temporarily suspended', 200);
+    const suspProj = createProject(proposer.pubKeyHex, 'Suspended Project', 'Temporarily suspended', hc(200));
     assert(suspProj !== null, 'Suspended project created');
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspProj!.id);
 
@@ -126,7 +127,7 @@ async function main() {
     assert(keeperSuspCheckEnt?.treasuries?.some((t: any) => t.publicKey === suspProj!.id), 'Keeper sees their own suspended project in /api/enterprises');
 
     // 0c2. An admin-rejected project (adminRejectProject sets status 'rejected') shows only to its keepers, as a suspended one
-    const rejProj = createProject(proposer.pubKeyHex, 'Rejected Project', 'Dismissed by an admin', 200);
+    const rejProj = createProject(proposer.pubKeyHex, 'Rejected Project', 'Dismissed by an admin', hc(200));
     assert(rejProj !== null, 'Rejected project created');
     db.prepare("UPDATE members SET status = 'rejected', lat = -28.55, lng = 153.5 WHERE public_key = ?").run(rejProj!.id);
     db.prepare("UPDATE members SET lat = -28.55, lng = 153.5 WHERE public_key = ?").run(suspProj!.id);
@@ -135,7 +136,7 @@ async function main() {
     assert((await signedFetch('GET', '/api/treasuries', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/treasuries');
     assert((await signedFetch('GET', '/api/enterprises', proposer)).body?.treasuries?.some((t: any) => t.publicKey === rejProj!.id), 'Keeper sees their own rejected project in /api/enterprises');
 
-    const disProj = createProject(proposer.pubKeyHex, 'Disabled Project', 'Dismissed as disabled', 200);
+    const disProj = createProject(proposer.pubKeyHex, 'Disabled Project', 'Dismissed as disabled', hc(200));
     assert(disProj !== null, 'Disabled project created');
     db.prepare("UPDATE members SET status = 'disabled', lat = -28.55, lng = 153.5 WHERE public_key = ?").run(disProj!.id);
 
@@ -177,15 +178,14 @@ async function main() {
     const aliasStatuses = (await signedFetch('GET', '/api/treasuries/statuses', attacker)).body;
     assert(!aliasStatuses?.enterprises?.some((e: any) => e.publicKey === rejProj!.id), 'Other member does not see a rejected project on /api/treasuries/statuses');
 
-    // 0c5. Manager password read: /api/local/admin/treasury lists rejected, suspended and disabled rows
+    // 0c5. The manager's read (an owner's key session): /api/local/admin/treasury lists rejected, suspended and disabled rows
     const unauthAdminRes = await fetch(`${BASE}/api/local/admin/treasury`);
     assert(unauthAdminRes.status === 401 || unauthAdminRes.status === 403, `Unauthenticated request refused from /api/local/admin/treasury (got ${unauthAdminRes.status})`);
-    const badAdminRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: { 'X-Admin-Password': 'wrong-password' } });
-    assert(badAdminRes.status === 401 || badAdminRes.status === 403, `Wrong password refused from /api/local/admin/treasury (got ${badAdminRes.status})`);
+    const badAdminRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: { 'X-Admin-Password': 'correct-horse-battery-staple-1234' } });
+    assert(badAdminRes.status === 401 || badAdminRes.status === 403, `An old admin password is no credential on /api/local/admin/treasury (got ${badAdminRes.status})`);
 
-    const twoFa = turnOn2faForTests(ADMIN_PASSWORD);
-    const adminTreasuriesRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: twoFa.headers() });
-    assert(adminTreasuriesRes.status === 200, `Manager password sign-in answers 200 on /api/local/admin/treasury (got ${adminTreasuriesRes.status})`);
+    const adminTreasuriesRes = await fetch(`${BASE}/api/local/admin/treasury`, { headers: ownerSessionHeaders() });
+    assert(adminTreasuriesRes.status === 200, `An owner's key session answers 200 on /api/local/admin/treasury (got ${adminTreasuriesRes.status})`);
     const adminBody = await adminTreasuriesRes.json();
     const adminTreasuries = adminBody.treasuries ?? [];
     assert(adminTreasuries.some((t: any) => t.publicKey === rejProj!.id), 'Manager lists rejected project in /api/local/admin/treasury');
@@ -205,7 +205,7 @@ async function main() {
         projectId,
         title: 'Hacked Title',
         description: 'Hacked Description',
-        requestedAmount: 1000,
+        requestedAmount_c: hc(1000),
     });
     assert(nonOwnerUpdateRes.status === 400, `Non-owner update returns 400 (got ${nonOwnerUpdateRes.status})`);
 
@@ -213,7 +213,7 @@ async function main() {
     const missingFieldsUpdateRes = await signedFetch('POST', '/api/commons/projects/update', proposer, {
         proposerPubkey: proposer.pubKeyHex,
         projectId,
-        // missing title and requestedAmount
+        // missing title and requestedAmount_c
     });
     assert(missingFieldsUpdateRes.status === 400, `Missing fields update returns 400 (got ${missingFieldsUpdateRes.status})`);
 
@@ -223,7 +223,7 @@ async function main() {
         projectId,
         title: 'Library & Media Center Renovation',
         description: 'Updated funding for books, seats and digital displays',
-        requestedAmount: 600,
+        requestedAmount_c: hc(600),
     });
     assert(ownerUpdateRes.status === 200, `Owner update returns 200 (got ${ownerUpdateRes.status})`);
     assert(ownerUpdateRes.body?.success === true, 'Update response indicates success: true');
@@ -232,7 +232,7 @@ async function main() {
     const allProjectsAfterUpdate = getAllProjects();
     const updatedProj = allProjectsAfterUpdate.find(p => p.id === projectId);
     assert(updatedProj?.title === 'Library & Media Center Renovation', 'Project title updated in state engine');
-    assert(updatedProj?.requestedAmount === 600, 'Project requestedAmount updated in state engine');
+    assert(updatedProj?.requestedAmount_c === hc(600), 'Project requestedAmount updated in state engine');
 
     // 4. Test POST /api/commons/projects/delete: Rejects non-owner delete
     const nonOwnerDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', attacker, {

@@ -45,9 +45,13 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-const r4 = (n: number): number => Math.round(n * 10000) / 10000;
+/**
+ * The story's figures are Beans; the node's are whole hundredths (1 Bean = 100). `hc` turns a Beans figure into
+ * hundredths. Balances are read as the integers the rows hold, so every check below is exact.
+ */
+const hc = (beans: number): number => Math.round(beans * 100);
 const balanceOf = (pk: string): number =>
-    r4((db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(pk) as any)?.balance ?? 0);
+    (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(pk) as any)?.balance_c ?? 0;
 const stateOf = (key: string): string | undefined => getSettlement(key)?.state;
 /** Ledger rows naming this settlement — how we prove a reversal ADDS entries rather than removing them. */
 const txnsFor = (key: string): number =>
@@ -59,21 +63,21 @@ const txnsFor = (key: string): number =>
  * path, and least of all on a compensating one.
  */
 const nodeTotal = (): number => {
-    const s = (db.prepare(`SELECT COALESCE(SUM(balance),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
+    const s = (db.prepare(`SELECT COALESCE(SUM(balance_c),0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'`)
         .get() as { s: number }).s;
-    return r4(s + getCommonsBalanceExact());
+    return s + getCommonsBalanceExact();
 };
 
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit_c, home_node_url)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`)
+        .run(pk, callsign, hc(500), homeNodeUrl ?? null);
     // Epoch at NOW, not 0. Epoch 0 is 1970, so the first read would apply ~56 years of compound demurrage
     // and every balance assertion below would be measuring decay instead of settlement (#138).
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
-        .run(pk, balance, ledger.getCurrentEpoch());
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, ?, ?)`)
+        .run(pk, hc(balance), ledger.getCurrentEpoch());
     reconcileLedgerFromDb();
     return pk;
 }
@@ -98,8 +102,8 @@ const stubWire = (askReply: any, deliverReply: any): SettlementWire & { asked: n
 };
 
 const ACCEPTED = { accepted: true, key: '', reservedUntil: new Date(Date.now() + RESERVATION_TTL_MS).toISOString() };
-const PRICE = 40;
-const FEE = crossNodeFee(PRICE);
+const PRICE = hc(40);
+const FEE = crossNodeFee(PRICE);   // 1.5% of 40 Beans: 0.60, a whole 60 hundredths
 
 async function main() {
     console.log('Running #104 buyer-side settlement orchestration tests...\n');
@@ -116,7 +120,7 @@ async function main() {
     const PEER = peerIdFromPrivateKey(peerKey).toString();
     const PEER_ADDR = `/dns4/byron.beanpool.org/tcp/4001/p2p/${PEER}`;
     addConnector(PEER_ADDR, 'peer', 'Byron', 'https://byron.beanpool.org');
-    setConnectorCreditCap(PEER_ADDR, 10_000);
+    setConnectorCreditCap(PEER_ADDR, hc(10_000));
 
     const bridge = bridgeAccountId(PEER);
     const seller = 'seller-on-their-node';
@@ -140,7 +144,7 @@ async function main() {
     const wire1 = stubWire({ ...ACCEPTED, key: KEY_OK }, { settled: true, key: KEY_OK });
     const commonsBefore = getCommonsBalanceExact();
     const out1 = await runOutboundSettlement(
-        { key: KEY_OK, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount: PRICE },
+        { key: KEY_OK, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount_c: PRICE },
         wire1, OURS, ourKey,
     );
 
@@ -148,11 +152,12 @@ async function main() {
     assert(stateOf(KEY_OK) === 'settled', 'and the row is terminal at `settled`');
     assert(wire1.asked === 1 && wire1.delivered === 1, 'one ask, one delivery — no retries on the happy path');
     // The buyer pays price + fee; the bridge carries the PRICE ONLY, and the fee stays home.
-    assert(balanceOf(buyer) === r4(500 - PRICE - FEE),
-        `the buyer is debited ${PRICE} + ${FEE} fee = ${r4(PRICE + FEE)}`);
+    assert(FEE === 60, `the fee on a 40-bean purchase is 0.60 (${FEE} hundredths)`);
+    assert(balanceOf(buyer) === hc(500) - PRICE - FEE,
+        `the buyer is debited 40 + 0.60 fee = 40.60 (${hc(500) - balanceOf(buyer)} hundredths)`);
     assert(balanceOf(bridge) === PRICE,
         `the bridge carries the price alone (${balanceOf(bridge)}) — a fee must never cross the border`);
-    assert(r4(getCommonsBalanceExact() - commonsBefore) === FEE,
+    assert(getCommonsBalanceExact() - commonsBefore === FEE,
         'and the fee landed in our own Commons pot');
     assert(nodeTotal() === baseline, 'conservation: a settled purchase moved value between our own rows only');
 
@@ -161,7 +166,7 @@ async function main() {
     const wire2 = stubWire({ accepted: false, reason: 'PEER_CAP_EXCEEDED', message: 'Not right now.' }, undefined);
     const beforeNo = balanceOf(buyer);
     const out2 = await runOutboundSettlement(
-        { key: KEY_NO, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_NO, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         wire2, OURS, ourKey,
     );
 
@@ -177,7 +182,7 @@ async function main() {
     const KEY_UNREACHABLE = 'orch-unreachable';
     const wire3 = stubWire(null, undefined);
     const out3 = await runOutboundSettlement(
-        { key: KEY_UNREACHABLE, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_UNREACHABLE, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         wire3, OURS, ourKey,
     );
 
@@ -193,7 +198,7 @@ async function main() {
         { settled: false, reason: 'CAPACITY_LAPSED', message: 'Cap reached.' });
     const beforeLapsed = balanceOf(buyer);
     const out4 = await runOutboundSettlement(
-        { key: KEY_LAPSED, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_LAPSED, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         wire4, OURS, ourKey,
     );
 
@@ -216,7 +221,7 @@ async function main() {
         { settled: false, reason: 'settlement_error', message: 'It is recorded and will be retried.' });
     const beforeRetry = balanceOf(buyer);
     const out5 = await runOutboundSettlement(
-        { key: KEY_RETRY, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_RETRY, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         wire5, OURS, ourKey,
     );
 
@@ -224,9 +229,9 @@ async function main() {
     assert(stateOf(KEY_RETRY) === 'committed',
         `the row stays \`committed\` for recovery (${stateOf(KEY_RETRY)}) — reversing it while they still hold `
         + 'the receipt would pay their seller and refund our buyer for the same trade');
-    assert(balanceOf(buyer) === r4(beforeRetry - PRICE - FEE),
+    assert(balanceOf(buyer) === beforeRetry - PRICE - FEE,
         'the buyer stays debited, because the trade may yet complete');
-    assert(balanceOf(bridge) === r4(PRICE * 2), 'and we still owe outward on the bridge');
+    assert(balanceOf(bridge) === PRICE * 2, 'and we still owe outward on the bridge');
     assert(nodeTotal() === baseline, 'conservation holds while a settlement is in flight');
 
     // ── 6. Delivery times out after commit — ambiguous, so also PENDING ────────────────────────────
@@ -234,7 +239,7 @@ async function main() {
     const KEY_LOST = 'orch-lost-reply';
     const wire6 = stubWire({ ...ACCEPTED, key: KEY_LOST }, null);
     const out6 = await runOutboundSettlement(
-        { key: KEY_LOST, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_LOST, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         wire6, OURS, ourKey,
     );
 
@@ -248,7 +253,7 @@ async function main() {
         const key = `orch-${reason.toLowerCase()}`;
         const before = balanceOf(buyer);
         const out = await runOutboundSettlement(
-            { key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+            { key, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
             stubWire({ ...ACCEPTED, key }, { settled: false, reason, message: reason }), OURS, ourKey,
         );
         assert(out.status === 'reversed' && stateOf(key) === 'reversed',
@@ -262,7 +267,7 @@ async function main() {
     // able to talk this node into undoing a trade the peer completed.
     const KEY_ALIEN = 'orch-unknown-reason';
     const out8 = await runOutboundSettlement(
-        { key: KEY_ALIEN, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_ALIEN, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         stubWire({ ...ACCEPTED, key: KEY_ALIEN }, { settled: false, reason: 'SOME_FUTURE_CODE' }), OURS, ourKey,
     );
     assert(out8.status === 'pending' && stateOf(KEY_ALIEN) === 'committed',
@@ -275,7 +280,7 @@ async function main() {
     let threw = '';
     try {
         await runOutboundSettlement(
-            { key: KEY_BROKE, peerId: PEER, buyerPublicKey: pauper, sellerPublicKey: seller, amount: 100_000 },
+            { key: KEY_BROKE, peerId: PEER, buyerPublicKey: pauper, sellerPublicKey: seller, amount_c: hc(100_000) },
             stubWire({ ...ACCEPTED, key: KEY_BROKE }, { settled: true, key: KEY_BROKE }), OURS, ourKey,
         );
     } catch (e: any) { threw = e?.message || String(e); }
@@ -294,7 +299,7 @@ async function main() {
     const retryOk = stubWire({ ...ACCEPTED, key: KEY_OK }, { settled: true, key: KEY_OK });
     const buyerBeforeRetries = balanceOf(buyer);
     const again1 = await runOutboundSettlement(
-        { key: KEY_OK, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount: PRICE },
+        { key: KEY_OK, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, postId: 'post-1', amount_c: PRICE },
         retryOk, OURS, ourKey,
     );
     assert(again1.status === 'settled' && retryOk.asked === 0,
@@ -302,14 +307,14 @@ async function main() {
     assert(balanceOf(buyer) === buyerBeforeRetries, 'and does not debit the buyer a second time');
 
     const again2 = await runOutboundSettlement(
-        { key: KEY_NO, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_NO, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         stubWire({ ...ACCEPTED, key: KEY_NO }, undefined), OURS, ourKey,
     );
     assert(again2.status === 'refused' && (again2 as any).reason === 'PEER_CAP_EXCEEDED',
         `retrying an abandoned key repeats the original refusal (${again2.status})`);
 
     const again3 = await runOutboundSettlement(
-        { key: KEY_LAPSED, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_LAPSED, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         stubWire({ ...ACCEPTED, key: KEY_LAPSED }, undefined), OURS, ourKey,
     );
     assert(again3.status === 'reversed' && (again3 as any).reason === 'CAPACITY_LAPSED',
@@ -324,7 +329,7 @@ async function main() {
     let again4: any;
     try {
         again4 = await runOutboundSettlement(
-            { key: KEY_RETRY, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+            { key: KEY_RETRY, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
             resumeWire, OURS, ourKey,
         );
     } catch (e: any) { resumeThrew = e?.message || String(e); }
@@ -343,7 +348,7 @@ async function main() {
     const KEY_HOSTILE = 'orch-hostile-copy';
     const HOSTILE = 'Error: ENOENT /srv/beanpool/secrets — call 1-800-SEND-BEANS';
     const out10 = await runOutboundSettlement(
-        { key: KEY_HOSTILE, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount: PRICE },
+        { key: KEY_HOSTILE, peerId: PEER, buyerPublicKey: buyer, sellerPublicKey: seller, amount_c: PRICE },
         stubWire({ accepted: false, reason: 'cap_exhausted', message: HOSTILE, error: HOSTILE }, undefined),
         OURS, ourKey,
     );
@@ -369,7 +374,7 @@ async function main() {
         + 'refusals, retries and resumptions, and the node still sums to where it started');
     // The bridge is the tab, so it must equal exactly the purchases that are settled or still owed: the one
     // settled, plus the three left committed. Reversed and abandoned ones must have left no trace on it.
-    assert(balanceOf(bridge) === r4(PRICE * 4),
+    assert(balanceOf(bridge) === PRICE * 4,
         `the bridge owes exactly the settled + in-flight purchases (${balanceOf(bridge)} = 4 × ${PRICE}) — `
         + 'nothing reversed or abandoned is still sitting on the tab');
 

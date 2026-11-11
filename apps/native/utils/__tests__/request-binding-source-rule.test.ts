@@ -91,14 +91,15 @@ function callSites(): { sites: Site[]; rawImports: string[] } {
 
 const key = (s: Site) => `${s.file} ${s.fn}`;
 
-describe('the member key signs only through core\'s builders and the listed old-form fallbacks', () => {
+describe('the member key signs only through core\'s builders', () => {
     const { sites, rawImports } = callSites();
 
     it('finds the signing code it is meant to police', () => {
         // Guards the test itself: if the scan stopped seeing these, every rule below would pass vacuously.
         expect(sites.some(s => s.callee === 'signData' && key(s) === 'utils/crypto.ts memberSigner')).toBe(true);
         expect(sites.some(s => s.callee === 'memberSigner' && key(s) === 'utils/member-statements.ts signAdminChallenge')).toBe(true);
-        expect(sites.some(s => s.callee === 'sign' && key(s) === 'utils/crypto.ts unboundRequestHeaders')).toBe(true);
+        // noble's own sign, inside signData: the scan sees a direct sign call, so "none but signData" below is not vacuous.
+        expect(sites.some(s => s.callee === 'sign' && key(s) === 'utils/crypto.ts signData')).toBe(true);
     });
 
     it('signData, the raw signer, is called only inside memberSigner (and the listed RSVP statement)', () => {
@@ -129,7 +130,7 @@ describe('the member key signs only through core\'s builders and the listed old-
         expect(fn.match(/signData\(/g)).toHaveLength(1);
     });
 
-    it('memberSigner is handed out only where a core builder or an old-form fallback takes it', () => {
+    it('memberSigner is handed out only where a core builder takes it', () => {
         const allowed = new Set([
             'utils/crypto.ts buildSignedHeaders',
             'utils/crypto.ts buildSignedWsParams',
@@ -145,6 +146,9 @@ describe('the member key signs only through core\'s builders and the listed old-
             // A re-key ask (utils/rekey-redeem.ts): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`, the host from
             // audienceOf of a plain address, the code the member typed or scanned, cleaned to the admin's spelling.
             'utils/member-statements.ts signReEnrollStatement',
+            // A standing deal's authorisation (S2): core's signStandingAuthorisation, `0xFF ‖ beanpool-standing-v1\nHOST\n…`, the
+            // text built by core from the take-up screen's own choice, the host the phone's requests are signed for.
+            'utils/member-statements.ts signStandingStatement',
             // The claim (utils/node-claim.ts): core's claimText through signedRequestBytes, `0xFF ‖ beanpool-claim/2\nHOST\n…`,
             // the host from audienceOf of a plain address, the code id shape-checked (8 hex), the key the phone's own, the
             // proof the phone's own HMAC. Nothing the node wrote goes in unchecked.
@@ -157,15 +161,9 @@ describe('the member key signs only through core\'s builders and the listed old-
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });
 
-    it('a Signer is called directly only by the old-form fallbacks, and only on plain UTF-8 they built', () => {
-        const fallbacks = new Set([
-            'utils/crypto.ts unboundRequestHeaders',
-            'utils/crypto.ts unboundWsParams',
-            'utils/member-statements.ts oldFormSignature',
-        ]);
+    it('a Signer is never called directly: only core\'s builders call it (the old unbound forms are gone, 1.4.0)', () => {
         const direct = sites.filter(s => s.callee === 'sign' && key(s) !== 'utils/crypto.ts signData'); // signData wraps noble's sign
-        expect(direct.filter(s => !fallbacks.has(key(s))).map(key)).toEqual([]);
-        for (const s of direct) expect(s.arg, key(s)).toMatch(/^utf8Bytes\(/);
+        expect(direct.map(key)).toEqual([]);
     });
 
     it('nothing else calls an Ed25519 sign, or holds one', () => {

@@ -29,6 +29,7 @@ import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -40,6 +41,8 @@ const show = (v: unknown) => JSON.stringify(v)?.slice(0, 400);
 const DAY = 86_400_000;
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const SENTENCE = "Someone in your community asked for something you're into.";
+/** The story's Beans as the node's whole hundredths: a listing's price is `price_c` on the wire. */
+const hc = (beans: number) => Math.round(beans * 100);
 
 type Id = { pubKeyHex: string; privateKey: crypto.KeyObject; name: string };
 
@@ -81,7 +84,7 @@ async function main(): Promise<void> {
                     VALUES (?, ?, 'active', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, name, new Date(Date.now() - 60 * DAY).toISOString());
         setMemberPhoto(db, pubKeyHex, AVATAR);
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.stars) setPref(pubKeyHex, 'interests', JSON.stringify(opts.stars));
         if (opts.phone !== false) putPushTokenRow(pubKeyHex, `ExponentPushToken[${name}]`, 'android');
         return { pubKeyHex, privateKey, name };
@@ -95,10 +98,11 @@ async function main(): Promise<void> {
         const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${pathAndQuery.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: pathAndQuery.split('?')[0], timestamp: ts, nonce, body: bodyString };
         const headers: Record<string, string> = {
             'X-Public-Key': id.pubKeyHex,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts), 'X-Nonce': nonce,
         };
         if (method === 'POST') headers['Content-Type'] = 'application/json';
@@ -114,7 +118,7 @@ async function main(): Promise<void> {
     const post = async (who: Id, type: 'offer' | 'need', body: Record<string, unknown> = {}): Promise<string> => {
         n++;
         const r = await signed('POST', '/api/marketplace/posts', {
-            type, category: 'garden', title: `${who.name} ${type} ${n}`, description: 'Private description words', credits: 20, priceType: 'fixed',
+            type, category: 'garden', title: `${who.name} ${type} ${n}`, description: 'Private description words', price_c: hc(20), priceType: 'fixed',
             authorPublicKey: who.pubKeyHex, photos: TEST_PHOTOS, lat: -28.6, lng: 153.5, ...body,
         }, who);
         const id = r.body?.post?.id ?? r.body?.id;
@@ -177,7 +181,7 @@ async function main(): Promise<void> {
     await offerFirst(ben);
     let since = mark();
     expo.length = 0;
-    const first = await need(ana, { title: 'Ana needs a bed dug at 12 Short St', category: 'garden', credits: 40 });
+    const first = await need(ana, { title: 'Ana needs a bed dug at 12 Short St', category: 'garden', price_c: hc(40) });
     await settle();
     const told = toldSince(since);
     assert(told.length === 2 && told.includes(gil.pubKeyHex) && told.includes(hal.pubKeyHex),
@@ -197,8 +201,10 @@ async function main(): Promise<void> {
         `what goes to Expo is the fixed title and sentence, one per phone (${show(sent.map(m => [m.title, m.body]))})`);
     const wire = JSON.stringify(sent);
     // The price by value, never as a bare "40" in the wire: a random notice id or a timestamp can hold those digits (#2937).
+    // As the node holds it (whole hundredths, 4000) or as words write it (40 Beans), under any name.
     const leaves = (v: unknown): unknown[] => v && typeof v === 'object' ? Object.values(v as object).flatMap(leaves) : [v];
-    const priced = sent.flatMap(leaves).some(v => v === 40 || v === '40' || (typeof v === 'string' && /\b40\s*(Beans|Ʀ)/.test(v)));
+    const priced = sent.flatMap(leaves).some(v => v === 40 || v === '40' || v === hc(40) || v === String(hc(40))
+        || (typeof v === 'string' && /\b40\s*(Beans|Ʀ)/.test(v)));
     assert(!/Ana|Short St|bed dug|garden|Private description/.test(wire) && !priced && !wire.includes(first) && !wire.includes(ana.pubKeyHex),
         `and it carries no name, no title, no category, no price, no post id and no key (${wire.slice(0, 300)})`);
     const details = db.prepare("SELECT recipient, data, title, body FROM push_notices WHERE kind = 'market.asked' AND recipient = ?").get(gil.pubKeyHex) as any;
@@ -249,11 +255,11 @@ async function main(): Promise<void> {
     await post(ana, 'offer', { title: 'Ana offers seedlings', category: 'garden' });
     assert(toldSince(since).length === 0, 'an Offer in a starred category tells nobody');
 
-    const assistantNeed = se.createPost('need', 'garden', 'An assistant asks', '', 10, 'fixed', ana.pubKeyHex, -28.6, 153.5, TEST_PHOTOS,
+    const assistantNeed = se.createPost('need', 'garden', 'An assistant asks', '', hc(10), 'fixed', ana.pubKeyHex, -28.6, 153.5, TEST_PHOTOS,
         false, undefined, undefined, { createdVia: 'assistant:test-grant' });
     assert(!!assistantNeed && toldSince(since).length === 0, `a Need an owner's assistant made tells nobody (${show(names(toldSince(since), all))})`);
 
-    const directNeed = se.createPost('need', 'garden', 'For Hal only', '', 10, 'fixed', ana.pubKeyHex, -28.6, 153.5, TEST_PHOTOS,
+    const directNeed = se.createPost('need', 'garden', 'For Hal only', '', hc(10), 'fixed', ana.pubKeyHex, -28.6, 153.5, TEST_PHOTOS,
         false, undefined, undefined, { audienceScope: 'direct', targetPubkey: hal.pubKeyHex });
     assert(!!directNeed && toldSince(since).length === 0, `a Need for one person tells nobody else of it, nor them by this push (${show(names(toldSince(since), all))})`);
     assert(typeof asked.needAsksNeighbours === 'function'

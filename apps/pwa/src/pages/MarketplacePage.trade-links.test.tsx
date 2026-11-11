@@ -50,13 +50,13 @@ const identity: BeanPoolIdentity = { publicKey: 'my-pubkey', privateKey: 'k', ca
 
 const feed = [{
     id: 'post-1', title: 'Bicycle Repair', description: 'Fix gears', type: 'offer', category: 'services',
-    credits: 20, status: 'active', authorPublicKey: 'member-david', authorCallsign: 'David', createdAt: '2026-09-15T00:00:00Z',
+    price_c: 2000, status: 'active', authorPublicKey: 'member-david', authorCallsign: 'David', createdAt: '2026-09-15T00:00:00Z',
 }];
 const finished = { ...feed[0], id: 'post-done', title: 'Sourdough loaf', authorPublicKey: 'peer-pubkey', authorCallsign: 'Bob', status: 'completed' };
 
 const trade = (id: string, rated: boolean): api.MarketplaceTransaction => ({
     id, postId: 'post-done', postTitle: 'Sourdough loaf', buyerPublicKey: 'my-pubkey', buyerCallsign: 'Alice',
-    sellerPublicKey: 'peer-pubkey', sellerCallsign: 'Bob', credits: 5, status: 'completed',
+    sellerPublicKey: 'peer-pubkey', sellerCallsign: 'Bob', amount_c: 500, status: 'completed',
     createdAt: '2026-10-14T00:00:00Z', completedAt: '2026-10-14T00:00:00Z', ratedByBuyer: rated, ratedBySeller: false,
 });
 
@@ -67,7 +67,7 @@ beforeEach(() => {
     vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
     vi.spyOn(api, 'getMembers').mockResolvedValue([]);
     vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
     vi.spyOn(api, 'getMyMarketplaceTransactions').mockResolvedValue([]);
 });
 

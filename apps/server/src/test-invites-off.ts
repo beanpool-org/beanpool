@@ -7,11 +7,11 @@
  * Over REAL HTTPS, through the signature middleware and the feature gate, with signed requests. No provider is
  * contacted: the Google keys are a test key primed into sso.ts's cache, as in test-open-join.
  *
- *   1. A fresh global node, and how its owner is made. /api/community/info says `invites: false`. The admin's seed
- *      invite on the empty node, with the password, is 404 feature_off and writes nothing (no "Admin" genesis member,
- *      no code, no role). Marty joins through the door with a sign-in, the password makes him owner, and his own key
- *      opens Settings as owner. As owner he makes no invite either: not the seed invite (key session or password), not
- *      a member's.
+ *   1. A fresh global node, and how its owner is made. /api/community/info says `invites: false`. The seed invite on
+ *      the empty node (the feature gate answers before any sign-in: the node has no owner yet and no password) is 404
+ *      feature_off and writes nothing (no "Admin" genesis member, no code, no role). Marty joins through the door with a
+ *      sign-in, claims the community with its claim code (claim-code.ts claimNode: the owner role), and his own key
+ *      opens Settings as owner. As owner he makes no invite either: not the seed invite under his key, not a member's.
  *   2. Members and node roles alike: a member's generate and an admin's are 404 and write nothing. A code already in
  *      the database (a member's, and a seed invite's) and an offline ticket a member signed join nobody: 404, no member
  *      row, the code still unused, the funnel untouched. The pre-flight is 404. Reads still answer: a member's own
@@ -39,23 +39,23 @@ process.env.NODE_PROFILE = 'global';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, generateInvite, adminGenerateInvite, redeemInvite, redeemOfflineTicket } from './state-engine.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { FeatureOffError, NODE_PROFILE_KEY } from './config/node-profile.js';
 import { approveKnock } from './engine/knocks.js';
 import { getFunnel } from './engine/funnel.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const ADMIN_PW = 'Invites-Off-Admin-Pw-71!';
-// Step 7c: with 2FA off the password alone opens no admin route, so main() turns 2FA on and every password call carries
-// a fresh code beside it (turnOn2faForTests; no member is seeded, so the "fresh node" checks below stay exact).
-let PASSWORD: () => Record<string, string> = () => ({ 'X-Admin-Password': ADMIN_PW });
+/** The owner's admin calls once Marty owns the community: his key session from the phone's Manage hand-off, per call. */
+let OWNER: () => Record<string, string> = () => ({});
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -106,7 +106,8 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         h['X-Public-Key'] = id.pk;
-        h['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        h['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        h[SIGNED_FOR_HEADER] = signedForHost();
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }
@@ -132,15 +133,14 @@ const redeemTicket = (id: Id, ticketB64: string) => call(id, 'POST', '/api/invit
 
 /** A paper invite: an offline ticket `inviter` signed on their phone, which the node first sees when someone joins with it. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64') })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 /** The owner's own key opening Settings, as the app's Manage button does: challenge, signature, session. */
 async function keySession(id: Id): Promise<{ session: string | null; role: unknown; why: string }> {
     const chal = await call(null, 'POST', '/api/local/admin/auth/challenge', {});
-    const signature = crypto.sign(null, Buffer.from(String(chal.body?.challenge), 'utf-8'), id.priv).toString('hex');
-    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, String(chal.body?.challengeId));
+    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (verified.status !== 200) return { session: null, role: null, why: show(verified) };
     const ex = await call(null, 'POST', '/api/local/admin/auth/exchange', { token: verified.body?.handshakeToken });
     // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
@@ -172,20 +172,11 @@ const engineRefuses = (fn: () => unknown): boolean => {
 async function main(): Promise<void> {
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     primeJwks();
     _clearNoncesForTests();
 
-    // Step 7c: with 2FA off, the password alone is refused on an admin route (and writes nothing); with 2FA on and a code
-    // it is the owner's password again, as the rest of this suite uses it.
-    const alone = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: 'f'.repeat(64), role: 'owner' }, { 'X-Admin-Password': ADMIN_PW });
-    assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !db.prepare('SELECT 1 FROM node_roles').get(),
-        `with 2FA off the admin password alone is refused: 403 password_needs_2fa, no role written (${show(alone)})`);
-    const twoFa = turnOn2faForTests(ADMIN_PW);
-    PASSWORD = twoFa.headers;
 
     // ── 1. a fresh global node, and how its owner is made ─────────────────────────────────────────
     console.log('── 1. a fresh global node: no invites, and the owner comes in through the door ──');
@@ -198,8 +189,8 @@ async function main(): Promise<void> {
     const genesisMembers = () => (db.prepare("SELECT COUNT(*) AS n FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM'").get() as { n: number }).n;
     assert(genesisMembers() === 0 && (db.prepare("SELECT COUNT(*) AS n FROM members WHERE COALESCE(is_treasury, 0) = 0 AND public_key != 'SYSTEM'").get() as { n: number }).n === 0,
         'the node is fresh: no member yet, and no genesis member');
-    const seedFresh = await call(null, 'POST', '/api/admin/seed-invite', { type: 'elder' }, PASSWORD());
-    assert(invitesOff(seedFresh), `the seed invite on the empty node, with the admin password → 404 feature_off invites (${show(seedFresh)})`);
+    const seedFresh = await call(null, 'POST', '/api/admin/seed-invite', { type: 'elder' });
+    assert(invitesOff(seedFresh), `the seed invite on the empty node → 404 feature_off invites, before any sign-in (${show(seedFresh)})`);
     assert(rowsNow() === rowsBefore && genesisMembers() === 0 && codeCount() === 0 && !db.prepare('SELECT 1 FROM node_roles').get(),
         `...and writes nothing: no "Admin" genesis member, no code, no role (codes ${codeCount()}, genesis members ${genesisMembers()})`);
 
@@ -207,8 +198,10 @@ async function main(): Promise<void> {
     const martyJoins = await joinThroughDoor(marty, 'marty-google-sub-0001');
     assert(martyJoins.status === 200 && memberRow(marty.pk)?.invited_by === 'open:google' && memberRow(marty.pk)?.invite_code === null,
         `Marty joins through the open door with a sign-in, no invite (${show(martyJoins)})`);
-    const grant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: marty.pk, role: 'owner' }, PASSWORD());
-    assert(grant.status === 200 && roleOf(marty.pk) === 'owner', `the admin password makes him owner (${show(grant)}; role ${roleOf(marty.pk)})`);
+    // He claims the community with its one-time claim code: on a member already here, claimNode grants the owner role alone.
+    grantNodeRole(marty.pk, 'owner', claimGrantor(crypto.randomBytes(4).toString('hex')));
+    assert(roleOf(marty.pk) === 'owner' && memberRow(marty.pk)?.invited_by === 'open:google', `the claim makes him owner, his member row as it was (role ${roleOf(marty.pk)})`);
+    OWNER = () => ownerPhoneSessionHeaders(marty.pk);
     const martySession = await keySession(marty);
     const roles = martySession.session
         ? await call(null, 'GET', '/api/local/admin/node-roles', undefined, { 'x-admin-session': martySession.session }) : null;
@@ -216,10 +209,9 @@ async function main(): Promise<void> {
         `his own key opens Settings as owner, as the app's Manage button does (${martySession.why}; ${roles ? show(roles) : 'no session'})`);
     const seedByOwner = martySession.session
         ? await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, { 'x-admin-session': martySession.session }) : null;
-    const seedByPassword = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
     const ownGenerate = await generate(marty);
-    assert(!!seedByOwner && invitesOff(seedByOwner) && invitesOff(seedByPassword) && invitesOff(ownGenerate) && codeCount() === 0,
-        `as owner he makes none: the seed invite under his key session and under the password, and a member's generate, each 404 (${seedByOwner ? show(seedByOwner) : '-'} | ${show(seedByPassword)} | ${show(ownGenerate)})`);
+    assert(!!seedByOwner && invitesOff(seedByOwner) && invitesOff(ownGenerate) && codeCount() === 0,
+        `as owner he makes none: the seed invite under his key session, and a member's generate, each 404 (${seedByOwner ? show(seedByOwner) : '-'} | ${show(ownGenerate)})`);
 
     // ── 2. members and node roles alike ───────────────────────────────────────────────────────────
     console.log('\n── 2. nobody makes an invite, and none joins anyone ──');
@@ -227,7 +219,7 @@ async function main(): Promise<void> {
     const ada = newId('Ada');
     assert((await joinThroughDoor(nia, 'nia-google-sub-0002')).status === 200 && (await joinThroughDoor(ada, 'ada-google-sub-0003')).status === 200,
         'Nia and Ada join through the door');
-    const adminGrant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'admin' }, PASSWORD());
+    const adminGrant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'admin' }, OWNER());
     assert(adminGrant.status === 200 && roleOf(ada.pk) === 'admin', `Ada is made an admin (${show(adminGrant)})`);
     const niaMakes = await generate(nia);
     const adaMakes = await generate(ada);
@@ -329,8 +321,8 @@ async function main(): Promise<void> {
     const samJoins = await redeemTicket(sam, samTicket);
     assert(samCheck.status === 200 && samCheck.body?.valid === true && samJoins.status === 200 && memberRow(sam.pk)?.status === 'active',
         `the pre-flight says an offline ticket is good, and it joins someone (${show(samCheck)} | ${show(samJoins)})`);
-    const localSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'trusted' }, PASSWORD());
-    assert(localSeed.status === 200 && typeof localSeed.body?.code === 'string', `the seed invite works with the password (${show(localSeed)})`);
+    const localSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'trusted' }, OWNER());
+    assert(localSeed.status === 200 && typeof localSeed.body?.code === 'string', `the seed invite works under the owner's key (${show(localSeed)})`);
 
     // A member of the global node asks to join this community, a member here answers, and the invite minted here lets
     // them in here. (The global node is not involved: the phone talks to this community directly.)

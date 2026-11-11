@@ -33,6 +33,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { DOOR_NUMBERS } from './engine/door-signal.js';
 import { isVisitor } from './federation-settlement.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 
@@ -75,7 +76,7 @@ function freshLimiters(): void {
     resetGatewayRateLimit();
 }
 
-/** A POST signed by `id` the way the phone signs one (the middleware's unbound form). */
+/** A POST signed by `id` the way the phone signs one (format 2, through signed-request-test-helper.ts). */
 async function call(id: Id, path: string, body: unknown): Promise<{ status: number; body: any }> {
     freshLimiters();
     const raw = JSON.stringify(body ?? {});
@@ -84,7 +85,8 @@ async function call(id: Id, path: string, body: unknown): Promise<{ status: numb
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

@@ -17,7 +17,7 @@ async function main() {
     const peerIdObj = peerIdFromPrivateKey(privKey);
     const peerIdStr = peerIdObj.toString();
 
-    // The base valid receipt
+    // The base valid receipt: 50.50 Beans, carried as whole hundredths (receipt /2).
     const validReceipt = {
         key: 'test-key',
         issuerPeerId: peerIdStr,
@@ -25,7 +25,7 @@ async function main() {
         buyerHomeNode: 'http://buyer.home',
         sellerPublicKey: 'seller-pub',
         postId: 'post-1',
-        amount: 50.5,
+        amount_c: 5050,
         committedAt: '2023-01-01T00:00:00Z',
     };
 
@@ -42,30 +42,40 @@ async function main() {
 
     threw = false;
     try {
-        await signReceipt({ ...validReceipt, amount: undefined as any }, privKey);
+        await signReceipt({ ...validReceipt, amount_c: undefined as any }, privKey);
     } catch (e: any) {
         threw = true;
-        assert(e.message.includes('finite numeric amount'), 'signReceipt throws on undefined amount');
+        assert(e.message.includes('amount in whole hundredths'), 'signReceipt throws on undefined amount');
     }
     assert(threw, 'signReceipt must throw without amount');
 
     threw = false;
     try {
-        await signReceipt({ ...validReceipt, amount: NaN }, privKey);
+        await signReceipt({ ...validReceipt, amount_c: NaN }, privKey);
     } catch (e: any) {
         threw = true;
-        assert(e.message.includes('finite numeric amount'), 'signReceipt throws on NaN amount');
+        assert(e.message.includes('amount in whole hundredths'), 'signReceipt throws on NaN amount');
     }
     assert(threw, 'signReceipt must throw on NaN amount');
 
     threw = false;
     try {
-        await signReceipt({ ...validReceipt, amount: Infinity }, privKey);
+        await signReceipt({ ...validReceipt, amount_c: Infinity }, privKey);
     } catch (e: any) {
         threw = true;
-        assert(e.message.includes('finite numeric amount'), 'signReceipt throws on Infinity amount');
+        assert(e.message.includes('amount in whole hundredths'), 'signReceipt throws on Infinity amount');
     }
     assert(threw, 'signReceipt must throw on Infinity amount');
+
+    // Whole hundredths only: a figure finer than a hundredth (50.5 hundredths) is refused, never rounded.
+    threw = false;
+    try {
+        await signReceipt({ ...validReceipt, amount_c: 50.5 }, privKey);
+    } catch (e: any) {
+        threw = true;
+        assert(e.message.includes('amount in whole hundredths'), 'signReceipt throws on an amount that is not whole hundredths');
+    }
+    assert(threw, 'signReceipt must throw on a fractional hundredths amount');
 
     threw = false;
     try {

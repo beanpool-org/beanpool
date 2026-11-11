@@ -577,6 +577,53 @@ test("Find your community's pin is described as decided (Lounge L1, Fable 29 Oct
     assert.deepEqual(retired, []);
 });
 
+test('invites I3: the two old inviter sentences are absent from every page; privacy names the role word, the card and the hide switch', () => {
+    // "Invited directly by the system admin" was a server bug (it hid any inviter with a node role), and "Vetted by the
+    // admin at sign-up" went with it. Every page, in every language folder and the operator manual, is read.
+    const files = [
+        ...fs.readdirSync(CONTENT_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(CONTENT_DIR, f)),
+        ...fs.readdirSync(OPERATORS_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(OPERATORS_DIR, f)),
+    ];
+    assert.ok(files.length > 100, `read ${files.length} pages`);
+    const found = [];
+    for (const file of files) {
+        const text = fs.readFileSync(file, 'utf8').replace(/\*\*/g, '');
+        for (const gone of [/invited directly by the system admin/i, /vetted by the admin at sign-up/i]) {
+            if (gone.test(text)) found.push(`${path.relative(path.resolve(CONTENT_DIR, '..'), file)}: ${gone.source}`);
+        }
+    }
+    assert.deepEqual(found, []);
+    const privacy = fs.readFileSync(path.join(CONTENT_DIR, 'settings', 'privacy.md'), 'utf8');
+    assert.ok(privacy.includes('**Invited by marty · owner**'), 'privacy names the role word');
+    assert.ok(privacy.includes('**Invited with an owner’s invite card**'), 'privacy names the owner\'s invite card');
+    assert.ok(privacy.includes('**Show who invited me to other members**'), 'privacy names the hide switch');
+    // Who you brought in (I3 round 2): any member reads the invite tree (GET /api/invite/tree; the web's Invites, Tree),
+    // so the page must not say only you, the owners and the admins see the people you invited.
+    const broughtIn = privacy.split('\n').find(l => l.startsWith('- **Who you brought in:**')) ?? '';
+    assert.ok(broughtIn, 'privacy has the Who you brought in bullet');
+    assert.doesNotMatch(broughtIn, /Only you, the owners and the admins see it/);
+    assert.match(broughtIn, /any member can open the invite tree/);
+    assert.match(broughtIn, /\*\*Invites\*\*, then \*\*Tree\*\*/);
+});
+
+test('invites I6: the three retired invite sentences are absent from every guide page and manual page, in every language folder', () => {
+    // Words sweep (DESIGN-invites-vouching-review-fable.md §4): "Share this cryptographic code" sat over a bare code, so a bound invite
+    // was made twice (Byron, 10 Nov); the other two are I3's. Markdown emphasis is stripped, so a bolded sentence is found too.
+    const files = [
+        ...fs.readdirSync(CONTENT_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(CONTENT_DIR, f)),
+        ...fs.readdirSync(OPERATORS_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(OPERATORS_DIR, f)),
+    ];
+    assert.ok(files.length > 100, `read ${files.length} pages`);
+    const found = [];
+    for (const file of files) {
+        const text = fs.readFileSync(file, 'utf8').replace(/\*\*/g, '');
+        for (const gone of [/invited directly by the system admin/i, /vetted by the admin at sign-up/i, /share this cryptographic code/i]) {
+            if (gone.test(text)) found.push(`${path.relative(path.resolve(CONTENT_DIR, '..'), file)}: ${gone.source}`);
+        }
+    }
+    assert.deepEqual(found, []);
+});
+
 test('the manual names no removed button, page or route (owner-delete: no wipe, no snapshot delete, no legacy page, restore from the shell)', () => {
     const gone = ['Wipe & Reset', 'Factory reset', 'Delete snapshot', 'Legacy Settings', '/settings-legacy', '/api/local/admin/restore'];
     const pages = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'));

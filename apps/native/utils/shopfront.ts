@@ -14,7 +14,7 @@
  * No answer is null, never an empty shop: a page says it couldn't read rather than showing nothing for sale.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SHOP_FEATURED_MAX, formatCount, formatDate, formatNumber, isShopCategory, t, tn, tierIndexForName, TIER_LEVELS, type ShopCategory, type TierName } from '@beanpool/core';
+import { SHOP_FEATURED_MAX, formatCount, formatDate, formatHundredths, freePriceWords, isHundredths, isShopCategory, t, tn, tierIndexForName, TIER_LEVELS, type ShopCategory, type TierName } from '@beanpool/core';
 import { signedGet } from './db';
 import { readShop, type MyShop } from './shop';
 import { TIER_WORDS } from './trust-tier';
@@ -27,7 +27,8 @@ export interface ShopfrontListing {
     type: 'offer' | 'need';
     title: string;
     category: string | null;
-    credits: number;
+    /** Its price, whole hundredths of a Bean (the node's `price_c`), or null when the node sent no such figure ("—"). */
+    price_c: number | null;
     /** 'fixed' for a total, else by the hour, day, week or month. */
     priceType: string;
     status: string;
@@ -52,13 +53,12 @@ export function readShopfrontListing(raw: unknown, anchor: string): ShopfrontLis
     if (typeof p.id !== 'string' || !p.id || (p.type !== 'offer' && p.type !== 'need')) return null;
     const first = Array.isArray(p.photos) ? p.photos[0] : null;
     const photo = typeof first === 'string' && first.trim() ? (first.startsWith('/') ? `${anchor}${first}` : first) : null;
-    const credits = typeof p.credits === 'number' && Number.isFinite(p.credits) ? p.credits : 0;
     return {
         id: p.id,
         type: p.type,
         title: typeof p.title === 'string' ? p.title : '',
         category: text(p.category),
-        credits,
+        price_c: isHundredths(p.price_c) && p.price_c >= 0 ? p.price_c : null,
         priceType: typeof p.priceType === 'string' ? p.priceType : 'fixed',
         status: typeof p.status === 'string' ? p.status : 'active',
         lendable: p.lendable === true,
@@ -121,12 +121,15 @@ export function shopSectionsOf(listings: readonly ShopfrontListing[]): ShopSecti
 /** Its price in words, or null where the community shows no Beans (the worldwide one). */
 export function listingPriceLine(l: ShopfrontListing, showsBeans: boolean): string | null {
     if (!showsBeans) return null;
-    const amount = formatNumber(l.credits);
+    // Priced at 0 it is Free whatever its unit (core listing-price.ts): "Free", never "0 🫘 an hour".
+    const free = freePriceWords(l.price_c, l.type);
+    if (free) return free;
+    // Whole hundredths in the member's numbers (formatHundredths: "12.50"); "—" for no figure, never a number made up.
+    const amount = formatHundredths(l.price_c);
     if (l.priceType === 'hourly') return t('{amount} 🫘 an hour', { amount });
     if (l.priceType === 'daily') return t('{amount} 🫘 a day', { amount });
     if (l.priceType === 'weekly') return t('{amount} 🫘 a week', { amount });
     if (l.priceType === 'monthly') return t('{amount} 🫘 a month', { amount });
-    if (l.credits === 0) return t('Free', undefined, 'a listing with no price');
     return t('{amount} 🫘', { amount });
 }
 
@@ -209,9 +212,9 @@ export function sinceLine(since: unknown): string | null {
     return t('since {date}', { date: formatDate(d, 'month-year') }, 'how long a shop or enterprise has been here');
 }
 
-/** The money in one line (round 3 §0 row 9): its balance and its credit line. */
-export function moneyLine(balance: number, creditLine: number): string {
-    return t('{balance} 🫘 · credit line {credit} 🫘', { balance: formatNumber(balance), credit: formatNumber(creditLine) });
+/** The money in one line (round 3 §0 row 9): its balance and its credit line, both whole hundredths of a Bean. */
+export function moneyLine(balance_c: number, creditLine_c: number): string {
+    return t('{balance} 🫘 · credit line {credit} 🫘', { balance: formatHundredths(balance_c), credit: formatHundredths(creditLine_c) });
 }
 
 /**

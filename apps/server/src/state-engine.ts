@@ -368,6 +368,7 @@ import {
     joinGroup as joinGroupEngine,
     setMemberRole as setMemberRoleEngine,
     removeGroupMember as removeGroupMemberEngine,
+    withdrawGroupInvitation as withdrawGroupInvitationEngine,
     updateGroupPolicy as updateGroupPolicyEngine,
     updateGroup as updateGroupEngine,
     approveGroupMember as approveGroupMemberEngine,
@@ -11398,6 +11399,21 @@ export function removeGroupMember(groupId: string, actorPubkey: string, targetPu
         broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey }, recipients);
     }
     return res;
+}
+
+/**
+ * "Withdraw" on a group's invitations list (DELETE /api/groups/:id/invitations/:pubkey): takes back an invitation ONLY
+ * while it is still open. The engine refuses, inside the transaction that would delete it, a person who has accepted
+ * since the list was read (INVITATION_ALREADY_JOINED): the list may be minutes old, and removeGroupMember would remove
+ * the member who just joined. Nobody invited is in the chat, so no key changes and no line is written; it is not the
+ * group's business, so only the convenors, the person invited and the member who made it hear of it.
+ */
+export function withdrawGroupInvitation(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+    assertGroupActorIsMember(actorPubkey);
+    const before = withdrawGroupInvitationEngine(db, groupId, actorPubkey, targetPubkey);
+    bumpGroupsVersion();
+    broadcast({ type: 'group_member_removed', groupId, memberPubkey: targetPubkey }, invitationAudience(groupId, targetPubkey, before.invitedBy));
+    return true;
 }
 
 export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinPolicy: JoinPolicy): Group {

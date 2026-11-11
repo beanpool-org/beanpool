@@ -15,6 +15,9 @@ import {
     isGroupMember,
     setMemberRole,
     removeGroupMember,
+    withdrawGroupInvitation,
+    INVITATION_ALREADY_JOINED,
+    INVITATION_NOT_OPEN,
     updateGroupPolicy,
     updateGroup,
     approveGroupMember,
@@ -468,6 +471,83 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         joinGroup(db, group.id, 'dave_pub');
         assert.throws(() => removeGroupMember(db, group.id, 'bob_pub', 'dave_pub'), /Only a group convenor can remove members/);
         assert.ok(isGroupMember(db, group.id, 'dave_pub'));
+    });
+
+    it('Withdraw takes back only an invitation still open: once the person has joined it is refused and they stay a member (review of #3061)', () => {
+        db.prepare("INSERT INTO members (public_key, callsign) VALUES ('erin_pub', 'Erin')").run();
+        const group = createGroup(db, { name: 'Secret Circle', joinPolicy: 'invite_only', createdBy: 'alice_pub' });
+        inviteGroupMember(db, group.id, 'alice_pub', 'carol_pub', 'member');
+        // Carol accepts while Alice's page still shows her as invited; Alice then taps Withdraw.
+        joinGroup(db, group.id, 'carol_pub');
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'alice_pub', 'carol_pub'), (e: Error) => e.message === INVITATION_ALREADY_JOINED);
+        const carol = getGroupMember(db, group.id, 'carol_pub');
+        assert.strictEqual(carol?.status, 'active', 'Carol is still a member, not removed');
+        assert.ok(isGroupMember(db, group.id, 'carol_pub'));
+
+        // Still open: a convenor withdraws it, and the row goes (with a tombstone for backups), as removeGroupMember's does.
+        inviteGroupMember(db, group.id, 'alice_pub', 'dave_pub', 'member');
+        const was = withdrawGroupInvitation(db, group.id, 'alice_pub', 'dave_pub');
+        assert.strictEqual(was.status, 'invited');
+        assert.strictEqual(was.invitedBy, 'alice_pub');
+        assert.strictEqual(getGroupMember(db, group.id, 'dave_pub'), null);
+        assert.ok(db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'group_members' AND row_key = ?").get(`${group.id}|dave_pub`));
+        // Withdrawn already (or declined): nothing open, and it says so.
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'alice_pub', 'dave_pub'), (e: Error) => e.message === INVITATION_NOT_OPEN);
+        // Never a member, never invited: the same.
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'alice_pub', 'erin_pub'), (e: Error) => e.message === INVITATION_NOT_OPEN);
+        // Someone who asked to join is no invitation: a convenor declines a request through removeGroupMember, not here.
+        updateGroupPolicy(db, group.id, 'alice_pub', 'request_to_join');
+        joinGroup(db, group.id, 'erin_pub');
+        assert.strictEqual(getGroupMember(db, group.id, 'erin_pub')?.status, 'pending_approval');
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'alice_pub', 'erin_pub'), (e: Error) => e.message === INVITATION_NOT_OPEN);
+        assert.strictEqual(getGroupMember(db, group.id, 'erin_pub')?.status, 'pending_approval');
+    });
+
+    it('Withdraw: the member who made the invitation, or a convenor whose powers are not resting; nobody else, and a removed member stays removed', () => {
+        db.prepare("INSERT INTO members (public_key, callsign) VALUES ('erin_pub', 'Erin')").run();
+        const group = createGroup(db, { name: 'Secret Circle', joinPolicy: 'invite_only', createdBy: 'alice_pub' });
+        // Bob is made a convenor, invites Carol, and is made a member again: the invitation he made stands, and is his to take back.
+        inviteGroupMember(db, group.id, 'alice_pub', 'bob_pub', 'convenor');
+        joinGroup(db, group.id, 'bob_pub');
+        inviteGroupMember(db, group.id, 'bob_pub', 'carol_pub', 'member');
+        inviteGroupMember(db, group.id, 'alice_pub', 'dave_pub', 'member');
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'member');
+
+        // Bob did not make Dave's: refused, and it stands. Dave cannot "withdraw" his own (declining is leaving, elsewhere).
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'bob_pub', 'dave_pub'), /UNAUTHORIZED: Only a group convenor, or the member who sent it/);
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'dave_pub', 'dave_pub'), /UNAUTHORIZED:/);
+        assert.strictEqual(getGroupMember(db, group.id, 'dave_pub')?.status, 'invited');
+        // Nor can Bob take anyone who is in the group out through it.
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'bob_pub', 'alice_pub'), /UNAUTHORIZED:/);
+        assert.ok(isGroupMember(db, group.id, 'alice_pub'));
+
+        // His own: yes.
+        withdrawGroupInvitation(db, group.id, 'bob_pub', 'carol_pub');
+        assert.strictEqual(getGroupMember(db, group.id, 'carol_pub'), null);
+        // His own, after the person joined: told they joined (it was his), and they stay.
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'convenor');
+        inviteGroupMember(db, group.id, 'bob_pub', 'carol_pub', 'member');
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'member');
+        joinGroup(db, group.id, 'carol_pub');
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'bob_pub', 'carol_pub'), (e: Error) => e.message === INVITATION_ALREADY_JOINED);
+        assert.ok(isGroupMember(db, group.id, 'carol_pub'));
+
+        // A suspended convenor's powers rest: Alice cannot withdraw Bob's invitation to Erin, yet may still take back her own, Dave's.
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'convenor');
+        inviteGroupMember(db, group.id, 'bob_pub', 'erin_pub', 'member');
+        setMemberRole(db, group.id, 'alice_pub', 'bob_pub', 'member');
+        db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = 'alice_pub'").run();
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'alice_pub', 'erin_pub'), /UNAUTHORIZED: .*suspended/);
+        assert.strictEqual(getGroupMember(db, group.id, 'erin_pub')?.status, 'invited');
+        withdrawGroupInvitation(db, group.id, 'alice_pub', 'dave_pub');
+        assert.strictEqual(getGroupMember(db, group.id, 'dave_pub'), null);
+        db.prepare("UPDATE members SET status = 'active' WHERE public_key = 'alice_pub'").run();
+
+        // A removed member is not an invitation: Withdraw does not erase the removal (and reopen the door).
+        removeGroupMember(db, group.id, 'alice_pub', 'carol_pub');
+        assert.strictEqual(getGroupMember(db, group.id, 'carol_pub')?.status, 'removed');
+        assert.throws(() => withdrawGroupInvitation(db, group.id, 'alice_pub', 'carol_pub'), (e: Error) => e.message === INVITATION_NOT_OPEN);
+        assert.strictEqual(getGroupMember(db, group.id, 'carol_pub')?.status, 'removed');
     });
 
     it('does not advertise invite_only groups to people outside them', () => {

@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { getGroupInvitations, removeGroupMember } from '../lib/api';
+import { getGroupInvitations, withdrawGroupInvitation } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
 import {
     declinedInvitationLine, declinedListNote, declinedListTitle, hasInvitationsToShow, invitedListTitle, invitedName,
@@ -54,11 +54,17 @@ export function GroupInvitedList({ groupId, myPubkey, reloadKey = 0, onChanged }
         setBusy(p.memberPubkey);
         setError(null);
         try {
-            await removeGroupMember(groupId, p.memberPubkey);
+            // Its own request, never the member removal: if they accepted since this list was read, the node refuses
+            // (409, "already joined") rather than removing a member who has just joined.
+            await withdrawGroupInvitation(groupId, p.memberPubkey);
             await load();
             onChanged?.();
         } catch (err: any) {
             setError(err?.message || w.failed);
+            // Refused because things moved on (they joined, or it was declined or withdrawn): read both lists again, so
+            // the person shows where they now are.
+            await load();
+            onChanged?.();
         } finally {
             setBusy(null);
         }

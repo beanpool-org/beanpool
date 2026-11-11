@@ -183,4 +183,26 @@ describe('Invited, not joined yet (the phone)', () => {
         expect(String(failedBody)).toContain('Only a group convenor can remove members');
         expect(rows('group-invited-row')).toHaveLength(2);
     });
+
+    it('when the person has joined since the list was read, says so and reads the lists again (review of #3061)', async () => {
+        const joined = 'They have already joined the group, so there is no invitation to withdraw. They are in the roster now.';
+        node.withdraw = async () => { throw new Error(joined); };
+        const changed = vi.fn();
+        await show({ onChanged: changed });
+        await act(async () => { rows('group-invited-withdraw')[0].click(); });
+        const [, , buttons] = alertCall();
+        vi.mocked(Alert.alert).mockClear();
+        // The node's next answer: Mia accepted, so she is no longer invited (the roster around it shows her as a member).
+        node.answer = { ...convenorAnswer(), pendingTotal: 1, pending: [convenorAnswer().pending[1]] };
+        await act(async () => { await buttons[1].onPress?.(); });
+        await settle();
+        expect(withdrawGroupInvitationApi).toHaveBeenCalledWith('g-1', 'pk-mia');
+        const [failedTitle, failedBody] = alertCall();
+        expect(failedTitle).toBe('Could not withdraw the invitation');
+        expect(String(failedBody)).toContain('They have already joined the group');
+        expect(host.textContent).not.toContain('Mia');
+        expect(rows('group-invited-row')).toHaveLength(1);
+        // The group page around it reads itself again too, so Mia shows under the members.
+        expect(changed).toHaveBeenCalledTimes(1);
+    });
 });

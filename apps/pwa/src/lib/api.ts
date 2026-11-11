@@ -2035,6 +2035,16 @@ export async function getGroupInvitations(groupId: string): Promise<GroupInvitat
     }
 }
 
+/**
+ * Takes back an invitation still open: a convenor's for anyone's, the sender's for their own (the node decides). Its own
+ * request, never removeGroupMember: the list on screen may be minutes old, and if the person has accepted since, a
+ * removal would remove a member who just joined. The node withdraws only a row still invited and otherwise refuses, 409,
+ * saying they have joined (the thrown error carries those words).
+ */
+export async function withdrawGroupInvitation(groupId: string, memberPubkey: string): Promise<{ success: boolean }> {
+    return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/invitations/${encodeURIComponent(memberPubkey)}`);
+}
+
 export async function approveGroupMember(groupId: string, memberPubkey: string): Promise<{ success: boolean; member: GroupMember }> {
     return request('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
         memberPubkey,

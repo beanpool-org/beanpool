@@ -8,12 +8,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react';
 import { GroupInvitedList } from './GroupInvitedList';
 import { GroupDetailModal } from './GroupDetailModal';
-import { getGroupInvitations, getGroup, getGroupMembers, removeGroupMember, type Group } from '../lib/api';
+import { getGroupInvitations, getGroup, getGroupMembers, removeGroupMember, withdrawGroupInvitation, type Group } from '../lib/api';
 import type { GroupInvitations } from '@beanpool/core';
 
 vi.mock('../lib/api', () => ({
     getGroupInvitations: vi.fn(),
     removeGroupMember: vi.fn(),
+    withdrawGroupInvitation: vi.fn(),
     getGroup: vi.fn(), getGroupMembers: vi.fn(),
     getGroupDecisions: vi.fn(async () => null), proposeGroupDecision: vi.fn(), voteGroupDecision: vi.fn(),
     getCommunityMe: vi.fn(async () => ({ mute: { muted: false, until: null } })), getMembers: vi.fn(async () => []),
@@ -48,6 +49,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getGroupInvitations).mockResolvedValue(convenorView());
     vi.mocked(removeGroupMember).mockResolvedValue({ success: true });
+    vi.mocked(withdrawGroupInvitation).mockResolvedValue({ success: true });
 });
 
 describe('Invited, not joined yet', () => {
@@ -112,7 +114,9 @@ describe('Invited, not joined yet', () => {
         const withdraw = await screen.findByRole('button', { name: 'Withdraw the invitation to Mia' });
         fireEvent.click(withdraw);
         expect(confirm).toHaveBeenCalledWith('The invitation to Mia is taken back. You can invite them again.');
-        await waitFor(() => expect(removeGroupMember).toHaveBeenCalledWith('g-1', 'pk-mia'));
+        // Its own request, never the member removal (review of #3061).
+        await waitFor(() => expect(withdrawGroupInvitation).toHaveBeenCalledWith('g-1', 'pk-mia'));
+        expect(removeGroupMember).not.toHaveBeenCalled();
         await waitFor(() => expect(screen.queryByText('Mia')).toBeNull());
         expect(screen.getByText('Nat')).toBeInTheDocument();
         expect(changed).toHaveBeenCalledTimes(1);
@@ -123,6 +127,7 @@ describe('Invited, not joined yet', () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
         render(<GroupInvitedList groupId="g-1" myPubkey={ME} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Withdraw the invitation to Nat' }));
+        expect(withdrawGroupInvitation).not.toHaveBeenCalled();
         expect(removeGroupMember).not.toHaveBeenCalled();
         expect(screen.getByText('Nat')).toBeInTheDocument();
         confirm.mockRestore();
@@ -130,11 +135,33 @@ describe('Invited, not joined yet', () => {
 
     it("says the node's words when a withdrawal is refused, and keeps the row", async () => {
         const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-        vi.mocked(removeGroupMember).mockRejectedValue(new Error('Only a group convenor can remove members, or a member may leave themselves'));
+        vi.mocked(withdrawGroupInvitation).mockRejectedValue(new Error('Only a group convenor, or the member who sent it, can withdraw an invitation'));
         render(<GroupInvitedList groupId="g-1" myPubkey={ME} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Withdraw the invitation to Mia' }));
-        expect(await screen.findByRole('alert')).toHaveTextContent('Only a group convenor can remove members');
+        expect(await screen.findByRole('alert')).toHaveTextContent('Only a group convenor, or the member who sent it, can withdraw an invitation');
         expect(screen.getByText('Mia')).toBeInTheDocument();
+        expect(removeGroupMember).not.toHaveBeenCalled();
+        confirm.mockRestore();
+    });
+
+    it('when the person has joined since the list was read, says so, removes nobody, and reads the lists again (review of #3061)', async () => {
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const changed = vi.fn();
+        const joined = 'They have already joined the group, so there is no invitation to withdraw. They are in the roster now.';
+        vi.mocked(withdrawGroupInvitation).mockRejectedValue(new Error(joined));
+        // The node's next answer: Mia accepted, so she is no longer invited (the roster around it shows her as a member).
+        vi.mocked(getGroupInvitations).mockResolvedValueOnce(convenorView()).mockResolvedValueOnce({
+            ...convenorView(), pendingTotal: 1, pending: [convenorView().pending[1]],
+        });
+        render(<GroupInvitedList groupId="g-1" myPubkey={ME} onChanged={changed} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Withdraw the invitation to Mia' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(joined);
+        expect(withdrawGroupInvitation).toHaveBeenCalledWith('g-1', 'pk-mia');
+        expect(removeGroupMember).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.queryByText('Mia')).toBeNull());
+        expect(getGroupInvitations).toHaveBeenCalledTimes(2);
+        // The group around it reads itself again too, so Mia shows under the members.
+        expect(changed).toHaveBeenCalledTimes(1);
         confirm.mockRestore();
     });
 });

@@ -14,6 +14,11 @@
  *  4. Accepted: the person leaves the pending list for everyone and is a member. Withdrawn: gone for everyone, and no note
  *     is left. A convenor may withdraw anyone's; the sender may withdraw their own after losing the role; another member
  *     may not (403, and the invitation stands).
+ *  4b. Withdraw is its OWN request (DELETE /api/groups/:id/invitations/:pubkey), never the member removal (review of #3061):
+ *     the person accepts first, then a convenor's Withdraw arrives → refused 409 "already joined", and they stay an active
+ *     member with no "removed" line in the chat; the same for the sender. Still open → withdrawn: the row goes, gone from
+ *     the lists of the convenor who withdrew it and of its sender, no chat line, no note; a second Withdraw → 409. A member
+ *     who did not make it → 403 and it stands; a stranger → 404; unsigned → 401. The member removal itself is unchanged.
  *  5. Declined: shown ONLY to the member who made it, "Declined" and dated — not to the other convenor, not to a member,
  *     not to the person who declined (refused). Gone from the pending list for everyone. Declined when it was a
  *     convenor's and the sender is not the viewer: the viewing convenor sees nothing of it.
@@ -107,11 +112,16 @@ async function signedFetch(method: 'GET' | 'POST' | 'DELETE' | 'PATCH', path: st
 const invite = (g: string, by: Id, who: Id, role = 'member') => signedFetch('POST', `/api/groups/${g}/members`, { targetPubkey: who.pubKeyHex, role }, by);
 const accept = (g: string, who: Id) => signedFetch('POST', `/api/groups/${g}/join`, {}, who);
 const removeFrom = (g: string, by: Id, who: Id) => signedFetch('DELETE', `/api/groups/${g}/members/${who.pubKeyHex}`, {}, by);
+/** The page's "Withdraw": its own request, never the member removal above (review of #3061). */
+const withdraw = (g: string, by: Id | null, who: Id) => signedFetch('DELETE', `/api/groups/${g}/invitations/${who.pubKeyHex}`, {}, by);
 const setRole = (g: string, by: Id, who: Id, role: string) => signedFetch('PATCH', `/api/groups/${g}/members/${who.pubKeyHex}`, { role }, by);
 const read = (g: string, who: Id | null) => signedFetch('GET', `/api/groups/${g}/invitations`, null, who);
 const pendingNames = (r: Signed): string[] => (r.body?.pending ?? []).map((p: any) => p.callsign).sort();
 const declinedNames = (r: Signed): string[] => (r.body?.declined ?? []).map((p: any) => p.callsign).sort();
 const declineRows = (g: string) => (db.prepare('SELECT COUNT(*) AS c FROM group_invite_declines WHERE group_id = ?').get(g) as { c: number }).c;
+/** "<convenor> removed <name>" lines in the group's chat. */
+const removedLines = (g: string) => (db.prepare("SELECT COUNT(*) AS c FROM messages WHERE conversation_id = ? AND system_type = 'GROUP_MEMBER_REMOVED'").get(g) as { c: number }).c;
+const rowOf = (g: string, who: Id) => db.prepare('SELECT status, role FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, who.pubKeyHex) as { status: string; role: string } | undefined;
 
 async function main(): Promise<void> {
     console.log('\nA private group lists who is invited and has not joined, to those who may read it, over real HTTPS\n');
@@ -204,6 +214,56 @@ async function main(): Promise<void> {
         'a convenor withdraws Mia\'s: gone for everyone, and no note');
     assert((await accept(garden, mia)).status !== 200, 'a withdrawn invitation cannot be accepted');
 
+    // ── 4b. Withdraw is its own request, and takes back only an invitation still open (review of #3061) ──────────
+    const [ann, bea, dov] = ['Ann', 'Bea', 'Dov'].map(makeMember);
+    assert((await invite(garden, cleo, ann)).status === 200 && pendingNames(await read(garden, cleo)).includes('Ann'), "Cleo invites Ann, who shows under Cleo's invited list");
+    // Ann accepts on her phone while Cleo's page still shows her as invited; then Cleo taps Withdraw.
+    assert((await accept(garden, ann)).status === 200 && rowOf(garden, ann)?.status === 'active', 'Ann accepts');
+    const linesBeforeLate = removedLines(garden);
+    const late = await withdraw(garden, cleo, ann);
+    assert(late.status === 409 && late.body?.code === 'already_joined' && /already joined/.test(late.body?.error ?? ''),
+        `Cleo's Withdraw after Ann accepted is refused, 409, saying she has already joined (got ${late.status} ${JSON.stringify(late.body)})`);
+    assert(rowOf(garden, ann)?.status === 'active', `Ann is still an active member, not removed (got ${JSON.stringify(rowOf(garden, ann))})`);
+    assert(removedLines(garden) === linesBeforeLate, 'and no "Cleo removed Ann" line is written in the group chat');
+    const rosterAfterLate = await signedFetch('GET', `/api/groups/${garden}/members`, null, cleo);
+    assert((rosterAfterLate.body ?? []).some((m: any) => m.callsign === 'Ann' && m.status === 'active') && !pendingNames(await read(garden, cleo)).includes('Ann'),
+        "she is a member in the roster, and off the invited list, when Cleo's page reads them again");
+    assert((await accept(garden, ann)).status === 200, 'and Ann is in, as she was (joining again is a no-op, not "a convenor removed you")');
+    // The sender, a member now: Hal invites Bea as a convenor, is made a member, Bea accepts, Hal taps Withdraw.
+    assert((await setRole(garden, cleo, hal, 'convenor')).status === 200 && (await invite(garden, hal, bea)).status === 200
+        && (await setRole(garden, cleo, hal, 'member')).status === 200, 'Hal, a convenor for a moment, invites Bea, and is a member again');
+    assert((await accept(garden, bea)).status === 200, 'Bea accepts');
+    const lateSender = await withdraw(garden, hal, bea);
+    assert(lateSender.status === 409 && lateSender.body?.code === 'already_joined' && rowOf(garden, bea)?.status === 'active' && removedLines(garden) === linesBeforeLate,
+        `the sender's late Withdraw is refused the same way, and Bea stays (got ${lateSender.status} ${lateSender.body?.error ?? ''})`);
+
+    // Still open: Withdraw takes it back.
+    assert((await invite(garden, cas, dov)).status === 200, 'Cas invites Dov');
+    const gusTries = await withdraw(garden, gus, dov);
+    assert(gusTries.status === 403 && rowOf(garden, dov)?.status === 'invited', `a member who did not make it cannot withdraw it (403), and it stands (got ${gusTries.status})`);
+    assert((await withdraw(garden, zed, dov)).status === 404 && (await withdraw(garden, null, dov)).status === 401 && rowOf(garden, dov)?.status === 'invited',
+        'a stranger to the invite-only group is answered 404, an unsigned Withdraw 401, and it stands');
+    const cleoTakesBack = await withdraw(garden, cleo, dov);
+    assert(cleoTakesBack.status === 200 && cleoTakesBack.body?.success === true, `Cleo, a convenor, withdraws Cas's invitation to Dov (got ${cleoTakesBack.status} ${cleoTakesBack.body?.error ?? ''})`);
+    assert(rowOf(garden, dov) === undefined, 'the row goes');
+    assert(!pendingNames(await read(garden, cleo)).includes('Dov') && !pendingNames(await read(garden, cas)).includes('Dov'),
+        'Dov is gone from the list of Cleo, who withdrew it, and of Cas, who made it');
+    assert(declineRows(garden) === 0 && removedLines(garden) === linesBeforeLate, 'no "Declined" note, and no line in the chat');
+    const again2 = await withdraw(garden, cleo, dov);
+    assert(again2.status === 409 && again2.body?.code === 'invitation_not_open', `a second Withdraw: nothing open, 409 (got ${again2.status} ${JSON.stringify(again2.body)})`);
+    assert((await accept(garden, dov)).status !== 200, 'and Dov cannot accept what was withdrawn');
+    // The sender withdraws their own, still open, after losing the role.
+    assert((await setRole(garden, cleo, hal, 'convenor')).status === 200 && (await invite(garden, hal, dov)).status === 200
+        && (await setRole(garden, cleo, hal, 'member')).status === 200, 'Hal invites Dov, and is a member again');
+    const halTakesBack = await withdraw(garden, hal, dov);
+    assert(halTakesBack.status === 200 && rowOf(garden, dov) === undefined && pendingNames(await read(garden, hal)).length === 0,
+        `Hal withdraws his own: gone, and off his list (got ${halTakesBack.status} ${halTakesBack.body?.error ?? ''})`);
+
+    // The member removal is unchanged: a convenor's DELETE …/members/:pubkey on a member still removes them and says so.
+    const linesBeforeRemoval = removedLines(garden);
+    assert((await removeFrom(garden, cleo, ann)).status === 200 && rowOf(garden, ann)?.status === 'removed' && removedLines(garden) === linesBeforeRemoval + 1,
+        `the member removal still removes Ann and writes its line (got ${JSON.stringify(rowOf(garden, ann))}, lines ${linesBeforeRemoval} → ${removedLines(garden)})`);
+
     // ── 5. Declined: for the member who made it, and nobody else ──────────────────────────────────────────────────
     assert((await invite(garden, cleo, mia)).status === 200 && (await invite(garden, cas, ola)).status === 200, 'Cleo invites Mia again and Cas invites Ola');
     // Mia declines (her own removal of an invitation).
@@ -276,6 +336,14 @@ async function main(): Promise<void> {
     assert((await invite(garden, cleo, ivy)).status === 200 && (await removeFrom(garden, cleo, ivy)).status === 200, 'Cleo invites Ivy and withdraws it');
     assert(JSON.stringify(heardOf('group_member_removed')) === JSON.stringify(['Cas', 'Cleo', 'Ivy']),
         `a withdrawal reaches the same, and no member (got ${heardOf('group_member_removed').join(', ')})`);
+    reset();
+    // The page's Withdraw (its own request): the convenors, the person invited and the sender, here Hal, a member now.
+    assert((await setRole(garden, cleo, hal, 'convenor')).status === 200 && (await invite(garden, hal, ivy)).status === 200
+        && (await setRole(garden, cleo, hal, 'member')).status === 200, 'Hal invites Ivy and is a member again');
+    reset();
+    assert((await withdraw(garden, cleo, ivy)).status === 200, "Cleo withdraws Hal's invitation to Ivy");
+    assert(JSON.stringify(heardOf('group_member_removed')) === JSON.stringify(['Cas', 'Cleo', 'Hal', 'Ivy']),
+        `a Withdraw reaches the convenors, Ivy and Hal who made it — not Gus, Nat or Zed (got ${heardOf('group_member_removed').join(', ')})`);
     reset();
     // A member leaving is still the group's business.
     assert((await removeFrom(garden, nat, nat)).status === 200, 'Nat leaves');

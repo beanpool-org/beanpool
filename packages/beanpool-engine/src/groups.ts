@@ -1022,6 +1022,46 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     return res.changes > 0;
 }
 
+/** Withdraw refused because the person accepted first: they are a member now, and a withdrawal removes nobody. */
+export const INVITATION_ALREADY_JOINED =
+    word('They have already joined the group, so there is no invitation to withdraw. They are in the roster now.');
+/** Withdraw refused because the invitation is gone: declined, or withdrawn by someone else first. */
+export const INVITATION_NOT_OPEN =
+    word('This invitation is no longer open: it was declined or withdrawn.');
+
+/**
+ * Withdraw an invitation still open (the group page's "Withdraw", DELETE /api/groups/:id/invitations/:pubkey). Its own
+ * request, not removeGroupMember: a list read a minute ago may show someone who has accepted since, and the convenor's
+ * general removal would then remove a member (review of #3061). This one deletes ONLY a row that is still 'invited',
+ * and the check is the delete's own WHERE, in one transaction with the read that words the refusal, so an acceptance
+ * cannot land between them. Who may: the member who made the invitation, whatever they are in the group now (it is not a
+ * convenor's power, so not paused with one), or a convenor whose powers are not resting. Returns the row as it was.
+ */
+export function withdrawGroupInvitation(db: Db, groupId: string, actorPubkey: string, targetPubkey: string): GroupMember {
+    return db.transaction(() => {
+        const target = getGroupMember(db, groupId, targetPubkey);
+        const isSender = actorPubkey !== targetPubkey && !!target?.invitedBy && target.invitedBy === actorPubkey;
+        if (!isSender) {
+            if (!isGroupConvenor(db, groupId, actorPubkey)) {
+                throw new Error(unauthorized(word('Only a group convenor, or the member who sent it, can withdraw an invitation')));
+            }
+            assertConvenorPowersActive(db, actorPubkey);
+        }
+        if (target?.status === 'active') throw new Error(INVITATION_ALREADY_JOINED);
+        if (target?.status !== 'invited') throw new Error(INVITATION_NOT_OPEN);
+
+        const now = membershipWriteAt(db, groupId, targetPubkey);
+        // The status is part of the delete itself: a row that is anything but an open invitation stays as it is.
+        const res = db.prepare("DELETE FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'invited'").run(groupId, targetPubkey);
+        if (res.changes === 0) throw new Error(INVITATION_NOT_OPEN);
+        // The tombstone carries the delete to backups; a later invitation is stamped after it and wins.
+        db.prepare("INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at) VALUES ('group_members', ?, ?)")
+            .run(`${groupId}|${targetPubkey}`, now);
+        reconcileGroupLead(db, groupId);
+        return target;
+    })();
+}
+
 /** A place circle's purpose is what the people in it opted into: a convenor can't turn it into another group. */
 export const CIRCLE_WORDS_FIXED = word("A circle's name, purpose and door stay as they are.");
 

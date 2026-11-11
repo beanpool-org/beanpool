@@ -9250,11 +9250,14 @@ export async function fetchGroupInvitations(groupId: string): Promise<GroupInvit
 }
 
 /**
- * Takes back an invitation still open: a convenor's for anyone's, the sender's for their own (the node decides). Not
- * leaveGroupApi: nobody invited is in the chat, so no key changes and no epoch is made for it.
+ * Takes back an invitation still open: a convenor's for anyone's, the sender's for their own (the node decides). Its own
+ * request, never the member removal (DELETE …/members/:pubkey): the list on screen may be minutes old, and if the person
+ * has accepted since, a removal would remove a member who just joined. The node withdraws only a row still invited and
+ * otherwise refuses, 409, saying they have joined (the thrown error carries those words). Nobody invited is in the chat,
+ * so no key changes and no epoch is made for it.
  */
 export async function withdrawGroupInvitationApi(groupId: string, memberPubkey: string): Promise<boolean> {
-    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/invitations/${encodeURIComponent(memberPubkey)}`);
     return Boolean(res?.success);
 }
 

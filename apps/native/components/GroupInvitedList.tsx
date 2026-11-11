@@ -74,12 +74,18 @@ export function GroupInvitedList({ groupId, myPubkey, reloadKey = 0, onChanged }
                 onPress: async () => {
                     setBusy(p.memberPubkey);
                     try {
+                        // Its own request, never the member removal: if they accepted since this list was read, the node
+                        // refuses (409, "already joined") rather than removing a member who has just joined.
                         await withdrawGroupInvitationApi(groupId, p.memberPubkey);
                         hapticSuccess();
                         await load();
                         onChanged?.();
                     } catch (e: any) {
                         Alert.alert(w.failed, e?.message ? signedRequestWords(e.message) : undefined);
+                        // Refused because things moved on (they joined, or it was declined or withdrawn): read both lists
+                        // again, so the person shows where they now are.
+                        await load();
+                        onChanged?.();
                     } finally {
                         setBusy(null);
                     }

@@ -1343,7 +1343,7 @@ async function main(): Promise<void> {
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/chat/report', 'POST /api/groups/:id/join',
             'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
             'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
-            'GET /api/groups/:id/members', 'GET /api/groups/:id/invitations', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
+            'GET /api/groups/:id/members', 'GET /api/groups/:id/invitations', 'DELETE /api/groups/:id/invitations/:pubkey', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             // A chat group's votes (routes/group-decisions.ts): its members see them, everyone else 404.

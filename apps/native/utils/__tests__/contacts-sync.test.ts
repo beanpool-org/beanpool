@@ -7,7 +7,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { newContactId, putContact, readContactsCopy, removeEveryContact, type ContactsCopyWire } from '@beanpool/core';
+import {
+    CONTACTS_SEQ_MAX, contactsCopyWire, emptyContactsList, makeContactsCopy, newContactId, putContact, readContactsCopy, removeEveryContact,
+    writeContactsList, type ContactsCopyWire,
+} from '@beanpool/core';
 import { contactsSyncStoreKey, loadContacts, readSyncState, type ContactsAccount } from '../contacts-store';
 import {
     CONTACTS_COPY_PATH, checkContactsHere, contactsHeard, contactsKeptAt, decide, editContacts, resetContactsCheckForTests, syncContacts,
@@ -29,7 +32,17 @@ class FakeCommunity {
     copies = new Map<string, ContactsCopyWire & { seq: number }>();
     off = false;
     old = false;
+    /** A dishonest server: says it keeps a copy numbered at core's cap, holds none, and refuses every save as stale. */
+    liar = false;
+    /** A dishonest server: hands back another member's copy as this member's. */
+    swapped: ContactsCopyWire | null = null;
     answer(owner: string, method: string, path: string, body: unknown): { status: number; body: unknown } {
+        if (this.liar) {
+            if (path === '/api/me/unread') return { status: 200, body: { unread: 0, requests: 0, alerts: 0, contacts: { seq: CONTACTS_SEQ_MAX }, asOf: '' } };
+            if (method === 'GET') return { status: 404, body: { code: 'no_copy' } };
+            return { status: 409, body: { code: 'stale_copy', seq: CONTACTS_SEQ_MAX } };
+        }
+        if (this.swapped && method === 'GET' && path === CONTACTS_COPY_PATH) return { status: 200, body: this.swapped };
         if (path === '/api/me/unread') {
             const kept = this.copies.get(owner);
             return { status: 200, body: { unread: 0, requests: 0, alerts: 0, ...(this.old ? {} : { contacts: kept && !this.off ? { seq: kept.seq } : null }), asOf: '' } };
@@ -240,6 +253,44 @@ describe('a new phone, and the other communities', () => {
         p.clock.now += WAIT;
         await syncContacts(me, p.deps);
         expect(p.requests.slice(before).every((r) => r.community === GLOBAL)).toBe(true);
+    });
+});
+
+describe('a dishonest community', () => {
+    it('saying it keeps a copy numbered at core\'s cap never stops the phone saving its changes, here or elsewhere', async () => {
+        const liar = new FakeCommunity();
+        liar.liar = true;
+        const global = new FakeCommunity();
+        const me = person();
+        const p = phone({ [BYRON]: liar, [GLOBAL]: global }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        expect(global.copies.get(me.publicKey)?.seq).toBe(1);
+        // The claim heard (a round's answer), and a change made straight after it.
+        await contactsHeard(me, BYRON, liar.answer(me.publicKey, 'GET', '/api/me/unread', undefined).body, false, p.deps);
+        await expect(editContacts(me, (l) => putContact(l, person1('Sam Jones')), p.deps)).resolves.toBeDefined();
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        expect(global.copies.get(me.publicKey)?.seq).toBe(2);
+        expect(await names(me, p.deps)).toEqual(['Dee Walker', 'Sam Jones']);
+        // Mutation: let nextSeq go past the numbers a community only said → the next change is past the cap and throws.
+    });
+
+    it('handing back another member\'s copy adds nobody, and it isn\'t fetched again each pass', async () => {
+        const byron = new FakeCommunity();
+        const me = person();
+        const other = person();
+        byron.swapped = contactsCopyWire(makeContactsCopy({ json: writeContactsList(putContact(emptyContactsList(), person1('Mallory'))), me: other, seq: 9 }));
+        const p = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        await contactsHeard(me, BYRON, { contacts: { seq: 9 } }, false, p.deps);
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        await syncContacts(me, p.deps);
+        expect(p.requests.filter((r) => r.method === 'GET' && r.path === CONTACTS_COPY_PATH)).toHaveLength(1);
+        expect(await names(me, p.deps)).toEqual(['Dee Walker']);
+        // Mutation: no rest after a copy that doesn't open → fetched again on every pass, up to 512 KiB each time.
     });
 });
 

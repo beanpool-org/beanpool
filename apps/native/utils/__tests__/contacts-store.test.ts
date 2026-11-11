@@ -72,6 +72,12 @@ describe('the phone keeps the list locked, in a file per account', () => {
         await changeContacts(me, add(dee()), deps, fixedRandom(0.999));
         s = readSyncState(deps.kvMap.get(contactsSyncStoreKey(me.publicKey)) ?? null);
         expect(s.dueAt).toBe(deps.clock.now - 60_000 + CONTACTS_SAVE_WAIT_MS.min);
+        // The wait ran out with nothing sent (offline, or a save still on its way): the next change waits afresh.
+        deps.clock.now += CONTACTS_SAVE_WAIT_MS.max;
+        await changeContacts(me, add(dee()), deps, fixedRandom(0.5));
+        s = readSyncState(deps.kvMap.get(contactsSyncStoreKey(me.publicKey)) ?? null);
+        expect(s.dueAt).toBe(deps.clock.now + CONTACTS_SAVE_WAIT_MS.min + 0.5 * (CONTACTS_SAVE_WAIT_MS.max - CONTACTS_SAVE_WAIT_MS.min));
+        // Mutation: set the wait only when none is set → this change would leave at once, straight after it was made.
         const top = fakeDeps();
         await changeContacts(me, add(dee()), top, fixedRandom(0.999));
         const wait = readSyncState(top.kvMap.get(contactsSyncStoreKey(me.publicKey)) ?? null).dueAt! - top.clock.now;
@@ -97,10 +103,10 @@ describe('a copy\'s number is never used twice once it has left the phone', () =
         // Mutation: always reuse the file's number → 1 again, and a community would keep the copy sent before this change.
     });
 
-    it('goes past every number a community was heard to keep', () => {
-        expect(nextSeq(3, { sentSeq: 0, heard: { a: 9, b: null }, merged: { a: 9 } })).toBe(10);
-        expect(nextSeq(12, { sentSeq: 0, heard: { a: 9 }, merged: {} })).toBe(12);
-        expect(nextSeq(12, { sentSeq: 12, heard: {}, merged: {} })).toBe(13);
+    it('goes past every number this phone sent or merged', () => {
+        expect(nextSeq(3, { sentSeq: 0, merged: { a: 9 } })).toBe(10);
+        expect(nextSeq(12, { sentSeq: 0, merged: { a: 9 } })).toBe(12);
+        expect(nextSeq(12, { sentSeq: 12, merged: {} })).toBe(13);
     });
 });
 
@@ -166,7 +172,7 @@ describe('a community\'s copy taken in', () => {
         expect(state.merged[BYRON]).toBe(5);
     });
 
-    it('another member\'s copy, or a forged one, adds nobody: only its number is noted, so the next save replaces it', async () => {
+    it('another member\'s copy, or a forged one, adds nobody, its number is never taken, and that community rests a day', async () => {
         const me = person();
         const other = person();
         const deps = fakeDeps();
@@ -175,8 +181,9 @@ describe('a community\'s copy taken in', () => {
         expect(await takeInCopy(me, BYRON, copyOf(other, theirs, 40), deps)).toEqual({ kind: 'unopened', seq: 40 });
         const { onPhone, state } = await loadContacts(me, deps);
         expect(onPhone.kind === 'list' && onPhone.list.contacts.map((c) => c.name)).toEqual(['Dee Walker']);
-        expect(state.heard[BYRON]).toBe(40);
+        expect(state.heard[BYRON]).toBeUndefined();
         expect(state.merged[BYRON]).toBeUndefined();
+        expect(state.refused[BYRON]).toEqual({ code: 'unopened', until: deps.clock.now + 24 * 60 * 60 * 1000 });
     });
 
     it('a removal made here is not undone by an older copy (core\'s markers, through the store)', async () => {

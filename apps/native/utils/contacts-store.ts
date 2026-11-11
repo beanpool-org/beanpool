@@ -13,7 +13,9 @@
  *
  * **A number never used twice.** Each copy carries a number its communities only take when it is newer. A change re-locks
  * the list under the number the file has while that number has never left the phone; once one has (a save was sent with
- * it), the next change takes a new one, above every number any community was heard to keep ({@link nextSeq}).
+ * it), the next change takes a new one, above every number this phone sent or merged ({@link nextSeq}). Only those: a
+ * community's word for its number (GET /api/me/unread, a 409) is signed by nobody, and a huge one taken as true would put
+ * every later number past core's cap, so that no change could be saved again.
  *
  * **What the sync may trust** (`merged`). For each community, the number of the copy there whose people this phone has
  * merged in, or put there itself. A community holding exactly that number holds nothing this phone lacks, so only then may
@@ -62,9 +64,9 @@ export type ContactsOnPhone =
 
 /**
  * Why a community isn't asked again for a while: it keeps no lists, its server is full, too many saves this hour, it holds a
- * list a newer app wrote, or the account isn't a member there.
+ * list a newer app wrote, the account isn't a member there, or it handed back a copy that doesn't open with the member's key.
  */
-export type ContactsRefusal = 'contacts_off' | 'node_full' | 'too_many_saves' | 'newer' | 'not_a_member';
+export type ContactsRefusal = 'contacts_off' | 'node_full' | 'too_many_saves' | 'newer' | 'not_a_member' | 'unopened';
 
 /** What the phone knows of the account's copies (design §4.5), kept beside the file. */
 export interface ContactsSyncState {
@@ -103,7 +105,7 @@ export function emptySyncState(): ContactsSyncState {
 
 const isSeq = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 1;
 const isMs = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
-const REFUSALS: readonly ContactsRefusal[] = ['contacts_off', 'node_full', 'too_many_saves', 'newer', 'not_a_member'];
+const REFUSALS: readonly ContactsRefusal[] = ['contacts_off', 'node_full', 'too_many_saves', 'newer', 'not_a_member', 'unopened'];
 
 /** A record as stored, never trusted: what doesn't read is left out (the worst of it is one more look at a community). */
 export function readSyncState(raw: string | null): ContactsSyncState {
@@ -211,14 +213,17 @@ export function writeState(account: ContactsAccount, kv: ContactsKv, s: Contacts
     return kv.setItem(contactsSyncStoreKey(account.publicKey), JSON.stringify(s));
 }
 
-/** The number a changed list is locked under: the file's while it has never left the phone, else past every one known. */
-export function nextSeq(fileSeq: number, s: Pick<ContactsSyncState, 'sentSeq' | 'heard' | 'merged'>): number {
-    const known = Math.max(0, ...Object.values(s.heard).map((n) => n ?? 0), ...Object.values(s.merged));
+/**
+ * The number a changed list is locked under: the file's while it has never left the phone, else past every one this phone
+ * sent or merged (copies it opened, signed by the member; never a number a community only said).
+ */
+export function nextSeq(fileSeq: number, s: Pick<ContactsSyncState, 'sentSeq' | 'merged'>): number {
+    const known = Math.max(0, ...Object.values(s.merged));
     if (fileSeq > s.sentSeq && fileSeq > known) return fileSeq;
     return Math.max(fileSeq, s.sentSeq, known) + 1;
 }
 
-/** Contacts that aren't markers, in a list's canonical JSON: two lists the same here hold the same people. */
+/** Two lists in their canonical JSON: the same here, they hold the same contacts and the same removal markers. */
 const sameList = (a: ContactsList, b: ContactsList) => writeContactsList(a) === writeContactsList(b);
 
 // ── The queue ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -275,8 +280,10 @@ export class ContactsUnreadableError extends Error {
 
 /**
  * The member's change: `change` gets the list (empty when there is none yet) and returns the next. Written locked at once,
- * and due to leave the phone after the wait (the first change since the last save sets it; later ones join it). Returns the
- * list as kept. A list that can't be opened is never written over: throws {@link ContactsUnreadableError}.
+ * and due to leave the phone after the wait: the first change since the last save sets it, and later ones join it while it
+ * runs. A change after it ran out (a save still on its way, or none possible offline) starts a fresh one, so no change ever
+ * leaves the phone straight after it was made. Returns the list as kept. A list that can't be opened is never written
+ * over: throws {@link ContactsUnreadableError}.
  */
 export function changeContacts(
     account: ContactsAccount, change: (list: ContactsList) => ContactsList, deps: ContactsStoreDeps = phoneContactsDeps(),
@@ -292,7 +299,7 @@ export function changeContacts(
         if (onPhone.kind === 'list' && sameList(before, next)) return before;
         // Nothing exists until a first contact: a change that leaves nobody and no marker writes no file.
         if (onPhone.kind === 'none' && next.contacts.length === 0 && next.removed.length === 0) return before;
-        if (s.dueAt === null) s.dueAt = now + saveWait(random);
+        if (s.dueAt === null || s.dueAt <= now) s.dueAt = now + saveWait(random);
         await writeList(account, deps, next, nextSeq(onPhone.kind === 'list' ? onPhone.seq : 0, s), s);
         told(account.publicKey);
         return next;
@@ -307,35 +314,33 @@ export type TakeIn =
 
 /**
  * A copy fetched from `community` taken in (design §4.5): opened with the member's key, merged with the phone's list, and
- * the result kept here when it differs. `merged` then names the copy's number for that community. A copy that doesn't open
- * (another member's, damaged, forged) adds nobody: its number is noted, so the next save goes past it and replaces it. One a
- * newer app wrote is left alone. A phone that held no list notes how many people came back.
+ * the result kept here when it differs. `merged` then names the copy's number for that community. When the copy holds
+ * everything the phone does, under a newer number, it becomes the phone's file as it is (so that community holds exactly
+ * the phone's copy); when the phone holds something it lacks, the merge is locked under a number past it, to be saved there.
+ * A copy that doesn't open (another member's, damaged, forged) adds nobody and that community is left alone for a day: it
+ * isn't fetched again each pass. One a newer app wrote is left alone too. A phone that held no list notes how many came back.
  */
 export function takeInCopy(account: ContactsAccount, community: string, raw: unknown, deps: ContactsStoreDeps = phoneContactsDeps()): Promise<TakeIn> {
     return inTurn(account.publicKey, async () => {
         const onPhone = await readOnPhone(account, deps.disk);
         const s = await readStateFor(account, deps.kv, onPhone);
         const opened = openContactsCopy(raw, account);
+        const day = (deps.now ?? Date.now)() + 24 * 60 * 60 * 1000;
         if (!opened.ok) {
             const header = readContactsCopy(raw);
-            const seq = header.ok ? header.copy.seq : null;
-            if (seq !== null) s.heard[community] = seq;
             delete s.merged[community];
+            s.refused[community] = { code: 'unopened', until: day };
             await writeState(account, deps.kv, s);
-            return { kind: 'unopened', seq };
+            return { kind: 'unopened', seq: header.ok ? header.copy.seq : null };
         }
         const theirs = readContactsList(opened.json);
         const seq = opened.copy.seq;
         s.heard[community] = seq;
         if (!theirs.ok) {
-            if (theirs.reason === 'newer') {
-                s.refused[community] = { code: 'newer', until: (deps.now ?? Date.now)() + 24 * 60 * 60 * 1000 };
-                await writeState(account, deps.kv, s);
-                return { kind: 'newer', seq };
-            }
             delete s.merged[community];
+            s.refused[community] = { code: theirs.reason === 'newer' ? 'newer' : 'unopened', until: day };
             await writeState(account, deps.kv, s);
-            return { kind: 'unopened', seq };
+            return theirs.reason === 'newer' ? { kind: 'newer', seq } : { kind: 'unopened', seq };
         }
         if (onPhone.kind === 'unreadable') {
             // The phone's own file can't be opened: never written over, so nothing is merged into it either.
@@ -345,27 +350,30 @@ export function takeInCopy(account: ContactsAccount, community: string, raw: unk
         s.merged[community] = seq;
         const mine = onPhone.kind === 'list' ? onPhone.list : emptyContactsList();
         const both = mergeContactsLists(mine, theirs.list);
-        const changed = onPhone.kind === 'none' || !sameList(mine, both);
+        const fileSeq = onPhone.kind === 'list' ? onPhone.seq : 0;
+        // Nothing of the phone's is missing from their copy / nothing of theirs is missing from the phone's.
+        const theyHaveAll = sameList(both, theirs.list);
+        const weHaveAll = onPhone.kind === 'list' && sameList(both, mine);
         let back: number | null = null;
         if (onPhone.kind === 'none') {
             back = both.contacts.length;
             s.back = back > 0 ? back : null;
         }
-        if (changed) {
-            const fileSeq = onPhone.kind === 'list' ? onPhone.seq : 0;
-            // The same people as the copy: kept under the copy's own number, which is then what that community holds.
-            const asTheirs = sameList(both, theirs.list) && seq > s.sentSeq && seq >= fileSeq;
-            if (asTheirs) {
-                await deps.disk.write(account.publicKey, JSON.stringify(contactsCopyWire(opened.copy)));
-                s.fileSeq = seq;
-                await writeState(account, deps.kv, s);
-            } else {
-                await writeList(account, deps, both, nextSeq(fileSeq, s), s);
-            }
-            told(account.publicKey);
+        let changed = false;
+        if (theyHaveAll && seq > fileSeq && seq > s.sentSeq) {
+            // Their copy is the phone's list under a newer number: kept as it is, so that community holds exactly the phone's.
+            await deps.disk.write(account.publicKey, JSON.stringify(contactsCopyWire(opened.copy)));
+            s.fileSeq = seq;
+            await writeState(account, deps.kv, s);
+            changed = true;
+        } else if (!weHaveAll || (!theyHaveAll && fileSeq <= seq)) {
+            // Both lists made one, under a number past theirs, so it can be saved there.
+            await writeList(account, deps, both, nextSeq(fileSeq, s), s);
+            changed = true;
         } else {
             await writeState(account, deps.kv, s);
         }
+        if (changed) told(account.publicKey);
         return { kind: 'merged', changed, seq, back };
     });
 }

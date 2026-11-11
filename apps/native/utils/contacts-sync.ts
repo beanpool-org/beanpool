@@ -20,7 +20,8 @@
  * leaves the phone readable (utils/__tests__/contacts-sync.test.ts holds every request to that).
  *
  * **Refusals.** A community that keeps no lists (`contacts_off`, or a server from before them), whose server is full
- * (`node_full`), or that took too many saves this hour, is left alone for a while and named in the Contacts screen's footer.
+ * (`node_full`), that took too many saves this hour, or that handed back a copy that doesn't open, is left alone for a
+ * while; one that keeps no lists is named in the Contacts screen's footer ({@link contactsKeptAt}).
  */
 import type { ContactsList } from '@beanpool/core';
 import { onAccountOnPhone } from './account-on-phone';
@@ -35,7 +36,7 @@ const UNREAD_PATH = '/api/me/unread';
 export const CONTACTS_REQUEST_MS = 15_000;
 const HOUR = 60 * 60 * 1000;
 /** How long each refusal leaves a community alone. */
-const REFUSAL_WAIT: Record<ContactsRefusal, number> = { contacts_off: 24 * HOUR, node_full: 24 * HOUR, too_many_saves: HOUR, newer: 24 * HOUR, not_a_member: HOUR };
+const REFUSAL_WAIT: Record<ContactsRefusal, number> = { contacts_off: 24 * HOUR, node_full: 24 * HOUR, too_many_saves: HOUR, newer: 24 * HOUR, not_a_member: HOUR, unopened: 24 * HOUR };
 /** The most steps one community takes in a pass: ask, fetch, save, and once more after a 409. */
 const STEPS_MAX = 5;
 

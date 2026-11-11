@@ -690,6 +690,41 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_standing_period_changes_open ON standing_p
 CREATE INDEX IF NOT EXISTS idx_standing_period_changes_period ON standing_period_changes(standing_id, period_no, state);
 CREATE INDEX IF NOT EXISTS idx_standing_period_changes_updated_at ON standing_period_changes(updated_at);
 
+-- 5d. Bills (DESIGN-getting-paid-fable.md §4, §5; engine/bills.ts): a request to pay, never a payment. From a member, or an
+-- enterprise a keeper sent it for (sent_by signed it), to one member, who pays it, declines it or leaves it. A bill is no
+-- deal and holds nothing: paying it is one ledger row (ledger_tx_id) written with the flip sent → paid. Nothing here is
+-- read from any other table's old rows: a new table, empty on every node until a bill is sent.
+CREATE TABLE IF NOT EXISTS bills (
+    -- The sender's app's UUID: a retry of the send is the same bill.
+    id TEXT PRIMARY KEY,
+    biller_pubkey TEXT NOT NULL,
+    sent_by TEXT NOT NULL,
+    -- NULL only while it waits on an invite (slice B3).
+    payer_pubkey TEXT,
+    invite_code TEXT,
+    amount_c INTEGER NOT NULL CHECK (amount_c > 0 AND amount_c <= 200000),
+    what_for TEXT NOT NULL,
+    post_id TEXT,
+    standing_id TEXT,
+    state TEXT NOT NULL CHECK (state IN ('sent', 'paid', 'declined', 'withdrawn', 'expired')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- When it reached its payer (its send; for a bill on an invite, the redeem), and when it expires: 30 days on.
+    delivered_at TEXT,
+    expires_at TEXT,
+    answered_at TEXT,
+    ledger_tx_id TEXT,
+    -- The report its payer filed on it (abuse_reports.id): three members' within 7 days hold the sender's bills.
+    report_id TEXT,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bills_invite ON bills(invite_code) WHERE invite_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bills_payer ON bills(payer_pubkey, state);
+CREATE INDEX IF NOT EXISTS idx_bills_biller ON bills(biller_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_bills_due ON bills(state, expires_at);
+CREATE INDEX IF NOT EXISTS idx_bills_updated_at ON bills(updated_at);
+-- The bills reports were filed on: all a hold (engine/bills.ts reportersHolding) and the reports queue (getReports) read.
+CREATE INDEX IF NOT EXISTS idx_bills_reported ON bills(report_id) WHERE report_id IS NOT NULL;
+
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
@@ -1678,6 +1713,14 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE standing_period_changes SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS bills_touch_updated_at
+AFTER UPDATE ON bills
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE bills SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS projects_touch_updated_at

@@ -40,7 +40,7 @@ describe('What needs you: which kinds show', () => {
     });
 
     it('orders by priority, highest first: admin, deal, vote, invite, message, group', () => {
-        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'vote', 'invite', 'message', 'group']);
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'bill', 'vote', 'invite', 'message', 'group']);
         expect(allFour().map(e => e.kind)).toEqual(['deal', 'vote', 'message', 'group']);
     });
 

@@ -177,6 +177,7 @@ export type { ActivityTarget, ActivityTargetItem } from './activity-target.js';
 export * from './calendar-month.js';
 export * from './share-says.js';
 export * from './requests-cleared-words.js';
+export * from './bills.js';
 // Private contacts (scratch/fable-design/DESIGN-private-contacts-fable.md slice C0): the lock, the list, contacts files.
 export * from './contacts-crypto.js';
 export * from './contacts-list.js';

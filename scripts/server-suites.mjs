@@ -552,6 +552,7 @@ export const SUITES = [
     'test-unfunded-pledges-return',
     'test-standing-deals',
     'test-standing-lower',
+    'test-bills',
     'test-enterprise-text',
     'test-event-chat',
     'test-event-chat-rsvp-fixes',

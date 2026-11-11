@@ -1223,7 +1223,7 @@ export function injectSystemMessage(
             id: crypto.randomUUID(), 
             conversationId, 
             authorPubkey: 'SYSTEM', 
-            ciphertext: contentMap[type] || (type === SystemMessageType.STANDING_DEAL && meta.text) || 'System Event occurring.', 
+            ciphertext: contentMap[type] || ((type === SystemMessageType.STANDING_DEAL || type === SystemMessageType.BILL) && meta.text) || 'System Event occurring.', 
             nonce: '00000', 
             type: 'system',
             systemType: type,

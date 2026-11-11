@@ -247,6 +247,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // A period lowered, an ask and its answer (DESIGN-getting-paid-fable.md §5): who made and who answered each.
     move('standing_period_changes', 'asked_by');
     move('standing_period_changes', 'answered_by');
+    // (s3) bills (engine/bills.ts): a bill waits on, or is owed to, the person, whichever key they hold.
+    move('bills', 'biller_pubkey');
+    move('bills', 'sent_by');
+    move('bills', 'payer_pubkey');
 
     // (t) settlements
     move('settlements', 'buyer_pubkey');

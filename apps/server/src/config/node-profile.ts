@@ -206,6 +206,11 @@ export interface ProfileSwitches {
      *  Example Valley where `showcase` is on. Set by the server's kind in this build (KIND_ONLY_SWITCHES); the owners'
      *  override under How this community works comes with the Settings slice. */
     knowledge: boolean;
+    /** Bills (engine/bills.ts; DESIGN-getting-paid-fable.md §4): a member, or an enterprise by a keeper, sends a member a
+     *  request to pay that never pays itself. On wherever Beans are on (a local community); off where they are off (the
+     *  global node), where every /api/bills route refuses. A bill holds no Beans, so an operator may turn it off on a live
+     *  community: the bills out then wait unpaid and expire. */
+    bills: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -245,6 +250,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         dmRequests: false,
         shareOutside: true,
         knowledge: true,
+        bills: true,
     },
     global: {
         openJoin: true,
@@ -296,6 +302,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         shareOutside: false,
         // Not a place (Marty, 11 Nov 2026): Local knowledge lives in a local community; global previews it (showcase).
         knowledge: false,
+        // No Beans here, so no bills (DESIGN-getting-paid-fable §4.1).
+        bills: false,
     },
 };
 
@@ -392,6 +400,9 @@ export interface NodeFeatures {
     /** Present, and true, only where `knowledge` is on: the apps show Learn, and its routes answer (/api/knowledge/*). Absent
      *  (the global community, or a server from before it): no Learn, which @beanpool/core knowledgeFeatureMode reads as off. */
     knowledge?: true;
+    /** Present, and true, only where bills are on (`bills`, engine/bills.ts): the apps offer "Send a bill" and list Your
+     *  deals → Bills. Absent (the global community, a server from before it): no bills, as before. */
+    bills?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -655,6 +666,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
         ...(s.knowledge ? { knowledge: true as const } : {}),
+        ...(s.bills ? { bills: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
     // post go outside: the preview shows visitors nothing.
@@ -722,6 +734,8 @@ function lockToLedger(s: ProfileSwitches): ProfileSwitches {
         s.enterprises = false;
         s.treasuries = false;
         s.crowdfund = false;
+        // A bill is paid in Beans: none where they are off.
+        s.bills = false;
     }
     return s;
 }
@@ -779,6 +793,7 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     directoryMirror: 'This node does not keep the communities directory. Find communities near you on the global community.',
     knocks: 'This community isn’t taking requests to join. Ask one of its members for an invite.',
     decisions: 'Community votes are switched off on this node, so nothing here can be proposed or voted on. Its moderators look after it instead.',
+    bills: 'Bills are switched off on this node.',
 };
 
 /** Invites off, to a member who would make one and to someone holding a code: what to do instead. */

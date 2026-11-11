@@ -1503,6 +1503,8 @@ async function main(): Promise<void> {
             // A restore that finds the account from the sign-in alone (routes/recovery-collect.ts, design S0).
             'POST /api/recovery/find-nonce', 'POST /api/recovery/find',
             'POST /api/reports',
+            // Bills (routes/bills.ts): the signer's own, sent or to pay; send, pay, decline, withdraw.
+            'GET /api/bills', 'POST /api/bills', 'POST /api/bills/:id/pay', 'POST /api/bills/:id/decline', 'POST /api/bills/:id/withdraw',
             // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
             'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',
             // Shops (routes/shops.ts): near a place, one, its banner, the signer's own and its changes, and an enterprise's by a keeper.

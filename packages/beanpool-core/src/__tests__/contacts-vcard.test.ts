@@ -211,12 +211,12 @@ describe('a file made to hurt, and files that aren’t contacts', () => {
         expect(first.candidates[0]).toEqual(longNote);
         expect(first.cutOff).toBe(false);
 
-        // A note just under the limit is still read whole, so the guard starts only past it.
+        // A note under the limit is still read and decoded (then cut to the note limit), so the guard starts only past it.
         const fits = '=E5=BC=A0'.repeat(7000);
         const fitsLines = (fits.match(/.{1,72}/g) ?? []).map((part, i, all) => (i < all.length - 1 ? `${part}=` : part));
         const read = names(crlf(['BEGIN:VCARD', 'VERSION:2.1', 'FN:Fits', 'NOTE;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:' + fitsLines[0], ...fitsLines.slice(1), 'END:VCARD', ...after(1)]));
         expect(read.candidates.map((c) => c.name)).toEqual(['Fits', 'After 0']);
-        expect(read.candidates[0].note.length).toBeGreaterThan(0);
+        expect(read.candidates[0].note).toBe('张'.repeat(300));
     });
 
     it('cards come one at a time, so an app can read a big file in slices', () => {

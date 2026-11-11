@@ -7175,7 +7175,7 @@ function communityInfoWith(counts: CommunityCounts, publicKey?: string): Communi
     return {
         memberCount, postCount, transactionCount: txCount, commonsBalance_c: COMMONS_BALANCE,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
-        // `contacts` (engine/contact-copies.ts): whether members' locked contact lists are kept here. `door` (config/door.ts)
+        // `contacts` (config/contact-copies.ts): whether members' locked contact lists are kept here. `door` (config/door.ts)
         // last, so older apps ignore it: who may invite here.
         profile: getNodeProfile(), features: { ...getNodeFeatures(), contacts: keepsContactCopies(), door: getDoor() },
     };

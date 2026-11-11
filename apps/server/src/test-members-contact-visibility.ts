@@ -37,7 +37,7 @@ process.env.ADMIN_PASSWORD = 'ContactTest123!'; // read by initAdminPassword
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 const ADMIN_PW = 'ContactTest123!';
 let BASE = '';
@@ -320,9 +320,7 @@ async function main() {
         // now be signed by the key it names (Fable's review, LOW 4), so unsigned is refused with no card at all, and the
         // card goes only to the member's own signed redeem (a phone re-entering).
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-PROBE-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
-        const payload = JSON.stringify({ i: stranger.pubKeyHex, t: Date.now() });
-        const sig = crypto.sign(null, Buffer.from(payload), stranger.privateKey).toString('base64');
-        const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
+        const ticketB64 = offlineTicket(stranger.privateKey, stranger.pubKeyHex);
         const CARD = ['avatarUrl', 'callsign', 'joinedAt', 'publicKey'].join(',');
         for (const [k, o] of Object.entries(owners)) {
             for (const [route, body] of [

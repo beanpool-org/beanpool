@@ -41,7 +41,7 @@ import { getFunnel } from './engine/funnel.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let BASE = '';
 const ADMIN_PW = 'Door-Setting-Admin-Pw-48!';
@@ -107,8 +107,7 @@ const answer = (id: Id, knockId: string, verb: 'approve' | 'decline') => call(id
 
 /** A paper invite: an offline ticket `inviter` signed on their phone, which the node first sees when someone joins with it. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64') })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 /** A member's own key opening Settings, as the app's Manage button does: challenge, signature, session. */

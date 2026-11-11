@@ -104,7 +104,7 @@ const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(
 
 function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
-    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId, HOST);
     const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), {});

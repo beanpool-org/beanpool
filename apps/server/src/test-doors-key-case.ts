@@ -68,7 +68,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, settingsSigninFields } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, settingsSigninFields, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -203,10 +203,11 @@ const hasRow = (pk: string) => !!db.prepare('SELECT 1 FROM members WHERE public_
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body ?? null).slice(0, 120)}`;
 const isBadKey = (r: Res) => r.status === 400 && r.body?.code === 'bad_key' && typeof r.body?.error === 'string' && r.body.error.length > 20;
 
+let ticketSeq = 0;
 /** An offline ticket signed by `inviter`'s key, naming `as` as its inviter (its own key by default). */
 function offlineTicket(inviter: Id, as = inviter.pk): string {
-    const payload = JSON.stringify({ i: as, t: Date.now(), n: crypto.randomBytes(4).toString('hex') });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64') })).toString('base64');
+    // Each one its own (a millisecond apart), as the old payload's random `n` made it.
+    return signedOfflineTicket(inviter.priv, as, { timestamp: Date.now() - (++ticketSeq) });
 }
 const ticketCode = (ticket: string) => {
     const { s } = JSON.parse(Buffer.from(ticket, 'base64').toString('utf8'));

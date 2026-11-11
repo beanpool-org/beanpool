@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildBoundRequestHeaders } from '@beanpool/core';
+import { audienceOf, buildBoundRequestHeaders } from '@beanpool/core';
 import { localFetch } from './keepalive-test-fetch.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 
@@ -200,7 +200,9 @@ async function onGlobal(member: Id, db: any): Promise<void> {
     assert(stranger.res.status >= 400 && stranger.res.status < 500, `a key that is not the body's author is refused (${stranger.res.status})`);
     const forged = await localFetch(`${BASE}${POSTS}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'Sec-Fetch-Site': 'cross-site', 'x-public-key': member.pk, 'x-signature': 'AAAA', 'x-timestamp': String(Date.now()), 'x-nonce': 'n'.repeat(32) },
+        headers: { 'Content-Type': 'application/json', Origin: ORIGIN, 'Sec-Fetch-Site': 'cross-site', 'x-public-key': member.pk, 'x-signature': 'AAAA', 'x-timestamp': String(Date.now()), 'x-nonce': 'n'.repeat(32),
+            // Signed for this node (format 2), so what is refused is the signature: with no host it is the old shape, 426 (CUT4).
+            'x-signed-for': audienceOf(BASE) ?? 'localhost' },
         body: JSON.stringify(copyBody(crypto.randomUUID(), member)),
     });
     await forged.text();

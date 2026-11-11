@@ -45,7 +45,7 @@ import { ledger } from './engine/ledger.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -308,7 +308,8 @@ async function main() {
         const signedReport = await send('POST', '/api/pricing-guide/report', { itemId: item.id, reportType: 'too_low', reporterPubkey: stranger.pub }, stranger);
         assert(signedReport.status === 200 && reporterOf(signedReport.json?.reportId) === stranger.pub, `a signed report is attributed to the signer (got ${signedReport.status} reporter=${reporterOf(signedReport.json?.reportId)})`);
         const badSig = await send('POST', '/api/pricing-guide/report', { itemId: item.id, reportType: 'other' }, undefined,
-            { 'X-Public-Key': subject.pub, 'X-Signature': 'AAAA', 'X-Timestamp': String(Date.now()), 'X-Nonce': crypto.randomUUID() });
+            // Signed for this node (format 2), so what is refused is the signature: with no host it is the old shape, 426 (CUT4).
+            { 'X-Public-Key': subject.pub, 'X-Signature': 'AAAA', 'X-Timestamp': String(Date.now()), 'X-Nonce': crypto.randomUUID(), [SIGNED_FOR_HEADER]: signedForHost() });
         assert(badSig.status === 403, `a report with a forged signature is refused, not stored as that member (got ${badSig.status})`);
 
         const conv = createConversation('dm', [subject.pub, friend.pub], subject.pub)!;
@@ -405,9 +406,7 @@ async function main() {
         db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(longAgo, lead.pub);
 
         // A paper ticket the lead signed three weeks ago, redeemed today by someone else.
-        const payload = JSON.stringify({ i: lead.pub, t: Date.now() - 21 * 86400000 });
-        const sig = crypto.sign(null, Buffer.from(payload), lead.priv).toString('base64');
-        const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
+        const ticketB64 = offlineTicket(lead.priv, lead.pub, { timestamp: Date.now() - 21 * 86400000 });
         const joiner = keypair();
         const res = await send('POST', '/api/invite/redeem-offline', { ticketB64, publicKey: joiner.pub, callsign: `joiner${joiner.pub.slice(0, 5)}` }, joiner);
         assert(res.status === 200 && res.json?.success, `fixture: the ticket redeems (got ${res.status} ${res.json?.error})`);

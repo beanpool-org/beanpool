@@ -17,8 +17,8 @@
 
 import crypto from 'node:crypto';
 import {
-    REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, adminSigninText, ed25519Signer, settingsSigninText, signedRequestBytes,
-    signedRequestText,
+    REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, adminSigninText, ed25519Signer, inviteTicketText, settingsSigninText,
+    signedRequestBytes, signedRequestText,
 } from '@beanpool/core';
 
 export { SIGNED_FOR_HEADER };
@@ -109,6 +109,30 @@ export function settingsSigninFields(
         signature: signBytes(key, signedRequestBytes(settingsSigninText(host, action, pairingId, shortCode))).toString(encoding),
         signedFor: host,
     };
+}
+
+export interface TestTicketOptions {
+    /** Defaults to now. */
+    timestamp?: number;
+    intendedFor?: string | null;
+    /** The inviter's community, as the app names it. Defaults to {@link signedForHost}. */
+    host?: string;
+}
+
+/** The text an offline ticket signs, format 2 (core's inviteTicketText): it names the inviter's community. */
+export function offlineTicketText(inviter: string, opts: TestTicketOptions = {}): string {
+    return inviteTicketText(opts.host ?? signedFor, inviter, opts.timestamp ?? Date.now(), opts.intendedFor ?? null);
+}
+
+/**
+ * An offline invite ticket as today's apps make one (core's buildInviteTicket): base64 of `{ p, s }`, `p` the format-2
+ * text ({@link offlineTicketText}) and `s` its signature over 0xFF then that text, by `key`. `inviter` is the key named in
+ * it: the signer's own, unless a suite names another on purpose. An old `{i, t}` ticket, from an app before request
+ * binding, is refused as too old (CUT4).
+ */
+export function offlineTicket(key: TestSigningKey, inviter: string, opts: TestTicketOptions = {}): string {
+    const p = offlineTicketText(inviter, opts);
+    return Buffer.from(JSON.stringify({ p, s: signBytes(key, signedRequestBytes(p)).toString('base64') })).toString('base64');
 }
 
 /** The `/ws` query params that name the host a socket's token was signed for, as an `&`-joinable fragment. */

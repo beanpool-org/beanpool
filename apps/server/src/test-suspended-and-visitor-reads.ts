@@ -78,7 +78,7 @@ import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 const MODE = READ_AUTH_OFF ? '[read auth off]' : '[defaults]';
 let BASE = '';
@@ -154,9 +154,7 @@ function openSocket(url: string): Promise<Socket> {
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pubKeyHex, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.privateKey).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.privateKey, inviter.pubKeyHex);
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';

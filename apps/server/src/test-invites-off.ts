@@ -49,7 +49,7 @@ import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -134,8 +134,7 @@ const redeemTicket = (id: Id, ticketB64: string) => call(id, 'POST', '/api/invit
 
 /** A paper invite: an offline ticket `inviter` signed on their phone, which the node first sees when someone joins with it. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64') })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 /** The owner's own key opening Settings, as the app's Manage button does: challenge, signature, session. */

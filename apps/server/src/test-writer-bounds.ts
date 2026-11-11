@@ -68,7 +68,7 @@ import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
 import { lockedColumn, lockedDm } from './dm-test-payload.js';
 import { resolveChannel, prunePulseItems, type SsrfSafeResponse } from './engine/pulse-resolver.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields, offlineTicket } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -156,11 +156,9 @@ function lineOf(chars: number): { ciphertext: string; nonce: string } {
     if (ciphertext.length !== chars) throw new Error(`fixture: ${ciphertext.length} characters, wanted ${chars}`);
     return { ciphertext, nonce: lockedDm().nonce };
 }
-/** A ticket as the phone makes one (apps/native app/(tabs)/people.tsx), as test-offline-ticket-check makes it. */
+/** A ticket as the phone makes one (core's buildInviteTicket, format 2), as test-offline-ticket-check makes it. */
 function phoneTicket(inviter: Id, t: number): string {
-    const payload = JSON.stringify({ i: inviter.pk, t });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: Buffer.from(payload).toString('base64'), s })).toString('base64');
+    return offlineTicket(inviter.priv, inviter.pk, { timestamp: t });
 }
 
 /** The rate limiter off (the minute bucket), the day budget still on: it is on whatever the operator's switch says. */

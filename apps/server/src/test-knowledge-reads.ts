@@ -14,6 +14,8 @@
  *  7. Off (the global community): Learn 404, and a read that names the type gets none.
  *  8. Its writer's own reads: an Offer read by author still has no knowledge, and a page taken down leaves Learn.
  *  9. The standby copy carries every knowledge column; a take-over's copy is the main server's.
+ * 10. Its writer on holiday: every page stays in Learn (front, topic=, q=, a read naming the type, a sync never as paused),
+ *     while their Offer leaves the Market as ever (the review of #3063).
  *
  * Run: mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-knowledge-reads" node ../../scripts/run-server-suites.mjs
  */
@@ -280,6 +282,43 @@ async function main(): Promise<void> {
     const copiedOffer = (copy.posts ?? []).find((p: any) => p.id === offerId);
     assert(copiedOffer && !('knowledgeColumns' in copiedOffer), '9. an Offer carries none');
     assert(KNOWLEDGE_TOPICS.length === 7, '(seven topics)');
+
+    // ── 10. Its writer on holiday ────────────────────────────────────────────────────────────────
+    // Holiday is a member's trade pause: their listings leave the Market. A page is no trade, so it stays in Learn
+    // (the review of #3063): Emergencies is never emptied because its writer is away.
+    console.log('── 10. its writer on holiday ──');
+    const owenOffer = await call(owen, 'POST', '/api/marketplace/posts', { type: 'offer', category: 'food', title: 'Spare jars', description: 'A box', price_c: 0, authorPublicKey: owen.pk, photos: [TEST_PHOTO] });
+    require_(owenOffer.status === 200, `Owen posts an Offer (${show(owenOffer)})`);
+    const owenOfferId = owenOffer.body.post.id as string;
+    const marketIds = async () => postsOf(await call(mel, 'GET', '/api/marketplace/posts?types=offer,need,poll,event')).map((p) => p.id);
+    require_((await marketIds()).includes(owenOfferId), "Owen's Offer is on Mel's Market");
+    const learnBefore = await call(mel, 'GET', '/api/knowledge/front');
+    const holiday = await call(owen, 'POST', '/api/members/holiday', { enabled: true });
+    require_(holiday.status === 200 && holiday.body?.enabled === true, `Owen goes on holiday (${show(holiday)})`);
+    const away = await call(mel, 'GET', '/api/knowledge/front');
+    const awayEmergencies = (away.body?.topics ?? []).find((t: any) => t.id === 'emergencies');
+    assert(away.status === 200 && away.body?.total === learnBefore.body?.total && away.body.total === 6 && awayEmergencies?.count === 1
+        && awayEmergencies.rows[0]?.id === kFlood, `10. Learn's front keeps every page, Emergencies too (${learnBefore.body?.total} → ${away.body?.total}; ${show(away)})`);
+    const awayTopic = await call(mel, 'GET', '/api/knowledge/front?topic=emergencies');
+    assert(awayTopic.status === 200 && awayTopic.body?.count === 1 && awayTopic.body.rows[0]?.id === kFlood, `10. topic=emergencies still holds the flood page (${show(awayTopic)})`);
+    const awaySearch = await call(mel, 'GET', '/api/knowledge/front?q=flood');
+    assert(awaySearch.status === 200 && awaySearch.body?.total === 1 && awaySearch.body.rows[0]?.id === kFlood, `10. q=flood still finds it (${show(awaySearch)})`);
+    const awayNamed = await call(mel, 'GET', '/api/marketplace/posts?type=knowledge');
+    assert(kinds(awayNamed).length === 6, `10. a read that names the type still gets the six pages (${kinds(awayNamed).length})`);
+    const awaySync = await call(mel, 'GET', '/api/marketplace/posts?sync=true&types=offer,need,poll,event,knowledge');
+    // A sync carries the page taken down in 8 too, as taken down (cancelled): the six showing pages are as they are.
+    const syncPages = postsOf(awaySync).filter((p) => p.type === 'knowledge');
+    const syncShowing = syncPages.filter((p) => p.id !== kBus);
+    const syncOffer = postsOf(awaySync).find((p) => p.id === owenOfferId);
+    assert(syncShowing.length === 6 && syncShowing.every((p) => p.status === 'active') && !syncPages.some((p) => p.status === 'paused'),
+        `10. a sync gives the pages as they are, never as paused (${syncPages.map((p) => `${p.id === kBus ? 'taken down ' : ''}${p.status}`).join(',')})`);
+    assert(syncOffer?.status === 'paused', `10. and the same sync gives Owen's Offer as paused, as before (${syncOffer?.status})`);
+    const market = await marketIds();
+    assert(!market.includes(owenOfferId) && market.includes(offerId), `10. the Market still hides Owen's Offer, and Mel's stays (${market.join(',')})`);
+    const marketSearch = await call(mel, 'GET', '/api/marketplace/posts?q=jars');
+    assert(!postsOf(marketSearch).some((p) => p.id === owenOfferId), "10. a Market search doesn't find it either");
+    require_((await call(owen, 'POST', '/api/members/holiday', { enabled: false })).status === 200, 'Owen is back');
+    assert((await marketIds()).includes(owenOfferId), '10. back from holiday, the Offer is on the Market again');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

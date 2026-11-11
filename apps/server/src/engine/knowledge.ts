@@ -296,8 +296,10 @@ export function knowledgeRowOf(p: MarketplacePost, now = Date.now()): KnowledgeR
 }
 
 /**
- * The pages showing to this reader, as the Market's own read shows a post (getPosts): active, its author on the board, in
- * the reader's audience, and not one hidden by reports (a moderator meets those in the queue, not in Learn).
+ * The pages showing to this reader, as the Market's own read shows a post (getPosts): active, its writer's account not
+ * paused, in the reader's audience, and not one hidden by reports (a moderator meets those in the queue, not in Learn).
+ * Its writer's holiday never takes a page out: holiday is a pause of trade, and a page is none (@beanpool/engine posts.ts
+ * NOT_ON_HOLIDAY_SQL, the review of #3063), so Emergencies keeps its pages while their writer is away.
  */
 function showingTo(reader: string, query?: string): MarketplacePost[] {
     return getPosts(db, { type: 'knowledge', withKnowledge: true, viewerPubkey: reader, query, limit: KNOWLEDGE_READ_MAX })

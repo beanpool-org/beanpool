@@ -1055,6 +1055,14 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
  */
 export const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
 /**
+ * The holiday half of the board's rule on a listing `p`: its author is not on holiday. Holiday is a member's trade pause
+ * (apps/server setHolidayMode: their listings leave the Market while they are away), so it never takes a page of Local
+ * knowledge out: a page is no trade, and Learn, Emergencies first, keeps it while its writer is away (the review of
+ * #3063). The account half (ENTERPRISE_ON_BOARD_SQL) holds for a page as for any post. The Market never reads a page
+ * (PostFilter.withKnowledge), so its reads are as they were.
+ */
+const NOT_ON_HOLIDAY_SQL = `(p.type = 'knowledge' OR p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}))`;
+/**
  * The half of the board's rule read off the author's own row, named for the enterprise it was first written for: an
  * enterprise's pause and wind-up, and an account that is 'disabled' (an admin's or a report's pause, a suspension the
  * community voted, a removal's grace window: removal by vote S1, scratch/fable-design/DESIGN-removal-by-vote-fable.md
@@ -1104,13 +1112,20 @@ const NOT_BLOCKED_SQL = ` AND (${UNNAMED_COPY_SQL} OR p.author_pubkey NOT IN (SE
 /** A row's author as a read may follow them: NULL for a copy (UNNAMED_COPY_SQL). */
 const NAMED_AUTHOR_SQL = `CASE WHEN ${UNNAMED_COPY_SQL} THEN NULL ELSE p.author_pubkey END`;
 
+/** Of these authors, those on holiday (ON_HOLIDAY_SQL) and those whose own row takes them off (ENTERPRISE_ON_BOARD_SQL). */
+function authorsOffBoardBy(db: Db, authors: string[]): { holiday: Set<string>; account: Set<string> } {
+    const holiday = new Set<string>();
+    const account = new Set<string>();
+    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph => `${ON_HOLIDAY_SQL} AND public_key IN (${ph})`)) holiday.add(r.public_key);
+    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph =>
+        `SELECT m.public_key FROM members m WHERE m.public_key IN (${ph}) AND NOT (${ENTERPRISE_ON_BOARD_SQL})`)) account.add(r.public_key);
+    return { holiday, account };
+}
+
 /** Of these authors, the ones whose listings the board leaves out (ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL). */
 function authorsOffBoard(db: Db, authors: string[]): Set<string> {
-    const off = new Set<string>();
-    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph => `${ON_HOLIDAY_SQL} AND public_key IN (${ph})`)) off.add(r.public_key);
-    for (const r of selectInChunks<{ public_key: string }>(db, authors, ph =>
-        `SELECT m.public_key FROM members m WHERE m.public_key IN (${ph}) AND NOT (${ENTERPRISE_ON_BOARD_SQL})`)) off.add(r.public_key);
-    return off;
+    const { holiday, account } = authorsOffBoardBy(db, authors);
+    return new Set([...holiday, ...account]);
 }
 
 /** The posts this member has an open deal on, as buyer or seller: asked for, or accepted and not yet completed. */
@@ -2215,7 +2230,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         where += " AND NOT (p.type = 'event' AND p.event_end_at IS NOT NULL AND p.event_end_at <= ?)";
         params.push(new Date().toISOString());
         if (!filter?.authorPubkey) {
-            where += ` AND (${UNNAMED_COPY_SQL} OR (p.author_pubkey NOT IN (${ON_HOLIDAY_SQL}) AND ${ENTERPRISE_ON_BOARD_SQL}))`;
+            where += ` AND (${UNNAMED_COPY_SQL} OR (${NOT_ON_HOLIDAY_SQL} AND ${ENTERPRISE_ON_BOARD_SQL}))`;
         } else if (!selfView && !filter?.includeInactive) {
             where += ` AND ${ENTERPRISE_ON_BOARD_SQL}`;
         }
@@ -2522,8 +2537,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // phone drops them from its Market and map at the sync that brings them, and puts them back when the author's
     // standing next changes (the delta above). Not to the author, whose own listings the node shows them as they are,
     // nor to a keeper of the enterprise, whose phone counts its listings as their own (enterprisesKeptBy), nor to a
-    // member with an open deal on one, whose phone finds the deal by its listing.
-    const offBoard = syncRead ? authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey as string))]) : new Set<string>();
+    // member with an open deal on one, whose phone finds the deal by its listing. A page of Local knowledge goes by the
+    // account half alone (NOT_ON_HOLIDAY_SQL): its writer's holiday never sends it as paused.
+    const offBy = syncRead ? authorsOffBoardBy(db, [...new Set(rows.map(r => r.author_pubkey as string))]) : null;
+    const offBoard = offBy ? new Set([...offBy.holiday, ...offBy.account]) : new Set<string>();
+    const authorOffFor = (r: { type: string; author_pubkey: string }): boolean => (r.type === 'knowledge' ? offBy?.account : offBoard)?.has(r.author_pubkey) ?? false;
     const viewerDeals = offBoard.size > 0 && viewer ? postsInOpenDealWith(db, viewer) : new Set<string>();
     const kept = offBoard.size > 0 ? viewerKeeps() : new Set<string>();
 
@@ -2701,7 +2719,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             }
         }
 
-        if (!isUnnamedCopy(r) && offBoard.has(r.author_pubkey) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
+        if (!isUnnamedCopy(r) && authorOffFor(r) && r.author_pubkey !== viewer && !kept.has(r.author_pubkey) && r.accepted_by !== viewer
             && !viewerDeals.has(r.id) && onBoardByStatus(post)) {
             post.status = 'paused';
         }

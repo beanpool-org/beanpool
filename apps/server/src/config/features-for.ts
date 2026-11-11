@@ -10,13 +10,15 @@ import { db } from '../db/db.js';
 import { confirmationDialOn, knownFloor, readsAsMember } from '@beanpool/engine';
 import { healthSettings } from '../engine/community-health.js';
 import { removalDecider, type RemovalDecider } from './removal-decider.js';
+import { keepsContactCopies } from './contact-copies.js';
 
-export type ReaderFeatures = NodeFeatures & { door: Door };
+export type ReaderFeatures = NodeFeatures & { contacts: boolean; door: Door };
 
 /** The reader's effective features: what `features` says on GET /api/community/me and GET /api/home. */
 export function featuresFor(actor: string | null | undefined): ReaderFeatures {
     const nodeFeatures = getNodeFeatures();
-    const res: ReaderFeatures = { ...nodeFeatures, door: getDoor() };
+    // In GET /api/community/info's order (state-engine.ts communityInfoWith): `contacts`, then `door` last.
+    const res: ReaderFeatures = { ...nodeFeatures, contacts: keepsContactCopies(), door: getDoor() };
     if (actor && nodeFeatures.beans && readsAsMember(db, actor) && confirmationDialOn(db)) {
         res.knownFloor = knownFloor(db);
         const { debtLinePct, quietDays } = healthSettings();

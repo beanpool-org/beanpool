@@ -102,6 +102,7 @@ async function main(): Promise<void> {
     const { CREDIT_CAP_MAX } = await import('@beanpool/core');
     const np = await import('./config/node-profile.js');
     const { getDoor, mayInviteHere, doorSettingRefusal } = await import('./config/door.js');
+    const { keepsContactCopies } = await import('./config/contact-copies.js');
     const { knownFloorSettings, setKnownFloorSettings, KnownFloorError } = await import('./config/known-floor.js');
     const { pushDirectoryNow } = await import('./services/directory-publisher.js');
     const { isPrivatePreview } = await import('./config/private-preview.js');
@@ -617,7 +618,7 @@ async function main(): Promise<void> {
         const after = await answers();
         assert(isDeepStrictEqual(before, after), `${label}: node/config, community/info, community/me, home's features and known-floor answer the same after the shape is read`);
         const features = after.me?.features ?? {};
-        const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
+        const nodeBase = { ...np.getNodeFeatures(), contacts: keepsContactCopies(), door: getDoor() };
         const expectsFloor = Boolean(np.getNodeFeatures().beans && confirmationDialOn(db));
         const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: hc(1000), debtLinePct: 50, quietDays: 60 } : nodeBase).sort();
         assert(isDeepStrictEqual(Object.keys(features).sort(), want),
@@ -656,7 +657,7 @@ async function main(): Promise<void> {
     for (const [view, overrides] of FLOOR_VIEWS) {
         setState({ profile: 'local', overrides, rows: 'none', preview: false, heldBack: 'named', hatch: '', ledger: false });
         const guestView = overrides.guestListingsOnly === true;
-        const nodeKeys = Object.keys({ ...np.getNodeFeatures(), door: getDoor() }).sort();
+        const nodeKeys = Object.keys({ ...np.getNodeFeatures(), contacts: keepsContactCopies(), door: getDoor() }).sort();
         assert(np.getNodeFeatures().beans && confirmationDialOn(db) && knownFloor(db) === hc(1000), `${view}: Beans and the dial are on, so a member has a floor to be told`);
 
         // A reader who reads as a member: the floor, and the node's own features beside it.

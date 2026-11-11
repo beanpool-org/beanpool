@@ -404,7 +404,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             ...style, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', minHeight: '44px',
             textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600, color: 'var(--text-primary)',
         }}>
-            <span><span aria-hidden="true">👥 </span>{hasContacts ? t('Your contacts') : t('Import contacts')}</span><span aria-hidden="true">›</span>
+            <span>{hasContacts ? t('👥 Your contacts') : t('👥 Import contacts')}</span><span aria-hidden="true">›</span>
         </button>
     );
     // Who this page can name: the member directory, or on a community where people are asked for, not read whole
@@ -3741,7 +3741,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             <span style={{ display: 'inline-flex', gap: '0.25rem' }}>
                                 <button type="button" data-testid="contacts-button" onClick={openContactsPage} style={headerButtonStyle}
                                     title={contactsHoverLine()} {...{ 'aria-description': contactsHoverLine() }}>
-                                    <span aria-hidden="true">👥 </span>{hasContacts ? t('Contacts') : t('Import contacts')}
+                                    {hasContacts ? t('👥 Contacts') : t('👥 Import contacts')}
                                 </button>
                                 <button type="button" data-testid="contacts-info-button" onClick={() => setContactsInfo(true)} aria-label={t('About your private contacts')}
                                     style={{ ...headerButtonStyle, minWidth: '36px', padding: '0.4rem 0.5rem' }}>ⓘ</button>

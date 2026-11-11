@@ -41,6 +41,8 @@ import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
+import { getLearnPost, showsLearn, useLearn } from '../lib/learn';
+import { LearnSearchLine } from '../components/LearnSearchLine';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -602,6 +604,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [showDealsModal, setShowDealsModal] = useState(false);
     // Deals off here and the node shows previews: Your deals opens Example Valley's two deals (DESIGN-global-showcase-fable.md §1 row 5).
     const dealsMode = useFeatureMode('escrow');
+    // Whether Learn shows here (local knowledge, slice K2): read once for the visit, so the first key typed is already counting.
+    const learnMode = useLearn().mode;
     // Beans and deals that live in a local community (preview or read-only): the price slot and the deal action carry the
     // 🏘️ marker instead of a price and a Request that would move Beans (design §1 rows 2 and 4). Live and hidden: as before.
     const priceMarked = marked(useFeatureMode('beans'));
@@ -790,8 +794,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (sayWhenPostUnopened) setPostLinkNotice(t('That listing can no longer be opened. It may have been taken down.'));
                     onPostOpened?.();
                 };
+                // Not a listing at all: a link to a page of Local knowledge (the Market never reads one) lands in Learn.
+                const inLearnOr = () => {
+                    if (!onNavigate) return notReadable();
+                    getLearnPost(id).then(
+                        page => { if (page) { setPostLinkNotice(null); onPostOpened?.(); onNavigate('learn-page', id); } else notReadable(); },
+                        () => notReadable(),
+                    );
+                };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
-                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); if (openTxId) setSelectedTxId(openTxId); onPostOpened?.(); } else notReadable(); })
+                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); if (openTxId) setSelectedTxId(openTxId); onPostOpened?.(); } else inLearnOr(); })
                     // A failed read is not an answer: say so, and let the next View Post ask again (review #1980 N1).
                     .catch(() => {
                         deepLinkFetched.current = null;
@@ -4013,6 +4025,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 </div>
             )}
 
+
+            {/* One line about Learn while words are typed and it has a match; never a page among the listings (slice K2). */}
+            {!isVisitor && isMember !== false && !membersOnly && showsLearn(learnMode) && searchQuery.trim() && (
+                <LearnSearchLine words={searchQuery} mode={learnMode} onOpen={(words) => onNavigate?.('learn-search', words)} />
+            )}
 
             {/* Posts */}
             {loading ? (

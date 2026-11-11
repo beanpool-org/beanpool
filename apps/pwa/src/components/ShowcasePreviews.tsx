@@ -1,7 +1,8 @@
 /**
  * The preview mode of the Ledger, the Commons' enterprises and Decide, and Your deals (scratch/global-node/
  * DESIGN-global-showcase-fable.md §1 rows 3, 5, 6; §2): the member's screen drawn from Example Valley, the sample
- * community in @beanpool/core, under the 🏘️ Local community strip. The ONLY web file that imports the sample.
+ * community in @beanpool/core, under the 🏘️ Local community strip. The ONLY web file that imports the sample. Learn's three
+ * pages of Local knowledge are made here too (`sampleLearnPosts`), for Learn's preview on a node with Learn off.
  *
  * - **Nothing here talks to the node.** No fetch, no write: the sample is bundled, and every action that would move
  *   Beans, vote or pledge is a marker action that opens the sheet. The explainers stay live (CommonsInfoModal).
@@ -20,6 +21,7 @@ import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } fr
 import { CommonsInfoModal } from './CommonsInfoModal';
 import { EnterpriseCard } from './EnterpriseCard';
 import type { BalanceInfo, DecisionWithTally, EnterpriseLedgerResponse, InviteCode, MarketplacePost, MarketplaceTransaction, MyPoolVoting, Treasury } from '../lib/api';
+import type { LearnPost } from '../lib/learn';
 
 const S = SAMPLE_COMMUNITY;
 
@@ -106,6 +108,39 @@ export function sampleLedger(): { member: string; balance: BalanceInfo; rows: Le
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Example Valley's three pages of Local knowledge in the shape a node sends (Learn's preview on a community with Learn off and
+ * `showcase` on, slice K2; amended §2.9). Each is "checked" the days ago the sample says. Nobody is named, and no page has a
+ * source or a photo: nothing on it opens outside the preview, and nothing about it is asked of the node.
+ */
+export function sampleLearnPosts(now: number = Date.now()): LearnPost[] {
+    return S.knowledge.map((k) => {
+        const checkedAt = new Date(now - k.checkedDaysAgo * DAY_MS).toISOString();
+        return {
+            id: k.id,
+            type: 'knowledge' as const,
+            category: k.topic,
+            title: t(k.title),
+            description: t(k.body),
+            authorPublicKey: '',
+            authorCallsign: '',
+            createdAt: checkedAt,
+            status: 'active',
+            photos: [],
+            knowledge: {
+                sources: [],
+                place: k.place ? t(k.place) : null,
+                lang: null,
+                checkedAt,
+                outdatedAt: null,
+                outdatedNote: null,
+                helped: k.helped,
+                gathered: false,
+            },
+        };
+    });
+}
 
 /**
  * Example Valley's invitations in the shape InvitePage reads (design §1 row 8, Marty's 16 Oct pick):

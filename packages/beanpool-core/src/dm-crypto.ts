@@ -36,6 +36,10 @@
  * never the row's words), and the message the admin page sends (metadata DM_FROM_ADMINS_KEY), shown marked as from the
  * community's admins and readable by the server.
  *
+ * Old chat, read-only (conversion code, log row OLDCHAT, remove in 1.5.0; the block "Old chat" at the end of this file):
+ * a line from before 1.4.0 is shown again, its words opened as they were then, marked old (DmLineView.old) and under one
+ * label in both apps, never answered, quoted, edited or reacted to.
+ *
  * Not covered, by design: the node can still withhold or delay a line, and put an edit's earlier words back (an edit keeps
  * its line's id, and both versions are the sender's own, each signed).
  */
@@ -46,6 +50,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { Buffer } from 'buffer';
 import { toEd25519Seed } from './ed25519-key.js';
+import { word } from './words.js';
 
 /** The nonce column's prefix for every encrypted line. */
 export const DM_NONCE_PREFIX = 'x25519-xc20p-v2:';
@@ -542,6 +547,12 @@ export interface DmLineView {
     format: 4 | null;
     after: string | null;
     mark: DmLineMark;
+    /**
+     * A line from before 1.4.0, shown read-only under DM_OLD_LINES_LABEL (dmLineIsOld; conversion code, log row OLDCHAT,
+     * remove in 1.5.0): 'sealed', an encrypted line whose words opened as they did before 1.4.0, in its named author's
+     * bubble; 'unsealed', a readable row (plaintext-v1, 00000), its words shown as nobody's. Absent on every other line.
+     */
+    old?: 'sealed' | 'unsealed';
 }
 
 function decodeReadable(ciphertext: string): string | null {
@@ -575,6 +586,8 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
     const former = keys ? formerPeers.filter((k) => !!k && k !== keys.peerEdPubHex) : [];
     const position = new Map<string, number>();
     lines.forEach((l, i) => { if (!position.has(l.id)) position.set(l.id, i); });
+    // Old chat: conversion code, log row OLDCHAT, remove in 1.5.0.
+    const oldCaches = new Map<string, KeyCache>();
 
     lines.forEach((l, i) => {
         if (views.has(l.id)) return;
@@ -592,7 +605,11 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
             return;
         }
         if (kind === 'not-encrypted') {
-            views.set(l.id, { text: null, format: null, after: null, mark: 'not-encrypted' });
+            // Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): a readable row from before 1.4.0, as nobody's.
+            const oldWords = dmOldReadableWords(l);
+            views.set(l.id, oldWords === null
+                ? { text: null, format: null, after: null, mark: 'not-encrypted' }
+                : { text: oldWords, format: null, after: null, mark: null, old: 'unsealed' });
             return;
         }
         let opened: OpenedDmLine | null = null;
@@ -614,6 +631,15 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
             }
         }
         if (!opened) {
+            // Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): a line from before 1.4.0, opened as it was then,
+            // unless the line it says it was written after is newer than the cutover (then it was written after it too).
+            const old = keys && myPubHex ? openOldLineOfThread(l, keys, conversationId, myPubHex, former, oldCaches) : null;
+            const afterAt = old?.after ? position.get(old.after) : undefined;
+            if (old && (afterAt === undefined || dmLineHasOldShape(lines[afterAt]))) {
+                const oldMark: DmLineMark = old.moved ? 'moved' : afterAt !== undefined && afterAt > i ? 'out-of-order' : null;
+                views.set(l.id, { text: old.text, format: null, after: old.after, mark: oldMark, old: 'sealed' });
+                return;
+            }
             views.set(l.id, { text: null, format: null, after: null, mark: 'not-verified' });
             return;
         }
@@ -666,10 +692,12 @@ export function dmLineShownText(view: DmLineView | undefined | null): string {
 
 /**
  * True when a line is shown as nobody's: a neutral line in the middle of the chat, not in its named author's bubble. A
- * line that didn't open or wasn't signed by its named sender, one that isn't encrypted, and the admin page's message.
+ * line that didn't open or wasn't signed by its named sender, one that isn't encrypted, and the admin page's message. And
+ * a readable row from before 1.4.0 (old 'unsealed'; conversion code, log row OLDCHAT, remove in 1.5.0): its words show,
+ * but the node could have written them, so never as a member's.
  */
 export function dmLineIsUnattributed(view: DmLineView | undefined | null): boolean {
-    return view?.mark === 'not-verified' || view?.mark === 'not-encrypted' || view?.mark === 'from-admins';
+    return view?.mark === 'not-verified' || view?.mark === 'not-encrypted' || view?.mark === 'from-admins' || view?.old === 'unsealed';
 }
 
 /**
@@ -708,3 +736,177 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
         default: return null;
     }
 }
+
+// ─── Old chat, read-only ─────────────────────────────────────────────────────────────────────────────────────────────
+// conversion code, log row OLDCHAT, remove in 1.5.0
+//
+// Marty, 12 Nov 2026, after the 1.4.0 live run: bring back members' chat from before 1.4.0, the same on the phone and the
+// web, read-only. Nothing was deleted at the cutover: every line is still on every node, in the formats 1.2.x and 1.3.x
+// apps wrote, which 1.4.0 doesn't open (format 4 only), so each reads as DM_LINE_NOT_VERIFIED_TEXT. The key and the
+// cipher never changed, so each still opens as it did then: format 3 (the associated data 'beanpool-dm-line/3' names the
+// conversation, the sender, the message id, the part and a reply's answered id; the sealed bytes are framed [3][length of
+// after][after][words]), else format 2 (the associated data is the conversation id alone; the sealed bytes are the words).
+//
+// A line is old only if it is NOT in format 4's form AND the node's time for it is before DM_OLD_LINE_CUTOFF, the 1.4.0
+// deploy. Anything else without a valid signature stays hidden exactly as before: a format-4 line that doesn't verify,
+// whatever time it carries, and an old-format line from after the cutover (a 1.4.0 node refuses one: engine/messaging.ts).
+// The node chooses the time, so it can always make an old line new (it is hidden then, as the node could already withhold
+// it); it cannot make a new line old: a forged line in format 4's form is never old, and an old-format line the node can't
+// write (it holds no key) and the apps no longer send. Only the other person, who shares the key, could seal one in format
+// 3 naming you, and only a node that took it in for them could store it: format 3's own hole (no signature), the reason
+// format 4 came, which the label says. One check catches a careless one: a line whose sealed "after" names a line newer
+// than the cutover was written after it, so it is hidden as a forgery.
+//
+// Shown: a sealed line that opens, in its named author's bubble (with the mark a moved or reordered line had before); a
+// readable row (plaintext-v1, 00000) whose words decode, as nobody's, because the node could have written those words in
+// anyone's name. Every old line goes under DM_OLD_LINES_LABEL, once above its run (dmOldLineRunStarts), and neither app
+// answers, quotes, edits or reacts to one (dmLineIsOld). A photo stays locked.
+
+/** The 1.4.0 deploy: a line the node dates before this, not in format 4's form, is from before every message was signed. */
+export const DM_OLD_LINE_CUTOFF = '2026-11-11T19:16:00.000Z';
+const DM_OLD_LINE_CUTOFF_MS = Date.UTC(2026, 10, 11, 19, 16, 0, 0);
+
+/** The one label above a run of old lines, in both apps (t() it where it is shown). */
+export const DM_OLD_LINES_LABEL = word('Older messages from before 12 November 2026. They were sent before BeanPool signed every message.');
+
+/** The first word of format 3's associated data, as 1.2.x and 1.3.x apps sealed it. */
+const DM_OLD_FORMAT3_AAD_TAG = 'beanpool-dm-line/3';
+
+/**
+ * A time as the node stores one (strftime('%Y-%m-%dT%H:%M:%fZ') or Date.toISOString(); a first-release row may carry
+ * SQLite's 'YYYY-MM-DD HH:MM:SS', which is UTC), parsed the same way on every engine: Date.parse differs between them on the
+ * space form, and the two apps must agree which lines are old.
+ */
+const DM_OLD_STAMP = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})?$/;
+
+function stampMs(timestamp: unknown): number | null {
+    if (typeof timestamp !== 'string') return null;
+    const m = DM_OLD_STAMP.exec(timestamp);
+    if (!m) return null;
+    const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+    const ms = Date.UTC(y, mo - 1, d, h, mi, s, m[7] ? Math.floor(Number(`0${m[7]}`) * 1000) : 0);
+    const dt = new Date(ms);
+    // A field out of range (month 13, 31 February) rolls over in Date.UTC: not a time the node wrote.
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d || dt.getUTCHours() !== h || dt.getUTCMinutes() !== mi || dt.getUTCSeconds() !== s) return null;
+    const zone = m[8];
+    if (!zone || zone === 'Z') return ms;
+    const offset = (Number(zone.slice(1, 3)) * 60 + Number(zone.slice(4, 6))) * 60_000;
+    return zone[0] === '-' ? ms + offset : ms - offset;
+}
+
+/** True when the node dates a line before DM_OLD_LINE_CUTOFF. A missing or unreadable time is never old. */
+export function dmLineSentBeforeCutover(timestamp: unknown): boolean {
+    const ms = stampMs(timestamp);
+    return ms !== null && ms < DM_OLD_LINE_CUTOFF_MS;
+}
+
+/** A line in the shape only an old line has: not in format 4's form, dated before the cutover. Says nothing about who wrote it. */
+export function dmLineHasOldShape(l: { ciphertext?: unknown; nonce?: unknown; timestamp?: string | null } | null | undefined): boolean {
+    return !!l && !isDmLineForm(l.ciphertext, l.nonce) && dmLineSentBeforeCutover(l.timestamp);
+}
+
+/** True for a line shown old: read-only, under DM_OLD_LINES_LABEL; never answered, quoted, edited or reacted to. */
+export function dmLineIsOld(view: DmLineView | undefined | null): boolean {
+    return view?.old === 'sealed' || view?.old === 'unsealed';
+}
+
+/**
+ * Where DM_OLD_LINES_LABEL goes: once above each run of old lines, in the order a thread is shown (oldest first). `old`
+ * says of each line whether it is old (dmLineIsOld), or null for a line a run passes over (the node's own notice, a day's
+ * label): such a line neither starts a run nor ends one. Returns, line by line, whether the label goes above it.
+ */
+export function dmOldLineRunStarts(old: ReadonlyArray<boolean | null>): boolean[] {
+    let inRun = false;
+    return old.map((o) => {
+        if (o === null) return false;
+        const starts = o && !inRun;
+        inRun = o;
+        return starts;
+    });
+}
+
+/** A readable row's words from before the cutover (plaintext-v1: base64 UTF-8; 00000: the column as written), or null. */
+function dmOldReadableWords(l: DmThreadLine): string | null {
+    if (!dmLineSentBeforeCutover(l.timestamp) || typeof l.ciphertext !== 'string') return null;
+    if (l.nonce === '00000') return l.ciphertext.trim() ? l.ciphertext : null;
+    if (l.nonce !== 'plaintext-v1') return null;
+    const text = decodeReadable(l.ciphertext);
+    return text !== null && text.trim() ? text : null;
+}
+
+/** An old line's words, opened. */
+export interface OpenedDmOldLine {
+    text: string;
+    format: 2 | 3;
+    /** Format 3: the newest line the sender had from the node when they wrote it; null if none, or format 2. */
+    after: string | null;
+    conversationId: string;
+    moved: boolean;
+}
+
+function openOldWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: string, cache?: KeyCache): OpenedDmOldLine {
+    // Only the two of them share this key; a line the node names as anyone else's is no line of theirs.
+    if (line.senderPubHex !== myPubHex && line.senderPubHex !== keys.peerEdPubHex) throw new DmLineNotVerifiedError();
+    const nonce = nonceBytes(payload.nonce);
+    // Read as 1.2.x and 1.3.x read it (the cipher's tag is the check, not the spelling).
+    const sealed = unb64(payload.ciphertext);
+    const ids = dmConversationIdsToTry(line.conversationId, line.metadata);
+    const replyToId = dmReplyToOf(line.metadata);
+    const part = line.part ?? 'body';
+    for (const format of [3, 2] as const) {
+        // A reply id no app writes: no format-3 line was sealed to it. Format 2 sealed words and photos, never a listing.
+        if (format === 3 && replyToId === undefined) continue;
+        if (format === 2 && part === 'about') continue;
+        for (const conversationId of ids) {
+            let key: Uint8Array;
+            try { key = keyFor(keys, conversationId, cache); } catch { throw new DmLineNotVerifiedError(); }
+            const aad = format === 3
+                ? utf8ToBytes(JSON.stringify([DM_OLD_FORMAT3_AAD_TAG, conversationId, line.senderPubHex, line.messageId, part, ...(replyToId ? [replyToId] : [])]))
+                : utf8ToBytes(conversationId);
+            let pt: Uint8Array;
+            try { pt = xchacha20poly1305(key, nonce, aad).decrypt(sealed); } catch { continue; }
+            const moved = conversationId !== line.conversationId;
+            if (format === 2) return { text: utf8(pt), format, after: null, conversationId, moved };
+            if (pt.length < 2 || pt[0] !== 3 || pt.length < 2 + pt[1]) throw new DmLineNotVerifiedError();
+            const len = pt[1];
+            return { text: utf8(pt.subarray(2 + len)), format, after: len ? utf8(pt.subarray(2, 2 + len)) : null, conversationId, moved };
+        }
+    }
+    throw new DmLineNotVerifiedError();
+}
+
+/**
+ * Open one part of a line from before 1.4.0 as it opened then: format 3 under each conversation id it may have been written
+ * under, then format 2. Only a line with the old shape (dmLineHasOldShape; `timestamp` is the node's time for the line):
+ * throws DmLineNotVerifiedError for anything else, and when none opens. No signature is checked: these lines had none.
+ */
+export function openDmOldLine(payload: DmPayload, keys: DmKeys, line: DmLineRef & { timestamp: string | null | undefined }): OpenedDmOldLine {
+    if (!dmLineHasOldShape({ ...payload, timestamp: line.timestamp })) throw new DmLineNotVerifiedError();
+    return openOldWith(payload, keys, line, dmPublicKeyOf(keys.myEdPrivHex));
+}
+
+/** checkDmThread's old reader: the pinned key, then each former one, as the format-4 reader tries them (keys cached per key). */
+function openOldLineOfThread(
+    l: DmThreadLine, keys: DmKeys, conversationId: string, myPubHex: string, former: readonly string[], caches: Map<string, KeyCache>,
+): OpenedDmOldLine | null {
+    if (!dmLineHasOldShape(l)) return null;
+    const payload = { ciphertext: l.ciphertext, nonce: l.nonce as string };
+    const cacheOf = (peer: string) => {
+        let c = caches.get(peer);
+        if (!c) caches.set(peer, c = new Map());
+        return c;
+    };
+    try {
+        return openOldWith(payload, keys, { conversationId, senderPubHex: l.authorPubkey, messageId: l.id, part: 'body', metadata: l.metadata }, myPubHex, cacheOf(keys.peerEdPubHex));
+    } catch { /* a former key */ }
+    const mine = l.authorPubkey === myPubHex;
+    for (const peer of former) {
+        if (!mine && l.authorPubkey !== keys.peerEdPubHex && l.authorPubkey !== peer) continue;
+        try {
+            return openOldWith(payload, { myEdPrivHex: keys.myEdPrivHex, peerEdPubHex: peer },
+                { conversationId, senderPubHex: mine ? myPubHex : peer, messageId: l.id, part: 'body', metadata: l.metadata }, myPubHex, cacheOf(peer));
+        } catch { /* the next former key */ }
+    }
+    return null;
+}
+// ─── end of old chat (OLDCHAT) ───────────────────────────────────────────────────────────────────────────────────────

@@ -31,12 +31,20 @@
 //
 // WHERE. On a main server only, from its minute tick (state-engine.ts armMainServerTimers) and the after-commit hook, never
 // on a standby (whose copy of this row is its main server's); where Beans are switched off nothing moves.
+//
+// A SHORT WEEK (scratch/fable-design/DESIGN-getting-paid-fable.md §3, §5; Marty, 11 Nov 2026). One period at a time can be
+// lowered, from 0 up to just under the price: the payee alone, or the payer asks and the payee says yes. Each change is a
+// row of standing_period_changes; what period n costs is the smallest agreed one, else the price (periodAmountOf), read in
+// the same synchronous step as its payment, and never more than the payer signed. A lowered period is paid at its start
+// like any other and counts as paid in full; one of 0 writes its deal row and moves nothing (no Ledger row, no fee). A
+// lowering or a yes in the grace pays at once through the hook's own step. An ask changes nothing until it is a yes; one
+// still open when its period is paid, its grace runs out or the standing deal stops lapses.
 
 import crypto from 'node:crypto';
 import {
-    STANDING_RETRY_MS, STANDING_START_AHEAD_MS, parseStandingAuthorisation, periodEnd, periodStart, signedRequestBytes, standingAuthorisationText,
-    standingGraceEndsAt, standingLines, standingPaymentPayload, standingUnitOf, standingWarnAheadMs, type PushNoticeKind, type StandingAuthorisation,
-    type StandingEndReason, type StandingPeriodUnit,
+    STANDING_ASKS_PER_PERIOD, STANDING_RETRY_MS, STANDING_START_AHEAD_MS, isStandingLowerAmount, parseStandingAuthorisation, periodEnd, periodStart,
+    signedRequestBytes, standingAuthorisationText, standingGraceEndsAt, standingLines, standingPaymentPayload, standingPeriodAmount, standingUnitOf,
+    standingWarnAheadMs, type PushNoticeKind, type StandingAuthorisation, type StandingChangeState, type StandingEndReason, type StandingPeriodUnit,
 } from '@beanpool/core';
 import { getPosts } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -47,7 +55,8 @@ import { marketplacePostOutOfSight } from './post-sight.js';
 import { audienceRefusal } from './member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from './own-addresses.js';
 import {
-    afterRelease, assertBuyerMayTrade, isShortRefusal, offerHoldChecks, payStandingPeriod, requestHoldChecks, type EscrowCallbacks, type HoldParties,
+    afterRelease, afterZeroPeriod, assertBuyerMayTrade, isShortRefusal, offerHoldChecks, payStandingPeriod, requestHoldChecks, type EscrowCallbacks,
+    type HoldParties,
 } from './escrow.js';
 
 /** The `standing` a member's app sends with an accept (an Offer) or an approval (a Need). */
@@ -74,7 +83,14 @@ export interface CheckedStandingStart {
 }
 
 /** A notice kept for a member in the transaction that made it, to go out live and as a push after the commit. */
-export interface StandingNotice { to: string; title: string; body: string; id: string | null; data: Record<string, unknown> }
+export interface StandingNotice {
+    to: string; title: string; body: string; id: string | null; data: Record<string, unknown>;
+    /** false: a bell row and the live notice only, no push (an ask that lapsed: DESIGN-getting-paid-fable §3.3 "notice only"). */
+    push?: boolean;
+}
+
+/** The same notices, a bell row each and no push. */
+const noticeOnly = (notices: StandingNotice[]): StandingNotice[] => notices.map((n) => ({ ...n, push: false }));
 
 /** The refusal of a standing start whose authorisation doesn't match (400 standing_auth). */
 export const STANDING_AUTH_CODE = 'standing_auth';
@@ -231,6 +247,7 @@ export function tellStanding(hooks: Pick<EscrowCallbacks, 'broadcast' | 'dispatc
         } catch (e: any) {
             console.warn('[Standing] A live notice failed:', e?.message || e);
         }
+        if (n.push === false) continue;
         try {
             hooks.dispatchPushNotification([n.to], 'SYSTEM', n.title, n.body, { screen: 'post', postId: n.data.postId }, 'escrow', 'trade.update' as PushNoticeKind,
                 false, keptNoticeDetails([n]));
@@ -263,8 +280,55 @@ function listingBack(sd: { id: string; post_id: string }, at: string): void {
 /** End a standing deal (the caller's transaction): nothing more is paid, and its listing comes back. Whether it ended now. */
 function endStanding(sd: { id: string; post_id: string }, reason: StandingEndReason, at: string): boolean {
     const moved = db.prepare(`UPDATE standing_deals SET phase = 'ended', ended_at = ?, ended_reason = ? WHERE id = ? AND phase != 'ended'`).run(at, reason, sd.id);
-    if (moved.changes === 1) listingBack(sd, at);
+    if (moved.changes === 1) {
+        listingBack(sd, at);
+        lapseOpenAsks(sd.id, at);
+    }
     return moved.changes === 1;
+}
+
+// ── A short week: what a period costs (DESIGN-getting-paid-fable §3, §5) ──────────────────────────────────────────────
+
+/** A change to one period's amount, as schema.sql standing_period_changes holds it. */
+interface ChangeRow {
+    id: string;
+    standing_id: string;
+    period_no: number;
+    beans_c: number;
+    side: 'payer' | 'payee';
+    asked_by: string;
+    state: StandingChangeState;
+    answered_by: string | null;
+    answered_at: string | null;
+    created_at: string;
+}
+
+const readChange = (id: string): ChangeRow | undefined => db.prepare('SELECT * FROM standing_period_changes WHERE id = ?').get(id) as ChangeRow | undefined;
+
+/**
+ * What period `n` of a standing deal costs (design §5): the smallest agreed change for it, else the price its payer signed;
+ * always from 0 up to that price (@beanpool/core standingPeriodAmount).
+ */
+function periodAmountOf(sd: { id: string; beans_per_period_c: number }, n: number): number {
+    const low = (db.prepare(`SELECT MIN(beans_c) AS m FROM standing_period_changes WHERE standing_id = ? AND period_no = ? AND state = 'agreed'`)
+        .get(sd.id, n) as { m: number | null }).m;
+    return standingPeriodAmount(sd.beans_per_period_c, low === null ? [] : [{ beans_c: low, state: 'agreed' }]);
+}
+
+/** The payer's ask still open about period `n`, if any. */
+const openAskOf = (standingId: string, n: number): ChangeRow | undefined =>
+    db.prepare(`SELECT * FROM standing_period_changes WHERE standing_id = ? AND period_no = ? AND state = 'asked'`).get(standingId, n) as ChangeRow | undefined;
+
+/** How many asks the payer has made about period `n`, whatever became of them (at most STANDING_ASKS_PER_PERIOD). */
+const asksMadeAbout = (standingId: string, n: number): number =>
+    (db.prepare(`SELECT COUNT(*) AS c FROM standing_period_changes WHERE standing_id = ? AND period_no = ? AND side = 'payer'`).get(standingId, n) as { c: number }).c;
+
+/**
+ * Every ask still open on a standing deal lapses (the caller's transaction): it stopped or ended, so no period is left for
+ * it. Nobody is told: the stop or the end says it all. How many lapsed.
+ */
+function lapseOpenAsks(standingId: string, at: string): number {
+    return db.prepare(`UPDATE standing_period_changes SET state = 'lapsed', answered_at = ? WHERE standing_id = ? AND state = 'asked'`).run(at, standingId).changes;
 }
 
 /** Whether the count the payer signed for is reached with `paid` periods paid. */
@@ -412,7 +476,7 @@ function dueStep(hooks: StandingHooks, sd: StandingRow, now: number): 'paid' | '
  * Every guard the door that started it runs, again, for its next period: acceptPost's on an Offer, approvePostRequest's on
  * a Need. Throws the refusal; isShortRefusal tells a short payer from one who can't carry on.
  */
-function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & { oneAtATime: boolean } {
+function scheduledChecks(hooks: StandingHooks, sd: StandingRow, amount: number): HoldParties & { oneAtATime: boolean } {
     assertFeatureOn('escrow');
     // Whoever signed still signs for the payer, as checkStandingStart asked at the start: the payer themselves (under a
     // re-key, their key now), or a keeper of the enterprise that pays. A keeper removed since stops spending its Beans.
@@ -433,10 +497,10 @@ function scheduledChecks(hooks: StandingHooks, sd: StandingRow): HoldParties & {
         if (!post || marketplacePostOutOfSight(post, sd.payer_pubkey)) throw new Error('its listing is not in the payer\'s sight');
         assertBuyerMayTrade(sd.payer_pubkey);
         if (post.authorPublicKey !== sd.payee_pubkey) throw new Error('its listing has another author');
-        const p = offerHoldChecks(hooks, post, sd.payer_pubkey, () => sd.beans_per_period_c, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
+        const p = offerHoldChecks(hooks, post, sd.payer_pubkey, () => amount, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
         return { ...p, oneAtATime: !raw.repeatable };
     }
-    const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, amount_c: sd.beans_per_period_c };
+    const deal = { id: sd.current_tx_id ?? '', post_id: sd.post_id, buyer_pubkey: sd.payer_pubkey, seller_pubkey: sd.payee_pubkey, amount_c: amount };
     const p = requestHoldChecks(hooks, deal, raw, sd.payer_pubkey, { authSigner: currentKeyOf(sd.auth_signer), scheduled });
     if (!p) throw new Error('its payer is no longer the listing\'s author');
     return p;
@@ -495,9 +559,18 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
         if (now < Date.parse(due.dueAt)) return 'skipped';
     }
 
+    // What this period costs (DESIGN-getting-paid-fable §5): the price the payer signed, or less by agreement. Read in this
+    // same synchronous step as the payment, so no lowering lands between the two, and never more than the payer signed.
+    const amount = periodAmountOf(sd, n);
+    if (!(Number.isSafeInteger(amount) && amount >= 0 && amount <= sd.beans_per_period_c)) {
+        logOnce(sd.id, `standing deal ${sd.id}: period ${n} reads ${amount}, outside 0 to the ${sd.beans_per_period_c} signed, so nothing is paid`);
+        return 'skipped';
+    }
+    const lowered = amount < sd.beans_per_period_c;
+
     let parties: HoldParties & { oneAtATime: boolean };
     try {
-        parties = scheduledChecks(hooks, sd);
+        parties = scheduledChecks(hooks, sd, amount);
     } catch (e: any) {
         if (via === 'hook') return 'skipped';
         if (isShortRefusal(e)) return markShort(hooks, sd, now);
@@ -519,18 +592,24 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
                                       WHERE id = ? AND phase = ? AND periods_done = ?`).run(txId, nextDue, sd.id, sd.phase, sd.periods_done);
             if (moved.changes !== 1) throw new Error('the standing deal moved on since it was read');
             paid = payStandingPeriod(hooks, {
-                txId, postId: sd.post_id, parties, periodNo: n, standingId: sd.id, amount_c: sd.beans_per_period_c,
-                memo: standingLines.memo(sd.period_unit, title, n),
+                txId, postId: sd.post_id, parties, periodNo: n, standingId: sd.id, amount_c: amount,
+                memo: lowered ? standingLines.memoLowered(sd.period_unit, title, n, amount, sd.beans_per_period_c) : standingLines.memo(sd.period_unit, title, n),
                 auth: { signer: sd.auth_signer, payload: standingPaymentPayload(sd.id, n) },
                 row: 'insert', paidAt, takeListing: parties.oneAtATime,
             });
             row = db.prepare('SELECT * FROM marketplace_transactions WHERE id = ?').get(txId);
-            if (covered) {
+            // An ask still open about this period closes unanswered: it is paid, at the price or as agreed (§3.1, §3.3).
+            const lapsed = db.prepare(`UPDATE standing_period_changes SET state = 'lapsed', answered_at = ? WHERE standing_id = ? AND period_no = ? AND state = 'asked'`)
+                .run(paidAt, sd.id, n).changes;
+            // Covered in the grace: both told, with the period's own amount. One lowered to 0 moved nothing, and the lowering
+            // that made it 0 has told the payer already.
+            if (covered && amount > 0) {
                 told = [
-                    ...keep([sd.payer_pubkey], standingLines.coveredPayer(sd.period_unit, title, sd.beans_per_period_c, nameOf(sd.payee_pubkey)), sd, 'standing_covered', { period: n }),
-                    ...keep([sd.payee_pubkey], standingLines.coveredPayee(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title), sd, 'standing_covered', { period: n }),
+                    ...keep([sd.payer_pubkey], standingLines.coveredPayer(sd.period_unit, title, amount, nameOf(sd.payee_pubkey)), sd, 'standing_covered', { period: n }),
+                    ...keep([sd.payee_pubkey], standingLines.coveredPayee(sd.period_unit, nameOf(sd.payer_pubkey), amount, title), sd, 'standing_covered', { period: n }),
                 ];
             }
+            if (lapsed > 0) told.push(...noticeOnly(keep([sd.payer_pubkey], standingLines.askLapsed(sd.period_unit, dayOf(due.dueAt)), sd, 'standing_ask_lapsed', { period: n })));
             if (sd.max_periods !== null && n === sd.max_periods) {
                 told.push(...keep([sd.payer_pubkey, sd.payee_pubkey], standingLines.lastPeriod(sd.period_unit, title, dayOf(nextDue)), sd, 'standing_last_period', { period: n }));
             }
@@ -544,11 +623,16 @@ function payNext(hooks: StandingHooks, sd: StandingRow, now: number, via: 'tick'
     loggedOnce.delete(sd.id);
     const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(sd.post_id) as any;
     // Each period paid on time: the payee's push, as every payment received; the payer's Ledger row and the chat line only.
-    // Covered in the grace: both get the covered notice (a push and a bell row) instead, and the record its line.
-    afterRelease(hooks, row, post, paid!, 'SYSTEM', covered ? null
-        : { title: standingLines.noticeTitle(), body: standingLines.paidIn(sd.period_unit, sd.beans_per_period_c, title, nameOf(sd.payer_pubkey), n) });
+    // Covered in the grace: both get the covered notice (a push and a bell row) instead, and the record its line. A period
+    // of 0 moved nothing: its row goes to both apps, and nothing else is said.
+    if (amount > 0) {
+        afterRelease(hooks, row, post, paid!, 'SYSTEM', covered ? null
+            : { title: standingLines.noticeTitle(), body: standingLines.paidIn(sd.period_unit, amount, title, nameOf(sd.payer_pubkey), n) });
+    } else {
+        afterZeroPeriod(hooks, txId);
+    }
     hooks.clearEnterpriseFloorCache?.();
-    if (covered) chatLine(hooks, sd, standingLines.chatCovered(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, nameOf(sd.payee_pubkey)));
+    if (covered && amount > 0) chatLine(hooks, sd, standingLines.chatCovered(sd.period_unit, nameOf(sd.payer_pubkey), amount, title, nameOf(sd.payee_pubkey)));
     tellStanding(hooks, told);
     return 'paid';
 }
@@ -565,6 +649,8 @@ function markShort(hooks: StandingHooks, sd: StandingRow, now: number): 'short' 
     const retryAt = new Date(Math.min(now + STANDING_RETRY_MS, graceEnd)).toISOString();
     const title = titleOf(sd.post_id);
     const until = dayOf(due.graceEndsAt);
+    // The period's own amount: a week lowered to 100 is 100 unpaid, not the price (DESIGN-getting-paid-fable §3.3).
+    const beans = periodAmountOf(sd, due.n);
     let told: StandingNotice[] = [];
     let began = false;
     db.transaction(() => {
@@ -574,11 +660,11 @@ function markShort(hooks: StandingHooks, sd: StandingRow, now: number): 'short' 
         if (moved.changes !== 1 || sd.phase === 'short') return;
         began = true;
         told = [
-            ...keep([sd.payer_pubkey], standingLines.duePayer(sd.period_unit, title, sd.beans_per_period_c, nameOf(sd.payee_pubkey), until), sd, 'standing_short', { period: due.n }),
-            ...keep([sd.payee_pubkey], standingLines.duePayee(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, until), sd, 'standing_short', { period: due.n }),
+            ...keep([sd.payer_pubkey], standingLines.duePayer(sd.period_unit, title, beans, nameOf(sd.payee_pubkey), until), sd, 'standing_short', { period: due.n }),
+            ...keep([sd.payee_pubkey], standingLines.duePayee(sd.period_unit, nameOf(sd.payer_pubkey), beans, title, until), sd, 'standing_short', { period: due.n }),
         ];
     })();
-    if (began) chatLine(hooks, sd, standingLines.chatDue(sd.period_unit, nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, until));
+    if (began) chatLine(hooks, sd, standingLines.chatDue(sd.period_unit, nameOf(sd.payer_pubkey), beans, title, until));
     tellStanding(hooks, told);
     return 'short';
 }
@@ -597,11 +683,16 @@ function endShort(hooks: StandingHooks, sd: StandingRow, from: StandingRow['phas
     db.transaction(() => {
         const fresh = readStanding(sd.id);
         if (!fresh || fresh.phase !== from || fresh.periods_done !== sd.periods_done) return;
+        // An ask still open about the unpaid period lapses with the end (endStanding): the payer hears it wasn't answered in
+        // time, a bell row and no push (DESIGN-getting-paid-fable §3.3).
+        const n = duePeriodOf(fresh).n;
+        const asked = !!openAskOf(fresh.id, n);
         if (!endStanding(fresh, 'short', at)) return;
         ended = true;
         told = [
             ...keep([sd.payer_pubkey], standingLines.endedShortPayer(sd.period_unit, title, nameOf(sd.payee_pubkey)), sd, 'standing_ended', { reason: 'short' }),
             ...keep([sd.payee_pubkey], standingLines.endedShortPayee(sd.period_unit, nameOf(sd.payer_pubkey), title, dueSince), sd, 'standing_ended', { reason: 'short' }),
+            ...(asked ? noticeOnly(keep([sd.payer_pubkey], standingLines.askLapsed(sd.period_unit, dayOf(duePeriodOf(fresh).dueAt)), sd, 'standing_ask_lapsed', { period: n })) : []),
         ];
     })();
     if (ended) chatLine(hooks, sd, standingLines.chatEndedShort(sd.period_unit, title, dueSince));
@@ -646,18 +737,20 @@ function graceCadence(hooks: StandingHooks, now: number): void {
         const until = dayOf(graceEnd);
         const dayBefore = graceEnd - 86_400_000;
         const halfway = dueMs + (graceEnd - dueMs) / 2;
+        // The period's own amount (DESIGN-getting-paid-fable §3.3): lowered in the grace and still short, it is that one.
+        const beans = periodAmountOf(sd, due.n);
         let kind: string | null = null;
         let payerBody = '';
         let payeeBody = '';
         if (now >= dayBefore) {
             kind = 'standing_day_before';
-            payerBody = standingLines.dayBeforePayer(title, sd.beans_per_period_c, nameOf(sd.payee_pubkey), until);
-            payeeBody = standingLines.dayBeforePayee(sd.period_unit, nameOf(sd.payer_pubkey), title, sd.beans_per_period_c, until);
+            payerBody = standingLines.dayBeforePayer(title, beans, nameOf(sd.payee_pubkey), until);
+            payeeBody = standingLines.dayBeforePayee(sd.period_unit, nameOf(sd.payer_pubkey), title, beans, until);
         } else if (sd.period_unit === 'month' && now >= halfway) {
             const days = Math.floor((now - dueMs) / 86_400_000);
             kind = 'standing_halfway';
-            payerBody = standingLines.halfwayPayer(title, sd.beans_per_period_c, days, until);
-            payeeBody = standingLines.halfwayPayee(nameOf(sd.payer_pubkey), sd.beans_per_period_c, title, days, until);
+            payerBody = standingLines.halfwayPayer(title, beans, days, until);
+            payeeBody = standingLines.halfwayPayee(nameOf(sd.payer_pubkey), beans, title, days, until);
         }
         if (!kind || toldBefore(sd, kind, due.n)) continue;
         const k = kind;
@@ -682,13 +775,16 @@ function warnAhead(hooks: StandingHooks, now: number): void {
         if (countReached(sd, sd.periods_done)) continue;
         const period = sd.periods_done + 1;
         if (toldBefore(sd, 'standing_short_ahead', period)) continue;
+        // The period's own amount (DESIGN-getting-paid-fable §3.3): lowered to 100, the payer is warned about 100; at 0, never.
+        const beans = periodAmountOf(sd, period);
+        if (beans === 0) continue;
         const { balance_c: balance, usableFloor_c: usableFloor } = hooks.getBalance(sd.payer_pubkey);
-        const shortBy = usableFloor - (balance - sd.beans_per_period_c);
+        const shortBy = usableFloor - (balance - beans);
         if (!(shortBy > 0)) continue;
         const title = titleOf(sd.post_id);
         let told: StandingNotice[] = [];
         db.transaction(() => {
-            told = keep([sd.payer_pubkey], standingLines.shortAheadNotice(title, sd.beans_per_period_c, nameOf(sd.payee_pubkey), dayOf(sd.next_due_at), shortBy), sd, 'standing_short_ahead', { period });
+            told = keep([sd.payer_pubkey], standingLines.shortAheadNotice(title, beans, nameOf(sd.payee_pubkey), dayOf(sd.next_due_at), shortBy), sd, 'standing_short_ahead', { period });
         })();
         markTold(sd.id, 'standing_short_ahead', period);
         tellStanding(hooks, told);
@@ -715,15 +811,31 @@ function sideOf(hooks: Pick<EscrowCallbacks, 'canOperateTreasury'>, sd: Standing
     return null;
 }
 
-/** The standing deal as the routes answer it. */
+/** A change to a period's amount as the routes answer it. */
+function changeView(c: ChangeRow): Record<string, unknown> {
+    return { id: c.id, standingId: c.standing_id, periodNo: c.period_no, beans_c: c.beans_c, side: c.side, state: c.state, askedAt: c.created_at, answeredAt: c.answered_at };
+}
+
+/**
+ * The standing deal as the routes answer it. While it runs, the period due next (paid) or now due (short): what it costs
+ * now (`dueBeans_c`, the price or less by agreement), the payer's ask still open about it, and how many more asks they may
+ * make (DESIGN-getting-paid-fable §3).
+ */
 export function standingDealView(id: string): Record<string, unknown> | null {
     const sd = readStanding(id);
     if (!sd) return null;
+    const n = sd.periods_done + 1;
+    const open = sd.phase === 'ended' ? undefined : openAskOf(sd.id, n);
     return {
         id: sd.id, postId: sd.post_id, payerPublicKey: sd.payer_pubkey, payeePublicKey: sd.payee_pubkey, beansPerPeriod_c: sd.beans_per_period_c,
         unit: sd.period_unit, startsAt: sd.starts_at, maxPeriods: sd.max_periods, phase: sd.phase, periodsDone: sd.periods_done,
         currentTransactionId: sd.current_tx_id, nextDueAt: sd.next_due_at, shortSince: sd.short_since,
         stopped: !!sd.stopped_at, endedAt: sd.ended_at, endedReason: sd.ended_reason,
+        ...(sd.phase === 'ended' ? {} : {
+            dueBeans_c: periodAmountOf(sd, n),
+            ask: open ? { id: open.id, beans_c: open.beans_c, periodNo: open.period_no, askedAt: open.created_at } : null,
+            asksLeft: Math.max(0, STANDING_ASKS_PER_PERIOD - asksMadeAbout(sd.id, n)),
+        }),
     };
 }
 
@@ -748,18 +860,22 @@ export function stopStandingDeal(hooks: EscrowCallbacks, id: string, actor: stri
         if (!fresh || fresh.phase === 'ended' || fresh.stopped_at) return;
         if (fresh.phase === 'short') {
             const dueSince = dayOf(duePeriodOf(fresh).dueAt);
+            // The unpaid period's own amount: lowered to 100, it is 100 that isn't paid (DESIGN-getting-paid-fable §3.3).
+            const beans = periodAmountOf(fresh, duePeriodOf(fresh).n);
             const moved = db.prepare(`UPDATE standing_deals SET stopped_by = ?, stopped_at = ? WHERE id = ? AND phase = 'short' AND periods_done = ?`)
                 .run(actor, at, id, fresh.periods_done);
             if (moved.changes !== 1 || !endStanding(fresh, 'stopped', at)) throw new Error('the standing deal moved on since it was read');
             const body = side === 'payer'
-                ? standingLines.stoppedInGraceByPayer(sd.period_unit, nameOf(who), title, sd.beans_per_period_c, dueSince)
-                : standingLines.stoppedInGraceByPayee(sd.period_unit, nameOf(who), title, sd.beans_per_period_c);
+                ? standingLines.stoppedInGraceByPayer(sd.period_unit, nameOf(who), title, beans, dueSince)
+                : standingLines.stoppedInGraceByPayee(sd.period_unit, nameOf(who), title, beans);
             told = keep([other], body, sd, 'standing_stopped', { period: duePeriodOf(fresh).n });
-            line = standingLines.chatStoppedInGrace(sd.period_unit, nameOf(who), title, sd.beans_per_period_c, dueSince);
+            line = standingLines.chatStoppedInGrace(sd.period_unit, nameOf(who), title, beans, dueSince);
             return;
         }
         const moved = db.prepare(`UPDATE standing_deals SET stopped_by = ?, stopped_at = ? WHERE id = ? AND phase = 'paid' AND stopped_at IS NULL`).run(actor, at, id);
         if (moved.changes !== 1) return;
+        // No period is left to lower: an ask still open lapses with the stop.
+        lapseOpenAsks(id, at);
         told = keep([other], standingLines.stoppedBy(sd.period_unit, nameOf(who), title, dayOf(fresh.next_due_at)), sd, 'standing_stopped');
     })();
     if (line) chatLine(hooks, sd, line);
@@ -793,6 +909,163 @@ export function extendStandingDeal(hooks: EscrowCallbacks, id: string, actor: st
     return standingDealView(id)!;
 }
 
+// ── A short week: lower, ask, answer, take back (signed requests: routes/marketplace.ts; DESIGN-getting-paid-fable §3) ──
+
+/** What a lowering or an ask carries: the change's id (the app's UUID), the period it is about, and its new amount. */
+export interface StandingLowerBody {
+    id?: unknown;
+    periodNo?: unknown;
+    beans_c?: unknown;
+}
+
+const CHANGE_ID = /^[A-Za-z0-9_-]{8,128}$/;
+
+/**
+ * A short period lowered or a yes said in the grace: paid at once if the payer's room covers what it costs now (at 0,
+ * nothing moves), through the after-commit hook's own step, so a refusal (still short) writes nothing and sends nothing
+ * (design §3.1). After the change's commit, never inside it. Main server only, Beans on.
+ */
+function payNowIfShort(hooks: StandingHooks, id: string, now: number): void {
+    if (!movesHere()) return;
+    const sd = readStanding(id);
+    if (!sd || sd.phase !== 'short') return;
+    try {
+        payNext(hooks, sd, now, 'hook');
+    } catch (e: any) {
+        logOnce(sd.id, `standing deal ${sd.id} could not be paid once it was lowered: ${e?.message || e}`);
+    }
+}
+
+/**
+ * Lower a period (the payee, alone: it holds at once) or ask to pay less for it (the payer: it changes nothing until the
+ * payee says yes), design §3.1. The side is the signer's. The period is the one due next while it is paid, or the unpaid
+ * one while it is short, and the app names it (`periodNo`), so a period paid meanwhile is never lowered by mistake; never
+ * one already paid, or one that won't come (stopped, the count reached). The amount is from 0 up to just under what the
+ * period costs now: lowered again, never raised. One open ask a period, three in all; the payee can't lower alone while an
+ * ask waits for their answer. A retry of the same change (its id) answers the same and writes nothing. The other side is
+ * told: the payee of an ask (a push and a bell row; their live Needs you line comes from state), the payer of a lowering
+ * (a push, a bell row and the deal's chat line). A lowering in the grace pays at once if it can (payNowIfShort).
+ */
+export function lowerStandingPeriod(hooks: StandingHooks, id: string, actor: string, body: StandingLowerBody, now: number = Date.now()): Record<string, unknown> {
+    const sd = readStanding(id);
+    const side = sd ? sideOf(hooks, sd, actor) : null;
+    if (!sd || !side || sd.phase === 'ended') throw refusal(404, 'standing_gone', STANDING_GONE_ERROR);
+    const changeId = body?.id;
+    const periodNo = body?.periodNo;
+    const beans = body?.beans_c;
+    if (typeof changeId !== 'string' || !CHANGE_ID.test(changeId) || typeof periodNo !== 'number' || !Number.isInteger(periodNo)) {
+        throw refusal(400, 'standing_change_body', standingLines.changeUnread());
+    }
+    const unit = sd.period_unit;
+    const existing = readChange(changeId);
+    if (existing) {
+        // The same change again (a retry after a lost answer): the same answer, nothing written.
+        if (existing.standing_id === sd.id && existing.period_no === periodNo && existing.beans_c === beans && existing.side === side) {
+            return { ...standingDealView(id)!, change: changeView(existing) };
+        }
+        throw refusal(409, 'standing_change_taken', standingLines.changeIdTaken());
+    }
+    const n = sd.periods_done + 1;
+    if (periodNo !== n || sd.stopped_at || (sd.phase === 'paid' && countReached(sd, sd.periods_done))) {
+        throw refusal(409, 'standing_lower_moved', standingLines.lowerMoved(unit));
+    }
+    const current = periodAmountOf(sd, n);
+    if (!isStandingLowerAmount(beans, current)) throw refusal(400, 'standing_lower_amount', standingLines.lowerOnlyDown(unit, current));
+    if (openAskOf(sd.id, n)) throw refusal(409, 'standing_ask_open', standingLines.askOpen(unit));
+    if (side === 'payer' && asksMadeAbout(sd.id, n) >= STANDING_ASKS_PER_PERIOD) throw refusal(409, 'standing_ask_limit', standingLines.askLimit(unit));
+
+    const at = new Date().toISOString();
+    const title = titleOf(sd.post_id);
+    const from = dayOf(periodStart(sd.starts_at, unit, n));
+    let told: StandingNotice[] = [];
+    let line: string | null = null;
+    db.transaction(() => {
+        const fresh = readStanding(id);
+        if (!fresh || fresh.phase === 'ended' || fresh.stopped_at || fresh.periods_done !== sd.periods_done) {
+            throw refusal(409, 'standing_lower_moved', standingLines.lowerMoved(unit));
+        }
+        const agreed = side === 'payee';
+        db.prepare(`INSERT INTO standing_period_changes (id, standing_id, period_no, beans_c, side, asked_by, state, answered_by, answered_at, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(changeId, sd.id, n, beans, side, actor, agreed ? 'agreed' : 'asked', agreed ? actor : null, agreed ? at : null, at);
+        if (agreed) {
+            line = standingLines.loweredBy(unit, nameOf(sd.payee_pubkey), from, title, beans);
+            told = keep([sd.payer_pubkey], line, sd, 'standing_lowered', { period: n, change: changeId });
+        } else {
+            told = keep([sd.payee_pubkey], standingLines.askedNotice(unit, nameOf(sd.payer_pubkey), beans, current, from, title), sd, 'standing_ask', { period: n, change: changeId });
+        }
+    })();
+    if (line) chatLine(hooks, sd, line);
+    tellStanding(hooks, told);
+    if (side === 'payee') payNowIfShort(hooks, id, now);
+    return { ...standingDealView(id)!, change: changeView(readChange(changeId)!) };
+}
+
+/** The payer's ask, as its answer and its take-back find it: on this standing deal, and the payer's. */
+function askOn(sd: StandingRow, changeId: string): ChangeRow {
+    const c = readChange(changeId);
+    if (!c || c.standing_id !== sd.id || c.side !== 'payer') throw refusal(404, 'standing_ask_gone', standingLines.askGone());
+    return c;
+}
+
+/**
+ * The payee answers the payer's open ask (design §3.1, §3.3): yes makes that period cost what was asked, and it counts as
+ * paid in full; no leaves it as it was. Either way the payer is told (a push and a bell row; a yes also the deal's chat
+ * line). A yes in the grace pays at once if it can (payNowIfShort). The same answer again (a retry) answers the same and
+ * writes nothing; an ask already closed is refused.
+ */
+export function answerStandingAsk(hooks: StandingHooks, id: string, changeId: string, actor: string, yes: unknown, now: number = Date.now()): Record<string, unknown> {
+    const sd = readStanding(id);
+    const side = sd ? sideOf(hooks, sd, actor) : null;
+    if (!sd || !side || sd.phase === 'ended') throw refusal(404, 'standing_gone', STANDING_GONE_ERROR);
+    if (side !== 'payee') throw refusal(403, 'standing_payee_only', standingLines.payeeOnly());
+    if (typeof yes !== 'boolean') throw refusal(400, 'standing_change_body', standingLines.changeUnread());
+    const c = askOn(sd, changeId);
+    if (c.state === (yes ? 'agreed' : 'declined')) return { ...standingDealView(id)!, change: changeView(c) };
+    const n = sd.periods_done + 1;
+    if (c.state !== 'asked' || c.period_no !== n || sd.stopped_at) throw refusal(409, 'standing_ask_gone', standingLines.askGone());
+
+    const unit = sd.period_unit;
+    const current = periodAmountOf(sd, n);
+    const at = new Date().toISOString();
+    const title = titleOf(sd.post_id);
+    const from = dayOf(periodStart(sd.starts_at, unit, n));
+    let told: StandingNotice[] = [];
+    let line: string | null = null;
+    db.transaction(() => {
+        const moved = db.prepare(`UPDATE standing_period_changes SET state = ?, answered_by = ?, answered_at = ? WHERE id = ? AND state = 'asked'`)
+            .run(yes ? 'agreed' : 'declined', actor, at, changeId);
+        const fresh = readStanding(id);
+        if (moved.changes !== 1 || !fresh || fresh.phase === 'ended' || fresh.periods_done !== sd.periods_done) {
+            throw refusal(409, 'standing_ask_gone', standingLines.askGone());
+        }
+        if (yes) {
+            line = standingLines.saidYes(unit, nameOf(sd.payee_pubkey), from, title, c.beans_c, current);
+            told = keep([sd.payer_pubkey], line, sd, 'standing_ask_yes', { period: n, change: changeId });
+        } else {
+            told = keep([sd.payer_pubkey], standingLines.saidNo(unit, nameOf(sd.payee_pubkey), from, title, current), sd, 'standing_ask_no', { period: n, change: changeId });
+        }
+    })();
+    if (line) chatLine(hooks, sd, line);
+    tellStanding(hooks, told);
+    if (yes) payNowIfShort(hooks, id, now);
+    return { ...standingDealView(id)!, change: changeView(readChange(changeId)!) };
+}
+
+/** The payer takes their open ask back (design §3.1): nothing changes, and the payee's live line leaves; nobody is told. */
+export function withdrawStandingAsk(hooks: StandingHooks, id: string, changeId: string, actor: string): Record<string, unknown> {
+    const sd = readStanding(id);
+    const side = sd ? sideOf(hooks, sd, actor) : null;
+    if (!sd || !side || sd.phase === 'ended') throw refusal(404, 'standing_gone', STANDING_GONE_ERROR);
+    if (side !== 'payer') throw refusal(403, 'standing_payer_only', standingLines.payerOnly());
+    const c = askOn(sd, changeId);
+    if (c.state === 'withdrawn') return { ...standingDealView(id)!, change: changeView(c) };
+    const moved = db.prepare(`UPDATE standing_period_changes SET state = 'withdrawn', answered_by = ?, answered_at = ? WHERE id = ? AND state = 'asked'`)
+        .run(actor, new Date().toISOString(), changeId);
+    if (moved.changes !== 1) throw refusal(409, 'standing_ask_gone', standingLines.askGone());
+    return { ...standingDealView(id)!, change: changeView(readChange(changeId)!) };
+}
+
 // ── A member gone, a listing removed ────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -824,6 +1097,7 @@ export function stopStandingDealsOnListing(postId: string, by: string): Standing
             told.push(...keep(others, standingLines.ended(title), sd, 'standing_ended', { reason: 'listing_gone' }));
         } else if (!sd.stopped_at) {
             db.prepare(`UPDATE standing_deals SET stopped_by = ?, stopped_at = ? WHERE id = ? AND stopped_at IS NULL`).run(by, at, sd.id);
+            lapseOpenAsks(sd.id, at);
             told.push(...keep(others, standingLines.stoppedBy(sd.period_unit, nameOf(by), title, dayOf(sd.next_due_at)), sd, 'standing_stopped'));
         }
     }

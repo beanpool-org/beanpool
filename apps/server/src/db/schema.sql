@@ -661,6 +661,35 @@ CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubk
 CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
 CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);
 
+-- 5c. A short week (DESIGN-getting-paid-fable.md §3, §5; Marty's decisions, 11 Nov 2026): one period of a standing deal
+-- lowered, from 0 up to just under the price the payer signed. The payee lowers it alone (side 'payee', agreed at once), or
+-- the payer asks (side 'payer', 'asked') and the payee says yes (agreed) or no (declined); the payer may take an ask back
+-- (withdrawn); an ask unanswered when its period is paid, its grace runs out or the standing deal stops lapses. What a
+-- period costs is the smallest agreed change for it, else the price (@beanpool/core standingPeriodAmount), so a period
+-- lowered can be lowered again and never raised back; engine/standing-deals.ts pays it. A new table: no column of another
+-- is added, no row of another is rewritten, nothing at boot reads one.
+CREATE TABLE IF NOT EXISTS standing_period_changes (
+    -- The app's UUID: a retry of the same change is the same change.
+    id TEXT PRIMARY KEY,
+    standing_id TEXT NOT NULL REFERENCES standing_deals(id),
+    period_no INTEGER NOT NULL CHECK (period_no >= 1),
+    -- What the period would cost, whole hundredths of a Bean.
+    beans_c INTEGER NOT NULL CHECK (beans_c >= 0),
+    -- Who made it: the payer's ask, or the payee's own lowering.
+    side TEXT NOT NULL CHECK (side IN ('payer', 'payee')),
+    -- The key that signed it: the member, or a keeper of the enterprise on that side.
+    asked_by TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('asked', 'agreed', 'declined', 'withdrawn', 'lapsed')),
+    answered_by TEXT,
+    answered_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- One open ask a period.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_standing_period_changes_open ON standing_period_changes(standing_id, period_no) WHERE state = 'asked';
+CREATE INDEX IF NOT EXISTS idx_standing_period_changes_period ON standing_period_changes(standing_id, period_no, state);
+CREATE INDEX IF NOT EXISTS idx_standing_period_changes_updated_at ON standing_period_changes(updated_at);
+
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
@@ -1641,6 +1670,14 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE standing_deals SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS standing_period_changes_touch_updated_at
+AFTER UPDATE ON standing_period_changes
+FOR EACH ROW
+WHEN NEW.updated_at IS OLD.updated_at
+BEGIN
+    UPDATE standing_period_changes SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS projects_touch_updated_at

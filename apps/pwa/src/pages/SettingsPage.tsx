@@ -28,6 +28,7 @@ import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInst
 import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
 import { BringToPhone } from '../components/BringToPhone';
 import { SharedOutsideSection } from '../components/SharedOutsideSection';
+import { BeansSignButtons } from '../components/BeansSignButtons';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
@@ -1213,6 +1214,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── Shared outside (front doors S6): the links this member shared outside the community, and Stop
                              sharing. Only where the community lets members share outside. ─── */}
                         <SharedOutsideSection />
+
+                        {/* ─── "Beans accepted here": the A4 window sign and the A6 stall card for this community, printed or saved as a PDF
+                             (components/BeansSignButtons.tsx). Anyone may print one; the keepers of an enterprise have the same in their Manage tab. ─── */}
+                        <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800">
+                            <BeansSignButtons />
+                        </div>
 
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}

@@ -682,9 +682,21 @@ export function payStandingPeriod(cb: EscrowCallbacks, p: StandingPayment): { re
         db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
             .run(p.postId, p.txId);
     }
+    // A period lowered to 0 by agreement (DESIGN-getting-paid-fable §5): its deal row only. Nothing moves, so there is no
+    // Ledger row and no fee, and transfer() is never called.
+    if (p.amount_c === 0) return { releaseResult: null, releaseCredits: 0 };
     const releaseResult = cb.transfer(p.parties.payer, p.parties.payee, p.amount_c, p.memo, 'escrow', false, p.auth);
     if (!releaseResult) throw short(new Error(word('Insufficient balance to accept this offer')));
     return { releaseResult, releaseCredits: p.amount_c };
+}
+
+/**
+ * After a standing deal's period of 0 Beans is written (DESIGN-getting-paid-fable §5): the deal row's change, live to both
+ * sides and their keepers, as a release's is. Nothing moved, so no earned surplus, no activity, no chat line and no push.
+ */
+export function afterZeroPeriod(cb: EscrowCallbacks, txId: string): void {
+    const tx = getMarketplaceTransaction(db, txId);
+    if (tx) cb.broadcast({ type: 'transaction_completed', transaction: tx }, tradeRecipients(cb, tx));
 }
 
 /** A request's deal as approvePostRequest's checks read it: a requested row, or a standing deal's next period on a Need. */
@@ -794,11 +806,14 @@ export function requestHoldChecks(
     }
     const parties: HoldParties = { payer: row.buyer_pubkey, payee: row.seller_pubkey, isEnterprisePayer, isPayeeKeeper };
 
-    assertHoldFunded(cb, parties, row.amount_c, {
-        payerName: buyerMember?.callsign || 'This enterprise',
-        insufficient: word('Buyer has insufficient balance to cover escrow'),
-        claim: opts.scheduled ? null : { postId: row.post_id, transactionId: row.id },
-    });
+    // A standing deal's period lowered to 0 (DESIGN-getting-paid-fable §5) moves nothing, so there is nothing to fund.
+    if (!(opts.scheduled && row.amount_c === 0)) {
+        assertHoldFunded(cb, parties, row.amount_c, {
+            payerName: buyerMember?.callsign || 'This enterprise',
+            insufficient: word('Buyer has insufficient balance to cover escrow'),
+            claim: opts.scheduled ? null : { postId: row.post_id, transactionId: row.id },
+        });
+    }
 
     // One deal at a time (a one-off listing, or a lendable Offer): refused here, before the escrow opens, when the listing
     // is no longer on the board, rather than by the update below, inside it (a throw there unwinds the ledger). A standing
@@ -1091,11 +1106,14 @@ export function offerHoldChecks(
     }
     const parties: HoldParties = { payer: buyerPublicKey, payee: post.authorPublicKey, isEnterprisePayer, isPayeeKeeper };
 
-    assertHoldFunded(cb, parties, finalCredits, {
-        payerName: buyerMember?.callsign || 'This enterprise',
-        insufficient: word('Insufficient balance to accept this offer'),
-        claim: opts.scheduled ? null : { postId: post.id },
-    });
+    // A standing deal's period lowered to 0 (DESIGN-getting-paid-fable §5) moves nothing, so there is nothing to fund.
+    if (!(opts.scheduled && finalCredits === 0)) {
+        assertHoldFunded(cb, parties, finalCredits, {
+            payerName: buyerMember?.callsign || 'This enterprise',
+            insufficient: word('Insufficient balance to accept this offer'),
+            claim: opts.scheduled ? null : { postId: post.id },
+        });
+    }
     return { ...parties, amount_c: finalCredits, buyerCallsign: buyerMember?.callsign };
 }
 

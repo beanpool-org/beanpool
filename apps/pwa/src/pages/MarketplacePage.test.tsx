@@ -833,7 +833,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         await screen.findByText('Gardening Mentorship');
 
         // Panel with Release button must be visible
-        expect(await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Beans/i }, { timeout: 5000 })).toBeInTheDocument();
 
         // The new payer words:
         expect(screen.getByText(/You took this up on.*45 Beans held in trust/)).toBeInTheDocument();
@@ -868,7 +868,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         };
         render(<MarketplacePage identity={identity} openPostId="post-myneed" transactions={[needTx]} />);
         await screen.findByText('Fix my fence');
-        expect(await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Beans/i }, { timeout: 5000 })).toBeInTheDocument();
         expect(screen.queryByText(/You took this up on/)).not.toBeInTheDocument();
     });
 
@@ -876,7 +876,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
     it('with the deal not loaded, the payer line names no date', async () => {
         render(<MarketplacePage identity={identity} openPostId="post-myneed" transactions={[]} />);
         await screen.findByText('Fix my fence');
-        await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 });
+        await screen.findByRole('button', { name: /Release Beans/i }, { timeout: 5000 });
         expect(screen.queryByText(/You took this up on/)).not.toBeInTheDocument();
         expect(screen.queryByText(/3 Oct/)).not.toBeInTheDocument();
     });
@@ -907,7 +907,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         await screen.findByRole('button', { name: /Accept Offer/i }, { timeout: 5000 });
 
         // Panel with Release button must NOT be visible
-        expect(screen.queryByRole('button', { name: /Release Credits/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Release Beans/i })).not.toBeInTheDocument();
 
         // My words must NOT be visible
         expect(screen.queryByText(/You took this up on/)).not.toBeInTheDocument();
@@ -942,7 +942,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         await screen.findByText('Old Lawn Mower');
 
         // Panel with Release button is visible
-        expect(await screen.findByRole('button', { name: /Release Credits/i }, { timeout: 5000 })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Beans/i }, { timeout: 5000 })).toBeInTheDocument();
 
         // Shows payer words
         expect(screen.getByText(/You took this up on.*30 Beans held in trust/)).toBeInTheDocument();
@@ -1217,7 +1217,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     // ── Not the author ─────────────────────────────────────────────────────────────────────────────────────────────
     it('one-off Offer, payer, held: Release and Cancel, no Accept', async () => {
         await open(listing({ title: 'Lawn mower', status: 'pending', pendingTransactionId: 'tx' }), [deal({})]);
-        expect(await screen.findByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Beans/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
         expect(screen.queryByTestId('taken-by-other')).not.toBeInTheDocument();
         noTakeUp();
@@ -1229,7 +1229,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(await screen.findByText("You're helping with this · 20 Beans held for you")).toBeInTheDocument();
         expect(screen.getByText('⏳ Pending Release by Kofi')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Release Beans/ })).not.toBeInTheDocument();
         noTakeUp();
     });
 
@@ -1338,7 +1338,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
 
     it('lendable Offer, borrowed (held): Release, never Ask again', async () => {
         await open(listing({ title: 'Ladder', lendable: true, status: 'pending', pendingTransactionId: 'tx' }), [deal({})]);
-        expect(await screen.findByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Beans/ })).toBeInTheDocument();
         noTakeUp();
     });
 
@@ -1355,7 +1355,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     it('a one-off taken up by someone else, reached by a link: "Taken up by someone else for now.", nothing to take, nothing of theirs', async () => {
         await open(listing({ title: 'Lawn mower', status: 'pending', pendingTransactionId: 'tx-kofi' }), []);
         expect(await screen.findByText('Taken up by someone else for now.')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Release Beans/ })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Cancel Hold/ })).not.toBeInTheDocument();
         noTakeUp();
     });
@@ -1380,7 +1380,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(within(screen.getByTestId('deal-row-tx-a')).getByText('⏳ Pending Release by Marty')).toBeInTheDocument();
         expect(within(screen.getByTestId('deal-row-tx-b')).getByText('Kofi · 30 Beans held · since 26 Oct')).toBeInTheDocument();
         expect(within(rows).getAllByRole('button', { name: /Cancel Hold/ })).toHaveLength(2);
-        expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Release Beans/ })).not.toBeInTheDocument();
         noTakeUp();
     });
 
@@ -1464,8 +1464,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             [deal({ id: 'tx-h', amount_c: 2000, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
         const row = await screen.findByTestId('deal-row-tx-h');
         expect(within(row).getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
-        fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
-        fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+        fireEvent.click(within(row).getByRole('button', { name: /Release Beans/ }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Release Beans' }));
         await waitFor(() => expect(done).toHaveBeenCalledWith('tx-h', ME, undefined));
     });
 
@@ -1474,7 +1474,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         await open(listing({ title: 'Pick the olives', type: 'need', repeatable: true, priceType: 'daily', price_c: 2000, authorPublicKey: ME, authorCallsign: 'Guest' }),
             [deal({ id: 'tx-d', amount_c: 6000, hours: 3, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
         const row = await screen.findByTestId('deal-row-tx-d');
-        fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
+        fireEvent.click(within(row).getByRole('button', { name: /Release Beans/ }));
         const line = within(row).getByTestId('release-line-tx-d');
         expect(line).toHaveTextContent('Transferring 60 B to Helper');
         fireEvent.change(within(row).getByRole('textbox'), { target: { value: '5' } });
@@ -1483,14 +1483,14 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.change(within(row).getByRole('textbox'), { target: { value: '1,000' } });
         expect(line).toHaveTextContent('Type the amount without thousands separators, like 1000.5.');
         fireEvent.change(within(row).getByRole('textbox'), { target: { value: '5' } });
-        fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Release Beans' }));
         await waitFor(() => expect(done).toHaveBeenCalledWith('tx-d', ME, 5));
     });
 
     it("one who took up an hourly Offer: the panel's total is the deal's own rate for the hours typed", async () => {
         await open(listing({ title: 'Garden help', priceType: 'hourly', price_c: 1500, status: 'pending', pendingTransactionId: 'tx-g' }),
             [deal({ id: 'tx-g', amount_c: 3000, hours: 2 })]);
-        fireEvent.click(await screen.findByRole('button', { name: /Release Credits/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Release Beans/ }));
         // Opened at the 2 hours the deal was struck for, as each row and the phone open it (it opened at 1: 15 B).
         expect(screen.getByRole('textbox')).toHaveValue('2');
         expect(await screen.findByText('Transferring 30 B to Damo')).toBeInTheDocument();
@@ -1511,7 +1511,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' }),
             deal({ id: 'tx-n', status: 'pending', createdAt: '2026-10-27T10:00:00.000Z' }),
         ], { openTxId: 'tx-c' });
-        expect(await screen.findByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Release Beans/ })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
         expect(screen.queryByTestId('pinned-deal-over')).not.toBeInTheDocument();
         noTakeUp();
@@ -1577,8 +1577,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             // The node, once the step is taken: the listing moved on, the deal over.
             feed = [{ ...fence, status: after }];
             if (step === 'Release') {
-                fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
-                fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+                fireEvent.click(within(row).getByRole('button', { name: /Release Beans/ }));
+                fireEvent.click(within(row).getByRole('button', { name: 'Release Beans' }));
             } else {
                 fireEvent.click(within(row).getByRole('button', { name: /Cancel Hold/ }));
             }
@@ -1586,7 +1586,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             view.rerender(<MarketplacePage identity={identity} isMember={true} transactions={[{ ...held, status: step === 'Release' ? 'completed' : 'cancelled' }]} />);
             await act(async () => { await new Promise(r => setTimeout(r, 30)); });
             expect(screen.queryByTestId('deals-under-way')).not.toBeInTheDocument();
-            expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /Release Beans/ })).not.toBeInTheDocument();
             expect(screen.queryByRole('button', { name: /Cancel Hold/ })).not.toBeInTheDocument();
         });
     }
@@ -1627,8 +1627,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         // The keeper messages Mo as themselves.
         expect(within(row).getByRole('button', { name: 'Message Mo' })).toBeInTheDocument();
         noTakeUp();
-        fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
-        fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+        fireEvent.click(within(row).getByRole('button', { name: /Release Beans/ }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Release Beans' }));
         await waitFor(() => expect(done).toHaveBeenCalledWith(ENT, 'tx-f', undefined));
         expect(ownDoor).not.toHaveBeenCalled();
     });
@@ -1640,7 +1640,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         entDeals = [...sold, deal({ id: 'tx-old', amount_c: 2000, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
         await open(farmNeed, []);
         const row = await screen.findByTestId('deal-row-tx-old');
-        expect(within(row).getByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        expect(within(row).getByRole('button', { name: /Release Beans/ })).toBeInTheDocument();
     });
 
     it("a keeper paid by the enterprise's own Need: their pay is another keeper's to release; they cancel as themselves", async () => {
@@ -1649,7 +1649,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         await open(farmNeed, []);
         const row = await screen.findByTestId('deal-row-tx-k');
         expect(within(row).getByText('⏳ Pending Release by Farm Co-op')).toBeInTheDocument();
-        expect(within(row).queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        expect(within(row).queryByRole('button', { name: /Release Beans/ })).not.toBeInTheDocument();
         expect(within(row).getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
     });
 
@@ -1664,7 +1664,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(within(rows).getByText('Deals under way: 2')).toBeInTheDocument();
         expect(within(rows).getByText('⏳ Pending Release by Mo')).toBeInTheDocument();
         expect(within(rows).getByText('⏳ Pending Release by Ana')).toBeInTheDocument();
-        expect(within(rows).queryByRole('button', { name: /Release Credits|Cancel Hold/ })).not.toBeInTheDocument();
+        expect(within(rows).queryByRole('button', { name: /Release Beans|Cancel Hold/ })).not.toBeInTheDocument();
         noTakeUp();
     });
 

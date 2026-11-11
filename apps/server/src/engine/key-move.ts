@@ -240,6 +240,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('standing_deals', 'payer_pubkey');
     move('standing_deals', 'payee_pubkey');
     move('standing_deals', 'stopped_by');
+    // A period lowered, an ask and its answer (DESIGN-getting-paid-fable.md §5): who made and who answered each.
+    move('standing_period_changes', 'asked_by');
+    move('standing_period_changes', 'answered_by');
 
     // (t) settlements
     move('settlements', 'buyer_pubkey');

@@ -95,7 +95,7 @@ export function ChatDealStrip({ deals, me, peerName, showsBeans, busy, onOpen, o
                                                 type="button"
                                                 disabled={busy}
                                                 onClick={() => onRelease(tx)}
-                                                aria-label={tx.postTitle ? t('Release credits for {title}', { title: tx.postTitle }) : t('Release credits for deal')}
+                                                aria-label={tx.postTitle ? t('Release Beans for {title}', { title: tx.postTitle }) : t('Release Beans for deal')}
                                                 style={{ ...buttonBase, flex: 1, border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}
                                             >
                                                 {busy ? '…' : t('Release')}

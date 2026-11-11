@@ -17,10 +17,10 @@ Chats that belong to a group, an enterprise or an event are under **Groups**, no
 - Search with **Search chats, posts, partners...**.
 - The filter button sorts by **Recent** or **Unread** (and, where your community uses Beans, by the Beans in each deal, highest or lowest first), and can show **Unread Only** or **Friends Only**.
 - On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Chat** again to jump to the top.
-- On the phone, a chat with a deal that needs you has the same tag under the name as in the web app (below): **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. A chat where you only have a finished deal to rate says **Review Needed**.
+- On the phone, a chat with a deal that needs you has the same tag under the name as in the web app (below): **Action Required (2)**, or **Release Beans (2)** when every one of them is Beans of yours to release. A chat where you only have a finished deal to rate says **Review Needed**.
 - On the phone, if unread messages wait in another community you keep, a line at the top of **Chat** shows them (such as "3 new messages in Castlemaine · Switch"). Tap it to switch to that community's **Chat**. The count also shows on the BeanPool sheet beside that community.
 
-In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter. A chat with a deal that needs you has a tag under the name, **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. It counts only the deals where the next step is yours: Beans of yours held in trust, or a request on your listing waiting for your answer. A deal where you are the one being paid adds nothing to it. A chat with a finished deal you haven't rated also says **Action Needed: Review Partner**.
+In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter. A chat with a deal that needs you has a tag under the name, **Action Required (2)**, or **Release Beans (2)** when every one of them is Beans of yours to release. It counts only the deals where the next step is yours: Beans of yours held in trust, or a request on your listing waiting for your answer. A deal where you are the one being paid adds nothing to it. A chat with a finished deal you haven't rated also says **Action Needed: Review Partner**.
 
 At the top of a chat with one person, tapping their name opens their profile (an enterprise's page for an enterprise), on the phone and the web.
 
@@ -33,7 +33,7 @@ When you and the other person have a deal, it is pinned above the messages, on t
 - **When a deal is finished** and you haven't rated it, the card has **⭐ Review**.
 - **If the other person has asked for your listing,** the card says **Waiting on you: answer**. No Beans are held yet, so it has no buttons of its own: tap it to open the listing and answer there.
 
-When you are paying for just one deal in the chat, it is in the bar above the messages instead of a card: **⚠️ Action Required: Release Credits** with **Release** and **Cancel** on the phone, **🔒 Trust Hold** with **✅ Release Credits** and **Cancel** in the web app. If you are paying for several, the bar has the newest and the cards have the rest.
+When you are paying for just one deal in the chat, it is in the bar above the messages instead of a card: **⚠️ Action needed: release the Beans** with **Release** and **Cancel** on the phone, **🔒 Trust Hold** with **✅ Release Beans** and **Cancel** in the web app. If you are paying for several, the bar has the newest and the cards have the rest.
 
 ## Starting a chat
 

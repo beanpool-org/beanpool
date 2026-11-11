@@ -155,11 +155,11 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(src).toContain('const showsBeans = beansOn(nodeProfile?.features);');
     });
 
-    it('Talk: no "Credits: High / Low" sort', () => {
+    it('Talk: no "Beans: High / Low" sort', () => {
         const src = read('app/(tabs)/chats.tsx');
         const gated = block(src, '{showsBeans && (');
-        expect(gated).toContain('Credits: High');
-        expect(gated).toContain('Credits: Low');
+        expect(gated).toContain('Beans: High');
+        expect(gated).toContain('Beans: Low');
         expect(src.split('bean.png').length - 1).toBe(2);
         expect(gated.split('bean.png').length - 1).toBe(2);
         // A Beans sort picked before the chips went is dropped, not left sorting and badging unseen.

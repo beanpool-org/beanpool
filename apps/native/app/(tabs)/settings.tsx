@@ -50,6 +50,7 @@ import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { CommunityAdminsRow } from '../../components/CommunityAdminsRow';
+import { BeansSignButtons } from '../../components/BeansSignButtons';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
@@ -2259,6 +2260,12 @@ export default function SettingsScreen() {
                             <View style={[styles.toggleThumb, holidayMode && styles.toggleThumbOn]} />
                         </Pressable>
                     </View>
+                </View>
+
+                {/* ─── "Beans accepted here": the A4 window sign and the A6 stall card for this community, as a PDF to share
+                    (components/BeansSignButtons.tsx). Anyone may print one; the keepers of an enterprise have the same in their Manage console. ─── */}
+                <View style={styles.card}>
+                    <BeansSignButtons colors={colors} />
                 </View>
 
                 {/* ─── BeanPool: the members' sheet, Suggest a change (goes to beanpool.org, not this community's node), the website ─── */}

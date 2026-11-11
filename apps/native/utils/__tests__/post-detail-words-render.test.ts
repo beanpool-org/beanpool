@@ -445,7 +445,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(host.textContent).toContain(pseudoLocalise("Release the Beans when it's done."));
         expect(host.textContent).toContain(pseudoLocalise('All your deals ›'));
         expect(bypassing(), 'held').toEqual([]);
-        await press('✅ Release Credits');
+        await press('✅ Release Beans');
         expect(host.textContent).toContain(pseudoLocalise('CONFIRM ACTUAL HOURS WORKED'));
         expect(bypassing(), 'release').toEqual([]);
         await press('❌ Cancel Trust Hold');
@@ -481,7 +481,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
             return HELD_TX;
         };
         await open(OTHER, 'xx', { first }, 'tx-held');
-        expect(host.textContent).not.toContain(pseudoLocalise('✅ Release Credits'));
+        expect(host.textContent).not.toContain(pseudoLocalise('✅ Release Beans'));
     });
 
     it('a deal held in trust: the one paid', async () => {

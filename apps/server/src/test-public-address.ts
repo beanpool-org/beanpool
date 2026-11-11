@@ -36,8 +36,6 @@ import { buildAttestation, ATTEST_DOMAIN, REQUEST_DOMAIN, PROTOCOLS, SEND_PROTO,
 import { tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN } from './services/tunnel-connector.js';
 import { useFakeCloudflared } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
-import { updateLocalConfig } from './config/local-config.js';
-import { generateTotpSecret } from './totp.js';
 import { db } from './db/db.js';
 
 let testsRun = 0;
@@ -222,8 +220,8 @@ async function run() {
     const regPort = (mockRegistrar.address() as any).port;
     process.env.REGISTRAR_URL = `http://127.0.0.1:${regPort}`;
 
-    // 3. Setup Test Koa App with Public Address Routes. The node's 2FA is on: the password path has a second factor.
-    updateLocalConfig({ totpEnabled: true, totpSecret: generateTotpSecret() } as any);
+    // 3. Setup Test Koa App with Public Address Routes. The node has no admin password: an owner signs in with their key.
+    const OWNER_KEY = '0a'.repeat(32);
     let allowAdmin = true;
     const fakeDeps: RouteDeps = {
         checkAdminAuth: async (ctx: any) => {
@@ -232,11 +230,16 @@ async function run() {
                 ctx.body = { error: 'Unauthorized' };
                 return false;
             }
-            // As the real checkAdminAuth does for the admin password sent with a current code: owner level (an admin is
-            // test-tunnel-token-owner-only's), and the code just checked, which is the owner's fresh proof that taking the
-            // address offline asks (design case 18, B1; the node's 2FA is on, below).
+            // As the real checkAdminAuth does for an owner's key session that the phone's Manage hand-off opened just now:
+            // owner level (an admin is test-tunnel-token-owner-only's), and the owner's fresh proof that taking the address
+            // offline asks (design case 18, B1): a phone hand-off younger than 90 seconds (admin-auth.ts requireFreshProof).
             ctx.state.adminRole = 'owner';
-            ctx.state.secondFactorJustVerified = true;
+            ctx.state.actor = OWNER_KEY;
+            ctx.state.auth_signer = OWNER_KEY;
+            ctx.state.isKeySession = true;
+            ctx.state.phoneHandoff = true;
+            ctx.state.keySessionCreatedAt = Date.now();
+            ctx.state.phoneStepUpDue = false;
             return true;
         },
     } as any;

@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import * as cm from './connector-manager.js';
 import { registerHandshakeHandler } from './handshake.js';
 import { createLibp2p } from 'libp2p';
@@ -45,8 +45,8 @@ import { generateKeyPair } from '@libp2p/crypto/keys';
 
 let PORT = 0;
 let BASE = '';
-const PW = 'TestAdmin123!';
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main().
+let asOwner: Record<string, string> = {};
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || '.';
 const CONNECTORS_PATH = path.join(DATA_DIR, 'connectors.json');
 
@@ -64,8 +64,8 @@ function assert(cond: boolean, msg: string): void {
 async function postConnector(body: Record<string, unknown>): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}/api/local/connectors`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PW, ...(tfa ? { totpCode: tfa.code() } : {}), ...body }),
+        headers: { 'Content-Type': 'application/json', ...asOwner },
+        body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -75,8 +75,8 @@ async function postConnector(body: Record<string, unknown>): Promise<{ status: n
 async function removeConnectorOverHttp(address: string): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}/api/local/connectors/remove`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PW, ...(tfa ? { totpCode: tfa.code() } : {}), address }),
+        headers: { 'Content-Type': 'application/json', ...asOwner },
+        body: JSON.stringify({ address }),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -86,8 +86,8 @@ async function removeConnectorOverHttp(address: string): Promise<{ status: numbe
 async function dialOverHttp(address: string): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}/api/local/connectors/connect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PW, ...(tfa ? { totpCode: tfa.code() } : {}), address }),
+        headers: { 'Content-Type': 'application/json', ...asOwner },
+        body: JSON.stringify({ address }),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -214,7 +214,7 @@ async function main() {
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
 
     // ── 2. Add 127.0.0.1:<port> as a peer connector and dial node X ──
     const kx = await generateKeyPair('Ed25519');

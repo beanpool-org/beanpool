@@ -24,11 +24,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, createTreasury, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, createTreasury, seedGenesisMember, grantNodeRole } from './state-engine.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { loadConnectors } from './connector-manager.js';
@@ -40,10 +40,11 @@ import { bridgeAccountId } from './federation-bridge.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestAdmin123!';
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
-// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main();
+// post() sends it unless a call passes its own headers.
+let asOwner: Record<string, string> = {};
+/** A key session this node never opened: a credential, and a wrong one. */
+const NO_SUCH_SESSION = { 'X-Admin-Session': 'not-a-session-of-this-node' };
 
 const PEER_ID = '12D3KooWEastGippyLinkTestPeer00000000000000';
 const ADDRESS = `/ip4/172.18.0.4/tcp/4001/p2p/${PEER_ID}`;
@@ -58,10 +59,9 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
+async function post(path: string, body: Record<string, unknown>, headers: Record<string, string> = asOwner): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -122,7 +122,20 @@ async function signedPost(signer: { pk: string; priv: crypto.KeyObject }, route:
 const hc = (beans: number) => Math.round(beans * 100);
 
 const setCap = (body: Record<string, unknown>) => post('/api/local/connectors/credit-cap', body);
-const setCeiling = (body: Record<string, unknown>) => post('/api/local/federation/links/ceiling', body);
+const setCeiling = (body: Record<string, unknown>, headers?: Record<string, string>) => post('/api/local/federation/links/ceiling', body, headers);
+
+/**
+ * This node's owner, whose key session makes the admin calls here. A member invited by another, not a genesis member: a
+ * link's default keeper is the first genesis member (federation-link.ts findDefaultLinkOperator), and step 12 names him.
+ */
+function seedLinkOwner(): string {
+    const pk = (crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, 'LinkOwner', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'seed', 'TEST', 'active')`).run(pk);
+    db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+    grantNodeRole(pk, 'owner', 'SYSTEM');
+    return pk;
+}
 
 const nodeTotal = (): number =>
     (db.prepare('SELECT COALESCE(SUM(balance_c),0) AS t FROM accounts').get() as any).t;
@@ -191,19 +204,11 @@ async function main() {
         `0c. named from the on-disk callsign (got "${onDisk?.name}") — an already-configured node needs no operator action to get its enterprise`);
     assert(reconcileFederationLinks(createTreasury) === 0, '0d. and a second boot creates nothing');
 
-    const alone = await post('/api/local/connectors', {
-        password: PW, address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
-    });
-    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
-        `1-. 2FA off: the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
-    tfa = turnOn2faForTests(PW);
-    // The refusal above is one more admin call than this suite made before 7c; the limits start the minute afresh (as at 12).
-    resetAdminRateLimit();
-    pruneAuthAttempts(Date.now() + 61_000);
+    asOwner = ownerSessionHeaders(seedLinkOwner());
 
     // ── 1. A capless peer has no link. Adding a connector is not the deliberate act; setting a cap is. ────
     const added = await post('/api/local/connectors', {
-        password: PW, address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
+        address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
     });
     assert(added.status === 200, `1a. setup: peer connector added over HTTP (got ${added.status})`);
     assert(getFederationLink(PEER_ID) === null,
@@ -212,7 +217,7 @@ async function main() {
         '1c. and the reconciler agrees: nothing to create for a capless peer');
 
     // ── 2. THE POINT OF THE STEP. Setting a cap creates the enterprise, in the same request. ─────────────
-    const capped = await setCap({ password: PW, address: ADDRESS, cap: hc(100) });
+    const capped = await setCap({ address: ADDRESS, cap: hc(100) });
     assert(capped.status === 200, `2a. a cap of 100 is accepted (got ${capped.status})`);
     const link = getFederationLink(PEER_ID);
     assert(link !== null, '2b. THE POINT: the link enterprise now exists, created by the act of setting a cap');
@@ -235,7 +240,7 @@ async function main() {
 
     // ── 3. Idempotence. This runs on every boot, and a cap can be set repeatedly. ────────────────────────
     const linksBefore = listFederationLinks().length;
-    await setCap({ password: PW, address: ADDRESS, cap: hc(250) });
+    await setCap({ address: ADDRESS, cap: hc(250) });
     assert(listFederationLinks().length === linksBefore,
         `3a. re-setting the cap does not create a second link (${linksBefore} → ${listFederationLinks().length})`);
     assert(getFederationLink(PEER_ID)?.treasuryPubkey === link!.treasuryPubkey,
@@ -272,7 +277,7 @@ async function main() {
     assert(strangerRead.status === 401 && strangerRead.json?.code === 'members_only',
         `5a0. an unsigned GET /api/federation/links is refused, members_only (got ${strangerRead.status} ${strangerRead.json?.code})`);
     const publicRead = await signedGet(reader, '/api/federation/links');
-    assert(publicRead.status === 200, `5a. a member's GET /api/federation/links needs no password (got ${publicRead.status})`);
+    assert(publicRead.status === 200, `5a. a member's GET /api/federation/links needs no admin credential (got ${publicRead.status})`);
     const shown = (publicRead.json?.links ?? []).find((l: any) => l.peerId === PEER_ID);
     assert(!!shown, '5b. THE POINT OF THE CARD: a member can read the community\'s own energy position');
     assert(shown?.commissionCeiling === 0 && shown?.energyBalance === 0,
@@ -312,39 +317,39 @@ async function main() {
     tiltBridge(PEER_ID, 480);   // back to square, so the checks below start where they expect
 
     // ── 7. The ceiling: admin-gated, bounded, and with no "unlimited". ───────────────────────────────────
-    assert((await setCeiling({ peerId: PEER_ID, ceiling: hc(20) })).status === 401, '7a. a missing password is rejected');
-    assert((await setCeiling({ password: 'nope', peerId: PEER_ID, ceiling: hc(20) })).status === 401, '7b. a wrong password is rejected');
+    assert((await setCeiling({ peerId: PEER_ID, ceiling: hc(20) }, {})).status === 401, '7a. a request with no credential is rejected');
+    assert((await setCeiling({ peerId: PEER_ID, ceiling: hc(20) }, NO_SUCH_SESSION)).status === 401, '7b. a wrong credential (a key session this node never opened) is rejected');
     assert(getFederationLink(PEER_ID)?.commissionCeiling === 0, '7c. and neither set anything');
 
-    assert((await setCeiling({ password: PW, ceiling: hc(20) })).status === 400, '7d. a missing peerId is a 400');
-    const unknownPeer = await setCeiling({ password: PW, peerId: '12D3KooWNoSuchPeer', ceiling: hc(20) });
+    assert((await setCeiling({ ceiling: hc(20) })).status === 400, '7d. a missing peerId is a 400');
+    const unknownPeer = await setCeiling({ peerId: '12D3KooWNoSuchPeer', ceiling: hc(20) });
     assert(unknownPeer.status === 404 && /credit cap/i.test(unknownPeer.json?.error ?? ''),
         `7e. an unknown peer is a 404 that says how a link comes into being (got ${unknownPeer.status})`);
 
     // The omission guard, same shape as the credit cap's: a dropped field must not remove a safety.
-    const absent = await setCeiling({ password: PW, peerId: PEER_ID });
+    const absent = await setCeiling({ peerId: PEER_ID });
     assert(absent.status === 400 && /unlimited/i.test(absent.json?.error ?? ''),
         `7f. an ABSENT ceiling is a 400, not "no limit" — there is no unlimited value (got ${absent.status})`);
-    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: String(hc(20)) })).status === 400,
+    assert((await setCeiling({ peerId: PEER_ID, ceiling: String(hc(20)) })).status === 400,
         '7g. a string ceiling is a 400, not coerced');
-    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: hc(-5) })).status === 400,
+    assert((await setCeiling({ peerId: PEER_ID, ceiling: hc(-5) })).status === 400,
         '7h. a negative ceiling is refused');
     assert(getFederationLink(PEER_ID)?.commissionCeiling === 0, '7i. none of the malformed requests moved it');
 
-    const ok = await setCeiling({ password: PW, peerId: PEER_ID, ceiling: hc(20) });
+    const ok = await setCeiling({ peerId: PEER_ID, ceiling: hc(20) });
     assert(ok.status === 200 && ok.json?.link?.commissionCeiling === hc(20),
         `7j. a ceiling of 20 is accepted and echoed (got ${ok.status} ceiling=${ok.json?.link?.commissionCeiling})`);
     assert(getFederationLink(PEER_ID)?.commissionCeiling === hc(20), '7k. and reads back through the accessor');
     assert((await signedGet(reader, '/api/federation/links')).json.links.find((l: any) => l.peerId === PEER_ID)?.commissionCeiling === hc(20),
         '7l. and is visible on the members\' read, which is the point of a ceiling being a safety');
-    assert((await setCeiling({ password: PW, peerId: PEER_ID, ceiling: 0 })).json?.link?.commissionCeiling === 0,
+    assert((await setCeiling({ peerId: PEER_ID, ceiling: 0 })).json?.link?.commissionCeiling === 0,
         '7m. and 0 turns commissioning back off — the documented way to stop it');
 
     // ── 8. A name collision cannot block a link. ─────────────────────────────────────────────────────────
     await post('/api/local/connectors', {
-        password: PW, address: ADDRESS_2, trustLevel: 'peer', callsign: 'eastgippy', enabled: false,
+        address: ADDRESS_2, trustLevel: 'peer', callsign: 'eastgippy', enabled: false,
     });
-    await setCap({ password: PW, address: ADDRESS_2, cap: hc(50) });
+    await setCap({ address: ADDRESS_2, cap: hc(50) });
     const second = getFederationLink(PEER_ID_2);
     assert(second !== null,
         '8a. a second peer whose operator chose the SAME callsign still gets a link — two communities picking one name is not a reason to refuse accountability');
@@ -354,7 +359,7 @@ async function main() {
         '8c. with its own treasury — sharing one would pool two separate obligations into one pot');
 
     // ── 9. Clearing a cap must not delete a link. ────────────────────────────────────────────────────────
-    const clearing = await setCap({ password: PW, address: ADDRESS_2, cap: null });
+    const clearing = await setCap({ address: ADDRESS_2, cap: null });
     assert(clearing.status === 200, `9a. the cap clears (got ${clearing.status} ${clearing.json?.error ?? ""})`);
     assert(getFederationLink(PEER_ID_2) !== null,
         '9b. but the LINK SURVIVES — its treasury can hold beans and its bridge can hold a tab, so dropping it would orphan both. Withdrawing a cap stops new settlement, which is what it is for');
@@ -436,9 +441,9 @@ async function main() {
     // has closed a minute from now, which is all of them).
     resetAdminRateLimit();
     pruneAuthAttempts(Date.now() + 61_000);
-    const riverAdded = await post('/api/local/connectors', { password: PW, address: RIVER_ADDR, trustLevel: 'peer', callsign: 'riverbend', enabled: false });
+    const riverAdded = await post('/api/local/connectors', { address: RIVER_ADDR, trustLevel: 'peer', callsign: 'riverbend', enabled: false });
     const treasuriesBeforeRiver = treasuryCount();
-    const riverCap = await setCap({ password: PW, address: RIVER_ADDR, cap: hc(40) });
+    const riverCap = await setCap({ address: RIVER_ADDR, cap: hc(40) });
     const river = getFederationLink(RIVER);
     assert(riverAdded.status === 200 && riverCap.status === 200 && !!river && river.treasuryPubkey !== hers,
         `12e. THE POINT: capping the new peer makes a NEW link treasury, not Rhea's enterprise (${riverAdded.status} ${riverAdded.json?.error ?? ''}, ${riverCap.status} ${riverCap.json?.error ?? ''}; got ${river?.treasuryPubkey?.slice(0, 12)} vs hers ${hers?.slice(0, 12)})`);
@@ -480,7 +485,7 @@ async function main() {
     // (c) The loss the fallback exists for, on the boot path: one link row gone, the peer still capped.
     resetAdminRateLimit();
     pruneAuthAttempts(Date.now() + 61_000);
-    await setCeiling({ password: PW, peerId: PEER_ID, ceiling: hc(20) });
+    await setCeiling({ peerId: PEER_ID, ceiling: hc(20) });
     db.prepare('DELETE FROM federation_links WHERE peer_id = ?').run(PEER_ID);
     const treasuriesBeforeBoot = treasuryCount();
     reconcileFederationLinks(createTreasury);

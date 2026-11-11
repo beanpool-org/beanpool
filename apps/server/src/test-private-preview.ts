@@ -6,7 +6,7 @@
  *   2. Every join that isn't an owner's or admin's invite is refused with the one sentence (403 private_preview): the
  *      open door (join, its work, its sign-in nonce), a knock, the old register route, a member's code (made before the
  *      preview, as a row) and a member making one (admins_only).
- *   3. An owner's invite (password-issued seed invite) and an admin's own code redeem.
+ *   3. An owner's invite (a seed invite made under the owner's key session) and an admin's own code redeem.
  *   4. A member signs in and reads as usual; recovery by a sign-in still reaches its routes.
  *   5. A visitor (unsigned, or signed by a non-member key) is refused every read but the listed open routes, and its
  *      /ws upgrade is refused 403; a member's socket opens.
@@ -27,7 +27,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { seedOwnerForTests, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { PRIVATE_PREVIEW_MESSAGE, VISITOR_OPEN_ROUTES, PRIVATE_PREVIEW_BOOT_LINE, privatePreviewAtBoot } from './config/private-preview.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -61,7 +61,6 @@ function withKey(url: string, k: string | null): string {
 
 let BASE = '';
 let WS_BASE = '';
-const PW = 'TestAdminPass123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -76,10 +75,10 @@ function newId(): Id {
 }
 
 type Method = 'GET' | 'POST';
-async function call(method: Method, id: Id | null, urlPath: string, body?: unknown): Promise<{ status: number; body: any }> {
+async function call(method: Method, id: Id | null, urlPath: string, body?: unknown, extra: Record<string, string> = {}): Promise<{ status: number; body: any }> {
     const bodiless = method === 'GET';
     const raw = bodiless ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...extra };
     if (!bodiless) headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -140,9 +139,9 @@ async function main() {
     assert(f.invites === true && f.knocks === false, 'info: invites on (an owner\'s or admin\'s), no knocks');
     assert(f.door === 'admins', `info: door is admins (got ${f.door})`);
 
-    // ── 3a. an owner's invite: the password-issued seed invite (fresh node: it seeds the genesis member too) ──
-    const tfa = turnOn2faForTests(PW);
-    const seed = await call('POST', null, '/api/admin/seed-invite', { password: PW, totpCode: tfa.code(), type: 'standard' });
+    // ── 3a. an owner's invite: a seed invite made under the owner's key session, so it hangs off that owner ──
+    const owner = seedOwnerForTests('Olwen');
+    const seed = await call('POST', null, '/api/admin/seed-invite', { type: 'standard' }, ownerSessionHeaders(owner));
     assert(seed.status === 200 && typeof seed.body.code === 'string', `owner makes a seed invite on a global node in preview (${show(seed)})`);
     const marty = newId();
     const martyIn = await redeem(marty, seed.body.code, 'Marty');

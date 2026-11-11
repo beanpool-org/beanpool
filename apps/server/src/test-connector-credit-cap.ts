@@ -24,7 +24,7 @@ import { startHttpsServer } from './https-server.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
 import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
-import { turnOn2faForTests, ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { db } from './db/db.js';
 import { grantNodeRole } from './state-engine.js';
@@ -32,10 +32,11 @@ import crypto from 'node:crypto';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestAdmin123!';
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
-// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main();
+// post() sends it unless a call passes its own headers.
+let asOwner: Record<string, string> = {};
+/** A key session this node never opened: a credential, and a wrong one. */
+const NO_SUCH_SESSION = { 'X-Admin-Session': 'not-a-session-of-this-node' };
 
 // A multiaddr with a peer id, because that is the shape a real connector carries and `peerIdFromAddress`
 // reads the last /p2p/ component out of it.
@@ -48,17 +49,16 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
+async function post(path: string, body: Record<string, unknown>, headers: Record<string, string> = asOwner): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
     return { status: res.status, json };
 }
 
-const setCap = (body: Record<string, unknown>) => post('/api/local/connectors/credit-cap', body);
+const setCap = (body: Record<string, unknown>, headers?: Record<string, string>) => post('/api/local/connectors/credit-cap', body, headers);
 
 async function getAs(path: string, headers: Record<string, string> = {}): Promise<{ status: number; text: string; json: any }> {
     const res = await fetch(`${BASE}${path}`, { headers });
@@ -100,16 +100,11 @@ async function main() {
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
-    const alone = await post('/api/local/connectors', {
-        password: PW, address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
-    });
-    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa' && getConnectorByAddress(ADDRESS) === null,
-        `setup: 2FA off, the password alone → 403 password_needs_2fa, no connector added (got ${alone.status} ${alone.json?.code})`);
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
 
     // ── The operator's own path: add the peer, then choose a limit for it. ────────────────────────────────
     const added = await post('/api/local/connectors', {
-        password: PW, address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
+        address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
     });
     assert(added.status === 200, `setup: peer connector added over HTTP (got ${added.status})`);
     assert(getConnectorByAddress(ADDRESS) !== null, 'setup: the connector is readable back by address');
@@ -120,42 +115,42 @@ async function main() {
         `1. with no cap chosen, settlement refuses with no_cap_configured (got ok=${before.ok} reason=${reasonOf(before)})`);
 
     // ── 2. Auth. The cap decides how much credit this community hands out, so it is admin-gated. ──────────
-    const noPw = await setCap({ address: ADDRESS, cap: 100 });
-    assert(noPw.status === 401, `2a. a missing password is rejected (got ${noPw.status})`);
+    const noPw = await setCap({ address: ADDRESS, cap: 100 }, {});
+    assert(noPw.status === 401, `2a. a request with no credential is rejected (got ${noPw.status})`);
     assert(getConnectorCreditCap(ADDRESS) === null, '2b. a rejected request sets nothing');
 
-    const badPw = await setCap({ password: 'nope', address: ADDRESS, cap: 100 });
-    assert(badPw.status === 401, `2c. a wrong password is rejected (got ${badPw.status})`);
+    const badPw = await setCap({ address: ADDRESS, cap: 100 }, NO_SUCH_SESSION);
+    assert(badPw.status === 401, `2c. a wrong credential (a key session this node never opened) is rejected (got ${badPw.status})`);
     assert(getConnectorCreditCap(ADDRESS) === null, '2d. still nothing set');
 
     // ── 3. Shape. ─────────────────────────────────────────────────────────────────────────────────────────
-    const noAddr = await setCap({ password: PW, cap: 100 });
+    const noAddr = await setCap({ cap: 100 });
     assert(noAddr.status === 400, `3a. a missing address is a 400 (got ${noAddr.status})`);
 
-    const unknown = await setCap({ password: PW, address: '/ip4/10.0.0.9/tcp/4001/p2p/12D3KooWNotAConnector', cap: 100 });
+    const unknown = await setCap({ address: '/ip4/10.0.0.9/tcp/4001/p2p/12D3KooWNotAConnector', cap: 100 });
     assert(unknown.status === 404, `3b. an address that is not one of our connectors is a 404 (got ${unknown.status})`);
 
     // THE OMISSION GUARD. An absent `cap` must not clear the cap, because clearing refuses every future
     // settlement with this peer — a client that dropped the field, or a truncated body, would otherwise freeze
     // a trading relationship silently. `null` clears (tested at 6); missing is a mistake.
-    const absent = await setCap({ password: PW, address: ADDRESS });
+    const absent = await setCap({ address: ADDRESS });
     assert(absent.status === 400 && /required/i.test(absent.json?.error ?? ''),
         `3c. an ABSENT cap is a 400, not a silent clear (got ${absent.status} ${absent.json?.error ?? ''})`);
 
-    const stringCap = await setCap({ password: PW, address: ADDRESS, cap: '100' });
+    const stringCap = await setCap({ address: ADDRESS, cap: '100' });
     assert(stringCap.status === 400, `3d. a string cap is a 400, not coerced (got ${stringCap.status})`);
     assert(getConnectorCreditCap(ADDRESS) === null, '3e. none of the malformed requests set a cap');
 
-    const negative = await setCap({ password: PW, address: ADDRESS, cap: -50 });
+    const negative = await setCap({ address: ADDRESS, cap: -50 });
     assert(negative.status === 400, `3f. a negative cap is rejected, not coerced (got ${negative.status})`);
 
-    const nan = await setCap({ password: PW, address: ADDRESS, cap: Number.NaN });
+    const nan = await setCap({ address: ADDRESS, cap: Number.NaN });
     // NaN does not survive JSON.stringify — it arrives as null, which is the documented "clear" value. This is
     // asserted rather than ignored so the behaviour is on the record: it clears, and clearing is already safe.
     assert(nan.status === 200, `3g. NaN arrives as JSON null and is treated as a clear (got ${nan.status})`);
 
     // ── 4. The happy path, and the thing it unblocks. ─────────────────────────────────────────────────────
-    const set = await setCap({ password: PW, address: ADDRESS, cap: 100 });
+    const set = await setCap({ address: ADDRESS, cap: 100 });
     assert(set.status === 200 && set.json?.creditCap === 100,
         `4a. a cap of 100 is accepted and echoed back (got ${set.status} cap=${set.json?.creditCap})`);
     assert(getConnectorCreditCap(ADDRESS) === 100, '4b. the cap is readable back through the accessor');
@@ -171,7 +166,7 @@ async function main() {
     // ── 5. ZERO IS A REAL CAP, NOT AN ABSENT ONE. "Stay connected, extend no credit" is a position an
     //      operator may hold, and it must not collapse into "no cap configured", which is a different state
     //      with a different message. `creditCap ?? null` preserves 0 — this is the check that keeps it that way.
-    const zero = await setCap({ password: PW, address: ADDRESS, cap: 0 });
+    const zero = await setCap({ address: ADDRESS, cap: 0 });
     assert(zero.status === 200 && zero.json?.creditCap === 0, `5a. a cap of 0 is accepted (got ${zero.status} cap=${zero.json?.creditCap})`);
     assert(getConnectorCreditCap(ADDRESS) === 0, '5b. 0 survives the accessor and is not flattened to null');
     const atZero = settlementCapacity(PEER_ID, ADDRESS, 5);
@@ -180,7 +175,7 @@ async function main() {
         + `(got reason=${reasonOf(atZero)})`);
 
     // ── 6. Clearing is deliberate and returns the pair to fail-closed. ───────────────────────────────────
-    const cleared = await setCap({ password: PW, address: ADDRESS, cap: null });
+    const cleared = await setCap({ address: ADDRESS, cap: null });
     assert(cleared.status === 200 && cleared.json?.creditCap === null,
         `6a. an explicit null clears the cap (got ${cleared.status} cap=${cleared.json?.creditCap})`);
     assert(getConnectorCreditCap(ADDRESS) === null, '6b. the cap is gone');
@@ -192,8 +187,8 @@ async function main() {
     //      addresses, how much credit it extends to each, the trust levels and the links' error strings: the
     //      community's federation posture, for its admins. The dashboard's identity stays public, as elsewhere.
     const BLOCKED_ADDR = '/ip4/198.51.100.23/tcp/4001/p2p/12D3KooWBlockedTestPeerIdPlaceholder000000';
-    const blockedAdded = await post('/api/local/connectors', { password: PW, address: BLOCKED_ADDR, trustLevel: 'blocked', callsign: 'shunned' });
-    const capped = await setCap({ password: PW, address: ADDRESS, cap: 250 });
+    const blockedAdded = await post('/api/local/connectors', { address: BLOCKED_ADDR, trustLevel: 'blocked', callsign: 'shunned' });
+    const capped = await setCap({ address: ADDRESS, cap: 250 });
     assert(blockedAdded.status === 200 && capped.status === 200, `7. setup: a blocked peer added and a cap of 250 set (got ${blockedAdded.status} ${capped.status})`);
     /** Nothing of the link list in an answer: no address, no cap, no trust level. */
     const holdsNoLinks = (text: string) => !text.includes(PEER_ID) && !text.includes('198.51.100.23') && !/creditCap|trustLevel|blocked/.test(text);
@@ -208,7 +203,7 @@ async function main() {
         ['no credential', () => ({})],
         ['a member\'s signed request', () => member.signed('GET', LIST)],
         ['a moderator\'s key session', () => modHeaders],
-        ['a wrong password', () => ({ 'X-Admin-Password': 'nope', 'X-Admin-TOTP': tfa!.code() })],
+        ['a key session this node never opened', () => NO_SUCH_SESSION],
         ['a backups-scope token', () => ownerTokenHeaders('backups')],
     ];
     for (const [who, headers] of refusedCallers) {
@@ -220,7 +215,6 @@ async function main() {
         ['an owner\'s key session', () => ownerSessionHeaders()],
         ['an admin-scope token', () => ownerTokenHeaders('admin')],
         ['a read-scope token', () => ownerTokenHeaders('read')],
-        ['the password with a 2FA code', () => tfa!.headers()],
     ];
     for (const [who, headers] of adminCallers) {
         const r = await getAs(LIST, headers());
@@ -245,9 +239,9 @@ async function main() {
     assert(memberDash.status === 200 && !('connectors' in (memberDash.json ?? {})) && holdsNoLinks(memberDash.text)
         && JSON.stringify(memberDash.json?.identity) === JSON.stringify(anonDash.json?.identity),
         `7e. GET ${DASH} as a member → the same public identity, no links (got ${memberDash.status} ${memberDash.text.slice(0, 120)})`);
-    const badDash = await getAs(DASH, { 'X-Admin-Password': 'nope', 'X-Admin-TOTP': tfa!.code() });
+    const badDash = await getAs(DASH, NO_SUCH_SESSION);
     assert(badDash.status === 401 && holdsNoLinks(badDash.text),
-        `7f. GET ${DASH} with a wrong password → refused, as any admin route refuses it, no links (got ${badDash.status})`);
+        `7f. GET ${DASH} with a wrong credential (a key session this node never opened) → refused, as any admin route refuses it, no links (got ${badDash.status})`);
     for (const [who, headers] of adminCallers) {
         const r = await getAs(DASH, headers());
         const peer = (r.json?.connectors ?? []).find((c: any) => c.address === ADDRESS);

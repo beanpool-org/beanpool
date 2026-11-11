@@ -18,11 +18,11 @@
  *      --code-file or --accept-signer, as the file, or as a restore point's name.
  *   3. A sealed file this server locked, with the code from --code-file: before anything is asked the output shows the
  *      file's community and signer beside this server's own; the database comes back (a row planted after the backup
- *      is gone), the keys and password come back (pinned signer), a restore point holds the row planted after the
+ *      is gone), the keys and connectors.json come back (pinned signer), a restore point holds the row planted after the
  *      backup, the opened plaintext is not left behind, the code is never printed. The notice is delivered once.
  *   4. A wrong code typed at the prompt is refused, and nothing changes. A code file others can read is warned about.
  *   5. `restore-point list` shows the point; `roll-back` asks for `yes`, then brings the old state back (the row and
- *      the password), keeps a point of its own first, and leaves the notice.
+ *      the later connectors.json), keeps a point of its own first, and leaves the notice.
  *   5b. Another community's file goes by its community: --accept-signer on it → exit 2; without, "DIFFERENT" with this
  *      server's name, member count and owners before `yes`; on a standby, a file of its community locked by another
  *      machine names the main server it copies. The count is people: SYSTEM, the genesis row, the Commons pot, escrow,
@@ -31,7 +31,7 @@
  *      line, the DIFFERENT warning there; a community ID that is not 16 hex, or a signer that is not a PeerId → "not a
  *      BeanPool backup", nothing shown or asked.
  *   6. A file of this community locked by another machine: refused without --accept-signer, and with the wrong one;
- *      with it, the database only (no key, password or genesis moves); --with-keys alone is a usage error; with
+ *      with it, the database only (no key, genesis or connectors.json moves); --with-keys alone is a usage error; with
  *      --accept-signer --with-keys, `yes` declined changes nothing, `yes` typed applies its keys.
  *   7. An old unlocked .tar.gz: refused without --unlocked; with it, anything but `UNLOCKED` changes nothing;
  *      `UNLOCKED` restores the database and never the keys.
@@ -53,7 +53,7 @@ import Database from 'better-sqlite3';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { db } from './db/db.js';
 import { ensureGenesis } from './genesis.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
+import { updateLocalConfig } from './config/local-config.js';
 import { makeRecoveryCode } from './services/takeover-envelope.js';
 import { createPlainBackup, createSealedBackup } from './services/sealed-backup.js';
 import { writeDbSnapshot } from './services/snapshot-scheduler.js';
@@ -106,7 +106,8 @@ function hasMember(callsign: string, file = STATE): boolean {
 }
 const points = () => { try { return fs.readdirSync(POINTS).filter((n) => !n.startsWith('.')).sort(); } catch { return [] as string[]; } };
 const notices = () => fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('restore-notice-'));
-const adminHash = () => JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'local-config.json'), 'utf-8')).adminHash as string;
+/** The server's connectors.json: a file the take-over bundle carries and a restore point keeps (the marker of steps 3, 5, 6). */
+const connectors = (): string | null => { try { return fs.readFileSync(path.join(DATA_DIR, 'connectors.json'), 'utf-8'); } catch { return null; } };
 /** The community in the database, read with a connection of its own: who is in it and who holds a role. */
 function people(file = STATE): string {
     const c = new Database(file, { readonly: true, fileMustExist: true });
@@ -118,7 +119,7 @@ function people(file = STATE): string {
  *  the database the way the node does at its start (its own boot rows), as the node's next start would. */
 const state = () => JSON.stringify({
     people: people(), key: sha(path.join(DATA_DIR, 'libp2p_key')), genesis: sha(path.join(DATA_DIR, 'genesis.json')),
-    config: sha(path.join(DATA_DIR, 'local-config.json')), points: points(), notices: notices(),
+    config: sha(path.join(DATA_DIR, 'local-config.json')), connectors: sha(path.join(DATA_DIR, 'connectors.json')), points: points(), notices: notices(),
     leftovers: fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('.restore') || f.startsWith('uploaded-backup')),
 });
 const addMember = (key: string, callsign: string) => db.prepare(
@@ -158,7 +159,7 @@ async function bodyOf(b: { body: AsyncIterable<unknown> }): Promise<Buffer> {
     return Buffer.concat(parts);
 }
 
-// ── The server: a community, its key, an owner, a password, a recovery code ──
+// ── The server: a community, its key, an owner, its connectors, a recovery code ──
 initStateEngine();
 await ensureGenesis();
 const { generateKeyPair, privateKeyToProtobuf, privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
@@ -171,8 +172,10 @@ const communityId: string = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'gene
 const { ed25519 } = await import('@noble/curves/ed25519.js');
 const ownerPub = Buffer.from(ed25519.getPublicKey(crypto.randomBytes(32))).toString('hex');
 seedGenesisMember(ownerPub, 'Olive');
-const PW_AT_BACKUP = hashPassword('Backup-Time-Pw-1!');
-updateLocalConfig({ adminHash: PW_AT_BACKUP.hash, salt: PW_AT_BACKUP.salt, communityName: 'Riverbend Commons' } as any);
+updateLocalConfig({ communityName: 'Riverbend Commons' } as any);
+// The connectors at backup time. The take-over bundle carries connectors.json: a sealed restore brings this back (step 3).
+const CONNECTORS_AT_BACKUP = JSON.stringify([{ address: '/p2p/12D3KooWConnectorAtBackupTime', trustLevel: 'peer', enabled: true, callsign: 'then', addedAt: 1 }]);
+fs.writeFileSync(path.join(DATA_DIR, 'connectors.json'), CONNECTORS_AT_BACKUP);
 
 // An old unlocked backup, made before the code, holding a row of its own.
 addMember('a1'.repeat(32), 'PlainRow');
@@ -197,14 +200,16 @@ addMember('c1'.repeat(32), 'ForgedRow');
 const forgedDb = path.join(work, 'forged-state.db');
 writeDbSnapshot(forgedDb);
 db.prepare('DELETE FROM members WHERE callsign = ?').run('ForgedRow');
+const CONNECTORS_OTHER_MACHINE = JSON.stringify([{ address: '/p2p/12D3KooWOtherMachinesConnector', trustLevel: 'peer', enabled: true, callsign: 'theirs', addedAt: 3 }]);
 const forgedBundle = JSON.stringify({
     v: 1,
     files: {
         libp2p_key: Buffer.from(forgerKeyBytes).toString('base64'),
         'community.key': Buffer.from('other-machine-community-key').toString('base64'),
         'genesis.json': Buffer.from(JSON.stringify({ communityId, otherMachine: true })).toString('base64'),
-        'connectors.json': null,
+        'connectors.json': Buffer.from(CONNECTORS_OTHER_MACHINE).toString('base64'),
     },
+    // An older machine's bundle still carried its admin password's hash and 2FA here: nothing reads it now.
     localConfig: { adminHash: 'other-machine-hash', salt: 'other-machine-salt', totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: null },
     nodeRoles: [], publicAddress: null, recoveryCode: null,
 });
@@ -265,10 +270,10 @@ function peopleCount(file = STATE): number {
 const WAY_OUT = 'If no restore is running: docker ps shows one left open (a container named …-run-…): finish it, or end it with docker rm -f NAME.';
 const NO_LOCKS = 'or this folder is on a file system without working file locks (some network shares), where BeanPool cannot run';
 
-// After the backup: a row, and a new password. The restore must take both away; the roll-back must bring both back.
+// After the backup: a row, and a changed connector list. The restore must take both away; the roll-back must bring both back.
 addMember('d1'.repeat(32), 'AfterBackup');
-const PW_LATER = hashPassword('Changed-Later-Pw-2!');
-updateLocalConfig({ adminHash: PW_LATER.hash, salt: PW_LATER.salt } as any);
+const CONNECTORS_LATER = JSON.stringify([{ address: '/p2p/12D3KooWConnectorChangedLater', trustLevel: 'peer', enabled: true, callsign: 'later', addedAt: 2 }]);
+fs.writeFileSync(path.join(DATA_DIR, 'connectors.json'), CONNECTORS_LATER);
 
 // ── 1. The node is running ──
 console.log('\n— 0. what a file\'s text looks like on the terminal (shown) —');
@@ -446,7 +451,7 @@ let firstPoint = '';
     assert(r.stdout.trim().endsWith(`Delete ${codeFile} now: it holds the recovery code.`) && !r.out.includes('can be read by other users'),
         '3. after a restore with --code-file: "Delete F now"; a file only its owner reads is not warned about');
     assert(hasMember('BeforeBackup') && !hasMember('AfterBackup'), '3. the backup\'s database is in place: the row planted after it is gone');
-    assert(adminHash() === PW_AT_BACKUP.hash, '3. pinned signer: the bundle came back (the admin password is the one at backup time)');
+    assert(connectors() === CONNECTORS_AT_BACKUP, `3. pinned signer: the bundle came back (connectors.json is the one at backup time: ${connectors()})`);
     assert(sha(path.join(DATA_DIR, 'libp2p_key')) === crypto.createHash('sha256').update(nodeKeyBytes).digest('hex'), '3. the node key is this server\'s, byte for byte');
     const ps = points();
     firstPoint = ps[0] ?? '';
@@ -489,7 +494,7 @@ console.log('\n— 5. restore-point list, roll-back —');
     assert(no.code === 1 && state() === before, `5. roll-back without "yes" → exit 1, nothing changed (exit ${no.code})`);
     const r = cli(['restore-point', 'roll-back', firstPoint], 'yes\n');
     assert(r.code === 0, `5. roll-back with "yes" → exit 0 (exit ${r.code}: ${r.out.trim().slice(-300)})`);
-    assert(hasMember('AfterBackup') && adminHash() === PW_LATER.hash, '5. the old state is back: the row planted after the backup, and the later password');
+    assert(hasMember('AfterBackup') && connectors() === CONNECTORS_LATER, '5. the old state is back: the row planted after the backup, and the later connectors.json');
     const ps = points();
     const own = ps.find((n) => /-before-roll-back$/.test(n));
     assert(ps.length === 2 && !!own && hasMember('BeforeBackup', path.join(POINTS, own!, 'state.db')) && !hasMember('AfterBackup', path.join(POINTS, own!, 'state.db')),
@@ -591,8 +596,8 @@ console.log('\n— 6. --accept-signer, --with-keys —');
 
     const dbOnly = cli(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, forgedFile]);
     assert(dbOnly.code === 0 && hasMember('ForgedRow'), `6. --accept-signer → exit 0, its database is in place (exit ${dbOnly.code}: ${dbOnly.out.trim().slice(-200)})`);
-    assert(sha(path.join(DATA_DIR, 'libp2p_key')) === keyBefore && sha(path.join(DATA_DIR, 'genesis.json')) === genesisBefore && adminHash() === PW_LATER.hash,
-        '6. the database only: the node key, genesis and admin password are this server\'s still');
+    assert(sha(path.join(DATA_DIR, 'libp2p_key')) === keyBefore && sha(path.join(DATA_DIR, 'genesis.json')) === genesisBefore && connectors() === CONNECTORS_LATER,
+        '6. the database only: the node key, genesis and connectors.json are this server\'s still');
     assert(points().length === 3, '6. a restore point was kept first');
 
     before = state();
@@ -601,8 +606,8 @@ console.log('\n— 6. --accept-signer, --with-keys —');
         `6. --with-keys says what it replaces; anything but "yes" → exit 1, nothing changed (exit ${declined.code})`);
     const withKeys = cli(['restore', '--code-file', codeFile, '--accept-signer', forgerPeer, '--with-keys', forgedFile], 'yes\n');
     assert(withKeys.code === 0 && sha(path.join(DATA_DIR, 'libp2p_key')) === crypto.createHash('sha256').update(forgerKeyBytes).digest('hex')
-        && adminHash() === 'other-machine-hash',
-        `6. --with-keys and "yes" → exit 0, its keys and password are applied (exit ${withKeys.code}: ${withKeys.out.trim().slice(-200)})`);
+        && connectors() === CONNECTORS_OTHER_MACHINE && !JSON.stringify(JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'local-config.json'), 'utf-8'))).includes('other-machine-hash'),
+        `6. --with-keys and "yes" → exit 0, its keys and connectors.json are applied, and nothing of its old admin password (exit ${withKeys.code}: ${withKeys.out.trim().slice(-200)})`);
     assert(points().length === 4, '6. and a restore point was kept first');
     delivered();
 }

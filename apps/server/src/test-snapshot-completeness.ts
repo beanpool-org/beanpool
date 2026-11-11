@@ -71,7 +71,6 @@ import { setMemberPhoto } from '@beanpool/engine';
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-const ADMIN_PW = 'Snapshot-Completeness-Pw-41!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -119,8 +118,8 @@ function extract(tarPath: string, into: string): string {
     return into;
 }
 
-// Step 7c: the password alone opens no admin route with 2FA off; the operator's calls go under an owner's key session
-// (backups and snapshots are an owner's).
+// The operator's calls go under an owner's key session (backups and snapshots are an owner's; the node has no admin
+// password).
 let ADMIN: Record<string, string> = {};
 
 /** Download a route to a file, with the headers it answered. */
@@ -210,7 +209,6 @@ async function main(): Promise<void> {
     const { initStateEngine, seedGenesisMember, createPost, updatePost, setMemberPreferences } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const {
@@ -230,8 +228,6 @@ async function main(): Promise<void> {
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(DATA_DIR, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
     ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -556,7 +552,7 @@ async function main(): Promise<void> {
 
     const deleted = await fetch(`${BASE}/api/local/admin/snapshots/delete`, {
         method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: ADMIN_PW, name: survivor.name }),
+        body: JSON.stringify({ name: survivor.name }),
     });
     // No route deletes a snapshot (design case 18, A3): the scheduler's pruning above is the only way one goes.
     assert(deleted.status === 404, `the delete route is gone: 404 (${deleted.status})`);

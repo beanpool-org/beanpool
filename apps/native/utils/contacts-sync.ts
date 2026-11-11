@@ -23,6 +23,7 @@
  * (`node_full`), or that took too many saves this hour, is left alone for a while and named in the Contacts screen's footer.
  */
 import type { ContactsList } from '@beanpool/core';
+import { onAccountOnPhone } from './account-on-phone';
 import {
     changeContacts, contactsRecordChanged, inTurn, loadContacts, phoneContactsDeps, readOnPhone, readStateFor, takeInCopy, writeState,
     type ContactsAccount, type ContactsOnPhone, type ContactsRefusal, type ContactsStoreDeps, type ContactsSyncState,
@@ -66,6 +67,21 @@ export function decide(community: string, s: ContactsSyncState, onPhone: Contact
     if (heard === null) return seq > 0 && contactsDue(s, now) ? 'put' : 'level';
     if (heard !== s.merged[community]) return 'fetch';
     return seq > heard && contactsDue(s, now) ? 'put' : 'level';
+}
+
+/**
+ * Where the phone's latest copy is kept (design §3.6's footer): `at`, the communities holding exactly it, in the phone's
+ * order; `off`, those that keep no lists (their owners' switch, or a server from before them). With none `at`, the list is
+ * on this phone only: BeanPool tries again while any community might take it, and a file is the way to keep it safe when
+ * none can (`off` is every one).
+ */
+export function contactsKeptAt(s: ContactsSyncState, onPhone: ContactsOnPhone, communities: readonly string[]): { at: string[]; off: string[]; savedAt: number | null } {
+    const seq = onPhone.kind === 'list' ? onPhone.seq : 0;
+    return {
+        at: communities.filter((c) => seq > 0 && s.heard[c] === seq && s.merged[c] === seq),
+        off: communities.filter((c) => s.refused[c]?.code === 'contacts_off'),
+        savedAt: s.savedAt,
+    };
 }
 
 const codeOf = (body: unknown): string | null => {
@@ -184,7 +200,8 @@ async function level(account: ContactsAccount, community: string, deps: Contacts
     }
 }
 
-let passing: Promise<void> | null = null;
+/** The pass under way for each account. */
+const passing = new Map<string, Promise<void>>();
 
 /** The number of the list on the phone, or 0. */
 async function fileSeqOf(account: ContactsAccount, deps: ContactsSyncDeps): Promise<number> {
@@ -201,8 +218,10 @@ const ROUNDS_MAX = 3;
  */
 export function syncContacts(account: ContactsAccount | null, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<void> {
     if (!account?.publicKey || !account.privateKey) return Promise.resolve();
-    if (passing) return passing;
-    passing = (async () => {
+    const key = account.publicKey.toLowerCase();
+    const running = passing.get(key);
+    if (running) return running;
+    const pass = (async () => {
         const { anchor, kept } = await deps.communities();
         const order = [...new Set([anchor, ...kept].filter((c): c is string => !!c))];
         for (let round = 0; round < ROUNDS_MAX; round++) {
@@ -211,8 +230,9 @@ export function syncContacts(account: ContactsAccount | null, deps: ContactsSync
             if (await fileSeqOf(account, deps) === before) break;
         }
         await forgetLeft(account, order, deps);
-    })().catch((e) => console.warn('[Contacts] A pass over the communities failed', e)).finally(() => { passing = null; });
-    return passing;
+    })().catch((e) => console.warn('[Contacts] A pass over the communities failed', e)).finally(() => { passing.delete(key); });
+    passing.set(key, pass);
+    return pass;
 }
 
 /** What the record says of communities the phone no longer keeps goes: the footer names only where copies are. */
@@ -249,7 +269,8 @@ export async function contactsHeard(account: ContactsAccount | null, community: 
     }
 }
 
-let lastHere = 0;
+/** When each account last asked the community in use (ms). */
+const lastHere = new Map<string, number>();
 /** How often the community in use is asked its number, at most. */
 export const CHECK_HERE_GAP_MS = 60 * 1000;
 
@@ -260,8 +281,10 @@ export const CHECK_HERE_GAP_MS = 60 * 1000;
 export async function checkContactsHere(account: ContactsAccount | null, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<void> {
     if (!account?.publicKey || !account.privateKey) return;
     const now = (deps.now ?? Date.now)();
-    if (now - lastHere < CHECK_HERE_GAP_MS && now >= lastHere) return;
-    lastHere = now;
+    const key = account.publicKey.toLowerCase();
+    const last = lastHere.get(key) ?? -Infinity;
+    if (now - last < CHECK_HERE_GAP_MS && now >= last) return;
+    lastHere.set(key, now);
     try {
         const { anchor } = await deps.communities();
         if (anchor) {
@@ -276,27 +299,39 @@ export async function checkContactsHere(account: ContactsAccount | null, deps: C
 
 /** For a test: forget when the community in use was last asked. */
 export function resetContactsCheckForTests(): void {
-    lastHere = 0;
+    lastHere.clear();
 }
 
-let timer: ReturnType<typeof setTimeout> | null = null;
+let timer: { at: ReturnType<typeof setTimeout>; for: string } | null = null;
+
+function stopTimer(): void {
+    if (timer) clearTimeout(timer.at);
+    timer = null;
+}
+
+// A save set for an account that has since left the phone never goes: its pass would be signed with a key the phone no
+// longer holds, to the communities of the account that replaced it.
+onAccountOnPhone((publicKey) => {
+    if (timer && timer.for !== (publicKey ?? '').toLowerCase()) stopTimer();
+});
 
 /**
  * A pass when the member's latest change is due to leave the phone (its wait, design §4.5): set after each change, and as
  * the app opens with a change still waiting. One timer for the phone; a later call replaces it. Never throws.
  */
 export async function savePassWhenDue(account: ContactsAccount | null, deps: ContactsSyncDeps = phoneSyncDeps()): Promise<void> {
-    if (timer) clearTimeout(timer);
-    timer = null;
+    stopTimer();
     if (!account?.publicKey) return;
     try {
         const { state } = await loadContacts(account, deps);
         if (state.dueAt === null) return;
         const wait = Math.max(0, state.dueAt - (deps.now ?? Date.now)());
-        timer = setTimeout(() => {
+        stopTimer();
+        const at = setTimeout(() => {
             timer = null;
             void syncContacts(account, deps);
         }, wait + 1000);
+        timer = { at, for: account.publicKey.toLowerCase() };
     } catch (e) {
         console.warn('[Contacts] The save could not be set for later', e);
     }

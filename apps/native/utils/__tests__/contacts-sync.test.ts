@@ -10,7 +10,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { newContactId, putContact, readContactsCopy, removeEveryContact, type ContactsCopyWire } from '@beanpool/core';
 import { contactsSyncStoreKey, loadContacts, readSyncState, type ContactsAccount } from '../contacts-store';
 import {
-    CONTACTS_COPY_PATH, checkContactsHere, contactsHeard, decide, editContacts, resetContactsCheckForTests, syncContacts,
+    CONTACTS_COPY_PATH, checkContactsHere, contactsHeard, contactsKeptAt, decide, editContacts, resetContactsCheckForTests, syncContacts,
     type ContactsNet, type ContactsSyncDeps,
 } from '../contacts-sync';
 
@@ -83,6 +83,8 @@ const names = async (me: ContactsAccount, deps: ContactsSyncDeps) => {
     return onPhone.kind === 'list' ? onPhone.list.contacts.map((c) => c.name).sort() : [];
 };
 const WAIT = 16 * 60 * 1000;
+/** Lets a pass the timer started run to its end (setImmediate isn't faked here). */
+const settle = async () => { for (let i = 0; i < 100; i++) await new Promise((r) => setImmediate(r)); };
 
 beforeEach(() => {
     resetContactsCheckForTests();
@@ -115,18 +117,28 @@ describe('a change leaves the phone only after its wait, and only to a community
         await editContacts(me, (l) => putContact(l, person1('Sam Jones')), other.deps);
         other.clock.now += WAIT;
         await syncContacts(me, other.deps);
-        // This phone adds Dee without having seen Sam, and its number would go past Byron's (heard from elsewhere).
-        const p = phone({ [BYRON]: byron }, BYRON);
-        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
-        p.clock.now += WAIT;
+        // This phone, on Global alone so far, saves three times there: its number (3) goes past Byron's (1) without Sam.
+        const global = new FakeCommunity();
+        const kept: Record<string, FakeCommunity> = { [GLOBAL]: global };
+        const p = phone(kept, GLOBAL);
+        for (const name of ['Dee Walker', 'Ana Li', 'Ben Ode']) {
+            await editContacts(me, (l) => putContact(l, person1(name)), p.deps);
+            p.clock.now += WAIT;
+            await syncContacts(me, p.deps);
+        }
+        expect(global.copies.get(me.publicKey)?.seq).toBe(3);
+        // Then the member joins Byron on this phone.
+        kept[BYRON] = byron;
+        p.requests.length = 0;
         await syncContacts(me, p.deps);
-        expect(p.requests.map((r) => `${r.method} ${r.path}`)).toEqual(['GET /api/me/unread', `GET ${CONTACTS_COPY_PATH}`, `PUT ${CONTACTS_COPY_PATH}`]);
-        expect(await names(me, p.deps)).toEqual(['Dee Walker', 'Sam Jones']);
-        // What Byron keeps now holds both.
+        expect(p.requests.filter((r) => r.community === BYRON).map((r) => `${r.method} ${r.path}`))
+            .toEqual(['GET /api/me/unread', `GET ${CONTACTS_COPY_PATH}`, `PUT ${CONTACTS_COPY_PATH}`]);
+        expect(await names(me, p.deps)).toEqual(['Ana Li', 'Ben Ode', 'Dee Walker', 'Sam Jones']);
+        // What Byron keeps now holds everyone, Sam included.
         const q = phone({ [BYRON]: byron }, BYRON);
         await checkContactsHere(me, q.deps);
-        expect(await names(me, q.deps)).toEqual(['Dee Walker', 'Sam Jones']);
-        // Mutation: decide() → 'put' when heard ≠ merged → Byron keeps Dee alone and Sam is gone from it.
+        expect(await names(me, q.deps)).toEqual(['Ana Li', 'Ben Ode', 'Dee Walker', 'Sam Jones']);
+        // Mutation: decide() → 'put' when the phone's number is past the one heard → Byron's copy is replaced without Sam.
     });
 
     it('a 409 stale_copy (another phone saved meanwhile) is fetched, merged and saved again, ending with both phones\' people', async () => {
@@ -275,6 +287,56 @@ describe('what leaves the phone (design §11: the recording node)', () => {
             vi.doUnmock('@react-native-async-storage/async-storage');
             vi.doUnmock('expo-crypto');
         }
+    });
+});
+
+describe('the save set for later', () => {
+    it('goes when the wait is over, and never for an account that has left the phone meanwhile', async () => {
+        const byron = new FakeCommunity();
+        const me = person();
+        const p = phone({ [BYRON]: byron }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        await vi.advanceTimersByTimeAsync(60_000);
+        await settle();
+        expect(p.requests).toEqual([]);
+        p.clock.now += WAIT;
+        await vi.advanceTimersByTimeAsync(WAIT);
+        await settle();
+        expect(byron.copies.get(me.publicKey)?.seq).toBe(1);
+
+        const q = phone({ [BYRON]: byron }, BYRON);
+        const her = person();
+        await editContacts(her, (l) => putContact(l, person1('Sam Jones')), q.deps);
+        // Sign Out (identity.ts announces the phone's key going): the save set for her never fires.
+        const { announceAccountOnPhone } = await import('../account-on-phone');
+        announceAccountOnPhone(null);
+        q.clock.now += WAIT;
+        await vi.advanceTimersByTimeAsync(WAIT);
+        await settle();
+        expect(q.requests).toEqual([]);
+        expect(byron.copies.get(her.publicKey)).toBeUndefined();
+        // Mutation: drop the onAccountOnPhone listener → the timer fires and her copy is sent after she signed out.
+    });
+});
+
+describe('where the copy is kept (the Contacts footer)', () => {
+    it('names the communities holding exactly the phone\'s copy, and those that keep no lists', async () => {
+        const byron = new FakeCommunity();
+        const global = new FakeCommunity();
+        global.off = true;
+        const me = person();
+        const p = phone({ [BYRON]: byron, [GLOBAL]: global }, BYRON);
+        await editContacts(me, (l) => putContact(l, person1('Dee Walker')), p.deps);
+        let { onPhone, state } = await loadContacts(me, p.deps);
+        expect(contactsKeptAt(state, onPhone, [BYRON, GLOBAL])).toEqual({ at: [], off: [], savedAt: null });
+        p.clock.now += WAIT;
+        await syncContacts(me, p.deps);
+        ({ onPhone, state } = await loadContacts(me, p.deps));
+        expect(contactsKeptAt(state, onPhone, [BYRON, GLOBAL])).toEqual({ at: [BYRON], off: [GLOBAL], savedAt: p.clock.now });
+        // A change not yet sent: Byron holds the one before, so it isn't named as keeping this one.
+        await editContacts(me, (l) => putContact(l, person1('Sam Jones')), p.deps);
+        ({ onPhone, state } = await loadContacts(me, p.deps));
+        expect(contactsKeptAt(state, onPhone, [BYRON, GLOBAL]).at).toEqual([]);
     });
 });
 

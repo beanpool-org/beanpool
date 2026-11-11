@@ -11,6 +11,7 @@
 import crypto from 'node:crypto';
 import { sealSeedToSso, openSeedFromSso } from '@beanpool/core';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const GOOGLE_KID = 'test-recovery-seal-s2-google-kid';
 const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
@@ -95,7 +96,8 @@ export async function startRecoveryHttps(): Promise<RecoveryHttps> {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Public-Key': id.pk,
-                'X-Signature': crypto.sign(null, Buffer.from(`POST\n${p}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64'),
+                'X-Signature': signRequest(id.priv, { method: 'POST', path: p, timestamp: ts, nonce, body: bodyString }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             },

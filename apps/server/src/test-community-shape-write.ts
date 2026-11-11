@@ -29,6 +29,7 @@
 import crypto from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Shape } from './config/community-shape.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // The flags the server reads at import, set before anything is imported (every import below is dynamic).
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -123,7 +124,8 @@ async function main(): Promise<void> {
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             headers['X-Public-Key'] = id.pk;
-            headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64');
+            headers['X-Signature'] = signRequest(id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }

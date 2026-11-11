@@ -31,6 +31,7 @@ process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1';
 process.env.DIRECTORY_UNLISTED = '1';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const PW = 'PreviewPasswordConfig1!';
 
@@ -56,7 +57,8 @@ async function call(method: string, urlPath: string, opts: { id?: Id | null; hea
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), opts.id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

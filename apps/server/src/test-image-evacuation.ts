@@ -46,6 +46,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -269,10 +270,11 @@ async function main(): Promise<void> {
     const signAttach = () => {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `GET\n${attachPath}\n${ts}\n${nonce}\n`;
+        const canonical = { method: 'GET', path: attachPath, timestamp: ts, nonce };
         return {
             'X-Public-Key': participantPubkey,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), privKey).toString('base64'),
+            'X-Signature': signRequest(privKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         };

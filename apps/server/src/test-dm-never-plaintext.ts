@@ -41,6 +41,7 @@ import { lockedColumn, lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { DM_REFUSED_LINES } from '@beanpool/core/dm-line-vectors';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 /** A line as an app before 1.4.0 seals it, frozen in core's vectors: format 3, the AEAD output alone, its signature beside it. */
 const format3 = DM_REFUSED_LINES[0];
@@ -91,7 +92,8 @@ async function call(method: 'GET' | 'POST', signer: Id, path: string, body?: unk
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

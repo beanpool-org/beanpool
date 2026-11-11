@@ -38,6 +38,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import {
     cacheRemoteListings, listingsForPeer, REMOTE_ID_PREFIX, LISTING_PULL_INTERVAL_MS,
 } from './federation-listings.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -130,14 +131,15 @@ async function signedPost(
     const bodyString = JSON.stringify(body ?? {});
     const timestamp = String(Date.now());
     const nonce = crypto.randomUUID();
-    const canonical = `POST\n${path}\n${timestamp}\n${nonce}\n${bodyString}`;
-    const signature = crypto.sign(null, Buffer.from(canonical), signer.privateKey).toString('base64');
+    const canonical = { method: 'POST', path, timestamp, nonce, body: bodyString };
+    const signature = signRequest(signer.privateKey, canonical);
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': signer.publicKey,
             'X-Signature': signature,
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': timestamp,
             'X-Nonce': nonce,
         },

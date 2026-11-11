@@ -24,6 +24,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -50,8 +51,8 @@ async function postJson(path: string, body: any, headers: Record<string, string>
 async function redeemAs(kp: ReturnType<typeof makeKeypair>, body: { code: string; publicKey: string; callsign: string }): Promise<{ status: number; body: any }> {
     const ts = String(Date.now());
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`POST\n/api/invite/redeem\n${ts}\n${nonce}\n${JSON.stringify(body)}`), kp.privateKey).toString('base64');
-    return postJson('/api/invite/redeem', body, { 'X-Public-Key': kp.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce });
+    const sig = signRequest(kp.privateKey, { method: 'POST', path: '/api/invite/redeem', timestamp: ts, nonce, body: JSON.stringify(body) });
+    return postJson('/api/invite/redeem', body, { 'X-Public-Key': kp.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce });
 }
 
 function makeKeypair() {

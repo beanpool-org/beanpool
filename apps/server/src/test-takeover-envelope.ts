@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -436,7 +437,8 @@ async function main() {
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             headers['X-Public-Key'] = w.pub;
-            headers['X-Signature'] = Buffer.from(ed25519.sign(Buffer.from(`GET\n${p}\n${ts}\n${nonce}\n`), w.seed)).toString('base64');
+            headers['X-Signature'] = signRequest(w.seed, { method: 'GET', path: p, timestamp: ts, nonce });
+            headers[SIGNED_FOR_HEADER] = signedForHost();
             headers['X-Timestamp'] = String(ts);
             headers['X-Nonce'] = nonce;
         }

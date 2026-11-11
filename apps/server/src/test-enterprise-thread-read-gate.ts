@@ -25,6 +25,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createTreasury, postEnterpriseThreadMessage } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const OPEN = process.env.ENFORCE_READ_AUTH === 'false';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -57,9 +58,10 @@ async function read(path: string, id?: Identity, method: 'GET' | 'HEAD' = 'GET')
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

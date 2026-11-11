@@ -48,6 +48,7 @@ import { formerKeysReader } from './engine/key-succession.js';
 import { dmPublicKeyOf, keySuccessionCanonical, makeKeySuccession, walkKeySuccession, KEY_SUCCESSION_MAX } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -87,7 +88,8 @@ async function call(method: 'GET' | 'POST', signer: Id, path: string, body?: unk
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

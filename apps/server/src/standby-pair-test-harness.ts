@@ -15,6 +15,7 @@ import crypto from 'node:crypto';
 import { privateKeyFromProtobuf, publicKeyToProtobuf } from '@libp2p/crypto/keys';
 import { spawnNode, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 export const PW_MAIN = 'Paged-Copies-Main-Pw-7719!';
 export const PW_STANDBY = 'Paged-Copies-Standby-Pw-3304!';
@@ -83,7 +84,8 @@ export async function api(base: string, method: 'GET' | 'POST', route: string, o
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), opts.as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.as.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

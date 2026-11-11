@@ -34,6 +34,7 @@ delete process.env.GOOGLE_CLIENT_IDS;
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Nothing in this suite may reach a real identity provider or any other host, even if a regression opens a door that
 // should be shut: every request that is not to this machine fails as unreachable, which the sign-in code answers with 503.
@@ -101,7 +102,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = as ?? id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

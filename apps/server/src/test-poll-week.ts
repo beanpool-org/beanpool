@@ -50,6 +50,7 @@ import { db } from './db/db.js';
 import { initStateEngine, createPost, closePoll, removePost, adminDeletePost, pausePost, resumePost, createGroup, joinGroup, createDecision } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { assertPollStartRoom, nextPollStartAt, POLL_START_WINDOW_MS } from './engine/poll-week.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -100,7 +101,8 @@ function signedHeaders(method: string, p: string, body: string, id: Id): Record<
     const nonce = crypto.randomBytes(16).toString('hex');
     return {
         'X-Public-Key': id.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${p.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: p.split('?')[0], timestamp: ts, nonce, body }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
 }
 async function send(method: string, p: string, payload: unknown, headers: Record<string, string>): Promise<{ status: number; cache: string | null; body: any }> {

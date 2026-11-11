@@ -33,6 +33,7 @@ import { db } from './db/db.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { SERVER_FAULT_TEXT } from './routes/member-error-text.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -67,13 +68,14 @@ async function signedPost(path: string, body: unknown, id: Id) {
     const bodyString = JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `POST\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method: 'POST', path, timestamp: ts, nonce, body: bodyString };
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pubKeyHex,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

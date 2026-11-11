@@ -30,6 +30,7 @@ import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { db } from './db/db.js';
 import { grantNodeRole } from './state-engine.js';
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -79,8 +80,8 @@ function seedMember(callsign: string, role?: 'moderator'): { pub: string; signed
     if (role) grantNodeRole(pub, role, 'SYSTEM');
     const signed = (method: string, path: string) => {
         const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-        const sig = crypto.sign(null, Buffer.from(`${method}\n${path}\n${ts}\n${nonce}\n`), privateKey).toString('base64');
-        return { 'X-Public-Key': pub, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+        const sig = signRequest(privateKey, { method, path, timestamp: ts, nonce });
+        return { 'X-Public-Key': pub, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
     };
     return { pub, signed };
 }

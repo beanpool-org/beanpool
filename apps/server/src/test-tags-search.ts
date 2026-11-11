@@ -44,6 +44,7 @@ import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { cacheRemoteListings, listingsForPeer } from './federation-listings.js';
 import { postSearchKeywords, postSearchKeywordsWithSynonyms } from './engine/search-keywords.js';
 import { TEST_PHOTO } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -84,7 +85,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

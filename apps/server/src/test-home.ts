@@ -97,6 +97,7 @@ import { lockedDm } from './dm-test-payload.js';
 // The server runs in this process with a 5 s keep-alive; the money section pays 1000 times without yielding, and on CI's
 // Node 22 the next request then reused a socket the server had closed ("fetch failed", four runs on 24 Oct).
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const MODE = `[${RUN}]`;
 let run = 0, passed = 0;
@@ -140,7 +141,8 @@ function signedHeaders(method: string, urlPath: string, body: string, id: Id): R
     const nonce = crypto.randomBytes(16).toString('hex');
     return {
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${body}`), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

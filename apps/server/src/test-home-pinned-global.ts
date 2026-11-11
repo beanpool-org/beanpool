@@ -21,6 +21,7 @@ import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -42,9 +43,9 @@ async function request(method: 'GET' | 'POST', pathAndQuery: string, body: unkno
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `${method}\n${pathAndQuery.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: pathAndQuery.split('?')[0], timestamp: ts, nonce, body: bodyString };
         Object.assign(headers, {
-            'X-Public-Key': id.pubKeyHex, 'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Public-Key': id.pubKeyHex, 'X-Signature': signRequest(id.privateKey, canonical),
             'X-Timestamp': String(ts), 'X-Nonce': nonce,
         });
     }

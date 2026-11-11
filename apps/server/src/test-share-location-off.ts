@@ -34,6 +34,7 @@ process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 process.env.ADMIN_PASSWORD = 'ShareLocationOff123!';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -55,7 +56,8 @@ async function get(urlPath: string, id: Id | null = null, extra: Record<string, 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method: 'GET', path: urlPath.split('?')[0], timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

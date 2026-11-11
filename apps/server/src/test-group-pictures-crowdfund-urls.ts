@@ -46,6 +46,7 @@ import readline from 'node:readline';
 import WebSocket from 'ws';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const HERE = fileURLToPath(import.meta.url);
 
@@ -75,7 +76,7 @@ function newKey(): Key {
 }
 
 type Res = { status: number; text: string; headers: Headers; bytes: Buffer; body: any };
-/** A member's signed request, as the apps send one (the older request format, which every node still takes). */
+/** A member's signed request, as the apps send one (format 2, through signed-request-test-helper.ts). */
 async function call(base: string, method: 'GET' | 'POST' | 'PATCH', route: string, key: Key | null, body?: unknown): Promise<Res> {
     const raw = body === undefined ? '' : JSON.stringify(body);
     const headers: Record<string, string> = raw ? { 'Content-Type': 'application/json' } : {};
@@ -85,7 +86,8 @@ async function call(base: string, method: 'GET' | 'POST' | 'PATCH', route: strin
         const priv = crypto.createPrivateKey({ key: Buffer.from(key.priv, 'base64'), format: 'der', type: 'pkcs8' });
         Object.assign(headers, {
             'X-Public-Key': key.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), priv).toString('base64'),
+            'X-Signature': signRequest(priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts), 'X-Nonce': nonce,
         });
     }
@@ -199,8 +201,8 @@ function socket(base: string, key: Key): Promise<{ ws: WebSocket; events: any[];
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const priv = crypto.createPrivateKey({ key: Buffer.from(key.priv, 'base64'), format: 'der', type: 'pkcs8' });
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), priv).toString('base64');
-    const url = `${base.replace('https', 'wss')}/ws?pubkey=${key.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(priv, ts, nonce);
+    const url = `${base.replace('https', 'wss')}/ws?pubkey=${key.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(url, { rejectUnauthorized: false });
         const s = { ws, events: [] as any[], raw: [] as string[] };

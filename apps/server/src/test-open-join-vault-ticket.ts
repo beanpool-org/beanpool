@@ -54,6 +54,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
 import { openJoinHash } from './engine/open-join.js';
 import { DOOR_NUMBERS } from './engine/door-signal.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 
@@ -147,7 +148,8 @@ async function call(id: Id, route: string, body: unknown): Promise<{ status: num
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'POST', path: route, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

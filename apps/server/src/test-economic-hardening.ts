@@ -25,6 +25,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { db } from './db/db.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -135,10 +136,10 @@ async function main() {
         const path = '/api/ledger/transfer';
         const body = JSON.stringify({ from: pubHex, to: 'escrow_attacker', amount_c: hc(5) });
         const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
-        const sig = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${body}`), privateKey).toString('base64');
+        const sig = signRequest(privateKey, { method: 'POST', path, timestamp: ts, nonce, body });
         const res = await fetch(`${BASE}${path}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Public-Key': pubHex, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
+            headers: { 'Content-Type': 'application/json', 'X-Public-Key': pubHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce },
             body,
         });
         const err = (await res.json())?.error ?? '';

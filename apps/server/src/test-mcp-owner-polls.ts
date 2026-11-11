@@ -47,6 +47,7 @@ import { registerOpenJoin } from './engine/open-join.js';
 import { db } from './db/db.js';
 import { nextPollStartAt, memberNextPollStartAt } from './engine/poll-week.js';
 import { admitAgentEdit, agentCreatesToday, agentEditsToday, resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -77,7 +78,8 @@ async function signed(path_: string, body: unknown, who: Key): Promise<{ status:
         method: 'POST',
         headers: {
             'Content-Type': 'application/json', 'X-Public-Key': who.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path_.split('?')[0]}\n${ts}\n${nonce}\n${text}`), who.priv).toString('base64'),
+            'X-Signature': signRequest(who.priv, { method: 'POST', path: path_.split('?')[0], timestamp: ts, nonce, body: text }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         },
         body: text,
     });

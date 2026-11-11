@@ -29,6 +29,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 
@@ -49,10 +50,11 @@ function keypair(): Identity {
 function signedHeaders(method: string, path: string, signer: Identity, bodyString = ''): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path, timestamp: ts, nonce, body: bodyString };
     return {
         'X-Public-Key': signer.pub,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

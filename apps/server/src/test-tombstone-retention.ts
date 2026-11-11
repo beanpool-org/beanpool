@@ -53,6 +53,7 @@ import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './t
 import { lockedDm } from './dm-test-payload.js';
 import http from 'node:http';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -255,7 +256,8 @@ async function api(base: string, route: string, as: Id | null, body: unknown = {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = as.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64');
+        headers['X-Signature'] = signRequest(as.priv, { method: 'POST', path: route, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

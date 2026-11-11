@@ -26,6 +26,7 @@ import { startHttpsServer } from './https-server.js';
 import { updateGroup, getGroupPicture, getMemberPhoto } from '@beanpool/engine';
 import { db } from './db/db.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0;
 let passed = 0;
@@ -72,13 +73,14 @@ async function send(base: string, method: string, path: string, body: unknown, s
     const bodyString = JSON.stringify(body);
     const ts = String(Date.now());
     const nonce = crypto.randomUUID();
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString };
     const res = await fetch(`${base}${path}`, {
         method,
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': signer.pub,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64'),
+            'X-Signature': signRequest(signer.priv, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': ts,
             'X-Nonce': nonce,
         },
@@ -251,7 +253,8 @@ async function main() {
         const res = await fetch(`${BASE}${path}`, {
             headers: {
                 'X-Public-Key': neighbour.pub,
-                'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), neighbour.priv).toString('base64'),
+                'X-Signature': signRequest(neighbour.priv, { method: 'GET', path, timestamp: ts, nonce }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': ts,
                 'X-Nonce': nonce,
             },

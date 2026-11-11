@@ -33,6 +33,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -67,7 +68,8 @@ async function signed(method: 'GET' | 'POST', p: string, signer?: Identity, body
     if (signer) {
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = signText(signer, `${method}\n${p}\n${ts}\n${nonce}\n${raw}`);
+        headers['X-Signature'] = signRequest(signer.priv, { method, path: p, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

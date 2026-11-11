@@ -84,6 +84,7 @@ import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCo
 import { createAdminRoutes } from './routes/admin.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import type { RouteDeps } from './routes/types.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let total = 0;
 let passed = 0;
@@ -695,14 +696,14 @@ async function main() {
         const revTimestamp = String(Date.now());
         const revNonce = randomBytes(16).toString('hex');
         const revRawBody = JSON.stringify({ memberPubkey: aliceKeys.pub });
-        const revMsg = `POST\n/api/local/admin/auth/revoke-all\n${revTimestamp}\n${revNonce}\n${revRawBody}`;
-        const revSig = Buffer.from(ed25519.sign(Buffer.from(revMsg, 'utf-8'), aliceKeys.priv)).toString('base64');
+        const revSig = signRequest(aliceKeys.priv, { method: 'POST', path: '/api/local/admin/auth/revoke-all', timestamp: revTimestamp, nonce: revNonce, body: revRawBody });
         const signedRevoke = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Public-Key': aliceKeys.pub,
                 'X-Signature': revSig,
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': revTimestamp,
                 'X-Nonce': revNonce,
             },
@@ -717,6 +718,7 @@ async function main() {
                 'Content-Type': 'application/json',
                 'X-Public-Key': aliceKeys.pub,
                 'X-Signature': revSig,
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': revTimestamp,
                 'X-Nonce': revNonce,
             },
@@ -727,14 +729,14 @@ async function main() {
         // 12.3c Stale timestamp on signed revoke-all fails (Comment 4021421368)
         const staleTs = String(Date.now() - 120_000);
         const freshNonce = randomBytes(16).toString('hex');
-        const staleMsg = `POST\n/api/local/admin/auth/revoke-all\n${staleTs}\n${freshNonce}\n${revRawBody}`;
-        const staleSig = Buffer.from(ed25519.sign(Buffer.from(staleMsg, 'utf-8'), aliceKeys.priv)).toString('base64');
+        const staleSig = signRequest(aliceKeys.priv, { method: 'POST', path: '/api/local/admin/auth/revoke-all', timestamp: staleTs, nonce: freshNonce, body: revRawBody });
         const staleRevoke = await fetch(`${base}/api/local/admin/auth/revoke-all`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Public-Key': aliceKeys.pub,
                 'X-Signature': staleSig,
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': staleTs,
                 'X-Nonce': freshNonce,
             },

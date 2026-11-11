@@ -17,6 +17,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, transfer } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signSocket, socketBinding } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -32,12 +33,11 @@ function makeId(callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
-const sign = (msg: string, pk: crypto.KeyObject) => crypto.sign(null, Buffer.from(msg), pk).toString('base64');
 
 function wsConnect(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): Promise<{ ws: WebSocket; events: any[] }> {
     const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = sign(`WS\n/ws\n${ts}\n${nonce}\n`, id.privateKey);
-    const qs = `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    const qs = `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
     const ws = new WebSocket(`wss://localhost:${PORT}/ws?${qs}`, { rejectUnauthorized: false });
     const events: any[] = [];
     ws.on('message', (d) => { try { events.push(JSON.parse(d.toString())); } catch { /* */ } });

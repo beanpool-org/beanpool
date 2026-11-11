@@ -35,6 +35,7 @@ import {
 } from './engine/avatar-keys.js';
 import { avatarRefOf, avatarUrlOf } from '@beanpool/core';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -185,7 +186,8 @@ async function main(): Promise<void> {
     const listRes = await fetch(`${baseUrl}${listPath}`, {
         headers: {
             'X-Public-Key': viewerPk,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${listPath}\n${ts}\n${nonce}\n`), viewerKeys.privateKey).toString('base64'),
+            'X-Signature': signRequest(viewerKeys.privateKey, { method: 'GET', path: listPath, timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

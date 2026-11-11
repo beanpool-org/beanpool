@@ -241,6 +241,51 @@ export function standingPaymentPayload(standingId: string, periodNo: number): st
     return `standing:${standingId}:${periodNo}`;
 }
 
+// ── A short week: lowering one period (DESIGN-getting-paid-fable.md §3, §5; Marty's decisions, 11 Nov 2026) ────────────
+
+/**
+ * Where one change to a period's amount is (the node's `standing_period_changes.state`): the payer's ask waiting for the
+ * payee (`asked`), then `agreed`, `declined`, `withdrawn` (the payer took it back) or `lapsed` (unanswered when the period
+ * was paid, its grace ran out or the standing deal stopped). The payee's own lowering is `agreed` from the start.
+ */
+export type StandingChangeState = 'asked' | 'agreed' | 'declined' | 'withdrawn' | 'lapsed';
+export const STANDING_CHANGE_STATES: readonly StandingChangeState[] = Object.freeze(['asked', 'agreed', 'declined', 'withdrawn', 'lapsed']);
+
+/** The most asks a payer may make about one period (design §3.1): one open at a time, three in all. */
+export const STANDING_ASKS_PER_PERIOD = 3;
+
+/**
+ * What one period costs (design §5): the smallest agreed change for it, else the price the payer signed; always from 0 up
+ * to that price, in whole hundredths. Only an agreed change counts, so an ask alone, a no, a take-back or a lapse leaves
+ * the price; and the smallest wins, so a period lowered can be lowered again but never raised back.
+ */
+export function standingPeriodAmount(price_c: Hundredths, changes: readonly { beans_c: unknown; state: unknown }[] = []): Hundredths {
+    let amount = price_c;
+    for (const c of changes) {
+        if (c.state === 'agreed' && isHundredths(c.beans_c) && c.beans_c >= 0 && c.beans_c < amount) amount = c.beans_c;
+    }
+    return amount;
+}
+
+/**
+ * Whether `beans_c` may be a period's new amount while it costs `current_c` (design §3.1): whole hundredths, from 0 up to
+ * just under what it costs now. Never the same or more: a period is lowered, never raised.
+ */
+export function isStandingLowerAmount(beans_c: unknown, current_c: Hundredths): beans_c is Hundredths {
+    return isHundredths(beans_c) && beans_c >= 0 && beans_c < current_c;
+}
+
+/** The payer's ask still open about a period (the node's transactions read, `standingAsk`). */
+export interface StandingAsk {
+    /** The change's id (the app's UUID). */
+    id: string;
+    /** The Beans the payer asks to pay for it, whole hundredths. */
+    beans_c: Hundredths;
+    /** Which period (from 1). */
+    periodNo: number;
+    askedAt: string;
+}
+
 // ── The words, one set for both apps and the node's notices ─────────────────────────────────────────────────────────
 
 /** A figure in the words: whole hundredths (formatHundredths). */
@@ -401,6 +446,126 @@ export const standingLines = {
     /** Either side's Stop in the grace, as the record says it: the payee is told the same words when the payer stops. */
     chatStoppedInGrace: (unit: StandingPeriodUnit, name: string, title: string, beans: number, date: string): string =>
         standingLines.stoppedInGraceByPayer(unit, name, title, beans, date),
+
+    // A short week: one period lowered (DESIGN-getting-paid-fable §3.2, §3.3). `short` is the phase: the period now due and
+    // unpaid ("this week"), else the one due next ("next week").
+    /** The card's quiet link: the payer asks, the payee lowers. */
+    askLowerLink: (unit: StandingPeriodUnit, short: boolean) => (unit === 'month'
+        ? (short ? t('Ask to pay less this month…') : t('Ask to pay less next month…'))
+        : (short ? t('Ask to pay less this week…') : t('Ask to pay less next week…'))),
+    lowerLink: (unit: StandingPeriodUnit, short: boolean) => (unit === 'month'
+        ? (short ? t('Lower this month…') : t('Lower next month…'))
+        : (short ? t('Lower this week…') : t('Lower next week…'))),
+    // The payer's sheet
+    askTitle: () => t('Ask to pay less?'),
+    askAbout: (unit: StandingPeriodUnit, title: string, from: string, beans: number) => (unit === 'month'
+        ? t('{title} · the month from {date} · {n} Beans', { title, date: from, n: n2(beans) })
+        : t('{title} · the week from {date} · {n} Beans', { title, date: from, n: n2(beans) })),
+    choiceHalf: (beans: number) => t('{n} Beans (half)', { n: n2(beans) }),
+    choiceNone: () => t('0 Beans'),
+    choiceOther: () => t('Another amount'),
+    /** Nothing changes until the payee says yes (never "he" or "she": the app doesn't know a member's pronouns). */
+    askUntilYes: (name: string, beans: number, date: string) =>
+        t('{name} has to say yes. Until then nothing changes: the full {n} Beans go on {date} if you have them.', { name, n: n2(beans), date }),
+    askUntilYesShort: (name: string, beans: number, until: string) =>
+        t('{name} has to say yes. Until then nothing changes: we keep trying for the full {n} Beans until {date}.', { name, n: n2(beans), date: until }),
+    askCountsAsPaid: (unit: StandingPeriodUnit, name: string) => (unit === 'month'
+        ? t('If {name} says yes, that month counts as paid in full here. Anything else you two agree is between you; BeanPool keeps no record of it.', { name })
+        : t('If {name} says yes, that week counts as paid in full here. Anything else you two agree is between you; BeanPool keeps no record of it.', { name })),
+    askButton: (name: string) => t('Ask {name}', { name }),
+    // The payee answering
+    answerTitle: (name: string) => t('{name} asks to pay less', { name }),
+    answerAbout: (unit: StandingPeriodUnit, title: string, from: string) => (unit === 'month'
+        ? t('{title} · the month from {date}', { title, date: from })
+        : t('{title} · the week from {date}', { title, date: from })),
+    answerInstead: (beans: number, now: number) => t('{n} Beans instead of {price}', { n: n2(beans), price: n2(now) }),
+    answerCountsAsPaid: (unit: StandingPeriodUnit, price: number) => (unit === 'month'
+        ? t('If you say yes, that month counts as paid in full here: nothing more is owed through the app for it. The month after is {n} Beans again.', { n: n2(price) })
+        : t('If you say yes, that week counts as paid in full here: nothing more is owed through the app for it. The week after is {n} Beans again.', { n: n2(price) })),
+    answerYes: (beans: number) => t('Yes, {n} Beans', { n: n2(beans) }),
+    answerNo: (now: number) => t('No, keep {n}', { n: n2(now) }),
+    // The payee lowering alone
+    lowerTitle: (unit: StandingPeriodUnit, short: boolean) => (unit === 'month'
+        ? (short ? t('Lower this month?') : t('Lower next month?'))
+        : (short ? t('Lower this week?') : t('Lower next week?'))),
+    lowerCountsAsPaid: (unit: StandingPeriodUnit, name: string, now: number, from: string, price: number) => (unit === 'month'
+        ? t('{name} pays this instead of {now} Beans for the month from {date}, and that month counts as paid in full here. You can lower it again, not raise it back. The month after is {n} Beans again.', { name, now: n2(now), date: from, n: n2(price) })
+        : t('{name} pays this instead of {now} Beans for the week from {date}, and that week counts as paid in full here. You can lower it again, not raise it back. The week after is {n} Beans again.', { name, now: n2(now), date: from, n: n2(price) })),
+    lowerButton: (beans: number) => t('Lower to {n} Beans', { n: n2(beans) }),
+    // The card while an ask is open (its own line, under the status: the status stays true, as an ask changes nothing)
+    askOpenPayer: (unit: StandingPeriodUnit, beans: number, from: string, name: string) => (unit === 'month'
+        ? t('You asked to pay {n} Beans for the month from {date} · waiting for {name}', { n: n2(beans), date: from, name })
+        : t('You asked to pay {n} Beans for the week from {date} · waiting for {name}', { n: n2(beans), date: from, name })),
+    askOpenPayee: (unit: StandingPeriodUnit, name: string, beans: number, from: string) => (unit === 'month'
+        ? t('⚠️ {name} asks to pay {n} Beans for the month from {date}', { name, n: n2(beans), date: from })
+        : t('⚠️ {name} asks to pay {n} Beans for the week from {date}', { name, n: n2(beans), date: from })),
+    takeBack: () => t('Take it back'),
+    answer: () => t('Answer'),
+    // The card's status with a period lowered: the one last paid (`paid`), the one due next (`due`), or both
+    nextLoweredPayer: (unit: StandingPeriodUnit, beans: number, name: string, paidOn: string, due: number, nextOn: string) => (unit === 'month'
+        ? t("This month's {n} went to {name} on {paid} · next month is {due} Beans by agreement, on {next}", { n: n2(beans), name, paid: paidOn, due: n2(due), next: nextOn })
+        : t("This week's {n} went to {name} on {paid} · next week is {due} Beans by agreement, on {next}", { n: n2(beans), name, paid: paidOn, due: n2(due), next: nextOn })),
+    nextLoweredPayee: (unit: StandingPeriodUnit, name: string, beans: number, paidOn: string, due: number, nextOn: string) => (unit === 'month'
+        ? t("{name}'s standing deal · {n} Beans a month · paid for this month on {paid} · next month is {due} Beans by agreement, on {next}", { name, n: n2(beans), paid: paidOn, due: n2(due), next: nextOn })
+        : t("{name}'s standing deal · {n} Beans a week · paid for this week on {paid} · next week is {due} Beans by agreement, on {next}", { name, n: n2(beans), paid: paidOn, due: n2(due), next: nextOn })),
+    paidLoweredPayer: (unit: StandingPeriodUnit, paid: number, name: string, paidOn: string, price: number, nextOn: string) => (unit === 'month'
+        ? t("This month's {m} went to {name} on {paid} (by agreement, not {n}) · the next {n} go on {next}", { m: n2(paid), name, paid: paidOn, n: n2(price), next: nextOn })
+        : t("This week's {m} went to {name} on {paid} (by agreement, not {n}) · the next {n} go on {next}", { m: n2(paid), name, paid: paidOn, n: n2(price), next: nextOn })),
+    paidLoweredPayee: (unit: StandingPeriodUnit, name: string, price: number, paidOn: string, paid: number, nextOn: string) => (unit === 'month'
+        ? t("{name}'s standing deal · {n} Beans a month · paid for this month on {paid}: {m} by agreement · next {n} on {next}", { name, n: n2(price), paid: paidOn, m: n2(paid), next: nextOn })
+        : t("{name}'s standing deal · {n} Beans a week · paid for this week on {paid}: {m} by agreement · next {n} on {next}", { name, n: n2(price), paid: paidOn, m: n2(paid), next: nextOn })),
+    paidZero: (unit: StandingPeriodUnit, price: number, nextOn: string) => (unit === 'month'
+        ? t('This month is 0 Beans by agreement · the next {n} go on {next}', { n: n2(price), next: nextOn })
+        : t('This week is 0 Beans by agreement · the next {n} go on {next}', { n: n2(price), next: nextOn })),
+    bothLoweredPayer: (unit: StandingPeriodUnit, paid: number, name: string, paidOn: string, price: number, due: number, nextOn: string) => (unit === 'month'
+        ? t("This month's {m} went to {name} on {paid} (by agreement, not {n}) · next month is {due} Beans by agreement, on {next}", { m: n2(paid), name, paid: paidOn, n: n2(price), due: n2(due), next: nextOn })
+        : t("This week's {m} went to {name} on {paid} (by agreement, not {n}) · next week is {due} Beans by agreement, on {next}", { m: n2(paid), name, paid: paidOn, n: n2(price), due: n2(due), next: nextOn })),
+    bothLoweredPayee: (unit: StandingPeriodUnit, name: string, price: number, paidOn: string, paid: number, due: number, nextOn: string) => (unit === 'month'
+        ? t("{name}'s standing deal · {n} Beans a month · paid for this month on {paid}: {m} by agreement · next month is {due} Beans by agreement, on {next}", { name, n: n2(price), paid: paidOn, m: n2(paid), due: n2(due), next: nextOn })
+        : t("{name}'s standing deal · {n} Beans a week · paid for this week on {paid}: {m} by agreement · next week is {due} Beans by agreement, on {next}", { name, n: n2(price), paid: paidOn, m: n2(paid), due: n2(due), next: nextOn })),
+    zeroNextLowered: (unit: StandingPeriodUnit, due: number, nextOn: string) => (unit === 'month'
+        ? t('This month is 0 Beans by agreement · next month is {due} Beans by agreement, on {next}', { due: n2(due), next: nextOn })
+        : t('This week is 0 Beans by agreement · next week is {due} Beans by agreement, on {next}', { due: n2(due), next: nextOn })),
+    /** The take-up screen's line under "If you're short…". */
+    takeUpAskLower: (unit: StandingPeriodUnit, name: string) => (unit === 'month'
+        ? t('Short one month? You can ask {name} to lower it.', { name })
+        : t('Short one week? You can ask {name} to lower it.', { name })),
+    /** The Ledger's memo of a lowered period (a period of 0 has no Ledger row). */
+    memoLowered: (unit: StandingPeriodUnit, title: string, n: number, beans: number, price: number) => (unit === 'month'
+        ? t('Standing deal · {title} · month {n} · {m} of {price} Beans by agreement', { title, n, m: n2(beans), price: n2(price) })
+        : t('Standing deal · {title} · week {n} · {m} of {price} Beans by agreement', { title, n, m: n2(beans), price: n2(price) })),
+    // The bell, the pushes and the record (§3.3): the payee's Needs you row is the same words as their push
+    askedNotice: (unit: StandingPeriodUnit, name: string, beans: number, now: number, from: string, title: string) => (unit === 'month'
+        ? t('{name} asks to pay {n} Beans, not {now}, for the month from {date} of {title}.', { name, n: n2(beans), now: n2(now), date: from, title })
+        : t('{name} asks to pay {n} Beans, not {now}, for the week from {date} of {title}.', { name, n: n2(beans), now: n2(now), date: from, title })),
+    saidYes: (unit: StandingPeriodUnit, name: string, from: string, title: string, beans: number, now: number) => (unit === 'month'
+        ? t('{name} said yes: the month from {date} of {title} is {n} Beans, not {now}. It counts as paid in full here.', { name, date: from, title, n: n2(beans), now: n2(now) })
+        : t('{name} said yes: the week from {date} of {title} is {n} Beans, not {now}. It counts as paid in full here.', { name, date: from, title, n: n2(beans), now: n2(now) })),
+    saidNo: (unit: StandingPeriodUnit, name: string, from: string, title: string, now: number) => (unit === 'month'
+        ? t('{name} said no: the month from {date} of {title} stays {n} Beans.', { name, date: from, title, n: n2(now) })
+        : t('{name} said no: the week from {date} of {title} stays {n} Beans.', { name, date: from, title, n: n2(now) })),
+    loweredBy: (unit: StandingPeriodUnit, name: string, from: string, title: string, beans: number) => (unit === 'month'
+        ? t('{name} lowered the month from {date} of {title} to {n} Beans. It counts as paid in full here.', { name, date: from, title, n: n2(beans) })
+        : t('{name} lowered the week from {date} of {title} to {n} Beans. It counts as paid in full here.', { name, date: from, title, n: n2(beans) })),
+    askLapsed: (unit: StandingPeriodUnit, from: string) => (unit === 'month'
+        ? t("Your ask to pay less for the month from {date} wasn't answered in time.", { date: from })
+        : t("Your ask to pay less for the week from {date} wasn't answered in time.", { date: from })),
+    // The node's refusals of a lowering, an ask, an answer or a take-back (routes/marketplace.ts)
+    lowerOnlyDown: (unit: StandingPeriodUnit, now: number) => (unit === 'month'
+        ? t('Choose fewer Beans than {n}: a month can be lowered, never raised.', { n: n2(now) })
+        : t('Choose fewer Beans than {n}: a week can be lowered, never raised.', { n: n2(now) })),
+    lowerMoved: (unit: StandingPeriodUnit) => (unit === 'month'
+        ? t("That month isn't the one to lower any more: it has been paid, or the standing deal stops before it. Nothing was changed.")
+        : t("That week isn't the one to lower any more: it has been paid, or the standing deal stops before it. Nothing was changed.")),
+    askOpen: (unit: StandingPeriodUnit) => (unit === 'month'
+        ? t("There's already an ask about this month. Answer it, or take it back, first.")
+        : t("There's already an ask about this week. Answer it, or take it back, first.")),
+    askLimit: (unit: StandingPeriodUnit) => (unit === 'month'
+        ? t("You've asked about this month three times, which is the most.")
+        : t("You've asked about this week three times, which is the most.")),
+    askGone: () => t('That ask has already been answered, taken back or closed.'),
+    changeIdTaken: () => t('That change is already made with other details. Close it and try again.'),
+    payeeOnly: () => t('Only the one who is paid can do this.'),
 };
 
 // ── Taking it up, signed (§2.2, §6; slice S2: both apps) ──────────────────────────────────────────────────────────────
@@ -511,6 +676,8 @@ export function standingTakeUpLines(
         paidNow: standingLines.paidNow(unit, beans, input.payeeName, day(from), day(periodEnd(from, unit, 1))),
         howItRuns: standingLines.howItRuns(unit),
         shortAhead: standingLines.shortAhead(unit),
+        // Under "If you're short…": a short period can be lowered by asking (DESIGN-getting-paid-fable §3.2, Q3).
+        askLower: standingLines.takeUpAskLower(unit, input.payeeName),
         agree: standingLines.agree(beans),
         // The payer's usable room (balance less their usable floor), when the app knows it: short of the first period, Agree
         // is disabled and this line says why. Null when there is room, or the room isn't known (the node still checks).
@@ -548,6 +715,110 @@ export interface StandingDealRow {
     standingEndedReason?: string | null;
     standingStoppedBy?: string | null;
     standingEndedAt?: string | null;
+    /** The row's own amount, whole hundredths: on the current row, what the period last paid cost (less by agreement, or 0). */
+    amount_c?: number | null;
+    /**
+     * What the period due next (paid) or now due (short) costs when it is lowered by agreement, whole hundredths; absent at the
+     * full price (DESIGN-getting-paid-fable §5). The node's transactions read, current row only.
+     */
+    standingDueBeans_c?: number | null;
+    /** The payer's ask still open about that period, or null. */
+    standingAsk?: StandingAsk | null;
+    /**
+     * How many more asks the payer may make about that period. A node that takes a lowering (POST
+     * /api/marketplace/standing/:id/lower) always sends it on the current row of a running standing deal, so an app shows no
+     * lowering and no ask to a node that has none: never a button that fails.
+     */
+    standingAsksLeft?: number | null;
+}
+
+/** What the period due next (paid) or now due (short) costs: the price, or less by agreement (never below 0 or above the price). */
+export function standingDueAmount(tx: Pick<StandingDealRow, 'standingBeans_c' | 'standingDueBeans_c'>): Hundredths {
+    const price = isHundredths(tx.standingBeans_c) && tx.standingBeans_c > 0 ? tx.standingBeans_c : 0;
+    const due = tx.standingDueBeans_c;
+    return isHundredths(due) && due >= 0 && due < price ? due : price;
+}
+
+/** The period a running standing deal lets its two sides lower or ask about (standingLowerable). */
+export interface StandingLowerable {
+    /** Which period (from 1): the one due next while it is paid, the unpaid one while it is short. */
+    n: number;
+    /** That period is the unpaid one ("this week"), not the next ("next week"). */
+    short: boolean;
+    /** When it starts (the day it is due), ISO. */
+    from: string;
+    /** The price the payer signed per period, whole hundredths. */
+    price_c: Hundredths;
+    /** What it costs now: the price, or less by agreement. */
+    amount_c: Hundredths;
+    /** The payer's ask still open about it, or null. */
+    ask: StandingAsk | null;
+    /** How many more asks the payer may make about it. */
+    asksLeft: number;
+}
+
+/**
+ * The one period of a standing deal that can be lowered (DESIGN-getting-paid-fable §3.1): the one due next while it is
+ * paid, the unpaid one while it is short; never a period already paid. Null when there is none: a row that isn't the
+ * current row of a running standing deal, one stopped (nothing more is paid), one whose count is reached, or a row from a
+ * node that takes no lowering (no standingAsksLeft).
+ */
+export function standingLowerable(tx: StandingDealRow): StandingLowerable | null {
+    const unit = tx.standingUnit;
+    const phase = tx.standingPhase;
+    if (!tx.standingId || (phase !== 'paid' && phase !== 'short') || (unit !== 'week' && unit !== 'month') || tx.standingStopped) return null;
+    const asksLeft = tx.standingAsksLeft;
+    if (typeof asksLeft !== 'number' || !Number.isInteger(asksLeft) || asksLeft < 0) return null;
+    const price = tx.standingBeans_c;
+    if (!isHundredths(price) || price <= 0) return null;
+    const done = Math.max(0, Number(tx.periodNo) || 0);
+    const max = tx.standingMaxPeriods ?? null;
+    if (phase === 'paid' && max !== null && done >= max) return null;
+    const n = done + 1;
+    const from = tx.standingStartsAt && Number.isFinite(Date.parse(tx.standingStartsAt)) ? periodStart(tx.standingStartsAt, unit, n) : null;
+    if (!from) return null;
+    const a = tx.standingAsk;
+    const ask = a && a.periodNo === n && typeof a.id === 'string' && isHundredths(a.beans_c) ? a : null;
+    return { n, short: phase === 'short', from, price_c: price, amount_c: standingDueAmount(tx), ask, asksLeft };
+}
+
+/** Which of the four lowering steps a side may take on a standing deal's current row (dealMoves, the panel). */
+export interface StandingLowerMoves {
+    /** The payee lowers the period alone (POST …/standing/:id/lower): while no ask is open and it costs more than 0. */
+    lower: boolean;
+    /** The payer asks to pay less (the same door): while no ask is open, it costs more than 0, and asks are left. */
+    askLower: boolean;
+    /** The payee answers the payer's open ask, yes or no (…/lower/:changeId/answer). */
+    answerLower: boolean;
+    /** The payer takes their open ask back (…/lower/:changeId/withdraw). */
+    takeBackAsk: boolean;
+}
+
+/**
+ * The one rule for the lowering steps, both apps (DESIGN-getting-paid-fable §3.1): `actingAs` is the side's key (the member,
+ * or the enterprise they keep); a stranger to the deal, or a row with no period to lower, gets none.
+ */
+export function standingLowerMoves(tx: StandingDealRow, actingAs: string): StandingLowerMoves {
+    const l = standingLowerable(tx);
+    const payer = !!l && !!actingAs && tx.buyerPublicKey === actingAs;
+    const payee = !!l && !!actingAs && tx.sellerPublicKey === actingAs;
+    const open = !!l?.ask;
+    const more = !!l && l.amount_c > 0;
+    return {
+        lower: payee && !open && more,
+        askLower: payer && !open && more && !!l && l.asksLeft > 0,
+        answerLower: payee && open,
+        takeBackAsk: payer && open,
+    };
+}
+
+/** The choices a lowering sheet offers (design §3.2): half of what the period costs now, and 0; then "Another amount". */
+export function standingLowerChoices(amount_c: Hundredths): { beans_c: Hundredths; label: string }[] {
+    const half = Math.floor(amount_c / 2);
+    return [
+        ...(half > 0 ? [{ beans_c: half, label: standingLines.choiceHalf(half) }] : []),
+        ...(amount_c > 0 ? [{ beans_c: 0, label: standingLines.choiceNone() }] : []),
+    ];
 }
 
 /**
@@ -584,6 +855,12 @@ export interface StandingPanel {
     stopLabel: string;
     /** When the grace ends, for a short one (ISO), else null. */
     graceEndsAt: string | null;
+    /** The quiet link under the status (DESIGN-getting-paid-fable §3.2): the payee's "Lower next week…", the payer's "Ask to pay less next week…"; null when this side may not. */
+    lowerLink: string | null;
+    /** While the payer's ask is open, its line under the status for this side: "You asked…" or "⚠️ Kim asks…". Null otherwise. */
+    askLine: string | null;
+    /** The ask line's button: the payer's "Take it back", the payee's "Answer". */
+    askAction: { move: 'takeBack' | 'answer'; label: string } | null;
 }
 
 /**
@@ -607,10 +884,22 @@ export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: 
     const n = Number(tx.periodNo) || 0;
     const max = tx.standingMaxPeriods ?? null;
     const last = phase === 'paid' && (!!tx.standingStopped || (max !== null && n >= max));
+    // A period lowered by agreement (DESIGN-getting-paid-fable §3.2): the one last paid (this row's own amount), the one due
+    // next, or both, say so; a short one warns about its own amount, not the price.
+    const due = standingDueAmount(tx);
+    const paidAmt = isHundredths(tx.amount_c) && tx.amount_c >= 0 && tx.amount_c < beans ? tx.amount_c : beans;
     let status: string;
-    if (short) status = payer ? standingLines.shortPayer(unit, beans, day(short.graceEndsAt)) : standingLines.shortPayee(unit, day(short.graceEndsAt));
+    if (short) status = payer ? standingLines.shortPayer(unit, due, day(short.graceEndsAt)) : standingLines.shortPayee(unit, day(short.graceEndsAt));
     else if (last) status = standingLines.stopsOn(unit, day(next));
-    else status = payer ? standingLines.paidPayer(unit, beans, payeeName, day(paidOn), day(next)) : standingLines.paidPayee(unit, payerName, beans, day(paidOn), day(next));
+    else status = paidStatus(unit, payer, { price: beans, paid: paidAmt, due, payeeName, payerName, paidOn: day(paidOn), next: day(next) });
+    const l = standingLowerable(tx);
+    const moves = standingLowerMoves(tx, actingAs);
+    const lowerLink = moves.lower ? standingLines.lowerLink(unit, !!l?.short) : moves.askLower ? standingLines.askLowerLink(unit, !!l?.short) : null;
+    const askLine = l?.ask
+        ? (payer ? standingLines.askOpenPayer(unit, l.ask.beans_c, day(l.from), payeeName) : standingLines.askOpenPayee(unit, payerName, l.ask.beans_c, day(l.from)))
+        : null;
+    const askAction = moves.takeBackAsk ? { move: 'takeBack' as const, label: standingLines.takeBack() }
+        : moves.answerLower ? { move: 'answer' as const, label: standingLines.answer() } : null;
     return {
         role: payer ? 'payer' : 'payee',
         phase,
@@ -623,7 +912,33 @@ export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: 
         stop: !tx.standingStopped,
         stopLabel: phase === 'short' ? standingLines.stopNow() : standingLines.stop(),
         graceEndsAt: short?.graceEndsAt ?? null,
+        lowerLink,
+        askLine,
+        askAction,
     };
+}
+
+/** A paid standing deal's status, for one side: the period last paid and the one due next, each at its price or lowered. */
+function paidStatus(unit: StandingPeriodUnit, payer: boolean, s: {
+    price: number; paid: number; due: number; payeeName: string; payerName: string; paidOn: string; next: string;
+}): string {
+    const lastLowered = s.paid < s.price;
+    const nextLowered = s.due < s.price;
+    if (s.price > 0 && s.paid === 0) return nextLowered ? standingLines.zeroNextLowered(unit, s.due, s.next) : standingLines.paidZero(unit, s.price, s.next);
+    if (payer) {
+        if (lastLowered) {
+            return nextLowered ? standingLines.bothLoweredPayer(unit, s.paid, s.payeeName, s.paidOn, s.price, s.due, s.next)
+                : standingLines.paidLoweredPayer(unit, s.paid, s.payeeName, s.paidOn, s.price, s.next);
+        }
+        return nextLowered ? standingLines.nextLoweredPayer(unit, s.price, s.payeeName, s.paidOn, s.due, s.next)
+            : standingLines.paidPayer(unit, s.price, s.payeeName, s.paidOn, s.next);
+    }
+    if (lastLowered) {
+        return nextLowered ? standingLines.bothLoweredPayee(unit, s.payerName, s.price, s.paidOn, s.paid, s.due, s.next)
+            : standingLines.paidLoweredPayee(unit, s.payerName, s.price, s.paidOn, s.paid, s.next);
+    }
+    return nextLowered ? standingLines.nextLoweredPayee(unit, s.payerName, s.price, s.paidOn, s.due, s.next)
+        : standingLines.paidPayee(unit, s.payerName, s.price, s.paidOn, s.next);
 }
 
 /**
@@ -634,7 +949,8 @@ export function standingPanel(tx: StandingDealRow, actingAs: string, day: (iso: 
 export function standingStopConfirm(tx: StandingDealRow, actingAs: string, day: (iso: string) => string) {
     const unit: StandingPeriodUnit = tx.standingUnit === 'week' ? 'week' : 'month';
     const payer = tx.buyerPublicKey === actingAs;
-    const beans = (isHundredths(tx.standingBeans_c) ? tx.standingBeans_c : 0);
+    // In the grace, the unpaid period's own amount: a week lowered to 100 is 100 unpaid, not the price (getting-paid §3.3).
+    const beans = standingDueAmount(tx);
     const short = shortPeriodOf(tx);
     const next = tx.standingNextDueAt || new Date().toISOString();
     return {
@@ -672,8 +988,13 @@ export function standingHistoryLine(tx: StandingDealRow, me: string, day: (iso: 
     return null;
 }
 
-/** One live "Needs you" line for a short standing deal (amendment §2): the payer's step (amber, counted) or the payee's (calm). */
+/**
+ * One live "Needs you" line of a standing deal: a short one's (amendment §2), the payer's step (amber, counted) or the
+ * payee's (calm); or the payer's ask to pay less, the payee's step (amber, counted; DESIGN-getting-paid-fable §3.3).
+ */
 export interface StandingNeedsLine {
+    /** Short: the period now due is unpaid. Ask: the payer asks to pay less for a period. */
+    kind: 'short' | 'ask';
     role: 'payer' | 'payee';
     /** "Vehicle Storage: 50 Beans 3 days overdue · until 24 Dec" */
     label: string;
@@ -696,7 +1017,8 @@ export function standingNeedsLine(tx: StandingDealRow, me: string, now: number, 
     const payer = tx.buyerPublicKey === me;
     if (!payer && tx.sellerPublicKey !== me) return null;
     const title = tx.postTitle || t('A standing deal');
-    const beans = n2((isHundredths(tx.standingBeans_c) ? tx.standingBeans_c : 0));
+    // The unpaid period's own amount: lowered to 100, it is 100 overdue, not the price (DESIGN-getting-paid-fable §3.3).
+    const beans = n2(standingDueAmount(tx));
     const until = day(short.graceEndsAt);
     const days = Math.max(0, Math.floor((now - Date.parse(short.dueAt)) / 86_400_000));
     let label: string;
@@ -711,18 +1033,41 @@ export function standingNeedsLine(tx: StandingDealRow, me: string, now: number, 
             : tn(days, "{name}'s {beans} Beans for {title}: {n} day overdue · we try until {date} · you can stop it now",
                 "{name}'s {beans} Beans for {title}: {n} days overdue · we try until {date} · you can stop it now", { name, beans, title, date: until });
     }
-    return { role: payer ? 'payer' : 'payee', label, accent: payer, standingId: tx.standingId!, txId: tx.id ?? null, postId: tx.postId ?? null };
+    return { kind: 'short', role: payer ? 'payer' : 'payee', label, accent: payer, standingId: tx.standingId!, txId: tx.id ?? null, postId: tx.postId ?? null };
 }
 
-/** The live lines for every short standing deal among `txs` that `me` is a side of: one per standing deal, oldest due first. */
+/**
+ * The payee's live "Needs you" line while the payer's ask to pay less is open (DESIGN-getting-paid-fable §3.3): "Kim asks
+ * to pay 100 Beans, not 200, for the week from 18 Nov of Room at Rob's." Amber and counted: answering is their step. It
+ * leaves when the ask is answered, taken back or closed. The payer gets none: asking is not a step waiting on them. Null
+ * for anyone else, and for a row with no open ask.
+ */
+export function standingAskNeedsLine(tx: StandingDealRow, me: string, day: (iso: string) => string): StandingNeedsLine | null {
+    const l = standingLowerable(tx);
+    if (!l || !l.ask || !me || tx.sellerPublicKey !== me) return null;
+    const unit: StandingPeriodUnit = tx.standingUnit === 'week' ? 'week' : 'month';
+    const label = standingLines.askedNotice(unit, tx.buyerCallsign || t('A member'), l.ask.beans_c, l.amount_c, day(l.from), tx.postTitle || t('A standing deal'));
+    return { kind: 'ask', role: 'payee', label, accent: true, standingId: tx.standingId!, txId: tx.id ?? null, postId: tx.postId ?? null };
+}
+
+/**
+ * The live lines of every standing deal among `txs` that `me` is a side of: one per standing deal for each of a short one
+ * and an open ask, the period due earliest first (a short one's due day, an ask's period's first day).
+ */
 export function standingNeedsLines(txs: readonly StandingDealRow[], me: string, now: number, day: (iso: string) => string): StandingNeedsLine[] {
     const seen = new Set<string>();
     const out: Array<StandingNeedsLine & { due: number }> = [];
     for (const tx of txs) {
-        const line = standingNeedsLine(tx, me, now, day);
-        if (!line || seen.has(line.standingId)) continue;
-        seen.add(line.standingId);
-        out.push({ ...line, due: Date.parse(shortPeriodOf(tx)!.dueAt) });
+        const short = standingNeedsLine(tx, me, now, day);
+        if (short && !seen.has(`short:${short.standingId}`)) {
+            seen.add(`short:${short.standingId}`);
+            out.push({ ...short, due: Date.parse(shortPeriodOf(tx)!.dueAt) });
+        }
+        const ask = standingAskNeedsLine(tx, me, day);
+        if (ask && !seen.has(`ask:${ask.standingId}`)) {
+            seen.add(`ask:${ask.standingId}`);
+            out.push({ ...ask, due: Date.parse(standingLowerable(tx)!.from) });
+        }
     }
     return out.sort((a, b) => a.due - b.due).map(({ due: _due, ...line }) => line);
 }

@@ -6,7 +6,7 @@
 import { t } from './words.js';
 import { formatHundredths, isHundredths, quantityHundredths, shareOf } from './hundredths.js';
 import { amountRefusalWords, isAmbiguousAmount, type ParsedAmount } from './amount-input.js';
-import type { StandingPhase } from './standing-deal.js';
+import { standingLowerMoves, type StandingAsk, type StandingPeriodUnit, type StandingPhase } from './standing-deal.js';
 
 export type DealRole = 'payer' | 'payee';
 
@@ -64,6 +64,18 @@ export interface DealRow {
     standingEndedReason?: string | null;
     standingStoppedBy?: string | null;
     standingEndedAt?: string | null;
+    /**
+     * What the lowering steps read (DESIGN-getting-paid-fable §3; @beanpool/core standing-deal.ts StandingDealRow says each):
+     * the row's own amount, the price, the period and its count, the start, and the lowering and ask of the period due.
+     */
+    amount_c?: number | null;
+    standingBeans_c?: number | null;
+    standingUnit?: StandingPeriodUnit | null;
+    standingMaxPeriods?: number | null;
+    standingStartsAt?: string | null;
+    standingDueBeans_c?: number | null;
+    standingAsk?: StandingAsk | null;
+    standingAsksLeft?: number | null;
 }
 
 /** A row that is the current period of a standing deal still running (any phase but ended). */
@@ -228,6 +240,15 @@ export interface DealMoves<T extends DealRow = DealRow> {
      * Paid, it ends when the period already paid does; short, it ends at once.
      */
     stop: boolean;
+    /**
+     * A short week (DESIGN-getting-paid-fable §3.1), on a standing deal's current row, for the period due next (paid) or
+     * now due (short): the payee lowers it alone; the payer asks to pay less; the payee answers an open ask; the payer
+     * takes it back (@beanpool/core standingLowerMoves, the one rule).
+     */
+    lower: boolean;
+    askLower: boolean;
+    answerLower: boolean;
+    takeBackAsk: boolean;
 }
 
 /**
@@ -259,6 +280,7 @@ export function dealMoves<T extends DealRow>(tx: T, me: string, keeperOf: readon
         answer: step.state === 'to-answer',
         withdraw: step.state === 'asked' && !asKeeper,
         stop: isLiveStanding(tx) && !tx.standingStopped,
+        ...standingLowerMoves(tx, actingAs),
     };
 }
 

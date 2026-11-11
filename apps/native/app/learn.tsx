@@ -20,7 +20,7 @@ import { ActivityIndicator, DeviceEventEmitter, Pressable, ScrollView, StyleShee
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_NAMES, KNOWLEDGE_PLACE_LINE, KNOWLEDGE_STANDING_LINE, isKnowledgeTopic, t, type KnowledgeRow,
+    KNOWLEDGE_NAMES, isKnowledgeTopic, t, type KnowledgeRow,
 } from '@beanpool/core';
 import { useStyles, useTheme } from './ThemeContext';
 import { ExampleHeader } from '../components/showcase/LocalCommunityMark';
@@ -35,6 +35,12 @@ import { useLearnMode } from '../utils/use-learn-mode';
 const LEARN_SEARCH_DELAY_MS = 300;
 
 const first = (v: string | string[] | undefined): string => (Array.isArray(v) ? v[0] : v) ?? '';
+
+/** A topic's glyph, name and count: "🚰 Local services 6". */
+const topicCount = (id: string, n: number): string => {
+    const info = topicOf(id);
+    return t(LEARN_LINES.topicCount, { emoji: info.emoji, topic: t(info.label), n });
+};
 
 export default function LearnScreen() {
     const router = useRouter();
@@ -173,7 +179,7 @@ export default function LearnScreen() {
             {header}
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                 {preview ? <ExampleHeader text={t('Example Valley')} /> : null}
-                <Text style={styles.place}>{t(KNOWLEDGE_PLACE_LINE)}</Text>
+                <Text style={styles.place}>{t(LEARN_LINES.placeLine)}</Text>
 
                 {preview ? (
                     <Pressable accessibilityRole="button" accessibilityLabel={t(LEARN_LINES.searchPlaceholder)} onPress={() => setSheet(true)} style={styles.search} testID="learn-search-preview">
@@ -213,7 +219,7 @@ export default function LearnScreen() {
                             return (
                                 <Pressable key={x.id} accessibilityRole="button" accessibilityState={{ selected: on }}
                                     onPress={() => setTopic(on ? null : x.id)} style={[styles.chip, on && styles.chipOn]} testID={`learn-topic-${x.id}`}>
-                                    <Text style={[styles.chipText, on && styles.chipTextOn]}>{`${info.emoji} ${t(info.label)} ${x.count}`}</Text>
+                                    <Text style={[styles.chipText, on && styles.chipTextOn]}>{topicCount(x.id, x.count)}</Text>
                                 </Pressable>
                             );
                         })}
@@ -239,7 +245,7 @@ export default function LearnScreen() {
                 ) : topic ? (
                     // ONE TOPIC: every page of it, in Learn's order.
                     <View style={styles.block} testID="learn-topic">
-                        <Text style={styles.blockTitle}>{`${topicOf(topic).emoji} ${t(topicOf(topic).label)} ${chosen?.count ?? 0}`}</Text>
+                        <Text style={styles.blockTitle}>{topicCount(topic, chosen?.count ?? 0)}</Text>
                         {topicRows.map(card)}
                     </View>
                 ) : front.total === 0 ? (
@@ -258,7 +264,7 @@ export default function LearnScreen() {
                             return (
                                 <View key={x.id} style={styles.block} testID={`learn-block-${x.id}`}>
                                     <View style={styles.blockHead}>
-                                        <Text style={styles.blockTitle}>{`${info.emoji} ${t(info.label)} ${x.count}`}</Text>
+                                        <Text style={styles.blockTitle}>{topicCount(x.id, x.count)}</Text>
                                     </View>
                                     {x.rows.map(card)}
                                     {x.count > x.rows.length ? (
@@ -272,7 +278,7 @@ export default function LearnScreen() {
                         })}
                     </>
                 )}
-                <Text style={styles.standing}>{t(KNOWLEDGE_STANDING_LINE)}</Text>
+                <Text style={styles.standing}>{t(LEARN_LINES.standing)}</Text>
             </ScrollView>
             <LearnPreviewSheet visible={sheet} onClose={() => setSheet(false)} />
         </View>

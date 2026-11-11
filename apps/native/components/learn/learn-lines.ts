@@ -2,7 +2,7 @@
  * The words and small helpers Learn's screens share (DESIGN-local-knowledge-fable.md §3.1 as amended, §3.2). English is the key;
  * every sentence reaches a screen through t() where it is drawn.
  */
-import { formatDate, knowledgeTopic, word, type WordKey } from '@beanpool/core';
+import { KNOWLEDGE_PLACE_LINE, KNOWLEDGE_STANDING_LINE, formatDate, knowledgeTopic, word, type WordKey } from '@beanpool/core';
 
 /** "Nov 2026" for an ISO instant, in the reader's language; an empty string for one that doesn't read. */
 export function monthYear(iso: string | null | undefined): string {
@@ -25,6 +25,15 @@ export function topicOf(id: string): { id: string; emoji: string; label: WordKey
 }
 
 export const LEARN_LINES = {
+    /** Core's two standing lines, in this table so t() can read them where they are drawn (a bare constant it cannot). */
+    placeLine: KNOWLEDGE_PLACE_LINE,
+    standing: KNOWLEDGE_STANDING_LINE,
+    /** A topic's name beside its glyph and its count: "🚰 Local services 6". */
+    topicCount: word('{emoji} {topic} {n}'),
+    /** A topic's glyph and name in capitals on a page's chip: "🚰 LOCAL SERVICES". */
+    emojiTopic: word('{emoji} {topic}'),
+    /** The row card's foot when it has both: "Checked Nov 2026 · Helped 12". */
+    checkedHelped: word('{checked} · {helped}'),
     back: word('Back'),
     searchPlaceholder: word('Search Learn'),
     allTopics: word('All topics'),

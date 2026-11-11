@@ -44,6 +44,8 @@ export function KnowledgeRowCard({ row, onPress, now, testID }: { row: Knowledge
     const when = monthYear(row.checkedAt);
     const old = checkedOverAYearAgo(row.checkedAt, now);
     const checked = old ? t(LEARN_LINES.checkedOver) : when ? t(LEARN_LINES.checked, { date: when }) : '';
+    const helped = row.helped > 0 ? t(LEARN_LINES.helped, { n: row.helped }) : '';
+    const foot = checked && helped ? t(LEARN_LINES.checkedHelped, { checked, helped }) : checked || helped;
     return (
         <Pressable
             accessibilityRole="button"
@@ -66,7 +68,7 @@ export function KnowledgeRowCard({ row, onPress, now, testID }: { row: Knowledge
                 <Text style={styles.title} numberOfLines={2}>{row.title}</Text>
                 {row.line ? <Text style={styles.line} numberOfLines={1}>{row.line}</Text> : null}
                 <Text style={old ? styles.footOld : styles.foot} numberOfLines={2}>
-                    {checked}{row.helped > 0 ? `${checked ? ' · ' : ''}${t(LEARN_LINES.helped, { n: row.helped })}` : ''}
+                    {foot}
                 </Text>
             </View>
         </Pressable>

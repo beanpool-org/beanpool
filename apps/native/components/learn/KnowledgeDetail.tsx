@@ -11,7 +11,7 @@ import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, T
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    KNOWLEDGE_NAMES, KNOWLEDGE_STANDING_LINE, currentLanguage, formatDate, inCapitalsOf, pinLive, t,
+    KNOWLEDGE_NAMES, currentLanguage, formatDate, inCapitalsOf, pinLive, t,
 } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { useIdentity } from '../../app/IdentityContext';
@@ -26,6 +26,21 @@ import { LANGUAGE_NAMES } from '../../utils/language-choice';
 import type { KnowledgePage } from '../../utils/learn-copy';
 import { ChipText } from './KnowledgeRowCard';
 import { LEARN_LINES, monthYear, topicOf } from './learn-lines';
+
+/**
+ * Whether a source's address may be opened: http or https, a host, no user name or password (the node's own rule for a join
+ * link, apps/server engine/posts.ts cleanEventLink, DESIGN-local-knowledge-fable.md §7 "A bad link"). The phone holds the same
+ * line itself, so a node that sent anything else (a `javascript:` or `intent:` address, `https://name:pass@host`) gets no link.
+ */
+export function openableSource(url: unknown): url is string {
+    if (typeof url !== 'string' || url.length > 500) return false;
+    try {
+        const u = new URL(url);
+        return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.host && !u.username && !u.password;
+    } catch {
+        return false;
+    }
+}
 
 /** The host a source link goes to, to show before the tap: "www.example.org", never the whole address. */
 export function hostOf(url: string): string {
@@ -111,7 +126,7 @@ export function KnowledgeDetail({ page }: { page: KnowledgePage }) {
     const readerLang = currentLanguage();
     const writtenIn = k.lang && k.lang !== readerLang ? (LANGUAGE_NAMES as Record<string, string>)[k.lang] ?? null : null;
     const photos = (page.photos ?? []).filter((p) => typeof p === 'string' && p !== '');
-    const sources = (k.sources ?? []).filter((s) => s && typeof s.url === 'string');
+    const sources = (k.sources ?? []).filter((s) => s && openableSource(s.url));
     const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/learn' as any); };
 
     return (
@@ -125,7 +140,7 @@ export function KnowledgeDetail({ page }: { page: KnowledgePage }) {
             </View>
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.chips}>
-                    <ChipText bg="learn">{`${topic.emoji} ${inCapitalsOf(t(topic.label))}`}</ChipText>
+                    <ChipText bg="learn">{t(LEARN_LINES.emojiTopic, { emoji: topic.emoji, topic: inCapitalsOf(t(topic.label)) })}</ChipText>
                     {pinned ? <ChipText bg="learn">{t(LEARN_LINES.pinned)}</ChipText> : null}
                 </View>
                 <Text style={styles.title} selectable>{page.title}</Text>
@@ -174,7 +189,7 @@ export function KnowledgeDetail({ page }: { page: KnowledgePage }) {
                         onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: page.authorPublicKey, callsign: page.authorCallsign ?? '' } })}
                     />
                 ) : null}
-                <Text style={styles.standing}>{t(KNOWLEDGE_STANDING_LINE)}</Text>
+                <Text style={styles.standing}>{t(LEARN_LINES.standing)}</Text>
                 {identity && page.authorPublicKey !== identity.publicKey ? (
                     <View>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Report this page')} style={styles.report} onPress={() => setReporting((v) => !v)} testID="knowledge-report">

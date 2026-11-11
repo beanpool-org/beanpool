@@ -8,7 +8,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { t } from '@beanpool/core';
 import { useStyles } from '../../app/ThemeContext';
 import { getKnowledgePosts } from '../../utils/db';
@@ -20,7 +20,6 @@ import { LEARN_LINES } from './learn-lines';
 export const MARKET_LEARN_LINE_DELAY_MS = 250;
 
 export function MarketLearnLine({ words }: { words: string }) {
-    const router = useRouter();
     const mode = useLearnMode();
     const [count, setCount] = useState(0);
     const typed = words.trim();
@@ -33,7 +32,9 @@ export function MarketLearnLine({ words }: { words: string }) {
         if (mode !== 'live' || !typed) { setCount(0); return; }
         let cancelled = false;
         const timer = setTimeout(() => {
-            getKnowledgePosts()
+            // Inside a promise, so a copy that cannot be read at all (a call that throws before it returns) is no page either.
+            Promise.resolve()
+                .then(() => getKnowledgePosts())
                 .then((pages) => { if (!cancelled) setCount(learnSearch(pages, typed).total); })
                 .catch(() => { if (!cancelled) setCount(0); });
         }, MARKET_LEARN_LINE_DELAY_MS);

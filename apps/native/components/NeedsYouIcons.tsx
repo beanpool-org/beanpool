@@ -44,6 +44,8 @@ const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIc
     knock: 'door-open',
     ask: 'account-plus-outline',
     deal: 'handshake-outline',
+    // A bill waiting on its payer (core bills.ts): its rows come from the node only to an app that opens a bill (B2).
+    bill: 'receipt-text-outline',
     vote: 'vote-outline',
     invite: 'email-outline',
     message: 'message-text-outline',

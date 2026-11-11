@@ -13,7 +13,8 @@ describe('needs-you core helpers', () => {
     ];
 
     it('NEEDS_YOU_PRIORITY is ordered highest first', () => {
-        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'vote', 'invite', 'message', 'group']);
+        // A bill waiting on its payer is a money step beside a deal's (DESIGN-getting-paid-fable §4.4).
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'bill', 'vote', 'invite', 'message', 'group']);
         expect(NEEDS_YOU_SLOT).toBe(48);
     });
 
@@ -47,5 +48,12 @@ describe('needsYouCounts: what the bell counts (DESIGN-standing-deals-upfront-am
         expect(needsYouCounts({ kind: 'deal', accent: true })).toBe(true);
         expect(needsYouCounts({ kind: 'deal', accent: false })).toBe(false);
         for (const kind of ['message', 'group', 'invite', 'vote'] as NeedsYouKind[]) expect(needsYouCounts({ kind, accent: false })).toBe(true);
+    });
+});
+
+describe('needsYouCounts: a bill (DESIGN-getting-paid-fable §4.4)', () => {
+    it("a bill from someone the payer knows is amber and counted; a stranger's is listed, calm, never counted", () => {
+        expect(needsYouCounts({ kind: 'bill', accent: true })).toBe(true);
+        expect(needsYouCounts({ kind: 'bill', accent: false })).toBe(false);
     });
 });

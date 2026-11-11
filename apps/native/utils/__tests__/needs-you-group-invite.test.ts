@@ -114,7 +114,7 @@ describe('the invitation line (utils/needs-you.ts buildNeedsYou)', () => {
     });
 
     it('sits after a vote and before messages and group lines', () => {
-        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'vote', 'invite', 'message', 'group']);
+        expect(NEEDS_YOU_PRIORITY).toEqual(['admin', 'knock', 'ask', 'deal', 'bill', 'vote', 'invite', 'message', 'group']);
         const entries = buildNeedsYou(base({
             groupInvites: [{ groupId: GARDEN, name: 'Garden Club' }],
             conversations: [{ id: 'c1', type: 'dm', unread: 1, peer: 'Bea' }],

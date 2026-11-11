@@ -548,11 +548,10 @@ export interface DmLineView {
     after: string | null;
     mark: DmLineMark;
     /**
-     * A line from before 1.4.0, shown read-only under DM_OLD_LINES_LABEL (dmLineIsOld; conversion code, log row OLDCHAT,
-     * remove in 1.5.0): 'sealed', an encrypted line whose words opened as they did before 1.4.0, in its named author's
-     * bubble; 'unsealed', a readable row (plaintext-v1, 00000), its words shown as nobody's. Absent on every other line.
+     * A line from before 1.4.0 whose words opened as they did then, in its named author's bubble, shown read-only under
+     * DM_OLD_LINES_LABEL (dmLineIsOld; conversion code, log row OLDCHAT, remove in 1.5.0). Absent on every other line.
      */
-    old?: 'sealed' | 'unsealed';
+    old?: true;
 }
 
 function decodeReadable(ciphertext: string): string | null {
@@ -605,11 +604,7 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
             return;
         }
         if (kind === 'not-encrypted') {
-            // Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): a readable row from before 1.4.0, as nobody's.
-            const oldWords = dmOldReadableWords(l);
-            views.set(l.id, oldWords === null
-                ? { text: null, format: null, after: null, mark: 'not-encrypted' }
-                : { text: oldWords, format: null, after: null, mark: null, old: 'unsealed' });
+            views.set(l.id, { text: null, format: null, after: null, mark: 'not-encrypted' });
             return;
         }
         let opened: OpenedDmLine | null = null;
@@ -637,7 +632,7 @@ export function checkDmThread(lines: readonly DmThreadLine[], keys: DmKeys | nul
             const afterAt = old?.after ? position.get(old.after) : undefined;
             if (old && (afterAt === undefined || dmLineHasOldShape(lines[afterAt]))) {
                 const oldMark: DmLineMark = old.moved ? 'moved' : afterAt !== undefined && afterAt > i ? 'out-of-order' : null;
-                views.set(l.id, { text: old.text, format: null, after: old.after, mark: oldMark, old: 'sealed' });
+                views.set(l.id, { text: old.text, format: null, after: old.after, mark: oldMark, old: true });
                 return;
             }
             views.set(l.id, { text: null, format: null, after: null, mark: 'not-verified' });
@@ -692,12 +687,10 @@ export function dmLineShownText(view: DmLineView | undefined | null): string {
 
 /**
  * True when a line is shown as nobody's: a neutral line in the middle of the chat, not in its named author's bubble. A
- * line that didn't open or wasn't signed by its named sender, one that isn't encrypted, and the admin page's message. And
- * a readable row from before 1.4.0 (old 'unsealed'; conversion code, log row OLDCHAT, remove in 1.5.0): its words show,
- * but the node could have written them, so never as a member's.
+ * line that didn't open or wasn't signed by its named sender, one that isn't encrypted, and the admin page's message.
  */
 export function dmLineIsUnattributed(view: DmLineView | undefined | null): boolean {
-    return view?.mark === 'not-verified' || view?.mark === 'not-encrypted' || view?.mark === 'from-admins' || view?.old === 'unsealed';
+    return view?.mark === 'not-verified' || view?.mark === 'not-encrypted' || view?.mark === 'from-admins';
 }
 
 /**
@@ -757,10 +750,14 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
 // format 4 came, which the label says. One check catches a careless one: a line whose sealed "after" names a line newer
 // than the cutover was written after it, so it is hidden as a forgery.
 //
-// Shown: a sealed line that opens, in its named author's bubble (with the mark a moved or reordered line had before); a
-// readable row (plaintext-v1, 00000) whose words decode, as nobody's, because the node could have written those words in
-// anyone's name. Every old line goes under DM_OLD_LINES_LABEL, once above its run (dmOldLineRunStarts), and neither app
-// answers, quotes, edits or reacts to one (dmLineIsOld). A photo stays locked.
+// Shown: a sealed line that opens, in its named author's bubble (with the mark a moved or reordered line had before), under
+// DM_OLD_LINES_LABEL once above its run (dmOldLineRunStarts); neither app answers, quotes, edits or reacts to one
+// (dmLineIsOld). A photo stays locked.
+//
+// NOT shown: a readable row (plaintext-v1, 00000) stays the hidden line it is today, whatever its time. The node holds no
+// key, but it can write a readable row in anyone's name dated whenever it likes, so nothing can show one is old: shown, a
+// row written today and dated last month would pass as an old line, which the rule above refuses (and the apps' tests pin
+// that such a row never shows its words: MessagesPage.dm-lines.test.tsx, "a row in Ben's name that isn't an encrypted line").
 
 /** The 1.4.0 deploy: a line the node dates before this, not in format 4's form, is from before every message was signed. */
 export const DM_OLD_LINE_CUTOFF = '2026-11-11T19:16:00.000Z';
@@ -807,7 +804,7 @@ export function dmLineHasOldShape(l: { ciphertext?: unknown; nonce?: unknown; ti
 
 /** True for a line shown old: read-only, under DM_OLD_LINES_LABEL; never answered, quoted, edited or reacted to. */
 export function dmLineIsOld(view: DmLineView | undefined | null): boolean {
-    return view?.old === 'sealed' || view?.old === 'unsealed';
+    return view?.old === true;
 }
 
 /**
@@ -823,15 +820,6 @@ export function dmOldLineRunStarts(old: ReadonlyArray<boolean | null>): boolean[
         inRun = o;
         return starts;
     });
-}
-
-/** A readable row's words from before the cutover (plaintext-v1: base64 UTF-8; 00000: the column as written), or null. */
-function dmOldReadableWords(l: DmThreadLine): string | null {
-    if (!dmLineSentBeforeCutover(l.timestamp) || typeof l.ciphertext !== 'string') return null;
-    if (l.nonce === '00000') return l.ciphertext.trim() ? l.ciphertext : null;
-    if (l.nonce !== 'plaintext-v1') return null;
-    const text = decodeReadable(l.ciphertext);
-    return text !== null && text.trim() ? text : null;
 }
 
 /** An old line's words, opened. */

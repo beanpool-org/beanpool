@@ -40,7 +40,7 @@ describe('an old line opens as it did before 1.4.0 (the 1.2.36 sealer, frozen)',
         it(`${label}: for both people, in either key spelling, as an old sealed line in its author's bubble`, () => {
             for (const keys of [anaKeys, benKeys]) {
                 const v = viewOf([l], keys);
-                expect(v).toEqual(expect.objectContaining({ text, format: null, old: 'sealed' }));
+                expect(v).toEqual(expect.objectContaining({ text, format: null, old: true }));
                 expect(dmLineIsOld(v)).toBe(true);
                 expect(dmLineIsUnattributed(v)).toBe(false);
                 expect(dmLineShownText(v)).toBe(text);
@@ -107,7 +107,7 @@ describe('anything newer without a valid signature stays hidden exactly as today
         expect(views.get(forged.id)).toEqual({ text: null, format: null, after: null, mark: 'not-verified' });
         expect(views.get(newLine.id)).toEqual(expect.objectContaining({ text: 'after the cutover', format: 4 }));
         // Without the newer line in the thread there is nothing to tell it by: it reads as old (format 3's own hole, the label's).
-        expect(checkDmThread([forged], anaKeys, CONV).get(forged.id)?.old).toBe('sealed');
+        expect(checkDmThread([forged], anaKeys, CONV).get(forged.id)?.old).toBe(true);
         // And a newer line the node re-dates before the cutover is still format 4's: never old, so the forgery stays hidden.
         const redated = { ...newLine, timestamp: '2026-11-01T10:00:00.000Z' };
         expect(dmLineHasOldShape(redated)).toBe(false);
@@ -131,25 +131,23 @@ describe('anything newer without a valid signature stays hidden exactly as today
     });
 });
 
-describe('a readable row from before 1.4.0 (plaintext-v1, 00000)', () => {
+describe('a readable row (plaintext-v1, 00000) stays hidden, however the node dates it', () => {
+    // The node holds no key but can write a readable row in anyone's name and date it whenever it likes: nothing can show one
+    // is old, so one written today and dated last month would pass as old. It stays the hidden line it is today.
     const plain = (text: string, timestamp: string | null, nonce = 'plaintext-v1'): DmThreadLine => ({
-        id: 'p1000000-0000-4000-8000-0000000000p1', authorPubkey: P.ben.publicKey,
+        id: 'p1000000-0000-4000-8000-0000000000e1', authorPubkey: P.ben.publicKey,
         ciphertext: nonce === 'plaintext-v1' ? Buffer.from(text).toString('base64') : text, nonce, type: 'text', metadata: null, timestamp,
     });
-    it('shows its words as old and nobody\'s: the node could have written them in anyone\'s name', () => {
-        for (const l of [plain('A June hello', '2026-06-21T10:00:00.000Z'), plain('A first-release line', '2026-06-20 10:00:00', '00000')]) {
-            const v = viewOf([l]);
-            expect(v).toEqual({ text: l.nonce === '00000' ? 'A first-release line' : 'A June hello', format: null, after: null, mark: null, old: 'unsealed' });
-            expect(dmLineIsOld(v)).toBe(true);
-            expect(dmLineIsUnattributed(v)).toBe(true);
-            expect(dmQuoteFrom(l, v)).toBe('nobody');
-        }
-    });
-    it('after the cutover, or when it doesn\'t decode, it is the hidden line it is today', () => {
-        for (const l of [plain('A new readable line', AFTER), plain('x', '2026-06-21T10:00:00.000Z', 'some-other-nonce'), { ...plain('', '2026-06-21T10:00:00.000Z'), ciphertext: Buffer.from([0xff, 0xfe, 0x80]).toString('base64') }]) {
-            const v = viewOf([l]);
-            expect(v).toEqual({ text: null, format: null, after: null, mark: 'not-encrypted' });
-            expect(dmLineShownText(v)).toBe(DM_LINE_NOT_ENCRYPTED_TEXT);
+    it('dated before the cutover, after it, or not at all', () => {
+        for (const ts of ['2026-06-21T10:00:00.000Z', '2026-06-20 10:00:00', BEFORE, AFTER, null]) {
+            for (const l of [plain('Send me your 12 words', ts), plain('A first-release line', ts, '00000'), plain('x', ts, 'some-other-nonce')]) {
+                const v = viewOf([l]);
+                expect(v).toEqual({ text: null, format: null, after: null, mark: 'not-encrypted' });
+                expect(dmLineShownText(v)).toBe(DM_LINE_NOT_ENCRYPTED_TEXT);
+                expect(dmLineIsOld(v)).toBe(false);
+                expect(dmLineIsUnattributed(v)).toBe(true);
+                expect(dmQuoteFrom(l, v)).toBe('nobody');
+            }
         }
     });
 });

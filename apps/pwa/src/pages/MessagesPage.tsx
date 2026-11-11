@@ -6,7 +6,7 @@
  *  - Chat: shows messages in a conversation with send input
  */
 
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, type CSSProperties } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo, type CSSProperties, type ReactNode } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi, decideMessageRequest,
     sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
@@ -25,6 +25,8 @@ import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
+// Old chat, read-only: conversion code, log row OLDCHAT, remove in 1.5.0 (core, as the thread check that marks the lines).
+import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_LABEL } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
 import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
@@ -600,6 +602,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         return found;
     }, [shownMessages, lineViews, activeConv, identity, isDmThread]);
+    // Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): a DM line from before 1.4.0 the thread check opened (core
+    // dmLineIsOld) is read-only, never answered, quoted, edited or reacted to; one label goes above each run of them, in the
+    // order the thread is drawn (core dmOldLineRunStarts), as the phone's list does.
+    const isOldLine = (m: ApiMessage | null | undefined): boolean => !!m && dmLineIsOld(lineViews?.get(m.id));
+    const oldLineLabelAbove = useMemo(() => {
+        const above = new Set<string>();
+        if (!lineViews) return above;
+        const starts = dmOldLineRunStarts(searchedMessages.map((m) => {
+            const v = lineViews.get(m.id);
+            return v ? dmLineIsOld(v) : null;
+        }));
+        searchedMessages.forEach((m, i) => { if (starts[i]) above.add(m.id); });
+        return above;
+    }, [searchedMessages, lineViews]);
     const userTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -1091,6 +1107,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function handleStartReply(msg: ApiMessage) {
+        // A line from before 1.4.0 is never answered or quoted (OLDCHAT).
+        if (isOldLine(msg)) return;
         if (editingMessage) {
             setEditingMessage(null);
             setDraft('');
@@ -1101,6 +1119,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }
 
     function handleStartEdit(msg: ApiMessage) {
+        // Nor edited (OLDCHAT).
+        if (isOldLine(msg)) return;
         setEditingMessage(msg);
         setReplyToMessage(null);
         setActiveEmojiPickerId(null);
@@ -1116,6 +1136,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     async function handleToggleReaction(messageId: string, emoji: string) {
         if (!activeConv) return;
+        // Nor reacted to (OLDCHAT).
+        if (isOldLine(messages.find((m) => m.id === messageId))) return;
         // Optimistic update
         setMessages(prev => prev.map(m => {
             if (m.id !== messageId) return m;
@@ -2514,7 +2536,18 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {t('No messages in this chat match.')}
                         </p>
                     )}
-                    {searchedMessages.map((msg, index) => {
+                    {/* Old chat (conversion code, log row OLDCHAT, remove in 1.5.0): one label above each run of lines from
+                        before 1.4.0 (core dmOldLineRunStarts), in the middle of the chat, as the app's own words. */}
+                    {searchedMessages.map((msg, index) => <Fragment key={msg.id}>{oldLineLabelAbove.has(msg.id) && (
+                        <div data-testid="dm-old-lines-label" role="note" style={{ alignSelf: 'center', margin: '0.75rem 0 0.25rem', maxWidth: '90%' }}>
+                            <div style={{
+                                background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', padding: '0.4rem 0.8rem',
+                                fontSize: '0.8rem', fontWeight: 500, textAlign: 'center', whiteSpace: 'normal',
+                            }}>
+                                {t(DM_OLD_LINES_LABEL)}
+                            </div>
+                        </div>
+                    )}{((): ReactNode => {
                         const isSystem = msg.type === 'system' || msg.authorPubkey === 'SYSTEM';
                         const lineView = lineViews?.get(msg.id);
                         const groupLine = groupShown?.get(msg.id) ?? null;
@@ -2675,8 +2708,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         } catch {}
 
                         const isTombstone = msg.type === 'removed' || metaObj?.removed === true;
+                        // From before 1.4.0 (conversion code, log row OLDCHAT, remove in 1.5.0): read-only. Copy and Report stay.
+                        const oldLine = isOldLine(msg);
                         const isConvenor = isGroupChat && !!openGroup?.answer?.isConvenor;
-                        const isTextEditable = isMe && !isTombstone && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                        const isTextEditable = isMe && !isTombstone && !oldLine && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
                             (!isGroupChat || openGroup?.answer?.canPost !== false);
                         const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
                         const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
@@ -2684,7 +2719,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         // Group chats and DMs, as on the phone: an enterprise chat refuses it (403). In a DM with a blocked peer the
                         // phone's canPost is false, so it offers no Delete either.
                         const canDelete = ((isGroupChat && openGroup?.answer?.canPost !== false) || (activeConv.type === 'dm' && !isPeerBlocked)) &&
-                            isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
+                            isMe && !isTombstone && !oldLine && msg.type !== 'system' && !msg.systemType;
                         const canRemove = isGroupChat && isConvenor && !isMe && !isTombstone && msg.type !== 'system' && !msg.systemType;
 
                         const reactions: { emoji: string; author: string }[] = Array.isArray(metaObj?.reactions)
@@ -2697,7 +2732,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const uniqueEmojis = Object.keys(reactionCounts);
                         const totalReactionsCount = reactions.length;
                         const myReaction = reactions.find((r: any) => r && r.author === identity.publicKey);
-                        const showEmojiPicker = !inRequest && activeEmojiPickerId === msg.id;
+                        const showEmojiPicker = !inRequest && !oldLine && activeEmojiPickerId === msg.id;
                         const isTopMessage = index < 2;
                         // A long message folds with "…more" (FoldedChatText); never a removed line, nor one being edited.
                         const foldable = !isTombstone && editingMessage?.id !== msg.id;
@@ -2906,6 +2941,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             refused until it is accepted, and the person it is for decides first. Nor on
                                             a deleted line: the node refuses a reaction to it (403), as the phone hides them. */}
                                         {!inRequest && !isTombstone && <>
+                                        {!oldLine && <>
                                         <button
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); handleStartReply(msg); }}
@@ -2956,6 +2992,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         >
                                             {t('React')}
                                         </button>
+                                        </>}
                                         {/* Someone else's line of a locked group chat, opened here: reported with its own key (S6);
                                             or of a direct message: reported as sealed, with its sender's signature (R0). */}
                                         {(groupLine
@@ -3142,6 +3179,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
+                                            // An old line's reactions are shown as they were; no new one (OLDCHAT).
+                                            if (oldLine) return;
                                             setActiveEmojiPickerId(activeEmojiPickerId === msg.id ? null : msg.id);
                                         }}
                                         style={{
@@ -3175,7 +3214,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 )}
                             </div>
                         );
-                    })}
+                    })()}</Fragment>)}
                     {!chatSearch?.trim() && pendingHere.map(line => {
                         const failed = line.state === 'failed';
                         return (

@@ -82,14 +82,13 @@ async function main() {
     const se: any = await import('./state-engine.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
+    const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { getMembersVersion, getPostsVersion } = await import('./engine/versions.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const httpPort = await startHttpServer(0);

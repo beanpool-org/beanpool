@@ -27,14 +27,12 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdminDataPages123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole, reconcileLedgerFromDb, getCommonsBalanceExact } from './state-engine.js';
 import { ledger } from './engine/ledger.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -131,7 +129,6 @@ async function walkMembers(headers: Record<string, string>, limit: number, q?: s
 
 async function main() {
     console.log('Running the paged owner-console data test...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

@@ -101,7 +101,7 @@ interface CaseResult { step: string; starts: number; outputs: string; after: any
 async function runCase(step: string, baseDir: string, root: string, code: string, ownerSeedHex: string): Promise<CaseResult> {
     const dir = path.join(root, `crash-${step}`);
     copyDir(baseDir, dir);
-    const env = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: step };
+    const env = { NODE_ROLE: 'backup', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: step };
     const outputs: string[] = [];
     let node: NodeProc | null = await spawnNode(SCRIPT, dir, env);
     try {
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
     const replicationToken = crypto.randomBytes(32).toString('hex');
 
     console.log('\n— setup: a main server, a standby that copies it, then the main server killed —');
-    const main = await spawnNode(SCRIPT, mainDir, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+    const main = await spawnNode(SCRIPT, mainDir, { NODE_ROLE: 'primary' });
     let setup: any;
     let mainPeerId: string;
     try {
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
         mainPeerId = main.ready.peerId;
         fs.mkdirSync(baseDir, { recursive: true });
         fs.copyFileSync(path.join(mainDir, 'genesis.json'), path.join(baseDir, 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, baseDir, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(SCRIPT, baseDir, { NODE_ROLE: 'backup' });
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: mainPeerId });
         const pulled = await standby.send('pull');
         assert(pulled.resync.ok && pulled.envelope === 'stored', 'the standby copied the main server and holds its locked keys');

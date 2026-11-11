@@ -206,7 +206,7 @@ async function main(): Promise<void> {
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     const dir = (name: string) => path.join(root, name);
     const nodes: NodeProc[] = [];
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const [owen, ada, abe, mel] = ['Owen', 'Ada', 'Abe', 'Mel'].map(newId);
     const keysOf = (id: Id) => ({ publicKey: id.pk, privateKey: id.seedHex });

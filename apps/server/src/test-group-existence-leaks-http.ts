@@ -41,7 +41,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'GroupLeaksHttp123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -57,7 +56,6 @@ import { eventGoingPubkeys } from './engine/posts.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -120,7 +118,6 @@ const show = (r: Res) => `${r.status} ${r.text.slice(0, 160)}`;
 
 async function main(): Promise<void> {
     console.log("Nothing tells someone outside an invite-only group that it, or anything in it, exists (over HTTP)\n");
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

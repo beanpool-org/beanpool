@@ -1,7 +1,6 @@
 /**
- * Admin credentials for server suites, after sign-in step 7c: with the node's 2FA off, the admin password sent with a
- * request (X-Admin-Password, a body `password`) opens no admin route. A suite that runs the server in its own process
- * uses one of these instead. Nothing here changes the server: each one is a credential a real owner can hold.
+ * Admin credentials for server suites. The node has no admin password (Marty, 11 Nov 2026), so a suite signs in as a
+ * real owner does: with one of these. Nothing here changes the server: each one is a credential a real owner can hold.
  *
  *   - ownerTokenHeaders: an automation token made from an owner's key (a member seeded here, granted owner), the way an
  *     owner makes one from the phone. It reaches every admin route its scope allows; no token reaches the sign-in,
@@ -10,8 +9,6 @@
  *     no token reaches.
  *   - ownerPhoneSessionHeaders: an owner's key session from the phone's Manage hand-off, just unlocked: for the owner
  *     changes that ask a fresh proof (requireFreshProof), which a computer's session is sent to the phone for.
- *   - turnOn2faForTests: for a suite whose purpose is the password itself. It turns the node's 2FA on, and
- *     `headers()` sends the password with a fresh code, as an owner with an authenticator does.
  *
  * Call either after initStateEngine() (the token's owner is a member row) and before the requests that need it.
  */
@@ -19,8 +16,6 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { grantNodeRole } from './state-engine.js';
 import { issueAutomationToken, type TokenScope } from './automation-tokens.js';
-import { updateLocalConfig } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { mintHandshakeToken, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
 
 /** Seed a member that holds the owner role, and return its key. */
@@ -65,15 +60,4 @@ export function ownerPhoneSessionHeaders(ownerPubkey?: string): Record<string, s
     const s = consumeHandshakeToken(handshakeToken, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
     if (!s.ok || !s.sessionId) throw new Error(`could not open a test hand-off session: ${s.error}`);
     return { 'X-Admin-Session': s.sessionId };
-}
-
-/**
- * Turn the node's 2FA on with a new secret. `headers()` returns the password with a code that is right now; the used-code
- * memory is cleared first, so each request may send the same 30-second code (the server refuses a replayed one).
- */
-export function turnOn2faForTests(password: string): { secret: string; code: () => string; headers: () => Record<string, string> } {
-    const secret = generateTotpSecret();
-    updateLocalConfig({ totpEnabled: true, totpSecret: secret, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
-    const code = () => { forgetUsedTotpCodesForTests(); return generateTotpCode(secret); };
-    return { secret, code, headers: () => ({ 'X-Admin-Password': password, 'X-Admin-TOTP': code() }) };
 }

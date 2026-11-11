@@ -40,7 +40,6 @@ delete process.env.PLACE_WATCHES_MAX;
 delete process.env.NEARBY_LISTINGS_RADIUS_KM;
 // Read once, at the first ask: a cap small enough to see.
 process.env.NEARBY_LISTINGS_MAX = '3';
-process.env.ADMIN_PASSWORD = 'Global-Cost-Limits-Admin-77!';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -107,8 +106,6 @@ async function main() {
     const { cleanStorageAndCompressLogs } = await import('./engine/storage-health.js');
 
     initSchema();
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     const se = await import('./state-engine.js');
     await se.initStateEngine();
     const { archiveStaleListings: archiveEngine } = await import('./engine/posts.js');

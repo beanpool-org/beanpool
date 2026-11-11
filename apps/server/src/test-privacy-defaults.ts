@@ -38,7 +38,7 @@
  *      membership probe answers only the key it asks about, whether it is a member as well as its name (multi-community
  *      review F3); the name check is rate-limited per address; the trust
  *      profile answers only a member, and a redeem gives an existing member's card only to that member's own key.
- *      Settings lists the enterprises with the admin password. A key-less socket hears no doorbell for any of them.
+ *      Settings lists the enterprises to an owner's key session. A key-less socket hears no doorbell for any of them.
  *
  * The real server, every request over TLS through the signature middleware, with every ENFORCE_* variable removed
  * (the fresh-download default) on a local node (NODE_PROFILE unset). The global node's guest view is the business of
@@ -53,8 +53,6 @@ delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 delete process.env.NODE_PROFILE;
-const ADMIN_PW = 'PrivAdminPass123!';
-process.env.ADMIN_PASSWORD = ADMIN_PW;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
@@ -177,6 +175,14 @@ async function main() {
     const sam = member('PrivSam', { status: 'disabled' }); // suspended: still a member, reads as a non-member
     const vera = member('PrivVera', { visitor: true, balance: 3 }); // a visitor's row
     const outsider = newId(); // signs, but no member here
+    // The community's owner, for Settings' reads (the node has no admin password: Settings signs in with an owner's key).
+    // Seeded where first needed (section 5), so every section before it runs on the members above alone.
+    let settingsOwner: string | null = null;
+    const asSettingsOwner = async (): Promise<Record<string, string>> => {
+        const { ownerSessionHeaders, seedOwnerForTests } = await import('./admin-auth-test-harness.js');
+        settingsOwner ??= seedOwnerForTests('Olwen');
+        return ownerSessionHeaders(settingsOwner);
+    };
 
     const tx = (id: string, from: string, to: string, beans: number, memo: string) =>
         db.prepare('INSERT INTO transactions (id, from_pubkey, to_pubkey, amount_c, memo, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
@@ -417,16 +423,12 @@ async function main() {
         // An admin is neither of its two people: the manager's data (/admin/data) lists it spoken for, and not by whom or
         // in which deal. An admin's look at a trade is the logged one (/admin/disputes, queue item 29, Marty 4 Oct).
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         resetAdminAuthTarpit();
-        const twoFa = turnOn2faForTests(ADMIN_PW);
+        const ownerHeaders = await asSettingsOwner();
         beforeCall();
         const dataRes = await fetch(`${BASE}/api/local/admin/data`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', ...twoFa.headers() }, body: JSON.stringify({}),
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...ownerHeaders }, body: JSON.stringify({}),
         });
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
         resetAdminAuthTarpit();
         const dataText = await dataRes.text();
         const adminPost = (JSON.parse(dataText)?.posts ?? []).find((p: any) => p.id === takenId);
@@ -676,8 +678,6 @@ async function main() {
     {
         const { createCrowdfundProject } = await import('./db/db.js');
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-        const { initAdminPassword } = await import('./config/local-config.js');
-        initAdminPassword(); // ADMIN_PASSWORD, as a first boot takes it (index.ts)
         // Bob backs the bakery, which is placed on the map; Bob runs a crowdfund; Alice proposes a Commons project; Alice's
         // Pulse channel lists a video on her own page elsewhere.
         db.prepare("INSERT INTO enterprise_pledges (id, keeper, enterprise, amount_c) VALUES ('pledge-priv', ?, ?, ?)").run(bob.pk, enterprise, hc(5));
@@ -816,17 +816,11 @@ async function main() {
         const ownCard = await post('/api/invite/redeem', redeemBody, alice);
         assert(ownCard.body?.alreadyMember === true && ownCard.body?.member?.callsign === 'PrivAlice', `Alice, signing with her own key, gets her own card (got ${ownCard.status} ${ownCard.text.slice(0, 90)})`);
 
-        // Settings reads the enterprises with the admin password, and nobody reads them there without it.
+        // Settings reads the enterprises with an owner's key session, and nobody reads them there without one.
         resetAdminAuthTarpit();
-        // Step 7c: with 2FA off the password alone opens no admin route, so Settings sends it with 2FA on and a code (2FA goes
-        // off again after).
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        const { updateLocalConfig } = await import('./config/local-config.js');
-        const twoFa = turnOn2faForTests(ADMIN_PW);
-        const admin = await get('/api/local/admin/treasury', undefined, twoFa.headers());
-        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+        const admin = await get('/api/local/admin/treasury', undefined, await asSettingsOwner());
         assert(admin.status === 200 && admin.body?.treasuries?.some((t: any) => t.publicKey === enterprise && t.keepers?.some((k: any) => k.publicKey === alice.pk)),
-            `Settings lists the enterprises with the admin password (got ${admin.status} ${admin.text.slice(0, 90)})`);
+            `Settings lists the enterprises to an owner's key session (got ${admin.status} ${admin.text.slice(0, 90)})`);
         resetAdminAuthTarpit();
         const noAdmin = await get('/api/local/admin/treasury');
         assert((noAdmin.status === 401 || noAdmin.status === 403) && !noAdmin.text.includes(enterprise), `and nobody without it (got ${noAdmin.status})`);

@@ -12,7 +12,7 @@
  *      A moderator is let in (happy path), with a session that reaches reports and is refused everything else.
  *   5. Expiry: an expired pairing can be neither approved nor redeemed. A role revoked between approval and
  *      redemption gives no session.
- *   6. The node's 2FA code is still asked for, on the phone.
+ *   6. No code is asked for on the phone: the phone's unlock is the key's factor (the node has no server 2FA).
  *   7. Decline, and the brakes: creation per client, approvals through the auth limiter.
  *   8. The phone is told the computer's address as the node saw it, how long ago it asked, the time left, and
  *      "same network" when the phone's address matches.
@@ -36,7 +36,6 @@ import { resolveClientIp, setTrustConfigForTests } from './client-ip.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode } from './totp.js';
 import {
     approvePairing,
     confirmPairing,
@@ -176,7 +175,7 @@ async function main() {
     grantNodeRole(owner.pub, 'owner', 'SYSTEM');
     grantNodeRole(admin.pub, 'admin', owner.pub);
     grantNodeRole(moderator.pub, 'moderator', owner.pub);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false, communityName: 'QR Test' } as any);
+    updateLocalConfig({ communityName: 'QR Test' });
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -375,24 +374,21 @@ async function main() {
         grantNodeRole(admin.pub, 'admin', owner.pub);
     }
 
-    // ── 6. The node's 2FA ──
-    console.log("\n6. The node's 2FA code is not asked for on the phone (decision D2: the phone's unlock is the key's factor)");
+    // ── 6. No code on the phone ──
+    console.log("\n6. No code is asked for on the phone (decision D2: the phone's unlock is the key's factor)");
     {
-        const secret = generateTotpSecret();
-        updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
         const b = await newPairing();
         const noCode = await approve(b.pairingId, b.shortCode, owner);
-        assert(noCode.status === 200 && noCode.body.totpRequired === undefined, `with 2FA on, the phone approves without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
+        assert(noCode.status === 200 && noCode.body.totpRequired === undefined, `the phone approves without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
         assert((await typeDigits(b)).body.status === 'signed-in', 'and the browser is signed in');
         const b2 = await newPairing();
-        const stale = await approve(b2.pairingId, b2.shortCode, admin, { totpCode: '000000' === generateTotpCode(secret) ? '111111' : '000000' });
+        const stale = await approve(b2.pairingId, b2.shortCode, admin, { totpCode: '000000' });
         assert(stale.status === 200, 'a code an older app still sends is not looked at');
         const b3 = await newPairing();
         const forged = await approve(b3.pairingId, b3.shortCode, member, { claimed: owner.pub });
         assert(forged.status === 403 && forged.body.reason === 'bad-signature' && forged.body.totpRequired === undefined,
-            `with 2FA on, an approval signed by another key is still refused (got ${forged.status})`);
+            `an approval signed by another key is still refused (got ${forged.status})`);
         assert((await poll(b3)).body.status === 'waiting', 'and that pairing is still waiting');
-        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
     }
 
     // ── 7. Decline, and the brakes ──

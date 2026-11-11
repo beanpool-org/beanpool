@@ -37,7 +37,7 @@ import {
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PRE_RESTART = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'community-settings', 'role', 'pull-config'];
-const STANDBY_ENV = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' };
+const STANDBY_ENV = { NODE_ROLE: 'backup' };
 
 /** The standby put back as it was, by `state` read in the process that rolled back or started after. */
 function assertRolledBack(world: World, s: Record<string, any>, label: string, step: string): void {

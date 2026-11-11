@@ -32,14 +32,12 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
-const ADMIN_PASSWORD = 'correct-horse-battery-staple-1234';
 
 // Every assertion runs and failures are reported together, so one broken finding does not hide the others.
 let run = 0, passed = 0;
@@ -90,8 +88,6 @@ async function main() {
     console.log('Running enterprise closed-state tests...\n');
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PASSWORD);
-    saveLocalConfig({ ...getLocalConfig(), adminHash: hash, salt });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -260,8 +256,7 @@ async function main() {
     setStatus(woundUp, 'completed');
     const signedAdminSet = await signedFetch('POST', `/api/enterprise/${woundUp}/location`, adminId, { lat: -28.5, lng: 153.5 });
     assert(signedAdminSet.status === 403, `Admin SET on a wound-up enterprise via the signed route is 403 (got ${signedAdminSet.status})`);
-    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (its 403 would hide this one's); the
-    // Settings route is called with an owner's automation token.
+    // The Settings route, called with an owner's automation token (the node has no admin password).
     const settingsAdmin = ownerTokenHeaders('admin');
     const settingsAdminSet = await fetch(`${BASE}/api/local/admin/treasury/${woundUp}/location`, {
         method: 'POST',

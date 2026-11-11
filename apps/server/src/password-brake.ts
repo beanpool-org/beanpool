@@ -1,5 +1,8 @@
 /**
- * The brake on guessing the admin password.
+ * The brake on guessing an owner's secret online. The node has no admin password any more (Marty, 11 Nov 2026): what this
+ * brakes now is an owner's break-glass code on the enrol routes (admin-auth.ts), the recovery code on its routes
+ * (routes/takeover-envelope.ts) and a standby's replication token on the copy routes (routes/backup.ts). The text below
+ * was written for the password, and holds for each of them: read "password" as the secret the route takes.
  *
  * The password is the one secret an outsider can try online, so guessing it must stay slow. But on a node with no
  * key owner yet (every node right after its launch update) the password is also the only way in, so no stranger may
@@ -75,7 +78,6 @@
  * break-glass code is still checked while a source is braked: it is 64 random bits, not guessable online.
  */
 import type Koa from 'koa';
-import { getLocalConfig, verifyPasswordAsync } from './config/local-config.js';
 import { clientLimiterKey, isSharedSourceKey } from './client-ip.js';
 import { logger } from './logger.js';
 import { noteSecurityEvent } from './services/security-signal.js';
@@ -391,41 +393,6 @@ export function refuseBraked(ctx: Koa.Context | any, refusal: { retryAfter: numb
         reason: refusal.reason,
         passwordBackoff: true,
     };
-}
-
-/**
- * Check the node's admin password under the brake.
- *   'ok'     — correct (the source's record is cleared);
- *   'wrong'  — missing or incorrect (counted), the caller answers 401 as before;
- *   'braked' — not checked; 429 is already set on ctx.
- * A missing password is 'wrong' without being counted: nothing was guessed.
- *
- * Under 2FA a right password alone never clears the record: only a right 2FA code does (the caller reports it with
- * notePasswordSuccess). Otherwise anyone who knows the password could wipe their source's count of wrong codes
- * between guesses by sending the password somewhere that takes it alone (#937 review, finding 1).
- */
-export async function checkAdminPassword(ctx: Koa.Context | any, password: unknown): Promise<'ok' | 'wrong' | 'braked'> {
-    const config = getLocalConfig();
-    if (!password || !config.adminHash || !config.salt) return 'wrong';
-    const key = clientLimiterKey(ctx);
-    const admission = await acquirePasswordAttempt(key);
-    if (!admission.admitted) {
-        refuseBraked(ctx, admission);
-        return 'braked';
-    }
-    let ok = false;
-    try {
-        ok = await verifyPasswordAsync(String(password), config.adminHash, config.salt);
-    } finally {
-        settlePasswordAttempt(key, ok, !twoFactorOn());
-    }
-    return ok ? 'ok' : 'wrong';
-}
-
-/** Whether the node asks for a 2FA code after the password; while it does, a right password alone clears nothing. */
-export function twoFactorOn(): boolean {
-    const c = getLocalConfig();
-    return !!(c.totpEnabled && c.totpSecret);
 }
 
 /** Tests only. */

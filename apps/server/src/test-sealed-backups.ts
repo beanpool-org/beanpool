@@ -3,8 +3,9 @@
  *
  *  1. Seal → restore round trip onto a FRESH data dir (a second process with its own data dir, its own genesis and
  *     its own node key) with the recovery code, through the real HTTPS server as the operator manual's curl line
- *     sends it: the database, the node key, community key, genesis, connectors, the admin/2FA credentials, the
- *     roles and the recovery code record all come back.
+ *     sends it: the database, the node key, community key, genesis, connectors, the roles and the recovery code
+ *     record all come back. What an older install's local-config.json still holds of the admin password and its 2FA
+ *     does not travel: the take-over bundle's localConfig is empty, and the restored server's config holds none of it.
  *  2. A plain `.tar.gz` is refused 400, naming `beanpool restore --unlocked`: nothing extracted, the live database
  *     untouched (design case 18 §3.1). The images and shortfall rows (2–2d) restore the same archives sealed.
  *  3. The hostile-archive suite through the sealed path: a `../` member, a symlink, a hardlink and an absolute
@@ -17,7 +18,7 @@
  *     X-Accept-Signer header changes nothing (the header is gone, design case 18 D3); a header whose signature does
  *     not match the server it names is refused 400.
  *  6. A file signed by another key, carrying a forged take-over bundle, sent with X-Accept-Signer: 409, and nothing
- *     changes: no key, no password, not the database.
+ *     changes: no key, not local-config.json, not the database.
  *  7. On a main server a `mirror` link's key is not a pin (a file signed by it: 409); on a standby it is (standby
  *     review F2).
  *
@@ -134,19 +135,16 @@ async function child(): Promise<void> {
     const { initStateEngine } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { seedOwnerForTests, ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
 
-    // A fresh install: its own genesis, its own node key, its own admin password.
+    // A fresh install: its own genesis, its own node key, and the owner who claimed it (the claim code: the node has no
+    // admin password), its only member, who signs in with their key.
     initStateEngine();
     await ensureGenesis();
     fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const pw = 'Fresh-Server-Pw-551!';
-    const { hash, salt } = hashPassword(pw);
-    updateLocalConfig({ adminHash: hash, salt });
-    // Step 7c: with 2FA off the password alone opens no admin route. A fresh server's operator (no member yet, so no owner
-    // key) turns 2FA on and sends the password with a code, as the manual's lines then do.
-    const twoFa = (await import('./admin-auth-test-harness.js')).turnOn2faForTests(pw);
+    const freshOwner = seedOwnerForTests('FreshOwner');
+    const asOwner = (): Record<string, string> => ownerSessionHeaders(freshOwner);
     const before = {
         key: sha(fs.readFileSync(path.join(dataDir, 'libp2p_key'))),
         communityId: JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId,
@@ -163,26 +161,26 @@ async function child(): Promise<void> {
     // Bind once and read the port back, rather than guessing a random one that may be taken.
     const port = await startHttpsServer(0);
     // Before the restore, on this fresh server: its backups are readable until it has a recovery code, and the
-    // operator manual's make-a-code line (password header, JSON body) makes one, after which they are locked.
+    // owner's make-a-code request (JSON body) makes one, after which they are locked.
     let makeCode: any = null;
     if (mode === 'sealed') {
         const backupLocked = async () => {
             resetAdminAuthTarpit();
-            const r = await localFetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: twoFa.headers() });
+            const r = await localFetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: asOwner() });
             const b = Buffer.from(await r.arrayBuffer());
             return { status: r.status, locked: r.headers.get('x-backup-locked'), why: r.headers.get('x-backup-not-locked'), gzip: b[0] === 0x1f && b[1] === 0x8b };
         };
         const beforeCode = await backupLocked();
         resetAdminAuthTarpit();
         const made = await localFetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
-            method: 'POST', headers: { ...twoFa.headers(), 'Content-Type': 'application/json' }, body: '{}',
+            method: 'POST', headers: { ...asOwner(), 'Content-Type': 'application/json' }, body: '{}',
         });
         const madeBody: any = await made.json();
         const afterCode = await backupLocked();
         makeCode = { beforeCode, status: made.status, looksLikeCode: /^BPRC-\d+ /.test(madeBody?.code || ''), afterCode };
     }
     resetAdminAuthTarpit();
-    const headers: Record<string, string> = { ...twoFa.headers(), 'Content-Type': 'application/x-www-form-urlencoded' };
+    const headers: Record<string, string> = { ...asOwner(), 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
     const res = await localFetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
     const body = await res.json();
@@ -272,7 +270,7 @@ async function main(): Promise<void> {
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
     const { privateKeyFromProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { makeRecoveryCode, getSealedTakeoverEnvelope } = await import('./services/takeover-envelope.js');
     const { createSealedBackup } = await import('./services/sealed-backup.js');
@@ -284,11 +282,11 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), nodeKeyBytes);
     const nodeSeed = new Uint8Array(privateKeyFromProtobuf(nodeKeyBytes).raw.subarray(0, 32));
     fs.writeFileSync(path.join(dataDir!, 'connectors.json'), JSON.stringify([{ address: '/p2p/12D3KooWPeerExample', trustLevel: 'peer', enabled: true, callsign: 'friend', addedAt: 1 }]));
-    const PW = 'Main-Server-Pw-907!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXP' });
-    // 2FA stays on in the bundle; this process signs in with the password alone below, so switch it off locally
-    // AFTER the backup is made.
+    // What an older install's local-config.json may still hold of the admin password and its 2FA (Marty, 11 Nov 2026: the
+    // node has none; deleting them is the operator's hand step). Nothing reads them, and the take-over bundle carries
+    // none of them, so a restore never brings them to another server (step 1).
+    const LEFTOVER = { adminHash: crypto.randomBytes(64).toString('hex'), salt: crypto.randomBytes(32).toString('hex'), totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXP' };
+    updateLocalConfig(LEFTOVER as any);
     const ownerKey = crypto.randomBytes(32);
     const { ed25519 } = await import('@noble/curves/ed25519.js');
     const ownerPub = Buffer.from(ed25519.getPublicKey(ownerKey)).toString('hex');
@@ -345,8 +343,10 @@ async function main(): Promise<void> {
             "C12: and data/open-join.key, byte for byte");
         assert(JSON.parse(bundleText).files['vapid.key'] === mainVapidKeyBytes.toString('base64'),
             'W1: and data/vapid.key, the web push key browsers subscribed to, byte for byte');
+        assert(JSON.stringify(JSON.parse(bundleText).localConfig) === '{}' && !bundleText.includes(LEFTOVER.adminHash)
+            && !bundleText.includes(LEFTOVER.salt) && !bundleText.includes(LEFTOVER.totpSecret),
+            "the bundle's localConfig is empty: no admin hash, salt or 2FA secret an older install's config still holds");
     }
-    updateLocalConfig({ totpEnabled: false, totpSecret: null });
 
     /** Seal a tar exactly as the node does: its own key signs, locked to the owner and the code. */
     const sealAsNode = async (payload: Buffer, opts: { signingKey?: Uint8Array; nodePeerId?: string; kind?: 'backup' | 'takeover' } = {}) => {
@@ -365,7 +365,7 @@ async function main(): Promise<void> {
     assert(mc?.beforeCode.status === 200 && mc.beforeCode.gzip && mc.beforeCode.locked === 'no'
         && mc.beforeCode.why === "Backups are not locked yet: make a recovery code to lock them. Until then a backup file can be read by anyone who has it, and a server restored from it cannot open members' sign-in recovery copies.",
         `1. a fresh server with no recovery code sends a readable backup over HTTPS, flagged not locked (${JSON.stringify(mc?.beforeCode)})`);
-    assert(mc?.status === 200 && mc.looksLikeCode, `1. the operator manual's make-a-code request (password header, JSON body) makes a code over HTTPS (got ${mc?.status})`);
+    assert(mc?.status === 200 && mc.looksLikeCode, `1. an owner's make-a-code request (JSON body) makes a code over HTTPS (got ${mc?.status})`);
     assert(mc?.afterCode.status === 200 && !mc.afterCode.gzip && mc.afterCode.locked === 'yes', `1. …after which its backups are locked (${JSON.stringify(mc?.afterCode)})`);
     assert(rt.status === 200 && rt.body.success === true && rt.body.sealed === true && rt.body.restoredKeys === true,
         `1. the fresh server restores the sealed backup (got ${rt.status}: ${JSON.stringify(rt.body).slice(0, 200)})`);
@@ -374,8 +374,8 @@ async function main(): Promise<void> {
     assert(rt.after.communityKey === main.communityKey && rt.after.genesis === main.genesis && rt.after.communityId === main.communityId,
         '1. community.key and genesis.json are back');
     assert(rt.after.connectors === main.connectors, '1. connectors.json is back');
-    assert(rt.after.adminHash === hash && rt.after.salt === salt && rt.after.totpEnabled === true && rt.after.totpSecret === 'JBSWY3DPEHPK3PXP',
-        "1. the community's admin password and 2FA come back, so owners sign in with the community's credentials");
+    assert(rt.after.adminHash === undefined && rt.after.salt === undefined && rt.after.totpEnabled === undefined && rt.after.totpSecret === undefined,
+        `1. the main server's leftover admin hash, salt and 2FA do not come with it: owners sign in with their keys (${JSON.stringify([rt.after.adminHash, rt.after.salt, rt.after.totpEnabled, rt.after.totpSecret])})`);
     assert(rt.after.recoveryCodeId === code.codeId, '1. the recovery code record comes back, so the server keeps locking to the same paper');
     assert(JSON.stringify(rt.after.roles) === JSON.stringify(main.roles), '1. the roles are back');
     assert(rt.after.members === main.members && rt.after.marker, '1. the database is back (members, and the marker row)');
@@ -550,7 +550,7 @@ async function main(): Promise<void> {
 
     // ── This process as the restoring server, for the refusals (nothing below reaches the database swap) ──
     const { server, base } = await serveBackupRoutes();
-    // Step 7c: the password alone opens no admin route with 2FA off; the refusals are asked under Olive's owner key session.
+    // The refusals are asked under Olive's owner key session.
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const asOlive = ownerSessionHeaders(ownerPub);
     const restore = async (bytes: Buffer, headers: Record<string, string> = {}) => {
@@ -711,8 +711,8 @@ async function main(): Promise<void> {
         && sha(fs.readFileSync(path.join(dataDir!, 'genesis.json'))) === genesisBefore,
         "6. …this server's node key, community key and genesis are untouched");
     const configAfter = JSON.parse(fs.readFileSync(path.join(dataDir!, 'local-config.json'), 'utf-8'));
-    assert(configAfter.adminHash === configBefore.adminHash && configAfter.salt === configBefore.salt && configAfter.adminHash !== 'forged-hash',
-        '6. …and so is its admin password');
+    assert(JSON.stringify(configAfter) === JSON.stringify(configBefore) && !JSON.stringify(configAfter).includes('forged'),
+        "6. …and so is its local-config.json: nothing of the forged bundle's in it");
     assert(liveMembers() === membersBefore && noLeftovers().length === 0 && !fs.existsSync(path.join(dataDir!, 'restore-points')),
         '6. …and so is the database: nothing restored, no restore point, nothing left behind');
 

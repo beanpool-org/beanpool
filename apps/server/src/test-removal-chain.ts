@@ -4,8 +4,8 @@
  * pauseMember, which an admin's suspension and a report's both call); this suite reaches them through the real routes.
  *
  * Boots the real server; every request goes over HTTPS through the real signature middleware and real admin sessions (an
- * admin's key session, an owner's from a computer and from the phone's Manage hand-off, an owner's automation token, and
- * the password with a 2FA code). Expo and the owners' alert channel (a stand-in ntfy on loopback) are answered here:
+ * admin's key session, an owner's from a computer and from the phone's Manage hand-off, and an owner's automation token;
+ * the node has no admin password). Expo and the owners' alert channel (a stand-in ntfy on loopback) are answered here:
  * nothing leaves this machine.
  *
  *  1. Within 30 days of a vote that ended without removing a member (the community said No), another admin can't pause
@@ -15,21 +15,21 @@
  *     "Second pause in 30 days. The last vote said No.", in its record and to members. The routes ask it what they ask
  *     a co-owner's pause, by the suspend route and through a report: an owner's automation token is refused it, and an
  *     owner's phone hand-off 10 minutes after its unlock is asked to press Manage again; pressed just now, it is made.
- *  2. A third pause within 90 days of the first is refused to everyone, an owner from the phone, an owner's automation
- *     token and the server's password too, by the route, through a report and in the engine; a member with standing can
+ *  2. A third pause within 90 days of the first is refused to everyone, an owner from the phone and an owner's automation
+ *     token too, by the route, through a report and in the engine; a member with standing can
  *     still propose a Decision on them. Once the first is 90 days old, an owner may pause them again.
  *  3. The other endings: too few voted (an admin's refusal says so, never that the community decided, and so does an
  *     owner's second pause on its card), a vote stopped before it closed (its own words, and its card), a removal the
  *     community passed that an admin halted in its window (no owner needed: the community agreed with that case), and
  *     31 days on (an admin may again, and the card says nothing).
- *  4. The owners are told of every pause: one counted line a day by who acted (an admin, an owner, the admin password),
+ *  4. The owners are told of every pause: one counted line a day by who acted (an admin, an owner),
  *     on the channel and pushed to the owners only; a pause that held a role aside is told by its role line alone, pushed
  *     once; a refused pause tells nothing; with votes off a pause is told too. Nothing names the member or the case.
  *  5. The tripwire: an admin with 5 pauses whose votes are still open is refused a sixth (route, report, engine), nothing
  *     written; an owner is asked the fresh proof (from a computer: do it from the phone), and from the phone it is made;
- *     a pause refused for another reason is answered without asking any proof; the password makes one with its current code.
- *     Before Otto's five: an owner, and the password, inside the cool-down of a pause they made themselves read that
- *     another owner can, never "an owner can".
+ *     a pause refused for another reason is answered without asking any proof; the engine asks it of any actor with five
+ *     open, the old password marker's included. Before Otto's five: an owner inside the cool-down of a pause he made
+ *     himself reads that another owner can, never "an owner can".
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   SERVER_SUITES_ONLY=test-removal-chain node scripts/run-server-suites.mjs
@@ -131,7 +131,7 @@ async function signed(method: 'GET' | 'POST', p: string, id: Id, payload?: unkno
     }));
 }
 
-/** An admin route under `session`'s headers (a key session, or the password with a 2FA code). */
+/** An admin route under `session`'s headers (a key session or a token). */
 async function admin(p: string, session: Record<string, string>, payload?: unknown): Promise<Answer> {
     return answerOf(await fetch(`${BASE}${p}`, {
         method: 'POST',
@@ -141,7 +141,6 @@ async function admin(p: string, session: Record<string, string>, payload?: unkno
 }
 
 const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
-const ADMIN_PW = 'Removal-Chain-Admin-Pw-58!';
 const DAY = 24 * 60 * 60_000;
 const HOUR = 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -158,8 +157,8 @@ async function main() {
     const { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { ownerSessionHeaders, ownerPhoneSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
+    const { ownerSessionHeaders, ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, STEP_UP_REQUIRED_CODE } = await import('./admin-key-auth.js');
     const { issueAutomationToken } = await import('./automation-tokens.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
@@ -174,9 +173,7 @@ async function main() {
     se.initStateEngine();
     // This machine's own disk may be full enough to alert: the lines here are the pauses'.
     setSimulatedDiskUsageForTesting(10);
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Chain Test Commons' });
-    const twoFa = turnOn2faForTests(ADMIN_PW);
+    updateLocalConfig({ communityName: 'Chain Test Commons' });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
@@ -232,7 +229,6 @@ async function main() {
     const ottoPhone = () => ownerPhoneSessionHeaders(otto.pubKeyHex);  // pressed Manage on the phone just now
     const gwenSession = ownerSessionHeaders(gen.pubKeyHex);
     const gwenPhone = () => ownerPhoneSessionHeaders(gen.pubKeyHex);
-    const password = () => twoFa.headers();
     // Otto's hand-off with its unlock 10 minutes old: past the phone's 5-minute step-up, so an owner-only change asks Manage again.
     const ottoPhoneStale = () => {
         const headers = ottoPhone();
@@ -397,9 +393,6 @@ async function main() {
     const gwenThird = await pause(gwenPhone(), dave, 'A third case about the deposits, from the market');
     assert(gwenThird.status === 403 && gwenThird.body?.code === de.THIRD_PAUSE_CODE && gwenThird.body?.error === THIRD,
         `an owner from the phone is refused in the design's words (${gwenThird.status} ${gwenThird.body?.code}: ${gwenThird.body?.error})`);
-    fresh();
-    const pwThird = await admin(`/api/local/admin/users/${dave.pubKeyHex}/suspend`, password(), { reason: 'A third case, with the password' });
-    assert(pwThird.status === 403 && pwThird.body?.code === de.THIRD_PAUSE_CODE, `so is the server's password (${pwThird.status} ${pwThird.body?.code})`);
     const abeThird = await pause(abeSession, dave, 'A third case about the deposits, Abe');
     assert(abeThird.status === 403 && abeThird.body?.code === de.THIRD_PAUSE_CODE, `and an admin (${abeThird.status} ${abeThird.body?.code})`);
     const tokenThird = await pause(gwenToken, dave, 'A third case about the deposits, sent by a script');
@@ -515,13 +508,10 @@ async function main() {
     assert(pushed.length === 1 && JSON.stringify(pushed[0].to.slice().sort()) === JSON.stringify(ownersTokens),
         `pushed once, to the owners only (${JSON.stringify(pushed.map(p => p.to))})`);
     const t2 = await pause(ottoSession, tams[1], 'Sent threats in the market chat, too');
-    fresh();
-    const t3 = await admin(`/api/local/admin/users/${tams[2].pubKeyHex}/suspend`, password(), { reason: 'Sent threats in the market chat as well' });
     await settle();
     const details = pausedLines().map(e => e.detail);
-    assert(t2.status === 200 && t3.status === 200 && details.includes('A member was paused in the last day, by an owner.')
-        && details.includes('A member was paused in the last day, by the admin password.') && details.includes('A member was paused in the last day, by an admin.'),
-        `an owner's and the password's are counted on lines of their own (${JSON.stringify(details)})`);
+    assert(t2.status === 200 && details.includes('A member was paused in the last day, by an owner.') && details.includes('A member was paused in the last day, by an admin.'),
+        `an owner's is counted on a line of its own (${JSON.stringify(details)})`);
     const told = pausedLines().length;
     const refused = await pause(abeSession, dave, 'A refused pause tells nothing');
     await settle();
@@ -570,14 +560,10 @@ async function main() {
     // His five are on members he has not paused before (his own pause of Tam2 holds him to its cool-down).
     for (const t of [...tams.slice(0, 7)]) await lift(t).catch(() => undefined);
     // Those lifts stopped their votes. Inside their 30 days an owner who made one meets its cool-down, which names another
-    // owner, not "an owner": he is one, and may have a new reason. So does the password, on the one it made.
+    // owner, not "an owner": he is one, and may have a new reason.
     const ottoOwn = await pause(ottoSession, tams[1], 'Sent threats in the market chat again');
     assert(ottoOwn.status === 403 && ottoOwn.body?.code === de.REMOVAL_COOL_DOWN_CODE && /until \d{4}-\d\d-\d\d\. Another owner can, with a new reason\.$/.test(ottoOwn.body?.error ?? ''),
         `Otto, an owner, meets the cool-down of his own pause of Tam2: another owner can (${ottoOwn.status} ${ottoOwn.body?.code}: ${ottoOwn.body?.error})`);
-    fresh();
-    const pwOwn = await admin(`/api/local/admin/users/${tams[2].pubKeyHex}/suspend`, password(), { reason: 'Sent threats in the market chat, once more' });
-    assert(pwOwn.status === 403 && pwOwn.body?.code === de.REMOVAL_COOL_DOWN_CODE && /until \d{4}-\d\d-\d\d\. Another owner can, with a new reason\.$/.test(pwOwn.body?.error ?? ''),
-        `so does the password, on its own pause of Tam3 (${pwOwn.status} ${pwOwn.body?.code}: ${pwOwn.body?.error})`);
     const ottosFive = [tams[0], tams[2], tams[3], tams[4], tams[5]];
     for (const [i, t] of ottosFive.entries()) {
         const r = await pause(ottoSession, t, `A spam wave from new accounts, case ${i + 1} seen by an owner`);
@@ -593,16 +579,13 @@ async function main() {
     const ottoFromPhone = await pause(ottoPhone(), sid, 'Spam from a new account, seen by an owner');
     assert(ottoFromPhone.status === 200 && statusOf(sid) === 'disabled' && de.openPausesBy(otto.pubKeyHex) === 6,
         `from the phone's Manage, his sixth is made (${ottoFromPhone.status} ${ottoFromPhone.text.slice(0, 140)})`);
-    // The password with five open (rows made here): its current code is the fresh proof.
+    // Five open under the old password marker (rows made here, in the engine's own words): its next asks the proof too.
     for (let i = 0; i < 5; i++) {
         db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, opens_at, closes_at, created_at, updated_at)
             VALUES (?, 'SYSTEM', 'Remove someone?', 'An admin paused someone.', 'member', 'remove_member', ?, ?, '1m1v', 'open', ?, ?, ?, ?)`)
             .run(crypto.randomUUID(), `pk-elsewhere-${i}`, JSON.stringify({ rule: de.PAUSE_VOTE_RULE, pausedBy: 'owner:password', reason: 'A case made elsewhere' }),
                 ago(HOUR), new Date(Date.now() + 6 * DAY).toISOString(), ago(HOUR), ago(HOUR));
     }
-    fresh();
-    const pwSixth = await admin(`/api/local/admin/users/${tams[6].pubKeyHex}/suspend`, password(), { reason: 'Spam from a new account, the password' });
-    assert(pwSixth.status === 200 && statusOf(tams[6]) === 'disabled', `the password, with five open, pauses with its current code (${pwSixth.status} ${pwSixth.text.slice(0, 140)})`);
     const engineNoProof = de.adminEmergencySuspend(tams[1].pubKeyHex, 'owner:password', 'Spam from a new account, no proof');
     assert(!engineNoProof.success && engineNoProof.code === de.OPEN_PAUSES_PROOF_CODE && statusOf(tams[1]) === 'active',
         `in the engine, the password's next asks the proof too (${engineNoProof.code})`);

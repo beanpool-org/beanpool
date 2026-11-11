@@ -15,12 +15,10 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pulse-report-takedown.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-process.env.ADMIN_PASSWORD = 'AdminPulseReportSecret123!';
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initStateEngine, getMember, exportSyncState } from './state-engine.js';
-import { initAdminPassword } from './config/local-config.js';
 import { checkAdminAuth } from './admin-auth.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { addChannel } from './engine/creator-channels.js';
@@ -103,7 +101,6 @@ function insertItem(id: string, channelId: string, owner: string, title: string)
 async function main(): Promise<void> {
     console.log('=== Pulse Report & Takedown Tests ===\n');
 
-    initAdminPassword();
     initStateEngine();
 
     const deps: any = {

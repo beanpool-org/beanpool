@@ -36,7 +36,7 @@ import { claimText } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { logAddressTag } from '../log-address.js';
-import { getLocalConfig, hasAdminPassword } from '../config/local-config.js';
+import { getLocalConfig } from '../config/local-config.js';
 import { nodeHasOwner } from '../engine/node-roles.js';
 import { verifyStatementSignature } from '../engine/member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
@@ -59,18 +59,15 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
     router.get('/api/local/claim', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         const config = getLocalConfig();
-        // Whether this server has an admin password at all: its hash (hasAdminPassword), never isLocked alone. A new
-        // install has none (config/local-config.ts initAdminPassword), claimed or not, and the Settings sign-in then draws
-        // no password form or fold. A retired one never has one, whatever the config still holds, and `passwordRetired`
-        // says why (design step 10), so the sign-in can say an owner retired it.
-        const password = !config.passwordRetired && hasAdminPassword(config);
-        const retired = config.passwordRetired ? { passwordRetired: true } : {};
+        // `password: false` in every answer: the node has no admin password. The manager's Settings sign-in draws its
+        // password form, or the unclaimed card's password fold, for any other answer (apps/manager/src/lib/node-claim.ts
+        // fetchClaimState), so it is sent until that reader goes. The phone reads none of it.
         if (getNodeRole() === 'backup' && !nodeHasOwner()) {
-            ctx.body = { unclaimed: false, standby: true, password, ...retired };
+            ctx.body = { unclaimed: false, standby: true, password: false };
             return;
         }
         if (nodeHasOwner()) {
-            ctx.body = { unclaimed: false, password, ...retired };
+            ctx.body = { unclaimed: false, password: false };
             return;
         }
         const pending = pendingClaim(config);
@@ -82,8 +79,7 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
             codeId: pending ? pending.id : null,
             salt: pending ? pending.salt : null,
             communityName: config.communityName || config.callsign || null,
-            password,
-            ...retired,
+            password: false,
         };
     });
 

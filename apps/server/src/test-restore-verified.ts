@@ -26,8 +26,9 @@
  *  6. M1, boot: .restore-tmp, .restore-candidate, the upload, the opened file and a phone's file past its window are
  *     removed by secureDataDirAtBoot; a phone's file inside its window and other files stay.
  *  7. Review of #2050 B2, the restart window: once an owner's phone has finished a restore and the database is closed, a
- *     key session's restore and roll-back (their auth reads node_roles) and a password session's restore are each 409 in
- *     words. (Before: the key sessions' were a bare 500, which made check 3 red about one run in two.)
+ *     key session's restore and roll-back (their auth reads node_roles) are each 409 in words. (Before: the key sessions'
+ *     were a bare 500, which made check 3 red about one run in two. A password session's restore was 409 too, until the
+ *     node had no admin password.)
  *  8. Review of #2050 N1, the backups the live nodes made. A node that ran v1.2.15 … v1.2.18 and was then updated holds
  *     that release's schema.sql (the same bytes) with node_roles added (its founder the owner) and still the
  *     recovery_requests_touch_updated_at trigger keeper recovery removed: its database passes the check with that trigger
@@ -76,7 +77,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const sha = (b: Buffer | Uint8Array) => crypto.createHash('sha256').update(b).digest('hex');
-const PW = 'Restore-Verified-Pw-5517!';
 const PHOTO_KEY = 'posts/p-fresh/0-aabbccdd.jpg';
 const BUSY = 'A restore or roll-back is already running on this server; wait for it and the restart.';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -224,7 +224,6 @@ async function child(): Promise<void> {
     const { initStateEngine, seedGenesisMember } = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const keyAuth = await import('./admin-key-auth.js');
     const { initTls } = await import('./services/tls.js');
     const httpsServer = await import('./https-server.js');
@@ -234,14 +233,13 @@ async function child(): Promise<void> {
     initStateEngine();
     const fresh = scenario !== 'rb';
     if (fresh) {
-        // A fresh server (install, claim): its own community, key, password and 2FA, one owner, one photo.
+        // A fresh server (install, claim): its own community, key and settings (local-config.json), one owner, one photo.
         const { ensureGenesis } = await import('./genesis.js');
         const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-        const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
         await ensureGenesis();
         fs.writeFileSync(path.join(dataDir, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-        const { hash, salt } = hashPassword(PW);
-        updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
+        updateLocalConfig({ callsign: 'FreshServer' });
         // The owner here is the backups' owner too, so the phone that opens the file is an owner of this server.
         seedGenesisMember(process.env.TEST_OWNER!, 'FreshOwner');
         const photo = crypto.randomBytes(1800);
@@ -252,7 +250,6 @@ async function child(): Promise<void> {
             .run('p-fresh', PHOTO_KEY, sha(photo), photo.length);
         db.pragma('foreign_keys = ON');
     }
-    const tfa = turnOn2faForTests(PW);
     await initTls();
     const port = await httpsServer.startHttpsServer(0);
     const base = `https://localhost:${port}`;
@@ -289,6 +286,8 @@ async function child(): Promise<void> {
         complete: r.json?.complete, restoreRunning: r.json?.restoreRunning, serverFiles: r.json?.serverFiles, movedAside: r.json?.movedAside,
     });
     const dbOpen = () => { try { db.prepare('SELECT 1').get(); return true; } catch { return false; } };
+    // The owner's computer session (key sign-in): an owner's request on the backup routes.
+    const asOwner = (): Record<string, string> => ({ 'x-admin-session': session() });
     // Sessions are made before a race: a restore that wins closes the database the next one would be made in.
     const restoreBy = (bytes: Uint8Array, sid = session()) => call('POST', '/api/local/admin/restore', { 'x-admin-session': sid, 'X-Recovery-Code': code }, undefined, bytes);
 
@@ -338,10 +337,7 @@ async function child(): Promise<void> {
         const point = fs.readdirSync(path.join(dataDir, 'restore-points')).find((n) => n.endsWith('-before-restore')) ?? 'none';
         const byKey = await restoreBy(file(process.env.TEST_ONE!), k1);
         const rollBack = await call('POST', '/api/local/admin/restore-points/roll-back', { 'x-admin-session': k2 }, { name: point });
-        let pw: Record<string, string> = {};
-        try { pw = tfa.headers(); } catch { /* the database is closed: the request goes with none */ }
-        const byPassword = await call('POST', '/api/local/admin/restore', { ...pw, 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
-        Object.assign(out, { finished: brief(finished), dbOpen: dbOpen(), byKey: brief(byKey), rollBack: brief(rollBack), byPassword: brief(byPassword) });
+        Object.assign(out, { finished: brief(finished), dbOpen: dbOpen(), byKey: brief(byKey), rollBack: brief(rollBack) });
         await sleep(6500);
         Object.assign(out, { restarts, state: await dirState(dataDir) });
         done();
@@ -352,22 +348,22 @@ async function child(): Promise<void> {
         const snapshots = path.join(dataDir, 'snapshots');
         fs.mkdirSync(snapshots, { recursive: true });
         fs.writeFileSync(path.join(snapshots, 'snapshot-2026-01-01T00-00-00.db'), 'not a database, though named as a snapshot');
-        const verify = await call('POST', '/api/local/admin/backup/verify', tfa.headers(), { name: 'snapshot-2026-01-01T00-00-00.db' });
+        const verify = await call('POST', '/api/local/admin/backup/verify', asOwner(), { name: 'snapshot-2026-01-01T00-00-00.db' });
         fs.rmSync(snapshots, { recursive: true, force: true });
         fs.writeFileSync(snapshots, 'a file where the snapshots folder goes');
-        const snapshot = await call('POST', '/api/local/admin/snapshots/create', tfa.headers(), {});
+        const snapshot = await call('POST', '/api/local/admin/snapshots/create', asOwner(), {});
         fs.rmSync(snapshots, { force: true });
         // The folder of a photo the database names is a file in the store: the backup cannot look for the photo (ENOTDIR,
         // where a photo that is simply gone makes a short backup).
         const photoDir = path.dirname(path.join(dataDir, 'images', PHOTO_KEY));
         fs.renameSync(photoDir, photoDir + '.aside');
         fs.writeFileSync(photoDir, 'a file where a folder of photos goes');
-        const backup = await call('POST', '/api/local/admin/backup', tfa.headers(), {});
+        const backup = await call('POST', '/api/local/admin/backup', asOwner(), {});
         fs.rmSync(photoDir);
         fs.renameSync(photoDir + '.aside', photoDir);
         // The backup's photos are under posts/p-main/, which is a file in this store: they cannot be put back.
         fs.writeFileSync(path.join(dataDir, 'images', 'posts', 'p-main'), 'a file where a folder of photos goes');
-        const restored = await call('POST', '/api/local/admin/restore', { ...tfa.headers(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
+        const restored = await call('POST', '/api/local/admin/restore', { ...asOwner(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
         Object.assign(out, {
             verify: brief(verify), snapshot: brief(snapshot), backup: brief(backup),
             restored: { ...brief(restored), warning: restored.json?.warning, imagesError: restored.json?.images?.error },
@@ -391,7 +387,7 @@ async function child(): Promise<void> {
     }
 
     if (scenario === 'prep') {
-        const r = await call('POST', '/api/local/admin/restore', { ...tfa.headers(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
+        const r = await call('POST', '/api/local/admin/restore', { ...asOwner(), 'X-Recovery-Code': code }, undefined, file(process.env.TEST_ONE!));
         Object.assign(out, { r: brief(r), state: await dirState(dataDir) });
         done();
     }
@@ -472,8 +468,7 @@ async function main(): Promise<void> {
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
-    const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { getLocalConfig } = await import('./config/local-config.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const { createSealedBackup } = await import('./services/sealed-backup.js');
     const { checkRestoreDatabase } = await import('./services/restore-checks.js');
@@ -485,9 +480,6 @@ async function main(): Promise<void> {
     await ensureGenesis();
     const key = await generateKeyPair('Ed25519');
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(key));
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
-    turnOn2faForTests(PW);
     const ownerSeed = crypto.randomBytes(32);
     const ownerSeedHex = Buffer.from(core.toEd25519Pkcs8(ownerSeed)).toString('hex');
     const owner = Buffer.from(ed25519.getPublicKey(ownerSeed)).toString('hex');
@@ -760,7 +752,7 @@ async function main(): Promise<void> {
             const r = runChild('window', newDir(), env);
             assert(r.finished?.status === 200 && r.dbOpen === false,
                 `7. setup: an owner's phone finished a restore, and the database is closed for the restart (${JSON.stringify(r.finished)}, open ${r.dbOpen})`);
-            for (const [label, x] of [["a key session's restore", r.byKey], ["a key session's roll-back", r.rollBack], ["a password session's restore", r.byPassword]] as const) {
+            for (const [label, x] of [["a key session's restore", r.byKey], ["a key session's roll-back", r.rollBack]] as const) {
                 assert(x?.status === 409 && x?.error === BUSY && x?.restoreRunning === true, `7. in that window, ${label}: 409 in words (${JSON.stringify(x)})`);
             }
             assert(r.restarts === 1 && r.state?.points?.length === 1, `7. one restart, one restore point (${r.restarts}, ${JSON.stringify(r.state?.points)})`);

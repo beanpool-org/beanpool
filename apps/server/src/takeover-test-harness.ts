@@ -2,7 +2,7 @@
  * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
- * genesis, admin password, a take-over stopped after `role` decided, database, the take-over resume at boot (which may
+ * genesis, a take-over stopped after `role` decided, database, the take-over resume at boot (which may
  * finish steps and run the audit), the snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1),
  * libp2p (on port 0), the envelope service in the node's role, the take-over's after-boot steps; then the real
  * backup and take-over routes over HTTP with the real admin auth. A take-over's restart is the real
@@ -190,7 +190,6 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     await useFakeCloudflared(`${dataDir}.cloudflared`);
     const Koa = (await import('koa')).default;
     const { ensureGenesis } = await import('./genesis.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initStateEngine, getNodeRole } = await import('./state-engine.js');
     const takeover: { settleTakeoverBeforeDatabaseBoot?: () => void } & typeof import('./services/takeover.js') = await import('./services/takeover.js');
     const { resumeTakeoverAtBoot, finishTakeoverAfterBoot } = takeover;
@@ -215,7 +214,6 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { removeGithubSignInsAtBoot } = await import('./engine/github-sign-in-removal.js');
 
     await ensureGenesis();
-    initAdminPassword();
     // index.ts step 2.4: a take-over stopped after `role` decided before the database's boot reads the role. Optional: a tree
     // from before it still starts.
     takeover.settleTakeoverBeforeDatabaseBoot?.();
@@ -253,8 +251,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
 
     const deps: any = {
-        // The options too, as https-server.ts passes checkAdminAuth itself: a copy route's `legacyCopy` (step 7c) is one.
-        checkAdminAuth: async (ctx: any, opts?: Parameters<typeof checkAdminAuth>[1]) => checkAdminAuth(ctx, opts),
+        checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
         rateLimit: () => true, clampLimit: (_v: unknown, d = 20) => d, clampOffset: () => 0,
         activeConnections: new Map(), calculateAnalytics: () => ({}), enforceReadAuth: false, broadcast: () => {},
     };
@@ -409,8 +406,8 @@ export const recoverySealCommands: Record<string, (args: any) => Promise<unknown
  * process, once per start.
  */
 /**
- * Step 7c: with the node's 2FA off the admin password alone opens no admin route. An owner's credentials, made inside the
- * node's process (admin-auth-test-harness.ts) and answered as headers for the orchestrator to send. Every node answers
+ * The node has no admin password: an owner signs in with their key. An owner's credentials, made inside the node's
+ * process (admin-auth-test-harness.ts) and answered as headers for the orchestrator to send. Every node answers
  * them (runNodeChild); a suite's own command of the same name wins.
  *   - owner-token { scope?, owner? }: an automation token (it lives in local-config.json, so it outlives a restart); no
  *     token makes an owner-only change.
@@ -431,11 +428,6 @@ export const adminCredentialCommands: Record<string, (args: any) => Promise<unkn
     'owner-phone-session': async (a: { owner?: string }) => {
         const { ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
         return ownerPhoneSessionHeaders(a.owner ?? await firstOwner());
-    },
-    /** 2FA on, and the password with a fresh code: for a suite whose check is the password itself. */
-    'password-and-code': async (a: { password: string }) => {
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        return turnOn2faForTests(a.password).headers();
     },
 };
 

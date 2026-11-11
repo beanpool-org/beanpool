@@ -21,7 +21,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -29,8 +28,7 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, createPost as rawCreatePost, updatePost, getPosts } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { listingsForPeer, reachablePeers } from './federation-listings.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -38,10 +36,8 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestAdmin123!';
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
-// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main().
+let asOwner: Record<string, string> = {};
 
 const BYRON = '12D3KooWByronReachTestPeer0000000000';
 const BYRON_ADDR = `/ip4/172.18.0.21/tcp/4001/p2p/${BYRON}`;
@@ -57,9 +53,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -111,23 +106,19 @@ const titlesFor = (peerId: string): string[] => listingsForPeer(peerId).map(l =>
 
 async function main() {
     console.log('Running per-listing reach tests (#143 step 4)...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
-    const alone = await post('/api/local/connectors', { password: PW, address: BYRON_ADDR, trustLevel: 'peer', callsign: 'byron', enabled: true });
-    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
-        `setup: 2FA off, the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
 
     // Two capped peers we settle with, and one configured-but-capless peer.
     for (const [addr, callsign] of [[BYRON_ADDR, 'byron'], [BRISBANE_ADDR, 'brisbane'], [UNCAPPED_ADDR, 'sleepy']] as const) {
-        await post('/api/local/connectors', { password: PW, address: addr, trustLevel: 'peer', callsign, enabled: true });
+        await post('/api/local/connectors', { address: addr, trustLevel: 'peer', callsign, enabled: true });
     }
-    await post('/api/local/connectors/credit-cap', { password: PW, address: BYRON_ADDR, cap: 500 });
-    await post('/api/local/connectors/credit-cap', { password: PW, address: BRISBANE_ADDR, cap: 500 });
+    await post('/api/local/connectors/credit-cap', { address: BYRON_ADDR, cap: 500 });
+    await post('/api/local/connectors/credit-cap', { address: BRISBANE_ADDR, cap: 500 });
 
     const author = makeMember('Reacher');
 
@@ -212,7 +203,7 @@ async function main() {
         '9b. a CAPLESS peer is not — naming it would promise discovery into a community no purchase could complete from');
     const viaHttp = await get('/api/federation/reachable-peers');
     assert(viaHttp.status === 200 && (viaHttp.json?.peers ?? []).length === 2,
-        `9c. and the route serves it without a password, because it is a compose-time read (got ${viaHttp.status}, ${(viaHttp.json?.peers ?? []).length} peers)`);
+        `9c. and the route serves it with no admin credential, because it is a compose-time read (got ${viaHttp.status}, ${(viaHttp.json?.peers ?? []).length} peers)`);
     assert((viaHttp.json?.peers ?? []).every((p: any) => !('address' in p) && !('creditCap' in p)),
         '9d. carrying no address and no cap — a member needs the name, not the operator configuration');
 
@@ -220,9 +211,9 @@ async function main() {
     // kept an old address while migrating a host. Rendered with key={peerId}, so a duplicate is both a React
     // key collision and the same community offered twice (review finding).
     await post('/api/local/connectors', {
-        password: PW, address: `/dns4/byron.example/tcp/4001/p2p/${BYRON}`, trustLevel: 'peer', callsign: 'byron-again', enabled: false,
+        address: `/dns4/byron.example/tcp/4001/p2p/${BYRON}`, trustLevel: 'peer', callsign: 'byron-again', enabled: false,
     });
-    await post('/api/local/connectors/credit-cap', { password: PW, address: `/dns4/byron.example/tcp/4001/p2p/${BYRON}`, cap: 500 });
+    await post('/api/local/connectors/credit-cap', { address: `/dns4/byron.example/tcp/4001/p2p/${BYRON}`, cap: 500 });
     const ids = reachablePeers().map(p => p.peerId);
     assert(ids.filter(id => id === BYRON).length === 1,
         `9e. two connectors for the SAME peer id yield ONE entry (got ${ids.filter(id => id === BYRON).length}) — the compose form keys on peer id`);

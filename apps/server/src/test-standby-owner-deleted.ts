@@ -123,12 +123,12 @@ async function main(): Promise<void> {
 
     try {
         console.log('\n— 1. a main server where a removed member keeps her profile, and its standby —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, rhea, friend: finn });
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');

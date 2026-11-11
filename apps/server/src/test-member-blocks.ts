@@ -51,7 +51,6 @@ delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
 const PW = 'MemberBlocksPass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -64,7 +63,6 @@ import {
     initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -186,7 +184,6 @@ const aboutBlocks = (s: Sock) => s.events.filter(e => e.type === 'blocklist_upda
 
 async function main(): Promise<void> {
     console.log('\n=== A member\'s block list, kept by the community ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     // The ceiling's rounds send one member's 1,200 signed requests in seconds, the gateway reset before each (call): the

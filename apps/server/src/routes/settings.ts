@@ -15,16 +15,12 @@ import {
 import { isPrivatePreview } from '../config/private-preview.js';
 import { placeAs, placeShownTo, type PlaceShown } from '../config/community-place.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig,
+    saveLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
-    getGatewayConfig, isBreakGlassMode, isPasswordRetired,
+    getGatewayConfig,
 } from '../config/local-config.js';
-import { validateAdminSession, restampPasswordSession } from '../admin-key-auth.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, requireFreshProof, PASSWORD_RETIRED_CODE, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
-import { logger } from '../logger.js';
-import { noteSecurityEvent, actingAs } from '../services/security-signal.js';
-import qrcode from 'qrcode';
+import { requireAdminRole, requireFreshProof, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
+import { actingAs } from '../services/security-signal.js';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE, directoryPromiseStatus, directoryPromiseSaved } from '../services/directory-publisher.js';
 import { listingFields, publicListingFields, setPromiseTicks } from '../engine/directory-promise.js';
 import { getConfiguredSwitches } from '../config/node-profile.js';
@@ -143,30 +139,6 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     // The phone's Manage button hands its sign-in over in the fragment (`/settings#handoff=…`), which the manager
     // redeems with POST /api/local/admin/auth/exchange (routes/admin.ts). The query form `/settings?token=` of builds
     // before 1.2.57 is gone (cutover N2, audit E4): a token in the query is never read here, so it signs nobody in.
-
-    // Break-glass mode enforcement: settings is restricted to enrolled key sessions
-    if (isBreakGlassMode()) {
-        const rawToken =
-            (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
-            (typeof ctx.get === 'function' ? ctx.get('x-admin-session') : null) ||
-            ctx.request?.headers?.['x-admin-session'] ||
-            ctx.headers?.['x-admin-session'];
-        const sessionToken = Array.isArray(rawToken) ? rawToken[0] : (rawToken ? String(rawToken) : null);
-
-        const sessionRes = sessionToken ? validateAdminSession(sessionToken) : null;
-        const hasValidSession = sessionRes?.valid;
-        if (!hasValidSession) {
-            ctx.status = 403;
-            ctx.type = 'text/html';
-            const isExpired = sessionRes?.expired || sessionRes?.idleTimeout || sessionRes?.hardLimit;
-            const heading = isExpired ? 'Admin Session Expired' : 'Break-Glass Mode Active';
-            const message = isExpired
-                ? escapeHtml(sessionRes?.error || 'Your admin session has expired. Please sign in again with your key.')
-                : 'Settings access is restricted to enrolled key sessions. Password access is disabled except for key enrolment.';
-            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${heading} — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">${isExpired ? "⏱️" : "🔒"}</span> ${heading}</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${message}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Sign In with Key</a></main></body></html>`;
-            return;
-        }
-    }
 
     const managerPath = resolveServerPath('public/settings/index.html');
     const publicPath = resolveServerPath('public/settings.html');
@@ -625,7 +597,7 @@ router.get('/api/version', (ctx) => {
 // ===================== THRESHOLDS API =====================
 
 router.post('/api/admin/thresholds', async (ctx) => {
-    const { password, totpCode, ...updates } = (ctx as any).requestBody || {};
+    const updates = (ctx as any).requestBody || {};
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its thresholds')) return;
     // Only allow known threshold keys. A number out of its range (negative, Infinity, a fraction of a day) is refused
@@ -687,245 +659,6 @@ router.post('/api/admin/check-update', async (ctx) => {
             error: e.message || 'Failed to check',
         };
     }
-});
-
-// ===================== TOTP 2FA ENDPOINTS (#135) =====================
-
-/**
- * Once an owner retired the admin password (admin.ts retire-password) the 2FA that guarded it was deleted with it, and
- * setup, verify and backup codes refuse: a 2FA turned on again would guard nothing but these routes, and a later
- * take-over or sealed restore would clear it without a word (takeover-envelope.ts bundledLocalConfigUpdates). Off
- * stays open, so a 2FA turned on before this check existed can still be turned off.
- */
-const NO_SERVER_2FA = "This server has no admin password, so it has no server 2FA: your phone's lock is your second factor";
-function refuse2faWhileRetired(ctx: any): boolean {
-    if (!isPasswordRetired()) return false;
-    ctx.status = 403;
-    ctx.body = { error: NO_SERVER_2FA, code: PASSWORD_RETIRED_CODE, passwordRetired: true };
-    return true;
-}
-
-/**
- * GET /api/local/admin/2fa/status — Returns current 2FA status (enabled/disabled).
- * Same auth as every admin route. This used to take the password alone, so the UI could learn whether 2FA was on
- * before it had a code; it no longer needs to: with 2FA on, the password alone gets 401 { totpRequired: true },
- * which says exactly that. The password alone also let a caller clear the password brake between wrong codes.
- */
-router.get('/api/local/admin/2fa/status', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can read its 2FA status')) return;
-    const config = getLocalConfig();
-    ctx.body = {
-        success: true,
-        totpEnabled: !!config.totpEnabled,
-        hasSecret: !!config.totpSecret,
-        pendingSetup: !!config.totpPendingSecret,
-        backupCodesRemaining: config.totpBackupCodesHashes ? config.totpBackupCodesHashes.length : 0,
-        // Settings draws one line instead of the 2FA card (refuse2faWhileRetired). Absent on a node from before.
-        passwordRetired: !!config.passwordRetired,
-    };
-});
-
-/**
- * POST /api/local/admin/2fa/setup — Generates a new secret + QR code + backup codes for setup.
- * Does NOT disarm existing active 2FA or overwrite totpSecret until verified via /2fa/verify.
- */
-router.post('/api/local/admin/2fa/setup', async (ctx) => {
-    // First, so a refusal is never cached either: the answer carries the new secret and backup codes (#1531).
-    ctx.set('Cache-Control', 'no-store');
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (refuse2faWhileRetired(ctx)) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can set up 2FA')) return;
-    const config = getLocalConfig();
-    const secret = generateTotpSecret();
-    const backupCodes = generateBackupCodes(8);
-    const backupCodesHashes = backupCodes.map(hashBackupCode);
-    const label = config.communityName || config.callsign || 'Admin';
-    const otpauthUri = generateOtpauthUri(secret, label, 'BeanPool');
-
-    try {
-        const qrDataUrl = await qrcode.toDataURL(otpauthUri);
-        // #135 CR: Stash in totpPendingSecret and SHA-256 hashes so active 2FA is NOT disarmed during re-setup.
-        updateLocalConfig({
-            totpPendingSecret: secret,
-            totpPendingBackupCodesHashes: backupCodesHashes,
-        });
-
-        // #135 CR: Return formattedSecret (e.g. "ABCD EFGH IJKL MNOP") for manual entry legibility.
-        const formattedSecret = secret.match(/.{1,4}/g)?.join(' ') || secret;
-
-        ctx.body = {
-            success: true,
-            secret,
-            formattedSecret,
-            qrDataUrl,
-            otpauthUri,
-            backupCodes,
-        };
-    } catch (e: any) {
-        ctx.status = 500;
-        ctx.body = { success: false, error: e?.message || 'Failed to generate QR code' };
-    }
-});
-
-/**
- * POST /api/local/admin/2fa/verify — Verifies the setup code (`code` or `totpCode`, from the NEW authenticator) and
- * makes the secret from /2fa/setup the active one.
- *
- * While 2FA is already on this replaces the authenticator, so it asks for the same proof as turning 2FA off: a code
- * that is right now from the CURRENT authenticator, or a backup code, in `currentCode` or X-Admin-TOTP
- * (requireCurrentSecondFactor: a 2FA session or key session alone is not enough, and wrong codes are braked).
- * Otherwise anyone holding a stolen owner session could enrol their own authenticator, then use it to turn 2FA off.
- *
- * With 2FA on and no setup in progress, `code` is checked against the active authenticator, under the same brake,
- * and a right one only issues a 2FA session: nothing changes.
- */
-router.post('/api/local/admin/2fa/verify', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (refuse2faWhileRetired(ctx)) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA on')) return;
-    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const code = body.code || body.totpCode;
-    if (!code) {
-        ctx.status = 400;
-        ctx.body = { success: false, error: 'code is required' };
-        return;
-    }
-
-    const config = getLocalConfig();
-    const alreadyOn = !!(config.totpEnabled && config.totpSecret);
-    if (!config.totpPendingSecret) {
-        if (!alreadyOn) {
-            ctx.status = 400;
-            ctx.body = { success: false, error: 'No 2FA setup in progress — call /2fa/setup first' };
-            return;
-        }
-        if (!(await requireCurrentSecondFactor(ctx, code, 'to confirm'))) return;
-        const tfaSessionToken = issue2faSessionToken();
-        ctx.set('X-Admin-2FA-Session', tfaSessionToken);
-        ctx.body = { success: true, message: '2FA is already on', totpEnabled: true, tfaSessionToken, sessionToken: tfaSessionToken };
-        return;
-    }
-    const secretToVerify = config.totpPendingSecret;
-
-    const valid = verifyTotpCode(String(code).trim(), secretToVerify);
-    if (!valid) {
-        ctx.status = 400;
-        ctx.body = { success: false, error: 'Invalid 6-digit 2FA code — check authenticator app time sync' };
-        return;
-    }
-
-    if (alreadyOn) {
-        const current = body.currentCode
-            || (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-totp') : null);
-        if (!(await requireCurrentSecondFactor(ctx, current, 'from the authenticator you are replacing, to replace it'))) return;
-        // The wait for the brake may have let a concurrent verify or disable through: promote only what this
-        // request checked.
-        if (getLocalConfig().totpPendingSecret !== secretToVerify) {
-            ctx.status = 409;
-            ctx.body = { success: false, error: '2FA setup changed while this was being checked — start again' };
-            return;
-        }
-    }
-
-    // The code that confirmed the new authenticator is spent like any accepted code (totp.ts useTotpCode): once this
-    // secret is the node's, it signs nobody in during the 90 seconds it stays right. Checked as right above.
-    useTotpCode(String(code).trim(), secretToVerify);
-
-    // Promote pending secret & backup code hashes to active configuration
-    // #135 CR2 fix: Check array length (Boolean([]) is truthy in JS, so [] would overwrite active hashes!)
-    const activeBackupHashes = (config.totpPendingBackupCodesHashes && config.totpPendingBackupCodesHashes.length > 0)
-        ? config.totpPendingBackupCodesHashes
-        : (config.totpBackupCodesHashes || []);
-
-    updateLocalConfig({
-        totpSecret: secretToVerify,
-        totpBackupCodesHashes: activeBackupHashes,
-        totpEnabled: true,
-        totpPendingSecret: null,
-        totpPendingBackupCodesHashes: [],
-    });
-    // Every password session opened without this authenticator ends; the one that turned it on carries on.
-    restampPasswordSession(ctx);
-    const tfaSessionToken = issue2faSessionToken();
-    ctx.set('X-Admin-2FA-Session', tfaSessionToken);
-    console.log(alreadyOn
-        ? '🔒 [AdminAuth] TOTP 2FA authenticator replaced (current code checked)'
-        : '🔒 [AdminAuth] TOTP 2FA successfully enabled for admin account');
-    ctx.body = {
-        success: true,
-        message: '2FA enabled successfully',
-        totpEnabled: true,
-        tfaSessionToken,
-        sessionToken: tfaSessionToken,
-    };
-});
-
-/**
- * POST /api/local/admin/2fa/disable — Disables 2FA. Owner only, and only with a code that is right NOW (from the
- * authenticator, or a backup code) in `code`, `totpCode` or X-Admin-TOTP: a 2FA session from earlier, or a key
- * session, is not enough (requireCurrentSecondFactor says why).
- */
-router.post('/api/local/admin/2fa/disable', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA off')) return;
-    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const code = body.code || body.totpCode
-        || (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-totp') : null);
-    if (!(await requireCurrentSecondFactor(ctx, code))) return;
-    updateLocalConfig({
-        totpEnabled: false,
-        totpSecret: null,
-        totpBackupCodesHashes: [],
-        totpPendingSecret: null,
-        totpPendingBackupCodesHashes: [],
-    });
-    restampPasswordSession(ctx);
-    console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
-    ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };
-});
-
-/**
- * POST /api/local/admin/2fa/backup-codes — eight new backup codes, shown once; the old ones stop working. Owner only,
- * and only with the 6-digit code the authenticator shows right now in `code` or `totpCode`: not a backup code (one of
- * those must never buy eight more), and not a code this request already spent signing in, so `secondFactorJustVerified`
- * is not taken here. Stored as SHA-256 hashes like every backup code; the log line never carries a code.
- */
-router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
-    // First, so a refusal is never cached either (#1531).
-    ctx.set('Cache-Control', 'no-store');
-    if (!rateLimit(ctx)) return;
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (refuse2faWhileRetired(ctx)) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can see new 2FA backup codes')) return;
-    const config = getLocalConfig();
-    if (!config.totpEnabled || !config.totpSecret) {
-        ctx.status = 409;
-        ctx.body = { error: 'Two-factor sign-in is off, so there are no backup codes. Turn it on first.' };
-        return;
-    }
-    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const code = String(body.code ?? body.totpCode ?? '').trim();
-    if (!/^\d{6}$/.test(code)) {
-        ctx.status = 401;
-        ctx.body = { error: 'Enter the 6-digit code your authenticator app shows now to see new backup codes', totpRequired: true };
-        return;
-    }
-    (ctx.state as any).secondFactorJustVerified = false;
-    if (!(await requireCurrentSecondFactor(ctx, code, 'to see new backup codes'))) return;
-    const backupCodes = generateBackupCodes(8);
-    updateLocalConfig({ totpBackupCodesHashes: backupCodes.map(hashBackupCode) });
-    const by = (ctx.state as any).isKeySession ? `owner ${String((ctx.state as any).actor).slice(0, 12)}…` : 'the admin password';
-    logger.security('AUTH', `New 2FA backup codes were made by ${by}; the old ones no longer work`);
-    noteSecurityEvent({
-        key: 'sec.keys',
-        detail: `New 2FA backup codes for the admin password were made, ${(ctx.state as any).isKeySession ? 'by an owner' : 'with the admin password'}; the old ones no longer work.`,
-        actor: (ctx.state as any).isKeySession ? String((ctx.state as any).actor) : 'owner:password',
-        actorRole: (ctx.state as any).isKeySession ? 'owner' : 'admin password',
-    });
-    ctx.body = { success: true, backupCodes };
 });
 
 // NOTE: /api/admin/update (signal-file approach) has been removed.

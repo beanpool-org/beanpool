@@ -12,8 +12,8 @@
  * producing what a caller would actually get.
  *
  * Verifies:
- *  1. The one request shape that used to work — signed AND carrying the admin password — is refused by the
- *     router: 405, because the sibling GET /api/commons/decisions/:id still matches that path, so
+ *  1. The one request shape that used to work — signed AND carrying node admin credentials (the admin password
+ *     then; the node has none now, so an owner's key session here) — is refused by the router: 405, because the sibling GET /api/commons/decisions/:id still matches that path, so
  *     @koa/router's allowedMethods() answers Method Not Allowed rather than 404. Either way no handler
  *     runs. On a tree that still has the route this request is 200.
  *  2. Nothing ticked: a Decision sitting past its close time is untouched by that request...
@@ -39,13 +39,12 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createDecision, tickDecisions, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const TICK_PATH = '/api/commons/decisions/tick';
-const ADMIN_PW = 'TickRouteGone123!';
 
 // Every assertion runs and failures are reported together, so one broken finding does not hide the others.
 let run = 0, passed = 0;
@@ -105,8 +104,6 @@ async function main(): Promise<void> {
     console.log('\nThe decisions tick route is gone, over real HTTPS\n');
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt });
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
@@ -129,10 +126,11 @@ async function main(): Promise<void> {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(decision.id);
     assert(statusOf(decision.id) === 'open', `the fixture Decision starts open (got ${statusOf(decision.id)})`);
 
-    // The only shape that ever worked since #1021: a signed request that also carries the admin password.
-    const admin = await signedFetch('POST', TICK_PATH, {}, author, { 'x-admin-password': ADMIN_PW });
+    // The only shape that ever worked since #1021: a signed request that also carries node admin credentials (then the
+    // admin password; the node has none now, so an owner's key session).
+    const admin = await signedFetch('POST', TICK_PATH, {}, author, ownerSessionHeaders());
     assert(admin.status === 405 || admin.status === 404,
-        `a signed POST ${TICK_PATH} with the admin password is refused by the router (got ${admin.status} ${admin.error ?? ''})`);
+        `a signed POST ${TICK_PATH} with an owner's key session is refused by the router (got ${admin.status} ${admin.error ?? ''})`);
     assert(admin.body?.success !== true, 'the refusal carries no tick result');
     assert(statusOf(decision.id) === 'open',
         `and the overdue Decision is untouched — nothing ticked (got ${statusOf(decision.id)})`);

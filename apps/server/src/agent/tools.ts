@@ -25,7 +25,7 @@ import os from 'node:os';
 import { db } from '../db/db.js';
 import { getVersion } from '../version.js';
 import { getNodeRole } from '../config/node-role.js';
-import { getLocalConfig, isPasswordRetired } from '../config/local-config.js';
+import { getLocalConfig } from '../config/local-config.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import {
     communityCountsCached, directoryName, getCommunityHealth, getMember, getReports, readWatchdogStatus, resolvePublicNodeUrl,
@@ -557,13 +557,13 @@ export const AGENT_TOOLS: AgentTool[] = [
     {
         name: 'safety_settings',
         title: 'Safety settings',
-        reads: 'yes-or-no answers only: join requests on, open joining on, read sign-in required, auto-hide and auto-mute on, two-factor '
-            + 'sign-in on, at least two owners, the admin password retired, backups leaving the server, a recovery code set, an alerts channel set',
+        reads: 'yes-or-no answers only: join requests on, open joining on, read sign-in required, auto-hide and auto-mute on, '
+            + 'at least two owners, backups leaving the server, a recovery code set, an alerts channel set',
         never: 'any value, URL, name or secret behind a yes or no',
         inputSchema: NO_ARGS,
         outputSchema: OBJ({
-            joinRequestsOn: BOOL, openJoinOn: BOOL, readAuthOn: BOOL, autoHideOn: BOOL, autoMuteOn: BOOL, twoFactorOn: BOOL,
-            atLeastTwoOwners: BOOL, passwordRetired: BOOL, backupsLeaving: BOOL, recoveryCodeSet: BOOL, alertsChannelSet: BOOL,
+            joinRequestsOn: BOOL, openJoinOn: BOOL, readAuthOn: BOOL, autoHideOn: BOOL, autoMuteOn: BOOL,
+            atLeastTwoOwners: BOOL, backupsLeaving: BOOL, recoveryCodeSet: BOOL, alertsChannelSet: BOOL,
         }),
         run: () => {
             const sw = getProfileSwitches();
@@ -579,9 +579,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                     readAuthOn: process.env.ENFORCE_READ_AUTH !== 'false',
                     autoHideOn: sw.autoHideReports === true,
                     autoMuteOn: sw.autoMute === true,
-                    twoFactorOn: !!(cfg.totpEnabled && cfg.totpSecret),
                     atLeastTwoOwners: ownerCount() >= 2,
-                    passwordRetired: isPasswordRetired(),
                     backupsLeaving: off.state === 'sending' && off.destinations.length > 0,
                     recoveryCodeSet: !!cfg.recoveryCode,
                     alertsChannelSet: channel,

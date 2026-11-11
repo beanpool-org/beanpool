@@ -6,7 +6,8 @@
  * watching the log saw it. Balances and trades are private by default. Now each line says what kind of frame it was
  * (its top-level `type`), its size, its direction and when, and nothing of what it says.
  *
- * Real HTTPS server: a member's signed /ws socket, an admin's /ws/logs socket opened with a ticket, a real signed
+ * Real HTTPS server: a member's signed /ws socket, an owner's /ws/logs socket opened with a ticket from the owner's key
+ * session (the node has no admin password, Marty 11 Nov 2026: a logs ticket is a session's), a real signed
  * POST /api/ledger/transfer between two members, and a frame the member's socket sends in. Then:
  *   1. the transfer reaches the payer's socket (the frame the log describes exists);
  *   2. the log has a `ws_traffic` line for it: direction out, frameType 'transaction', its size, a time;
@@ -28,6 +29,7 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { setMemberPhoto } from '@beanpool/engine';
 import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
+import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { db } from './db/db.js';
 import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -50,6 +52,17 @@ function seedMember(pk: string, callsign: string) {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), 'genesis', 'genesis')`).run(pk, callsign);
     setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+}
+
+/** An owner's key sign-in, as the app's link or the QR pairing ends it: the admin_session cookie's id. */
+function keySession(id: Id): string {
+    const chal = createAdminChallenge();
+    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), id.priv).toString('hex');
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pub, signature });
+    if (!solved.ok) throw new Error(`key sign-in refused: ${solved.error}`);
+    const ex = consumeHandshakeToken(solved.handshakeToken!);
+    if (!ex.ok || !ex.sessionId) throw new Error(`handshake refused: ${ex.error}`);
+    return ex.sessionId;
 }
 
 function signedWsQuery(id: Id): string {
@@ -82,7 +95,9 @@ async function main() {
     const payer = keypair(), payee = keypair();
     const PAYER_CALLSIGN = 'payerQz' + crypto.randomBytes(2).toString('hex');
     const PAYEE_CALLSIGN = 'payeeXw' + crypto.randomBytes(2).toString('hex');
-    seedGenesisMember(keypair().pub, 'Gwen');
+    // Gwen, the genesis member, is the owner (seedGenesisMember grants it) who watches the log.
+    const gwen = keypair();
+    seedGenesisMember(gwen.pub, 'Gwen');
     seedMember(payer.pub, PAYER_CALLSIGN);
     seedMember(payee.pub, PAYEE_CALLSIGN);
     // A direct send needs Beans held and a completed trade behind the sender (state-engine transfer), as
@@ -93,7 +108,9 @@ async function main() {
     createPost('offer', 'produce', 'Seedlings', 'Seedlings, fresh', 1000, 'fixed', payer.pub); // an Offer first: accepting needs one
     completePostTransaction(acceptPost(eggs.id, payer.pub).id, payer.pub);
 
-    const logs = await open(`${WSS}/ws/logs?ticket=${issueWsTicket()}`);
+    const ticket = issueWsTicket(keySession(gwen));
+    if (!ticket) throw new Error("the owner's key session got no logs ticket");
+    const logs = await open(`${WSS}/ws/logs?ticket=${ticket}`);
     const member = await open(`${WSS}/ws?${signedWsQuery(payer)}`);
     await sleep(200);
     logs.raw.length = 0;

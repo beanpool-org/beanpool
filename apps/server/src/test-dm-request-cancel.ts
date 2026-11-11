@@ -32,7 +32,6 @@ delete process.env.CF_RECORD_NAME;
 process.env.NODE_PROFILE = 'global';
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'DmCancelPass123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -42,7 +41,6 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
@@ -137,7 +135,6 @@ const dir = process.env.BEANPOOL_DATA_DIR || fs.mkdtempSync(path.join(os.tmpdir(
 process.env.BEANPOOL_DATA_DIR = dir;
 initStateEngine();
 await initTls();
-initAdminPassword();
 const p2p = await startP2P(0, 0);
 seedGenesisMember(owner.pk, 'owner');
 

@@ -48,11 +48,8 @@ import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js'
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText, normaliseLang } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
-    validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
-    isPasswordRetired,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, type LocalConfig,
 } from '../config/local-config.js';
-import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -94,10 +91,8 @@ import { READER_CACHE_CONTROL } from '../guest-cache.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
-import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
-import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
-import { restampPasswordSession } from '../admin-key-auth.js';
+import { requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
 import { isPausedMember, revokeInvite, InviteRevokeError } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
@@ -144,89 +139,12 @@ router.get('/api/local/status', async (ctx) => {
     // sister-node map, is gone, and with it any web page could read this from a visitor's browser. An origin the operator
     // lists in corsAllowedOrigins still gets it through the gateway's CORS layer, as every other route does.
     ctx.body = {
-        // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
-        // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
-        isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
         // As anyone else gets it (config/community-place.ts): rounded to two decimals (~1 km) with "Share Location & Radius"
         // on, null with it off. This route answers anyone, from anywhere, and isn't signature-checked, so it can't tell a
         // member; an operator may have set a home address. Its one reader was the sister map in the legacy settings page.
         location: placeAs(config.location, placeShownTo({ ownerOrAdmin: false })),
-        // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
-        // manager knows to use a token. Absent on a node from before.
-        passwordRetired: !!config.passwordRetired,
     };
-});
-
-// ===================== AUTH API =====================
-
-router.post('/api/local/verify-password', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
-    const body = (ctx as any).requestBody || {};
-    const password = body.password;
-    const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
-
-    if (!password && !headerPass) {
-        ctx.status = 400;
-        ctx.body = { error: 'Password required' };
-        return;
-    }
-
-    const pw = password || headerPass;
-    // Under 2FA a right password alone clears nothing: the brake lets go only once the code is right too
-    // (checkAdminPassword and notePasswordSuccess below).
-    const pwCheck = await checkAdminPassword(ctx, pw);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        logger.security('AUTH', 'Failed administrative login attempt.');
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid password' };
-        return;
-    }
-
-    // #135: Check TOTP 2FA if enabled. Read after the password check's wait, and nothing below waits: another request
-    // may have spent a backup code or replaced the authenticator meanwhile, and writing back a list read before the
-    // wait would bring those codes back.
-    const config = getLocalConfig();
-    if (config.totpEnabled && config.totpSecret) {
-        const totpCode = body.totpCode || ctx.request?.headers?.['x-admin-totp'] || (ctx as any).headers?.['x-admin-totp'] || '';
-        if (!totpCode) {
-            ctx.status = 401;
-            ctx.body = { error: '2FA code required', totpRequired: true };
-            return;
-        }
-        const cleanCode = String(totpCode).trim();
-        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
-        const totpUse = useTotpCode(cleanCode, config.totpSecret);
-        let totpValid = totpUse === 'ok';
-
-        // Check backup codes if TOTP didn't match
-        const backupHashes = config.totpBackupCodesHashes || [];
-        if (!totpValid && backupHashes.length > 0) {
-            const codeIndex = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
-            if (codeIndex !== -1) {
-                totpValid = true;
-                const updatedHashes = [...backupHashes];
-                updatedHashes.splice(codeIndex, 1);
-                updateLocalConfig({ totpBackupCodesHashes: updatedHashes });
-            }
-        }
-
-        if (!totpValid) {
-            notePasswordFailure(clientLimiterKey(ctx));
-            ctx.status = 401;
-            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
-            return;
-        }
-        notePasswordSuccess(clientLimiterKey(ctx));
-    }
-
-    // Issue 2FA session token so subsequent API calls can skip TOTP re-entry
-    const tfaSession = config.totpEnabled ? issue2faSessionToken() : undefined;
-
-    logger.security('AUTH', 'Successful administrative login.');
-    ctx.body = { success: true, ...(tfaSession ? { tfaSessionToken: tfaSession } : {}) };
 });
 
 /** A voucher's refusal (engine/vouchers.ts), in its own status, code and sentence. */
@@ -444,82 +362,6 @@ router.post('/api/funnel-event', async (ctx) => {
     // unbounded number of rows.
     const safeVariant = typeof variant === 'string' ? variant.slice(0, 16) : '';
     recordFunnelEvent(event, safeVariant);
-    ctx.body = { success: true };
-});
-
-router.post('/api/local/change-password', async (ctx) => {
-    if (!rateLimit(ctx)) return;
-    // Retired for good: no route sets a password again, a key session's included.
-    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
-    // The password this request replaces, read before any wait. It must still be the one on disk when the new one is
-    // written (below).
-    const replacing = getLocalConfig();
-    const body = (ctx as any).requestBody || {};
-    const { currentPassword, newPassword } = body;
-
-    // Clients that send only { currentPassword, newPassword } sign in with that same password: it still has to
-    // pass checkAdminAuth, 2FA included.
-    const headerPass = (typeof (ctx as any).get === 'function' ? (ctx as any).get('x-admin-password') : null)
-        || ctx.request?.headers?.['x-admin-password'];
-    if (!body.password && !headerPass && currentPassword) body.password = currentPassword;
-
-    if (!(await checkAdminAuth(ctx as any))) return;
-    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can change its password')) return;
-
-    // The current password is asked for even under a key session. A key session proves who you are, not that you
-    // know the password; without this, a phone left signed in could set a password its holder has never known, and
-    // with it sign in anywhere the password works.
-    // When checkAdminAuth has just verified this very string as the node password (a password caller, or a body-only
-    // client whose currentPassword was its sign-in), that is the proof: checking it again would only run scrypt and
-    // take the brake a second time. Anything else (a key session, a different string) is checked.
-    const proven = typeof ctx.state?.verifiedAdminPassword === 'string' ? Buffer.from(ctx.state.verifiedAdminPassword) : null;
-    const given = typeof currentPassword === 'string' ? Buffer.from(currentPassword) : null;
-    const alreadyProven = !!proven && !!given && proven.length === given.length && crypto.timingSafeEqual(proven, given);
-    const pwCheck = alreadyProven ? 'ok' : await checkAdminPassword(ctx, currentPassword);
-    if (pwCheck === 'braked') return;
-    if (pwCheck !== 'ok') {
-        ctx.status = 401;
-        ctx.body = { error: 'Invalid current password' };
-        return;
-    }
-
-    const validation = validatePasswordStrength(newPassword || '');
-    if (!validation.valid) {
-        ctx.status = 400;
-        ctx.body = { error: validation.error };
-        return;
-    }
-
-    const { hash, salt } = hashPassword(newPassword);
-    // The checks above waited (scrypt runs off the event loop), and any other request may have written the settings
-    // file meanwhile: two-factor setup, a gateway setting, the replication token. From here to the answer nothing
-    // waits: read the file as it is now, and write only the password into it (updateLocalConfig), so none of that
-    // is lost.
-    const current = getLocalConfig();
-    if (current.adminHash !== replacing.adminHash || current.salt !== replacing.salt) {
-        // Another owner changed it while this one was being checked: the current password this request proved is
-        // not the one it would replace.
-        ctx.status = 409;
-        ctx.body = { error: 'The admin password was changed while this was being checked. Sign in with the new one and try again.' };
-        return;
-    }
-    updateLocalConfig({ adminHash: hash, salt });
-    // saveLocalConfig reports a failed write in the log only: success only once the new hash is read back from disk.
-    const saved = getLocalConfig();
-    if (saved.adminHash !== hash || saved.salt !== salt) {
-        ctx.status = 500;
-        ctx.body = {
-            error: saved.adminHash === replacing.adminHash && saved.salt === replacing.salt
-                ? 'The new password could not be saved: check the data folder is writable and has free space. The current password still works.'
-                : 'The new password could not be saved, and the settings file could not be read back. Check the server log.',
-        };
-        return;
-    }
-    // The first boot's made-up password, if it was never changed before, no longer works. Only now the new one is on
-    // disk: until then the file holds the password that works.
-    removeFirstPasswordFile('The admin password was changed');
-    // Every Settings sign-in made with the old password ends on its next request; the one that changed it carries on.
-    restampPasswordSession(ctx);
     ctx.body = { success: true };
 });
 

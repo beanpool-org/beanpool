@@ -51,7 +51,6 @@ delete process.env.ENFORCE_WS_AUTH;
 /** The run with read auth opted out (VARIANTS): the detail's own gate answers a non-member, not the read gate. */
 const OPEN_READS = process.env.ENFORCE_READ_AUTH === 'false';
 if (!OPEN_READS) delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ShopfrontPass123!';
 
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
@@ -62,7 +61,6 @@ import {
     purgeMemberSelf, pauseEnterprise, resumeEnterprise,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { setMemberPhoto, guestPost } from '@beanpool/engine';
 import { tierForCredit } from '@beanpool/core';
@@ -168,7 +166,6 @@ const featurePath = (id: string) => `/api/marketplace/posts/${id}/feature`;
 
 async function main(): Promise<void> {
     console.log(`\n=== The enterprise shopfront's data (E2)${OPEN_READS ? ', read auth opted out' : ''} ===\n`);
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

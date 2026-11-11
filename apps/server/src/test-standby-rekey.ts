@@ -467,7 +467,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A main server ──
         console.log('\n— 1. a main server; Rex, Sue and Tom leave rows in the tables a re-key moves —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
@@ -483,7 +483,7 @@ async function main(): Promise<void> {
         await main.send('reseal');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');
@@ -696,7 +696,7 @@ async function main(): Promise<void> {
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         require_(standby.ready.role === 'primary', 'it is the main server');
         const port = (await standby.send('serve')).port as number;

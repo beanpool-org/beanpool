@@ -19,10 +19,6 @@ export const DEFAULT_ENV = {
     DISABLE_UPDATE_CHECK: 'true',
     // Nor for a newer Android APK (services/apk-mirror.ts; its first check is 10 minutes after the start, past any suite).
     DISABLE_APK_UPDATE_CHECK: 'true',
-    // A new install makes no admin password and ignores ADMIN_PASSWORD (config/local-config.ts initAdminPassword). The
-    // suites that sign in with a password on a fresh data dir still get it from ADMIN_PASSWORD with this; the ones that
-    // check a new install (test-no-password-fresh-install, test-node-claim, test-first-admin-password) remove it.
-    BEANPOOL_SUITE_ENV_PASSWORD: '1',
 };
 
 /** A plain run with a custom per-entry timeout in seconds (default stays 300 s). */
@@ -166,7 +162,6 @@ export const SUITES = [
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',
     'test-money-followups',
-    'test-admin-password-query',
     'test-cors-policy',
     'test-knock-cors',
     'test-health-cors',
@@ -181,11 +176,6 @@ export const SUITES = [
     'test-password-brake-no-lockout',
     'test-password-brake-fairness',
     'test-csrf-protection',
-    'test-totp-admin-2fa',
-    'test-2fa-covers-admin-routes',
-    // 3m07s-3m21s on five CI runs of 30 Oct 2026 (41101712630 to 41105808588), against the 300 s default.
-    withTimeout('test-2fa-reenrol-needs-code', 600),
-    'test-2fa-session-credential-bound',
     'test-breakglass-and-backup-codes',
     'test-break-glass-code',
     'test-beanpool-recover',
@@ -195,7 +185,6 @@ export const SUITES = [
     'test-atomic-state-writes',
     'test-write-file-atomic',
     'test-boot-file-safety',
-    'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',
     'test-ledger-export',
@@ -225,19 +214,12 @@ export const SUITES = [
     'test-admin-actor-name',
     'test-chat-mutes',
     'test-admin-queue',
-    'test-admin-auth',
-    'test-first-admin-password',
     'test-node-claim',
     'test-standby-claim',
-    'test-no-password-fresh-install',
-    'test-config-write-races',
     'test-admin-key-auth',
+    'test-no-admin-password',
     'test-app-admin-handoff',
     'test-web-manager-hardening',
-    'test-password-totp-gate',
-    'test-password-needs-2fa',
-    'test-retire-admin-password',
-    'test-retired-password-bundles',
     'test-automation-tokens',
     'test-admin-mcp',
     'test-admin-mcp-settings',
@@ -417,7 +399,6 @@ export const SUITES = [
     'test-no-docker-socket',
     'test-node-config-public',
     'test-share-location-off',
-    'test-preview-password-config',
     'test-tunnel-token-owner-only',
     'test-registrar-contract',
     'test-invite-trampoline',

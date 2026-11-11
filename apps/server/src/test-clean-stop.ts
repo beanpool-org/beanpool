@@ -59,7 +59,7 @@ async function startNode(dataDir: string): Promise<Node> {
             ...process.env,
             ...ports,
             BEANPOOL_DATA_DIR: dataDir,
-            ADMIN_PASSWORD: 'Clean-Stop-Suite-1!',
+            
             DISABLE_UPDATE_CHECK: 'true',
             // Nothing leaves this machine: the directory push (first at 30 s) goes to a port nothing listens on.
             DIRECTORY_REGISTRY_URL: 'http://127.0.0.1:9/',

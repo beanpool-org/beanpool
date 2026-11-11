@@ -10099,12 +10099,12 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // signal) on the admin dashboard. Each entry's address is kept 7 days, then
 // null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
     lastPullIp: string | null;
-    lastPullAuth: 'token' | 'admin-pw' | null;
+    lastPullAuth: 'token' | null;
     totalRejected: number;
     lastRejectedAt: number | null;
     lastRejectedIp: string | null;

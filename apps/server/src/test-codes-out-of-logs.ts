@@ -10,23 +10,21 @@
  * client in logger.ts's set) and every system_logs row is captured while:
  *   1. the boot step scrubs lines written before this version: planted rows with a re-key, a bring-back or an invite
  *      code lose it, an invite code becoming the same short tag new lines carry; every other row is left byte for byte;
- *   2. an admin makes a seed invite on a fresh node (the genesis path) and on a node with members;
+ *   2. an owner makes a seed invite on a node just claimed (its owner the only member) and on a node with more members;
  *   3. a member makes an invite;
- *   4. an admin issues a re-key code and completes the re-key with it.
+ *   4. an owner issues a re-key code and completes the re-key with it.
  * Then no code appears in any of the three, and the lines still say what happened: the invite's tag, and the re-key
  * line naming the member by a short key prefix.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdminPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { initAdminPassword } from './config/local-config.js';
+import { seedOwnerForTests, ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { addLogClient } from './logger.js';
 import { generateInvite } from './engine/invites.js';
@@ -42,7 +40,6 @@ for (const stream of [process.stdout, process.stderr]) {
     };
 }
 
-const PW = 'TestAdminPass123!';
 let BASE = '';
 
 let run = 0, passed = 0;
@@ -85,7 +82,6 @@ const logText = () => logRows().map((r) => `${r.message ?? ''} ${r.metadata ?? '
 async function main() {
     console.log('--- TEST: re-key and invite codes stay out of the logs ---');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
 
@@ -127,9 +123,10 @@ async function main() {
     const othersBefore = new Map(logRows().filter((r) => otherIds.includes(r.id)).map((r) => [r.id, JSON.stringify(r)]));
 
     const PORT = await startHttpsServer(0); // boots: the scrub of older log lines runs here
-    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (no member is seeded for a token:
-    // step 2 needs a fresh node). 2FA is on and each password goes with a code.
-    const tfa = turnOn2faForTests(PW);
+    // The node has no admin password (Marty, 11 Nov 2026): its owner claimed it (the claim code makes them its first member)
+    // and signs in with their key. The phone's hand-off, minted for each request, passes every owner gate.
+    const owner = seedOwnerForTests('Claimer');
+    const asOwner = (): Record<string, string> => ownerPhoneSessionHeaders(owner);
     BASE = `https://localhost:${PORT}`;
 
     console.log('\n1. The boot step scrubs codes from lines already written');
@@ -157,18 +154,18 @@ async function main() {
         assert(otherIds.every((id) => after.get(id) === othersBefore.get(id)), 'every other planted line is left byte for byte');
     }
 
-    // ── 2. Seed invites: a fresh node's (genesis path), then a node with members ──
+    // ── 2. Seed invites: a node just claimed (its owner the only member), then a node with more members ──
     console.log('\n2. Seed invites');
     const codes: string[] = [];
-    const fresh = await postJson('/api/admin/seed-invite', { password: PW, totpCode: tfa.code(), type: 'ambassador' });
-    assert(fresh.status === 200 && /^INV-/.test(fresh.body.code ?? ''), 'the admin gets the fresh node\'s seed invite in the answer');
+    const fresh = await postJson('/api/admin/seed-invite', { type: 'ambassador' }, asOwner());
+    assert(fresh.status === 200 && /^INV-/.test(fresh.body.code ?? ''), 'the owner gets the just-claimed node\'s seed invite in the answer');
     codes.push(fresh.body.code);
     const aliceKp = newKeyPair();
     const alice = aliceKp.pubKeyHex;
     const redeem = await redeemAs(aliceKp, { code: fresh.body.code, publicKey: alice, callsign: 'AliceLogs' });
     assert(redeem.status === 200 && redeem.body.success === true, 'the seed invite redeems');
-    const elder = await postJson('/api/admin/seed-invite', { password: PW, totpCode: tfa.code(), type: 'elder' });
-    assert(elder.status === 200 && /^INV-/.test(elder.body.code ?? ''), 'the admin gets a seed invite on a node with members');
+    const elder = await postJson('/api/admin/seed-invite', { type: 'elder' }, asOwner());
+    assert(elder.status === 200 && /^INV-/.test(elder.body.code ?? ''), 'the owner gets a seed invite on a node with members');
     codes.push(elder.body.code);
     const elderLine = logRows().find((r) => (r.message ?? '').startsWith('Seed invite generated') && (r.message ?? '').includes(tagOf(elder.body.code)));
     assert(!!elderLine, 'the seed invite line carries the code\'s tag, so an operator can still tell one invite from another');
@@ -181,14 +178,14 @@ async function main() {
 
     // ── 4. A re-key code, issued and used ──
     console.log('\n4. A re-key code');
-    const issued = await postJson(`/api/local/admin/members/${alice}/rekey/issue-code`, {}, tfa.headers());
-    assert(issued.status === 200 && /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(issued.body.code ?? ''), `the admin gets the re-key code in the answer (${issued.status})`);
+    const issued = await postJson(`/api/local/admin/members/${alice}/rekey/issue-code`, {}, asOwner());
+    assert(issued.status === 200 && /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(issued.body.code ?? ''), `the owner gets the re-key code in the answer (${issued.status})`);
     const rk: string = issued.body.code ?? 'RK-none';
     codes.push(rk);
     const issueLine = logRows().find((r) => r.id > planted.seed && (r.message ?? '').includes('[Rekey]') && (r.message ?? '').includes('issued'));
     assert(!!issueLine && issueLine.message!.includes(alice.slice(0, 10)) && issueLine.message!.includes('AliceLogs'),
         `the re-key line says a code was made and for whom, by a short key prefix (${issueLine?.message})`);
-    const done = await postJson(`/api/local/admin/members/${alice}/rekey/complete`, { code: rk, newPubkey: newKey() }, tfa.headers());
+    const done = await postJson(`/api/local/admin/members/${alice}/rekey/complete`, { code: rk, newPubkey: newKey() }, asOwner());
     assert(done.status === 200, `the re-key completes with the code (${done.status})`);
 
     // Give the log lines and the stream a moment.

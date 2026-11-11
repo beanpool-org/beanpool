@@ -27,7 +27,6 @@ process.env.BEANPOOL_DATA_DIR = dataDir;
 process.env.APK_IMAGE_DIR = imageDir;
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP', 'HIDE_APK_LINK', 'BEANPOOL_ADDRESSES']) delete process.env[k];
 process.env.DISABLE_APK_UPDATE_CHECK = 'true';
-process.env.ADMIN_PASSWORD ??= 'Apk-On-Node-Suite-Pw-5519!';
 
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean, detail = '') {
@@ -203,12 +202,10 @@ const a93 = apk('1.2.93');
 // ── C. serving ────────────────────────────────────────────────────────────────────────────────────────────────────
 console.log('\nC. served only to a request straight off the local network');
 const lan = await import('./direct-lan.js');
-const { initAdminPassword } = await import('./config/local-config.js');
 const tlsMod = await import('./services/tls.js');
 const se = await import('./state-engine.js');
 const { startHttpServer, _setPlainConnectionHookForTests } = await import('./http-server.js');
 const { startHttpsServer } = await import('./https-server.js');
-initAdminPassword();
 await tlsMod.initTls();
 se.initStateEngine();
 const httpPort = await startHttpServer(0);

@@ -185,12 +185,12 @@ async function main(): Promise<void> {
 
     try {
         console.log('\n— 1. a main server with an enterprise, Hana, Olly and Pia, and its standby —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         const { mill, posts } = await main.send('setup-primary', { replicationToken, pat, hana, olly, pia });
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
+        const standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');

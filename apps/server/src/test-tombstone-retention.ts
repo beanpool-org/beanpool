@@ -294,7 +294,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = (pw: string, role: string) => ({
-        ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
+        NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
         ...(role === 'backup' ? { MAX_IMPORT_ROWS_PER_CATEGORY: String(CAP), BACKUP_RESYNC_RETRY_MS: String(RETRY_MS) } : {}),
     });
     const gwen = newId('Gwen');

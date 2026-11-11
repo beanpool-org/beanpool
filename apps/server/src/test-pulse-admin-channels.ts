@@ -13,14 +13,12 @@
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pulse-admin-channels.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-process.env.ADMIN_PASSWORD = 'AdminPulseTestSecret123!';
 
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { db } from './db/db.js';
 import { addChannel } from './engine/creator-channels.js';
 import { initStateEngine } from './state-engine.js';
-import { initAdminPassword } from './config/local-config.js';
 import { checkAdminAuth } from './admin-auth.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { createAdminRoutes } from './routes/admin.js';
@@ -89,7 +87,6 @@ async function callRouter(
 async function main(): Promise<void> {
     console.log('=== Pulse Admin Curated Channels Tests ===\n');
 
-    initAdminPassword();
     initStateEngine();
 
     const adminRouter = createAdminRoutes({

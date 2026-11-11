@@ -18,8 +18,8 @@
  *     group), change their profile, or edit another member's group event it convenes. The re-key then completes, signed
  *     by the new phone: the new key holds the member's account, with its Beans and profile.
  *  4. Invites: a pruned account can't make one; a code or an offline ticket it made before the prune no longer
- *     redeems, and the pre-flight check says so; a live member's and an admin's invites still redeem, the admin's
- *     even after the genesis member it hangs the code on has been pruned.
+ *     redeems, and the pre-flight check says so; a live member's and an owner's seed invites still redeem, the owner's
+ *     even after the genesis member has been pruned (it hangs the code on the owner who made it).
  *  5. The sweep, every other signed write that reaches another member or moves Beans: a pruned convenor runs the group
  *     no more (members, roles, invites, requests, details, lead, chat, posts, succession); a pruned account rates,
  *     reports and reacts to nobody; the old key of a member being
@@ -62,8 +62,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-const PW = 'NonMembersPass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -80,8 +78,7 @@ import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
-import { initAdminPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { aWeekPasses } from './post-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -148,13 +145,8 @@ async function signedFetch(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', 
     return { status: res.status, body: json };
 }
 
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The owner's password goes with a fresh
-// code, 2FA on from its first use (the refusal is asserted just before that).
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
-function ownerPassword(): { password: string; totpCode: string } {
-    tfa ??= turnOn2faForTests(PW);
-    return { password: PW, totpCode: tfa.code() };
-}
+/** An owner's admin call (the node has no admin password): Alice's key session from the phone's Manage hand-off. */
+let asOwner: () => Record<string, string> = () => ({});
 
 async function unsigned(method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}) {
     const res = await fetch(`${BASE}${path}`, {
@@ -241,7 +233,6 @@ function offlineTicket(inviter: Id): string {
 
 async function main(): Promise<void> {
     console.log('A key that is not a live member cannot act on other people\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -256,6 +247,7 @@ async function main(): Promise<void> {
     const operator = makeMember('OperatorNM');
     // A second owner, so the founder can be pruned in section 4.
     db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')").run(alice.pubKeyHex);
+    asOwner = () => ownerPhoneSessionHeaders(alice.pubKeyHex);
 
     // Everyone who trades lists an offer first (CONTRIBUTION_REQUIRED).
     offer(alice, 'Alice seedlings');
@@ -514,19 +506,16 @@ async function main(): Promise<void> {
             { code: aliceCode.body?.invite?.code, publicKey: viaAlice.pubKeyHex, callsign: viaAlice.callsign });
         assert(aliceRedeem.status === 200 && isMemberRow(viaAlice.pubKeyHex), `a live member's invite still redeems (got ${aliceRedeem.status})`);
 
-        const alone = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
-        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.success,
-            `2FA off: the admin password alone → 403 password_needs_2fa, no invite (got ${alone.status} ${alone.body?.code})`);
-        const seed = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
+        const seed = await unsigned('POST', '/api/admin/seed-invite', {}, asOwner());
         const viaAdmin = keypair('ViaAdminNM');
         const adminRedeem = await signedFetch('POST', '/api/invite/redeem', viaAdmin,
             { code: seed.body?.code, publicKey: viaAdmin.pubKeyHex, callsign: viaAdmin.callsign });
         assert(seed.status === 200 && adminRedeem.status === 200 && isMemberRow(viaAdmin.pubKeyHex),
             `an admin's invite still redeems (got ${seed.status}, ${adminRedeem.status})`);
 
-        // The admin's invite hangs off the genesis member. Pruned, the node picks a live member instead.
+        // An owner's seed invite hangs off the owner who made it, a live member: with the genesis member pruned it still joins.
         adminPruneUser(founder.pubKeyHex, COMMUNITY_DECISION_ACTOR);
-        const seed2 = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
+        const seed2 = await unsigned('POST', '/api/admin/seed-invite', {}, asOwner());
         const viaAdmin2 = keypair('ViaAdminTwoNM');
         const adminRedeem2 = await signedFetch('POST', '/api/invite/redeem', viaAdmin2,
             { code: seed2.body?.code, publicKey: viaAdmin2.pubKeyHex, callsign: viaAdmin2.callsign });
@@ -871,7 +860,7 @@ async function main(): Promise<void> {
 
         // A listing the prune cancelled under a deal in escrow stays down when an admin refunds the buyer.
         const carolHeld = getBalance(carol.pubKeyHex).balance_c;
-        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { ...ownerPassword(), action: 'refund_to_buyer' });
+        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { action: 'refund_to_buyer' }, asOwner());
         assert(refund.status === 200 && tradeStatus(escrowTx.id) === 'cancelled' && getBalance(carol.pubKeyHex).balance_c > carolHeld,
             `an admin refunds Carol the deal in escrow with the removed member (got ${refund.status} ${JSON.stringify(refund.body)}, ${tradeStatus(escrowTx.id)})`);
         assert(postStatus(escrowed.id) === 'cancelled', `and the listing the prune cancelled stays down (got ${postStatus(escrowed.id)})`);

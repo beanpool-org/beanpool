@@ -31,7 +31,6 @@
  *  14. state.json holds the attempt (its count and next try, and the once-a-day mark of an unconfirmed one) before the
  *      CA is asked anything: what a server that stops mid-order leaves makes its next boot wait and ask the CA nothing.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-acme-http01.ts
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -47,7 +46,6 @@ import { fileURLToPath } from 'node:url';
 const dataDir = fs.mkdtempSync(path.join(process.env.BEANPOOL_DATA_DIR || process.env.TMPDIR || os.tmpdir(), 'acme-http01-'));
 process.env.BEANPOOL_DATA_DIR = dataDir;
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'PUBLIC_IP']) delete process.env[k];
-process.env.ADMIN_PASSWORD ??= 'Acme-Http01-Suite-Pw-7731!';
 
 const require = createRequire(import.meta.url);
 const forge = require(require.resolve('node-forge', { paths: [path.dirname(require.resolve('selfsigned'))] }));
@@ -230,7 +228,6 @@ process.env.ACME_DIRECTORY_URL = `${base()}/directory`;
 
 // ── The node, in this process ──────────────────────────────────────────────────────────────────────────────────
 
-const { initAdminPassword } = await import('./config/local-config.js');
 const tlsMod = await import('./services/tls.js');
 const se = await import('./state-engine.js');
 const { startHttpServer } = await import('./http-server.js');
@@ -242,7 +239,6 @@ const store = await import('./services/acme/store.js');
 const { setNodeRole } = await import('./config/node-role.js');
 const { secureDataDirAtBoot } = await import('./boot-file-safety.js');
 
-initAdminPassword();
 await tlsMod.initTls();
 se.initStateEngine();
 const httpPort = await startHttpServer(0);

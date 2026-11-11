@@ -21,7 +21,7 @@
  *     one row alone, every page holds at least one row, and each big row arrives whole.
  *  5. One copy at a time (a second open is 409 busy), pages in order (a page skipped or asked again after the next is 409),
  *     a retry of the last page gets the same bytes, an unknown copy is 404, and every copy route wants the replication
- *     token or the admin password (401).
+ *     token (401); an old admin password is answered as no credential, the same words on every copy route, and moves nothing.
  *  6. A page's signature covers its copy id and number: one with either changed doesn't verify, and a page of another copy
  *     verifies but names that copy.
  *  7. Expiry: a copy no page is asked of closes, and the WAL it held truncates after (it could not while the copy was open);
@@ -61,7 +61,8 @@ delete process.env.NODE_PROFILE;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // the node's own self-signed certificate
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const PW = 'Copy-Pages-Main-Pw-5521!';
+/** What an older install's admin password looked like: no credential now (step 5 sends it). */
+const OLD_PW = 'Copy-Pages-Main-Pw-5521!';
 /** The story's figures are Beans; the node's are whole hundredths (exact for every figure here). */
 const hc = (beans: number) => Math.round(beans * 100);
 /** M's page bounds, scaled down from 8 MB and 25,000 rows. */
@@ -125,12 +126,6 @@ async function child(): Promise<void> {
         },
         /** The importer format this build reads (engine/sync.ts REPLICA_FORMAT), as its own puller sends it. */
         'replica-format': async () => (await import('./engine/sync.js')).REPLICA_FORMAT,
-        /** Whether copies take the replication token only, as the operator sets it in Settings. */
-        'token-only': async (a: { on: boolean }) => {
-            const { updateLocalConfig } = await import('./config/local-config.js');
-            updateLocalConfig({ replicationTokenOnly: a.on });
-            return true;
-        },
         /** This process's environment, live (the copy reads its bounds and times at each open); '' removes one. */
         'set-env': async (a: { vars: Record<string, string> }) => {
             for (const [k, v] of Object.entries(a.vars)) {
@@ -278,8 +273,8 @@ interface Answer { status: number; body: any }
 
 /**
  * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
- * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes
- * (takeover-test-harness.ts owner-session).
+ * The node has no admin password: `admin` is an owner's key session the node makes (takeover-test-harness.ts
+ * owner-session).
  */
 async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
@@ -382,7 +377,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = {
-        ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', NODE_ENV: 'test',
+        NODE_ROLE: 'primary', NODE_ENV: 'test',
         SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
     };
     const gwen = newId('Gwen');
@@ -692,18 +687,14 @@ async function main(): Promise<void> {
         const openNoToken = await open(undefined, {});
         assert(unknown.status === 404 && noToken.status === 401 && badToken.status === 401 && openNoToken.status === 401,
             `an unknown copy is 404, and a page or a copy without the replication token is 401 (${unknown.status}, ${noToken.status}, ${badToken.status}, ${openNoToken.status})`);
-        // A server with a replication token takes only the token until its operator says otherwise, on every copy route.
-        const byPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': PW });
-        const oldByPassword = await fetch(`${main.base}/api/local/admin/sync-snapshot`, { headers: { 'X-Admin-Password': PW } });
+        // Every copy route takes the replication token only: an old admin password is no credential on any of them.
+        const byPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': OLD_PW });
+        const oldByPassword = await fetch(`${main.base}/api/local/admin/sync-snapshot`, { headers: { 'X-Admin-Password': OLD_PW } });
         const oldPwText = await oldByPassword.text();
         assert(byPassword.status === 401 && oldByPassword.status === 401 && byPassword.text === oldPwText,
-            `the admin password is answered as the old routes answer it (${byPassword.status} ${byPassword.text.slice(0, 80)}; sync-snapshot ${oldByPassword.status} ${oldPwText.slice(0, 80)})`);
-        await main.send('token-only', { on: false });
-        const byPasswordNow = await get(o.page.copyId, 2, { 'X-Admin-Password': PW });
-        const wrongPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': `${PW}x` });
-        await main.send('token-only', { on: true });
-        assert(byPasswordNow.status === 200 && byPasswordNow.page?.n === 2 && wrongPassword.status === 401,
-            `with the token-only setting off, the admin password gets a page and a wrong one is 401 (${byPasswordNow.status}, ${wrongPassword.status} ${wrongPassword.text.slice(0, 80)})`);
+            `an old admin password is answered as the old routes answer it (${byPassword.status} ${byPassword.text.slice(0, 80)}; sync-snapshot ${oldByPassword.status} ${oldPwText.slice(0, 80)})`);
+        const p2 = await get(o.page.copyId, 2);
+        assert(p2.status === 200 && p2.page?.n === 2, `refused, it moved nothing: page 2 then comes to the token (${p2.status})`);
 
         // ── 6. What the signature covers ──
         console.log('\n— 6. a page\'s signature covers its copy id and its number —');

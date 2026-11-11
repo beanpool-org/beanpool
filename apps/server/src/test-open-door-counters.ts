@@ -9,8 +9,8 @@
  *      here (409) and a forged token (401). The route then says `openDoor: true` and counts, for today: the attempts
  *      per provider (`open_join_attempt`, 5), the people who came in through the door per provider (`cohort_open_door`,
  *      a subset of `member_created`: 3 of 6), and each refusal by its reason (`open_join_failed`)
- *   3. who may read them: unsigned, a wrong password and a member's signature 401, a moderator's session 403, none of
- *      them with a count; an admin's session and the owner's password 200; POST with `{ days }` answers the same
+ *   3. who may read them: unsigned, an old admin password and a member's signature 401, a moderator's session 403, none
+ *      of them with a count; an admin's session and the owner's automation token 200; POST with `{ days }` answers the same
  *   4. back to the local profile: `openDoor: false`, and the joins that happened are still counted
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-door-counters.ts
@@ -28,7 +28,6 @@ import https from 'node:https';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engine.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
@@ -155,9 +154,6 @@ async function main(): Promise<void> {
     console.log('\n=== The open door\'s counters on the Onboarding screen ===\n');
     await initTls();
     initStateEngine();
-    const PW = 'OpenDoor-Counters-Owner-7!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false });
     const olive = makeKey(), adam = makeKey(), mo = makeKey(), mem = makeKey();
     seedGenesisMember(olive.pk, 'Olive');
     addMember(adam.pk, 'Adam', olive.pk);
@@ -169,8 +165,8 @@ async function main(): Promise<void> {
     PORT = await startHttpsServer(0);
     primeJwks();
     _clearNoncesForTests();
-    // Step 7c: the password alone opens no admin route with 2FA off; the owner reads with an automation token made from
-    // Olive's key (the genesis member, the owner), as an owner makes one from the phone.
+    // The owner reads with an automation token made from Olive's key (the genesis member, the owner), as an owner makes
+    // one from the phone.
     const asOwner = ownerTokenHeaders('admin', olive.pk);
     const owner = () => { resetAdminAuthTarpit(); return send('GET', ROUTE, asOwner); };
 
@@ -217,8 +213,8 @@ async function main(): Promise<void> {
     resetAdminAuthTarpit();
     r = await send('GET', ROUTE, {});
     assert(r.status === 401 && !r.body.includes('open_join'), `unsigned: 401, no counts (got ${r.status})`);
-    r = await send('GET', ROUTE, { 'X-Admin-Password': 'not-the-password' });
-    assert(r.status === 401 && !r.body.includes('open_join'), `a wrong password: 401, no counts (got ${r.status})`);
+    r = await send('GET', ROUTE, { 'X-Admin-Password': 'OpenDoor-Counters-Owner-7!' });
+    assert(r.status === 401 && !r.body.includes('open_join'), `an old admin password: 401, no counts (got ${r.status})`);
     resetAdminAuthTarpit();
     r = await send('GET', ROUTE, signed(mem, 'GET', ROUTE));
     assert(r.status === 401 && !r.body.includes('open_join'), `a member's signature: 401, no counts (got ${r.status})`);

@@ -3,7 +3,9 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { putContact, readContactsCopy, removeEveryContact, toEd25519Pkcs8, contactsFromCandidates, mergeContactsLists, emptyContactsList, type ContactsCopyWire } from '@beanpool/core';
 import { memoryIndexedDB } from './memory-indexeddb';
-import { importIdentity } from './identity';
+import { importIdentity, wipeIdentity } from './identity';
+import { beginAccountEpoch, endAccountEpoch, resetAccountEpochForTest } from './account-epoch';
+import { clearAccountStorage } from './device-prefs';
 import { openContactsList } from './contacts-lock';
 import {
     CONTACTS_SAVE_WAIT_MS, changeContacts, clearContactsStore, contactsSignOutCheck, contactsSnapshot, openContacts,
@@ -11,32 +13,47 @@ import {
 } from './contacts-store';
 
 // The web's contacts store against a recording community (DESIGN-private-contacts-fable.md §4.4, §4.5, §6.4, §11 "Web
-// (C4)"): what it sends, when, and what it does with each answer. The fake holds copies as C1's store does (signed by
-// the signer, a newer number or 409 stale_copy with the kept one) and records every request whole.
+// (C4)"): what it sends, when, and what it does with each answer. The fake holds copies as C1's store does (each
+// member's own, by the key that signed the request: a newer number, or 409 stale_copy with the kept one; another key's
+// copy 403 not_yours) and records every request whole.
 
 const seed = ed25519.utils.randomSecretKey();
 const me = { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(toEd25519Pkcs8(seed)), callsign: 'ana', createdAt: '2026-11-12T00:00:00.000Z' };
+/** The next account to sign in on this browser once Ana has signed out. */
+const bobSeed = ed25519.utils.randomSecretKey();
+const bob = { publicKey: bytesToHex(ed25519.getPublicKey(bobSeed)), privateKey: bytesToHex(toEd25519Pkcs8(bobSeed)), callsign: 'bob', createdAt: '2026-11-12T00:00:00.000Z' };
 
 interface Seen { method: string; url: string; headers: Record<string, string>; body: string }
 let seen: Seen[] = [];
 let kept: ContactsCopyWire | null = null;
 let off = false;
 let down = false;
-/** Something in front of the community answers a save with a bare 200 page and keeps nothing. */
+/** Something in front of the community (a captive portal, a proxy) answers every call with a bare 200 page and keeps nothing. */
 let blank = false;
+/** The next GET waits here, once asked, until the test lets it answer. */
+let holdGet: { asked: () => void; answer: Promise<void> } | null = null;
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
-function community(url: string, init: RequestInit = {}): Response {
+async function community(url: string, init: RequestInit = {}): Promise<Response> {
     const headers = Object.fromEntries(Object.entries((init.headers ?? {}) as Record<string, string>));
-    seen.push({ method: init.method ?? 'GET', url, headers, body: typeof init.body === 'string' ? init.body : '' });
+    const method = init.method ?? 'GET';
+    seen.push({ method, url, headers, body: typeof init.body === 'string' ? init.body : '' });
+    if (method === 'GET' && holdGet) {
+        const held = holdGet;
+        holdGet = null;
+        held.asked();
+        await held.answer;
+    }
     if (down) throw new TypeError('Failed to fetch');
-    if (blank && init.method === 'PUT') return new Response('<!doctype html><title>OK</title>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+    if (blank) return new Response('<!doctype html><title>OK</title>', { status: 200, headers: { 'Content-Type': 'text/html' } });
     if (!url.endsWith('/api/contacts/copy')) return json(404, { error: 'no route' });
     if (off) return json(404, { error: 'off', code: 'contacts_off' });
-    if (init.method === 'GET') return kept ? json(200, kept) : json(404, { error: 'none', code: 'no_copy' });
+    const signer = headers['X-Public-Key'];
+    if (method === 'GET') return kept && signer === me.publicKey ? json(200, kept) : json(404, { error: 'none', code: 'no_copy' });
     const body = JSON.parse(String(init.body)) as ContactsCopyWire;
     const read = readContactsCopy(body);
+    if (read.ok && read.copy.owner !== signer) return json(403, { error: 'not yours', code: 'not_yours' });
     if (!read.ok || read.copy.owner !== me.publicKey) return json(400, { error: 'bad', code: 'bad_copy' });
     const had = kept ? readContactsCopy(kept) : null;
     if (had?.ok && had.copy.header === read.copy.header) return json(200, { seq: had.copy.seq, code: 'exists' });
@@ -73,9 +90,26 @@ beforeEach(async () => {
     off = false;
     down = false;
     blank = false;
+    holdGet = null;
+    // A test that signed the account out leaves this page's account epoch ended: each test starts as a page loaded now.
+    resetAccountEpochForTest();
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => community(url, init)));
     await browser();
 });
+
+/** The next GET is held once asked: `asked` resolves when it is, and `answer()` lets the community answer it. */
+function holdNextGet(): { asked: Promise<void>; answer: () => void } {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    const asked = new Promise<void>((resolve) => { holdGet = { asked: resolve, answer: held }; });
+    return { asked, answer };
+}
+
+/** Each request as who signed it: Ana, Bob, or nobody. */
+const signedAs = (s: Seen) => `${s.method} signed as ${s.headers['X-Public-Key'] === me.publicKey ? 'Ana' : s.headers['X-Public-Key'] === bob.publicKey ? 'Bob' : 'nobody'}`;
+
+/** The number of the copy this browser keeps for Ana, or undefined when it keeps none. */
+const heldSeq = (idb: ReturnType<typeof memoryIndexedDB>) => (idb.peek('beanpool-contacts', 'copies', me.publicKey.toLowerCase()) as { seq?: number } | undefined)?.seq;
 
 afterEach(() => {
     resetContactsStoreForTest();
@@ -219,6 +253,133 @@ describe('the web contacts store', () => {
         expect(await contactsSignOutCheck(me.publicKey)).toBe('unsaved');
         await clearContactsStore();
         expect(await contactsSignOutCheck(me.publicKey)).toBe('none');
+        expect(contactsSnapshot().list).toBeNull();
+    });
+
+    it('a read answered with a 200 that isn\'t a copy (a captive portal\'s page) is a read that didn\'t arrive: the change waiting here is tried again and reaches the community', async () => {
+        await openContacts(me);
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Pine')) }));
+        expect(contactsSnapshot().where).toBe('soon');
+
+        // The next page load, behind a captive portal: every call gets the portal's 200 page.
+        resetContactsStoreForTest();
+        blank = true;
+        seen = [];
+        await openContacts(me);
+        const said = contactsSnapshot().where;
+        const signOut = await contactsSignOutCheck(me.publicKey);
+
+        // Back online: within the hour the community has the change, sent once.
+        blank = false;
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+        expect(seen.map((s) => s.method)).toEqual(['GET', 'PUT']);
+        expect(listOnCommunity().contacts.map((c) => c.name)).toEqual(['Pine Person 0 Walker']);
+        // While the portal answered, the footer said it would try again (not "within 15 minutes"), and sign-out warned.
+        expect(said).toBe('retry');
+        expect(signOut).toBe('unsaved');
+        expect(contactsSnapshot().where).toBe('here');
+        expect(await contactsSignOutCheck(me.publicKey)).toBe('saved');
+    });
+
+    it('Sign Out in another tab: a tab still open drops the list and the save that waited, refuses a change, and sends nothing, so the old copy never goes signed as the next account', async () => {
+        await openContacts(me);
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Rue')) }));
+        expect(contactsSnapshot().where).toBe('soon');
+        seen = [];
+
+        // Ana signs out in another tab (this tab hears the account's epoch end), and Bob signs in there.
+        endAccountEpoch('signed-out');
+        await wipeIdentity();
+        await importIdentity(bob);
+
+        // Ana's old tab adds someone, and an hour passes.
+        const added = await changeContacts(me, (list) => putContact(list, { id: 'b'.repeat(32), name: 'Late Add', phones: ['0400 111 222'], emails: [], note: '', links: [], invite: null }))
+            .then(() => 'kept', () => 'refused');
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+
+        // Nothing went: not Ana's copy, and nothing signed as Bob.
+        expect(seen.map(signedAs)).toEqual([]);
+        expect(kept).toBeNull();
+        expect(added).toBe('refused');
+        expect(contactsSnapshot().list).toBeNull();
+    });
+
+    it('a read still on its way when the account signs out in another tab keeps nothing in this browser when it lands, and nothing more is sent', async () => {
+        // Ana's list is at the community.
+        await openContacts(me);
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(2, 'Teak')) }));
+        expect(await saveContactsNow(me)).toBe('here');
+
+        // A browser holding none of it opens the list; its read is out when Ana signs out in another tab.
+        const idb = await browser();
+        const get = holdNextGet();
+        const opened = openContacts(me);
+        await get.asked;
+        endAccountEpoch('signed-out');
+        get.answer();
+        await opened;
+
+        // The community's copy is not put back here, nor shown, and nothing more goes.
+        expect(heldSeq(idb)).toBeUndefined();
+        expect(await contactsSignOutCheck(me.publicKey)).toBe('none');
+        expect(contactsSnapshot().list).toBeNull();
+        expect(contactsSnapshot().restored).toBeNull();
+        seen = [];
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+        expect(seen.map(signedAs)).toEqual([]);
+    });
+
+    it('a change whose write lands as the account signs out is taken out again and refused, and nothing is sent', async () => {
+        const idb = await browser();
+        await openContacts(me);
+        const release = idb.holdNextCommit();
+        const change = changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Gum')) }))
+            .then(() => 'kept', () => 'refused');
+        await vi.waitFor(() => expect(heldSeq(idb)).toBe(1));
+        endAccountEpoch('signed-out');
+        release();
+        expect(await change).toBe('refused');
+        expect(heldSeq(idb)).toBeUndefined();
+        seen = [];
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+        expect(seen.map(signedAs)).toEqual([]);
+    });
+
+    it('a save is signed as the account whose list it is, never as another key this browser holds by then', async () => {
+        await openContacts(me);
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Ash')) }));
+        await wipeIdentity();
+        await importIdentity(bob);
+        seen = [];
+        expect(await saveContactsNow(me)).toBe('here');
+        expect(seen.map(signedAs)).toEqual(['PUT signed as Ana']);
+        expect(listOnCommunity().contacts).toHaveLength(1);
+    });
+
+    it('signed out and another account signed in within this same page, with no reload: the read that was out keeps nothing of the old account, and nothing goes', async () => {
+        // Ana's list is at the community, and this browser holds one change more.
+        const idb = await browser();
+        await openContacts(me);
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Oak')) }));
+        expect(await saveContactsNow(me)).toBe('here');
+        await changeContacts(me, (list) => mergeContactsLists(list, { ...emptyContactsList(), contacts: contactsFromCandidates(people(1, 'Elm')) }));
+
+        // The next page load opens it. While its read is out, Ana signs out in this page and Bob signs in, with no reload.
+        resetContactsStoreForTest();
+        const get = holdNextGet();
+        const opened = openContacts(me);
+        await get.asked;
+        await clearAccountStorage();
+        await wipeIdentity();
+        await importIdentity(bob);
+        beginAccountEpoch();
+        seen = [];
+        get.answer();
+        await opened;
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+
+        expect(seen.map(signedAs)).toEqual([]);
+        expect(heldSeq(idb)).toBeUndefined();
         expect(contactsSnapshot().list).toBeNull();
     });
 });

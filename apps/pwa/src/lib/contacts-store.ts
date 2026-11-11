@@ -16,8 +16,12 @@
  *   wins, a removal's marker beats an older contact). A 409 `stale_copy` means another device saved first: fetch,
  *   merge, save again.
  * - **What it says, truthfully.** `where` is what the footer says: `here` (the community keeps the latest), `soon`
- *   (a change waits for its save), `retry` (the last save didn't arrive: tried again), `device-only` (this community
- *   keeps no list for this member: switched off, full, too big, or not a member here).
+ *   (a change waits for its save), `retry` (the last save or read didn't arrive: tried again), `device-only` (this
+ *   community keeps no list for this member: switched off, full, too big, or not a member here).
+ * - **Never past the account.** Once the account leaves this browser (Sign Out, or the delete at the last community, in
+ *   this tab or another: lib/account-epoch.ts), nothing started before keeps a row here, shows the list or sends
+ *   anything, even after another account has signed in. What is sent is signed as the account whose list it is, never as
+ *   whoever this browser holds by then.
  *
  * The web saves only to the community whose web app is open (design §4.5; reaching global from the web is a later step).
  * Signing out deletes this database (lib/device-prefs.ts clearAccountStorage), after Settings has said so when the
@@ -27,7 +31,8 @@ import { useSyncExternalStore } from 'react';
 import {
     emptyContactsList, mergeContactsLists, readContactsCopy, writeContactsList, writeContactsVcard, type ContactsCopyWire, type ContactsList,
 } from '@beanpool/core';
-import { nodeAddress, signedFetch } from './api';
+import { accountEpochHolds, onAccountEpochEnd } from './account-epoch';
+import { nodeAddress, signedFetchWithKey } from './api';
 import { lockContactsList, openContactsList, type ContactsKeys } from './contacts-lock';
 
 const DB_NAME = 'beanpool-contacts';
@@ -88,6 +93,43 @@ export function contactsSnapshot(): ContactsSnapshot {
     return snapshot;
 }
 
+// ── The account leaving ────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Moves on each time the account leaves this browser (see the file's note). Work takes it when it starts and holds to
+ * it, so work started before the account left stops at its next step, even once this page has signed in again (a 'cleared'
+ * end keeps the account, and with it the work under way).
+ */
+let session = 0;
+
+/** Thrown inside the store when the account left while its work was under way: that work stops, keeping nothing. */
+class AccountLeftError extends Error {
+    constructor() {
+        super('The account has left this browser.');
+        this.name = 'AccountLeftError';
+    }
+}
+
+/** Whether work started in `s` may still keep, show or send anything: the account hasn't left since, here or elsewhere. */
+function live(s: number): boolean {
+    return accountEpochHolds() && s === session;
+}
+
+/** The account left: the waiting save is dropped, no screen shows the list, and nothing under way goes on ({@link live}). */
+function leave(): void {
+    session += 1;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    opening = null;
+    publish(IDLE);
+}
+
+onAccountEpochEnd((end) => { if (end === 'signed-out') leave(); });
+
+/** What work started in `s` tells a screen: only while it may (see {@link live}) and the screen shows this account. */
+function tell(s: number, key: string, next: Partial<ContactsSnapshot>): void {
+    if (live(s) && snapshot.key === key) publish(next);
+}
+
 // ── This browser's row ─────────────────────────────────────────────────────────────────────────────────────────────
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -131,32 +173,57 @@ function asHeld(v: unknown): Held | null {
 
 /**
  * Read the account's row and decide what to write, in one readwrite transaction (see the file's note). `decide` runs
- * synchronously inside it and returns the row to put (or null for none) and a result.
+ * synchronously inside it and returns the row to put (or null for none) and a result. For work started in `s` only:
+ * once the account has left this browser it opens nothing (so Sign Out's delete is never undone), and a row that landed
+ * as the account left is taken out again, as tools/store.ts does.
  */
-async function withHeld<T>(key: string, decide: (held: Held | null) => { put: Held | null; result: T }): Promise<T> {
+async function withHeld<T>(key: string, s: number, decide: (held: Held | null) => { put: Held | null; result: T }): Promise<T> {
+    if (!live(s)) throw new AccountLeftError();
     const db = await openDb();
-    return new Promise<T>((resolve, reject) => {
-        let result: T;
+    if (!live(s)) throw new AccountLeftError();
+    let wrote = false;
+    const result = await new Promise<T>((resolve, reject) => {
+        let answer: T;
         const tx = db.transaction(STORE, 'readwrite');
         const store = tx.objectStore(STORE);
         const req = store.get(key);
         req.onsuccess = () => {
             try {
                 const out = decide(asHeld(req.result));
-                if (out.put) store.put(out.put, key);
-                result = out.result;
+                if (out.put) { store.put(out.put, key); wrote = true; }
+                answer = out.result;
             } catch (e) {
                 reject(e);
                 try { tx.abort(); } catch { /* already done */ }
             }
         };
-        tx.oncomplete = () => resolve(result);
+        tx.oncomplete = () => resolve(answer);
         tx.onerror = () => reject(tx.error ?? new Error('The contacts store did not save.'));
         tx.onabort = () => reject(tx.error ?? new Error('The contacts store did not save.'));
     });
+    if (wrote && !live(s)) {
+        await dropRow(db, key);
+        throw new AccountLeftError();
+    }
+    return result;
 }
 
-const readHeld = (key: string) => withHeld<Held | null>(key, (held) => ({ put: null, result: held }));
+/** The account's row taken out. Never throws: a database closed under it is being deleted, and the row goes with it. */
+function dropRow(db: IDBDatabase, key: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+        try {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).delete(key);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+            tx.onabort = () => resolve();
+        } catch {
+            resolve();
+        }
+    });
+}
+
+const readHeld = (key: string, s: number) => withHeld<Held | null>(key, s, (held) => ({ put: null, result: held }));
 
 /** Where the footer stands for a row: see {@link ContactsWhere}. */
 function whereOf(held: Held | null, address: string): ContactsWhere {
@@ -183,13 +250,14 @@ function openHeld(held: Held | null, me: ContactsKeys): { list: ContactsList | n
 export function openContacts(me: ContactsKeys, fresh = false): Promise<void> {
     const key = me.publicKey.toLowerCase();
     if (opening?.key === key && !fresh) return opening.done;
+    const s = session;
     if (snapshot.key !== key) publish({ ...IDLE, key, phase: 'loading' });
     const done = (async () => {
         try {
-            const held = await readHeld(key);
+            const held = await readHeld(key, s);
             const { list, newer } = openHeld(held, me);
-            publish({ list, newer, where: whereOf(held, nodeAddress()), keptAt: held?.at === nodeAddress() ? held.keptAt : null, phase: 'ready' });
-            await pull(me);
+            tell(s, key, { list, newer, where: whereOf(held, nodeAddress()), keptAt: held?.at === nodeAddress() ? held.keptAt : null, phase: 'ready' });
+            await pull(me, s);
         } catch {
             if (snapshot.key === key && snapshot.phase !== 'ready') publish({ phase: 'failed' });
         }
@@ -213,8 +281,9 @@ export class ContactsNewerError extends Error {
 export async function changeContacts(me: ContactsKeys, change: (list: ContactsList) => ContactsList): Promise<ContactsList> {
     const key = me.publicKey.toLowerCase();
     const address = nodeAddress();
+    const s = session;
     const mine = snapshot.key === key ? snapshot.list : null;
-    const next = await withHeld(key, (held) => {
+    const next = await withHeld(key, s, (held) => {
         const stored = openHeld(held, me);
         if (stored.newer || (snapshot.key === key && snapshot.newer)) throw new ContactsNewerError();
         const list = change(mine ? mergeContactsLists(stored.list ?? emptyContactsList(), mine) : stored.list ?? emptyContactsList());
@@ -227,17 +296,18 @@ export async function changeContacts(me: ContactsKeys, change: (list: ContactsLi
         };
         return { put, result: { list, held: put } };
     });
-    publish({ key, list: next.list, phase: 'ready', where: whereOf(next.held, address) });
-    if (!next.held.refused) scheduleSave(me);
+    if (live(s)) publish({ key, list: next.list, phase: 'ready', where: whereOf(next.held, address) });
+    if (!next.held.refused) scheduleSave(me, s);
     return next.list;
 }
 
-function scheduleSave(me: ContactsKeys, ms?: number): void {
-    if (saveTimer) return; // changes made during the wait go with it
+function scheduleSave(me: ContactsKeys, s: number, ms?: number): void {
+    // Changes made during the wait go with it. Nothing waits for an account that has left this browser.
+    if (saveTimer || !live(s)) return;
     const wait = ms ?? CONTACTS_SAVE_WAIT_MS.min + Math.floor(Math.random() * (CONTACTS_SAVE_WAIT_MS.max - CONTACTS_SAVE_WAIT_MS.min));
     saveTimer = setTimeout(() => {
         saveTimer = null;
-        void push(me);
+        void push(me, s);
     }, wait);
 }
 
@@ -246,10 +316,13 @@ function scheduleSave(me: ContactsKeys, ms?: number): void {
 /** The community's answer to a save or a read, as the store acts on it. */
 type Answer = { kind: 'ok'; body: Record<string, unknown> } | { kind: 'missing' } | { kind: 'refused' } | { kind: 'stale' } | { kind: 'failed' };
 
-async function ask(method: 'GET' | 'PUT', body?: ContactsCopyWire): Promise<Answer> {
+async function ask(me: ContactsKeys, s: number, method: 'GET' | 'PUT', body?: ContactsCopyWire): Promise<Answer> {
+    // Nothing goes once the account has left this browser. What goes is signed as `me`, whose list it is, never as whoever
+    // this browser holds by then (signedFetch signs as that).
+    if (!live(s)) throw new AccountLeftError();
     let res: Response;
     try {
-        res = await signedFetch(method, PATH, body);
+        res = await signedFetchWithKey(method, PATH, body, me.privateKey, me.publicKey);
     } catch {
         return { kind: 'failed' };
     }
@@ -265,8 +338,8 @@ async function ask(method: 'GET' | 'PUT', body?: ContactsCopyWire): Promise<Answ
 }
 
 /** Mark the row for `address` (what the community keeps), keeping its copy; null when there is no row. */
-async function markKept(key: string, address: string, mark: Pick<Held, 'kept' | 'keptAt' | 'refused'>): Promise<Held | null> {
-    return withHeld(key, (held) => {
+async function markKept(key: string, s: number, address: string, mark: Pick<Held, 'kept' | 'keptAt' | 'refused'>): Promise<Held | null> {
+    return withHeld(key, s, (held) => {
         if (!held) return { put: null, result: null };
         const put = { ...held, at: address, ...mark };
         return { put, result: put };
@@ -278,37 +351,39 @@ async function markKept(key: string, address: string, mark: Pick<Held, 'kept' | 
  * this browser ("Your contacts are back"); a merged list that holds more than the community's is locked under the next
  * number and saved after the wait. Never throws.
  */
-async function pull(me: ContactsKeys): Promise<void> {
+async function pull(me: ContactsKeys, s: number): Promise<void> {
     const key = me.publicKey.toLowerCase();
     const address = nodeAddress();
-    const answer = await ask('GET');
+    const answer = await ask(me, s, 'GET');
     // The row is brought level whatever screen is open; the screen hears of it only while it shows this account.
-    const say = (next: Partial<ContactsSnapshot>) => { if (snapshot.key === key) publish(next); };
-    if (answer.kind === 'failed') {
-        const held = await readHeld(key);
-        // A list this community keeps none of stays device-only: nothing is tried, so nothing says "will try again".
-        if (held && whereOf(held, address) !== 'device-only' && held.seq !== held.kept) { say({ where: 'retry' }); scheduleSave(me, RETRY_MS); }
-        return;
-    }
+    const say = (next: Partial<ContactsSnapshot>) => tell(s, key, next);
     if (answer.kind === 'refused') {
-        await markKept(key, address, { kept: null, keptAt: null, refused: true });
+        await markKept(key, s, address, { kept: null, keptAt: null, refused: true });
         say({ where: 'device-only' });
         return;
     }
     if (answer.kind === 'missing') {
-        const held = await markKept(key, address, { kept: null, keptAt: null, refused: false });
+        const held = await markKept(key, s, address, { kept: null, keptAt: null, refused: false });
         say({ where: whereOf(held, address) });
-        if (held) scheduleSave(me);
+        if (held) scheduleSave(me, s);
         return;
     }
-    if (answer.kind !== 'ok') return;
-    const theirs = openContactsList(answer.body, me);
-    if (!theirs.ok) {
-        if (theirs.reason === 'newer') say({ newer: true, list: null });
+    const theirs = answer.kind === 'ok' ? openContactsList(answer.body, me) : null;
+    if (theirs && !theirs.ok && theirs.reason === 'newer') {
+        say({ newer: true, list: null });
+        return;
+    }
+    if (answer.kind !== 'ok' || !theirs?.ok) {
+        // No copy came back: the community was out of reach, or a 200 isn't this member's copy (a captive portal's page,
+        // something in front of the community), as a save's bare 200 is in push(). A change it hasn't got is tried again
+        // later, and said so. A list this community keeps none of stays device-only: nothing is tried, so nothing says
+        // "will try again".
+        const held = await readHeld(key, s);
+        if (held && whereOf(held, address) !== 'device-only' && held.seq !== held.kept) { say({ where: 'retry' }); scheduleSave(me, s, RETRY_MS); }
         return;
     }
     const wire: ContactsCopyWire = { header: String(answer.body.header), signature: String(answer.body.signature), nonce: String(answer.body.nonce), sealed: String(answer.body.sealed) };
-    const outcome = await withHeld(key, (held) => {
+    const outcome = await withHeld(key, s, (held) => {
         const stored = openHeld(held, me);
         if (stored.newer) return { put: null, result: null };
         const merged = mergeContactsLists(stored.list ?? emptyContactsList(), theirs.list);
@@ -325,55 +400,57 @@ async function pull(me: ContactsKeys): Promise<void> {
     });
     if (!outcome) return;
     say({ list: outcome.list, where: whereOf(outcome.held, address), keptAt: outcome.held.keptAt, newer: false, ...(outcome.restored ? { restored: outcome.restored } : {}) });
-    if (outcome.held.seq !== outcome.held.kept) scheduleSave(me);
+    if (outcome.held.seq !== outcome.held.kept) scheduleSave(me, s);
 }
 
 /**
  * Save this browser's copy to the community now (after the wait, or sign-out's "Save now"). A 409 `stale_copy` is
  * fetched and merged, and the merged copy saved, once. Returns where the list stands after.
  */
-async function push(me: ContactsKeys, round = 0): Promise<ContactsWhere> {
+async function push(me: ContactsKeys, s: number, attempt = 0): Promise<ContactsWhere> {
     const key = me.publicKey.toLowerCase();
     const address = nodeAddress();
     let held: Held | null;
-    try { held = await readHeld(key); } catch { return snapshot.where; }
+    try { held = await readHeld(key, s); } catch { return snapshot.where; }
     if (!held || (held.at === address && (held.kept === held.seq || held.refused))) return whereOf(held, address);
-    const answer = await ask('PUT', held.copy);
     try {
+        const answer = await ask(me, s, 'PUT', held.copy);
         // Saved only when the community names this copy's number (design §6.4: sign-out removes this browser's copy once
         // the server has the same number). A 2xx naming none or another, such as a page from something in front of it,
         // is tried again like a save that didn't arrive.
         if (answer.kind === 'ok' && answer.body.seq === held.seq) {
             const savedAt = readContactsCopy(held.copy);
-            const marked = await markKept(key, address, { kept: held.seq, keptAt: savedAt.ok ? savedAt.copy.savedAt : null, refused: false });
+            const marked = await markKept(key, s, address, { kept: held.seq, keptAt: savedAt.ok ? savedAt.copy.savedAt : null, refused: false });
             // A change made while the save was on its way has its own wait.
-            if (marked && marked.seq !== marked.kept) scheduleSave(me);
-            return settle(key, marked, address);
+            if (marked && marked.seq !== marked.kept) scheduleSave(me, s);
+            return settle(s, key, marked, address);
         }
-        if (answer.kind === 'stale' && round === 0) {
-            await pull(me);
+        if (answer.kind === 'stale' && attempt === 0) {
+            await pull(me, s);
             if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-            return push(me, 1);
+            return push(me, s, 1);
         }
-        if (answer.kind === 'refused') return settle(key, await markKept(key, address, { kept: null, keptAt: null, refused: true }), address);
+        if (answer.kind === 'refused') return settle(s, key, await markKept(key, s, address, { kept: null, keptAt: null, refused: true }), address);
     } catch {
-        // The row couldn't be written: what the screen says stays as it was.
+        // The row couldn't be written, or the account left this browser: what the screen says stays as it was.
     }
-    scheduleSave(me, RETRY_MS);
-    if (snapshot.key === key) publish({ where: 'retry' });
+    // The account left while the save was under way: nothing is tried again, and nothing said.
+    if (!live(s)) return snapshot.where;
+    scheduleSave(me, s, RETRY_MS);
+    tell(s, key, { where: 'retry' });
     return 'retry';
 }
 
-function settle(key: string, held: Held | null, address: string): ContactsWhere {
+function settle(s: number, key: string, held: Held | null, address: string): ContactsWhere {
     const where = whereOf(held, address);
-    if (snapshot.key === key) publish({ where, keptAt: held?.keptAt ?? null });
+    tell(s, key, { where, keptAt: held?.keptAt ?? null });
     return where;
 }
 
 /** Sign-out's "Save now" (design §6.4): the save without the wait. Where the list stands after. */
 export async function saveContactsNow(me: ContactsKeys): Promise<ContactsWhere> {
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    return push(me);
+    return push(me, session);
 }
 
 /**
@@ -383,7 +460,7 @@ export async function saveContactsNow(me: ContactsKeys): Promise<ContactsWhere> 
  */
 export async function contactsSignOutCheck(publicKey: string): Promise<'none' | 'saved' | 'unsaved' | 'device-only'> {
     let held: Held | null;
-    try { held = await readHeld(publicKey.toLowerCase()); } catch { return 'none'; }
+    try { held = await readHeld(publicKey.toLowerCase(), session); } catch { return 'none'; }
     if (!held) return 'none';
     const address = nodeAddress();
     if (held.at === address && held.refused) return 'device-only';
@@ -393,7 +470,7 @@ export async function contactsSignOutCheck(publicKey: string): Promise<'none' | 
 /** The list as this browser keeps it, opened, without asking the community; null with none (or a newer app's). */
 export async function heldContactsList(me: ContactsKeys): Promise<ContactsList | null> {
     try {
-        const held = await readHeld(me.publicKey.toLowerCase());
+        const held = await readHeld(me.publicKey.toLowerCase(), session);
         return held ? openHeld(held, me).list : null;
     } catch {
         return null;
@@ -422,11 +499,12 @@ export function clearContactsRestored(): void {
     if (snapshot.restored !== null) publish({ restored: null });
 }
 
-/** Sign Out, and the delete at the last community: this browser's row goes with the database. Never throws. */
+/**
+ * Sign Out, and the delete at the last community: this browser's row goes with the database, and nothing under way puts
+ * it back. Never throws.
+ */
 export async function clearContactsStore(): Promise<void> {
-    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    opening = null;
-    publish(IDLE);
+    leave();
     const held = dbPromise;
     dbPromise = null;
     try { (await held)?.close(); } catch { /* not open */ }
@@ -445,8 +523,9 @@ export async function clearContactsStore(): Promise<void> {
     });
 }
 
-/** Tests only: forget the open database, the wait and the snapshot, as a new page load would. */
+/** Tests only: forget the open database, the wait, the snapshot and the work under way, as a new page load would. */
 export function resetContactsStoreForTest(): void {
+    session += 1;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     dbPromise = null;
     opening = null;

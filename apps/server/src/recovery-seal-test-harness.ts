@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { sealSeedToSso, openSeedFromSso } from '@beanpool/core';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 /** The seal's own command line (the rollback command, run as a command in 7 and 21). */
 export const SEAL_CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'services', 'recovery-seal-key.ts');
@@ -776,7 +777,8 @@ export async function bootParent() {
             headers: {
                 'Content-Type': 'application/json',
                 'X-Public-Key': id.pk,
-                'X-Signature': crypto.sign(null, Buffer.from(`POST\n${p}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64'),
+                'X-Signature': signRequest(id.priv, { method: 'POST', path: p, timestamp: ts, nonce, body: bodyString }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             },

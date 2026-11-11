@@ -39,6 +39,7 @@ import {
     PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, ed25519KeyOfPeerId, isPushNoticeKind, pushNoticeWords, verifyPushNotice,
     type PushNoticeKind,
 } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Everything this process prints, so section 5 can look for a push token in it.
 const printed: string[] = [];
@@ -82,7 +83,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

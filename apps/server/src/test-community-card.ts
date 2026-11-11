@@ -40,6 +40,7 @@ process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1/directory-register';
 const ADMIN_PASSWORD = 'CommunityCardAdmin123!';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -50,6 +51,8 @@ function assert(cond: boolean, msg: string): void {
 
 // Unique enough that a substring can only be these.
 const HOST = 'card-test.example.org';
+// The node takes this as its name from the config below; before that it takes any host, so every request is signed for it.
+setSignedForHost(HOST);
 const NAME = 'Sentinelvale Commons';
 const AREA = 'Sentinelvale and around';
 // The place, and what a stranger's rounding of it would print: neither may appear.
@@ -72,7 +75,8 @@ async function get(path: string, opts: { id?: Id | null; headers?: Record<string
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`), opts.id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.id.priv, { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -317,7 +321,8 @@ async function main(): Promise<void> {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-                'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+                'X-Signature': signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: raw }),
+                [SIGNED_FOR_HEADER]: signedForHost(),
             },
             body: raw,
         });

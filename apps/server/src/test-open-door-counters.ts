@@ -34,6 +34,7 @@ import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } 
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -99,7 +100,8 @@ function signed(k: Key, method: string, urlPath: string, raw = ''): Record<strin
     const nonce = crypto.randomBytes(16).toString('hex');
     return {
         'X-Public-Key': k.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), k.privateKey).toString('base64'),
+        'X-Signature': signRequest(k.privateKey, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

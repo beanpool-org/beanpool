@@ -38,6 +38,7 @@ import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { resetAgentLimits } from './agent/limits.js';
 import { fileSuggestion, openSuggestions, SUGGESTION_TTL_MS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY } from './agent/suggestions.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -83,7 +84,8 @@ async function signedGet(p: string, k: Key): Promise<Reply> {
     return call('GET', p, {
         headers: {
             Accept: 'application/json', 'X-Public-Key': k.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${p.split('?')[0]}\n${ts}\n${nonce}\n`), k.priv).toString('base64'),
+            'X-Signature': signRequest(k.priv, { method: 'GET', path: p.split('?')[0], timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         },
     });
 }

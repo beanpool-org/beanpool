@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -231,7 +232,8 @@ async function signedGet(port: number, id: Id, route: string): Promise<{ status:
     const res = await fetch(`https://127.0.0.1:${port}${route}`, {
         headers: {
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${route}\n${ts}\n${nonce}\n`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'GET', path: route, timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -251,7 +253,8 @@ async function signedPost(port: number, id: Id, route: string, body: unknown): P
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': signRequest(id.priv, { method: 'POST', path: route, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

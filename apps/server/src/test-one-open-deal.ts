@@ -35,6 +35,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -82,7 +83,8 @@ async function call(id: Id, path: string, body: Record<string, unknown>): Promis
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'X-Public-Key': id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: bodyString }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

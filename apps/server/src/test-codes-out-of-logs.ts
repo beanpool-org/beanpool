@@ -28,6 +28,7 @@ import { seedOwnerForTests, ownerPhoneSessionHeaders } from './admin-auth-test-h
 import { db } from './db/db.js';
 import { addLogClient } from './logger.js';
 import { generateInvite } from './engine/invites.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Capture everything printed from here on, passing it through.
 const printed: string[] = [];
@@ -70,8 +71,8 @@ function newKeyPair() {
 async function redeemAs(kp: ReturnType<typeof newKeyPair>, body: { code: string; publicKey: string; callsign: string }): Promise<{ status: number; body: any }> {
     const ts = String(Date.now());
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`POST\n/api/invite/redeem\n${ts}\n${nonce}\n${JSON.stringify(body)}`), kp.privateKey).toString('base64');
-    return postJson('/api/invite/redeem', body, { 'X-Public-Key': kp.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce });
+    const sig = signRequest(kp.privateKey, { method: 'POST', path: '/api/invite/redeem', timestamp: ts, nonce, body: JSON.stringify(body) });
+    return postJson('/api/invite/redeem', body, { 'X-Public-Key': kp.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce });
 }
 
 type Row = { id: number; message: string | null; metadata: string | null };

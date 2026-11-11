@@ -49,6 +49,7 @@ import { TABLE_HASHES_VERSION } from './engine/replica-hashes.js';
 import { budgetOf, returnLapsedHolds } from './engine/vouchers.js';
 import { listKeptNotices } from './engine/kept-notices.js';
 import { issueAutomationToken } from './automation-tokens.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 /** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
@@ -84,7 +85,8 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         h['X-Public-Key'] = id.pk;
-        h['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        h['X-Signature'] = signRequest(id.priv, { method, path: urlPath.split('?')[0], timestamp: ts, nonce, body: raw });
+        h[SIGNED_FOR_HEADER] = signedForHost();
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }

@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -327,8 +328,8 @@ async function main(): Promise<void> {
     const asBob = (p: string): Record<string, string> => {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const signature = crypto.sign(null, Buffer.from(`GET\n${p}\n${ts}\n${nonce}\n`), bobKeys.privateKey).toString('base64');
-        return { 'X-Public-Key': bob, 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+        const signature = signRequest(bobKeys.privateKey, { method: 'GET', path: p, timestamp: ts, nonce });
+        return { 'X-Public-Key': bob, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': signature, 'X-Timestamp': String(ts), 'X-Nonce': nonce };
     };
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Bob', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(bob);
     const conv = createConversation('dm', [author, bob], author);

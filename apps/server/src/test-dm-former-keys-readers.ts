@@ -43,6 +43,7 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { addBlocks } from './engine/member-blocks.js';
 import { dmPublicKeyOf, makeKeySuccession, walkKeySuccession } from '@beanpool/core';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const OPEN = process.env.ENFORCE_READ_AUTH === 'false';
 
@@ -86,7 +87,8 @@ async function call(method: 'GET' | 'POST', signer: Id | null, path: string, bod
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64');
+        headers['X-Signature'] = signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

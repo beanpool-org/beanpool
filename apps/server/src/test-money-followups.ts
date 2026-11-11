@@ -42,6 +42,7 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { resumeTakeoverAtBoot, getTakeoverProgress, TAKEOVER_JOURNAL_FILE } from './services/takeover.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -86,13 +87,14 @@ function makeMember(callsign: string, beans: number): Id {
 async function signedRaw(urlPath: string, id: Id, raw: string) {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `POST\n${urlPath}\n${ts}\n${nonce}\n${raw}`;
+    const canonical = { method: 'POST', path: urlPath, timestamp: ts, nonce, body: raw };
     const res = await fetch(`${BASE}${urlPath}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, canonical),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

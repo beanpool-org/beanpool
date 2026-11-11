@@ -42,6 +42,7 @@ import { db } from './db/db.js';
 import { resetAgentLimits } from './agent/limits.js';
 import { enterpriseRef } from './agent/owner-posts.js';
 import { AGENT_TOOLS, toolsFor, type AgentGrant } from './agent/tools.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -79,7 +80,8 @@ async function market(reader: Key, query: string): Promise<any[]> {
     const res = await fetch(`${BASE}${urlPath}`, {
         headers: {
             'X-Public-Key': reader.pub, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), reader.priv).toString('base64'),
+            'X-Signature': signRequest(reader.priv, { method: 'GET', path: urlPath.split('?')[0], timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         },
     });
     const body = await res.json().catch(() => null);

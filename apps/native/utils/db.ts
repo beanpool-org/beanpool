@@ -90,14 +90,12 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
 }
 
 /**
- * Singleton database instance.
- * Using the synchronous API available in expo-sqlite version 14.x+ 
+ * The community's copy open now: set only once its copy is made (openCopy, _doInitDB), so getDb never hands out a copy
+ * still being cleared or made. Every reader, writer, sync cycle and the socket reach the copy through getDb.
  */
 let db: SQLite.SQLiteDatabase | null = null;
 /** The community file each open handle is for: a group's key store reads only its own community's (groupKeyStore). */
 const dbFileOf = new WeakMap<object, string>();
-let dbInitialized = false;
-let dbInitPromise: Promise<void> | null = null;
 
 // Global JS mutex to prevent expo-sqlite "database is locked" crashes
 // arising from concurrent loops across background Pillar polls and foreground Inbox rendering.
@@ -157,89 +155,154 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     } while (copyMoving);
     const expectedDbName = getDatabaseFilenameForNode(url);
 
-    if (db && currentDbName === expectedDbName) {
+    // The copy open now, when it is this community's: made, since `db` is set only once it is. Matched by its own file,
+    // never by the name an open on its way is for (currentDbName): the community left is never handed out under the new name.
+    if (db && dbFileOf.get(db) === expectedDbName) {
         return db;
     }
 
+    // Its open on its way, which hands it out once its copy is made.
     if (getDbPromise && currentDbName === expectedDbName) {
         return getDbPromise;
     }
 
-    currentDbName = expectedDbName;
+    return openCopy(expectedDbName, url, null);
+}
 
-    getDbPromise = (async () => {
+/** A clear's open (clearDB): the cache tables go whatever the copy's number, and `alsoDrop` with them (the account's own, as it leaves). */
+interface CopyClear { alsoDrop: string }
+
+/**
+ * Open `file`'s copy and make it (_doInitDB) on a connection of its own, before anything else has it: published as the
+ * copy open (`db`) and handed to the asks waiting on it (getDbPromise) only once it is made. So no reader, writer, sync
+ * cycle or socket holds a statement on it while its tables are dropped: SQLite refuses a DROP TABLE while a statement of
+ * the same connection is still open ("database table is locked", SQLITE_LOCKED), which a reader that had the copy while
+ * a 1.3 copy was cleared hit on 1.4.0 (11 Nov). A copy not made is closed and not handed out: the next ask opens it again.
+ * `clear` (clearDB): the cache tables go whatever the copy's number.
+ *
+ * Another community's copy open now (getDb's own swap: an address written with no closeDB) is left at once: handed to no
+ * one from here, and closed under the sync lock on its own (leaveCopy), so a write in flight on it finishes first. The open
+ * takes no lock and waits for no close: a writer holding the lock as it asks (applyDelta, the deal and review writers, the
+ * ratings reads) waits on this open, and an open that waited for that lock would wait for good (review of #3053, db.ts:161).
+ */
+function openCopy(file: string, url: string | null, clear: CopyClear | null): Promise<SQLite.SQLiteDatabase> {
+    if (db) {
+        leaveCopy(db);
+        db = null;
+    }
+    currentDbName = file;
+    const seq = ++openSeq;
+    // Cleared once it settles, unless another open has taken its place since, and before the asks waiting on it go on.
+    const opening = openAndMakeCopy(file, url, clear, seq).finally(() => {
+        if (getDbPromise === opening) getDbPromise = null;
+    });
+    getDbPromise = opening;
+    return opening;
+}
+
+/** Each open's number (openCopy): only the latest is handed out. */
+let openSeq = 0;
+
+/** The copies a swap has left (openCopy) that are not closed yet: each waits for the sync lock (leaveCopy, closeOpenCopy). */
+const copiesLeft = new Set<SQLite.SQLiteDatabase>();
+
+/**
+ * Close `copy`, left by a swap, once the sync lock is free: a writer that had it as it took the lock finishes on it first.
+ * On its own: nothing waits for it, so no asker that holds the lock waits on its own lock. closeOpenCopy closes it sooner
+ * when a closeDB, a clear or a move has the lock first.
+ */
+function leaveCopy(copy: SQLite.SQLiteDatabase): void {
+    copiesLeft.add(copy);
+    void (async () => {
+        await acquireSyncLock({ urgent: true });
         try {
-            // Force strict database isolation and hot-swap reconnect if matrix url changes
-            if (db) {
-                await acquireSyncLock({ urgent: true });
-                try {
-                    if (db) {
-                        const oldDb = db;
-                        db = null;
-                        dbInitialized = false;
-                        dbInitPromise = null;
-                        try {
-                            await oldDb.closeAsync();
-                        } catch (e) {
-                            console.warn('[DB] Reconnect close warning:', e);
-                        }
-                    }
-                } finally {
-                    releaseSyncLock();
-                }
-            }
-
-            // Auto-track nodes we jump into correctly inside the UI Matrix. Never one that isn't plain host[:port]
-            // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
-            if (url && isPlainNodeAddress(url)) await addSavedNode(url);
-            
-            db = await SQLite.openDatabaseAsync(expectedDbName, { useNewConnection: true });
-            dbFileOf.set(db, expectedDbName);
-            
-            // Hardcode native concurrent locking parameters per-connection
-            await db.execAsync(`
-                PRAGMA journal_mode = WAL;
-                PRAGMA busy_timeout = 30000;
-            `);
-            
-            // Safety Init: If we blindly swapped contexts, ensure this newly mounted database replicates the exact Schema
-            if (!dbInitialized && !dbInitPromise) {
-                dbInitPromise = _doInitDB();
-                await dbInitPromise;
-            }
-
-            return db;
+            await closeLeftCopy(copy);
         } finally {
-            getDbPromise = null;
+            releaseSyncLock();
         }
     })();
+}
 
-    return getDbPromise;
+/** Close `copy`, left by a swap, unless it is closed already. The caller holds the sync lock (leaveCopy, closeOpenCopy). */
+async function closeLeftCopy(copy: SQLite.SQLiteDatabase): Promise<void> {
+    if (!copiesLeft.delete(copy)) return;
+    try {
+        await copy.closeAsync();
+    } catch (e) {
+        console.warn('[DB] Reconnect close warning:', e);
+    }
+}
+
+async function openAndMakeCopy(file: string, url: string | null, clear: CopyClear | null, seq: number): Promise<SQLite.SQLiteDatabase> {
+    // Auto-track nodes we jump into correctly inside the UI Matrix. Never one that isn't plain host[:port]
+    // (node-url.ts): addSavedNode refuses it, and that must not stop the database opening.
+    if (url && isPlainNodeAddress(url)) await addSavedNode(url);
+
+    const handle = await SQLite.openDatabaseAsync(file, { useNewConnection: true });
+    dbFileOf.set(handle, file);
+    try {
+        // Hardcode native concurrent locking parameters per-connection
+        await handle.execAsync(`
+            PRAGMA journal_mode = WAL;
+            PRAGMA busy_timeout = 30000;
+        `);
+        await _doInitDB(handle, clear);
+    } catch (e) {
+        await handle.closeAsync().catch(() => {});
+        throw e;
+    }
+    if (seq !== openSeq) {
+        // Another copy was asked for while this one was made (the address changed): never a second connection left open
+        // beside the one in use. Its asks get the copy asked for now.
+        await handle.closeAsync().catch(() => {});
+        return getDb();
+    }
+    db = handle;
+    return handle;
 }
 
 export async function closeDB() {
     await acquireSyncLock({ urgent: true });
     try {
+        // An open on its way finishes first, and its copy is closed with the rest (the copies a swap left too): none is left
+        // open after this.
+        await untilNoOpenOnItsWay();
         await closeOpenCopy();
     } finally {
         releaseSyncLock();
     }
 }
 
-/** Close the copy open, if one is. The caller holds the sync lock (closeDB, whileCopyMoves). */
+/**
+ * Called holding the sync lock, and back holding it: an open on its way (getDbPromise) finishes first (closeDB,
+ * whileCopyMoves, clearDB). An open takes no lock; the lock is let go meanwhile all the same, so the writers queued for it
+ * are not held up while a copy is made.
+ */
+async function untilNoOpenOnItsWay(): Promise<void> {
+    while (getDbPromise) {
+        const opening = getDbPromise;
+        releaseSyncLock();
+        await opening.catch(() => {});
+        await acquireSyncLock({ urgent: true });
+    }
+}
+
+/**
+ * Close the copy open, if one is, and every copy a swap left that is still open (its own close waits for the lock this
+ * caller holds). The caller holds the sync lock (closeDB, whileCopyMoves, clearDB).
+ */
 async function closeOpenCopy() {
     if (db) {
         const oldDb = db;
         db = null;
         currentDbName = null;
-        dbInitialized = false;
-        dbInitPromise = null;
         try {
             await oldDb.closeAsync();
         } catch (e) {
             console.warn('[DB] closeDB warning:', e);
         }
     }
+    for (const copy of [...copiesLeft]) await closeLeftCopy(copy);
 }
 
 /**
@@ -255,20 +318,15 @@ async function closeOpenCopy() {
  * lock first and publishes copyMoving only while holding it, and clears it before letting go. A writer that took the lock
  * first finishes, its getDb with it, before the move starts; one waiting for the lock gets it after the move, with
  * copyMoving clear. (Published before the lock was taken, each waited for the other for good: confirmation 2 of #2138.)
- * Moves wait for each other on the lock. An open already on its way finishes first, outside the lock, since a hot swap
- * in getDb takes the lock itself.
+ * Moves wait for each other on the lock. An open already on its way finishes first (untilNoOpenOnItsWay), and a copy a
+ * swap left is closed with the copy open (closeOpenCopy).
  */
 export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Promise<T> {
     const toFile = getDatabaseFilenameForNode(to);
     // Never while the copies still move to their own names (cache-file-migration.ts): that opens and renames them too.
     await communityCachesRenamed();
     await acquireSyncLock({ urgent: true });
-    while (getDbPromise) {
-        const opening = getDbPromise;
-        releaseSyncLock();
-        await opening.catch(() => {});
-        await acquireSyncLock({ urgent: true });
-    }
+    await untilNoOpenOnItsWay();
     let moved!: () => void;
     copyMoving = new Promise<void>((resolve) => { moved = resolve; });
     try {
@@ -286,28 +344,17 @@ export async function whileCopyMoves<T>(to: string, move: () => Promise<T>): Pro
     }
 }
 
-/** Ensures initDB has completed before any query runs */
+/** The copy, made: getDb hands out none before its copy is made (openCopy). */
 async function waitForInit(): Promise<SQLite.SQLiteDatabase> {
-    if (dbInitialized) return getDb();
-    if (dbInitPromise) {
-        await dbInitPromise;
-        return getDb();
-    }
-    // If neither, trigger initDB ourselves
-    dbInitPromise = initDB();
-    await dbInitPromise;
     return getDb();
 }
 
 /**
- * Physically translates the Node Server schema identical array into
- * the local Native device's memory for Background Libp2p gossiping.
+ * The community's copy open and made (getDb, openCopy): the schema below, and a copy below this build's number cleared
+ * first. Rejects when it couldn't be made; the next ask tries again.
  */
 export async function initDB() {
-    if (dbInitialized) return;
-    if (dbInitPromise) { await dbInitPromise; return; }
-    dbInitPromise = _doInitDB();
-    await dbInitPromise;
+    await getDb();
 }
 
 /**
@@ -345,9 +392,12 @@ const CACHE_TABLES = [
 ] as const;
 const DROP_CACHE_TABLES_SQL = CACHE_TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`).join(' ');
 
-async function _doInitDB() {
-    const database = await getDb();
-
+/**
+ * Make the copy `database` opens: the schema below, a copy below this build's number cleared first, and `clear`'s tables
+ * dropped first (clearDB). Only ever on the connection openCopy has just opened, which nothing else has yet: a statement of
+ * another reader open on it would refuse the drops. Throws when the copy couldn't be made, and leaves it as it was.
+ */
+async function _doInitDB(database: SQLite.SQLiteDatabase, clear: CopyClear | null = null) {
     // A copy below this build's schema number (COPY_SCHEMA): its cache tables go before the schema below makes them again
     // with today's columns, and the copy is read whole (every cursor forgotten, as for a Force Resync). A fresh copy has
     // nothing to drop and takes the number.
@@ -363,7 +413,8 @@ async function _doInitDB() {
         } catch (e) {
             newCopyGeneration();
         }
-        await database.execAsync(DROP_CACHE_TABLES_SQL);
+        // The cursors go before the tables: stopped between the two, the copy is still below the number and is cleared at
+        // the next open, never left cleared with the cursors of what it held (its next sync would read only what changed).
         try {
             const file = dbFileOf.get(database);
             const { syncCursorKeysOf } = await import('../services/pillar-sync');
@@ -371,8 +422,8 @@ async function _doInitDB() {
         } catch (e) {
             console.warn('[SQLite] Could not forget the sync cursors of a copy below the schema number:', e);
         }
-        await database.execAsync(`PRAGMA user_version = ${COPY_SCHEMA}`);
     }
+    const drops = (copyBelowSchema || clear ? DROP_CACHE_TABLES_SQL : '') + (clear?.alsoDrop ?? '');
 
     // We execute the same exact schema.sql payload to guarantee 1:1 API compatibility locally
     const schema = `
@@ -659,21 +710,30 @@ ${GROUP_KEY_TABLES_SQL}
 ${TOOL_DOCS_TABLE}
     `;
 
+    // One step: the drops, today's schema and the copy's number land together or not at all. A clear that stops part way
+    // (the app closed, a write refused) leaves the copy as it was, below the number with every table it had, and the next
+    // open clears it again: never a copy without its tables, nor one at the number that was never made.
+    await database.execAsync('BEGIN IMMEDIATE');
     try {
+        if (drops) await database.execAsync(drops);
         await database.execAsync(schema);
-        console.log('[SQLite] Local database initialized physically 1:1 with Server node.');
-
-        // A copy cleared for being below the schema number (above): read it whole now rather than at the next timer.
-        if (copyBelowSchema) {
-            try {
-                const { requestSync } = require('../services/pillar-sync');
-                requestSync().catch(() => {});
-            } catch (e) {}
-        }
-
-        dbInitialized = true;
+        if (copyBelowSchema) await database.execAsync(`PRAGMA user_version = ${COPY_SCHEMA}`);
+        await database.execAsync('COMMIT');
     } catch (e) {
+        await database.execAsync('ROLLBACK').catch(() => {});
         console.error('[SQLite] Database init error:', e);
+        throw e;
+    }
+    console.log('[SQLite] Local database initialized physically 1:1 with Server node.');
+
+    // A copy cleared for being below the schema number (above): read it whole now rather than at the next timer. A cycle
+    // that began before it was handed out may have read the cursors forgotten above, so it stores nothing (a new generation).
+    if (copyBelowSchema) {
+        newCopyGeneration();
+        try {
+            const { requestSync } = require('../services/pillar-sync');
+            requestSync().catch(() => {});
+        } catch (e) {}
     }
 }
 
@@ -726,26 +786,30 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
     } catch (e) {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
-    const database = await getDb();
+    // Never while the copies still move to their own names (cache-file-migration.ts), as getDb.
+    await communityCachesRenamed();
+    let cleared: Promise<SQLite.SQLiteDatabase> | undefined;
     // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
     // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
     await acquireSyncLock({ urgent: true });
     try {
+        await untilNoOpenOnItsWay();
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync(DROP_CACHE_TABLES_SQL
+        // The community's copy by its address, never opened first: one that can't be made is what this clear mends. Read
+        // under the lock, so no copy moves to another name meanwhile (whileCopyMoves).
+        const file = getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url'));
+        // Closed, so no statement is open on it as its tables go ("database table is locked"); made again by openCopy.
+        await closeOpenCopy();
+        cleared = openCopy(file, null, {
             // The tools' documents are the account's own, not a copy of the node's: kept by a re-sync, gone as it leaves.
-            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : ''));
+            alsoDrop: opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers; DROP TABLE IF EXISTS tool_docs;' : '',
+        });
     } finally {
         releaseSyncLock();
     }
-
-    // Reset flags to force schema recreation
-    dbInitialized = false;
-    dbInitPromise = null;
-    
-    await initDB();
+    await cleared;
 }
 
 /**

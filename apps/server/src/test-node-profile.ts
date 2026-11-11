@@ -31,6 +31,7 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -59,7 +60,8 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, { method: 'GET', path, timestamp: ts, nonce });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -73,7 +75,8 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, { method: 'GET', path, timestamp: ts, nonce }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

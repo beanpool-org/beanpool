@@ -29,6 +29,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { TEST_PHOTOS } from './post-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -60,9 +61,10 @@ async function signedFetch(method: 'POST' | 'GET' | 'PUT', path: string, body: u
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         const canonicalPath = path.split('?')[0];
-        const canonical = `${method}\n${canonicalPath}\n${ts}\n${nonce}\n${bodyString}`;
+        const canonical = { method, path: canonicalPath, timestamp: ts, nonce, body: bodyString };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

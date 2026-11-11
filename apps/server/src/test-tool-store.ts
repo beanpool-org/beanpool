@@ -73,6 +73,7 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { ledger } from './engine/ledger.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -108,14 +109,15 @@ function member(name: string, opts: { visitor?: boolean } = {}): Id {
 type Method = 'GET' | 'PUT' | 'DELETE' | 'POST';
 interface Req { method: Method; path: string; headers: Record<string, string>; body?: string }
 interface Res { status: number; body: any; headers: Headers }
-/** The app's signed request (the format before request binding, which every node still takes), ready to send or send again. */
+/** The app's signed request (format 2, through signed-request-test-helper.ts), ready to send or send again. */
 function signed(method: Method, route: string, id: Id, body?: unknown, opts: { headerKey?: string; raw?: string } = {}): Req {
     const raw = method === 'GET' ? '' : opts.raw ?? JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': opts.headerKey ?? id.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

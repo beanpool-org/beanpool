@@ -55,6 +55,7 @@ import {
 } from './services/recovery-seal-key.js';
 import { getCurrentShares } from './engine/recovery-shares.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -119,7 +120,8 @@ async function call(id: Id | null, p: string, body: unknown): Promise<{ status: 
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`POST\n${p}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(id.priv, { method: 'POST', path: p, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
@@ -146,9 +148,9 @@ async function connect(id: Id, provider: Provider, sub: string, extra: Record<st
 /** Settings' Disconnect: DELETE /api/recovery/shares/sso/:provider, signed by the member. The status. */
 async function disconnect(id: Id, provider: Provider): Promise<number> {
     const ts = Date.now(); const n = crypto.randomBytes(16).toString('hex'); const p = `/api/recovery/shares/sso/${provider}`;
-    const sig = crypto.sign(null, Buffer.from(`DELETE\n${p}\n${ts}\n${n}\n`), id.priv).toString('base64');
+    const sig = signRequest(id.priv, { method: 'DELETE', path: p, timestamp: ts, nonce: n });
     pruneAuthAttempts(Date.now() + 120_000); resetGatewayRateLimit();
-    const res = await localFetch(`${BASE}${p}`, { method: 'DELETE', headers: { 'X-Public-Key': id.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': n } });
+    const res = await localFetch(`${BASE}${p}`, { method: 'DELETE', headers: { 'X-Public-Key': id.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': n } });
     return res.status;
 }
 /** The global community's open door: one sign-in joins and enrols the same sign-in as the recovery copy. */

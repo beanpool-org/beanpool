@@ -33,6 +33,7 @@ import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { db } from './db/db.js';
+import { signSocket, socketBinding } from './signed-request-test-helper.js';
 
 const ENFORCE_WS_AUTH = process.env.ENFORCE_WS_AUTH === 'true';
 const OPEN_FEED = process.env.ENFORCE_WS_AUTH === 'false';
@@ -69,8 +70,8 @@ function ownerKeySession(id: { pubKeyHex: string; privateKey: crypto.KeyObject }
 
 function signedWsQuery(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): string {
     const ts = Date.now(), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    const sig = signSocket(id.privateKey, ts, nonce);
+    return `pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}&${socketBinding()}`;
 }
 
 type Outcome =

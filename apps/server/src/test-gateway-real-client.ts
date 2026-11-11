@@ -25,6 +25,7 @@ import { db } from './db/db.js';
 import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
 import { resolveClientIp, isTrustedProxy, setTrustConfigForTests } from './client-ip.js';
 import { resetGatewayRateLimit, SIGNED_CEILING_FACTOR } from './gateway-rate-limit.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -42,8 +43,8 @@ function makeMember(callsign: string) {
 
 function signedHeaders(id: { pubKeyHex: string; privateKey: crypto.KeyObject }, method: string, path: string): Record<string, string> {
     const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`${method}\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
-    return { 'X-Public-Key': id.pubKeyHex, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    const sig = signRequest(id.privateKey, { method, path, timestamp: ts, nonce });
+    return { 'X-Public-Key': id.pubKeyHex, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
 }
 
 /** What cloudflared forwards for a member at `ip` (Cloudflare's edge sets both). */

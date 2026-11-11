@@ -29,6 +29,7 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 import { lockedDm } from './dm-test-payload.js'; // no engine import: safe to hoist
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -46,9 +47,10 @@ async function get(path: string, id?: Id): Promise<{ status: number; error?: str
     if (id) {
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const canonical = `GET\n${path.split('?')[0]}\n${ts}\n${nonce}\n`;
+        const canonical = { method: 'GET', path: path.split('?')[0], timestamp: ts, nonce };
         headers['X-Public-Key'] = id.pubKeyHex;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64');
+        headers['X-Signature'] = signRequest(id.privateKey, canonical);
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

@@ -57,6 +57,7 @@ import {
     recordWebVisit, pruneWebVisits, getWebVisits, isWebAppPageLoad, utcDay, VISIT_RETENTION_DAYS,
     webVisitMemoryForTests, webVisitTagForTests, forgetWebVisitDayForTests,
 } from './engine/web-visits.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -134,7 +135,8 @@ function signed(kp: ReturnType<typeof makeKeypair>, method: string, urlPath: str
     const nonce = crypto.randomBytes(16).toString('hex');
     return {
         'X-Public-Key': kp.pk,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), kp.privateKey).toString('base64'),
+        'X-Signature': signRequest(kp.privateKey, { method, path: urlPath.split('?')[0], timestamp: ts, nonce }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

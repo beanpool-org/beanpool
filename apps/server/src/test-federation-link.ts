@@ -37,6 +37,7 @@ import {
     ensureFederationLink,
 } from './federation-link.js';
 import { bridgeAccountId } from './federation-bridge.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -82,7 +83,8 @@ async function signedGet(signer: { pk: string; priv: crypto.KeyObject }, route: 
     const res = await fetch(`${BASE}${route}`, {
         headers: {
             'X-Public-Key': signer.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${route.split('?')[0]}\n${ts}\n${nonce}\n`), signer.priv).toString('base64'),
+            'X-Signature': signRequest(signer.priv, { method: 'GET', path: route.split('?')[0], timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -103,7 +105,8 @@ async function signedPost(signer: { pk: string; priv: crypto.KeyObject }, route:
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': signer.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route}\n${ts}\n${nonce}\n${raw}`), signer.priv).toString('base64'),
+            'X-Signature': signRequest(signer.priv, { method: 'POST', path: route, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

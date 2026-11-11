@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Pot-Unknown-Pw-6620!';
@@ -186,7 +187,8 @@ async function signed(base: string, urlPath: string, id: Id, body: unknown): Pro
         method: 'POST',
         headers: {
             'Content-Type': 'application/json', 'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${urlPath}\n${ts}\n${nonce}\n${raw}`), id.privateKey).toString('base64'),
+            'X-Signature': signRequest(id.privateKey, { method: 'POST', path: urlPath, timestamp: ts, nonce, body: raw }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         },
         body: raw,
     });

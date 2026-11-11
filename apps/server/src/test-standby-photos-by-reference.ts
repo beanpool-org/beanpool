@@ -64,6 +64,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -134,7 +135,8 @@ async function api(base: string, route: string, as: Id, body: unknown): Promise<
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'Content-Type': 'application/json', 'X-Public-Key': as.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`POST\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), as.priv).toString('base64'),
+        'X-Signature': signRequest(as.priv, { method: 'POST', path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
     const res = await fetch(`${base}${route}`, { method: 'POST', headers, body: raw });
     const text = await res.text();

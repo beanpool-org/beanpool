@@ -11,6 +11,7 @@
 import crypto from 'node:crypto';
 import { sealSeedToSso, openSeedFromSso } from '@beanpool/core';
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const GOOGLE_KID = 'test-recovery-seal-s2-google-kid';
 const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
@@ -90,12 +91,17 @@ export async function startRecoveryHttps(): Promise<RecoveryHttps> {
         const bodyString = JSON.stringify(body ?? {});
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
+        // The node of a take-over suite takes a name mid-run (and a standby takes its primary's at the take-over): a client
+        // reaching it signs for that name, so this does too, and for the machine's own name while it has none.
+        const { publishedAddresses } = await import('./engine/own-addresses.js');
+        const host = publishedAddresses()[0] ?? signedForHost();
         const res = await localFetch(`${base}${p}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Public-Key': id.pk,
-                'X-Signature': crypto.sign(null, Buffer.from(`POST\n${p}\n${ts}\n${nonce}\n${bodyString}`), id.priv).toString('base64'),
+                'X-Signature': signRequest(id.priv, { method: 'POST', path: p, timestamp: ts, nonce, body: bodyString }, host),
+                [SIGNED_FOR_HEADER]: host,
                 'X-Timestamp': String(ts),
                 'X-Nonce': nonce,
             },

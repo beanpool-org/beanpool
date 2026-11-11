@@ -72,6 +72,7 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { isPastDeadline } from '@beanpool/core';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 // Loaded so that this suite runs to the end on a tree without the return (it fails there, with a count, rather than
 // stopping at the import).
@@ -152,7 +153,8 @@ async function signedFetch(method: 'GET' | 'POST', route: string, body: unknown,
     const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, { method, path: route.split('?')[0], timestamp: ts, nonce, body: bodyString }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

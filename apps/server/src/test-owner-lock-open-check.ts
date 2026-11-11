@@ -21,6 +21,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -50,10 +51,6 @@ function keypair(): Identity {
     };
 }
 
-function signText(who: Identity, text: string): string {
-    return crypto.sign(null, Buffer.from(text), who.priv).toString('base64');
-}
-
 function seedMember(pk: string, callsign: string): void {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pk, callsign);
@@ -67,7 +64,8 @@ async function makeRequest(method: 'POST', path: string, signer?: Identity, body
     if (signer) {
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = signer.pub;
-        headers['X-Signature'] = signText(signer, `${method}\n${path}\n${ts}\n${nonce}\n${raw}`);
+        headers['X-Signature'] = signRequest(signer.priv, { method, path, timestamp: ts, nonce, body: raw });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

@@ -33,6 +33,7 @@ process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 const ADMIN_PASSWORD = 'NodeConfigAdmin123!';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -71,7 +72,8 @@ function signedHeaders(path: string): Record<string, string> {
     const nonce = crypto.randomBytes(16).toString('hex');
     return {
         'X-Public-Key': pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), privateKey).toString('base64'),
+        'X-Signature': signRequest(privateKey, { method: 'GET', path, timestamp: ts, nonce }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };
@@ -104,6 +106,8 @@ async function main() {
 
     // The agent's persist(): updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, saved) }).
     const persist = (pa: any) => updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, (getNodeConfig() as any).publicAddress) } as any);
+    // The node takes this as its name from here on, so every request is signed for it.
+    setSignedForHost('testvale.beanpool.org');
     // 1. its claim: { name, mode, communityName, contact, ...the registrar's answer }
     persist({
         name: 'testvale', mode: 'tunnel', communityName: 'Test Vale', contact: CONTACT,

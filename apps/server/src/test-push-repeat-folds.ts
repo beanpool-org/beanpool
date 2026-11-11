@@ -17,6 +17,7 @@ for (const k of ['CF_RECORD_NAME', 'NODE_ROLE', 'NODE_PROFILE', 'EXPO_ACCESS_TOK
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -42,7 +43,8 @@ async function call(method: 'GET' | 'POST', id: Id, route: string, body?: unknow
     const ts = Date.now(); const nonce = crypto.randomBytes(16).toString('hex');
     const headers: Record<string, string> = {
         'X-Public-Key': id.pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-        'X-Signature': crypto.sign(null, Buffer.from(`${method}\n${route.split('?')[0]}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+        'X-Signature': signRequest(id.priv, { method, path: route.split('?')[0], timestamp: ts, nonce, body: raw }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
     };
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${BASE}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });

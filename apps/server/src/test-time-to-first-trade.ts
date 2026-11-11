@@ -37,6 +37,7 @@ import { communityTotals } from './engine/community-health.js';
 import { FIRST_TRADE_PEOPLE_SQL, firstTradeFunnel } from './engine/time-to-first-trade.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 import { db } from './db/db.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -101,7 +102,8 @@ async function main(): Promise<void> {
         const nonce = crypto.randomBytes(16).toString('hex');
         return {
             'X-Public-Key': pk, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-            'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), priv).toString('base64'),
+            'X-Signature': signRequest(priv, { method: 'GET', path, timestamp: ts, nonce }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
         };
     };
     const reset = () => { resetGatewayRateLimit(); resetAdminRateLimit(); resetAdminAuthTarpit(); pruneAuthAttempts(Date.now() + 120_000); };

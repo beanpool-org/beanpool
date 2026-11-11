@@ -38,6 +38,7 @@ process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:1/directory-register';
 
 import crypto from 'node:crypto';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -47,6 +48,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const HOST = 'peek-test.example.org';
+// The node takes this as its name from the config below; before that it takes any host, so every request is signed for it.
+setSignedForHost(HOST);
 const NAME = 'Sentinelvale Commons';
 // The listing's place, and what any rounding finer than its area (0.1°) would print: none may appear.
 const PLACE = { lat: -37.0657, lng: 144.2169 };
@@ -72,7 +75,8 @@ async function call(method: string, path: string, opts: { id?: Id | null; body?:
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
         headers['X-Public-Key'] = opts.id.pk;
-        headers['X-Signature'] = crypto.sign(null, Buffer.from(`${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`), opts.id.priv).toString('base64');
+        headers['X-Signature'] = signRequest(opts.id.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString });
+        headers[SIGNED_FOR_HEADER] = signedForHost();
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }

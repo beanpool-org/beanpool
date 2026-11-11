@@ -41,6 +41,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 // The suite's own server, in this process: a call after a long synchronous stretch (rows written by the hundred
 // thousand) must not reuse a socket the server is about to close (keepalive-test-fetch.ts; CI run 36964891493).
 import { localFetch } from './keepalive-test-fetch.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 /** The scheme a device asks for (core KEEPER_ALG_RELEASE), spelled out so this suite reads the same on a node without it. */
 const SEAL = 'x25519-xc20p-release-v1';
@@ -118,7 +119,8 @@ async function call(key: Key, path: string, body: unknown): Promise<{ status: nu
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': key.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyString}`), key.priv).toString('base64'),
+            'X-Signature': signRequest(key.priv, { method: 'POST', path, timestamp: ts, nonce, body: bodyString }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -146,7 +148,8 @@ async function callFrom(addr: string, key: Key, path: string, body: unknown): Pr
             'Content-Type': 'application/json',
             'X-Forwarded-For': addr,
             'X-Public-Key': key.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyString}`), key.priv).toString('base64'),
+            'X-Signature': signRequest(key.priv, { method: 'POST', path, timestamp: ts, nonce, body: bodyString }),
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

@@ -70,6 +70,7 @@ import readline from 'node:readline';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const HERE = fileURLToPath(import.meta.url);
 const MB = 2 ** 20;
@@ -295,13 +296,13 @@ async function startServer(dataDir: string, heapMb: number): Promise<Server> {
     };
 }
 
-/** A member's signature on a GET, as the apps send one (the older request format, which every node still takes). */
+/** A member's signature on a GET, as the apps send one (format 2, through signed-request-test-helper.ts). */
 function signed(route: string, key: Key, badSignature = false): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`GET\n${route.split('?')[0]}\n${ts}\n${nonce}\n`), key.priv);
+    const sig = Buffer.from(signRequest(key.priv, { method: 'GET', path: route.split('?')[0], timestamp: ts, nonce }), 'base64');
     if (badSignature) sig[0] ^= 0xff;
-    return { 'X-Public-Key': key.pk, 'X-Signature': sig.toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
+    return { 'X-Public-Key': key.pk, [SIGNED_FOR_HEADER]: signedForHost(), 'X-Signature': sig.toString('base64'), 'X-Timestamp': String(ts), 'X-Nonce': nonce };
 }
 
 interface Answer { status: number | 'error'; headers: http.IncomingHttpHeaders; bytes: number; sha: string; text: string; ms: number; error?: string }

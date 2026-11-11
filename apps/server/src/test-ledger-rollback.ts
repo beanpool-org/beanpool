@@ -58,6 +58,7 @@ import {
     persistCommonsBalance,
     reconcileLedgerFromDb,
 } from './state-engine.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 
 let run = 0, passed = 0;
@@ -218,11 +219,12 @@ function assertNothingPersisted(label: string, before: ReturnType<typeof snapsho
 function signedHeaders(path: string, body: string, pubHex: string, privateKey: crypto.KeyObject): Record<string, string> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const sig = crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${body}`), privateKey).toString('base64');
+    const sig = signRequest(privateKey, { method: 'POST', path, timestamp: ts, nonce, body });
     return {
         'Content-Type': 'application/json',
         'X-Public-Key': pubHex,
         'X-Signature': sig,
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

@@ -14,6 +14,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -40,11 +41,12 @@ async function signedFetch(method: string, path: string, body?: unknown): Promis
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const pathname = path.split('?')[0];
-    const canonical = `${method}\n${pathname}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: pathname, timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'X-Public-Key': pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), privateKey).toString('base64'),
+        'X-Signature': signRequest(privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts),
         'X-Nonce': nonce,
     };

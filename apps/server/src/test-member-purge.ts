@@ -26,6 +26,7 @@ import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, creat
 const createPost = wrapCreatePost(rawCreatePost);
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -194,8 +195,8 @@ async function runTests() {
     assert(unauthRes.status === 401, 'Unsigned POST /api/member/purge is rejected with 401');
 
     function signPayload(method: string, path: string, ts: number, nonce: string, bodyStr: string, privKey: crypto.KeyObject): string {
-        const canonical = `${method}\n${path}\n${ts}\n${nonce}\n${bodyStr}`;
-        return crypto.sign(null, Buffer.from(canonical), privKey).toString('base64');
+        const canonical = { method, path, timestamp: ts, nonce, body: bodyStr };
+        return signRequest(privKey, canonical);
     }
 
     const ts = Date.now();
@@ -210,6 +211,7 @@ async function runTests() {
             'Content-Type': 'application/json',
             'X-Public-Key': dave.pubKeyHex,
             'X-Signature': signature,
+            [SIGNED_FOR_HEADER]: signedForHost(),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },

@@ -43,6 +43,7 @@ import { withAvatarKey } from './avatar-test-url.js';
 import { lockedGroupLine } from './group-test-payload.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -606,10 +607,10 @@ async function signed(method: string, path: string, body: unknown, signer: Ident
     const bodyString = method === 'GET' ? '' : JSON.stringify(body);
     const ts = String(Date.now());
     const nonce = crypto.randomUUID();
-    const canonical = `${method}\n${path.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
     const headers: Record<string, string> = {
         'X-Public-Key': signer.pub,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), signer.priv).toString('base64'),
+        'X-Signature': signRequest(signer.priv, { method, path: path.split('?')[0], timestamp: ts, nonce, body: bodyString }),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': ts,
         'X-Nonce': nonce,
     };

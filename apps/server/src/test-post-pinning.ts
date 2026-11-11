@@ -50,6 +50,7 @@ import { rollDueSeries, setSeriesDateSkipped } from './engine/event-series-roll.
 import { AGENT_TOOLS } from './agent/tools.js';
 import { OWNER_READ_TOOLS } from './agent/owner-reads.js';
 import { OWNER_POST_TOOLS, OWNER_TEND_TOOLS } from './agent/owner-posts.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -81,10 +82,11 @@ async function signed(method: 'GET' | 'POST', pathAndQuery: string, body: unknow
     const bodyString = method === 'GET' ? '' : JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const canonical = `${method}\n${pathAndQuery.split('?')[0]}\n${ts}\n${nonce}\n${bodyString}`;
+    const canonical = { method, path: pathAndQuery.split('?')[0], timestamp: ts, nonce, body: bodyString };
     const headers: Record<string, string> = {
         'X-Public-Key': id.pubKeyHex,
-        'X-Signature': crypto.sign(null, Buffer.from(canonical), id.privateKey).toString('base64'),
+        'X-Signature': signRequest(id.privateKey, canonical),
+        [SIGNED_FOR_HEADER]: signedForHost(),
         'X-Timestamp': String(ts), 'X-Nonce': nonce, ...extra,
     };
     if (method === 'POST') headers['Content-Type'] = 'application/json';

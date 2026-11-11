@@ -134,6 +134,7 @@ async function main(): Promise<void> {
     console.log('--- 1. reading it: both, one, none, and what it can\'t read ---');
     storesHave134();
     let v = getAppStoreVersions();
+    const storesAnswered = v.checkedAt;
     assert(v.android === '1.3.4' && v.ios === '1.3.4', `none: the stores' own versions, as today (${JSON.stringify(v)})`);
     assert(getPlatformFloorDetail('android').blocking === false && getPlatformFloorDetail('android').held === true,
         `none: the floor 1.4.0 is held for Google Play's 1.3.4, stopping nobody (${detail('android')})`);
@@ -155,8 +156,13 @@ async function main(): Promise<void> {
     assert(floorRefusing('android', '1.3.4') === '1.4.0' && floorRefusing('ios', '1.3.4') === '1.4.0',
         'both: a 1.3.4 app on either is refused below 1.4.0');
     assert(floorRefusing('android', '1.4.0') === null, 'both: an app at the floor is refused nothing');
-    assert(v.checkedAt === getAppStoreVersions().checkedAt && typeof v.checkedAt === 'string',
-        `checkedAt stays the stores' own, when one last answered (${v.checkedAt})`);
+    assert(typeof storesAnswered === 'string' && v.checkedAt === storesAnswered,
+        `checkedAt stays the stores' own, when one last answered, not moved by the setting (${v.checkedAt} vs ${storesAnswered})`);
+    __resetAppStoreVersionsForTest();
+    v = getAppStoreVersions();
+    assert(v.android === '1.4.0' && v.ios === '1.4.0' && v.checkedAt === null,
+        `on a node whose stores never answered: the versions given, and checkedAt still null (${JSON.stringify(v)})`);
+    storesHave134();
 
     setEnv({ APP_STORE_VERSIONS: 'android=1.4.0' });
     v = getAppStoreVersions();
@@ -217,7 +223,8 @@ async function main(): Promise<void> {
     let d = getPlatformFloorDetail('android');
     assert(d.floor === '1.4.0' && d.store === '1.3.9' && d.held === true && d.enforced === null && d.blocking === false,
         `a version below the floor holds the floor, as a store behind it does (${detail('android')})`);
-    assert(warnings.some(w => w.includes('android floor 1.4.0 is held') && w.includes('has 1.3.9')), 'and the log says it is held');
+    assert(warnings.some(w => w.includes('android floor 1.4.0 is held') && w.includes('has 1.3.9 (as APP_STORE_VERSIONS says)')),
+        'and the log says it is held, by the version the setting gives');
     setEnv({ APP_STORE_VERSIONS: 'android=1.4.0', MIN_APP_VERSION: '1.5.0' });
     d = getPlatformFloorDetail('android');
     assert(d.floor === '1.5.0' && d.held === true && d.blocking === false && floorRefusing('android', '1.4.0') === null,
@@ -285,7 +292,7 @@ async function main(): Promise<void> {
     assert(line.includes('android=1.4.0') && line.includes('ios=1.4.1'), 'naming each version given');
     assert(line.includes('does not ask') && line.includes('Google Play') && line.includes('the App Store'), 'and that those stores are not asked');
     assert(line.includes('test community only'), 'and that it is for a test community only');
-    assert(armed.length === 2, `the check for a platform it doesn't name still arms its timers (${armed.join(', ')} ms)`);
+    assert(armed.length === 2, `the boot still arms its two timers; each check asks only a store the setting doesn't name (${armed.join(', ')} ms)`);
 
     // ── 5. over HTTPS ─────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 5. over HTTPS ---');

@@ -265,7 +265,8 @@ function noteHeldFloor(platform: AppPlatform, floor: string, store: string | nul
     lastFloorNote[platform] = key;
     const env = `MIN_APP_VERSION_${PLATFORM_ENV[platform]}`;
     if (held) {
-        logger.warn('SYS', `[AppVersions] ${platform} floor ${floor} is held: the store has ${store}, so no ${platform} app is stopped until it has ${floor} (${env} / MIN_APP_VERSION)`);
+        const said = platform in storeVersionsSetting().stores ? ' (as APP_STORE_VERSIONS says)' : '';
+        logger.warn('SYS', `[AppVersions] ${platform} floor ${floor} is held: the store has ${store}${said}, so no ${platform} app is stopped until it has ${floor} (${env} / MIN_APP_VERSION)`);
     }
     if (fromInvalid) {
         logger.warn('SYS', `[AppVersions] ${platform}: MIN_APP_VERSION_FROM_${PLATFORM_ENV[platform]} / MIN_APP_VERSION_FROM is not a date (use 2026-10-15 or 2026-10-15T09:00:00+10:00) — the ${platform} update block is off until it is`);

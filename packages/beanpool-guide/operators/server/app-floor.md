@@ -17,7 +17,7 @@ Once a floor stops apps, your server also refuses them: an app below it can't se
 
 Public reads, such as your community's name and the floor itself, still answer, so the app can say what to do, and so do the screen's ways out (below). Before the floor stops apps (its store has no version that meets it yet, or its grace date is still ahead), your server refuses nothing for an app's version.
 
-A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform. With DISABLE_APP_STORE_CHECK=true in .env it never reads one (see Updates, health checks and disk space), so a floor shows its banner only, on both kinds of phone.
+A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform. With DISABLE_APP_STORE_CHECK=true in .env it never reads one (see Updates, health checks and disk space), so a floor shows its banner only, on both kinds of phone. Only APP_STORE_VERSIONS, for a test community (below), can stop an app before its store has the version.
 
 ## Setting it
 
@@ -27,6 +27,7 @@ In .env:
 - **MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION. A kind of phone without its own floor has MIN_APP_VERSION's.
 - **MIN_APP_VERSION_FROM**: the grace date, from when an app below the floor stops. A date, such as 2026-10-15 (midnight UTC), or a date and time, such as 2026-10-15T09:00:00+10:00. Until then the app shows its banner only. Unset, an app below the floor stops at its next start.
 - **MIN_APP_VERSION_FROM_ANDROID** and **MIN_APP_VERSION_FROM_IOS**: a grace date for one kind of phone.
+- **APP_STORE_VERSIONS**: for a test community only. It tells your server what each store has, for example android=1.4.0,ios=1.4.0, and your server does not ask that store. It is for trying **Update required** before the stores have the new version: with android=1.4.0, an Android app below 1.4.0 is stopped as if Google Play had 1.4.0. A kind of phone it does not name is checked with its store as usual. It never lowers a floor or moves a grace date. On a real community it would stop older apps before members can get the new version, so leave it empty there. If your server can't read it, it stops no app on the kind of phone it could mean, and its log says why. It applies with DISABLE_APP_STORE_CHECK=true too.
 
 Then run: docker compose up -d
 

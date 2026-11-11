@@ -449,6 +449,7 @@ export const SUITES = [
     'test-app-store-versions',
     'test-app-store-check-switch',
     'test-app-floors',
+    'test-app-store-versions-given',
     'test-node-profile',
     'test-sample-id-guard',
     'test-profile-feature-gate',

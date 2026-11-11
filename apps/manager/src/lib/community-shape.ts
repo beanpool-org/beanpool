@@ -113,6 +113,8 @@ export interface ShapeSettings {
     autoMute: ShapeSetting<boolean>;
     /** Absent on a node from before the rule: there every copy goes where each app's build sends it. */
     recoveryCopies?: ShapeSetting<RecoveryCopies>;
+    /** Whether members' locked contact lists are kept here (private contacts). Absent on a node from before them. */
+    contacts?: ShapeSetting<boolean>;
     /**
      * Who decides a removal (removal jury). `lock` (pool_too_small) refuses only A jury, while fewer than 36 could serve;
      * `poolSize` is how many could serve today. Absent on a node from before the jury.
@@ -561,6 +563,10 @@ export function getConsequenceSentence(
             return targetValue === false
                 ? t('Your contact phone will no longer be listed in the public directory.')
                 : t('Your contact phone will be listed in the public directory and on the map, where anyone can read it.');
+        case 'contacts':
+            return targetValue === false
+                ? t("This server keeps no member's contacts list, and deletes the locked copies it keeps now. Members' lists stay on their phones and at their other communities. Every member is told.")
+                : t("Each member may keep one locked copy of their contacts list here, up to 512 KB. Nobody but the member can open it, you included. Every member is told.");
         case 'shareHealth':
             return targetValue === false
                 ? t('Node health and version diagnostics will no longer be shared.')

@@ -81,6 +81,8 @@ import { evaluateRequestReports, liftRequestLimit, requestReceived, dropRequestL
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
+import { dropContactCopyOf, contactCopySeqOf } from './engine/contact-copies.js';
+import { keepsContactCopies } from './config/contact-copies.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
@@ -7126,7 +7128,7 @@ export function getMarketplaceTransactions(publicKey: string, filter?: { status?
 
 // ===================== COMMUNITY INFO =====================
 
-type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance_c: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
+type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance_c: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door; contacts: boolean } };
 
 interface CommunityCounts { memberCount: number; postCount: number; transactionCount: number }
 
@@ -7174,7 +7176,7 @@ function communityInfoWith(counts: CommunityCounts, publicKey?: string): Communi
         memberCount, postCount, transactionCount: txCount, commonsBalance_c: COMMONS_BALANCE,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         // `door` (config/door.ts) last, so older apps ignore it: who may invite here.
-        profile: getNodeProfile(), features: { ...getNodeFeatures(), door: getDoor() },
+        profile: getNodeProfile(), features: { ...getNodeFeatures(), door: getDoor(), contacts: keepsContactCopies() },
     };
 }
 
@@ -7353,6 +7355,9 @@ export function getUnreadAnswer(pubkey: string): UnreadAnswer {
         unread: chats.reduce((sum, chat) => sum + chat.unread, 0),
         alerts: getMemberPreference(pubkey, 'notify_chat') === 'false' ? 0 : linesPushedAbout(pubkey, chats, now),
         requests: countRequestsWaitingFor(pubkey, now),
+        // The number of the member's locked contacts list kept here, or null (engine/contact-copies.ts): a phone's rounds
+        // learn from it whether this community's copy is behind or ahead, with no extra request (contacts design §4.4).
+        contacts: contactCopySeqOf(pubkey),
         asOf: new Date(now).toISOString(),
     };
 }
@@ -9087,6 +9092,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         dropNamesListHoldOf(publicKey, 'removed', balance);
+        // Their locked contacts list (engine/contact-copies.ts), with a tombstone: their devices and other communities keep theirs.
+        dropContactCopyOf(publicKey);
         // Any budget to vouch from stops, and the room they held is stamped with the debt the Commons paid (engine/vouchers.ts):
         // the Commons' row above is the record, unchanged; this never throws.
         vouchingOnDeparture(publicKey, actor, balance);
@@ -9358,6 +9365,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
         dropNamesListHoldOf(publicKey, 'account_deleted', balance);
+        // Their locked contacts list (engine/contact-copies.ts), with a tombstone.
+        dropContactCopyOf(publicKey);
         // As adminPruneUser: a budget stops, and the room they held is stamped with the debt the Commons paid (never throws).
         vouchingOnDeparture(publicKey, publicKey, balance);
         // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"

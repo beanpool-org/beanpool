@@ -29,12 +29,12 @@ export type EverydayGroup = 'taking' | 'rules' | 'found' | 'connections';
 /** The settings each card shows the Changes lines of. */
 const GROUP_LOG: Record<EverydayGroup, string[]> = {
     taking: ['join', 'knocks'],
-    rules: ['dmRequests', 'probation', 'autoHide', 'autoHideReports', 'autoMute', 'removalDecider'],
+    rules: ['dmRequests', 'probation', 'autoHide', 'autoHideReports', 'autoMute', 'removalDecider', 'contacts'],
     found: ['listed', 'doorCheck', 'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth'],
     connections: [],
 };
 
-type BoolKey = 'knocks' | 'doorCheck' | 'dmRequests' | 'probation' | 'autoHide' | 'autoMute' | 'shareLocation' | 'shareMemberCount' | 'shareEmail' | 'sharePhone' | 'shareHealth';
+type BoolKey = 'knocks' | 'doorCheck' | 'dmRequests' | 'probation' | 'autoHide' | 'autoMute' | 'contacts' | 'shareLocation' | 'shareMemberCount' | 'shareEmail' | 'sharePhone' | 'shareHealth';
 
 interface BoolRow { key: BoolKey; icon: string; name: string; summary: string; label: string; display?: (on: boolean) => string }
 
@@ -92,6 +92,8 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
                 { key: 'probation', icon: '⏳', name: t('Limits on new accounts'), summary: t('New accounts have small daily limits for their first days.'), label: t('Apply limits to new accounts'), display: onOff },
                 { key: 'autoHide', icon: '🛡️', name: t('Reported posts hidden and message requests cleared automatically'), summary: t('Reports from three independent groups hide a post until a moderator looks. Reports from the people a sender wrote to can clear their message requests too.'), label: t('Hide reported posts and clear reported message requests'), display: onOff },
                 { key: 'autoMute', icon: '🔇', name: t('Repeat offenders muted automatically'), summary: t('Three posts removed in 30 days stop a member posting and messaging until a moderator lifts it.'), label: t('Mute members after repeat removals'), display: onOff },
+                // Private contacts (engine/contact-copies.ts on the server): absent from a server from before them, and not shown.
+                { key: 'contacts', icon: '👥', name: t("Keep members' locked contact lists"), summary: t('Each member may keep a locked copy of their private contacts list here. Only they can open it.'), label: t("Keep members' locked contact lists"), display: onOff },
             ],
             found: [
                 { key: 'doorCheck', icon: '🛡️', name: t('A person check on busy days'), summary: t('When lots of people are joining, a 12-words join starts with a Cloudflare check. Needs the TURNSTILE keys on the server; without them it does nothing.'), label: t('Ask for a person check on busy days'), display: onOff },

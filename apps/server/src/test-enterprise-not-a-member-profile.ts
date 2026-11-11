@@ -83,11 +83,9 @@ async function main() {
         initStateEngine, createTreasury, getProfile, getTrustProfileForViewer,
     } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

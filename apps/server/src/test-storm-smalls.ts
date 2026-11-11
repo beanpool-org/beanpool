@@ -10,14 +10,14 @@
  *     visitor's read) and the groups list. `?q=a&q=b` is answered, not thrown on.
  *  3. Admin thresholds (FABLE-sec-input LOW F3): a negative, an Infinity (`1e999`), a fraction of a day is refused 400
  *     and nothing is saved; a value in range is saved; a bad value already in the config reads as its default.
- *  4. TOTP (FABLE-sec-races LOW-1): a code signs in once. The same code again, at the password sign-in and inline on an
- *     admin route, is refused; the next step's code works once; an earlier step's after it is refused.
+ *  4. (Gone with the admin password, 11 Nov 2026: the server's TOTP was only ever the password's second factor, and the
+ *     node has neither now. A key sign-in's second factor is the phone's own lock.)
  *  5. Conversations (FABLE-sec-events-chat F2): a pruned enterprise's discussion can't be read by its id; a group chat's
  *     read hands no one else's read cursor (nor the enterprise thread's own route); a DM keeps both, its read ticks.
  *  6. Error text (FABLE-sec-errors M3, L1): a member route whose database call fails answers its own words, not the
  *     database's; the net under every member route turns a server fault's text into fixed words, 500, and leaves the
  *     operator's routes their detail; a refused address names no address.
- *  7. The retired fleet manager's /api/manager/backups routes are gone: the password gets nothing there.
+ *  7. The retired fleet manager's /api/manager/backups routes are gone: an owner's key session gets nothing there.
  *
  * Already fixed on main before this suite (no check here, evidence in the PR): a Decision removing an admin (#1394),
  * escrow pushes carrying the amount (#1398, every push is fixed words per kind).
@@ -28,8 +28,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_READ_AUTH;
-const PW = 'StormSmallsPass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -45,13 +43,11 @@ import {
     postEnterpriseThreadMessage,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword, getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
-import { resetPasswordBrake } from './password-brake.js';
-import { ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { generateTotpSecret, generateTotpCode } from './totp.js';
+import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { savePricingGuideItem } from './db/pricing-guide-db.js';
 import { verifyEpochStatement } from './services/identity-epoch.js';
 import { attestMessage } from './services/registrar-client.js';
@@ -214,7 +210,7 @@ async function thresholds(): Promise<void> {
     console.log('\n── 3. Admin thresholds: finite, in range ──');
     resetAdminAuthTarpit();
     const before = getLocalConfig().thresholds?.inactiveMemberDays;
-    // Step 7c: the password alone opens no admin route with 2FA off: these go under an owner's automation token.
+    // The node has no admin password: these go under an owner's automation token.
     const admin = ownerTokenHeaders('admin');
     const post = (raw: string) => call('POST', null, '/api/admin/thresholds', raw, admin);
     for (const [what, raw] of [
@@ -242,37 +238,6 @@ async function thresholds(): Promise<void> {
     const got = await call('POST', null, '/api/admin/thresholds/get', {}, admin);
     assert(got.status === 200 && got.body?.thresholds?.inactiveMemberDays === 30 && got.body?.thresholds?.sybilFunnelWindowDays === 30,
         `a bad value already saved reads as its default (${JSON.stringify({ inactive: got.body?.thresholds?.inactiveMemberDays, window: got.body?.thresholds?.sybilFunnelWindowDays })})`);
-}
-
-async function totpOnce(): Promise<void> {
-    console.log('\n── 4. TOTP: a code works once ──');
-    const secret = generateTotpSecret();
-    updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
-    const fresh = () => { resetAdminAuthTarpit(); resetPasswordBrake(); };
-
-    fresh();
-    const code = generateTotpCode(secret);
-    const first = await call('POST', null, '/api/local/verify-password', { password: PW, totpCode: code });
-    assert(first.status === 200 && first.body?.success === true, `the password and a current code sign in (${show(first)})`);
-    fresh();
-    const again = await call('POST', null, '/api/local/verify-password', { password: PW, totpCode: code });
-    assert(again.status === 401 && again.body?.totpRequired === true && /already used/.test(again.body?.error ?? ''),
-        `the same code again is refused, saying so (${show(again)})`);
-    fresh();
-    const inline = await call('POST', null, '/api/admin/thresholds/get', {}, { 'X-Admin-Password': PW, 'X-Admin-TOTP': code });
-    assert(inline.status === 401 && inline.body?.thresholds === undefined, `…and inline on an admin route (${show(inline)})`);
-    fresh();
-    const next = generateTotpCode(secret, 1);
-    const nextOk = await call('POST', null, '/api/admin/thresholds/get', {}, { 'X-Admin-Password': PW, 'X-Admin-TOTP': next });
-    assert(nextOk.status === 200 && nextOk.body?.thresholds !== undefined, `the next step's code works (${nextOk.status})`);
-    fresh();
-    const nextAgain = await call('POST', null, '/api/local/verify-password', { password: PW, totpCode: next });
-    assert(nextAgain.status === 401, `…once (${show(nextAgain)})`);
-    fresh();
-    const earlier = await call('POST', null, '/api/local/verify-password', { password: PW, totpCode: generateTotpCode(secret, -1) });
-    assert(earlier.status === 401, `and a code for a step before the one accepted is refused too (${show(earlier)})`);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
-    fresh();
 }
 
 async function conversations(ann: Id, bo: Id): Promise<void> {
@@ -411,14 +376,15 @@ async function errorText(ann: Id): Promise<void> {
 
 async function managerBackupsGone(): Promise<void> {
     console.log('\n── 7. The fleet manager\'s backup routes are gone ──');
+    // An owner signed in with their key: the routes are gone, so even the owner finds nothing there.
     resetAdminAuthTarpit();
-    const status = await call('GET', null, '/api/manager/backups/status', undefined, { 'X-Admin-Password': PW });
-    assert(status.status >= 400 && status.status < 500 && status.body?.nodes === undefined, `GET status: nothing there for the password (${show(status)})`);
+    const status = await call('GET', null, '/api/manager/backups/status', undefined, ownerSessionHeaders(owner.pk));
+    assert(status.status >= 400 && status.status < 500 && status.body?.nodes === undefined, `GET status: nothing there for an owner's key session (${show(status)})`);
     resetAdminAuthTarpit();
-    const trigger = await call('POST', null, '/api/manager/backups/trigger', { nodeId: 'x', url: 'https://127.0.0.1:1', adminPassword: 'x' }, { 'X-Admin-Password': PW });
-    assert(trigger.status >= 400 && trigger.status < 500 && trigger.body?.success !== true, `POST trigger (a caller's URL and password): nothing there (${show(trigger)})`);
+    const trigger = await call('POST', null, '/api/manager/backups/trigger', { nodeId: 'x', url: 'https://127.0.0.1:1' }, ownerSessionHeaders(owner.pk));
+    assert(trigger.status >= 400 && trigger.status < 500 && trigger.body?.success !== true, `POST trigger (a caller's URL): nothing there (${show(trigger)})`);
     resetAdminAuthTarpit();
-    const dl = await call('GET', null, '/api/manager/backups/download-db?nodeId=local', undefined, { 'X-Admin-Password': PW });
+    const dl = await call('GET', null, '/api/manager/backups/download-db?nodeId=local', undefined, ownerSessionHeaders(owner.pk));
     assert(dl.status >= 400 && dl.status < 500 && !dl.text.includes('SQLite format'), `GET download-db: no database (${dl.status})`);
     // No longer on the signature bypass either: a signed member's request reaches no route there.
     const signed = await call('GET', owner, '/api/manager/backups/status');
@@ -427,7 +393,6 @@ async function managerBackupsGone(): Promise<void> {
 
 async function main(): Promise<void> {
     console.log('\n=== The security storm\'s smaller server items ===');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
@@ -441,7 +406,6 @@ async function main(): Promise<void> {
         ['zip215', zip215],
         ['LIKE', () => likeWildcards(ann)],
         ['thresholds', thresholds],
-        ['TOTP', totpOnce],
         ['conversations', () => conversations(ann, bo)],
         ['error text', () => errorText(ann)],
         ['manager backups', managerBackupsGone],

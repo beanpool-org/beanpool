@@ -53,7 +53,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ToolStorePass123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -65,7 +64,6 @@ import {
     reconcileLedgerFromDb,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db, pruneTombstones } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { emptyCopiedTables } from './engine/copied-tables.js';
@@ -163,7 +161,6 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 async function main(): Promise<void> {
     console.log('\n=== The tool store: each tool\'s private copy, its owner\'s alone ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

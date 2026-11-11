@@ -25,7 +25,6 @@ import {
 } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { ledger } from './engine/ledger.js';
@@ -93,7 +92,6 @@ function rng(seed: number): () => number {
 }
 
 async function main(): Promise<void> {
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

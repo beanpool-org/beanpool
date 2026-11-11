@@ -2,21 +2,19 @@
  * The web manager's admin sign-in and the admin surface's edges (Fable's web review, scratch/reviews/FABLE-sec-web.md:
  * M1, M2, L3–L6), over REAL HTTPS through the real middleware. Nothing here contacts anything but the server it starts.
  *
- *   1. M1, the password sign-in: POST /api/local/admin/auth/password checks the password once (2FA included) and
- *      answers an httpOnly, SameSite=Strict admin_session cookie and a CSRF token; the body carries neither the
- *      password nor the session's id, and no 2FA session is handed out. The cookie alone then opens the admin routes
- *      (mutations with the CSRF token), survives a reload (/auth/session, a fresh CSRF token), and ends with sign-out.
- *      A new sign-in ends the browser's old session. Turning 2FA on ends every password session opened without it;
- *      turning it off (or changing the password) ends every other password session but keeps the one that did it.
- *      In break-glass mode the password opens no session and an open one ends.
- *  1b. The node, not the browser, ends a session: the cookie has no Max-Age, so at 12 h, 2 h idle (15 min for the phone
- *      hand-off) the node answers `sessionExpired` with the reason. A request with nothing (no cookie, no password)
- *      is answered at once, `sessionExpired`, and not counted by the admin tarpit.
+ *   1. M1, the sign-in: the node has no admin password (Marty, 11 Nov 2026), so Settings signs in by key and the old
+ *      password sign-in is gone (404, no cookie). The key sign-in's exchange answers an httpOnly, SameSite=Strict
+ *      admin_session cookie and a CSRF token; the body never carries the session's id. The cookie alone then opens the
+ *      admin routes (mutations with the CSRF token), survives a reload (/auth/session, a fresh CSRF token), and ends
+ *      with sign-out. A new sign-in ends the browser's old session.
+ *  1b. The node, not the browser, ends a session: the cookie has no Max-Age, so at 12 h, 2 h idle (a computer's; 15 min
+ *      for the phone hand-off) the node answers `sessionExpired` with the reason. A request with nothing (no cookie, no
+ *      credential) is answered at once, `sessionExpired`, and not counted by the admin tarpit.
  *   2. L3: the key sign-in's exchange answers the session in the cookie only (HttpOnly, SameSite=Strict); the query
  *      form /settings?token= of phones before 1.2.57 is gone and sets no cookie at all (cutover N2, audit E4).
- *   3. L4: a CSRF token counts only for the session it was issued to: a moderator's on an owner's cookie, another
- *      password session's, or one issued to a password caller, is refused; a session's tokens go with it.
- *   4. L5: /ws/logs takes a ticket only; the admin password in its query string (`?auth=`) is refused, 2FA off too.
+ *   3. L4: a CSRF token counts only for the session it was issued to: a moderator's on an owner's cookie, or the same
+ *      owner's other session's, is refused; a session's tokens go with it.
+ *   4. L5: /ws/logs takes a ticket only; anything in its query string (`?auth=`, an old admin password) is refused.
  *   5. L6: an origin listed in corsAllowedOrigins gets credentialed CORS on the member API, never on the admin surface
  *      (the price-report queue included, which the admin IP allowlist also guards).
  *   6. M2: Settings (the manager) is served under the web app's strict policy, every way it is reached; the old
@@ -38,11 +36,9 @@ import path from 'node:path';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engine.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword, setBreakGlassMode, updateGatewayConfig } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
-import { resetAdminAuthTarpit, validateCsrfToken, PASSWORD_CSRF_BINDING, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
-import { mintHandshakeToken, createPasswordSession, validateAdminSession, revokeAdminSession, MAX_PASSWORD_SESSIONS } from './admin-key-auth.js';
+import { updateGatewayConfig } from './config/local-config.js';
+import { resetAdminAuthTarpit, validateCsrfToken } from './admin-auth.js';
+import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { APP_DOCUMENT_CSP } from './app-document-csp.js';
 import { adminSigninFields } from './signed-request-test-helper.js';
 
@@ -55,15 +51,13 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
 }
 
+/** What an older install's admin password looked like: no credential now. */
 const PW = 'WebManagerHardening1!';
-const NEW_PW = 'WebManagerHardening2!';
-const SECRET = generateTotpSecret();
 const LISTED = 'https://listed.example';
 
 interface Reply { status: number; body: any; text: string; headers: Headers; cookie: string; sessionId: string | null }
 
 async function call(method: string, p: string, opts: { body?: unknown; headers?: Record<string, string> } = {}): Promise<Reply> {
-    forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
     const res = await fetch(`${BASE}${p}`, {
         method,
         headers: { ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) },
@@ -81,39 +75,19 @@ const show = (r: Reply) => `${r.status} ${r.text.slice(0, 140)}`;
 const asCookie = (sessionId: string | null, csrf?: string): Record<string, string> =>
     ({ Cookie: `admin_session=${sessionId ?? ''}`, ...(csrf ? { 'X-CSRF-Token': csrf } : {}) });
 
-/** What Settings' sign-in card sends. */
-function signIn(password: string, totpCode?: string, headers: Record<string, string> = {}): Promise<Reply> {
-    return call('POST', '/api/local/admin/auth/password', { body: { password, ...(totpCode ? { totpCode } : {}) }, headers });
-}
-
-function setPassword(pw: string): void {
-    const { hash, salt } = hashPassword(pw);
-    updateLocalConfig({ adminHash: hash, salt });
-}
-function set2fa(on: boolean): void {
-    updateLocalConfig(on
-        ? { totpEnabled: true, totpSecret: SECRET, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] }
-        : { totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
-}
-function wrongCode(): string {
-    for (;;) {
-        const c = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-        if (!verifyTotpCode(c, SECRET)) return c;
-    }
-}
 
 interface Key { pub: string; priv: crypto.KeyObject }
 function keypair(): Key {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey };
 }
-/** The app's key sign-in over HTTP: challenge → signature → handshake token → exchange. */
-async function keySignIn(k: Key): Promise<Reply> {
+/** The app's key sign-in over HTTP: challenge → signature → handshake token → exchange (`headers` on the exchange). */
+async function keySignIn(k: Key, headers: Record<string, string> = {}): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
         body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
-    return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
+    return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken }, headers });
 }
 
 /** A WebSocket upgrade to /ws/logs with this query: the status it was answered with, or 101. */
@@ -135,7 +109,7 @@ function csrfCtx(token: string) {
 }
 
 async function main(): Promise<void> {
-    console.log('\n=== The web manager: the password off the origin, sessions, CSRF, the logs socket, CORS and the CSP ===\n');
+    console.log('\n=== The web manager: the key sign-in, sessions, CSRF, the logs socket, CORS and the CSP ===\n');
 
     const webRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-web-manager-'));
     const publicDir = path.join(webRoot, 'public');
@@ -155,9 +129,6 @@ async function main(): Promise<void> {
         .run(mod.pub, 'Moe', new Date().toISOString(), owner.pub, 'TEST');
     db.prepare(`INSERT INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(mod.pub);
     grantNodeRole(mod.pub, 'moderator', owner.pub);
-    setPassword(PW);
-    set2fa(false);
-    setBreakGlassMode(false);
     updateGatewayConfig({ corsAllowedOrigins: [LISTED] });
 
     const { startHttpsServer } = await import('./https-server.js');
@@ -165,42 +136,36 @@ async function main(): Promise<void> {
     BASE = `https://localhost:${PORT}`;
 
     try {
-        // ── 1. M1: the password sign-in ───────────────────────────────────────────────────────────
-        console.log('── 1. the password is exchanged once for an httpOnly session ──');
+        // ── 1. M1: the sign-in ────────────────────────────────────────────────────────────────────
+        console.log('── 1. the key sign-in is exchanged once for an httpOnly session ──');
         resetAdminAuthTarpit();
-        const none = await signIn('');
-        assert(none.status === 400 && !none.cookie, `no password → 400, no cookie (${show(none)})`);
-        const wrong = await signIn('not the password');
-        assert(wrong.status === 401 && !wrong.cookie, `a wrong password → 401, no cookie (${show(wrong)})`);
+        const gone = await call('POST', '/api/local/admin/auth/password', { body: { password: PW } });
+        assert(gone.status === 404 && !gone.cookie, `the old password sign-in is gone: 404, no cookie (${show(gone)})`);
 
-        const a = await signIn(PW);
-        assert(a.status === 200 && !!a.sessionId, `the right password → 200 and an admin_session cookie (${show(a)})`);
+        const a = await keySignIn(owner);
+        assert(a.status === 200 && !!a.sessionId, `the key sign-in → 200 and an admin_session cookie (${show(a)})`);
         assert(/;\s*httponly/i.test(a.cookie) && /;\s*samesite=strict/i.test(a.cookie) && /;\s*path=\/(;|$)/i.test(a.cookie),
             `the cookie is HttpOnly, SameSite=Strict, Path=/ (${a.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
         assert(a.body?.role === 'owner' && typeof a.body?.csrfToken === 'string', `the body names the role and a CSRF token (${a.text.slice(0, 120)})`);
-        assert(!a.text.includes(PW), 'the body never holds the password');
-        assert(!!a.sessionId && !a.text.includes(a.sessionId), "nor the session's id: it is in the httpOnly cookie only");
-        assert(a.headers.get('x-admin-2fa-session') === null && !('tfaSessionToken' in (a.body || {})), 'and no 2FA session is handed out');
+        assert(!!a.sessionId && !a.text.includes(a.sessionId), "the body never holds the session's id: it is in the httpOnly cookie only");
         assert((a.headers.get('cache-control') || '').includes('no-store'), 'the answer is not stored');
         const csrfA: string = a.body?.csrfToken ?? '';
 
         const who = await call('GET', '/api/local/admin/auth/session', { headers: asCookie(a.sessionId) });
-        assert(who.body?.authenticated === true && who.body?.isPasswordSession === true && who.body?.isKeySession === false
-            && who.body?.role === 'owner' && who.body?.memberPubkey === null,
-            `after a reload the cookie still says who: a password session, owner, no member (${who.text})`);
-        // With 2FA off a password session opens the 2FA card's routes only (step 6, test-password-totp-gate.ts), so
-        // the read and the change here are that card's.
-        const diag = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(a.sessionId) });
-        assert(diag.status === 200, `the cookie alone opens an admin read, no password sent (${diag.status})`);
-        const noCsrf = await call('POST', '/api/local/admin/2fa/setup', { body: {}, headers: asCookie(a.sessionId) });
+        assert(who.body?.authenticated === true && who.body?.isKeySession === true && who.body?.isPasswordSession === undefined
+            && who.body?.role === 'owner' && who.body?.memberPubkey === owner.pub,
+            `after a reload the cookie still says who: a key session, the owner, their key (${who.text})`);
+        const diag = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(a.sessionId) });
+        assert(diag.status === 200, `the cookie alone opens an admin read (${diag.status})`);
+        const noCsrf = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(a.sessionId) });
         assert(noCsrf.status === 403, `a change on the cookie without the CSRF token → 403 (${show(noCsrf)})`);
-        const withCsrf = await call('POST', '/api/local/admin/2fa/setup', { body: {}, headers: asCookie(a.sessionId, csrfA) });
-        assert(withCsrf.status === 200 && typeof withCsrf.body?.secret === 'string', `with its CSRF token → 200 (${show(withCsrf)})`);
+        const withCsrf = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(a.sessionId, csrfA) });
+        assert(withCsrf.status === 200 && typeof withCsrf.body?.ticket === 'string', `with its CSRF token → 200 (${show(withCsrf)})`);
         const fresh = await call('POST', '/api/local/admin/csrf-token', { body: {}, headers: asCookie(a.sessionId) });
-        const withFresh = await call('POST', '/api/local/admin/2fa/setup', { body: {}, headers: asCookie(a.sessionId, fresh.body?.csrfToken) });
+        const withFresh = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(a.sessionId, fresh.body?.csrfToken) });
         assert(fresh.status === 200 && withFresh.status === 200, `a reload's fresh CSRF token works too (${fresh.status}, ${withFresh.status})`);
 
-        const again = await signIn(PW, undefined, asCookie(a.sessionId));
+        const again = await keySignIn(owner, asCookie(a.sessionId));
         const oldAfterAgain = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(a.sessionId) });
         assert(again.status === 200 && again.sessionId !== a.sessionId && oldAfterAgain.status === 401,
             `signing in again from the same browser ends its old session (${again.status}, old → ${oldAfterAgain.status})`);
@@ -208,68 +173,6 @@ async function main(): Promise<void> {
         const afterOut = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(again.sessionId) });
         assert(out.status === 200 && /admin_session=;/.test(out.cookie) && afterOut.status === 401 && afterOut.body?.sessionExpired === true,
             `sign-out clears the cookie and ends the session (${out.status} ${out.cookie.slice(0, 30)}, then ${show(afterOut)})`);
-
-        // 2FA: on, a session opened without it ends; sign-in needs the code; off, other sessions end, the caller's stays.
-        resetAdminAuthTarpit();
-        const before2fa = await signIn(PW);
-        set2fa(true);
-        const ended = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(before2fa.sessionId) });
-        assert(ended.status === 401, `turning 2FA on ends a password session opened without it (${show(ended)})`);
-        const noCode = await signIn(PW);
-        assert(noCode.status === 401 && noCode.body?.totpRequired === true && !noCode.cookie, `with 2FA on the password alone opens nothing (${show(noCode)})`);
-        const badCode = await signIn(PW, wrongCode());
-        assert(badCode.status === 401 && !badCode.cookie, `a wrong code opens nothing (${show(badCode)})`);
-        const t1 = await signIn(PW, generateTotpCode(SECRET));
-        assert(t1.status === 200 && !!t1.sessionId && t1.headers.get('x-admin-2fa-session') === null,
-            `password and code → a session, and no 2FA session token (${show(t1)})`);
-        const t1Read = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(t1.sessionId) });
-        assert(t1Read.status === 200, `the session then needs no code per request (${t1Read.status})`);
-        const t2 = await signIn(PW, generateTotpCode(SECRET));
-        const off = await call('POST', '/api/local/admin/2fa/disable', { body: { code: generateTotpCode(SECRET) }, headers: asCookie(t1.sessionId, t1.body?.csrfToken) });
-        // 2FA off again: the session that turned it off is held to the 2FA card (step 6), which it still opens.
-        const t1AfterOff = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(t1.sessionId) });
-        const t2AfterOff = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(t2.sessionId) });
-        assert(off.status === 200 && t1AfterOff.status === 200 && t2AfterOff.status === 401,
-            `turning 2FA off keeps the session that did it and ends the others (${show(off)}; it ${t1AfterOff.status}, another ${t2AfterOff.status})`);
-
-        // The password changed: the session that changed it carries on, every other one ends.
-        // With 2FA on: a password session on a node with 2FA off opens nothing but the 2FA card (step 6).
-        resetAdminAuthTarpit();
-        set2fa(true);
-        const p1 = await signIn(PW, generateTotpCode(SECRET));
-        const p2 = await signIn(PW, generateTotpCode(SECRET));
-        const changed = await call('POST', '/api/local/change-password', {
-            body: { currentPassword: PW, newPassword: NEW_PW }, headers: asCookie(p1.sessionId, p1.body?.csrfToken),
-        });
-        const p1After = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(p1.sessionId) });
-        const p2After = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(p2.sessionId) });
-        assert(changed.status === 200 && p1After.status === 200 && p2After.status === 401,
-            `a password change keeps the session that made it and ends the others (${show(changed)}; it ${p1After.status}, another ${p2After.status})`);
-        const oldPw = await signIn(PW, generateTotpCode(SECRET));
-        const newPw = await signIn(NEW_PW, generateTotpCode(SECRET));
-        assert(oldPw.status === 401 && newPw.status === 200, `the old password signs in no more, the new one does (${oldPw.status}, ${newPw.status})`);
-        setPassword(PW);
-        set2fa(false);
-
-        // Break-glass mode: the password reaches key enrolment only, so it opens no session and an open one ends.
-        resetAdminAuthTarpit();
-        const preBreak = await signIn(PW);
-        const ownerKey = await keySignIn(owner);
-        setBreakGlassMode(true);
-        const inBreak = await signIn(PW);
-        const preBreakNow = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(preBreak.sessionId) });
-        const keyInBreak = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(ownerKey.sessionId) });
-        assert(inBreak.status === 403 && inBreak.body?.breakGlassMode === true && !inBreak.cookie,
-            `in break-glass mode the password opens no session (${show(inBreak)})`);
-        assert(preBreakNow.status === 401 && keyInBreak.status === 200,
-            `an open password session ends, a key session carries on (${preBreakNow.status}, ${keyInBreak.status})`);
-        setBreakGlassMode(false);
-
-        // At most MAX_PASSWORD_SESSIONS at once: a new one ends the oldest.
-        const opened = Array.from({ length: MAX_PASSWORD_SESSIONS + 1 }, () => createPasswordSession());
-        assert(!validateAdminSession(opened[0].sessionId).valid && validateAdminSession(opened[MAX_PASSWORD_SESSIONS].sessionId).valid,
-            `at most ${MAX_PASSWORD_SESSIONS} password sessions: the oldest goes`);
-        for (const s of opened) revokeAdminSession(s.sessionId);
 
         // The node, not the browser, ends a session: the cookie has no Max-Age, so at each limit it is still sent and
         // the node answers `sessionExpired` with the reason (the manager's sign-in card shows it). The clock is moved
@@ -282,21 +185,22 @@ async function main(): Promise<void> {
             Date.now = () => t + ms;
             try { return await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(sessionId) }); } finally { Date.now = realNow; }
         };
-        const life = await signIn(PW);
+        // The phone's hand-off (/settings#handoff=…), as the manager redeems it.
+        const handOver = () => call('POST', '/api/local/admin/auth/exchange', { body: { token: mintHandshakeToken(owner.pub, 'owner').handshakeToken } });
+        const life = await keySignIn(owner);
         assert(life.status === 200 && !/;\s*max-age=/i.test(life.cookie) && !/;\s*expires=/i.test(life.cookie),
-            `the password sign-in's cookie has no Max-Age or Expires: a browser-session cookie (${life.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
-        const keyLife = await keySignIn(owner);
-        assert(keyLife.status === 200 && !/;\s*max-age=/i.test(keyLife.cookie) && !/;\s*expires=/i.test(keyLife.cookie),
-            `so has the key sign-in's (${keyLife.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
+            `the key sign-in's cookie has no Max-Age or Expires: a browser-session cookie (${life.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
+        const handoffLife = await handOver();
+        assert(handoffLife.status === 200 && !/;\s*max-age=/i.test(handoffLife.cookie) && !/;\s*expires=/i.test(handoffLife.cookie),
+            `so has the phone hand-off's (${handoffLife.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
         const hard = await later(12 * 3_600_000 + 1_000, life.sessionId);
         assert(hard.status === 401 && hard.body?.sessionExpired === true && /12h hard limit/.test(hard.body?.error ?? ''),
             `12 h on, the cookie still sent: 401, sessionExpired, and the reason (${show(hard)})`);
-        const idlePw = await signIn(PW);
-        const idleAnswer = await later(2 * 3_600_000 + 1_000, idlePw.sessionId);
-        assert(idleAnswer.status === 401 && idleAnswer.body?.sessionExpired === true && /2h idle/.test(idleAnswer.body?.error ?? ''),
-            `a password session unused for 2 h: 401, sessionExpired, "2h idle" (${show(idleAnswer)})`);
-        // The phone's hand-off (/settings#handoff=…), as the manager redeems it.
-        const handOver = () => call('POST', '/api/local/admin/auth/exchange', { body: { token: mintHandshakeToken(owner.pub, 'owner').handshakeToken } });
+        // A computer's key session ("Sign in with your phone"), as its sign-in opens one: 2 h idle.
+        const computer = consumeHandshakeToken(mintHandshakeToken(owner.pub, 'owner').handshakeToken);
+        const idleAnswer = await later(2 * 3_600_000 + 1_000, computer.sessionId ?? null);
+        assert(computer.ok && idleAnswer.status === 401 && idleAnswer.body?.sessionExpired === true && /2h idle/.test(idleAnswer.body?.error ?? ''),
+            `a computer's key session unused for 2 h: 401, sessionExpired, "2h idle" (${show(idleAnswer)})`);
         const handoff = await handOver();
         const handoffIdle = await later(16 * 60_000, handoff.sessionId);
         assert(handoff.status === 200 && handoffIdle.status === 401 && handoffIdle.body?.sessionExpired === true && /15 min idle/.test(handoffIdle.body?.error ?? ''),
@@ -316,13 +220,14 @@ async function main(): Promise<void> {
             bare.push(realNow() - t);
             if (!(r.status === 401 && r.body?.sessionExpired === true && r.body?.notSignedIn === true)) { bareOk = false; console.error(`   ${show(r)}`); }
         }
-        assert(bareOk, 'a request with no cookie and no password: 401, sessionExpired, notSignedIn');
+        assert(bareOk, 'a request with no cookie and no credential: 401, sessionExpired, notSignedIn');
         assert(Math.max(...bare) < 200, `and it is answered at once, not tarpitted (${bare.join(', ')} ms)`);
+        // The one secret still checked is an owner's break-glass code, on the enrol routes (admin-auth.ts).
         const tWrong = realNow();
-        const wrongAfter = await signIn('not the password');
+        const wrongAfter = await call('POST', '/api/local/admin/auth/enrol', { body: { memberPubkey: mod.pub, role: 'admin' }, headers: { 'X-Break-Glass-Code': 'bg-0000-0000-0000-0000' } });
         const wrongMs = realNow() - tWrong;
         assert(wrongAfter.status === 401 && wrongMs >= 200 && wrongMs < 1_200,
-            `a wrong password after them is tarpitted as the first failure, not the ninth (${wrongMs} ms; 8 counted would be ≥ 2250)`);
+            `a wrong break-glass code after them is tarpitted as the first failure, not the ninth (${wrongMs} ms; 8 counted would be ≥ 2250)`);
         resetAdminAuthTarpit();
 
         // ── 2. L3: the key sign-in's session id is in the cookie only ───────────────────────────
@@ -340,20 +245,12 @@ async function main(): Promise<void> {
         console.log('\n── 3. a CSRF token counts for its own session only ──');
         const o = await keySignIn(owner);
         const m = await keySignIn(mod);
-        const pw = await signIn(PW);
-        // A caller sending the password per request: this node's 2FA is off, so it is refused (step 7c). With 2FA on, the
-        // password plus a code gets its token from csrf-token over HTTP, so the route picks the binding itself.
-        const pwRefused = await call('POST', '/api/local/admin/csrf-token', { body: {}, headers: { 'X-Admin-Password': PW } });
-        assert(pwRefused.status === 403 && pwRefused.body?.code === PASSWORD_NEEDS_2FA_CODE, `with 2FA off the password per request gets no CSRF token (${show(pwRefused)})`);
-        const tfa = turnOn2faForTests(PW);
-        const pwCaller = await call('POST', '/api/local/admin/csrf-token', { body: {}, headers: tfa.headers() });
-        set2fa(false);
-        assert(pwCaller.status === 200 && typeof pwCaller.body?.csrfToken === 'string' && validateCsrfToken(csrfCtx(pwCaller.body.csrfToken), PASSWORD_CSRF_BINDING),
-            `with 2FA on, the password plus a code is handed a token bound to the password caller (${pwCaller.status})`);
-        assert(o.status === 200 && m.status === 200 && pw.status === 200, `owner, moderator and password sessions open (${o.status}, ${m.status}, ${pw.status})`);
+        // The same owner, signed in from another browser: a session of its own, with tokens of its own.
+        const o2 = await keySignIn(owner);
+        assert(o.status === 200 && m.status === 200 && o2.status === 200, `owner, moderator and the owner's second sessions open (${o.status}, ${m.status}, ${o2.status})`);
         const ownWorks = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(o.sessionId, o.body?.csrfToken) });
         assert(ownWorks.status === 200, `the owner's own token on the owner's cookie → 200 (${ownWorks.status})`);
-        for (const [label, token] of [["the moderator's", m.body?.csrfToken], ["another password session's", pw.body?.csrfToken], ["a password caller's", pwCaller.body?.csrfToken]] as const) {
+        for (const [label, token] of [["the moderator's", m.body?.csrfToken], ["the same owner's other session's", o2.body?.csrfToken]] as const) {
             const r = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(o.sessionId, token) });
             assert(r.status === 403, `${label} token on the owner's cookie → 403 (${show(r)})`);
         }
@@ -363,11 +260,10 @@ async function main(): Promise<void> {
         assert(!validateCsrfToken(csrfCtx(modToken), m.sessionId!), 'and goes with it at sign-out');
 
         // ── 4. L5: /ws/logs takes a ticket only ───────────────────────────────────────────────────
-        console.log('\n── 4. the logs socket takes a ticket, never the password in a URL ──');
+        console.log('\n── 4. the logs socket takes a ticket, never a secret in a URL ──');
         resetAdminAuthTarpit();
-        set2fa(false);
         const viaPassword = await logsUpgrade(`?auth=${encodeURIComponent(PW)}`);
-        assert(viaPassword === 401, `/ws/logs?auth=<the password>, 2FA off → 401 (got ${viaPassword})`);
+        assert(viaPassword === 401, `/ws/logs?auth=<an old admin password> → 401 (got ${viaPassword})`);
         const ticket = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(o.sessionId, o.body?.csrfToken) });
         const viaTicket = await logsUpgrade(`?ticket=${encodeURIComponent(ticket.body?.ticket ?? '')}`);
         assert(viaTicket === 101, `/ws/logs?ticket=<a fresh ticket> → 101 (got ${viaTicket})`);
@@ -384,7 +280,7 @@ async function main(): Promise<void> {
         });
         assert(preflight.status === 204 && preflight.headers.get('access-control-allow-credentials') === null,
             `the preflight of an admin change: no credentials, so the browser sends none (${preflight.status}, ACAC ${preflight.headers.get('access-control-allow-credentials')})`);
-        for (const adminPath of ['/api/local/verify-password', '/api/local/change-password', '/api/admin/seed-invite', '/settings', '/API/LOCAL/ADMIN/data']) {
+        for (const adminPath of ['/api/local/update-identity', '/api/local/reset', '/api/admin/seed-invite', '/settings', '/API/LOCAL/ADMIN/data']) {
             const r = await call('OPTIONS', adminPath, { headers: { Origin: LISTED, 'Access-Control-Request-Method': 'POST' } });
             assert(r.headers.get('access-control-allow-credentials') === null, `OPTIONS ${adminPath}: no credentials (${r.headers.get('access-control-allow-credentials')})`);
         }
@@ -439,7 +335,7 @@ async function main(): Promise<void> {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ The web manager holds no password; its session is a strict, httpOnly cookie with its own CSRF tokens.');
+    console.log('⭐️ The web manager signs in by key; its session is a strict, httpOnly cookie with its own CSRF tokens.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

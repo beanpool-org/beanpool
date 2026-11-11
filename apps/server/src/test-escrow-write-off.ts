@@ -25,8 +25,9 @@
  *   Part 3: refusals, each leaving the ledger untouched: a pending or requested trade, a positive balance, a zero
  *           or dust balance, non-escrow accounts, no such escrow, a missing, short or over-long reason, a non-owner
  *           actor, a standby node, memory and disk disagreeing.
- *   Part 4: HTTP through the REAL checkAdminAuth: no or wrong credentials are refused on both routes, an admin
- *           and a moderator key session are refused the write-off, an owner key session and the password work,
+ *   Part 4: HTTP through the REAL checkAdminAuth: no or wrong credentials (an old admin password among them: the
+ *           node has none) are refused on both routes, an admin and a moderator key session and an owner's automation
+ *           token are refused the write-off, an owner's key session works (a computer's, and the phone's hand-off),
  *           an actor in the body is ignored, `confirmDeficit` must be literally true, the deficit refusal carries
  *           both Commons figures, and the admin log records the write-off.
  *
@@ -55,7 +56,7 @@ import {
 } from './state-engine.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
+import { ownerTokenHeaders, ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { adminSigninFields } from './signed-request-test-helper.js';
 
@@ -71,7 +72,6 @@ function assert(cond: boolean, msg: string): void {
     }
 }
 
-const PW = 'EscrowWriteOff123!';
 const REASON = 'Legacy refund from an unfunded escrow (pre-#1099)';
 
 function sumBalances(): number {
@@ -163,8 +163,6 @@ function commonsRows(escrowId: string): any[] {
 async function main() {
     console.log('Testing the stranded-escrow write-off from the Commons...\n');
     initStateEngine();
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false } as any);
 
     const olive = makeKeypair(); // owner
     const ada = makeKeypair();   // admin, not an owner
@@ -451,23 +449,16 @@ async function main() {
         const h1 = seedEscrow(-500, buyer1, 'cancelled', seller);
         const h2 = seedEscrow(-1000, buyer2, 'cancelled', seller);
         const writeOffPath = (id: string) => `/api/local/admin/stranded-escrows/${encodeURIComponent(id)}/write-off`;
-        // Step 7c: with the node's 2FA off the password alone opens no admin route (checked below); from then on 2FA is on
-        // and the password goes with a fresh code.
-        let tfa: { headers: () => Record<string, string> } | null = null;
-        const asPassword = (): Record<string, string> => (tfa ? tfa.headers() : { 'x-admin-password': PW });
+        // The owner, Olive, signed in with her key from a computer.
+        const asOwner = (): Record<string, string> => ({ 'x-admin-session': keySession(olive) });
 
         // The list.
         const listNone = await call('GET', '/api/local/admin/stranded-escrows', {});
         assert(listNone.status === 401, `list with no credentials: 401 (${listNone.status})`);
-        const listWrong = await call('GET', '/api/local/admin/stranded-escrows', { 'x-admin-password': 'not-the-password' });
-        assert(listWrong.status === 401, `list with the wrong password: 401 (${listWrong.status})`);
-        const listAlone = await call('GET', '/api/local/admin/stranded-escrows', asPassword());
-        assert(listAlone.status === 403 && listAlone.body.code === 'password_needs_2fa' && !listAlone.body.escrows,
-            `list with the password alone, 2FA off: 403 password_needs_2fa (${listAlone.status})`);
-        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-        tfa = turnOn2faForTests(PW);
-        const listed = await call('GET', '/api/local/admin/stranded-escrows', asPassword());
-        assert(listed.status === 200 && listed.body.success === true, `list with the password: 200 (${listed.status})`);
+        const listWrong = await call('GET', '/api/local/admin/stranded-escrows', { 'x-admin-password': 'EscrowWriteOff123!' });
+        assert(listWrong.status === 401 && !listWrong.body.escrows, `list with an admin password (the node has none): 401 (${listWrong.status})`);
+        const listed = await call('GET', '/api/local/admin/stranded-escrows', asOwner());
+        assert(listed.status === 200 && listed.body.success === true, `list with an owner's key session: 200 (${listed.status})`);
         const listedIds = (listed.body.escrows ?? []).map((e: any) => e.escrowId).sort();
         assert(JSON.stringify(listedIds) === JSON.stringify([h1.escrowId, h2.escrowId].sort()) && listed.body.eligibleCount === 2
             && listed.body.commonsBalance_c === -1168 && listed.body.commonsAfterAll_c === -2668,
@@ -479,10 +470,11 @@ async function main() {
         const before = ledgerState();
         const cases: [string, Record<string, string>, number][] = [
             ['no credentials', {}, 401],
-            ['the wrong password', { 'x-admin-password': 'not-the-password' }, 401],
+            ['an admin password (the node has none)', { 'x-admin-password': 'EscrowWriteOff123!' }, 401],
             ['a forged session', { 'x-admin-session': 'not-a-real-session' }, 401],
             ['an admin who is not an owner', { 'x-admin-session': keySession(ada) }, 403],
             ['a moderator', { 'x-admin-session': keySession(mo) }, 403],
+            ["the owner's automation token", ownerTokenHeaders('admin', olive.pubKeyHex), 403],
         ];
         for (const [label, headers, status] of cases) {
             const res = await call('POST', writeOffPath(h1.escrowId), headers, { reason: REASON, confirmDeficit: true });
@@ -491,13 +483,13 @@ async function main() {
         assert(ledgerState() === before, 'none of them touched the ledger');
 
         // The deficit refusal over HTTP carries both figures; "true" as a string is not a confirmation.
-        const unconfirmed = await call('POST', writeOffPath(h1.escrowId), asPassword(), { reason: REASON });
+        const unconfirmed = await call('POST', writeOffPath(h1.escrowId), asOwner(), { reason: REASON });
         assert(unconfirmed.status === 409 && unconfirmed.body.code === 'deficit_unconfirmed'
             && unconfirmed.body.commonsBalance_c === -1168 && unconfirmed.body.commonsAfter_c === -1668,
             `unconfirmed deficit: 409 with the Commons now and after (${unconfirmed.status} ${unconfirmed.body.commonsBalance_c} → ${unconfirmed.body.commonsAfter_c})`);
-        const stringly = await call('POST', writeOffPath(h1.escrowId), asPassword(), { reason: REASON, confirmDeficit: 'true' });
+        const stringly = await call('POST', writeOffPath(h1.escrowId), asOwner(), { reason: REASON, confirmDeficit: 'true' });
         assert(stringly.status === 409 && stringly.body.code === 'deficit_unconfirmed', `confirmDeficit: "true" is not a confirmation (${stringly.status})`);
-        const noReason = await call('POST', writeOffPath(h1.escrowId), asPassword(), { confirmDeficit: true });
+        const noReason = await call('POST', writeOffPath(h1.escrowId), asOwner(), { confirmDeficit: true });
         assert(noReason.status === 400 && noReason.body.code === 'reason_required', `no reason: 400 (${noReason.status})`);
         assert(ledgerState() === before, 'still untouched');
 
@@ -508,20 +500,20 @@ async function main() {
             `an owner key session writes off -5 (${byOwner.status} ${JSON.stringify(byOwner.body).slice(0, 120)})`);
         assert(commonsRows(h1.escrowId)[0]?.auth_signer === olive.pubKeyHex, 'recorded against the owner, not the actor in the body');
 
-        // The password works too, and is recorded as the password.
-        const byPassword = await call('POST', writeOffPath(h2.escrowId), asPassword(), { reason: REASON, confirmDeficit: true, actor: olive.pubKeyHex });
-        assert(byPassword.status === 200 && byPassword.body.amount_c === 1000 && byPassword.body.commonsAfter_c === -2668,
-            `the password writes off -10 (${byPassword.status} ${JSON.stringify(byPassword.body).slice(0, 120)})`);
-        assert(commonsRows(h2.escrowId)[0]?.auth_signer === 'owner:password', 'recorded as the password, whatever the body says');
+        // Her phone's Manage hand-off works too, and is recorded against her, whatever the body says.
+        const byPhone = await call('POST', writeOffPath(h2.escrowId), ownerPhoneSessionHeaders(olive.pubKeyHex), { reason: REASON, confirmDeficit: true, actor: ada.pubKeyHex });
+        assert(byPhone.status === 200 && byPhone.body.amount_c === 1000 && byPhone.body.commonsAfter_c === -2668,
+            `the owner's phone hand-off writes off -10 (${byPhone.status} ${JSON.stringify(byPhone.body).slice(0, 120)})`);
+        assert(commonsRows(h2.escrowId)[0]?.auth_signer === olive.pubKeyHex, 'recorded against the owner, whatever the body says');
 
-        const twice = await call('POST', writeOffPath(h2.escrowId), asPassword(), { reason: REASON, confirmDeficit: true });
+        const twice = await call('POST', writeOffPath(h2.escrowId), asOwner(), { reason: REASON, confirmDeficit: true });
         assert(twice.status === 409 && twice.body.code === 'already_written_off', `a second write-off over HTTP: 409 (${twice.status})`);
 
         const logged = db.prepare(`SELECT * FROM system_logs WHERE category = 'ADMIN' AND message LIKE 'Wrote off stranded%' ORDER BY id`).all() as any[];
         assert(logged.length === 2, `the admin log has one entry per write-off (${logged.length})`);
         const meta = JSON.parse(logged[1].metadata || '{}');
         const metaOwner = JSON.parse(logged[0].metadata || '{}');
-        assert(meta.escrowId === h2.escrowId && meta.transactionId && meta.actor === 'owner:password' && meta.commonsAfter_c === -2668,
+        assert(meta.escrowId === h2.escrowId && meta.transactionId && meta.actor === olive.pubKeyHex.substring(0, 12) && meta.commonsAfter_c === -2668,
             'each carrying the escrow, the ledger row, the admin and the Commons after');
         assert(metaOwner.actor === olive.pubKeyHex.substring(0, 12), `a key session is logged by its short key, which the redactor leaves readable (${metaOwner.actor})`);
 

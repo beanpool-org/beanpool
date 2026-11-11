@@ -28,7 +28,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -42,7 +41,6 @@ import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harnes
 import { grantNodeRole } from './engine/node-roles.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -127,7 +125,6 @@ const logRows = () => (db.prepare('SELECT COUNT(*) AS n FROM health_access_log')
 
 async function main(): Promise<void> {
     console.log('The Community health panel over HTTPS\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

@@ -1,7 +1,7 @@
 /**
  * Take over as the main server, on a standby, with the printed recovery code (sealed-keys.md §5.3, §5.4, §5.5;
  * slice 5) or an owner's phone (§5.2; slice 6, services/owner-unlock.ts). The standby keeps the community's identity: the same node key (so the same PeerId), its owners and
- * admins, its links with other communities, its admin password and two-factor sign-in, and its web address.
+ * admins, its links with other communities, its recovery code record, and its web address.
  *
  * ## Two steps, then a journal
  *
@@ -100,7 +100,7 @@ import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMainServer, HELD_
 import { retireStandbyMain, STANDBY_MAIN_FILE } from './standby-main.js';
 import { VAPID_KEY_FILE } from './web-push.js';
 import {
-    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
+    BUNDLED_FILES, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
 } from './takeover-envelope.js';
 import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
@@ -178,7 +178,7 @@ export const WHAT_WILL_BE_MISSING: readonly string[] = [
 
 /** What the people running the community do afterwards. Shown with the result. */
 export const AFTER_A_TAKEOVER: readonly string[] = [
-    "Sign in to this server's Settings with the community's admin password or an owner's key. This standby's own admin password no longer works.",
+    "Sign in to this server's Settings with an owner's phone (Sign in with your phone). There is no admin password.",
     'Make a new recovery code: the one you typed is now spent.',
     "If the community's Settings answered only certain internet addresses (the admin IP allowlist, under Gateway & Peers), set it again here: a take-over keeps this server's own allowlist, not the main server's.",
     "Don't start the old main server again. It has the same identity as this one and would compete with it.",
@@ -192,7 +192,7 @@ export const TAKEOVER_STEPS = [
     ['opened', 'Opened the locked keys'],
     ['undo-copy', "Kept a copy of this standby's own keys and settings"],
     ['identity-files', "Wrote the community's node key, genesis and links with other communities"],
-    ['admin-settings', "Installed the community's admin password and two-factor sign-in"],
+    ['admin-settings', "Installed the community's recovery code record"],
     ['roles', "Brought back the community's owners and admins"],
     ['public-address', "Brought back the community's web address"],
     ['profile', "Kept the community's node profile and its switches"],
@@ -928,9 +928,9 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'admin-settings': {
             const config = getLocalConfig();
-            // The password's retirement is sticky (bundledLocalConfigUpdates): an envelope sealed before it never brings
-            // the password back.
-            const updates = bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config as any);
+            // The community's recovery code record. A bundle from an older server may still carry the admin password's
+            // hash, its 2FA or break-glass mode in `localConfig`: nothing reads them (the node has no admin password).
+            const updates: Record<string, unknown> = {};
             if (bundle.recoveryCode) {
                 updates.recoveryCode = bundle.recoveryCode;
                 updates.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
@@ -939,7 +939,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             // nothing: their key is still theirs, and the new server locks to them again.
             if (j.authorisedBy.type === 'code') updates.recoveryCodeUsed = { codeId: j.authorisedBy.codeId, at: j.startedAt };
             updateLocalConfig(updates as any);
-            return 'admin password, two-factor sign-in and the recovery code record';
+            return 'the recovery code record';
         }
         case 'roles': {
             const owners: string[] = [];
@@ -1032,7 +1032,7 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'pull-config': {
             stopBackupPuller();
-            updateLocalConfig({ backupPrimaryUrl: null, backupReplicationToken: null, backupAdminPassword: null });
+            updateLocalConfig({ backupPrimaryUrl: null, backupReplicationToken: null });
             // And where its copies had reached: no pull follows that cursor (design §6.3 T6).
             forgetPullCursor();
             // And which server it copied (case 19 D1): this server imports from nobody now. The undo copy holds the pin.
@@ -1149,9 +1149,9 @@ const PROFILE_OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
 const UNDO_NODE_CONFIG_FIELDS: readonly string[] = ['publicAddress', 'ownerAddresses', 'registrarNames', ...COMMUNITY_DIRECTORY_FIELDS];
 /** local-config.json fields the steps write, through `role` and `pull-config`. Nothing else in the file is touched. */
 const UNDO_LOCAL_CONFIG_FIELDS: readonly string[] = [
-    ...BUNDLED_LOCAL_CONFIG_FIELDS, 'recoveryCode', 'recoveryCodeLastId', 'recoveryCodeUsed', ...COMMUNITY_LOCAL_CONFIG_FIELDS,
+    'recoveryCode', 'recoveryCodeLastId', 'recoveryCodeUsed', ...COMMUNITY_LOCAL_CONFIG_FIELDS,
     'nodeRole', 'promotionAuditPending', 'identityEpoch', 'identityEpochSince', 'identityReplaced',
-    'backupPrimaryUrl', 'backupReplicationToken', 'backupAdminPassword',
+    'backupPrimaryUrl', 'backupReplicationToken',
 ];
 /** The files put back: each one the undo copy holds is copied back; one it does not hold was not here, and goes. */
 const RESTORED_FILES = UNDO_FILES.filter((f) => f !== 'local-config.json');

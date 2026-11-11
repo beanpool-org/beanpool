@@ -52,7 +52,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ShopsPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -64,7 +63,6 @@ import {
 const createPost = wrapCreatePost(rawCreatePost);
 import { SHOPS_NEAR_MAX } from './routes/shops.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -156,7 +154,6 @@ const HOBART = { lat: -42.88, lng: 147.33 };
 
 async function main(): Promise<void> {
     console.log('\n=== Shops: a front window on an account ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

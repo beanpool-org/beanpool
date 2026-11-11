@@ -19,7 +19,6 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db, initSchema, createCrowdfundProject, pledgeToProject, getCrowdfundProject } from './db/db.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
@@ -138,7 +137,6 @@ const postPrice = (id: string): number => Number((db.prepare('SELECT price_c FRO
 
 async function main(): Promise<void> {
     console.log('Money: a late pledge is never stranded; an open deal\'s price is frozen\n');
-    initAdminPassword();
     await initTls();
     stranded = await import('./engine/stranded-pledges.js').catch(() => null);
     assert(stranded !== null, 'the boot step\'s module is there (engine/stranded-pledges.ts)');

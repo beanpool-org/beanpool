@@ -27,7 +27,6 @@
  *   9. what the loopback rule rests on: the tunnel's origin is 127.0.0.1, and docker-compose.yml pins beanpool-node to
  *      127.0.0.1 and runs no host network, so nothing outside the container reaches it from loopback.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-plain-http-gate.ts
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -41,14 +40,12 @@ process.env.BEANPOOL_DATA_DIR = dataDir;
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP']) delete process.env[k];
 // localhost too, as an operator lists it for an SSH tunnel: accepted, never an address to send anyone to.
 process.env.BEANPOOL_ADDRESSES = 'beans.example.org,localhost';
-process.env.ADMIN_PASSWORD ??= 'Plain-Http-Gate-Suite-Pw-4417!';
 
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean, detail = '') {
     if (ok) { passed++; console.log(`  ✅ ${name}`); } else { failed++; console.log(`  ❌ ${name}${detail ? ` — ${detail}` : ''}`); }
 }
 
-const { initAdminPassword } = await import('./config/local-config.js');
 const tlsMod = await import('./services/tls.js');
 const se = await import('./state-engine.js');
 const { startHttpServer, _setPlainConnectionHookForTests } = await import('./http-server.js');
@@ -62,7 +59,6 @@ const { acmeTargets } = await import('./services/acme/schedule.js');
 /** The addresses this server certifies now, as the gate reads them. */
 const certified = () => acmeTargets().map((t) => t.host);
 
-initAdminPassword();
 await tlsMod.initTls();
 se.initStateEngine();
 const httpPort = await startHttpServer(0);

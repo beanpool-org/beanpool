@@ -1,29 +1,22 @@
 /**
- * Local Configuration — Node Identity & Admin Auth
+ * Local Configuration — Node Identity & Settings
  *
- * First boot:
- *   - A new install makes no admin password (initAdminPassword): its first owner claims it with the claim code.
- *   - An existing node keeps the password it has (scrypt hash in data/local-config.json). An older install's
- *     data/first-admin-password.txt is never printed: the log says only where it is. Changing the password deletes it.
+ * The node has no admin password (Marty, 11 Nov 2026): a new install's first owner claims it with the claim code
+ * (claim-code.ts), and owners sign in with their key. A local-config.json from an older install may still hold the keys
+ * adminHash, salt, the totp* keys, backupAdminPassword, breakGlassMode or passwordRetired: nothing reads them, and they
+ * are still left out of every backup file (LEFT_OUT_OF_BACKUPS). Deleting them is a hand step for the operator.
  *
- * Subsequent boots:
- *   - Loads existing config from disk (env var ignored)
- *
- * Password reset:
- *   - Change it in Settings (Access & Security). Locked out: `beanpool recover` on the server adds an owner, who signs in
- *     with the app. Deleting data/local-config.json (or Wipe & Reset) leaves no admin password at all, old or from .env:
- *     the server starts as a new install, with a claim code only if the community has no owner.
- *   - scripts/rotate-node-env.sh ADMIN_PASSWORD=<new> on a node that has one: the next boot takes the new one
- *     (initAdminPassword, joinedAt).
+ * Locked out: `beanpool recover` on the server adds an owner, who signs in with the app. Deleting data/local-config.json
+ * (or Wipe & Reset) starts the server as a new install, with a claim code only if the community has no owner.
  */
 
-import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt, createHash } from 'node:crypto';
+import { scryptSync, randomBytes, timingSafeEqual, scrypt, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
 import type { RecoveryCodeRecord } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
-import { writeFileAtomic, fsyncDir } from '../write-file-atomic.js';
+import { writeFileAtomic } from '../write-file-atomic.js';
 export { type GatewayConfig, DEFAULT_GATEWAY_CONFIG };
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -36,17 +29,7 @@ export interface LocalConfig {
     isLocked: boolean;
     callsign: string | null;
     location: { lat: number; lng: number } | null;
-    adminHash: string | null;
-    salt: string | null;
     joinedAt: number | null;
-    // --- TOTP 2FA for Admin (#135) ---
-    totpEnabled?: boolean;
-    totpSecret?: string | null;
-    totpBackupCodesHashes?: string[];
-    /** The time step of the last 2FA code accepted for totpSecret (totp.ts useTotpCode): a number, never a code. */
-    totpLastAcceptedStep?: number;
-    totpPendingSecret?: string | null;
-    totpPendingBackupCodesHashes?: string[];
     thresholds?: Thresholds;
     gateway?: GatewayConfig;
     communityName: string | null;
@@ -55,17 +38,10 @@ export interface LocalConfig {
     currencyType?: 'text' | 'image';
     currencyValue?: string;
     backupPrimaryUrl?: string | null;
-    // LEGACY, never written any more. Older standbys stored the main server's admin password
-    // here in plain text. On start a standby swaps it for a replication token and wipes it
-    // (services/backup-puller.ts migrateStandbyPassword); where it can't, it keeps it and warns,
-    // saying whether the main server still takes it. It is stripped from every backup file
-    // this node writes (redactLocalConfig).
-    backupAdminPassword?: string | null;
     // --- Replication credential (live backup) ---
     // Primary side: scrypt hash of a dedicated replication token. The snapshot-pull
-    // endpoint accepts a request bearing the matching token (least-privilege, scoped
-    // to read-only replication only — distinct from the all-powerful admin password,
-    // and independently rotatable). Never store the plaintext.
+    // endpoint accepts a request bearing the matching token and nothing else (least-privilege,
+    // scoped to read-only replication only, and independently rotatable). Never store the plaintext.
     // --- Claim code (claim-code.ts) ---
     // A node with no owner writes a one-time claim code to data/claim-code.txt; only K = scrypt(sha256(code), salt) (hex,
     // a secret: it checks a claim's proof), the public salt, the code's short public id and when it was made are kept
@@ -96,11 +72,6 @@ export interface LocalConfig {
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
-    // When true, the snapshot endpoint refuses admin-password auth and REQUIRES the
-    // token. A NEW install starts with it on (initAdminPassword). An install from before
-    // that has it unset, which reads as off, so a standby still copying with the admin
-    // password keeps working; Settings tells the owner to switch it on.
-    replicationTokenOnly?: boolean;
     // Owner automation tokens (automation-tokens.ts): each one's public id, name, scope, who made it and when, and a
     // SHA-256 of its secret, never the secret. This server's own: never in a backup file, the stager's copy or the bundle.
     automationTokens?: AutomationTokenRecord[];
@@ -127,16 +98,6 @@ export interface LocalConfig {
     // correct, and a drift is corrected on demand. Null → env BACKUP_RECONCILE_EVERY_MS
     // → 15m. 0 → routine full reconcile disabled (drift-triggered fulls still run).
     backupReconcileMinutes?: number | null;
-    // --- Break-glass Admin Mode (docs/admin-surface.md §2.2, §2.4) ---
-    // When true, password / break-glass credentials can ONLY reach key enrolment.
-    // All normal admin routes require a cryptographic key session.
-    // Default false during migration rollout.
-    breakGlassMode?: boolean;
-    // --- The admin password, retired for good (node sign-in design step 10, POST /api/local/admin/auth/retire-password) ---
-    // Set once by an owner's key; never cleared by any route, Wipe & Reset or a restart. While set, adminHash and salt stay
-    // null, every password path answers 403 password_retired, and ADMIN_PASSWORD in .env is ignored (initAdminPassword).
-    // `by` is the owner's member key; `acceptedOneOwner` when they retired it as the only owner.
-    passwordRetired?: { at: number; by: string; byCallsign: string | null; acceptedOneOwner?: boolean } | null;
     // --- Sealed keys (scratch/overnight/design/sealed-keys.md §2.6) ---
     // The PUBLIC record of the printed recovery code: codeId, the X25519 public key scrypt(code) derives, the
     // salt and cost. It seals, it never opens. The code itself is shown once and never stored anywhere.
@@ -233,8 +194,6 @@ const DEFAULT_CONFIG: LocalConfig = {
     isLocked: false,
     callsign: null,
     location: null,
-    adminHash: null,
-    salt: null,
     joinedAt: null,
     communityName: null,
     contactEmail: null,
@@ -385,9 +344,8 @@ function restoreFromBackup(why: string): LocalConfig {
             + '(identityEpoch, the split-brain guard) are kept only in local-config.json, so with NODE_ROLE=backup in .env it would '
             + 'start as a standby again and copy from BACKUP_PRIMARY_URL. If they can\'t be mended: on a main '
             + 'server, first make sure .env does not say NODE_ROLE=backup (set NODE_ROLE=primary); then move local-config.json and '
-            + 'local-config.json.bak aside (rename them and keep them) and restart. This server then starts with no settings: no '
-            + 'admin password (ADMIN_PASSWORD in .env is ignored; owners sign in with the BeanPool app, and `beanpool recover` adds '
-            + 'an owner); an address request still waiting is forgotten (an address it already holds is kept in the database); '
+            + 'local-config.json.bak aside (rename them and keep them) and restart. This server then starts with no settings '
+            + '(owners still sign in with the BeanPool app, and `beanpool recover` adds an owner); an address request still waiting is forgotten (an address it already holds is kept in the database); '
             + 'its standbys stop copying until each is paired again (a standby paired from Settings stops its own copying too; one set up with BACKUP_PRIMARY_URL in .env carries on); backups are not locked, and are not sent off the server, '
             + 'until an owner makes a new recovery code; the take-over count starts again at 0; and the community\'s name and '
             + 'contact details must be set again. Its community, node key and database are not touched.';
@@ -481,12 +439,8 @@ export function writeLocalConfigFileIn(dir: string, config: Record<string, unkno
 }
 
 export function saveLocalConfig(config: LocalConfig): void {
-    // The admin password changed: the one a copy verified last is not taken any more (rememberCopyPassword).
-    if (rememberedCopyPassword && (config.adminHash !== rememberedCopyPassword.storedHash || config.salt !== rememberedCopyPassword.salt)) {
-        rememberedCopyPassword = null;
-    }
     // Atomic, so no reader and no crash sees half a file; then the last good copy, the same way. A new file is 0600: it
-    // holds the admin's hash and token hashes.
+    // holds token hashes.
     const json = JSON.stringify(config, null, 2);
     let saved = false;
     keptConfig = null;
@@ -562,226 +516,6 @@ export function verifyPasswordAsync(password: string, storedHash: string, stored
     });
 }
 
-/**
- * Validate password complexity:
- * - Minimum 8 characters
- * - Uppercase, lowercase, number, symbol
- */
-export function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
-    if (!password) {
-        return { valid: false, error: 'Password is required' };
-    }
-    if (password.length < 8) {
-        return { valid: false, error: 'Password must be at least 8 characters long' };
-    }
-    if (!/[A-Z]/.test(password)) {
-        return { valid: false, error: 'Password must contain at least one uppercase letter' };
-    }
-    if (!/[a-z]/.test(password)) {
-        return { valid: false, error: 'Password must contain at least one lowercase letter' };
-    }
-    if (!/[0-9]/.test(password)) {
-        return { valid: false, error: 'Password must contain at least one number' };
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>\-_]/.test(password)) {
-        return { valid: false, error: 'Password must contain at least one special character (!@#$%^&*(),.?":{}|<>_-)' };
-    }
-    return { valid: true };
-}
-
-/**
- * Generates a high-entropy 20-character password satisfying the strength validator
- */
-export function generateStrongPassword(): string {
-    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-    const numbers = '0123456789';
-    const symbols = '!@#$%^&*()';
-    const all = uppercase + lowercase + numbers + symbols;
-
-    // SECURITY (SRV-10): this is an authentication credential, so draw from a
-    // CSPRNG (crypto.randomInt) — never Math.random, whose output is not
-    // cryptographically secure and can be reconstructed from observed values.
-    const chars: string[] = [
-        // Guarantee at least one character from each required category
-        uppercase[randomInt(uppercase.length)],
-        lowercase[randomInt(lowercase.length)],
-        numbers[randomInt(numbers.length)],
-        symbols[randomInt(symbols.length)],
-    ];
-    // Fill up to the 20-character length
-    for (let i = 0; i < 16; i++) {
-        chars.push(all[randomInt(all.length)]);
-    }
-
-    // Cryptographic Fisher-Yates shuffle so the guaranteed-category characters
-    // aren't pinned to the first four positions (and to avoid the biased
-    // comparator-based shuffle the previous implementation used).
-    for (let i = chars.length - 1; i > 0; i--) {
-        const j = randomInt(i + 1);
-        [chars[i], chars[j]] = [chars[j], chars[i]];
-    }
-    return chars.join('');
-}
-
-// ===================== FIRST ADMIN PASSWORD =====================
-// The password an older version's first boot made up when .env had no ADMIN_PASSWORD (a new install makes none now:
-// initAdminPassword). It was never printed: in Docker stdout IS the container log. It went in this file, readable by the
-// server's user only, until the password is changed; an install that still has it is reminded at boot. Backups never
-// carry it: they take named files only.
-
-export const FIRST_PASSWORD_FILE = 'first-admin-password.txt';
-
-export function firstPasswordPath(): string {
-    return path.join(DATA_DIR, FIRST_PASSWORD_FILE);
-}
-
-/** The command that reads the file. The image keeps its data in /data (Dockerfile, docker-compose.yml). */
-function firstPasswordReadCommand(file: string): string {
-    return DATA_DIR === '/data' ? `docker compose exec beanpool-node cat ${file}` : `cat ${file}`;
-}
-
-/**
- * Delete the first-password file, if there is one, and say so in the log. Called wherever the admin password stops
- * being the one in it: a change in Settings, Wipe & Reset, and a boot that finds it no longer matches.
- */
-export function removeFirstPasswordFile(why: string): void {
-    const file = firstPasswordPath();
-    try {
-        fs.unlinkSync(file);
-    } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        if (code === 'ENOENT') return;
-        console.warn(`⚠️  ${why}, but ${file} could not be deleted (${code || 'error'}). It holds a password that no longer works: delete it by hand.`);
-        return;
-    }
-    fsyncDir(DATA_DIR);
-    console.log(`🔑 ${why}: deleted ${file}, which held the first admin password.`);
-}
-
-/**
- * A later boot with the file still there. While it still holds the admin password, remind the operator to read it and
- * change the password. Once it does not (a restore or a take-over brought another one), delete it: it would send
- * them to a password that does not work.
- */
-function checkFirstPasswordFile(config: LocalConfig): void {
-    const file = firstPasswordPath();
-    let held: string;
-    try {
-        held = fs.readFileSync(file, 'utf-8').trim();
-    } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        if (code !== 'ENOENT') console.warn(`⚠️  ${file} is there but could not be read (${code || 'error'}).`);
-        return;
-    }
-    if (held && config.adminHash && config.salt && verifyPassword(held, config.adminHash, config.salt)) {
-        console.log(`🔑 The first admin password is still in ${file}, and still works.`);
-        console.log(`   Read it with: ${firstPasswordReadCommand(file)}`);
-        console.log('   Then change it in Settings → Appliance & Data → Access & Security. The file is deleted when you do.');
-        return;
-    }
-    removeFirstPasswordFile('The admin password is no longer the one in it');
-}
-
-/**
- * Whether this server has an admin password: its hash, never isLocked alone. A take-over's admin-settings step
- * (services/takeover.ts) and a sealed restore (services/sealed-backup.ts) write the hash without isLocked, so onto a new
- * install (never locked) it arrives unlocked; the next boot locks it (initAdminPassword).
- */
-export function hasAdminPassword(config: LocalConfig): boolean {
-    return !!(config.adminHash && config.salt);
-}
-
-/**
- * The admin password at boot (node sign-in step 8: no password on new installs).
- * - passwordRetired (an owner retired it, routes/admin.ts retire-password) → none, for good, before every rule below:
- *   ADMIN_PASSWORD in .env is ignored, any hash left is cleared, the first-password file deleted
- * - Config locked, or a hash in it (hasAdminPassword) → an existing node: its password stays exactly as it is, and the
- *   first-password file is looked at. A hash a take-over or sealed restore wrote without isLocked is locked here. A lock
- *   with no hash (an older locked server that took over a community with no password) stays, and no password is made:
- *   only the hash ever counts as having one (hasAdminPassword)
- * - Not locked, but joinedAt set (when this server's password was set; only a boot that sets one writes it, and Wipe &
- *   Reset clears it) → an existing node whose password is being rotated: scripts/rotate-node-env.sh unlocks the config
- *   and drops the hash, then restarts it with the new ADMIN_PASSWORD, which is taken as before. Never read as a new
- *   install (deciding review r4176337954). With no ADMIN_PASSWORD it has none until one is set and it restarts.
- * - Otherwise → a new install (no local-config.json, or one never locked, or a Wipe & Reset): no password is made and
- *   ADMIN_PASSWORD in .env is ignored. The claim code (claim-code.ts) is the only way to the first owner. Such a node is
- *   never locked here, so a claimed node rebooted with ADMIN_PASSWORD set still has none.
- * - The server suites' fresh data dirs still take ADMIN_PASSWORD when BEANPOOL_SUITE_ENV_PASSWORD=1
- *   (scripts/server-suites.mjs DEFAULT_ENV): the old first boot, kept for the suites that sign in with a password
- */
-export function initAdminPassword(): void {
-    const config = getLocalConfig();
-
-    // Retired for good: no password is made, read from .env or kept. A redeploy with ADMIN_PASSWORD still in .env must
-    // never bring it back. Before every other rule: a retired node is neither an existing node nor a new install here.
-    if (config.passwordRetired) {
-        console.log(process.env.ADMIN_PASSWORD
-            ? '🔒 The admin password was retired: ADMIN_PASSWORD in .env is ignored. Sign in with a phone; remove it from .env.'
-            : '🔒 The admin password was retired: sign in with a phone.');
-        if (config.adminHash || config.salt) updateLocalConfig({ adminHash: null, salt: null });
-        removeFirstPasswordFile('The admin password was retired');
-        return;
-    }
-
-    if (config.isLocked || hasAdminPassword(config)) {
-        if (!config.isLocked) {
-            updateLocalConfig({ isLocked: true });
-            console.log('🔒 This server holds an admin password a take-over or a restore brought, so it is locked now.');
-        }
-        if (hasAdminPassword(config)) {
-            console.log('🔒 Node is locked — admin password already configured.');
-        } else {
-            // Locked with no hash behind it: an older server, locked with its own password, that took over a community with
-            // none (isLocked is per-server; the take-over brings the community's hash, here none). No password signs in.
-            console.log('🔒 This server is locked but holds no admin password: its community has none, so no password signs in, ADMIN_PASSWORD from .env included. Owners sign in with the BeanPool app.');
-        }
-        checkFirstPasswordFile(config);
-        return;
-    }
-
-    // A password was set on this server once: its rotation (above), never a new install.
-    const rotating = config.joinedAt != null;
-    if (rotating && !process.env.ADMIN_PASSWORD) {
-        console.warn('⚠️  This server had an admin password, and its lock was cleared for a new one (scripts/rotate-node-env.sh), but .env has no ADMIN_PASSWORD.');
-        console.warn('   It has no admin password until you set ADMIN_PASSWORD in .env and restart. Owners still sign in with the BeanPool app; `beanpool recover` adds an owner.');
-        return;
-    }
-
-    if (!rotating && (!process.env.ADMIN_PASSWORD || process.env.BEANPOOL_SUITE_ENV_PASSWORD !== '1')) {
-        if (process.env.ADMIN_PASSWORD) {
-            console.log('🔑 ADMIN_PASSWORD in .env is ignored: a new install has no admin password. Claim this community with its one-time claim code: run `beanpool claim` on this server.');
-        }
-        // First boot of a new install: standbys copy with a replication token only, never the admin password.
-        if (config.replicationTokenOnly === undefined) updateLocalConfig({ replicationTokenOnly: true });
-        // A file left by an earlier install whose config was deleted: it holds a password this one does not use.
-        checkFirstPasswordFile(config);
-        return;
-    }
-
-    // A rotation, or the suites' seam: the old first boot with the password from .env.
-    const password = process.env.ADMIN_PASSWORD!;
-    const validation = validatePasswordStrength(password);
-    if (!validation.valid) {
-        throw new Error(`[Config] ADMIN_PASSWORD environment variable is invalid: ${validation.error}`);
-    }
-
-    const { hash, salt } = hashPassword(password);
-
-    const saved: LocalConfig = {
-        ...config,
-        isLocked: true,
-        adminHash: hash,
-        salt: salt,
-        joinedAt: Date.now(),
-        replicationTokenOnly: config.replicationTokenOnly ?? true,
-    };
-    saveLocalConfig(saved);
-
-    console.log('🔒 Admin password configured and saved.');
-    checkFirstPasswordFile(saved);
-}
-
 // ===================== REPLICATION TOKEN =====================
 
 /** Generate a fresh 256-bit replication token (shown to the operator once). */
@@ -834,9 +568,10 @@ export function clearReplicationToken(): void {
 }
 
 /**
- * What a backup file's node_config.json leaves out: this server's credentials. The admin password's hash and salt, the
- * two-factor secret and backup codes (and a half-made pair), the replication token's hash, the token a standby presents,
- * the plain-text admin password an older standby may still hold, and the owners' automation tokens' hashes. The notices from the
+ * What a backup file's node_config.json leaves out: this server's credentials. The replication token's hash, the token a
+ * standby presents, the owners' automation tokens' hashes, and the keys an older install's file may still hold though
+ * nothing reads them now (the admin password's hash and salt, the two-factor secret and backup codes, the plain-text
+ * admin password an older standby kept). The notices from the
  * address service too: each holds a live one-use reply link, which would let whoever reads the file reply as the community. A readable backup is a file anyone who has it can
  * read (Fable's replication review HIGH-1, 2026-10-01: the hash was offline guessing, the 2FA secret the second factor
  * gone); a locked one carries them in its take-over bundle, where a restore takes them from.
@@ -880,39 +615,6 @@ export async function verifyReplicationToken(token: string): Promise<boolean> {
         rememberedToken = { digest, storedHash, until: Date.now() + REPLICATION_TOKEN_REMEMBERED_MS };
     }
     return ok;
-}
-
-/**
- * The admin password a standby copies with (routes/backup.ts replicationAuth: every install from before token-only, whose
- * flag reads as off), remembered as the replication token is (rememberedToken), so that a copy's object requests, one per
- * listing photo, cost the main server one scrypt, not one each (review of #1370, routes/backup.ts:1074). The SHA-256 of
- * the password, the stored hash and salt it verified against, and until when. Only a password the admin hash verified, and
- * only on the copy routes: a wrong one, or a break-glass code, pays checkAdminAuth's full brake and tarpit every time.
- * Forgotten when the admin password changes (saveLocalConfig), and never taken against a hash or salt other than the one
- * it verified against, nor while break-glass mode or two-factor sign-in is on (either would refuse the password there).
- */
-let rememberedCopyPassword: { digest: Buffer; storedHash: string; salt: string; until: number } | null = null;
-
-/**
- * The admin password `password` verified against the stored `storedHash` and `salt` for a copy (checkAdminAuth passed on
- * it): remembered for REPLICATION_TOKEN_REMEMBERED_MS, if they are still the stored ones.
- */
-export function rememberCopyPassword(password: string, storedHash: string, salt: string): void {
-    const config = getLocalConfig();
-    if (config.adminHash !== storedHash || config.salt !== salt) return;
-    rememberedCopyPassword = {
-        digest: createHash('sha256').update(password).digest(), storedHash, salt, until: Date.now() + REPLICATION_TOKEN_REMEMBERED_MS,
-    };
-}
-
-/** `password` is the admin password a copy verified last, still (rememberCopyPassword): taken without its scrypt. */
-export function copyPasswordRemembered(password: string): boolean {
-    const r = rememberedCopyPassword;
-    if (!r || Date.now() >= r.until) return false;
-    const config = getLocalConfig();
-    if (config.adminHash !== r.storedHash || config.salt !== r.salt || config.replicationTokenOnly) return false;
-    if (isBreakGlassMode() || (config.totpEnabled && config.totpSecret)) return false;
-    return timingSafeEqual(r.digest, createHash('sha256').update(password).digest());
 }
 
 // ===================== THRESHOLDS =====================
@@ -1065,19 +767,3 @@ export function updateGatewayConfig(updates: Partial<GatewayConfig>): GatewayCon
     return merged;
 }
 
-/** Whether an owner retired the admin password for good (passwordRetired). */
-export function isPasswordRetired(): boolean {
-    return !!getLocalConfig().passwordRetired;
-}
-
-export function isBreakGlassMode(): boolean {
-    if (process.env.ADMIN_BREAK_GLASS_MODE === '1' || process.env.ADMIN_BREAK_GLASS_MODE === 'true') {
-        return true;
-    }
-    const config = getLocalConfig();
-    return !!config.breakGlassMode;
-}
-
-export function setBreakGlassMode(enabled: boolean): void {
-    updateLocalConfig({ breakGlassMode: enabled });
-}

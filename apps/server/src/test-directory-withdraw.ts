@@ -64,7 +64,6 @@ delete process.env.PUBLIC_ADDRESS_AUTO;
 delete process.env.DIRECTORY_UNLISTED;
 delete process.env.NODE_PROFILE;
 process.env.REGISTRAR_URL = 'http://127.0.0.1:1';
-process.env.ADMIN_PASSWORD = 'WithdrawAdmin123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -188,7 +187,7 @@ const day = (offsetDays: number) => new Date(Date.now() + offsetDays * DAY_MS).t
 async function main() {
     console.log('A community leaves the directory at once: one signed withdraw, only after a push...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { initStateEngine, setNodeRole, updateNodeConfig, getNodeConfig } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startP2P } = await import('./p2p.js');
@@ -197,7 +196,6 @@ async function main() {
     const { ensureGenesis } = await import('./genesis.js');
 
     await initTls();
-    initAdminPassword();
     initStateEngine();
     await ensureGenesis();
     setNodeRole('primary');

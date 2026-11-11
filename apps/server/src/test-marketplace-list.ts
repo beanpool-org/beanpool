@@ -16,7 +16,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'MarketplaceListPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -24,7 +23,6 @@ import {
     initStateEngine, seedGenesisMember, createTreasury, createPost, adminAssignTreasuryOperator,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { openShop, setShopPhoto } from './engine/shops.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -93,7 +91,6 @@ const OTHER_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB
 
 async function main(): Promise<void> {
     console.log('\n=== test-marketplace-list: Pictures S6 enterprise banner on cards ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

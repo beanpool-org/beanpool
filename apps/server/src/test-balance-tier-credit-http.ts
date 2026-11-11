@@ -21,7 +21,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'TierCreditHttp123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -35,7 +34,6 @@ import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
@@ -132,7 +130,6 @@ async function ownRead(who: Id, label: string, expected: number, floor?: number)
 
 async function main(): Promise<void> {
     console.log(`tierCredit on the own balance read (read auth ${process.env.ENFORCE_READ_AUTH === 'false' ? 'opted out' : 'on'})\n`);
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

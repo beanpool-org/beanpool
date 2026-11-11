@@ -22,7 +22,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
@@ -30,8 +29,7 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, getMember, getPosts, createPost as rawCreatePost, reconcileLedgerFromDb } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -42,10 +40,8 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestAdmin123!';
-// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
-// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main().
+let asOwner: Record<string, string> = {};
 
 const BYRON = '12D3KooWByronPullTestPeer00000000000';
 const BYRON_ADDR = `/ip4/172.18.0.31/tcp/4001/p2p/${BYRON}`;
@@ -61,9 +57,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -176,19 +171,15 @@ const nodeTotal = (): number =>
 
 async function main() {
     console.log('Running listing pull tests (#143 step 4, second half)...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
 
-    const alone = await post('/api/local/connectors', { password: PW, address: BYRON_ADDR, trustLevel: 'peer', callsign: 'byron', publicUrl: BYRON_URL, enabled: true });
-    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
-        `setup: 2FA off, the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
     for (const [addr, callsign, url] of [[BYRON_ADDR, 'byron', BYRON_URL], [BRISBANE_ADDR, 'brisbane', BRISBANE_URL]] as const) {
-        const added = await post('/api/local/connectors', { password: PW, address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });
-        const capped = await post('/api/local/connectors/credit-cap', { password: PW, address: addr, cap: 500 });
+        const added = await post('/api/local/connectors', { address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });
+        const capped = await post('/api/local/connectors/credit-cap', { address: addr, cap: 500 });
         assert(added.status === 200 && capped.status === 200, `setup: ${callsign} added and capped over HTTP (got ${added.status}, ${capped.status})`);
     }
     // EVERY local member seeded BEFORE the baseline. `makeLocalMember` mints — a fixture's privilege, not the

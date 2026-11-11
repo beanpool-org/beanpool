@@ -142,7 +142,6 @@ async function signed(method: 'GET' | 'POST', p: string, id: Id | null, payload?
 const settle = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 const DAY = 24 * 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
-const ADMIN_PW = 'Removal-Jury-Admin-Pw-71!';
 
 async function main() {
     console.log('Removal by a drawn jury (J1): the draw, the roll, the tally over it, the route and the setting...\n');
@@ -155,7 +154,7 @@ async function main() {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
@@ -167,8 +166,7 @@ async function main() {
     await initTls();
     se.initStateEngine();
     setSimulatedDiskUsageForTesting(10);
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Jury Test Commons' });
+    updateLocalConfig({ communityName: 'Jury Test Commons' });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     const fresh = () => { resetAdminAuthTarpit(); resetAdminRateLimit(); resetGatewayRateLimit(); };

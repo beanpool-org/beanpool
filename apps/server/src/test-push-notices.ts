@@ -28,7 +28,6 @@ delete process.env.NODE_ROLE;
 delete process.env.NODE_PROFILE;
 delete process.env.EXPO_ACCESS_TOKEN;
 const ADMIN_PW = 'PushNoticesAdmin123!';
-process.env.ADMIN_PASSWORD = ADMIN_PW; // the announcement route is the operator's
 let ADMIN: Record<string, string> = {};
 
 import crypto from 'node:crypto';
@@ -115,8 +114,6 @@ async function main() {
     // Absent on a tree without them: the checks that need them fail, and the rest still run.
     const notices: any = await import('./engine/push-notices.js').catch(() => null);
 
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     ADMIN = (await import('./admin-auth-test-harness.js')).ownerTokenHeaders('admin');

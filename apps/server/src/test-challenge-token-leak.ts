@@ -22,7 +22,6 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { updateLocalConfig } from './config/local-config.js';
 import { adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -66,7 +65,6 @@ async function main() {
     const owner = keypair();
     seedMember(owner.pub, 'leakOwner');
     grantNodeRole(owner.pub, 'owner', 'SYSTEM');
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false } as any);
 
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;

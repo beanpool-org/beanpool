@@ -16,7 +16,8 @@
  *  8. The maker demoted: neither.
  *  9. Nothing that reaches a joiner before they join (/api/invite/check) or their card at the redeem carries the level,
  *     the vouch or the entry.
- * 10. An automation token and a password session reach the route not at all (401); a standby refuses it (409).
+ * 10. An automation token and an owner's key session (an admin credential, no member's signature) reach the route not at
+ *     all (401); a standby refuses it (409).
  * 11. No Bean moved: the ledger audit sums to zero and no transaction was written.
  * 12. The replication manifest carries the two new columns, and the hashes' version moved.
  */
@@ -32,11 +33,13 @@ import {
 } from '@beanpool/core';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, getBalance, runLedgerAudit } from './state-engine.js';
+import { initStateEngine, getBalance, runLedgerAudit, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride } from './config/node-profile.js';
@@ -49,9 +52,8 @@ import { issueAutomationToken } from './automation-tokens.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
-const ADMIN_PW = 'Invite-Adds-Voucher-Pw-71!';
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -152,23 +154,24 @@ async function main(): Promise<void> {
     const COMMUNITY = (await ensureGenesis()).communityId;
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
     // ── Setup: Owen an owner (on the credit committee by role), Ada an admin (not on it), Mel a member ───────────────
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes Ada's role with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const [ada, mel] = ['Ada', 'Mel'].map(newId);
     for (const who of [ada, mel]) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin']] as const) {
-        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
+    for (const [who, role] of [[ada, 'admin']] as const) {
+        require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER())).status === 200, `${who.name} is made ${role}`);
     }
     const owenP = new Phone(owen);
     const adaP = new Phone(ada);
@@ -177,7 +180,7 @@ async function main(): Promise<void> {
     require_((await owenP.open()).kind === 'ready', "Owen's phone makes the list's first key");
     await owenP.open();
     require_((await adaP.open()).kind === 'ready', "Ada's phone takes the list's key from Owen's");
-    require_((await call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, PASSWORD())).status === 200, 'the community turns on the known floor');
+    require_((await call(null, 'POST', '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, OWNER())).status === 200, 'the community turns on the known floor');
     const addEntry = async (name: string) => {
         const id = newNamesEntryId();
         const r = await call(owen, 'POST', '/api/names/entries', { id, ciphertext: sealNamesEntry(owenP.key(), id, owenP.head(), { name, note: '' } as NamesEntryText), keyId: owenP.head() });
@@ -366,7 +369,7 @@ async function main(): Promise<void> {
     const e8 = await addEntry('Ned Ashworth');
     const b8 = await bind(ada, e8, { voucherLevel: hc(500) });
     require_(b8.status === 201, `Ada makes another (${show(b8)})`);
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'moderator' }, PASSWORD())).status === 200, 'Ada is made a moderator');
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'moderator' }, OWNER())).status === 200, 'Ada is made a moderator');
     const ned = newId('Ned');
     const j8 = await redeem(ned, b8.body.invite.code);
     assert(j8.status === 200 && !liveConfirmation(ned.pk) && !voucherRow(ned.pk) && codeRow(b8.body.invite.code)?.names_bind_outcome === 'maker_not_admin'
@@ -392,9 +395,9 @@ async function main(): Promise<void> {
     const token = issueAutomationToken({ name: 'adds-voucher-suite', scope: 'admin', createdBy: owen.pk });
     require_(token.ok, 'Owen makes an admin automation token');
     const byToken = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: hc(1000) }, { Authorization: `Bearer ${token.ok ? token.token : ''}` });
-    const byPassword = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: hc(1000) }, PASSWORD());
-    assert(byToken.status === 401 && byPassword.status === 401 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore,
-        `10. an automation token and a password session: 401, nothing written (${show(byToken)} | ${show(byPassword)})`);
+    const bySession = await call(null, 'POST', `/api/names/entries/${e10}/invite`, { voucherLevel: hc(1000) }, OWNER());
+    assert(byToken.status === 401 && bySession.status === 401 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore,
+        `10. an automation token and an owner's key session: 401, nothing written (${show(byToken)} | ${show(bySession)})`);
     setNodeRole('backup');
     const onStandby = await bind(owen, e10, { voucherLevel: hc(1000) });
     setNodeRole('primary');

@@ -122,7 +122,7 @@ async function spawnRefused(dataDir: string, env: Record<string, string>): Promi
  */
 async function refusedInPlace(standbyDir: string, dir: string, code: string, mainPeerId: string): Promise<void> {
     copyDir(standbyDir, dir);
-    const env = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_PROFILE: 'global' };
+    const env = { NODE_ROLE: 'backup', NODE_PROFILE: 'global' };
     const unsafe = { ...env, ENFORCE_READ_AUTH: 'false' };
     const node = await spawnNode(SCRIPT, dir, { ...unsafe, BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'roles' });
     try {
@@ -178,7 +178,7 @@ async function main(): Promise<void> {
     try {
         // ── 1. A global main server ──
         console.log('\n— 1. a main server running as global —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', ...GLOBAL });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', ...GLOBAL });
         nodes.push(main);
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         assert(setup.envelopeId && /^BPRC-1 /.test(setup.code), 'it has a recovery code and a take-over envelope');
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
         console.log('\n— 2. its standby runs with NODE_PROFILE unset —');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...LOCAL });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...LOCAL });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pulled = await standby.send('pull');
@@ -204,7 +204,7 @@ async function main(): Promise<void> {
             'and says the main server runs as global while its NODE_PROFILE is local');
 
         await standby.kill('SIGTERM');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...LOCAL });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...LOCAL });
         nodes.push(standby);
         const again = await standby.send('profile');
         assert(standby.ready.role === 'backup' && again.record.profile === 'global',
@@ -226,7 +226,7 @@ async function main(): Promise<void> {
         console.log('\n— 4. the same standby promoted by hand, NODE_PROFILE still unset —');
         await standby.send('checkpoint');
         copyDir(dirs.standby, dirs.probe);
-        const byHand = await spawnRefused(dirs.probe, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'primary', ...LOCAL });
+        const byHand = await spawnRefused(dirs.probe, { NODE_ROLE: 'primary', ...LOCAL });
         assert(!byHand.started && byHand.code === 1, `it does not start (exit ${byHand.code})`);
         assert(/This database is a global node, but NODE_PROFILE here is unset \(local\)/.test(byHand.output) && /will not start/.test(byHand.output),
             'and says why, before the ledger is loaded or a port is open');
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
         // ── 5. With NODE_PROFILE=global the take-over goes through ──
         console.log('\n— 5. the standby restarted with NODE_PROFILE=global —');
         await standby.kill('SIGTERM');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...GLOBAL });
         nodes.push(standby);
         const standbyOwner = await asOwner(standby);
         const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
@@ -248,7 +248,7 @@ async function main(): Promise<void> {
         assert(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...GLOBAL });
         nodes.push(standby);
         assert(standby.ready.role === 'primary' && standby.ready.peerId === main.ready.peerId, 'it is the main server, with the same PeerId');
         const after = await standby.send('profile');
@@ -263,7 +263,7 @@ async function main(): Promise<void> {
         // ── 6. …and never as local ──
         console.log('\n— 6. the promoted server started again without NODE_PROFILE —');
         await standby.kill('SIGTERM');
-        const later = await spawnRefused(dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...LOCAL });
+        const later = await spawnRefused(dirs.standby, { NODE_ROLE: 'backup', ...LOCAL });
         assert(!later.started && later.code === 1 && /will not start/.test(later.output),
             `it does not start: a global node never opens as local (exit ${later.code})`);
     } finally {

@@ -82,7 +82,7 @@ async function bootRollBackAsStandby(world: World, root: string): Promise<{ main
             spawnNode(SCRIPT, dirA, STANDBY_ENV), spawnNode(SCRIPT, dirA2, { ...STANDBY_ENV, BEANPOOL_TEST_TAKEOVER_FAIL_AT: 'pull-config' }),
             spawnNode(SCRIPT, dirB, STANDBY_ENV), spawnNode(SCRIPT, dirC, STANDBY_ENV),
             // D: a main server made a standby while it runs, after its boot armed the main server's timers.
-            spawnNode(SCRIPT, path.join(root, 'ab-d'), { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'primary' }),
+            spawnNode(SCRIPT, path.join(root, 'ab-d'), { NODE_ROLE: 'primary' }),
         ]);
         Object.assign(nodes, { A: a, A2: a2, B: b, C: c, D: d });
         assert(d.ready.role === 'primary' && await d.send('set-role', { role: 'backup' }), `[${label}] D booted as a main server, then made a standby`);

@@ -12,9 +12,8 @@
  *  2. One per source, called as the server calls them: a grant by the admin password, by break-glass enrolment, a
  *     grant inside a transaction that rolled back (nothing told), the community claimed from the server, wrong claim
  *     proofs past the minute's budget, one address backing off wrong passwords and then many addresses (raised, then
- *     raised again as high; ended after an hour quiet), a break-glass code made, an owner signed out everywhere, new 2FA
- *     backup codes (through the real route), the admin password retired (through the real route), the address naming
- *     another community's key and its own again.
+ *     raised again as high; ended after an hour quiet), a break-glass code made, an owner signed out everywhere, the
+ *     address naming another community's key and its own again.
  *  3. Replaced: this server replaced by another with the same keys is urgent, told again a day later, and counted in
  *     the banner until an owner acknowledges it (through the real route); then resolved once, after the hold.
  *  4. Nothing per member in any payload: no callsign and no key (nor its first 12 characters) in any message the
@@ -115,16 +114,14 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken, enrolAdminOwnerKey, issueBreakGlassCode, retireBreakGlassCode, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { getAdminQueue } = await import('./engine/admin-queue.js');
     const { burnClaimFromShell, claimLogAdmit, resetClaimBrake, CLAIM_LOG_BUDGET } = await import('./claim-code.js');
     const brake = await import('./password-brake.js');
-    const { generateTotpSecret, generateTotpCode } = await import('./totp.js');
     const { readNodeIdentity } = await import('./services/takeover-envelope.js');
     const { noteNameStandingForTests } = await import('./services/registrar-name-watch.js');
     const { recordRegistrarAnswer } = await import('./engine/registrar-names.js');
@@ -139,9 +136,7 @@ async function main(): Promise<void> {
     // This machine's own disk may be full enough to alert: the rows here are the security ones.
     setSimulatedDiskUsageForTesting(10);
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const PW = 'Alerts-Sec-Pw-5512!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Security Test Commons' });
+    updateLocalConfig({ communityName: 'Security Test Commons' });
 
     const pubkey = () => crypto.randomBytes(32).toString('hex');
     const owner = pubkey();
@@ -169,8 +164,8 @@ async function main(): Promise<void> {
         return ex.sessionId!;
     };
     const asOwner = { 'x-admin-session': session(owner, 'owner') };
-    // Granting or taking admin, and retiring the password, ask the owner's fresh proof (design case 18, C4, C8): Manage on
-    // the phone, pressed just now, a new hand-off session for each.
+    // Granting or taking admin asks the owner's fresh proof (design case 18, C4, C8): Manage on the phone, pressed just
+    // now, a new hand-off session for each.
     const asOwnerPhone = () => ({ 'x-admin-session': session(owner, 'owner', true) });
 
     await initTls();
@@ -344,14 +339,6 @@ async function main(): Promise<void> {
     await settle();
     assert(/An owner signed out everywhere/.test(lastHistory('sec.keys')?.detail ?? ''), '2. an owner signed out everywhere');
 
-    const secret = generateTotpSecret();
-    updateLocalConfig({ totpEnabled: true, totpSecret: secret });
-    const codes = await call('POST', '/api/local/admin/2fa/backup-codes', { code: generateTotpCode(secret) }, asOwner);
-    await settle();
-    assert(codes.status === 200 && /New 2FA backup codes for the admin password were made, by an owner/.test(lastHistory('sec.keys')?.detail ?? ''),
-        `2. new 2FA backup codes through the real route (${codes.status} ${codes.json?.error ?? ''})`);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-
     // Two registrar names on the record, as Settings' claims write them: the alert reads which are lost from it.
     for (const name of ['first', 'second']) recordRegistrarAnswer({ status: 'live', name, hostname: `${name}.beanpool.org` }, 'claim');
     noteNameStandingForTests('lost-another-key', 'first.beanpool.org');
@@ -415,21 +402,13 @@ async function main(): Promise<void> {
         `3. the history keeps who marked it seen (${lastHistory('sec.seen')?.detail})`);
     grantNodeRole(helper, 'moderator', 'owner:password');
     await settle();
-    const tfa = turnOn2faForTests(PW);
-    const ackPw = await call('POST', '/api/local/admin/alerts/acknowledge', {}, tfa.headers());
-    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+    // The owner's phone (its Manage hand-off) may acknowledge too.
+    const ackPhone = await call('POST', '/api/local/admin/alerts/acknowledge', {}, asOwnerPhone());
     const hist3 = alerts.getAlertsStatus().history;
-    assert(ackPw.status === 200 && banner('owner') === 0, `3. the admin password may acknowledge (${ackPw.status} ${ackPw.json?.error ?? ''})`);
-    assert(/^Marked as seen with the admin password: 1 security event/.test(hist3[0]?.detail ?? '') && hist3[0].at > 0
+    assert(ackPhone.status === 200 && banner('owner') === 0, `3. the owner's phone may acknowledge (${ackPhone.status} ${ackPhone.json?.error ?? ''})`);
+    assert(/^Marked as seen by an owner: 1 security event/.test(hist3[0]?.detail ?? '') && hist3[0].at > 0
         && hist3.some((e) => /An admin was made a moderator, by the admin password\./.test(e.detail)),
-        `3. but deletes nothing: the history keeps the event, and that the password marked it seen, with the time (${hist3[0]?.detail})`);
-
-    // The admin password retired, through the real route (last: it ends password sign-in).
-    issueBreakGlassCode(owner, 'a test', 'app');
-    const retire = await call('POST', '/api/local/admin/auth/retire-password', { acceptOneOwner: true }, asOwnerPhone());
-    await settle();
-    assert(retire.status === 200 && /The admin password was retired for good, by an owner/.test(lastHistory('sec.keys')?.detail ?? ''),
-        `2. the admin password retired through the real route (${retire.status} ${retire.json?.error ?? ''})`);
+        `3. but deletes nothing: the history keeps the event, and that an owner marked it seen, with the time (${hist3[0]?.detail})`);
 
     // ── 4. Nothing per member ───────────────────────────────────────────────────────────────────────────────────────
     await settle(300);

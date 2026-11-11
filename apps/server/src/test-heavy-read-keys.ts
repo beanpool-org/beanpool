@@ -128,7 +128,6 @@ const rows = (a: Answer): number => { try { return JSON.parse(a.text).length; } 
 async function main(): Promise<void> {
     console.log('A heavy read is weighed by its own key: a small answer never stands in for the big one...\n');
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
@@ -137,7 +136,6 @@ async function main(): Promise<void> {
     const { heavyReadStats, setHeavyReadsForTests } = await import('./heavy-reads.js');
     const { setRosterSnapshotsForTests } = await import('./roster-snapshots.js');
     const { SNAPSHOT_SEND_WEIGHT } = await import('./members-snapshot.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
 

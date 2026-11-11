@@ -225,7 +225,7 @@ async function main(): Promise<void> {
     const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
     const nodes: NodeProc[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const anna = newId('Anna');
     const ben = newId('Ben');
     const cat = newId('Cat');

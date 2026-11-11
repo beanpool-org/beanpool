@@ -32,14 +32,12 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'ElectoratePass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, createGroup, joinGroup, setMemberRole, seedGenesisMember, tickGroupSuccession, GROUP_SUCCESSION_WINDOW_MS } from './state-engine.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedGroupLine } from './group-test-payload.js';
@@ -126,7 +124,6 @@ function groupOf(name: string, lead: Id, members: Id[]): string {
 
 async function main(): Promise<void> {
     console.log('Only people who were in a group before its lead went quiet vote in a new lead\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

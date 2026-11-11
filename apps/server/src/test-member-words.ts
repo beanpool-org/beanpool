@@ -286,10 +286,8 @@ async function testRealServer(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { startP2P } = await import('./p2p.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { exportPlainTables } = await import('@beanpool/engine');
     const { PLAIN_TABLES } = await import('./engine/replication-manifest.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     await startP2P(0, 0);

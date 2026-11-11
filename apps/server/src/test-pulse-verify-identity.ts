@@ -25,7 +25,6 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'VerifyIdentity123!';
 process.env.TIKTOK_CLIENT_KEY = 'fake-client-key';
 process.env.TIKTOK_CLIENT_SECRET = 'fake-client-secret';
 process.env.INSTAGRAM_APP_ID = 'fake-ig-app';

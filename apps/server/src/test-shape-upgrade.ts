@@ -38,8 +38,6 @@ delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.PRIVATE_PREVIEW;
 delete process.env.DIRECTORY_UNLISTED;
-process.env.ADMIN_PASSWORD = 'ShapeUpgrade123!';
-process.env.BEANPOOL_SUITE_ENV_PASSWORD = '1';
 // A directory push that got past every hold-back would go here: a closed port on this machine, never the registry.
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:9/directory-register';
 
@@ -74,7 +72,7 @@ async function main(): Promise<void> {
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
     const { ownerSessionHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } = await import('./admin-auth-test-harness.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
-    const { initAdminPassword, updateLocalConfig, getGatewayConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig, getGatewayConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { db } = await import('./db/db.js');
@@ -86,7 +84,6 @@ async function main(): Promise<void> {
     const { setSecurityAlertHandler } = await import('./services/security-signal.js');
     const { ENABLE_PEER_CONNECTORS } = await import('./connector-manager.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const BASE = `https://localhost:${await startHttpsServer(0)}`;

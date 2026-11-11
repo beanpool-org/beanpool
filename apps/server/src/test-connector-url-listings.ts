@@ -10,11 +10,10 @@
  *    (the new address could be someone else).
  *
  * Run:
- *   BEANPOOL_SUITE_ENV_PASSWORD=1 ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-connector-url-listings.ts
+ *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-connector-url-listings.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { generateKeyPair } from '@libp2p/crypto/keys';
@@ -22,8 +21,7 @@ import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import * as cm from './connector-manager.js';
 import { addWsClient } from './state-engine.js';
@@ -31,8 +29,8 @@ import { cacheRemoteListings, pullAllPeerListings, REMOTE_ID_PREFIX } from './fe
 
 let PORT = 0;
 let BASE = '';
-const PW = 'TestAdmin123!';
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main().
+let asOwner: Record<string, string> = {};
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -41,9 +39,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -92,12 +89,11 @@ function makeFakeNode(listingsByPeer: Map<string, any[]>) {
 
 async function main() {
     console.log('Running connector URL listings test...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
 
     const peerA = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();
     const addrA = `/ip4/172.18.0.31/tcp/4001/p2p/${peerA}`;
@@ -106,10 +102,10 @@ async function main() {
 
     // ── 1. Setup connector A ────────────────────────────────────────────────────────────────────────
     const addA = await post('/api/local/connectors', {
-        password: PW, address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA1, enabled: true,
+        address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA1, enabled: true,
     });
     const capA = await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrA, cap: hc(500),
+        address: addrA, cap: hc(500),
     });
     assert(addA.status === 200 && capA.status === 200, `1a. Peer A connector configured and capped (got ${addA.status}, ${capA.status})`);
 
@@ -130,7 +126,7 @@ async function main() {
 
     // ── 3. Edit ONLY the URL of connector A ─────────────────────────────────────────────────────────
     const editA = await post('/api/local/connectors', {
-        password: PW, address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA2, enabled: true,
+        address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA2, enabled: true,
     });
     assert(editA.status === 200 && editA.json?.connector?.publicUrl === urlA2,
         `3a. Connector URL successfully edited to ${urlA2} (got ${editA.json?.connector?.publicUrl})`);
@@ -167,10 +163,10 @@ async function main() {
     const urlB = 'https://peer-b.beanpool.org';
 
     await post('/api/local/connectors', {
-        password: PW, address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: true,
+        address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: true,
     });
     await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrB, cap: hc(500),
+        address: addrB, cap: hc(500),
     });
 
     const itemB1 = listing({ title: 'Peer B old carpentry', price_c: hc(15) });
@@ -186,12 +182,12 @@ async function main() {
     const addrC = `/ip4/172.18.0.33/tcp/4001/p2p/${peerC}`;
 
     // Remove old connector B and configure connector C at urlB
-    await post('/api/local/connectors/remove', { password: PW, address: addrB });
+    await post('/api/local/connectors/remove', { address: addrB });
     await post('/api/local/connectors', {
-        password: PW, address: addrC, trustLevel: 'peer', callsign: 'peer-c', publicUrl: urlB, enabled: true,
+        address: addrC, trustLevel: 'peer', callsign: 'peer-c', publicUrl: urlB, enabled: true,
     });
     await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrC, cap: hc(500),
+        address: addrC, cap: hc(500),
     });
 
     const itemC1 = listing({ title: 'Peer C pottery', price_c: hc(20) });

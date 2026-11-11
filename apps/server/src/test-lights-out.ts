@@ -11,11 +11,10 @@
  *      /api/ledger/transfer stays 301; a proxy header, a public Host, a public source or a dot segment: 301; the socket
  *      the same;
  *   2. the switch: unsigned 401; a member, an admin, a stale owner signature, the owner's old-format (unbound) signature
- *      (426), an automation token, an assistant's token, a computer's session, an admin's session, the password with 2FA
- *      off, the password without a current code, a standby: refused, nothing changed. The owner signed for the
- *      community's NAME over plain http at the number: on (request binding unchanged); signed for the NUMBER on this named
- *      node: 421. The phone's Manage session and the password with a current code: on/off through Settings' route. "On"
- *      twice is "on";
+ *      (426), an automation token, an assistant's token, a computer's session, an admin's session, an admin password (the
+ *      node has none), a standby: refused, nothing changed. The owner signed for the community's NAME over plain http at
+ *      the number: on (request binding unchanged); signed for the NUMBER on this named node: 421. The phone's Manage
+ *      session: on/off through Settings' route. "On" twice is "on";
  *   3. ON: the hall Wi-Fi is served (a page, a write, the socket); the Internet, a tunnel-shaped request and a proxy's are
  *      still redirected; loopback always; /hall shows the lines and the door link, and "Get the Android app" (H3) only with
  *      an APK held and HIDE_APK_LINK unset, in the reader's language, leading to the APK page; health + info carry
@@ -38,7 +37,6 @@
  *      sealed file with `beanpool restore` and starts on it: its health and info read lightsOut off, its local-config.json
  *      holds none, and the boot keeps it as a restored copy.
  *
- * Run: BEANPOOL_SUITE_ENV_PASSWORD=1 BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-lights-out.ts
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -55,8 +53,8 @@ process.env.BEANPOOL_DATA_DIR = dataDir;
 for (const k of ['CF_RECORD_NAME', 'CF_API_TOKEN', 'CF_ZONE_ID', 'NODE_ROLE', 'PUBLIC_IP']) delete process.env[k];
 const OWN = 'beans.example.org';
 process.env.BEANPOOL_ADDRESSES = OWN;
-const PASSWORD = 'Lights-Out-Suite-Pw-5521!';
-process.env.ADMIN_PASSWORD ??= PASSWORD;
+/** What an older install's admin password looked like: the node has none now, so it is no credential. */
+const OLD_ADMIN_PASSWORD = 'Lights-Out-Suite-Pw-5521!';
 // The APK on the node (H3, services/apk-mirror.ts): the image's folder, empty until section 3 puts one there.
 const apkImageDir = `${dataDir}-image-apk`;
 process.env.APK_IMAGE_DIR = apkImageDir;
@@ -67,7 +65,7 @@ function check(name: string, ok: boolean, detail = '') {
     if (ok) { passed++; console.log(`  ✅ ${name}`); } else { failed++; console.log(`  ❌ ${name}${detail ? ` — ${detail}` : ''}`); }
 }
 
-const { initAdminPassword, getLocalConfig, updateLocalConfig, redactLocalConfig } = await import('./config/local-config.js');
+const { getLocalConfig, updateLocalConfig, redactLocalConfig } = await import('./config/local-config.js');
 const tlsMod = await import('./services/tls.js');
 const se = await import('./state-engine.js');
 const { db } = await import('./db/db.js');
@@ -88,7 +86,6 @@ const { APK_SIGNING_CERT_SHA256 } = await import('./services/apk-release.js');
 const { wordsIn } = await import('./member-words.js');
 const { escapeHtml } = await import('./routes/community-card.js');
 
-initAdminPassword();
 await tlsMod.initTls();
 se.initStateEngine();
 // The community's genesis and the node's key: the identity statement is signed with the key, and a backup is locked only
@@ -287,8 +284,8 @@ console.log('\n2. Who may flip it');
     check('a computer\'s session → 403 phone_required', computer.status === 403 && computer.json?.code === 'phone_required' && !isOn(), `${computer.status} ${computer.body.slice(0, 100)}`);
     const adminPhone = await settingsSwitch(harness.ownerPhoneSessionHeaders(admin.pk), { on: true });
     check('an admin\'s phone session → 403', adminPhone.status === 403 && !isOn(), String(adminPhone.status));
-    const pwNo2fa = await settingsSwitch({ 'X-Admin-Password': PASSWORD }, { on: true });
-    check('the password with the node\'s 2FA off → refused (fails closed)', (pwNo2fa.status === 401 || pwNo2fa.status === 403) && !isOn(), `${pwNo2fa.status} ${pwNo2fa.body.slice(0, 100)}`);
+    const oldPassword = await settingsSwitch({ 'X-Admin-Password': OLD_ADMIN_PASSWORD }, { on: true });
+    check('an admin password (the node has none) → 401 notSignedIn', oldPassword.status === 401 && oldPassword.json?.notSignedIn === true && !isOn(), `${oldPassword.status} ${oldPassword.body.slice(0, 100)}`);
 
     setNodeRole('backup');
     const standby = await phoneSwitch(owner, { on: true });
@@ -305,20 +302,11 @@ console.log('\n2. Who may flip it');
     const badAddr = await phoneSwitch(owner, { on: true, address: 'https://evil.example.com' });
     check('a hall address that is not a local number → 400', badAddr.status === 400, String(badAddr.status));
 
-    // Off and on through Settings: the phone's Manage session, and the password with a current code.
+    // Off and on through Settings: the phone's Manage session.
     const off = await settingsSwitch(harness.ownerPhoneSessionHeaders(owner.pk), { on: false });
     check('Settings, the phone\'s Manage session → off', off.status === 200 && !isOn(), `${off.status} ${off.body.slice(0, 120)}`);
-    const twofa = harness.turnOn2faForTests(PASSWORD);
-    // The fresh proof on the password path: a current code, once. The same code a second time is refused.
-    const once = twofa.code();
-    const pwOn = await settingsSwitch({ 'X-Admin-Password': PASSWORD, 'X-Admin-TOTP': once }, { on: true, address: ADDRESS, code: once });
-    check('the password with a current authenticator code → on', pwOn.status === 200 && isOn(), `${pwOn.status} ${pwOn.body.slice(0, 120)}`);
-    await phoneSwitch(owner, { on: false });
-    const reused = await settingsSwitch({ 'X-Admin-Password': PASSWORD, 'X-Admin-TOTP': once }, { on: true, address: ADDRESS, code: once });
-    check('the same code again → refused, nothing changed', (reused.status === 401 || reused.status === 403) && !isOn(), `${reused.status} ${reused.body.slice(0, 120)}`);
-    const pwOn2 = await settingsSwitch(twofa.headers(), { on: true, address: ADDRESS, code: twofa.code() });
-    check('… and a new current code → on', pwOn2.status === 200 && isOn(), `${pwOn2.status} ${pwOn2.body.slice(0, 120)}`);
-    updateLocalConfig({ totpEnabled: false, totpSecret: null });
+    const settingsOn = await settingsSwitch(harness.ownerPhoneSessionHeaders(owner.pk), { on: true, address: ADDRESS });
+    check('… and → on', settingsOn.status === 200 && isOn(), `${settingsOn.status} ${settingsOn.body.slice(0, 120)}`);
 }
 
 // ── 3. ON ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -581,8 +569,7 @@ const copyMadeOn = { file: '', code: '', epoch: 0, madeAt: '' };
     const leftOut = /const CREDENTIALS_LEFT_OUT = \[([\s\S]*?)\];/.exec(stagerSrc)?.[1] ?? '';
     check('the stager\'s copy leaves both out', leftOut.includes("'lightsOut'") && leftOut.includes("'restoredCopy'"));
 
-    const { makeRecoveryCode, BUNDLED_LOCAL_CONFIG_FIELDS } = await import('./services/takeover-envelope.js');
-    check('the take-over bundle\'s field list has neither', !(BUNDLED_LOCAL_CONFIG_FIELDS as readonly string[]).includes('lightsOut') && !(BUNDLED_LOCAL_CONFIG_FIELDS as readonly string[]).includes('restoredCopy'));
+    const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const code = await makeRecoveryCode();
     const { createSealedBackup, openSealedFileTo, readBundleFrom } = await import('./services/sealed-backup.js');
     const work = fs.mkdtempSync(path.join(dataDir, 'copies-'));
@@ -598,6 +585,7 @@ const copyMadeOn = { file: '', code: '', epoch: 0, madeAt: '' };
     const nodeConfig = JSON.parse(fs.readFileSync(path.join(unpacked, 'node_config.json'), 'utf8'));
     check('a sealed backup\'s node_config.json: no lightsOut, no restoredCopy', !('lightsOut' in nodeConfig) && !('restoredCopy' in nodeConfig) && 'identityEpoch' in nodeConfig);
     const bundle = readBundleFrom(unpacked, header) as any;
+    check('the take-over bundle carries no local-config field at all, so neither', !!bundle && JSON.stringify(bundle.localConfig) === '{}', JSON.stringify(bundle?.localConfig));
     check('its take-over bundle: no lightsOut anywhere', !!bundle && !JSON.stringify(bundle).includes('lightsOut') && !JSON.stringify(bundle).includes('restoredCopy'));
     Object.assign(copyMadeOn, { file: sealedFile, code: code.code, epoch: Number(bundle?.identityEpoch) || 0, madeAt: String(header.createdAt) });
     const { createSnapshot, resolveSnapshotPath } = await import('./services/snapshot-scheduler.js');

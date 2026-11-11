@@ -297,7 +297,7 @@ async function main(): Promise<void> {
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const GLOBAL = { NODE_PROFILE: 'global' };
-    const mainEnv = { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', ...GLOBAL };
+    const mainEnv = { NODE_ROLE: 'primary', ...GLOBAL };
     const ada = newId(), ben = newId();
     const suiteStart = new Date(Date.now() - 1_000).toISOString();
 
@@ -417,7 +417,7 @@ async function main(): Promise<void> {
 
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
+        const standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ...GLOBAL });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pulled = await standby.send('pull');
@@ -437,7 +437,7 @@ async function main(): Promise<void> {
         console.log('\n— 3. the backup, locked with no door key in it, restored on a new server that made a key of its own —');
         fs.mkdirSync(dirs.restored, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.restored, 'genesis.json'));
-        const restoredEnv = { ADMIN_PASSWORD: PW_RESTORED, NODE_ROLE: 'primary', ...GLOBAL };
+        const restoredEnv = { NODE_ROLE: 'primary', ...GLOBAL };
         let restored = await spawnNode(SCRIPT, dirs.restored, restoredEnv);
         nodes.push(restored);
         const ownKey = Buffer.from(await restored.send('make-own-key') as string, 'base64');

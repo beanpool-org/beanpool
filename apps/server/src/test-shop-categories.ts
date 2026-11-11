@@ -23,14 +23,12 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_READ_AUTH;
-process.env.ADMIN_PASSWORD = 'ShopCategoriesPass123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { TEST_PHOTOS } from './post-test-helper.js';
 import { initStateEngine, seedGenesisMember, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -98,7 +96,6 @@ const MULLUM = { lat: -28.55, lng: 153.50 };
 
 async function main(): Promise<void> {
     console.log('\n=== Shops pick a Market category ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

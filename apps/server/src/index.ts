@@ -57,7 +57,7 @@ if (fs.existsSync(envPath)) {
 scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
+import { localConfigRestoredNotice } from './config/local-config.js';
 import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls } from './services/tls.js';
 import { startAcmeScheduler } from './services/acme/schedule.js';
@@ -134,9 +134,6 @@ async function main() {
     console.log(`✅ Community: ${genesis.communityId}`);
     console.log(`   Genesis hash: ${genesis.genesisHash}\n`);
 
-    // Step 2: Admin password (an existing node keeps its own or takes a rotated one; a new install makes none)
-    initAdminPassword();
-
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();
     // This start, for the alerts' crash-loop row (services/alerts.ts): three after unclean stops in 15 minutes is told at
@@ -191,7 +188,7 @@ async function main() {
         remember: noteRestoredCopy,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
-    // (it asks whether there is an owner). Never throws: the admin password works as before either way.
+    // (it asks whether there is an owner). Never throws: without a code, `beanpool recover` on the server still adds an owner.
     initClaimCode();
 
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else

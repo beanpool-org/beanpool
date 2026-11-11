@@ -24,7 +24,6 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NODE_PROFILE;
-process.env.ADMIN_PASSWORD = 'KeeperReadOnly123!';
 
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
@@ -38,7 +37,6 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { setNodeRole } from './config/node-role.js';
@@ -134,7 +132,6 @@ type Case = {
 
 async function main(): Promise<void> {
     console.log('A keeper request\'s standing check reads, never writes\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     BASE = `https://localhost:${await startHttpsServer(0)}`;

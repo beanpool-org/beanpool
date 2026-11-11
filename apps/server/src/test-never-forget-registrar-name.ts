@@ -266,7 +266,7 @@ async function main(): Promise<void> {
 
     try {
         console.log('A community never forgets a registrar name it held\n');
-        const N = await spawnNode(SCRIPT, dirs.n, { ...noAgent, ADMIN_PASSWORD: PW_N, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'b2.test', REGISTRAR_URL: reg.url });
+        const N = await spawnNode(SCRIPT, dirs.n, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: 'b2.test', REGISTRAR_URL: reg.url });
         nodes.push(N);
         const setup = await N.send('setup', { ownerSeedHex, replicationToken });
         const nBase: string = setup.https;
@@ -284,7 +284,7 @@ async function main(): Promise<void> {
         // A standby of N, copying it from the start (its keys are pulled again at the end).
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.n, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: N.base, replicationToken, primaryPeerId: N.ready.peerId });
         const pull1 = await standby.send('pull');
@@ -420,7 +420,7 @@ async function main(): Promise<void> {
         // ── 5 ──
         console.log('\n— 5. a node whose only name is its registrar name, answered none —');
         await section('5', async () => {
-            const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, ADMIN_PASSWORD: PW_U, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
+            const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
             nodes.push(U);
             const uSetup = await U.send('setup', { ownerSeedHex });
             const uAdmin: Record<string, string> = await U.send('owner-session');
@@ -455,7 +455,7 @@ async function main(): Promise<void> {
             const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
             assert(confirmed.status === 200, `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
             assert((await standby.exited) === 0, 'the standby restarts itself');
-            standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
+            standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
             nodes.push(standby);
             assert(standby.ready.role === 'primary', 'it is the main server now');
             const s = await standby.send('inspect');

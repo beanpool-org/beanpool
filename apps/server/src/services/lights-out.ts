@@ -317,7 +317,7 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  *   - signing in or out of Settings on this server: a session, a challenge, a CSRF token, the sign-in pairing, the live
  *     updates' ticket (each held by this server alone, none in the record). Signing a member out everywhere (revoke-all)
  *     raises their session epoch, so it counts;
- *   - the reads Settings sends as POST (the body carries the password or a filter): what opening Settings asks for, so an
+ *   - the reads Settings sends as POST (the body carries a filter): what opening Settings asks for, so an
  *     owner who opens it in the hall to turn the switch off still gets the offer. Each was read for a write (#2822);
  *     POST /api/local/admin/community-health is not one (it saves the health settings) and counts. What the Network tab
  *     (where the switch is) and the Backups tab send as they open is pinned in apps/manager/src/lib/hall-reads.json:
@@ -334,7 +334,7 @@ export const NOT_HALL_WRITES: readonly string[] = [
     'POST /api/local/admin/lights-out', 'POST /api/node/owner/lights-out',
     'POST /api/local/admin/csrf-token', 'POST /api/local/admin/ws-ticket',
     'POST /api/local/admin/auth/challenge', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/auth/exchange',
-    'POST /api/local/admin/auth/password', 'POST /api/local/admin/auth/logout',
+    'POST /api/local/admin/auth/logout',
     'POST /api/local/admin/auth/pairing', 'POST /api/local/admin/auth/pairing/:id/wait',
     'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/approve',
     'POST /api/local/admin/auth/pairing/:id/decline',

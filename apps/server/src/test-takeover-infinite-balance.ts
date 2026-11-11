@@ -163,14 +163,14 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
     {
         console.log(`\n═══ ${sc.label} ═══`);
         console.log('\n— 1. a main server and a standby that copies it —');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', CF_RECORD_NAME: undefined });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary', CF_RECORD_NAME: undefined });
         nodes.push(main);
         const setup = await main.send('setup-primary', { ownerSeedHex, replicationToken });
         assert(/^BPRC-1 /.test(setup.code) && setup.envelopeId && setup.paid && setup.audit?.ok === true,
             `the main server has a recovery code, a take-over envelope and a ledger that adds up (${JSON.stringify(setup.audit)})`);
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        let standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        let standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const pulled = await standby.send('pull');
@@ -207,7 +207,7 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
             `${sc.account}'s balance on the standby is now ${stored.holds} (${String(row.balance_c)}, ${row.t})`);
 
         console.log('\n— 3. it starts as the main server, and the take-over finishes —');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
         nodes.push(standby);
         assert(standby.ready.role === 'primary', `it is the main server (${standby.ready.role})`);
         const firstStart = standby.output();
@@ -285,7 +285,7 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
 
         console.log('\n— 5. a second start is quiet, and the take-over stays complete —');
         await standby.kill('SIGTERM');
-        standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
+        standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
         nodes.push(standby);
         const second = standby.output();
         const again = await post(standby.base, '/api/local/admin/takeover/progress', {}, await standby.send('owner-session'));

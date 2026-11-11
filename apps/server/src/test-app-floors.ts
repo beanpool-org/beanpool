@@ -34,7 +34,6 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { logger } from './logger.js';
@@ -296,9 +295,6 @@ async function main(): Promise<void> {
     console.log('\n--- 6. over HTTPS ---');
     await initTls();
     initStateEngine();
-    const PW = 'Floors-Owner-7!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false });
     const owner = keyPair(), ann = keyPair(), ben = keyPair(), stranger = keyPair();
     seedGenesisMember(owner.pub, 'Owner');
     addMember(ann, 'Ann');
@@ -357,17 +353,14 @@ async function main(): Promise<void> {
     resetAdminAuthTarpit();
     r = await get(route, null);
     assert(r.status === 401 && !r.text.includes('"platforms"'), `unsigned: 401, no counts (got ${r.status})`);
-    r = await get(route, null, { 'X-Admin-Password': 'not-the-password' });
-    assert(r.status === 401, `a wrong password: 401 (got ${r.status})`);
+    // The node has no admin password: one sent in the header is no credential.
+    r = await get(route, null, { 'X-Admin-Password': 'Floors-Owner-7!' });
+    assert(r.status === 401 && r.body?.notSignedIn === true && !r.text.includes('"platforms"'), `a password header: 401 notSignedIn, no counts (got ${r.status})`);
     resetAdminAuthTarpit();
     r = await get(route, ann);
     assert(r.status === 401 && !r.text.includes('"platforms"'), `a member's signature: 401, no counts (got ${r.status})`);
     resetAdminAuthTarpit();
-    // Step 7c: with the node's 2FA off, the owner's password alone is refused; the manager sends an owner's automation token.
-    r = await get(route, null, { 'X-Admin-Password': PW });
-    assert(r.status === 403 && r.body?.code === 'password_needs_2fa' && !r.text.includes('"platforms"'),
-        `the owner's password alone, 2FA off: 403 password_needs_2fa, no counts (got ${r.status})`);
-    resetAdminAuthTarpit();
+    // The manager sends an owner's automation token.
     const managerToken = ownerTokenHeaders('admin');
     r = await get(route, null, managerToken);
     assert(r.status === 200, `the owner's automation token: 200 (got ${r.status})`);

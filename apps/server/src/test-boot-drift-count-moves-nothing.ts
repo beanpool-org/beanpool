@@ -161,7 +161,7 @@ async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     const dataDir = path.join(root, 'node');
-    const env = { ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', NODE_ENV: 'test' };
+    const env = { NODE_ROLE: 'primary', NODE_ENV: 'test' };
     const w: World = {
         owner: newKey(), kai: newKey(), lee: newKey(), ola: newKey(), pat: newKey(),
         driftCo: newKey(), evenCo: newKey(), oweCo: newKey(),

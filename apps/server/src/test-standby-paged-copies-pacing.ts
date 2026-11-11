@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 
     try {
         const main = await spawnNode(SCRIPT, dir('main'), {
-            ADMIN_PASSWORD: 'Paced-Copies-Main-Pw-5521!', NODE_ROLE: 'primary', NODE_ENV: 'test',
+            NODE_ROLE: 'primary', NODE_ENV: 'test',
             SYNC_PAGE_ROWS: String(PAGE_ROWS), SYNC_PAGE_BYTES: String(64 * 1024), SYNC_COPY_IDLE_MS: String(COPY_IDLE_MS),
             ADMIN_RATE_WINDOW_MS: String(WINDOW_MS),
         });
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
         fs.mkdirSync(dir('standby'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby'), 'genesis.json'));
         const standby = await spawnNode(SCRIPT, dir('standby'), {
-            ADMIN_PASSWORD: 'Paced-Copies-Standby-Pw-8830!', NODE_ROLE: 'backup', NODE_ENV: 'test',
+            NODE_ROLE: 'backup', NODE_ENV: 'test',
             BACKUP_RECONCILE_EVERY_MS: '86400000', BACKUP_PAGE_GAP_MS: String(gapMs),
         });
         nodes.push(standby);

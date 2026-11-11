@@ -4,9 +4,9 @@
  * opens the vote. Every door that removed someone without it is closed there, and each one that stays is shown working.
  *
  * Boots the real server; every request goes over HTTPS through the real signature middleware and real admin sessions: an
- * admin's key session, an owner's, and the password with a 2FA code.
+ * admin's key session and an owner's (the node has no admin password).
  *
- *  1. Prune, votes on: an admin's key, the password and an owner's key are each refused 400 in words that say what to do
+ *  1. Prune, votes on: an admin's key and an owner's key are each refused 400 in words that say what to do
  *     instead (pause them; the community's vote decides), an owner's of another owner before any fresh proof is asked. For
  *     an owner or an admin the words say no vote removes one, and that an owner takes the role away first (§3.8).
  *     Nothing changes: the member stays active and no Bean moves. The engine refuses underneath, whatever route reaches
@@ -96,7 +96,7 @@ async function signed(method: 'GET' | 'POST', p: string, id: Id, payload?: unkno
     }));
 }
 
-/** An admin route under `session`'s headers (a key session, or the password with a 2FA code). */
+/** An admin route under `session`'s headers (a key session). */
 async function admin(method: 'GET' | 'POST', p: string, session: Record<string, string>, payload?: unknown): Promise<Answer> {
     return answerOf(await fetch(`${BASE}${p}`, {
         method,
@@ -105,7 +105,6 @@ async function admin(method: 'GET' | 'POST', p: string, session: Record<string, 
     }));
 }
 
-const ADMIN_PW = 'Removal-Doors-Admin-Pw-31!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -124,8 +123,7 @@ async function main() {
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { executeOffboard } = await import('./engine/member-wizards.js');
@@ -142,9 +140,6 @@ async function main() {
 
     await initTls();
     se.initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    const twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // What the owners are told (services/security-signal.ts): an admin's removals are counted, the community's are not.
@@ -179,7 +174,6 @@ async function main() {
         if (!s.ok || !s.sessionId) throw new Error(`could not open Ada's key session: ${s.error}`);
         return { 'X-Admin-Session': s.sessionId };
     })();
-    const password = () => twoFa.headers();
 
     const row = (id: Id): any => db.prepare('SELECT status, credit_frozen FROM members WHERE public_key = ?').get(id.pubKeyHex);
     const statusOf = (id: Id) => row(id)?.status as string | undefined;
@@ -213,7 +207,7 @@ async function main() {
     const pam = seedMember('PlainPam');
     const accountsBefore = accountsNow();
     const pamWords: string[] = [];
-    for (const [who, session] of [['an admin', adaSession], ['the password', password()], ['an owner', gwenSession]] as const) {
+    for (const [who, session] of [['an admin', adaSession], ['an owner', gwenSession]] as const) {
         fresh();
         const r = await admin('POST', `/api/local/admin/users/${pam.pubKeyHex}/prune`, session, {});
         pamWords.push(r.body?.error ?? '');
@@ -368,7 +362,7 @@ async function main() {
     db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
         .run(keypair('StrayInvitee').pubKeyHex.toUpperCase(), 'StrayInvitee', ago(DAY), strayOnly.pubKeyHex, 'OLD-DOOR');
     const accountsBeforeOne = accountsNow();
-    for (const [who, session] of [['an owner', () => gwenSession], ['the password', password]] as const) {
+    for (const [who, session] of [['an owner', () => gwenSession]] as const) {
         for (const [what, one] of [['a member who invited nobody', loner], ['one whose only invitee is gone already', emptied],
             ['one whose only invitee is a row in another spelling of a key', strayOnly]] as const) {
             fresh();
@@ -411,18 +405,16 @@ async function main() {
     type Door = { route: string; method: 'GET' | 'POST'; session: () => Record<string, string>; body?: (pk: string) => unknown; status: number; path: (pk: string) => string };
     const doors: Door[] = [
         { route: 'prune, an admin', method: 'POST', path: pk => `/api/local/admin/users/${pk}/prune`, session: () => adaSession, status: 400 },
-        { route: 'prune, the password', method: 'POST', path: pk => `/api/local/admin/users/${pk}/prune`, session: password, status: 400 },
         { route: 'prune, an owner', method: 'POST', path: pk => `/api/local/admin/users/${pk}/prune`, session: () => gwenSession, status: 400 },
         { route: 'offboard, donate', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => adaSession, body: () => ({ resolution: 'donate_to_commons' }), status: 400 },
         { route: 'offboard, gift', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => adaSession, body: () => ({ resolution: 'gift_to_member', giftRecipientPubkey: gil.pubKeyHex }), status: 400 },
-        { route: 'offboard, write off, the password', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: password, body: () => ({ resolution: 'write_off_commons' }), status: 400 },
+        { route: 'offboard, write off, an owner', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => gwenSession, body: () => ({ resolution: 'write_off_commons' }), status: 400 },
         { route: 'offboard, nothing to settle, an owner', method: 'POST', path: pk => `/api/local/admin/members/${pk}/offboard`, session: () => gwenSession, body: () => ({ resolution: 'prune_zero_balance' }), status: 400 },
         { route: 'offboard preview', method: 'GET', path: pk => `/api/local/admin/members/${pk}/offboard/preview`, session: () => adaSession, status: 400 },
         { route: 'status pruned', method: 'POST', path: pk => `/api/local/admin/users/${pk}/status`, session: () => adaSession, body: () => ({ status: 'pruned' }), status: 400 },
         { route: 'prune branch, an admin', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: () => adaSession, status: 403 },
         // Each target invited nobody: its branch is one member.
         { route: 'prune branch of one, an owner', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: () => gwenSession, status: 400 },
-        { route: 'prune branch of one, the password', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: password, status: 400 },
         { route: 'burst removal (no open door here)', method: 'POST', path: pk => `/api/local/admin/members/${pk}/burst/remove`, session: () => gwenSession, body: pk => ({ members: [pk], count: 1 }), status: 404 },
         { route: 'accelerate an open vote', method: 'POST', path: () => `/api/local/admin/decisions/${openVote.id}/accelerate`, session: () => adaSession, status: 400 },
     ];

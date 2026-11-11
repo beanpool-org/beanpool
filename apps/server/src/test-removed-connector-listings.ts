@@ -11,11 +11,10 @@
  *    leaves cached listings in place.
  *
  * Run:
- *   BEANPOOL_SUITE_ENV_PASSWORD=1 ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-removed-connector-listings.ts
+ *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-removed-connector-listings.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { generateKeyPair } from '@libp2p/crypto/keys';
@@ -25,8 +24,7 @@ import { wrapCreatePost } from './post-test-helper.js';
 import { initStateEngine, createPost as rawCreatePost, addWsClient } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pullAllPeerListings, REMOTE_ID_PREFIX } from './federation-listings.js';
@@ -35,8 +33,8 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 
 let PORT = 0;
 let BASE = '';
-const PW = 'TestAdmin123!';
-let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+// The node has no admin password: an owner signs in with their key. This is that owner's key session, opened in main().
+let asOwner: Record<string, string> = {};
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -45,9 +43,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
-    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify(body),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -104,12 +101,11 @@ function makeFakeNode(listingsByPeer: Map<string, any[]>) {
 
 async function main() {
     console.log('Running removed connector listings test (#2067)...\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
-    tfa = turnOn2faForTests(PW);
+    asOwner = ownerSessionHeaders();
 
     const peerA = peerIdFromPrivateKey(await generateKeyPair('Ed25519')).toString();
     const addrA = `/ip4/172.18.0.31/tcp/4001/p2p/${peerA}`;
@@ -121,18 +117,18 @@ async function main() {
 
     // ── 1. Setup two connectors and a local post ────────────────────────────────────────────────────
     const addA = await post('/api/local/connectors', {
-        password: PW, address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA, enabled: true,
+        address: addrA, trustLevel: 'peer', callsign: 'peer-a', publicUrl: urlA, enabled: true,
     });
     const capA = await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrA, cap: 50000,
+        address: addrA, cap: 50000,
     });
     assert(addA.status === 200 && capA.status === 200, `1a. Peer A connector configured and capped (${addA.status}, ${capA.status})`);
 
     const addB = await post('/api/local/connectors', {
-        password: PW, address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: true,
+        address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: true,
     });
     const capB = await post('/api/local/connectors/credit-cap', {
-        password: PW, address: addrB, cap: 50000,
+        address: addrB, cap: 50000,
     });
     assert(addB.status === 200 && capB.status === 200, `1b. Peer B connector configured and capped (${addB.status}, ${capB.status})`);
 
@@ -169,7 +165,7 @@ async function main() {
         try { return JSON.parse(m).type === 'post_updated'; } catch { return false; }
     }).length;
 
-    const remA = await post('/api/local/connectors/remove', { password: PW, address: addrA });
+    const remA = await post('/api/local/connectors/remove', { address: addrA });
     assert(remA.status === 200 && remA.json?.success === true, `3a. Peer A connector removed (${remA.status})`);
     await tick();
 
@@ -193,13 +189,13 @@ async function main() {
     assert(doorbells() === 1, `3e. Fake socket heard post_updated once (got ${doorbells()})`);
 
     // ── 4. Removing non-existent connector does not ring doorbell ───────────────────────────────────
-    await post('/api/local/connectors/remove', { password: PW, address: addrA });
+    await post('/api/local/connectors/remove', { address: addrA });
     await tick();
     assert(doorbells() === 1, `4a. Removing already-removed connector rings nobody (still ${doorbells()})`);
 
     // ── 5. Disabling a connector leaves its cached listings intact ──────────────────────────────────
     const disableB = await post('/api/local/connectors', {
-        password: PW, address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: false,
+        address: addrB, trustLevel: 'peer', callsign: 'peer-b', publicUrl: urlB, enabled: false,
     });
     assert(disableB.status === 200, `5a. Peer B disabled (${disableB.status})`);
     await tick();
@@ -208,7 +204,7 @@ async function main() {
     assert(doorbells() === 1, `5c. Disabling Peer B does not ring post_updated (still ${doorbells()})`);
 
     // ── 6. Removing connector B deletes its listings and rings post_updated a 2nd time ─────────────
-    const remB = await post('/api/local/connectors/remove', { password: PW, address: addrB });
+    const remB = await post('/api/local/connectors/remove', { address: addrB });
     assert(remB.status === 200 && remB.json?.success === true, `6a. Peer B connector removed (${remB.status})`);
     await tick();
     const listingsBFinal = db.prepare('SELECT * FROM posts WHERE origin_node = ?').all(urlB) as any[];
@@ -221,20 +217,20 @@ async function main() {
     const addrE2 = `/ip4/172.18.0.42/tcp/4001/p2p/${peerE}`;
     const urlE = 'https://peer-e.beanpool.org';
     for (const address of [addrE1, addrE2]) {
-        await post('/api/local/connectors', { password: PW, address, trustLevel: 'peer', callsign: 'peer-e', publicUrl: urlE, enabled: true });
-        await post('/api/local/connectors/credit-cap', { password: PW, address, cap: 50000 });
+        await post('/api/local/connectors', { address, trustLevel: 'peer', callsign: 'peer-e', publicUrl: urlE, enabled: true });
+        await post('/api/local/connectors/credit-cap', { address, cap: 50000 });
     }
     listingsByPeer.set(peerE, [listing({ title: 'Peer E eggs', price_c: 300 }), listing({ title: 'Peer E jam', price_c: 500 })]);
     await pullAllPeerListings(fakeNode);
     await tick();
     const bellsBeforeE = doorbells();
     assert(cachedFor(urlE).length === 2, `7a. Peer E's 2 listings cached (${cachedFor(urlE).length})`);
-    const remE1 = await post('/api/local/connectors/remove', { password: PW, address: addrE1 });
+    const remE1 = await post('/api/local/connectors/remove', { address: addrE1 });
     await tick();
     assert(remE1.status === 200 && cachedFor(urlE).length === 2,
         `7b. Removing E's old address keeps its listings: its other connector still names it (${remE1.status}, ${cachedFor(urlE).length})`);
     assert(doorbells() === bellsBeforeE, `7c. and rings nobody (post_updated ×${doorbells() - bellsBeforeE})`);
-    const remE2 = await post('/api/local/connectors/remove', { password: PW, address: addrE2 });
+    const remE2 = await post('/api/local/connectors/remove', { address: addrE2 });
     await tick();
     assert(remE2.status === 200 && cachedFor(urlE).length === 0, `7d. Removing E's last connector deletes them (${cachedFor(urlE).length})`);
 

@@ -70,7 +70,7 @@ export async function runRestorePoint(args: string[], io: ShellIo, dir = dataDir
     if (stopped) return refuse(stopped);
     const point = listRestorePoints().find((p) => p.name === name)!;
     io.out(`Roll this server back to ${name}, as it was on ${point.takenAt.slice(0, 16).replace('T', ' ')} UTC (before a ${point.why})?`);
-    io.out('Everything since then goes: its database, photos and per-server files (keys, password, 2FA) come back. '
+    io.out('Everything since then goes: its database, photos and per-server files (keys, recovery-code record) come back. '
         + 'A restore point of this server as it is now is kept first, so this can be undone the same way.');
     const typed = await io.ask('Type yes to roll back: ');
     if ((typed ?? '').trim() !== 'yes') return refuse('You did not type yes.');

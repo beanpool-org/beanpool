@@ -11,7 +11,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdminPassword123!';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +18,6 @@ import type { SealedEnvelopeHeader } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword } from './config/local-config.js';
 import { startRestoreUnlock, followUnlock, describeUnlock } from './services/owner-unlock.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 
@@ -47,7 +45,6 @@ async function postJson(p: string, headers: Record<string, string>, body: unknow
 async function main() {
     console.log('Running unlock cancel integration test...\n');
 
-    initAdminPassword();
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);

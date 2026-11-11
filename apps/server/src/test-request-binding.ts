@@ -82,7 +82,6 @@ async function child(): Promise<void> {
     // Never a real certificate or DNS: a self-signed certificate whatever the name.
     delete process.env.CF_API_TOKEN;
     delete process.env.CF_ZONE_ID;
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
@@ -96,7 +95,6 @@ async function child(): Promise<void> {
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
@@ -218,7 +216,7 @@ let seq = 0;
 function startNode(name: string, env: Record<string, string | undefined>): Promise<Node> {
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dataDir, { recursive: true });
-    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir };
     for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });

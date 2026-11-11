@@ -12,7 +12,7 @@
  *     local community, a listing's (members-only, 2026-09-28) or a Commons change's (members-only, 2026-10-01)
  *   /ws (ENFORCE_WS_AUTH=true) unsigned → 401, validly signed → 101
  *   /ws (ENFORCE_WS_AUTH=false) unsigned → 101, and gets a community-wide event in full (the open feed)
- *   /ws/logs      without admin auth → 401; with a valid ticket → 101
+ *   /ws/logs      without admin auth → 401; with a valid ticket (an owner's key session's, as Settings asks) → 101
  *   anything else → socket destroyed, no response
  *
  * test-ws-auth-default covers what each kind of socket gets in detail.
@@ -27,12 +27,13 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
-import { initStateEngine, broadcast } from './state-engine.js';
+import { initStateEngine, broadcast, grantNodeRole } from './state-engine.js';
 import { startHttpServer } from './http-server.js';
 import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
+import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { db } from './db/db.js';
-import { signSocket, socketBinding } from './signed-request-test-helper.js';
+import { signSocket, socketBinding, adminSigninFields } from './signed-request-test-helper.js';
 
 const ENFORCE_WS_AUTH = process.env.ENFORCE_WS_AUTH === 'true';
 const OPEN_FEED = process.env.ENFORCE_WS_AUTH === 'false';
@@ -50,6 +51,21 @@ function makeMember(callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
+}
+
+/**
+ * An owner's key sign-in, as the app's link or the QR pairing ends it: the admin_session cookie's id. The node has no
+ * admin password (Marty, 11 Nov 2026), so a logs ticket is a session's (POST /api/local/admin/ws-ticket issues one for
+ * ctx.state.adminSessionId, as below; no automation token gets one).
+ */
+function ownerKeySession(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): string {
+    const chal = createAdminChallenge();
+    const { signature, signedFor } = adminSigninFields(id.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pubKeyHex, signature, signedFor });
+    if (!solved.ok) throw new Error(`key sign-in refused: ${solved.error}`);
+    const ex = consumeHandshakeToken(solved.handshakeToken!);
+    if (!ex.ok || !ex.sessionId) throw new Error(`handshake refused: ${ex.error}`);
+    return ex.sessionId;
 }
 
 function signedWsQuery(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): string {
@@ -103,6 +119,9 @@ async function main() {
     // What cloudflared adds to a proxied request.
     const tunnelHeaders = { 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-for': '203.0.113.7' };
     const member = makeMember('Listener');
+    const owner = makeMember('Olive');
+    grantNodeRole(owner.pubKeyHex, 'owner', 'SYSTEM');
+    const ownerSession = ownerKeySession(owner);
 
     for (const p of ports) {
         console.log(`\n— ${p.name} —`);
@@ -186,7 +205,9 @@ async function main() {
         assert(logsBadTicket.kind === 'status' && logsBadTicket.status === 401, `${p.name}: /ws/logs with a made-up ticket → 401 (got ${describe(logsBadTicket)})`);
         if (logsBadTicket.kind === 'open') logsBadTicket.ws.close();
 
-        const logsTicket = await upgrade(`${p.base}/ws/logs?ticket=${issueWsTicket()}`, tunnelHeaders);
+        const ticket = issueWsTicket(ownerSession);
+        assert(typeof ticket === 'string', `${p.name}: the owner's key session gets a logs ticket`);
+        const logsTicket = await upgrade(`${p.base}/ws/logs?ticket=${ticket}`, tunnelHeaders);
         assert(logsTicket.kind === 'open', `${p.name}: /ws/logs with a valid admin ticket → 101 (got ${describe(logsTicket)})`);
         if (logsTicket.kind === 'open') logsTicket.ws.close();
 

@@ -204,7 +204,7 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
+    const env = (pw: string, role: string) => ({ NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
 
     try {
         const main = await spawnNode(SCRIPT, dirs.main, env(PW_MAIN, 'primary'));

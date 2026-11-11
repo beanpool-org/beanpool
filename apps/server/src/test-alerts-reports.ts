@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
-    const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
+    const { updateLocalConfig } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -167,8 +167,7 @@ async function main(): Promise<void> {
     // This machine's own disk may be full enough to alert: the rows here are the report ones.
     setSimulatedDiskUsageForTesting(10);
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
-    const { hash, salt } = hashPassword('Alerts-Rep-Pw-5512!');
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null, communityName: 'Report Test Commons' });
+    updateLocalConfig({ communityName: 'Report Test Commons' });
 
     const ids: Id[] = [];
     const makeId = (callsign: string): Id => {

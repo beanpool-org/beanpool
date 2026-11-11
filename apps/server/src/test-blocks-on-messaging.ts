@@ -36,7 +36,6 @@ delete process.env.ENFORCE_WS_AUTH;
 const READ_AUTH_OFF = process.env.ENFORCE_READ_AUTH === 'false';
 if (process.env.BLOCKS_OPEN_NODE) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 const PW = 'BlocksOnMessagingPass123!';
-process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -57,7 +56,6 @@ import { wrapCreatePost } from './post-test-helper.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { registerVisitor } from './engine/members.js';
@@ -178,7 +176,6 @@ const dm = (conversationId: string, author: Id, extra: Record<string, unknown> =
 
 async function main(): Promise<void> {
     console.log('\n=== Blocking stops messages and notifications on the node ===\n');
-    initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);

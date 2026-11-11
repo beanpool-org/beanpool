@@ -118,10 +118,8 @@ async function seed(a: { n: number; readers: string[]; group?: number }): Promis
 /** The real server, on port 0: its heap's peak (sampled every 5 ms) and the cap's counts when asked on stdin. */
 async function serve(): Promise<void> {
     const { initTls } = await import('./services/tls.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     // This suite loads the cap with whole-directory reads. Where `openMembership` is on (the global node's default) those

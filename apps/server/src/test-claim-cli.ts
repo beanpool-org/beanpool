@@ -83,7 +83,7 @@ function startNode(name: string, env: Record<string, string>): Promise<Node> {
     const dir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dir, { recursive: true });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dir, NODE_ENV: 'test', ACME_DIRECTORY_URL: 'http://127.0.0.1:9/directory', ...env };
-    for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE', 'ADMIN_PASSWORD']) delete childEnv[k];
+    for (const k of ['PUBLIC_ADDRESS_NAME', 'PUBLIC_ADDRESS_AUTO', 'CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'NODE_ROLE']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let out = '';

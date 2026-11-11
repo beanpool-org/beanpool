@@ -236,7 +236,7 @@ async function main(): Promise<void> {
 
     try {
         console.log('\n=== Beans from someone you have blocked arrive without their note ===\n');
-        const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
+        const main = await spawnNode(SCRIPT, dirs.main, { NODE_ROLE: 'primary' });
         nodes.push(main);
         await main.send('setup-primary', {
             replicationToken, genesis: gwen.pk, members: [ann, bo, cy, dee, eve].map(m => [m.pk, m.name]), senders: [bo.pk, cy.pk, eve.pk], seller: dee.pk,
@@ -339,7 +339,7 @@ async function main(): Promise<void> {
             'and nothing in it holds the note, but the sender\'s own signed request');
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
-        const standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ENFORCE_LEDGER_AUTH: 'true' });
+        const standby = await spawnNode(SCRIPT, dirs.standby, { NODE_ROLE: 'backup', ENFORCE_LEDGER_AUTH: 'true' });
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
         const seeded = await standby.send('resync');

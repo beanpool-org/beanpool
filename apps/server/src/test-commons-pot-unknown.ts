@@ -211,7 +211,7 @@ async function main(): Promise<void> {
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     const dir = path.join(root, 'main');
-    const env = { ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', CF_RECORD_NAME: undefined };
+    const env = { NODE_ROLE: 'primary', CF_RECORD_NAME: undefined };
     const ids = Object.fromEntries(NAMES.map((n) => [n, keypair()])) as Record<(typeof NAMES)[number], Id>;
     const k = Object.fromEntries(NAMES.map((n) => [n, ids[n].pk])) as Keys;
     // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the admin calls send an owner's

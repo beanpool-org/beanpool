@@ -13,8 +13,8 @@
  *   3. nothing identifying is kept: the table is exactly (day, visits, uniques); no answer sets a cookie; the database
  *      file and its WAL, and everything the server printed (stdout, stderr) or logged (system_logs), hold none of the
  *      addresses, the browsers or the day's tags
- *   4. the admin route: unsigned, a wrong password, a member's signature and a moderator's session are refused; an admin's
- *      session and the owner's password read 30 days by default, oldest first, today last and as counted; `days` clamped
+ *   4. the admin route: unsigned, an admin password (the node has none), a member's signature and a moderator's session
+ *      are refused; an admin's session and the owner's key session read 30 days by default, oldest first, today last and as counted; `days` clamped
  *      to 1..400; read-only
  *   5. the prune: today and the 399 days before are kept, older rows deleted with no tombstone, by pruneWebVisits (which
  *      the server's start runs) and on a day's first visit (6); reading deletes nothing
@@ -50,9 +50,7 @@ const say = (line: string) => toStdout(`${line}\n`);
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engine.js';
 import { db } from './db/db.js';
-import { updateLocalConfig, hashPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { limiterKeyForIp } from './client-ip.js';
 import {
@@ -159,9 +157,6 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
-    const PW = 'WebVisits-Owner-9!';
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false });
     const olive = makeKeypair(), adam = makeKeypair(), mo = makeKeypair(), mem = makeKeypair();
     seedGenesisMember(olive.pk, 'Olive');
     addMember(adam.pk, 'Adam', olive.pk);
@@ -312,8 +307,8 @@ async function main(): Promise<void> {
         resetAdminAuthTarpit();
         r = await send('GET', route, {});
         assert(r.status === 401, `unsigned: 401 (got ${r.status})`);
-        r = await send('GET', route, { 'X-Admin-Password': 'not-the-password' });
-        assert(r.status === 401, `a wrong password: 401 (got ${r.status})`);
+        r = await send('GET', route, { 'X-Admin-Password': 'WebVisits-Owner-9!' });
+        assert(r.status === 401 && !r.body.includes('"series"'), `an admin password (the node has none): 401, no counts (got ${r.status})`);
         resetAdminAuthTarpit();
         r = await send('GET', route, signed(mem, 'GET', route));
         assert(r.status === 401 && !r.body.includes('"series"'), `a member's signature: 401, no counts (got ${r.status})`);
@@ -336,20 +331,16 @@ async function main(): Promise<void> {
         assert(JSON.stringify(Object.keys(body.series[0]).sort()) === JSON.stringify(['day', 'uniques', 'visits']), 'each day is (day, visits, uniques) only');
 
         resetAdminAuthTarpit();
-        // Step 7c: with 2FA off the owner's password alone is refused (as needing 2FA, not as a wrong one); with 2FA on, it
-        // and a fresh code read the counts. 2FA goes off again after.
-        r = await send('GET', route, { 'X-Admin-Password': PW });
-        assert(r.status === 403 && JSON.parse(r.body).code === 'password_needs_2fa' && !r.body.includes('"series"'),
-            `the owner's password alone, 2FA off: 403 password_needs_2fa, no counts (got ${r.status})`);
-        const tfa = turnOn2faForTests(PW);
+        // The owner, signed in with her key, reads the counts too.
+        const ownerSid = keySession(olive);
+        assert(!!ownerSid, 'the owner signs in with her key');
         for (const [q, want] of [['0', 1], ['7', 7], ['9999', 400], ['abc', 30], ['-5', 1]] as const) {
-            r = await send('GET', `${route}?days=${q}`, tfa.headers());
+            r = await send('GET', `${route}?days=${q}`, { 'X-Admin-Session': ownerSid! });
             body = JSON.parse(r.body);
-            assert(r.status === 200 && body.days === want && body.series.length === want, `the owner's password, days=${q}: ${want} days (got ${r.status}, ${body.days})`);
+            assert(r.status === 200 && body.days === want && body.series.length === want, `the owner's key session, days=${q}: ${want} days (got ${r.status}, ${body.days})`);
         }
-        r = await send('POST', route, { ...tfa.headers(), 'Content-Type': 'application/json' });
+        r = await send('POST', route, { 'X-Admin-Session': ownerSid!, 'Content-Type': 'application/json' });
         assert(r.status === 404 || r.status === 405, `read-only: a POST is no route (got ${r.status})`);
-        updateLocalConfig({ totpEnabled: false, totpSecret: null });
     }
 
     // ── 5. the prune ────────────────────────────────────────────────────────────────────────────

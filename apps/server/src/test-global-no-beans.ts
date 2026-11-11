@@ -32,7 +32,6 @@ delete process.env.CF_RECORD_NAME;
 // Whatever the shell running the suite has set, the suite starts from a node with no profile configured.
 delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
-process.env.ADMIN_PASSWORD = 'Global-No-Beans-Admin-83!';
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -100,8 +99,6 @@ async function main() {
     console.log('── 1. a fresh local node with nodeProfile.beans=false ──');
     initSchema();
     setOverride('beans', 'false');
-    const { initAdminPassword } = await import('./config/local-config.js');
-    initAdminPassword();
     const se = await import('./state-engine.js');
     const boot1 = await capture(() => se.initStateEngine());
     assert(!boot1.error, `the node boots (${String(boot1.error ?? 'ok')})`);

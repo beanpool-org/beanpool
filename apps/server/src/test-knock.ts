@@ -77,10 +77,9 @@ import { registerMemberInternal } from './engine/members.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
 import * as knockEngine from './engine/knocks.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { seedOwnerForTests, ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
@@ -89,7 +88,6 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const ADMIN_PW = 'Knock-Knock-Admin-Pw-62!';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 let run = 0, passed = 0;
@@ -131,9 +129,9 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }
     return { status: res.status, body: parsed, text };
 }
-// Step 7c: with 2FA off the password alone opens no admin route. main() turns 2FA on (no member is seeded, so no count
-// below moves) and the operator's calls send the password with a fresh code.
-let adminHeaders: () => Record<string, string> = () => ({ 'X-Admin-Password': ADMIN_PW });
+// The operator's calls: an owner's key session from the phone's Manage hand-off, opened for each call (the node has no
+// admin password). main() seeds that owner, a member of its own who never knocks or answers a knock.
+let adminHeaders: () => Record<string, string> = () => ({});
 const admin = (method: 'GET' | 'POST', path: string, body?: unknown) =>
     call(null, method, path, body, { headers: adminHeaders() });
 
@@ -187,9 +185,6 @@ function jpegWithXmp(marker: string): string {
 async function main(): Promise<void> {
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    adminHeaders = turnOn2faForTests(ADMIN_PW).headers;
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     // The tidy-up runs every minute by itself. Here it runs only when section 15 calls it: the sections before set a
@@ -210,6 +205,8 @@ async function main(): Promise<void> {
     adminSetUserStatus(quiet.pk, 'disabled');
     purgeMemberSelf(leaver.pk);
     completeRekey(rekeyed.pk, rekeyedNew.pk, issueRekeyCode(rekeyed.pk, 'owner:password').code, 'owner:password');
+    const operator = seedOwnerForTests('Operator');
+    adminHeaders = () => ownerPhoneSessionHeaders(operator);
 
     // Applicants: nobody here.
     const ann = newId('Ann');      // approved, redeems

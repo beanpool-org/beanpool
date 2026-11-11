@@ -44,7 +44,6 @@ async function main(): Promise<void> {
     // After the environment above: ENFORCE_LEDGER_AUTH is read when engine/sync.ts loads.
     const core = await import('@beanpool/core');
     const { ed25519 } = await import('@noble/curves/ed25519.js');
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const se = await import('./state-engine.js');
@@ -56,7 +55,6 @@ async function main(): Promise<void> {
     const { setSignatureSwitchClockForTests, UNCONFIGURED_HOSTS_UNTIL } = await import('./engine/member-signature.js');
 
     console.log('A format-2 Beans send stays re-verifiable on a backup (ENFORCE_LEDGER_AUTH=true)\n');
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);

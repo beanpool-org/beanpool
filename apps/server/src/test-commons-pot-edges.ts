@@ -21,7 +21,6 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestAdmin123!';
 
 import crypto from 'node:crypto';
 import { generateKeyPair } from '@libp2p/crypto/keys';

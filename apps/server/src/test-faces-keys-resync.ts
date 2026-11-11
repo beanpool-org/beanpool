@@ -50,13 +50,11 @@ async function child(): Promise<void> {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     delete process.env.CF_API_TOKEN;
     delete process.env.CF_ZONE_ID;
-    const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
 
-    initAdminPassword();
     await initTls();
     se.initStateEngine();
     const port = await startHttpsServer(0);
@@ -132,7 +130,7 @@ let seq = 0;
 function boot(env: Record<string, string | undefined>, dir: string): Promise<Node> {
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, dir);
     fs.mkdirSync(dataDir, { recursive: true });
-    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ADMIN_PASSWORD: PW };
+    const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir };
     for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE', 'PRIVATE_PREVIEW']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });

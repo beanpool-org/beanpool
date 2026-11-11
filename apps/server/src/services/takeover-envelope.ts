@@ -70,30 +70,13 @@ function envelopePath(): string {
 
 // ── What is sealed (§2.1) ──────────────────────────────────────────────────────────────────
 
-/** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials.
- *  `passwordRetired` is never copied plain: {@link bundledLocalConfigUpdates} merges it. */
-export const BUNDLED_LOCAL_CONFIG_FIELDS = [
-    'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode', 'passwordRetired',
-] as const;
-
 /**
- * What a take-over (`admin-settings`) and a sealed-backup restore write into this server's local-config from a bundle.
- * The admin password's retirement is sticky: retired when the bundle says so OR this server already is (a bundle
- * sealed before the retirement carries no such field), and then no hash, salt or the 2FA that guarded the password
- * come with it. So an older envelope or backup never brings a retired password back, and a restore never clears the
- * flag. A server that never saw the retirement, given a bundle sealed before it, cannot learn of it from that bundle.
+ * The bundle's `localConfig`: empty. It held the community's admin password (its hash and salt), the 2FA that guarded it,
+ * break-glass mode and the password's retirement; the node has no admin password now (Marty, 11 Nov 2026). It stays in
+ * the bundle, empty, so every reader finds the shape it checks (services/sealed-backup.ts); what an older server's bundle
+ * still carries there is never read.
  */
-export function bundledLocalConfigUpdates(
-    bundled: Record<string, unknown>, current: Record<string, unknown>,
-): Record<string, unknown> {
-    const updates: Record<string, unknown> = {};
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = bundled[f] ?? null;
-    updates.passwordRetired = bundled.passwordRetired || current.passwordRetired || null;
-    if (updates.passwordRetired) {
-        Object.assign(updates, { adminHash: null, salt: null, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-    }
-    return updates;
-}
+export type BundledLocalConfig = Record<string, never>;
 
 /**
  * Identity files, raw bytes as base64 so a take-over writes back exactly what was read.
@@ -121,7 +104,7 @@ export interface TakeoverBundle {
     /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all, and one sealed before
      *  the open door's key was a file no `open-join.key` entry. */
     files: Record<(typeof BUNDLED_FILES)[number], string | null>;
-    localConfig: Record<(typeof BUNDLED_LOCAL_CONFIG_FIELDS)[number], unknown>;
+    localConfig: BundledLocalConfig;
     /** The raw table: a standby does not replicate roles (backups-and-replicas.md), so without these a promoted
      *  node has no owners and key sign-in fails. */
     nodeRoles: {
@@ -232,8 +215,7 @@ function readRegistrarNames(): unknown[] {
 
 function buildBundle(files: TakeoverBundle['files']): TakeoverBundle {
     const config = getLocalConfig() as any;
-    const localConfig = {} as TakeoverBundle['localConfig'];
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) localConfig[f] = config[f] ?? null;
+    const localConfig: BundledLocalConfig = {};
     const nodeRoles = db.prepare(
         `SELECT member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
          FROM node_roles ORDER BY member_pubkey`,

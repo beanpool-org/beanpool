@@ -317,7 +317,7 @@ async function main(): Promise<void> {
     try {
         console.log('A node checks each of its addresses from outside\n');
         const P = await spawnNode(SCRIPT, path.join(root, 'p'), {
-            ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: addresses.join(','), PUBLIC_ADDRESS_AUTO: undefined, PUBLIC_ADDRESS_NAME: undefined,
+            NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: addresses.join(','), PUBLIC_ADDRESS_AUTO: undefined, PUBLIC_ADDRESS_NAME: undefined,
             CF_RECORD_NAME: undefined, CF_API_TOKEN: undefined, CF_ZONE_ID: undefined, BEANPOOL_TEST_EDGE_ORIGIN: edge.origin, BEANPOOL_SSRF_TEST_HOOK: '1',
             BEANPOOL_TEST_DNS_SERVER: dns.address, NODE_TLS_REJECT_UNAUTHORIZED: undefined,
         });

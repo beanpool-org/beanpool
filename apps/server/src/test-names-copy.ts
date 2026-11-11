@@ -27,12 +27,14 @@ import crypto from 'node:crypto';
 import { emptyNamesPin, makeNamesCopy, namesPinForNextCopy, NAMES_COPY_MAX_BYTES, type NamesCopy, type NamesPin } from '@beanpool/core';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState } from './state-engine.js';
+import { initStateEngine, exportSyncState, broadcast } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
+import { registerMemberInternal } from './engine/members.js';
+import { grantNodeRole } from './engine/node-roles.js';
+import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setNodeRole } from './config/node-role.js';
@@ -41,10 +43,8 @@ import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-
 
 let BASE = '';
 let COMMUNITY = '';
-const ADMIN_PW = 'Names-Copy-Admin-Pw-62!';
-// Step 7c: the password alone opens no admin route with 2FA off, so the suite turns 2FA on and sends a code with it.
-let twoFa: ReturnType<typeof turnOn2faForTests>;
-const PASSWORD = () => twoFa.headers();
+/** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
+let OWNER: () => Record<string, string> = () => ({});
 const ADDRESS = 'https://copytown.example.org';
 
 let run = 0, passed = 0;
@@ -118,23 +118,24 @@ async function main(): Promise<void> {
     COMMUNITY = (await ensureGenesis()).communityId;
     await initTls();
     initStateEngine();
-    const { hash, salt } = hashPassword(ADMIN_PW);
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    // The node has no admin password: Owen claims the community as its claim code lets the first phone do (claim-code.ts
+    // claimNode: his member row, then the owner role), and makes the other roles with his key.
     const owen = newId('Owen');
-    require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
+    const claim = claimGrantor(crypto.randomBytes(4).toString('hex'));
+    require_(!!registerMemberInternal(broadcast, owen.pk, owen.name, null, claim), 'Owen claims the community: its first member');
+    grantNodeRole(owen.pk, 'owner', claim);
+    OWNER = () => ownerPhoneSessionHeaders(owen.pk);
     const others = ['Ada', 'Abe', 'Bea', 'Nia', 'Kit', 'Rex', 'Dee', 'Mo', 'Mel'].map(newId);
     const [ada, abe, bea, nia, kit, rex, dee, mo, mel] = others;
     for (const who of others) {
         const made = await generate(owen);
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
-    for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [abe, 'admin'], [bea, 'admin'], [nia, 'admin'], [kit, 'admin'], [rex, 'admin'], [dee, 'admin'], [mo, 'moderator']] as const) {
-        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD());
+    for (const [who, role] of [[ada, 'admin'], [abe, 'admin'], [bea, 'admin'], [nia, 'admin'], [kit, 'admin'], [rex, 'admin'], [dee, 'admin'], [mo, 'moderator']] as const) {
+        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, OWNER());
         require_(granted.status === 200, `${who.name} is made ${role} (${show(granted)})`);
     }
     const [owenP, adaP, abeP, beaP, niaP, kitP, rexP, deeP] = [owen, ada, abe, bea, nia, kit, rex, dee].map((i) => new Phone(i));
@@ -227,13 +228,13 @@ async function main(): Promise<void> {
 
     // ── 13. Lifecycle ────────────────────────────────────────────────────────────────────────────
     for (const [who, p] of [[nia, niaP], [kit, kitP], [rex, rexP], [dee, deeP]] as const) require_((await putCopy(who, p.next())).status === 200, `13. ${who.name} saves a copy`);
-    const demoted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: dee.pk, role: 'moderator' }, PASSWORD());
+    const demoted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: dee.pk, role: 'moderator' }, OWNER());
     require_(demoted.status === 200, `13. Dee is made a moderator (${show(demoted)})`);
     await state(owen);
     assert(!!copyRow(dee.pk), '13. demoted: Dee\'s row is kept');
     // An admin removes a member outright only where community votes are switched off (removal by vote S3).
     setSwitchOverride('decisions', false);
-    const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, PASSWORD());
+    const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, OWNER());
     setSwitchOverride('decisions', true);
     require_(pruned.status === 200, `13. Nia is removed (${show(pruned)})`);
     assert(!copyRow(nia.pk), '13. removed: Nia\'s row is gone');

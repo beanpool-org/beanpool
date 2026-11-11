@@ -2,26 +2,27 @@
  * Integration tests for admin thresholds endpoints (/api/admin/thresholds and /api/admin/thresholds/get).
  *
  * Verifies:
- * 1. POST /api/admin/thresholds/get returns current thresholds and defaults when authenticated via x-admin-password header.
- * 2. POST /api/admin/thresholds/get rejects unauthenticated or invalid auth requests with 401.
- * 3. POST /api/admin/thresholds updates valid threshold keys when correct password is provided in body.
- * 4. POST /api/admin/thresholds rejects updates with invalid password with 401.
+ * 0. The node has no admin password: an old one in the X-Admin-Password header or the body opens neither route (401).
+ * 1. POST /api/admin/thresholds/get returns current thresholds and defaults to an owner's automation token.
+ * 2. POST /api/admin/thresholds/get rejects unauthenticated requests with 401.
+ * 3. POST /api/admin/thresholds rejects updates with a wrong token with 401.
+ * 4. POST /api/admin/thresholds updates valid threshold keys for an owner's token.
  * 5. POST /api/admin/thresholds ignores unknown/disallowed keys, the circulation rate and its epoch among them: read by
  *    nothing that moves Beans, they are no threshold any more (How this community works S3, the design's Q10). One stored
  *    before is never read, and leaves the file at the next save.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-process.env.ADMIN_PASSWORD = 'TestThresholdsAdmin123!';
 
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import { initAdminPassword, getThresholds, DEFAULT_THRESHOLDS, getLocalConfig, updateLocalConfig } from './config/local-config.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { getThresholds, DEFAULT_THRESHOLDS, getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
+/** What an older install's admin password looked like: no credential now. */
 const PW = 'TestThresholdsAdmin123!';
 
 let run = 0, passed = 0;
@@ -32,29 +33,27 @@ function assert(cond: boolean, msg: string): void {
 
 async function main() {
     console.log('Running admin thresholds endpoint tests...\n');
-    initAdminPassword();
 
     await initTls();
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
-    // Step 7c: with the node's 2FA off the password alone opens no admin route (header or body); from then on 2FA is on
-    // and each password goes with a code.
+    // 0. The node has no admin password: one sent in the header or the body is no credential.
     const aloneHeader = await fetch(`${BASE}/api/admin/thresholds/get`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': PW } });
     const aloneHeaderBody = await aloneHeader.json() as any;
-    assert(aloneHeader.status === 403 && aloneHeaderBody.code === 'password_needs_2fa' && aloneHeaderBody.thresholds === undefined,
-        `2FA off: thresholds/get with the password header alone → 403 password_needs_2fa (got ${aloneHeader.status})`);
+    assert(aloneHeader.status === 401 && aloneHeaderBody.notSignedIn === true && aloneHeaderBody.thresholds === undefined,
+        `thresholds/get with a password header → 401 notSignedIn (got ${aloneHeader.status})`);
     const aloneBody = await fetch(`${BASE}/api/admin/thresholds`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: PW, inactiveMemberDays: 70 }) });
-    assert(aloneBody.status === 403 && getThresholds().inactiveMemberDays !== 70,
-        `2FA off: thresholds update with the body password alone → 403, nothing changed (got ${aloneBody.status})`);
-    const tfa = turnOn2faForTests(PW);
+    assert(aloneBody.status === 401 && getThresholds().inactiveMemberDays !== 70,
+        `thresholds update with a body password → 401, nothing changed (got ${aloneBody.status})`);
+    const asOwner = ownerTokenHeaders('admin');
 
     // 1. Test POST /api/admin/thresholds/get with valid admin header auth
     const getResOk = await fetch(`${BASE}/api/admin/thresholds/get`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            ...tfa.headers(),
+            ...asOwner,
         },
     });
     assert(getResOk.status === 200, `POST /api/admin/thresholds/get with valid auth returns 200 (got ${getResOk.status})`);
@@ -70,24 +69,24 @@ async function main() {
     });
     assert(getResNoAuth.status === 401, `POST /api/admin/thresholds/get without auth returns 401 (got ${getResNoAuth.status})`);
 
-    // 3. Test POST /api/admin/thresholds with invalid password
+    // 3. Test POST /api/admin/thresholds with a wrong token
     const postResBadPw = await fetch(`${BASE}/api/admin/thresholds`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: 'WrongPassword123!', inactiveMemberDays: 50 }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer bp_${'0'.repeat(12)}_${'0'.repeat(64)}` },
+        body: JSON.stringify({ inactiveMemberDays: 50 }),
     });
-    assert(postResBadPw.status === 401, `POST /api/admin/thresholds with bad password returns 401 (got ${postResBadPw.status})`);
+    assert(postResBadPw.status === 401 && getThresholds().inactiveMemberDays !== 50, `POST /api/admin/thresholds with a wrong token returns 401 (got ${postResBadPw.status})`);
 
-    // 4. Test POST /api/admin/thresholds with valid password and valid threshold updates. A circulation rate stored before
+    // 4. Test POST /api/admin/thresholds with an owner's token and valid threshold updates. A circulation rate stored before
     //    S3 is in the file: never read, and gone after the save.
     updateLocalConfig({ thresholds: { ...DEFAULT_THRESHOLDS, circulationRate: 0.02, circulationEpochDays: 20 } as any });
     assert(!('circulationRate' in getThresholds()), 'a circulation rate stored before is never read');
     const postResOk = await fetch(`${BASE}/api/admin/thresholds`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PW, totpCode: tfa.code(), inactiveMemberDays: 80, unknownKey: 999, circulationRate: 0.08 }),
+        headers: { 'Content-Type': 'application/json', ...asOwner },
+        body: JSON.stringify({ inactiveMemberDays: 80, unknownKey: 999, circulationRate: 0.08 }),
     });
-    assert(postResOk.status === 200, `POST /api/admin/thresholds with valid password returns 200 (got ${postResOk.status})`);
+    assert(postResOk.status === 200, `POST /api/admin/thresholds with an owner's token returns 200 (got ${postResOk.status})`);
     const postBodyOk = await postResOk.json() as any;
     assert(postBodyOk.thresholds?.inactiveMemberDays === 80, 'Threshold inactiveMemberDays updated successfully');
     assert(postBodyOk.thresholds?.unknownKey === undefined, 'Unknown threshold keys filtered out');

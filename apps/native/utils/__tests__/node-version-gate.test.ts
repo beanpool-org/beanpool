@@ -450,7 +450,7 @@ const serverSource = (rel: string) => fs.readFileSync(path.resolve(__dirname, '.
 
 /**
  * The 426 the server answers an app it refuses, read from the server itself: its code and its sentence from
- * engine/member-signature.ts (APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, the refusal `unboundRefusal` builds), in the shape its
+ * engine/member-signature.ts (APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, the refusal `oldShapeRefusal` builds), in the shape its
  * signature check answers with (https-server.ts): the sentence in `error`, the code in `code`.
  */
 function serverAppTooOld(): { error: string; code: string } {

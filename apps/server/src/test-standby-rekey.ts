@@ -60,7 +60,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -426,9 +426,7 @@ async function call(port: number, id: Id | null, method: 'GET' | 'POST', route: 
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 async function main(): Promise<void> {

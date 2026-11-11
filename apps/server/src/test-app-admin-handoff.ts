@@ -31,7 +31,7 @@ import { REKEY_OWN_KEY } from './engine/member-wizards.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -91,7 +91,7 @@ async function requestLink(signer: Identity, claimedPubkey = signer.pub, totpCod
     return postJson('/api/local/admin/auth/verify-challenge', {
         challengeId: chal.body.challengeId,
         memberPubkey: claimedPubkey,
-        signature: signText(signer, chal.body.challenge),
+        ...adminSigninFields(signer.priv, chal.body.challengeId, undefined, 'base64'),
         ...(totpCode ? { totpCode } : {}),
     });
 }
@@ -317,7 +317,7 @@ async function main() {
 
         // Sanity: the direct API agrees about the wrong-key case (no HTTP in between).
         const c = createAdminChallenge();
-        const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(member, c.challenge) });
+        const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, ...adminSigninFields(member.priv, c.challengeId, undefined, 'base64') });
         assert(direct.ok === false && !direct.handshakeToken, 'verifyAndSolveChallenge refuses a signature from another key');
     }
 

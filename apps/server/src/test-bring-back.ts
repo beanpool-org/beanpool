@@ -61,6 +61,7 @@ import { setRecoveryCopies, NO_COPIES_HERE } from './config/recovery-copies.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { ensureRecoverySealKey, installCarriedRecoverySealKey, recoverySealKeyPath, rewrapCommunityCopiesFromRetiredKeys } from './services/recovery-seal-key.js';
 import { BRING_BACK_NO_COPY, BRING_BACK_OWN_KEY, BRING_BACK_GONE, BRING_BACK_NEEDS_NUMBER, BRING_BACK_CANT_OPEN } from './engine/bring-back.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 const HOST = 'mullum.test';
 
@@ -103,8 +104,8 @@ const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(
 
 function keySession(kp: Keypair): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId, HOST);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`challenge refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!, Date.now(), {});
     if (!ex.ok) throw new Error(`handshake refused: ${ex.error}`);

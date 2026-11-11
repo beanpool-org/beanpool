@@ -34,6 +34,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { logger } from './logger.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '', WSS = '';
 let run = 0, passed = 0;
@@ -57,8 +58,8 @@ function seedMember(callsign: string): Who {
 interface Session { sessionId: string; csrf: string }
 function keySession(who: Who): Session {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), who.priv).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: who.pub, signature });
+    const { signature, signedFor } = adminSigninFields(who.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: who.pub, signature, signedFor });
     if (!solved.ok) throw new Error(solved.error);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(ex.error);

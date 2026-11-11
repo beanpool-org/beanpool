@@ -17,29 +17,30 @@
  *     for named.test with that nonce and timestamp is accepted); a /ws token → 401, nonce unspent (re-signed for
  *     named.test it opens); a Manage sign-in → 421, no session, the challenge still open (signed for named.test it
  *     opens one). /api/community/info lists named.test and no loopback name.
- *  2. The old format (bound to no community) is untouched on N before the switch: a send, a socket and the old
- *     Manage sign-in form work as they did. This change is about format-2 audiences only.
+ *  2. The old format (bound to no community) is refused on N, as on every node since the cutover (1.4.0, CUT4): a send
+ *     gets 426 app_too_old and moves nothing, a /ws token reads as unsigned (401: ENFORCE_WS_AUTH=true), and the old
+ *     Manage sign-in form gets 426 with no session. Loopback changes nothing for it.
  *  3. A node named only by BEANPOOL_ADDRESSES (E), only by an owner-confirmed address (O), only by a registrar name
  *     (R): loopback → 421 with the nonce unspent; its own name → accepted.
- *  4. U, a node with none of those (a developer's): loopback and the rest of 127.0.0.0/8 are accepted, also after the
- *     switch (while a host it doesn't know is refused then); a /ws token and a Manage sign-in for 127.0.0.1 work.
+ *  4. U, a node with none of those (a developer's): loopback and the rest of 127.0.0.0/8 are accepted, also from the
+ *     date (while a host it doesn't know is refused then); a /ws token and a Manage sign-in for 127.0.0.1 work.
  *     Loopback is never listed: not in /api/community/info, not among the addresses Settings offers to confirm or
  *     holds back.
  *  5. L, named (optin.test) with BEANPOOL_ADDRESSES=localhost, 127.0.0.1, [::1], ::1: the explicit way in. Those three
  *     are accepted and 127.0.0.2 is not; Settings lists them as set on the server; /api/community/info still lists
  *     only optin.test; the log names the bare ::1 as left out and gives its bracketed form.
  *  6. Z, with ONLY BEANPOOL_ADDRESSES=localhost (an owner who followed the SSH-tunnel advice on a node with no other
- *     name): still a node that knows none of its names (4113741087). Before the switch it accepts its domain
+ *     name): still a node that knows none of its names (4113741087). Before the date it accepts its domain
  *     (community.example.org) and a home-network address as it did with nothing set, and localhost and 127.0.0.1;
   *     Settings says it has no name, offers the domain to confirm (Settings open at it) and lists localhost as set on
  *     the server;
- *     /api/community/info lists nothing. After the switch the domain is refused, localhost and the home network not.
+ *     /api/community/info lists nothing. From the date the domain is refused, localhost and the home network not.
  *  7. T, named (tunnel.test) with BEANPOOL_ADDRESSES=localhost: localhost and tunnel.test are accepted; the domain,
  *     a home-network address and 127.0.0.1 (not listed) are refused with the nonce unspent. Settings says it has a
  *     name and offers nothing.
  *
- * The nodes' switch clocks are pinned just before the switch (unboundSignaturesCutoff), except where a step moves one
- * past it, so the suite holds for any date.
+ * The nodes' clocks are pinned just before the one date left (engine/member-signature.ts UNCONFIGURED_HOSTS_UNTIL),
+ * except where a step moves one past it, so the suite holds for any date.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-loopback-audience.ts
  */
@@ -59,7 +60,7 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const LOOPBACK = ['127.0.0.1', 'localhost', '[::1]'];
 /** The story's figures are Beans; the node's are whole hundredths: `hc` turns one into the other at the door. */
 const hc = (beans: number) => Math.round(beans * 100);
-/** The switch (ms), read from the nodes once they are up. */
+/** UNCONFIGURED_HOSTS_UNTIL (ms), read from the nodes once they are up. */
 let SWITCH = 0;
 
 // ── The node processes ─────────────────────────────────────────────────────────────────────
@@ -116,7 +117,7 @@ async function child(): Promise<void> {
         balance: (a: { pk: string }) => (db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').get(a.pk) as { balance_c: number } | undefined)?.balance_c ?? null,
         transfers: (a: { memo: string }) => (db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE memo = ?').get(a.memo) as { n: number }).n,
         nonceSpent: (a: { nonce: string }) => ms.requestNonces.isSpent(a.nonce),
-        switchCutoff: () => ms.unboundSignaturesCutoff(),
+        switchCutoff: () => Date.parse(`${ms.UNCONFIGURED_HOSTS_UNTIL}T00:00:00Z`),
         switchClock: (a: { at: number | null }) => {
             ms.setSignatureSwitchClockForTests(a.at === null ? null : () => a.at as number);
             return true;
@@ -176,7 +177,6 @@ function startNode(name: string, env: Record<string, string | undefined>): Promi
     const dataDir = path.join(process.env.BEANPOOL_DATA_DIR!, name);
     fs.mkdirSync(dataDir, { recursive: true });
     const childEnv: NodeJS.ProcessEnv = { ...process.env, BEANPOOL_DATA_DIR: dataDir };
-    // ACCEPT_UNBOUND_SIGNATURES_UNTIL is kept: a date set for the run is every node's switch.
     for (const k of ['CF_RECORD_NAME', 'BEANPOOL_ADDRESSES', 'ENFORCE_WS_AUTH', 'ENFORCE_READ_AUTH', 'NODE_PROFILE', 'NODE_ROLE']) delete childEnv[k];
     Object.assign(childEnv, env);
     const proc = spawn(process.execPath, [...process.execArgv, SCRIPT, '--child'], { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
     const challenge = async (node: Node) => (await call(node, 'POST', '/api/local/admin/auth/challenge', {}, '{}')).body;
     const verifySignin = (node: Node, body: Record<string, unknown>) =>
         call(node, 'POST', '/api/local/admin/auth/verify-challenge', {}, JSON.stringify(body));
-    /** A node's switch clock just before the switch. */
+    /** A node's clock just before UNCONFIGURED_HOSTS_UNTIL. */
     const beforeSwitch = (n: Node) => n.send('switchClock', { at: SWITCH - 1 });
     const wrongCommunity = (r: Reply) => r.status === 421 && r.body?.code === 'wrong_community';
 
@@ -341,9 +341,9 @@ async function main(): Promise<void> {
         await O.send('nodeConfig', { ownerAddresses: ['owner.test'] });
         await R.send('nodeConfig', { publicAddress: { name: 'reg.test', mode: 'direct', status: 'live' } });
         const cutoff = await N.send('switchCutoff');
-        if (typeof cutoff !== 'number') throw new Error('N refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
+        if (!Number.isFinite(cutoff)) throw new Error('N names no UNCONFIGURED_HOSTS_UNTIL: this suite needs the date');
         SWITCH = cutoff;
-        console.log(`the switch: ${new Date(SWITCH).toISOString()}; the nodes' clocks are pinned just before it`);
+        console.log(`UNCONFIGURED_HOSTS_UNTIL: ${new Date(SWITCH).toISOString()}; the nodes' clocks are pinned just before it`);
         for (const n of [N, E, O, R, U, L, Z, T]) await beforeSwitch(n);
 
         // ── 1. A node named by CF_RECORD_NAME ──
@@ -389,18 +389,20 @@ async function main(): Promise<void> {
             assert(JSON.stringify(info.body?.addresses) === JSON.stringify(['named.test']), `/api/community/info lists named.test and no loopback name (${JSON.stringify(info.body?.addresses)})`);
         });
 
-        // ── 2. The old format is untouched ──
-        console.log('\n— 2. the old format, bound to no community, is untouched before the switch —');
+        // ── 2. The old format is refused ──
+        console.log('\n— 2. the old format, bound to no community, is refused: 426 app_too_old (CUT4) —');
         await section('2', async () => {
             await N.send('resetLimits');
             const before = await N.send('balance', { pk: xan.pk });
             const r = await sendTo(N, 'POST', unbound(mia, 'POST', '/api/ledger/transfer', { from: mia.pk, to: xan.pk, amount_c: hc(1), memo: 'old app send' }));
-            assert(r.status === 200 && (await N.send('balance', { pk: xan.pk })) === before + hc(1), `an old-format Beans send is accepted at N (${show(r)})`);
+            assert(r.status === 426 && r.body?.code === 'app_too_old' && /too old/.test(r.body?.error) && (await N.send('balance', { pk: xan.pk })) === before,
+                `an old-format Beans send at N → 426 app_too_old, and nothing moves (${show(r)})`);
             const s = await socket(N, oldWsQuery(mia));
-            assert(s.kind === 'open', `an old-format /ws token opens a member socket at N (ENFORCE_WS_AUTH=true) (${sockShow(s)})`);
+            assert(s.kind === 'status' && s.status === 401, `an old-format /ws token at N (ENFORCE_WS_AUTH=true) reads as unsigned: 401 (${sockShow(s)})`);
+            if (s.kind === 'open') s.ws.terminate();
             const ch = await challenge(N);
             const old = await verifySignin(N, { challengeId: ch.challengeId, memberPubkey: owner.pk, signature: Buffer.from(ed25519.sign(core.utf8Bytes(ch.challenge), owner.seed)).toString('base64') });
-            assert(old.status === 200 && old.body?.handshakeToken, `the old Manage sign-in form opens a session (${show(old)})`);
+            assert(old.status === 426 && old.body?.code === 'app_too_old' && !old.body?.handshakeToken, `the old Manage sign-in form → 426 app_too_old, no session (${show(old)})`);
         });
 
         // ── 3. Each other source of a name ──
@@ -422,7 +424,7 @@ async function main(): Promise<void> {
                 assert(r.status === 200 && r.body?.publicKey === mia.pk, `a read signed for ${host} is accepted (${show(r)})`);
             }
             const offered = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
-            assert(offered.status === 200, `(and one for community.example.org, before the switch) (${show(offered)})`);
+            assert(offered.status === 200, `(and one for community.example.org, before the date) (${show(offered)})`);
             const s = await socket(U, await core.buildBoundWsParams({ wsUrl: 'wss://127.0.0.1:8443/ws', publicKeyHex: mia.pk, sign: mia.sign }));
             assert(s.kind === 'open', `a /ws token signed for 127.0.0.1 opens a member socket (ENFORCE_WS_AUTH=true) (${sockShow(s)})`);
             const ch = await challenge(U);
@@ -431,7 +433,7 @@ async function main(): Promise<void> {
 
             await U.send('switchClock', { at: SWITCH + 1000 });
             const late = await sendTo(U, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
-            assert(late.status === 421, `after the switch, community.example.org (not confirmed) is refused (${show(late)})`);
+            assert(late.status === 421, `from the date, community.example.org (not confirmed) is refused (${show(late)})`);
             for (const host of LOOPBACK) {
                 const r = await sendTo(U, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
                 assert(r.status === 200, `while a read signed for ${host} is still accepted (${show(r)})`);
@@ -479,7 +481,7 @@ async function main(): Promise<void> {
             await Z.send('resetLimits');
             for (const host of ['community.example.org', '192.168.1.20', 'localhost', '127.0.0.1']) {
                 const r = await sendTo(Z, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
-                assert(r.status === 200 && r.body?.publicKey === mia.pk, `before the switch, a read signed for ${host} is accepted (${show(r)})`);
+                assert(r.status === 200 && r.body?.publicKey === mia.pk, `before the date, a read signed for ${host} is accepted (${show(r)})`);
             }
             // Settings offers with one tap only the host it is open at itself (engine/address-offers.ts): asked as
             // Settings open at community.example.org asks (?host=).
@@ -499,7 +501,7 @@ async function main(): Promise<void> {
 
             await Z.send('switchClock', { at: SWITCH + 1000 });
             const late = await sendTo(Z, 'GET', await bound(mia, 'GET', 'https://community.example.org/api/community/me'));
-            assert(wrongCommunity(late), `after the switch, community.example.org (not confirmed) is refused (${show(late)})`);
+            assert(wrongCommunity(late), `from the date, community.example.org (not confirmed) is refused (${show(late)})`);
             for (const host of ['localhost', '127.0.0.1', '192.168.1.20']) {
                 const r = await sendTo(Z, 'GET', await bound(mia, 'GET', `https://${host}/api/community/me`));
                 assert(r.status === 200, `while a read signed for ${host} is still accepted (${show(r)})`);

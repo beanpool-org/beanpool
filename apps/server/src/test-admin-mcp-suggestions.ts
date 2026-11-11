@@ -38,7 +38,7 @@ import { issueAutomationToken } from './automation-tokens.js';
 import { db } from './db/db.js';
 import { resetAgentLimits } from './agent/limits.js';
 import { fileSuggestion, openSuggestions, SUGGESTION_TTL_MS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY } from './agent/suggestions.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -73,7 +73,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return (await call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } })).sessionId;
 }

@@ -97,7 +97,7 @@ Once your server has an address, it accepts only its listed ones. It refuses loc
 
 A confirmed address travels with the take-over keys, so a standby that takes over accepts it too.
 
-**Old apps.** The list also says how many apps too old to name a community reached your server today. Until the date shown, they keep working. After it, your server refuses them, and their members see a message asking them to update BeanPool from the app store. If the number stays high as the date comes near, remind your members to update.
+**Old apps.** From BeanPool 1.4.0, your server refuses an app too old to name a community (one from before late September 2026), whatever the date. What that app signs is answered as too old, except what anyone may read without signing in, and its member sees a message asking them to update BeanPool from the app store. The list says so, and counts no such app. The date shown on the list is only for a server with no address (above).
 
 ## Node identity and the directory
 

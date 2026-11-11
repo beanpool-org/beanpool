@@ -42,7 +42,6 @@ import {
     createPairing,
     describePairing,
     redeemPairing,
-    pairingMessage,
     bindingCookieName,
     resetPairingsForTests,
     PAIRING_TTL_MS,
@@ -50,6 +49,7 @@ import {
     PAIRING_MAX_REFUSALS,
     PAIRING_CONFIRM_TTL_MS,
 } from './settings-signin-pairing.js';
+import { settingsSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -119,7 +119,7 @@ async function approve(pairingId: string, shortCode: string, signer: Identity, o
     const r = await call('POST', `/api/local/admin/auth/pairing/${pairingId}/approve`, {
         body: {
             memberPubkey: opts.claimed ?? signer.pub,
-            signature: signText(signer, pairingMessage('approve', pairingId, shortCode)),
+            ...settingsSigninFields(signer.priv, 'approve', pairingId, shortCode),
             ...(opts.totpCode ? { totpCode: opts.totpCode } : {}),
             ...(opts.olderApp ? {} : { confirm: true }),
         },
@@ -285,7 +285,7 @@ async function main() {
         const b = await newPairing();
         const body = {
             memberPubkey: owner.pub,
-            signature: signText(owner, pairingMessage('approve', b.pairingId, b.shortCode)),
+            ...settingsSigninFields(owner.priv, 'approve', b.pairingId, b.shortCode),
             confirm: true,
         };
         const first = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, { body, headers: via(freshIp()) });
@@ -300,7 +300,7 @@ async function main() {
         assert((await poll(b2)).body.status === 'waiting', 'and that other pairing is still waiting');
 
         const wrongCode = await call('POST', `/api/local/admin/auth/pairing/${b2.pairingId}/approve`, {
-            body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', b2.pairingId, 'AAAAAA')), confirm: true },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', b2.pairingId, 'AAAAAA'), confirm: true },
             headers: via(freshIp()),
         });
         assert(wrongCode.status === 403, 'an approval over a different short code is refused');
@@ -349,7 +349,7 @@ async function main() {
         const late = approvePairing({
             pairingId: b.pairingId,
             memberPubkey: owner.pub,
-            signature: signText(owner, pairingMessage('approve', b.pairingId, b.shortCode)),
+            ...settingsSigninFields(owner.priv, 'approve', b.pairingId, b.shortCode),
             now: Date.now() + PAIRING_TTL_MS + 1_000,
         });
         assert(!late.ok && late.reason === 'expired', 'an approval after two minutes is refused');
@@ -396,12 +396,12 @@ async function main() {
     {
         const b = await newPairing();
         const badDecline = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/decline`, {
-            body: { memberPubkey: owner.pub, signature: signText(member, pairingMessage('decline', b.pairingId, b.shortCode)) },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(member.priv, 'decline', b.pairingId, b.shortCode) },
             headers: via(freshIp()),
         });
         assert(badDecline.status === 403, 'a decline with a wrong signature is refused');
         const decline = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/decline`, {
-            body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('decline', b.pairingId, b.shortCode)) },
+            body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'decline', b.pairingId, b.shortCode) },
             headers: via(freshIp()),
         });
         assert(decline.status === 200, 'the phone declines');
@@ -458,7 +458,7 @@ async function main() {
         const byOutsider = await signedLookup(b.pairingId, outsider, via(b.ip));
         assert(byOutsider.status === 200 && !('fromAddress' in byOutsider.body), 'nor one signed by a key that is no member here');
         const byOwner = await signedLookup(b.pairingId, owner, via(b.ip));
-        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16) } });
+        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16), 'X-Signed-For': 'localhost' } });
         assert(byOwner.status === 200 && 'fromAddress' in byOwner.body && forged.status === 200 && !('fromAddress' in forged.body),
             'nor one that names an owner\'s key without the owner\'s signature');
 
@@ -490,7 +490,7 @@ async function main() {
     // ── 9. Number matching: the computer types the two digits the phone shows (design §5 fix 3) ──
     console.log('\n9. Two digits typed on the computer');
     const approveNew = (b: Browser, signer: Identity) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
-        body: { memberPubkey: signer.pub, signature: signText(signer, pairingMessage('approve', b.pairingId, b.shortCode)), confirm: true },
+        body: { memberPubkey: signer.pub, ...settingsSigninFields(signer.priv, 'approve', b.pairingId, b.shortCode), confirm: true },
         headers: via(freshIp()),
     });
     const confirmDigits = (b: Browser, code: string, cookie: string | null = b.cookie) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
@@ -548,13 +548,30 @@ async function main() {
             'and the same pairing then signs in from an app that shows the digits');
     }
     {
+        // An app from before request binding signs the old v1 text and names no host: refused as too old, unchecked
+        // (the cutover, 1.4.0, CUT4), with the words that tell the member to update. The pairing still waits.
+        const b = await newPairing();
+        const v1 = `beanpool-settings-signin:v1:approve:${b.pairingId}:${b.shortCode}`;
+        const old = await call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
+            body: { memberPubkey: owner.pub, signature: signText(owner, v1), confirm: true },
+            headers: via(freshIp()),
+        });
+        assert(old.status === 426 && old.body.code === 'app_too_old' && old.body.reason === 'app-too-old' && !('confirmCode' in old.body),
+            `an approval signed in the old v1 form is refused, 426 app_too_old (${old.status} ${JSON.stringify(old.body)})`);
+        assert(/too old/.test(old.body.error || '') && /update BeanPool/i.test(old.body.error || ''), `and it says the app is too old, to update it (${old.body.error})`);
+        const r = await poll(b);
+        assert(r.body.status === 'waiting' && !r.sessionId, 'the browser is not signed in: the pairing still waits');
+        assert((await approve(b.pairingId, b.shortCode, owner)).status === 200 && (await typeDigits(b)).body.status === 'signed-in',
+            'and the same pairing then signs in from an app that signs format 2');
+    }
+    {
         // Expiry, at the module level with a clock: 30 s for the digits.
         const t = Date.now();
         const created = createPairing({ clientKey: 'confirm-expiry', requesterAddress: '198.51.100.7', now: t });
         if (!created.ok) throw new Error('create failed');
         const res = approvePairing({
             pairingId: created.pairingId, memberPubkey: owner.pub,
-            signature: signText(owner, pairingMessage('approve', created.pairingId, created.shortCode)), confirm: true, now: t + 1_000,
+            ...settingsSigninFields(owner.priv, 'approve', created.pairingId, created.shortCode), confirm: true, now: t + 1_000,
         });
         assert(res.ok && /^\d{2}$/.test(res.confirmCode || ''), 'the module hands out two digits');
         const code = res.ok ? res.confirmCode! : '';

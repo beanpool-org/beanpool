@@ -309,11 +309,15 @@ async function main() {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         return { hex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
     };
-    const TEXT = 'a fixed statement';
-    /** Whether verifyStatementSignature accepts `sig` as `hex`'s signature of TEXT (the old form, accepted until the switch day). */
+    // A statement in format 2 (the only form since the cutover, CUT4), for the host a test node takes as its own.
+    const HOST = 'localhost';
+    const TEXT = `a fixed statement\n${HOST}`;
+    /** Whether verifyStatementSignature accepts `sig` as `hex`'s signature of TEXT, signed for HOST. */
     const accepts = (hex: string, sig: string): boolean =>
-        ms.verifyStatementSignature({ signature: sig, pubKeyHex: hex, boundText: () => '', oldTexts: [TEXT] }).ok === true;
-    const signOf = (s: { privateKey: crypto.KeyObject }, text = TEXT): string => crypto.sign(null, Buffer.from(text, 'utf-8'), s.privateKey).toString('base64');
+        ms.verifyStatementSignature({ signature: sig, pubKeyHex: hex, boundText: (host: string) => `a fixed statement\n${host}`, signedFor: HOST }).ok === true;
+    /** `text` signed as a format-2 statement is: 0xFF, then the text. */
+    const signOf = (s: { privateKey: crypto.KeyObject }, text = TEXT): string =>
+        crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(text, 'utf-8')]), s.privateKey).toString('base64');
 
     {
         const s = signer();

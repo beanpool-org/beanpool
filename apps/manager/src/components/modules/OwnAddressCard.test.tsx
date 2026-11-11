@@ -199,7 +199,7 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
         const sent: Sent[] = [];
         let reads = 0;
         mockNode(() => { if (++reads > 1) throw new TypeError('Failed to fetch'); return tlsStatus(); },
-            { '/app-addresses/remove': [[200, { addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 } }]] }, sent);
+            { '/app-addresses/remove': [[200, { addresses: [], unconfirmed: [] }]] }, sent);
         render(<PublicAddressPanel activeNode={node} />);
         await card();
         fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Remove 203.0.113.5' }));
@@ -308,7 +308,7 @@ describe('OwnAddressCard: "Your own address" (HTTPS S4)', () => {
 
     it('Remove asks in the page first, then the fresh proof; Keep it sends nothing', async () => {
         const sent: Sent[] = [];
-        mockNode(() => tlsStatus(), { '/app-addresses/remove': [[401, CODE_ASK], [200, { addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 } }]] }, sent);
+        mockNode(() => tlsStatus(), { '/app-addresses/remove': [[401, CODE_ASK], [200, { addresses: [], unconfirmed: [] }]] }, sent);
         render(<PublicAddressPanel activeNode={node} />);
         await card();
         fireEvent.click(within(row('203.0.113.5')).getByRole('button', { name: 'Remove 203.0.113.5' }));
@@ -344,8 +344,7 @@ describe('AppAddressesPanel: Remove asks an owner\'s fresh proof (HTTPS S4)', ()
 
     it('the box opens on the node\'s ask; Confirm re-sends the removal once, with the code', async () => {
         const sent: Sent[] = [];
-        let report = { addresses: [{ address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 }], unconfirmed: [], heldBack: [], named: true,
-            oldApps: { today: 0, busiestDay: 0 }, unboundSignaturesUntil: null, unboundSignaturesAccepted: false };
+        let report = { addresses: [{ address: 'community.example.org', source: 'owner', today: 1, busiestDay: 2 }], unconfirmed: [], heldBack: [], named: true, unboundSignaturesUntil: null, unboundSignaturesAccepted: false };
         vi.spyOn(global, 'fetch').mockImplementation(async (url, opts) => {
             if (opts?.method === 'POST' && String(url).includes('/app-addresses/remove')) {
                 sent.push({ path: 'remove', body: JSON.parse(String(opts.body || '{}')) });

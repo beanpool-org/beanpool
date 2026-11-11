@@ -1477,13 +1477,12 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
         ],
         unconfirmed: [],
         heldBack: [],
-        oldApps: { today: 0, busiestDay: 0 },
         unboundSignaturesUntil: null,
         unboundSignaturesAccepted: false,
     };
     if (pathname === '/api/local/admin/app-addresses') return ok(APP_ADDRESSES_FIXTURE);
     if (pathname === '/api/local/admin/app-addresses/check') return ok({ ...APP_ADDRESSES_FIXTURE, checking: false });
-    if (pathname === '/api/local/admin/app-addresses/remove') return ok({ addresses: [], unconfirmed: [], heldBack: [], oldApps: { today: 0, busiestDay: 0 }, unboundSignaturesUntil: null, unboundSignaturesAccepted: false });
+    if (pathname === '/api/local/admin/app-addresses/remove') return ok({ addresses: [], unconfirmed: [], heldBack: [], unboundSignaturesUntil: null, unboundSignaturesAccepted: false });
 
     // ---- connectors ----
     if (pathname === '/api/local/connectors') return m === 'GET' ? ok({ connectors: CONNECTORS }) : ok({ success: true });

@@ -260,7 +260,8 @@ console.log('\n2. Who may flip it');
     const forNumber = await phoneSwitch(owner, { on: true }, { signFor: ADDRESS });
     check('signed for the number on this named node → 421 (binding unchanged)', forNumber.status === 421 && !isOn(), `${forNumber.status} ${forNumber.body.slice(0, 100)}`);
     // The old format (1) names no community: one an owner sent to another community could be replayed here (design §2.3).
-    // Refused as break-glass refuses it (AUTH-01), the middleware having accepted it until UNBOUND_SIGNATURES_UNTIL.
+    // Refused, 426 app_too_old, by the signature middleware before any route, as every old-format request is since the
+    // cutover (1.4.0, CUT4): break-glass (AUTH-01) the same. Never cached.
     {
         const body = JSON.stringify({ on: true });
         const ts = String(Date.now());
@@ -268,7 +269,8 @@ console.log('\n2. Who may flip it');
         const text = core.unboundRequestText({ method: 'POST', path: '/api/node/owner/lights-out', timestamp: ts, nonce, body });
         const sig = Buffer.from(ed25519.sign(new TextEncoder().encode(text), owner.seed)).toString('base64');
         const old = await send(LAN, 'POST', '/api/node/owner/lights-out', HALL, { 'X-Public-Key': owner.pk, 'X-Timestamp': ts, 'X-Nonce': nonce, 'X-Signature': sig }, body);
-        check('the owner\'s old-format (unbound, format 1) request → 426 app_too_old, nothing changed', old.status === 426 && old.json?.code === 'app_too_old' && !isOn(),
+        check('the owner\'s old-format (unbound, format 1) request → 426 app_too_old, saying the app is too old, never cached, nothing changed',
+            old.status === 426 && old.json?.code === 'app_too_old' && /too old/.test(old.json?.error ?? '') && (old.headers['cache-control'] ?? '').includes('no-store') && !isOn(),
             `${old.status} ${old.body.slice(0, 120)}`);
     }
     const badBody = await phoneSwitch(owner, { on: 'yes' });

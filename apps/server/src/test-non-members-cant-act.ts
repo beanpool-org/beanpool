@@ -85,7 +85,7 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -226,9 +226,7 @@ const changedTables = (a: Map<string, string>, b: Map<string, string>) =>
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pubKeyHex, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.privateKey).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.privateKey, inviter.pubKeyHex);
 }
 
 async function main(): Promise<void> {

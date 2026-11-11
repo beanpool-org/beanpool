@@ -37,6 +37,7 @@ import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle, issueAutomationT
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 import { signedRequestText, signedRequestBytes, SIGNED_FOR_HEADER } from '@beanpool/core';
 import { localFetch } from './keepalive-test-fetch.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -96,7 +97,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
 }

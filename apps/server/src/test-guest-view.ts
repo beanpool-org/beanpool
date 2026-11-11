@@ -105,7 +105,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { haversineKm } from '@beanpool/engine';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -1115,8 +1115,7 @@ async function main(): Promise<void> {
         const invitesForTheCard = process.env.NODE_PROFILE === 'global';
         if (invitesForTheCard) db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.invites', 'true');
         const code = se.generateInvite(bob.pk)!.code;
-        const ticketPayload = JSON.stringify({ i: bob.pk, t: Date.now() });
-        const ticketB64 = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), bob.priv).toString('base64') })).toString('base64');
+        const ticketB64 = offlineTicket(bob.priv, bob.pk);
         const noPerson = (r: Res, sent: string[] = []) => !leaks(r.text, sent).length && !r.text.includes('/api/avatar/') && !KEYED_FACE.test(r.text);
 
         // 11a. The review's walk: a name typed at the recovery lookup gives a key, as designed; that key opens nothing more.

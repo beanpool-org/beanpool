@@ -59,6 +59,7 @@ import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { createAvatarRoutes } from './routes/avatar.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -79,8 +80,8 @@ type Keypair = ReturnType<typeof makeKeypair>;
 /** Key sign-in as the app does it: challenge → signature → handshake token → session. */
 function keySession(kp: Keypair): { sessionId?: string; csrfToken?: string; role?: string; error?: string } {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(kp.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, signedFor });
     if (!solved.ok) return { error: solved.error };
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     return ex.ok ? { sessionId: ex.sessionId, csrfToken: ex.csrfToken, role: ex.role } : { error: ex.error };

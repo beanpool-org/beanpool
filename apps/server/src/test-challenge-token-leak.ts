@@ -22,6 +22,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -37,7 +38,6 @@ function keypair(): Identity {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     return { pub: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey };
 }
-const signText = (who: Identity, text: string) => crypto.sign(null, Buffer.from(text), who.priv).toString('base64');
 
 function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
@@ -85,7 +85,7 @@ async function main() {
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
         challengeId: id,
         memberPubkey: owner.pub,
-        signature: signText(owner, chal.body.challenge),
+        ...adminSigninFields(owner.priv, chal.body.challengeId, undefined, 'base64'),
     });
     assert(solved.status === 200 && typeof solved.body.handshakeToken === 'string', 'the signer gets the token from verify-challenge');
     const token: string = solved.body.handshakeToken;
@@ -119,7 +119,7 @@ async function main() {
         const resolveAgain = await call('POST', '/api/local/admin/auth/verify-challenge', {
             challengeId: id,
             memberPubkey: owner.pub,
-            signature: signText(owner, chal.body.challenge),
+            ...adminSigninFields(owner.priv, chal.body.challengeId, undefined, 'base64'),
         });
         assert(resolveAgain.status !== 200 && !resolveAgain.body?.handshakeToken, 'the same signed challenge cannot mint a second token');
         const stillNothing = await call('GET', `/api/local/admin/auth/challenge/${id}`);

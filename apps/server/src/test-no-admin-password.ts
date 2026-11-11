@@ -44,6 +44,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { issueBreakGlassCode } from './admin-key-auth.js';
 import { issueAutomationToken } from './automation-tokens.js';
 import { pullBackupForNode } from './services/harvester.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let PORT = 0;
 let BASE = '';
@@ -85,7 +86,7 @@ function seedMember(k: Key, callsign: string): void {
 async function keySignIn(k: Key): Promise<Reply> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
 }

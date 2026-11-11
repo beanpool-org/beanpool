@@ -16,8 +16,10 @@
  *      phone's join check, community switcher and delete (native utils/membership-probe.ts, signed by the phone's key),
  *      its restore (db.ts fetchNodeCallsign, signed by the key restored, which is not saved yet), the web app's (lib/api.ts
  *      request, lib/web-join.ts): each answered, a member with its name
- *   5. an old app's probe in the old format (no community named): answered until the switch; after it, refused as an
- *      unsigned one is, never a wrong "not a member"
+ *   5. an old app's probe in the old format (no community named): refused as an unsigned one is, on any day, never a
+ *      wrong "not a member". Since the cutover (1.4.0, CUT4) the signature middleware refuses the old format unchecked,
+ *      and answers a PUBLIC read signed that way as the read unsigned (so an old app still reads its update banner's
+ *      floor from /api/community/health): here, 401 signature_required
  *   6. a probe signed for another community's host is refused (request binding): a hostile community can't replay a
  *      member's own probe here
  */
@@ -169,13 +171,13 @@ async function main() {
     // ── 5. an old app (local) ──
     console.log('\n── local 5. an old app\'s probe, in the format that names no community ──');
     resetGatewayRateLimit();
-    const old = await oldAppProbe(alice.pk, alice);
-    assert(old.status === 200 && old.body?.isMember === true && old.body?.callsign === 'alice',
-        `until the switch, an old app's own probe is answered (got ${old.status} ${old.text.slice(0, 80)})`);
-    setSignatureSwitchClockForTests(() => Date.parse('2027-07-01T00:00:00Z'));
-    const switched = await oldAppProbe(alice.pk, alice);
-    assert(switched.status === 401 && switched.body?.code === 'signature_required',
-        `after it, the old format is read as unsigned and refused, never a wrong "not a member" (got ${switched.status} ${switched.text.slice(0, 80)})`);
+    // Today, and a day past the node's one date (UNCONFIGURED_HOSTS_UNTIL, 2027-06-30): the same answer.
+    for (const [when, clock] of [['today', null], ['on 1 July 2027', Date.parse('2027-07-01T00:00:00Z')]] as const) {
+        setSignatureSwitchClockForTests(clock === null ? null : () => clock);
+        const old = await oldAppProbe(alice.pk, alice);
+        assert(old.status === 401 && old.body?.code === 'signature_required' && !('isMember' in (old.body ?? {})) && !old.text.includes('alice'),
+            `${when}, an old app's own probe is read as unsigned and refused, never a wrong "not a member" (got ${old.status} ${old.text.slice(0, 80)})`);
+    }
     setSignatureSwitchClockForTests(null);
 
     // The global profile: the same rule. Its people reads are members' already (G9a), and whether a key tried BeanPool

@@ -33,7 +33,7 @@ import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { db } from './db/db.js';
-import { signSocket, socketBinding } from './signed-request-test-helper.js';
+import { signSocket, socketBinding, adminSigninFields } from './signed-request-test-helper.js';
 
 const ENFORCE_WS_AUTH = process.env.ENFORCE_WS_AUTH === 'true';
 const OPEN_FEED = process.env.ENFORCE_WS_AUTH === 'false';
@@ -60,8 +60,8 @@ function makeMember(callsign: string) {
  */
 function ownerKeySession(id: { pubKeyHex: string; privateKey: crypto.KeyObject }): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), id.privateKey).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pubKeyHex, signature });
+    const { signature, signedFor } = adminSigninFields(id.privateKey, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pubKeyHex, signature, signedFor });
     if (!solved.ok) throw new Error(`key sign-in refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok || !ex.sessionId) throw new Error(`handshake refused: ${ex.error}`);

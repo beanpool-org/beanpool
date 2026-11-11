@@ -66,7 +66,7 @@ import fs from 'node:fs';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedDm } from './dm-test-payload.js';
 import { lockedGroupLine } from './group-test-payload.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket, offlineTicketText } from './signed-request-test-helper.js';
 
 
 let BASE = '';
@@ -129,15 +129,12 @@ async function asAdmin(session: Record<string, string>, p: string, payload: unkn
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pubKeyHex, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.privateKey).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.privateKey, inviter.pubKeyHex);
 }
 
 /** One anyone can write: it names `named` (whose key every ticket they gave out carries) over 64 bytes no key signed. */
 function forgedTicket(named: Id): string {
-    const payload = JSON.stringify({ i: named.pubKeyHex, t: Date.now() });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.randomBytes(64).toString('base64') })).toString('base64');
+    return Buffer.from(JSON.stringify({ p: offlineTicketText(named.pubKeyHex), s: crypto.randomBytes(64).toString('base64') })).toString('base64');
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';

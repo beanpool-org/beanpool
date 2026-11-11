@@ -13,8 +13,8 @@
  *    admin password's): an owner's, an admin's and a moderator's key sign in with no code, a stray code is not looked
  *    at, and a signature by another key opens nothing.
  * 3. LOW 4. An invite redeem, or an offline-ticket redeem, must be signed by the key it registers. On main anyone
- *    holding a code registered any key, unsigned, under a name of their choosing. A real join (old app or new) still
- *    works.
+ *    holding a code registered any key, unsigned, under a name of their choosing. A current app's join works; an old
+ *    app's (the old format, bound to no community) is refused, 426 app_too_old, and joins nobody (the cutover, CUT4).
  *
  * The real servers, on the tunnel-origin port: the client connects from loopback (a trusted local proxy), so
  * CF-Connecting-IP names the client, as cloudflared does.
@@ -40,7 +40,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { limiterKeyForIp } from './client-ip.js';
 import { SOURCE_FREE_FAILURES, sourceClosedUntil } from './password-brake.js';
-import { pairingMessage } from './settings-signin-pairing.js';
+import { adminSigninFields, settingsSigninFields, signedHeaders } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -50,6 +50,8 @@ function assert(cond: unknown, msg: string): void {
 
 /** What an older install's admin password looked like: no credential now. */
 const PW = 'Followups-1001-Password!';
+/** This community's one name (BEANPOOL_ADDRESSES above): what its members' apps sign for. */
+const HOME = 'home.test';
 const viaTunnel = (ip: string) => ({ 'cf-connecting-ip': ip, 'x-forwarded-for': ip });
 let ipSeq = 10;
 const freshIp = () => `198.51.100.${ipSeq++}`;
@@ -85,7 +87,10 @@ function stranger(callsign: string): Key {
 }
 const signText = (k: Key, text: string) => Buffer.from(ed25519.sign(Buffer.from(text, 'utf-8'), k.priv)).toString('base64');
 
-/** An old-format signed POST (METHOD\nPATH\nTS\nNONCE\nBODY), as the phone app has signed every request since its first release. */
+/**
+ * An old-format signed POST (METHOD\nPATH\nTS\nNONCE\nBODY), naming no community, as every app before request binding
+ * signed one: refused since the cutover (1.4.0), 426 app_too_old.
+ */
 function unboundHeaders(k: Key, path: string, raw: string, at = Date.now()): Record<string, string> {
     const ts = String(at);
     const nonce = crypto.randomBytes(16).toString('hex');
@@ -192,12 +197,12 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     assert(lateUse.status === 200, `and keeps working after (${show(lateUse)})`);
 }
 
-/** A key sign-in, signing the challenge's own text (the old form, accepted until the switch). */
+/** A key sign-in as the app makes it: format 2 over the challenge id, for this community's name. */
 async function signIn(k: Key, ip: string, totpCode?: string, challenge?: { challengeId: string; challenge: string }): Promise<Reply> {
     const c = challenge ?? (await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(ip) })).json;
     return req('/api/local/admin/auth/verify-challenge', {
         method: 'POST', headers: viaTunnel(ip),
-        body: { challengeId: c.challengeId, memberPubkey: k.pub, signature: signText(k, c.challenge), ...(totpCode ? { totpCode } : {}) },
+        body: { challengeId: c.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, c.challengeId, HOME), ...(totpCode ? { totpCode } : {}) },
     });
 }
 async function keySession(k: Key, ip: string, totpCode?: string): Promise<string | null> {
@@ -237,7 +242,7 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
     const c = (await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(X) })).json;
     const forged = await req('/api/local/admin/auth/verify-challenge', {
         method: 'POST', headers: viaTunnel(X),
-        body: { challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(bob, c.challenge) },
+        body: { challengeId: c.challengeId, memberPubkey: owner.pub, ...adminSigninFields(bob.priv, c.challengeId, HOME) },
     });
     assert(forged.status !== 200 && !forged.json?.handshakeToken && forged.json?.totpRequired === undefined,
         `a signature by another key opens nothing (${show(forged)})`);
@@ -247,7 +252,7 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
     const qr = await req(`/api/local/admin/auth/pairing/${pairing.pairingId}/approve`, {
         method: 'POST', headers: viaTunnel(freshIp()),
         // As the app sends it (confirm: true, so it shows the two digits); an approval without it is refused (426).
-        body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', pairing.pairingId, pairing.shortCode)), confirm: true },
+        body: { memberPubkey: owner.pub, ...settingsSigninFields(owner.priv, 'approve', pairing.pairingId, pairing.shortCode, HOME), confirm: true },
     });
     assert(qr.status === 200, `the QR sign-in approves with no code (${show(qr)})`);
     resetAdminAuthTarpit();
@@ -265,7 +270,13 @@ async function part3Redeem(owner: Key): Promise<void> {
         const raw = JSON.stringify(body);
         return req(path, { method: 'POST', raw, headers: { ...headers, ...viaTunnel(freshIp()) } });
     };
-    const signedBy = (k: Key, path: string, body: unknown) => {
+    /** Signed by `k` as a current app signs it: format 2, for this community. */
+    const signedBy = (k: Key, path: string, body: unknown, at = Date.now()) => {
+        const raw = JSON.stringify(body);
+        return req(path, { method: 'POST', raw, headers: { ...signedHeaders({ publicKeyHex: k.pub, key: k.priv, method: 'POST', path, body: raw, host: HOME, timestamp: at }), ...viaTunnel(freshIp()) } });
+    };
+    /** Signed by `k` as an app from before request binding signed it: the old format, naming no community. */
+    const oldSignedBy = (k: Key, path: string, body: unknown) => {
         const raw = JSON.stringify(body);
         return req(path, { method: 'POST', raw, headers: { ...unboundHeaders(k, path, raw), ...viaTunnel(freshIp()) } });
     };
@@ -287,19 +298,23 @@ async function part3Redeem(owner: Key): Promise<void> {
     // Signed by the key, but by a phone whose clock is ten minutes out: the verifier's own answer, not "unsigned".
     const skewed = stranger('SkewedClock');
     const skewedCode = generateInvite(owner.pub)!.code;
-    const skewedRaw = JSON.stringify({ code: skewedCode, publicKey: skewed.pub, callsign: skewed.callsign });
-    const skewedJoin = await req('/api/invite/redeem', { method: 'POST', raw: skewedRaw, headers: { ...unboundHeaders(skewed, '/api/invite/redeem', skewedRaw, Date.now() - 10 * 60_000), ...viaTunnel(freshIp()) } });
+    const skewedJoin = await signedBy(skewed, '/api/invite/redeem', { code: skewedCode, publicKey: skewed.pub, callsign: skewed.callsign }, Date.now() - 10 * 60_000);
     assert(skewedJoin.status === 401 && /timestamp/i.test(skewedJoin.json?.error ?? '') && skewedJoin.json?.code !== 'redeem_unsigned' && !hasRow(skewed.pub) && codeUser(skewedCode) === null,
         `a redeem signed with a clock ten minutes out is refused with the verifier's answer, and nobody joins (${show(skewedJoin)})`);
 
-    // A real join: the phone app's old-format signature (every version in the stores), and a current app's.
+    // An old app's join: its redeem signed in the old format, bound to no community. Refused as too old (the cutover,
+    // 1.4.0, CUT4), before the code or the ticket is looked at: nobody joins and the code stays unused.
     const oldApp = stranger('OldApp');
-    const oldJoin = await signedBy(oldApp, '/api/invite/redeem', { code, publicKey: oldApp.pub, callsign: oldApp.callsign });
-    assert(oldJoin.status === 200 && oldJoin.json?.success === true && hasRow(oldApp.pub) && codeUser(code) === oldApp.pub,
-        `an old app's signed redeem joins, and uses the code (${show(oldJoin)})`);
+    const oldJoin = await oldSignedBy(oldApp, '/api/invite/redeem', { code, publicKey: oldApp.pub, callsign: oldApp.callsign });
+    assert(oldJoin.status === 426 && oldJoin.json?.code === 'app_too_old' && /too old/.test(oldJoin.json?.error ?? '') && !hasRow(oldApp.pub) && codeUser(code) === null,
+        `an old app's signed redeem is refused, 426 app_too_old: nobody joins, the code unused (${show(oldJoin)})`);
     const tj = stranger('TicketJoiner');
-    const tjJoin = await signedBy(tj, '/api/invite/redeem-offline', { ticketB64: ticketOf(owner), publicKey: tj.pub, callsign: tj.callsign });
-    assert(tjJoin.status === 200 && hasRow(tj.pub), `an old app's signed offline-ticket redeem joins (${show(tjJoin)})`);
+    const tjOld = await oldSignedBy(tj, '/api/invite/redeem-offline', { ticketB64: ticketOf(owner), publicKey: tj.pub, callsign: tj.callsign });
+    assert(tjOld.status === 426 && tjOld.json?.code === 'app_too_old' && !hasRow(tj.pub), `so is an old app's signed offline-ticket redeem (${show(tjOld)})`);
+    // A real join: the same code, redeemed by a current app (format 2, for this community).
+    const realJoin = await signedBy(oldApp, '/api/invite/redeem', { code, publicKey: oldApp.pub, callsign: oldApp.callsign });
+    assert(realJoin.status === 200 && realJoin.json?.success === true && hasRow(oldApp.pub) && codeUser(code) === oldApp.pub,
+        `the same person's redeem from a current app joins, and uses the code (${show(realJoin)})`);
 
     const core = await import('@beanpool/core');
     const bound = async (k: Key, host: string, path: string, body: unknown) => {

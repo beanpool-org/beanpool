@@ -16,7 +16,10 @@
  */
 
 import crypto from 'node:crypto';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, ed25519Signer, signedRequestBytes, signedRequestText } from '@beanpool/core';
+import {
+    REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, adminSigninText, ed25519Signer, inviteTicketText, settingsSigninText,
+    signedRequestBytes, signedRequestText,
+} from '@beanpool/core';
 
 export { SIGNED_FOR_HEADER };
 
@@ -73,6 +76,63 @@ export function signRequest(key: TestSigningKey, f: TestRequestFields, host: str
 /** A `/ws` connect token's signature (base64): method WS, path /ws, no body. */
 export function signSocket(key: TestSigningKey, timestamp: string | number, nonce: string, host: string = signedFor): string {
     return signRequest(key, { method: 'WS', path: '/ws', timestamp, nonce }, host);
+}
+
+/** How a statement's signature is spelled in its body: the server takes either (verifyStatementSignature). */
+export type StatementEncoding = 'hex' | 'base64';
+
+/** A signed statement, as the body that carries it names it: the signature and the host it was signed for. */
+export interface SignedStatement {
+    signature: string;
+    signedFor: string;
+}
+
+/**
+ * The Manage button's sign-in as today's app signs it (cutover N2c): format 2 over the challenge id alone,
+ * `0xFF ‖ beanpool-admin-signin/2\n<host>\n<challengeId>` (core's adminSigninText), never the node's challenge text. Spread
+ * it into the body of POST /api/local/admin/auth/verify-challenge, or the params of verifyAndSolveChallenge, beside
+ * `challengeId` and `memberPubkey`. One without `signedFor` is an app from before request binding: 426 app_too_old.
+ */
+export function adminSigninFields(key: TestSigningKey, challengeId: string, host: string = signedFor, encoding: StatementEncoding = 'hex'): SignedStatement {
+    return { signature: signBytes(key, signedRequestBytes(adminSigninText(host, challengeId))).toString(encoding), signedFor: host };
+}
+
+/**
+ * A phone's approval or decline of a Settings sign-in by QR (settings-signin-pairing.ts) as today's app signs it: format
+ * 2, `0xFF ‖ beanpool-settings-signin/2\n<host>\n<action>\n<pairingId>\n<shortCode>` (core's settingsSigninText).
+ */
+export function settingsSigninFields(
+    key: TestSigningKey, action: 'approve' | 'decline', pairingId: string, shortCode: string, host: string = signedFor,
+    encoding: StatementEncoding = 'base64',
+): SignedStatement {
+    return {
+        signature: signBytes(key, signedRequestBytes(settingsSigninText(host, action, pairingId, shortCode))).toString(encoding),
+        signedFor: host,
+    };
+}
+
+export interface TestTicketOptions {
+    /** Defaults to now. */
+    timestamp?: number;
+    intendedFor?: string | null;
+    /** The inviter's community, as the app names it. Defaults to {@link signedForHost}. */
+    host?: string;
+}
+
+/** The text an offline ticket signs, format 2 (core's inviteTicketText): it names the inviter's community. */
+export function offlineTicketText(inviter: string, opts: TestTicketOptions = {}): string {
+    return inviteTicketText(opts.host ?? signedFor, inviter, opts.timestamp ?? Date.now(), opts.intendedFor ?? null);
+}
+
+/**
+ * An offline invite ticket as today's apps make one (core's buildInviteTicket): base64 of `{ p, s }`, `p` the format-2
+ * text ({@link offlineTicketText}) and `s` its signature over 0xFF then that text, by `key`. `inviter` is the key named in
+ * it: the signer's own, unless a suite names another on purpose. An old `{i, t}` ticket, from an app before request
+ * binding, is refused as too old (CUT4).
+ */
+export function offlineTicket(key: TestSigningKey, inviter: string, opts: TestTicketOptions = {}): string {
+    const p = offlineTicketText(inviter, opts);
+    return Buffer.from(JSON.stringify({ p, s: signBytes(key, signedRequestBytes(p)).toString('base64') })).toString('base64');
 }
 
 /** The `/ws` query params that name the host a socket's token was signed for, as an `&`-joinable fragment. */

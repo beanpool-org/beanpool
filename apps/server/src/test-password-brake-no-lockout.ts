@@ -42,6 +42,7 @@ import {
     SOURCE_FREE_FAILURES, MAX_DELAY_MS, FORGET_MS, NODE_CHECKS_PER_MIN, NODE_BACKOFF_CHECKS_PER_MIN, PREFIX_CLEAN_FAILURES,
     tryAdmit, settlePasswordAttempt, notePasswordFailure, prefixOf, resetPasswordBrake,
 } from './password-brake.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -234,7 +235,7 @@ function part2Maths() {
 function keyPair() {
     const priv = randomBytes(32);
     const pub = Buffer.from(ed25519.getPublicKey(priv)).toString('hex');
-    return { pub, sign: (m: string) => Buffer.from(ed25519.sign(Buffer.from(m, 'utf-8'), priv)).toString('hex') };
+    return { pub, priv };
 }
 
 async function part3Http() {
@@ -318,7 +319,7 @@ async function part3Http() {
 
         const chal = await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(K) });
         const solved = await req('/api/local/admin/auth/verify-challenge', {
-            method: 'POST', headers: viaTunnel(K), body: { challengeId: chal.json?.challengeId, memberPubkey: owner.pub, signature: owner.sign(chal.json?.challenge || '') },
+            method: 'POST', headers: viaTunnel(K), body: { challengeId: chal.json?.challengeId, memberPubkey: owner.pub, ...adminSigninFields(owner.priv, chal.json?.challengeId || '') },
         });
         const exchanged = await req('/api/local/admin/auth/exchange', { method: 'POST', headers: viaTunnel(K), body: { token: solved.json?.handshakeToken } });
         // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).

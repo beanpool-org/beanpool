@@ -1923,7 +1923,7 @@ describe('report normalisation keeps enterprise reports off the post line', () =
 
 describe('app addresses (Settings → Network)', () => {
     it("sends the host the node is reached at, so the node can say when the directory lists it (4114569450)", async () => {
-        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ addresses: [], unconfirmed: [], oldApps: { today: 0, busiestDay: 0 } }) });
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ addresses: [], unconfirmed: [] }) });
         vi.stubGlobal('fetch', fetchMock);
         await getAppAddresses('https://Community.Example.org:8443', 'pw');
         await confirmAppAddress('https://Community.Example.org:8443', 'bp.example.net', 'pw');

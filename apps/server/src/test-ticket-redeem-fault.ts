@@ -24,7 +24,7 @@ import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { db } from './db/db.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -45,9 +45,7 @@ function keypair(name: string): Id {
 
 /** An offline ticket, as the app signs one: the payload and its signature, base64 JSON. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 /** Signed by `id` when given, as both apps sign a redeem and the membership probe with the key they name. */

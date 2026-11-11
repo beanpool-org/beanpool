@@ -79,7 +79,7 @@ import {
 import { createAdminRoutes } from './routes/admin.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import type { RouteDeps } from './routes/types.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let total = 0;
 let passed = 0;
@@ -133,9 +133,9 @@ async function main() {
     // What an older install's admin password looked like: no credential on this node (checked in 7, 8 and 12.13).
     const testPassword = 'SuperSecretAdminPassword123!';
     /** An owner's phone hand-off session, just unlocked: the fresh proof an owner's role changes ask (requireFreshProof). */
-    const phoneSessionOf = (k: { pub: string; sign: (m: string) => string }): string => {
+    const phoneSessionOf = (k: { pub: string; priv: Uint8Array }): string => {
         const chal = createAdminChallenge();
-        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: k.pub, signature: k.sign(chal.challenge) });
+        const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.challengeId) });
         const opened = consumeHandshakeToken(solved.handshakeToken!, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
         return opened.sessionId!;
     };
@@ -210,32 +210,33 @@ async function main() {
                 challengeId: chalBody.challengeId,
                 memberPubkey: aliceKeys.pub,
                 signature: tamperedSig,
+                signedFor: signedForHost(),
             }),
         });
         assert(verifyTampered.status === 403, 'Tampered Ed25519 signature returns 403');
 
         // Verify with non-role member (Charlie) -> rejected
-        const charlieSig = charlieKeys.sign(chalBody.challenge);
+        const charlieSig = adminSigninFields(charlieKeys.priv, chalBody.challengeId);
         const verifyCharlie = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 challengeId: chalBody.challengeId,
                 memberPubkey: charlieKeys.pub,
-                signature: charlieSig,
+                ...charlieSig,
             }),
         });
         assert(verifyCharlie.status === 403, 'Member without node role returns 403');
 
         // Verify with legitimate owner (Alice) -> success
-        const aliceSig = aliceKeys.sign(chalBody.challenge);
+        const aliceSig = adminSigninFields(aliceKeys.priv, chalBody.challengeId);
         const verifyAlice = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 challengeId: chalBody.challengeId,
                 memberPubkey: aliceKeys.pub,
-                signature: aliceSig,
+                ...aliceSig,
             }),
         });
         assert(verifyAlice.status === 200, 'Valid Ed25519 signature by owner returns 200');
@@ -311,7 +312,7 @@ async function main() {
         const chal2Res = verifyAndSolveChallenge({
             challengeId: chal2.challengeId,
             memberPubkey: bobKeys.pub,
-            signature: bobKeys.sign(chal2.challenge),
+            ...adminSigninFields(bobKeys.priv, chal2.challengeId),
         });
         assert(chal2Res.ok === true, 'Bob challenge verified');
         const bobToken = chal2Res.handshakeToken!;
@@ -356,7 +357,7 @@ async function main() {
         const solveAliceNew = verifyAndSolveChallenge({
             challengeId: chalAliceNew.challengeId,
             memberPubkey: aliceKeys.pub,
-            signature: aliceKeys.sign(chalAliceNew.challenge),
+            ...adminSigninFields(aliceKeys.priv, chalAliceNew.challengeId),
         });
         assert(solveAliceNew.ok === true, 'New challenge for Alice solved');
         // From the phone's Manage (its hand-off session): granting admin and break-glass mode, below, ask the owner's fresh
@@ -374,7 +375,7 @@ async function main() {
         const solveTtl = verifyAndSolveChallenge({
             challengeId: chalTtl.challengeId,
             memberPubkey: aliceKeys.pub,
-            signature: aliceKeys.sign(chalTtl.challenge),
+            ...adminSigninFields(aliceKeys.priv, chalTtl.challengeId),
         });
         const exchangeTtl = consumeHandshakeToken(solveTtl.handshakeToken!);
         const ttlSessionId = exchangeTtl.sessionId!;
@@ -386,7 +387,7 @@ async function main() {
         const solveTtl2 = verifyAndSolveChallenge({
             challengeId: chalTtl2.challengeId,
             memberPubkey: aliceKeys.pub,
-            signature: aliceKeys.sign(chalTtl2.challenge),
+            ...adminSigninFields(aliceKeys.priv, chalTtl2.challengeId),
         });
         const exchangeTtl2 = consumeHandshakeToken(solveTtl2.handshakeToken!);
         const ttlSessionId2 = exchangeTtl2.sessionId!;
@@ -553,7 +554,7 @@ async function main() {
         const solveDl = verifyAndSolveChallenge({
             challengeId: chalDl.challengeId,
             memberPubkey: aliceKeys.pub,
-            signature: aliceKeys.sign(chalDl.challenge),
+            ...adminSigninFields(aliceKeys.priv, chalDl.challengeId),
         });
         assert(solveDl.ok === true, 'Challenge for deep link solved');
         const dlToken = solveDl.handshakeToken!;
@@ -657,7 +658,7 @@ async function main() {
         const daveSolve = verifyAndSolveChallenge({
             challengeId: daveChal.challengeId,
             memberPubkey: daveKeys.pub,
-            signature: daveKeys.sign(daveChal.challenge),
+            ...adminSigninFields(daveKeys.priv, daveChal.challengeId),
         });
         assert(daveSolve.ok === true, 'Dave challenge solved');
         const daveExch = consumeHandshakeToken(daveSolve.handshakeToken!);
@@ -773,7 +774,7 @@ async function main() {
         const solveCsrf = verifyAndSolveChallenge({
             challengeId: chalCsrf.challengeId,
             memberPubkey: aliceKeys.pub,
-            signature: aliceKeys.sign(chalCsrf.challenge),
+            ...adminSigninFields(aliceKeys.priv, chalCsrf.challengeId),
         });
         const exchCsrf = consumeHandshakeToken(solveCsrf.handshakeToken!);
         const freshAliceSessionId = exchCsrf.sessionId!;

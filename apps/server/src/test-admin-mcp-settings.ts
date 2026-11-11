@@ -46,6 +46,7 @@ import { db } from './db/db.js';
 import { resetAgentLimits, agentCallsToday } from './agent/limits.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 import { AGENT_GRANTS_PER_MEMBER, OWNER_ONLY_CODE } from './agent/grants-route.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -83,7 +84,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     return (await call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } })).sessionId;
 }

@@ -84,7 +84,7 @@ import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -996,8 +996,7 @@ async function main(): Promise<void> {
     assert(k1Redeem.status === 400 && /replaced/.test(k1Redeem.body?.error ?? ''), `her old key redeeming Mia's ordinary invite → refused (${k1Redeem.status} ${k1Redeem.body?.error})`);
     assert(!memberRow(olga.pk) && usedBy(ordinaryCode) === null, 'no member row for the old key, and the invite is not used');
     // A paper invite: an offline ticket Mia signed.
-    const ticketPayload = JSON.stringify({ i: mia.pk, t: Date.now() });
-    const ticket = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), mia.priv).toString('base64') })).toString('base64');
+    const ticket = offlineTicket(mia.priv, mia.pk);
     const redeemTicket = (id: Id) => call(id, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
     const k1Ticket = await redeemTicket(olga);
     assert(k1Ticket.status === 400 && /replaced/.test(k1Ticket.body?.error ?? ''), `her old key redeeming Mia's offline ticket → refused (${k1Ticket.status} ${k1Ticket.body?.error})`);

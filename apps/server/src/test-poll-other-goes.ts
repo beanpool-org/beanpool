@@ -23,7 +23,7 @@ delete process.env.ENFORCE_WS_AUTH;
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { setMemberPhoto } from '@beanpool/engine';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -66,7 +66,7 @@ async function keySignIn(id: Id): Promise<Record<string, string>> {
     const chal = await send('POST', '/api/local/admin/auth/challenge', {}, {});
     const solved = await send('POST', '/api/local/admin/auth/verify-challenge', {
         challengeId: chal.body?.challengeId, memberPubkey: id.pubKeyHex,
-        signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), id.privateKey).toString('hex'),
+        ...adminSigninFields(id.privateKey, chal.body?.challengeId ?? ''),
     }, {});
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }) });
     const session = res.headers.getSetCookie().find(c => c.startsWith('admin_session='))?.match(/^admin_session=([0-9a-f]{64})/)?.[1];

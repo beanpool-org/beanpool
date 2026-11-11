@@ -329,7 +329,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // provenKeySpelling). The signature check forgives case, so as sent, a key in capitals was the row an old door
         // stored under that spelling, and "sign me out everywhere" ended that row's sessions instead of the member's.
         // Verified as every signed request is (engine/member-signature.ts): signed for this community (421 for
-        // another's, 426 for the old format after the switch), and the nonce spent only once all of that holds.
+        // another's, 426 for the old format, unchecked: CUT4), and the nonce spent only once all of that holds.
         const pubKeyHex = provenKeySpelling(ctx.get('X-Public-Key'));
         const signatureBase64 = ctx.get('X-Signature');
         if (pubKeyHex && signatureBase64 && nodeRoleOf(pubKeyHex)) {

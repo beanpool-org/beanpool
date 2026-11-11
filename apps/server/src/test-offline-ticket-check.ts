@@ -22,7 +22,7 @@ import { initStateEngine, seedGenesisMember, generateInvite } from './state-engi
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { db } from './db/db.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, offlineTicket } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -40,18 +40,14 @@ function keypair(name: string): Id {
     return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), priv: privateKey, name };
 }
 
-/** A ticket as the phone makes one (apps/native app/(tabs)/people.tsx): base64 of { p: the payload in base64, s }. */
+/** A ticket as the phone makes one (apps/native utils/member-statements.ts, core's buildInviteTicket): format 2, base64. */
 function phoneTicket(inviter: Id, t: number): string {
-    const payload = JSON.stringify({ i: inviter.pk, t });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: Buffer.from(payload).toString('base64'), s })).toString('base64');
+    return offlineTicket(inviter.priv, inviter.pk, { timestamp: t });
 }
 
-/** A ticket as the web app makes one (apps/pwa pages/InvitePage.tsx): URL-safe base64 of { p: the payload, s }, unpadded. */
+/** The same, written in URL-safe base64 with no padding, as a link can carry it: the node reads either spelling. */
 function webTicket(inviter: Id, t: number): string {
-    const payload = JSON.stringify({ i: inviter.pk, t });
-    const s = crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64');
-    return Buffer.from(JSON.stringify({ p: payload, s })).toString('base64url');
+    return Buffer.from(offlineTicket(inviter.priv, inviter.pk, { timestamp: t }), 'base64').toString('base64url');
 }
 
 /** Signed by `id` when given, as both apps sign a redeem with the key it names. */

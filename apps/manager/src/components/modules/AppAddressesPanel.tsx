@@ -6,8 +6,8 @@
  * engine/own-addresses.ts, engine/member-signature.ts). The addresses themselves are the Addresses list above this panel
  * (AddressesPanel, design §5.2), which draws each row's source and standing with the words here. This panel says how many
  * apps still reach it by a name it had before, and where it lives now (lost-name L4); lets the owner confirm an address
- * the node doesn't know (a self-hoster's custom domain behind a proxy); and says how many apps too old to name a community
- * still reach it before the switch date.
+ * the node doesn't know (a self-hoster's custom domain behind a proxy); and says that apps too old to name a community are
+ * refused (since the cutover, 1.4.0: apps/server engine/member-signature.ts, CUT4).
  *
  * An owner or admin confirms; nothing here is ever learned from a request by itself. Only the address this page is
  * open at is offered with one tap (apps/server engine/address-offers.ts): members' keys can all be one person's, and
@@ -89,7 +89,7 @@ const listedName = (h: HeldBackAddress) => h.directory?.name || 'another communi
 /** The node's answer, or null for anything else (an older server's page, a proxy's error page). */
 function asReport(r: unknown): AppAddressesReport | null {
     const x = r as AppAddressesReport | null;
-    return x && Array.isArray(x.addresses) && Array.isArray(x.unconfirmed) && x.oldApps && typeof x.oldApps === 'object' ? x : null;
+    return x && Array.isArray(x.addresses) && Array.isArray(x.unconfirmed) ? x : null;
 }
 
 /** A moment as a day, as Settings shows dates (UTC), or '' for none. */
@@ -276,11 +276,7 @@ export function AppAddressesPanel({ activeNode, onChanged, refreshSignal = 0 }: 
             {actionError && <p className="text-sm text-red-300 m-0 break-words" role="alert">{actionError}</p>}
 
             <p className="text-sm text-nature-300 m-0 leading-relaxed" data-testid="old-apps">
-                {report.unboundSignaturesAccepted
-                    ? (report.oldApps.busiestDay > 0
-                        ? `${apps(report.oldApps.today)} too old to name this community reached it today (most in one day this week: ${report.oldApps.busiestDay}). From ${switchDay} this community refuses apps that old, and their members see a message asking them to update BeanPool.`
-                        : `No app too old to name this community reached it this week. From ${switchDay} such apps are refused here.`)
-                    : 'Apps too old to name this community are refused here. Members using one see a message asking them to update BeanPool.'}
+                Apps too old to name this community are refused here. Members using one see a message asking them to update BeanPool.
             </p>
         </div>
     );

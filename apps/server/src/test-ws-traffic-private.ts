@@ -31,7 +31,7 @@ import { startHttpsServer } from './https-server.js';
 import { issueWsTicket } from './admin-auth.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { db } from './db/db.js';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -57,8 +57,8 @@ function seedMember(pk: string, callsign: string) {
 /** An owner's key sign-in, as the app's link or the QR pairing ends it: the admin_session cookie's id. */
 function keySession(id: Id): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), id.priv).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pub, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pub, signature, signedFor });
     if (!solved.ok) throw new Error(`key sign-in refused: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok || !ex.sessionId) throw new Error(`handshake refused: ${ex.error}`);

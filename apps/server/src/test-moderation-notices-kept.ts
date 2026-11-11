@@ -53,7 +53,7 @@ import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import * as mod from './engine/moderation-notices.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
-import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, signSocket, socketBinding, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -112,8 +112,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
 /** A moderator's key session, signed in as the app does it: challenge → signature → handshake → session. */
 function keySession(id: Id): string {
     const chal = createAdminChallenge();
-    const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), id.priv).toString('hex');
-    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, chal.challengeId);
+    const solved = verifyAndSolveChallenge({ challengeId: chal.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (!solved.ok) throw new Error(`no session: ${solved.error}`);
     const ex = consumeHandshakeToken(solved.handshakeToken!);
     if (!ex.ok) throw new Error(`no session: ${ex.error}`);

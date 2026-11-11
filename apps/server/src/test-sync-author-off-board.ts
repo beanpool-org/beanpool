@@ -58,7 +58,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { localFetch } from './keepalive-test-fetch.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields } from './signed-request-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -655,7 +655,7 @@ async function main() {
     const adaChal = createAdminChallenge();
     const adaSolved = verifyAndSolveChallenge({
         challengeId: adaChal.challengeId, memberPubkey: ada.pubKeyHex,
-        signature: crypto.sign(null, Buffer.from(adaChal.challenge, 'utf-8'), ada.privateKey).toString('hex'),
+        ...adminSigninFields(ada.privateKey, adaChal.challengeId),
     });
     const adaSession = adaSolved.ok ? consumeHandshakeToken(adaSolved.handshakeToken!).sessionId : undefined;
     assert(!!adaSession, 'Ada signs in as an admin with her key');
@@ -833,7 +833,7 @@ async function main() {
     const chal = createAdminChallenge();
     const solved = verifyAndSolveChallenge({
         challengeId: chal.challengeId, memberPubkey: mo.pubKeyHex,
-        signature: crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), mo.privateKey).toString('hex'),
+        ...adminSigninFields(mo.privateKey, chal.challengeId),
     });
     const modSession = solved.ok ? consumeHandshakeToken(solved.handshakeToken!).sessionId : undefined;
     assert(!!modSession, 'Mo signs in as a moderator with his key');

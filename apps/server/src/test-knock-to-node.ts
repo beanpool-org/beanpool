@@ -2,9 +2,11 @@
  * A knock is taken only by the community it was addressed to (routes/knocks.ts "Addressed here";
  * DESIGN-account-without-global-fable.md §3.5, closed in slice S3), over REAL HTTPS through the real signature middleware.
  *
- * The phone puts the community it asks in the body as `toNode`, inside what is signed. An old-format signature names no
+ * The phone puts the community it asks in the body as `toNode`, inside what is signed. An old-format signature named no
  * host, so a community that received a knock could send the same signed request on to another community for five
- * minutes, and learn from the answer whether that key is a member there. Each case below sends such a request.
+ * minutes, and learn from the answer whether that key is a member there. Since the cutover (1.4.0, CUT4) such a request
+ * is refused, 426 app_too_old, before any route (case 5). Cases 1 to 4 send a knock signed as today's app signs it (format
+ * 2, for a host this node takes as its own), so what they test is the route's own check of `toNode`.
  *
  *   1. a node that knows none of its names (as a self-hoster's first boot): a knock addressed to the host it came to is
  *      taken, with or without a port; one with no `toNode` is taken as before; one addressed to another community, or to
@@ -15,6 +17,8 @@
  *   3. the refusal comes before anything about the key: a member of this community whose knock names another community
  *      hears `wrong_community`, never "already a member"
  *   4. a `toNode` that is not an address is refused too
+ *   5. an old-format knock (no host in what is signed: the relayed request this check was written for) is refused,
+ *      426 app_too_old, and nothing is written
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock-to-node.ts
  */
@@ -31,6 +35,7 @@ import { db } from './db/db.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { forgetOwnAddresses } from './engine/own-addresses.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, setSignedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
 
@@ -49,8 +54,8 @@ function newId(name: string): Id {
 
 interface Res { status: number; body: any }
 
-/** A knock through the real stack, signed in the old format (no host in what is signed), as a relayed one would be. */
-async function knock(id: Id, extra: Record<string, unknown>): Promise<Res> {
+/** A knock through the real stack, as today's app signs it (format 2, for signedForHost()); `old`: in the old format. */
+async function knock(id: Id, extra: Record<string, unknown>, old = false): Promise<Res> {
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
     // A new day for the address limit (3 a day from one network): every case here comes from the test's one address.
@@ -64,7 +69,10 @@ async function knock(id: Id, extra: Record<string, unknown>): Promise<Res> {
         headers: {
             'Content-Type': 'application/json',
             'X-Public-Key': id.pk,
-            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64'),
+            'X-Signature': old
+                ? crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${raw}`), id.priv).toString('base64')
+                : signRequest(id.priv, { method: 'POST', path, timestamp: ts, nonce, body: raw }),
+            ...(old ? {} : { [SIGNED_FOR_HEADER]: signedForHost() }),
             'X-Timestamp': String(ts),
             'X-Nonce': nonce,
         },
@@ -115,6 +123,7 @@ async function main(): Promise<void> {
     // 2. A node that knows its name (BEANPOOL_ADDRESSES, one of the sources engine/own-addresses.ts reads).
     process.env.BEANPOOL_ADDRESSES = 'riverside.example.org';
     forgetOwnAddresses();
+    setSignedForHost('riverside.example.org');
     {
         const named = newId('Wren');
         const r = await knock(named, { toNode: 'riverside.example.org' });
@@ -149,8 +158,19 @@ async function main(): Promise<void> {
         }
     }
 
+    // 5. The old format: the relayed request the `toNode` check was written for, refused before the route since the cutover.
+    {
+        for (const toNode of ['riverside.example.org', 'castlemaine.example.org']) {
+            const id = newId('Old');
+            const r = await knock(id, { toNode }, true);
+            assert(r.status === 426 && r.body?.code === 'app_too_old' && /too old/.test(r.body?.error ?? '') && rowsFor(id.pk) === 0,
+                `5. an old-format knock addressed to ${toNode} is refused, 426 app_too_old, nothing written (${r.status} ${JSON.stringify(r.body)})`);
+        }
+    }
+
     delete process.env.BEANPOOL_ADDRESSES;
     forgetOwnAddresses();
+    setSignedForHost(null);
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
 }

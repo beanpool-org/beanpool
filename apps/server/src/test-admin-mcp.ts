@@ -47,6 +47,7 @@ import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './l
 import { welcomeInstructions, promptText, PROMPTS, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 import { AGENT_CREATE_BODY_MAX, REMOVE_ALL_CONFIRM } from './agent/owner-posts.js';
+import { adminSigninFields } from './signed-request-test-helper.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -86,7 +87,7 @@ function keypair(): Key {
 async function keySignIn(k: Key): Promise<string | null> {
     const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
     const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
-        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), k.priv).toString('hex') },
+        body: { challengeId: chal.body?.challengeId, memberPubkey: k.pub, ...adminSigninFields(k.priv, chal.body?.challengeId ?? '') },
     });
     const res = await fetch(`${BASE}/api/local/admin/auth/exchange`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: solved.body?.handshakeToken }),

@@ -3728,7 +3728,7 @@ export async function executeOffboardApi(
 // ======================== ADDRESSES MEMBERS' APPS USE (request binding) ========================
 // A member's app signs each request for the address it reaches the community at, and the node accepts only its own
 // addresses (apps/server engine/own-addresses.ts). Settings lists them, offers to confirm one the node doesn't know,
-// and says how many apps are too old to name a community (engine/member-signature.ts).
+// and says that apps too old to name a community are refused (engine/member-signature.ts, CUT4).
 
 export interface AppAddress {
     address: string;
@@ -3811,9 +3811,11 @@ export interface AppAddressesReport {
     unconfirmed: AddressSighting[];
     /** Addresses apps reached it at that are not offered with one tap, and why. Absent from a server before the guard. */
     heldBack?: HeldBackAddress[];
-    /** Apps that signed in the old format, bound to no community. */
-    oldApps: { today: number; busiestDay: number };
-    /** The day (UTC) old apps stop working here, or null when they already don't. */
+    /**
+     * The day (UTC) until which a node that knows none of its names accepts any address (apps/server
+     * engine/member-signature.ts UNCONFIGURED_HOSTS_UNTIL), or null once it has passed. Apps too old to name a community are
+     * refused on every day since the cutover (1.4.0), so nothing here counts them.
+     */
     unboundSignaturesUntil: string | null;
     unboundSignaturesAccepted: boolean;
     /**

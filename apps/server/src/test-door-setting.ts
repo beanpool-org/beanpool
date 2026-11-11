@@ -43,7 +43,7 @@ import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { registerMemberInternal } from './engine/members.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { claimGrantor } from './claim-code.js';
-import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { signRequest, SIGNED_FOR_HEADER, signedForHost, adminSigninFields, offlineTicket as signedOfflineTicket } from './signed-request-test-helper.js';
 
 let BASE = '';
 /** The owner's admin calls: Owen's key session from the phone's Manage hand-off, opened for each call (it passes every owner gate). */
@@ -106,15 +106,14 @@ const answer = (id: Id, knockId: string, verb: 'approve' | 'decline') => call(id
 
 /** A paper invite: an offline ticket `inviter` signed on their phone, which the node first sees when someone joins with it. */
 function offlineTicket(inviter: Id): string {
-    const payload = JSON.stringify({ i: inviter.pk, t: Date.now() });
-    return Buffer.from(JSON.stringify({ p: payload, s: crypto.sign(null, Buffer.from(payload), inviter.priv).toString('base64') })).toString('base64');
+    return signedOfflineTicket(inviter.priv, inviter.pk);
 }
 
 /** A member's own key opening Settings, as the app's Manage button does: challenge, signature, session. */
 async function keySession(id: Id): Promise<string | null> {
     const chal = await call(null, 'POST', '/api/local/admin/auth/challenge', {});
-    const signature = crypto.sign(null, Buffer.from(String(chal.body?.challenge), 'utf-8'), id.priv).toString('hex');
-    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature });
+    const { signature, signedFor } = adminSigninFields(id.priv, String(chal.body?.challengeId));
+    const verified = await call(null, 'POST', '/api/local/admin/auth/verify-challenge', { challengeId: chal.body?.challengeId, memberPubkey: id.pk, signature, signedFor });
     if (verified.status !== 200) return null;
     const ex = await call(null, 'POST', '/api/local/admin/auth/exchange', { token: verified.body?.handshakeToken });
     // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).

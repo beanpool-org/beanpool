@@ -9,7 +9,7 @@ related: privacy, notifications, the-bean, web-app
 ## Choosing
 
 - Open **Settings**. Under **App Settings**, find **Appearance**.
-- Tap one. It changes at once; there is no Save button. The one you chose has a tick and a darker border.
+- Tap one. It changes at once; there is no Save button. The one you chose has a tick and a stronger border.
 - **Same as phone** (**Same as device** in the web app): **Light** when your phone or computer is set to light, and **Classic** when it is set to dark. It follows the device, even while the app is open.
 - **Classic:** dark, with olive green. This is how BeanPool starts, on the phone and in the web app.
 - **Light:** always light, pale and warm.

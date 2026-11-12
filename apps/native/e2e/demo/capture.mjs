@@ -21,7 +21,8 @@
  * Metro's is taken), 1080x1920 at 420 dpi (Play rejects 2.22:1) and font 1.0, both put back at the end; SystemUI in demo mode
  * (9:41, battery 100, full signal, no notifications). The app is the dev client already on the AVD, loading its JS from a Metro
  * started on a `git archive` copy of this branch (never the worktree): the copy is the only place Sam's identity is patched in
- * (see `patchTree`), so no app source changes. Light and dark are chosen in Settings -> Appearance, as a member would, and the
+ * (see `patchTree`), so no app source changes. Light and Classic (the dark the pictures have always shown) are chosen in Settings
+ * -> Appearance, as a member would, and the
  * app is restarted after the choice (the map bakes its scheme in when it is made). Pictures are `adb exec-out screencap -p`.
  *
  * IOS (`--ios`, written here, run by the director: it needs an iOS dev client built and installed on the simulator, which no
@@ -199,12 +200,14 @@ export function patchTree(tree, { ios }) {
     fs.writeFileSync(appJson, `${JSON.stringify(config, null, 2)}\n`);
     if (ios) {
         // The theme provider reads the stored choice once at start: the patch above wrote 'system' first, but the two providers race,
-        // so the provider's own default is 'system' in the copy as well.
+        // so the provider's own start value is 'system' (Same as phone, which is Light on a light phone and Classic on a dark one)
+        // in the copy as well. The app's own start value is its default look, Classic (DEFAULT_PREFERENCE), since T3.
         const theme = path.join(tree, 'apps/native/app/ThemeContext.tsx');
         let t = fs.readFileSync(theme, 'utf8');
-        const from = "useState<ThemePreference>('light')";
-        if (!t.includes(from)) throw new Error('the theme provider no longer reads as the demo hook expects');
-        t = t.replace(from, "useState<ThemePreference>('system')").replace('.then(setThemePreferenceState)', ".then(() => setThemePreferenceState('system'))");
+        const from = 'useState<ThemePreference>(DEFAULT_PREFERENCE)';
+        const read = '.then(setThemePreferenceState)';
+        if (!t.includes(from) || !t.includes(read)) throw new Error('the theme provider no longer reads as the demo hook expects');
+        t = t.replace(from, "useState<ThemePreference>('system')").replace(read, ".then(() => setThemePreferenceState('system'))");
         fs.writeFileSync(theme, t);
     }
 }

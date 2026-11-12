@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LOOK_CHOICES, parseLook } from '@beanpool/core';
 import { patchTree, DEMO_APP_VERSION } from '../capture.mjs';
 
 const NATIVE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -44,7 +45,7 @@ describe('capture.mjs patchTree', () => {
         expect(src).not.toMatch(/struggle|banana/);
     });
 
-    it('leaves the theme alone on Android (light and dark are chosen in Settings) and follows the phone on iOS', () => {
+    it('leaves the theme alone on Android (Light and Classic are chosen in Settings) and follows the phone on iOS', () => {
         const before = read('app/ThemeContext.tsx');
         patchTree(tree, { ios: false });
         expect(read('app/ThemeContext.tsx')).toBe(before);
@@ -53,6 +54,32 @@ describe('capture.mjs patchTree', () => {
         patchTree(tree, { ios: true });
         expect(read('app/ThemeContext.tsx')).toContain("useState<ThemePreference>('system')");
         expect(read('app/IdentityContext.tsx')).toContain("'beanpool_theme_mode', 'system'");
+    });
+
+    it("on iOS the copy's theme provider starts from Same as phone and keeps it after the stored value is read; the app's own provider starts from its default look", () => {
+        // The app's own provider starts from the default look (Classic since T3), not from 'system'.
+        const own = read('app/ThemeContext.tsx');
+        expect(own).toContain('useState<ThemePreference>(DEFAULT_PREFERENCE)');
+        expect(own).toContain('.then(setThemePreferenceState)');
+        patchTree(tree, { ios: true });
+        const copy = read('app/ThemeContext.tsx');
+        expect(copy).toContain("useState<ThemePreference>('system')");
+        expect(copy).toContain(".then(() => setThemePreferenceState('system'))");
+        expect(copy).not.toContain('useState<ThemePreference>(DEFAULT_PREFERENCE)');
+        expect(copy).not.toContain('.then(setThemePreferenceState)');
+        // the 'system' the patch writes and starts from is a look the app knows (Same as phone): a rename of the stored value must fail here
+        expect(LOOK_CHOICES).toContain('system');
+        expect(parseLook('system')).toBe('system');
+        // and the copy is otherwise the app's own provider: only those two spots moved
+        expect(copy.replace("useState<ThemePreference>('system')", 'useState<ThemePreference>(DEFAULT_PREFERENCE)').replace(".then(() => setThemePreferenceState('system'))", '.then(setThemePreferenceState)')).toBe(own);
+    });
+
+    it('stops with a plain sentence when the theme provider no longer reads as the iOS patch expects', () => {
+        fs.writeFileSync(path.join(tree, 'apps/native/app/ThemeContext.tsx'), "export const x = useState<ThemePreference>('light');\n");
+        expect(() => patchTree(tree, { ios: true })).toThrow(/theme provider no longer reads/);
+        // Android never reads the theme provider, so it is not stopped by it
+        fs.copyFileSync(path.join(NATIVE, 'app/IdentityContext.tsx'), path.join(tree, 'apps/native/app/IdentityContext.tsx'));
+        expect(() => patchTree(tree, { ios: false })).not.toThrow();
     });
 
     it("sets the status bar on the post page only, inside the post page's own component, and gives it back on leaving", () => {

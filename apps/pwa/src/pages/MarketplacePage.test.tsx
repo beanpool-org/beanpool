@@ -1853,6 +1853,13 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             expect(screen.getByTestId('listing-price')).toHaveTextContent(/^Asking Price300 eachAll taken for now$/i);
         });
 
+        it('a free one says Free with its count under it, and no Beans sign or price for all', async () => {
+            await open(listing({ price_c: 0, priceType: 'each', unitsLeft: 20, lot: null }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^Asking PriceFree20 left$/i);
+            expect(box.querySelector('img')).toBeNull();
+        });
+
         it('a plain fixed price keeps its figure, its unit and its hours line (red if the box changes for every listing)', async () => {
             await open(listing({ price_c: 2000, priceType: 'fixed' }), []);
             const box = screen.getByTestId('listing-price');

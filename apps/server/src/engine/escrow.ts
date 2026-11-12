@@ -1204,8 +1204,9 @@ export function acceptPost(
     // A take-up that says how a listing priced for each one is taken, of one that is not (its seller changed the unit while
     // the buyer's screen was open), is refused, never paid at what it costs now; and a total the buyer's screen showed, sent
     // with any other take-up, holds it to that total too. Asked after the listing's own refusals (a copy, a Need, a loan).
-    if (!perItem && opts?.item && (opts.item.option !== undefined
-        || (!standing && opts.item.expect_c !== undefined && opts.item.expect_c !== finalCredits))) {
+    // null is none, as absent is (a body's JSON null for "no way", "no total").
+    if (!perItem && opts?.item && (opts.item.option != null
+        || (!standing && opts.item.expect_c != null && opts.item.expect_c !== finalCredits))) {
         throw itemTakeUpRefusal({ code: 'price_changed' });
     }
     if (standing) {

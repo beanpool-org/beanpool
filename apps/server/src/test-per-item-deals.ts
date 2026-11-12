@@ -504,6 +504,11 @@ async function main(): Promise<void> {
         `a Total, with the total it showed: one deal, off the board under it, as before (${brief(fw)})`);
     await release(dana, fw.body.transaction.id);
     assert(listing(firewood).status === 'completed' && listing(firewood).units_left === null, 'released: completed, as a one-off sale always was');
+    const kindling = await made(rob, { title: 'Kindling', priceType: 'fixed', price_c: hc(8) });
+    const kd = await post(eli, '/api/marketplace/posts/accept', { postId: kindling, buyerPublicKey: eli.pk, itemOption: null, expect_c: null });
+    // Red if a JSON null for "no way, no total" reads as a way given: the Total would be refused price_changed.
+    assert(kd.status === 200 && deal(kd.body.transaction.id).amount_c === hc(8) && deal(kd.body.transaction.id).item_option === null,
+        `a Total taken up with null for the way and the total: null is none, taken up as before (${brief(kd)})`);
     const garden = await made(rob, { title: 'Garden help', priceType: 'hourly', price_c: hc(20) });
     const gh = await post(eli, '/api/marketplace/posts/accept', { postId: garden, buyerPublicKey: eli.pk, hours: 2 });
     const robG = bal(rob.pk);

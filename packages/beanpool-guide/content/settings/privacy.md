@@ -20,7 +20,7 @@ Tap the sliders button at the top right of the screen. In the web app on a wide 
 
 ## What only you can see
 
-- **Your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person. Your balance is private from other members in the same way, with one exception: the people who give credit (below).
+- **Your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person. Your balance is private from other members in the same way, except for the people who give credit (below) and the cases that follow.
 - **Your friends list, who you chat with, and the invites you made.** Only you can read them, in the app or from your community's server. Others see only the connections in common you share with them.
 - If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.
 - If your account is removed (after your community voted for it, after an owner decided it because too few members could vote, or by an admin where votes are switched off), the admin who settles it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.

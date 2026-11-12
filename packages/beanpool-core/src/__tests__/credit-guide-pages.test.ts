@@ -15,7 +15,8 @@ import { knownRuleLine } from '../community-shape-card.js';
 import { formatHundredths } from '../hundredths.js';
 import {
     ALMOST_ALL_TENTHS, BRANCH_BELOW_MIN, CANCELLED_MIN, COMPLETION_MIN_ENDED, CREDIT_SIGHT_WORDS, DISPUTE_DAYS, LOW_DAYS_HERE, LOW_PARTNERS,
-    LOW_TRADES, RISK_LEVELS, RISK_SHAPES, riskLevelSentence, riskReasonSentence, type ReasonMark, type RiskLevel, type RiskReason,
+    LOW_TRADES, RISK_LEVELS, RISK_SHAPES, creditRisk, riskLevelSentence, riskReasonSentence, riskReasons, type CreditRiskFacts, type ReasonMark,
+    type RiskLevel, type RiskReason,
 } from '../credit-sight.js';
 import { VOUCH_MAX, VOUCH_PRESETS, VOUCHER_BUDGET_MAX } from '../vouch-presets.js';
 
@@ -58,6 +59,7 @@ describe('no page still says what stopped being true', () => {
         [/\*\*Your balance and your trades\.\*\* Nobody else/, 'the privacy page before the giver section'],
         [/Your balance stays private to you except in the four cases below/, 'the policy before section 9'],
         [/in a known community, if an admin has confirmed you, the admins can see your balance/i, 'the privacy page before the admins\' list wording'],
+        [/private from other members in the same way, with one exception/, 'the privacy page counts one exception where the removal vote, the settling admin and the admins\' list follow it'],
     ];
 
     it('the guide, the operator manual and the website say none of the old sentences', () => {
@@ -82,7 +84,18 @@ describe('no page still says what stopped being true', () => {
             "Other members can't read your balance or your history.",
             "**Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server.",
             'Your balance stays private to you except in the four cases below.',
+            'Your balance is private from other members in the same way, with one exception: the people who give credit (below).',
         ]) expect(OLD.some(([re]) => re.test(sentence)), sentence).toBe(true);
+    });
+
+    it('the members\' privacy page does not count one exception when the bullets under it add three more', () => {
+        const page = guide('settings/privacy.md');
+        const only = /## What only you can see\n([\s\S]*?)\n## /.exec(page)?.[1] ?? '';
+        expect(only).toContain('except for the people who give credit (below) and the cases that follow.');
+        // The cases that follow: the removal vote, the admin who settles a removal, the admins' list in a known community.
+        expect(only).toContain('If the community votes on removing you');
+        expect(only).toContain('If your account is removed');
+        expect(only).toContain('In a known community, the admins also keep a list');
     });
 });
 
@@ -181,6 +194,95 @@ describe('Credit risk: what it reads says what core\'s rules say', () => {
         for (const way of ['Friends trading to look established.', 'Topping up before asking.', 'A new key wipes a bad record.', 'A friendly voucher or a forwarded invite.',
             'Waiting it out.', 'A figure invites false precision.', 'Spending fast to be topped up.', 'Looking, not giving.']) expect(page, way).toContain(way);
         expect(page).toContain('Your community\'s server enforces nothing from this word.');
+    });
+
+    // The gaming list is said to the giver, so each line is held to what the rules do (deciding review of #3088, findings 1-3:
+    // the design's own sentences were wrong, and the page copied them).
+    const base: CreditRiskFacts = {
+        completed: 10, cancelled: 0, daysHere: 100, balance_c: 0, line_c: 100000, usable_c: 100000, frozen: false, ring: false, disputeAgainst: false,
+        lastSaleDays: 90, confirmed: false, insideOnly: false, outsideTrades: 0, outsidePartners: 0, branchPeople: 0, branchBelowZero: 0, writtenOff_c: 0,
+        debtLinePct: 50, quietDays: 60,
+    };
+    const codesOf = (f: CreditRiskFacts) => riskReasons(f).map((r) => r.code);
+
+    it('topping up: a gift that brings someone to zero or above clears every reason built from what they owe, the no-sale ones too', () => {
+        const owedBased = ['over', 'paused', 'almost_all_quiet', 'over_half', 'below_zero_quiet'];
+        // Owing 900 of 1,000 with 300 unlocked trips paused, almost-all-quiet, below-zero-quiet and over-half; owing 1,100 trips over.
+        const spentPaused: CreditRiskFacts = { ...base, balance_c: -90000, usable_c: 30000 };
+        const spentOver: CreditRiskFacts = { ...base, balance_c: -110000 };
+        const before = new Set([...codesOf(spentPaused), ...codesOf(spentOver)]);
+        for (const code of owedBased) expect(before.has(code as RiskReason['code']), `${code} holds in debt`).toBe(true);
+        expect(creditRisk(spentPaused).level).toBe('high');
+        // A friend's 950 Beans lift the first to +50 and 1,150 lift the second to +50, for the look.
+        for (const gifted of [{ ...spentPaused, balance_c: 5000 }, { ...spentOver, balance_c: 5000 }]) {
+            const after = codesOf(gifted);
+            for (const code of owedBased) expect(after, `${code} after a gift`).not.toContain(code);
+            expect(creditRisk(gifted).level).not.toBe('high');
+        }
+        // At zero is enough: owing nothing is owing nothing.
+        expect(codesOf({ ...spentPaused, balance_c: 0 })).not.toContain('below_zero_quiet');
+        // What a gift does not clear: the last sale is no input a gift changes, and a balance above zero adds no reason to trust.
+        expect(creditRisk({ ...spentPaused, balance_c: 5000 }).level).toBe('not_known');
+        // The page says so, and no longer says the no-sale reasons hold.
+        expect(page).toContain('A gift that brings someone to zero or above clears every reason built from what they owe, the no-sale ones too, until the Beans go back.');
+        expect(page).toContain('A gift is not a sale, so their last sale does not move, and a balance above zero is never a reason to trust.');
+        expect(page).not.toMatch(/do not move with a gift/i);
+    });
+
+    it('a new account reads not known yet until an admin confirms it, which reads low, so the page does not say "never low"', () => {
+        const newcomer: CreditRiskFacts = { ...base, completed: 0, daysHere: 1, lastSaleDays: null };
+        expect(creditRisk(newcomer).level).toBe('not_known');
+        expect(creditRisk({ ...newcomer, confirmed: true }).level).toBe('low');
+        expect(page).toContain('A new account reads not known yet. It reads low only once an admin confirms it, or after real trades with people outside its circle over thirty days.');
+        expect(page).not.toMatch(/never low/i);
+        expect(LOW_DAYS_HERE).toBe(30);
+    });
+
+    it('only owners and admins are told who stands behind someone; the page says a voucher is not', () => {
+        const server = readFileSync(join(ROOT, 'apps/server/src/engine/credit-sight.ts'), 'utf8');
+        const voucherAnswer = /export interface CreditPersonVoucher \{[\s\S]*?\n\}/.exec(server)?.[0] ?? '';
+        const fullAnswer = /export interface CreditPersonFull extends CreditPersonVoucher \{[\s\S]*?\n\}/.exec(server)?.[0] ?? '';
+        expect(voucherAnswer).toContain('interface CreditPersonVoucher');
+        expect(voucherAnswer).not.toContain('standsBehind');
+        expect(fullAnswer).toContain('standsBehind');
+        expect(server).toContain("const full = sight !== 'voucher';");
+        expect(page).toContain('The card that owners and admins see names who stands behind someone, so they can judge that too. A voucher is not told who.');
+        expect(page).not.toContain('so the giver can judge that too');
+    });
+});
+
+describe('the website goes live when the PR merges, so it names only places that exist', () => {
+    /** Non-test source of the apps and of core, where a screen's heading or a route's call would be. */
+    const SOURCE_DIRS = ['apps/native/app', 'apps/native/components', 'apps/native/utils', 'apps/pwa/src', 'apps/manager/src', 'packages/beanpool-core/src'];
+    function sources(dir: string): string[] {
+        return readdirSync(dir).flatMap((name) => {
+            const p = join(dir, name);
+            if (name === 'node_modules' || name === '__tests__' || name === 'dist') return [];
+            if (statSync(p).isDirectory()) return sources(p);
+            return /\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) ? [p] : [];
+        });
+    }
+    const code = () => SOURCE_DIRS.map((d) => join(ROOT, d)).filter(existsSync).flatMap(sources).map((p) => readFileSync(p, 'utf8')).join('\n');
+
+    it('the Ledger panel and the Settings record of looks are on the policy only once an app has them', () => {
+        const text = plain(policy());
+        // Review of #3088, finding 4: section 9 sent members to a Ledger panel (C6) and a Settings record (C5) no app has. Once
+        // C5 or C6 land the name is in the apps and the policy may say it; until then the policy says what the server answers.
+        const places: Array<[RegExp, string, string]> = [
+            [/What people who give credit see|on your own Ledger/, 'What people who give credit see', 'the Ledger panel (C6)'],
+            [/beside the record of balance looks/, 'api/credit/looks', 'the Settings record of looks (C5)'],
+        ];
+        const all = code();
+        const early = places.filter(([said, there]) => said.test(text) && !all.includes(there)).map(([, , name]) => name);
+        expect(early).toEqual([]);
+        // The policy still says what the server does now: any member can ask, and it is not a look.
+        expect(text).toContain('your community\'s server will tell any member, on request, the answer a voucher gets about them. Asking is not recorded as a look.');
+        expect(text).toContain('Every owner and admin can read the record from your community\'s server.');
+        // The route it names is the one on main, and it records nothing.
+        const route = readFileSync(join(ROOT, 'apps/server/src/routes/credit-sight.ts'), 'utf8');
+        const me = /router\.get\('\/api\/credit\/me',[\s\S]*?\n {4}\}\);/.exec(route)?.[0] ?? '';
+        expect(me).toContain('creditMe(viewer)');
+        expect(me).not.toContain('recordLooks');
     });
 });
 

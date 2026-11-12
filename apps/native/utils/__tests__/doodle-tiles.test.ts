@@ -53,7 +53,7 @@ async function draw(set: BrandSet, patternEnabled = true, theme = brandScheme(se
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    act(() => root!.render(createElement(PatternBackground)));
+    act(() => root!.render(createElement(PatternBackground as any) as any));
     return { tile: tileName(host.querySelector('img')?.getAttribute('data-tile') ?? null), ground: host.querySelector('div')?.getAttribute('data-ground') };
 }
 

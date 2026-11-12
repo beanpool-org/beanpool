@@ -961,6 +961,16 @@ export interface DmOldPartLine {
 }
 
 /**
+ * An old line's words, opened as checkDmThread opens them: under `keys`, then each of `formerPeers`. Only with the old shape at
+ * the line's time (dmLineHasOldShape). Throws DmLineNotVerifiedError when none opens. For a reader that must know the words
+ * open before it shows anything of the line (the phone's photo cache, kept by message id: utils/db.ts getDecryptedAttachment).
+ */
+export function openDmOldLineWords(words: DmPayload, keys: DmKeys, line: DmOldPartLine, formerPeers: readonly string[] = []): OpenedDmOldLine {
+    if (!dmLineHasOldShape({ ...words, timestamp: line.timestamp })) throw new DmLineNotVerifiedError();
+    return openDmOldWords(words, keys, line, dmPublicKeyOf(keys.myEdPrivHex), formerPeers).opened;
+}
+
+/**
  * One more part of a line from before 1.4.0, its photo ('attachment') or the listing it is about ('about'), opened only as
  * part of its words (`words`, the line's own ciphertext and nonce): the words open as an old line first (under `keys`, then
  * each of `formerPeers` as checkDmThread tries them), then the part under the same key, sender, conversation id and format,

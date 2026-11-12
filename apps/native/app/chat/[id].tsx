@@ -77,18 +77,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promi
 }
 
 /** Image bubble that lazily fetches + decrypts an encrypted attachment for display.
- *  Tapping calls onOpen(uri) so the parent can show it full-screen. */
-function ChatImage({ conversationId, messageId, onOpen }: { conversationId: string; messageId: string; onOpen?: (uri: string) => void }) {
+ *  Tapping calls onOpen(uri) so the parent can show it full-screen.
+ *  `oldLine`: a line from before 1.4.0, shown read-only; its photo opens as part of its words (conversion code, log row
+ *  OLDCHAT, remove after 12 Dec 2026). */
+function ChatImage({ conversationId, messageId, onOpen, oldLine = false }: { conversationId: string; messageId: string; onOpen?: (uri: string) => void; oldLine?: boolean }) {
     const { colors } = useTheme();
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
     useEffect(() => {
         let active = true;
-        getDecryptedAttachment(conversationId, messageId)
+        getDecryptedAttachment(conversationId, messageId, oldLine)
             .then(u => { if (active) { if (u) { setUri(u); } else { setFailed(true); } } })
             .catch(() => { if (active) setFailed(true); });
         return () => { active = false; };
-    }, [conversationId, messageId]);
+    }, [conversationId, messageId, oldLine]);
     if (failed) return <Text style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>{t('🔒 Image unavailable')}</Text>;
     if (!uri) return <View style={{ width: 220, height: 220, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={colors.text.muted} /></View>;
     return (
@@ -1439,7 +1441,8 @@ function ChatScreen({ id }: { id: string }) {
                         <Text aria-hidden={true} importantForAccessibility="no">🖼️ </Text>{t('Photo: shown when you accept')}
                     </Text>
                 ) : (
-                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
+                    // oldLine: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
+                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} oldLine={!!item.oldLine} />
                 )) : null}
                 status={status}
                 footer={(item.type === 'image' && !item.text) || item.integrityNote ? (

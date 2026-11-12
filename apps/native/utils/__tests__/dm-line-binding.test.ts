@@ -106,6 +106,8 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { dmLineSigOf, dmLineSigVerifies } from '@beanpool/core';
+// Old chat's photos and cards: the frozen 1.2.36 lines (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+import { DM_OLD_LINES, DM_OLD_LINE_TIMES, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '@beanpool/core/dm-line-vectors';
 import { reportDmLine, getDb, getMessages, syncMessages, syncSingleConversation, createConversationApi, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
@@ -663,6 +665,131 @@ describe('old chat: a line from before 1.4.0', () => {
             expect(await drawn(dm, id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
             expect(JSON.stringify(await getMessages(dm.id))).not.toMatch(/500 Beans/);
         }
+    });
+});
+
+// Old chat's photos and cards (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 13 Nov 2026: "if they are there
+// why not view them?"): an old line's photo opens on the phone as a new line's does, and its listing card shows, each opened
+// as part of the line's words, from the lines the 1.2.36 apps and the format-3 card sealer wrote (core DM_OLD_LINES, frozen).
+// The same as on the web (MessagesPage.old-chat-photos.test.tsx).
+describe('old chat: an old line\'s photo and listing card, from the frozen 1.2.36 lines', () => {
+    const L = DM_OLD_LINES;
+    const VCONV = DM_VECTOR_CONVERSATION;
+    const BEFORE = DM_OLD_LINE_TIMES.before;
+    // Ana and Ben as the phone keeps a key (the bare seed); Cat, a stranger to their chat.
+    const vAna: Person = { name: 'Ana', publicKey: DM_VECTOR_PEOPLE.ana.publicKey, privateKey: DM_VECTOR_PEOPLE.ana.seedHex };
+    const vBen: Person = { name: 'Ben', publicKey: DM_VECTOR_PEOPLE.ben.publicKey, privateKey: DM_VECTOR_PEOPLE.ben.seedHex };
+    type Fixture = (typeof L)[keyof typeof L];
+    /** A frozen line as the node stores it, in its author's name. */
+    const frozen = (f: Fixture, o: { type?: string; timestamp?: string; metadata?: string | null } = {}): Line => {
+        const line: Line = {
+            id: f.messageId, conversationId: VCONV, authorPubkey: (f.from === 'ana' ? vAna : vBen).publicKey, ciphertext: f.payload.ciphertext,
+            nonce: f.payload.nonce, type: o.type ?? 'text', systemType: null, metadata: o.metadata === undefined ? f.metadata : o.metadata,
+            timestamp: o.timestamp ?? BEFORE, editedAt: null,
+        };
+        node.lines.push(line);
+        return line;
+    };
+    const servePhoto = (line: Line, photo: Fixture) => node.photos.set(line.id, { data: photo.payload.ciphertext, nonce: photo.payload.nonce });
+    const itemOf = async (id: string) => (await getMessages(VCONV)).find((m: any) => m.id === id) as ChatMessage;
+    /** The photo as the chat screen asks for it (app/chat/[id].tsx ChatImage): with the line's own oldLine. */
+    const photoShown = async (id: string) => getDecryptedAttachment(VCONV, id, !!(await itemOf(id))?.oldLine);
+    const cached = (id: string) => (fs.existsSync(`${h.cacheDir}/chat-images/${id}.jpg`) ? fs.readFileSync(`${h.cacheDir}/chat-images/${id}.jpg`, 'utf8') : null);
+    const base64Of = (dataUri: string) => dataUri.slice(dataUri.indexOf(',') + 1);
+    const viewerOf = (who: Person) => ({ kind: 'dm' as const, myPubkey: who.publicKey, canPost: true, reportsLines: true, now: Date.parse('2026-11-13T09:00:00.000Z') });
+
+    beforeEach(() => {
+        node.convs = [{ id: VCONV, type: 'dm', participants: [vAna.publicKey, vBen.publicKey] }];
+    });
+
+    it('a frozen 1.2.36 photo (format 3) opens on both phones, kept once in the cache, and the line stays read-only', async () => {
+        const line = frozen(L.anaFormat3, { type: 'image' });
+        servePhoto(line, L.anaPhotoFormat3);
+        for (const who of [vBen, vAna]) {
+            await phoneOf(who);
+            const item = await itemOf(line.id);
+            expect(item.oldLine).toBe(true);
+            expect(item.text).toBe(L.anaFormat3.text);   // the caption, under the photo
+            expect(await photoShown(line.id)).toMatch(/chat-images\//);
+            expect(cached(line.id)).toBe(base64Of(L.anaPhotoFormat3.text));
+            const a = messageActions(item, viewerOf(who));
+            expect({ reply: a.reply, react: a.react, edit: a.edit, delete: a.delete }).toEqual({ reply: false, react: false, edit: false, delete: false });
+        }
+    });
+
+    it('a frozen format-2 photo (an app before 2 October 2026) opens for Ana', async () => {
+        const line = frozen(L.benFormat2, { type: 'image', timestamp: '2026-09-20T10:00:00.000Z' });
+        servePhoto(line, L.benPhotoFormat2);
+        await phoneOf(vAna);
+        expect((await itemOf(line.id)).oldLine).toBe(true);
+        expect(await photoShown(line.id)).toMatch(/chat-images\//);
+        expect(cached(line.id)).toBe(base64Of(L.benPhotoFormat2.text));
+    });
+
+    it('its file gone on the node: locked (null), nothing cached, the caption still reads', async () => {
+        const line = frozen(L.anaFormat3, { type: 'image' });
+        await phoneOf(vBen);
+        expect((await itemOf(line.id)).text).toBe(L.anaFormat3.text);
+        expect(await photoShown(line.id)).toBeNull();
+        expect(cached(line.id)).toBeNull();
+    });
+
+    it('not this line\'s photo: another format\'s, or words that are no picture, stay locked and are never cached', async () => {
+        const three = frozen(L.anaFormat3, { type: 'image' });
+        const two = frozen(L.benFormat2, { type: 'image', timestamp: '2026-09-20T10:00:00.000Z' });
+        servePhoto(three, L.benPhotoFormat2);
+        servePhoto(two, L.benNotPhotoFormat2);
+        await phoneOf(vAna);
+        for (const line of [three, two]) {
+            expect((await itemOf(line.id)).oldLine).toBe(true);
+            expect(await photoShown(line.id)).toBeNull();
+            expect(cached(line.id)).toBeNull();
+        }
+    });
+
+    it('a stranger\'s key opens nothing: Cat, shown Ana\'s old photo line in a chat with her, gets neither words nor photo, even asked as old', async () => {
+        const cat = person('Cat');
+        node.convs = [{ id: VCONV, type: 'dm', participants: [cat.publicKey, vAna.publicKey] }];
+        const line = frozen(L.anaFormat3, { type: 'image' });
+        servePhoto(line, L.anaPhotoFormat3);
+        await phoneOf(cat);
+        const item = await itemOf(line.id);
+        expect(item.oldLine).toBe(false);
+        expect(item.unattributed).toBe(true);
+        expect(await photoShown(line.id)).toBeNull();
+        expect(await getDecryptedAttachment(VCONV, line.id, true)).toBeNull();
+        expect(cached(line.id)).toBeNull();
+    });
+
+    it('a photo opened once never shows from the cache under words that no longer open as old (re-dated after the cutover)', async () => {
+        const line = frozen(L.anaFormat3, { type: 'image' });
+        servePhoto(line, L.anaPhotoFormat3);
+        await phoneOf(vBen);
+        expect(await photoShown(line.id)).toMatch(/chat-images\//);
+        line.timestamp = DM_OLD_LINE_TIMES.after;
+        await phoneOf(vBen, { keepPhotos: true });
+        expect(cached(line.id)).not.toBeNull();
+        expect((await itemOf(line.id)).oldLine).toBe(false);
+        expect(await photoShown(line.id)).toBeNull();
+        expect(await getDecryptedAttachment(VCONV, line.id, true)).toBeNull();
+    });
+
+    it('a format-3 line\'s listing card opens for the bubble\'s card; none on a format-2 line, under another message, or after the cutover', async () => {
+        const about = (f: Fixture) => JSON.stringify({ ...(f.metadata ? JSON.parse(f.metadata) : {}), about: L.anaAboutFormat3.payload });
+        const line = frozen(L.anaFormat3, { metadata: about(L.anaFormat3) });
+        const two = frozen(L.benFormat2, { timestamp: '2026-09-20T10:00:00.000Z', metadata: about(L.benFormat2) });
+        const reply = frozen(L.benFormat3Reply, { timestamp: '2026-11-05T09:01:00.000Z', metadata: about(L.benFormat3Reply) });
+        for (const who of [vBen, vAna]) {
+            await phoneOf(who);
+            expect((await itemOf(line.id)).about).toEqual({ postId: 'old-eggs-1', title: 'Fresh eggs', kind: 'offer' });
+            expect((await itemOf(two.id)).oldLine).toBe(true);
+            expect((await itemOf(two.id)).about).toBeNull();
+            expect((await itemOf(reply.id)).oldLine).toBe(true);
+            expect((await itemOf(reply.id)).about).toBeNull();
+        }
+        line.timestamp = DM_OLD_LINE_TIMES.after;
+        await phoneOf(vBen);
+        expect((await itemOf(line.id)).about).toBeNull();
     });
 });
 

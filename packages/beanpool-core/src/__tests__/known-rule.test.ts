@@ -13,7 +13,9 @@ import { pseudoLocalise, setLanguage } from '../words.js';
 
 /** The defaults, nothing waiting. */
 const RULE: KnownRule = { knownFloor: 100000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
-const HALF = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+// The rule line, reworded beside the sentence that every giver sees each balance (credit sight C1, DESIGN-credit-list-amend-fable.md §5.3).
+const HALF = "The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
+const TOLD = 'People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded.';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const APP_SOURCES = ['apps/native/app', 'apps/native/components', 'apps/native/utils', 'apps/pwa/src', 'packages/beanpool-core/src'];
@@ -34,22 +36,24 @@ afterEach(() => setLanguage('en'));
 describe('the rule line', () => {
     it('says "half" at 50 and the percentage otherwise, in the community\'s numbers', () => {
         expect(knownRuleLine({ debtLinePct: 50, quietDays: 60 })).toBe(HALF);
-        expect(knownRuleLine({ debtLinePct: 30, quietDays: 90 })).toBe("The admins can see a confirmed member's balance if they owe more than 30% of their credit line, or are in debit and haven't made a sale for 90 days. Each look is logged.");
+        expect(knownRuleLine({ debtLinePct: 30, quietDays: 90 })).toBe("The admins also keep a list of confirmed members who owe more than 30% of their credit line, or are in debit and haven't made a sale for 90 days.");
+        // Where the node says givers see balances, the sentence that says so comes first, in the same line.
+        expect(knownRuleLine({ debtLinePct: 50, quietDays: 60, creditSight: true })).toBe(`${TOLD} ${HALF}`);
     });
 
     it('an older node, which states no lines, draws no rule line and keeps its floor line', () => {
         expect(knownRuleLine({})).toBeNull();
         expect(knownRuleLine({ debtLinePct: 50 })).toBeNull();
         expect(knownRuleLine({ quietDays: 60 })).toBeNull();
-        expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 100000 }).filter(l => /admins can see/.test(l))).toEqual([]);
+        expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 100000 }).filter(l => /admins also keep a list/.test(l))).toEqual([]);
         expect(communityShapeLines({ beans: true, door: 'members', knownFloor: 100000 }).some(l => l.includes('1,000 Beans'))).toBe(true);
     });
 
     it('sits right under the floor line on "How this community works", and only with the floor', () => {
         const lines = communityShapeLines({ beans: true, door: 'members', knownFloor: 100000, debtLinePct: 50, quietDays: 60 });
         const floor = lines.findIndex(l => l.includes('(the known floor)'));
-        expect(lines[floor + 1]).toBe(HALF);
-        expect(communityShapeLines({ beans: true, door: 'members', debtLinePct: 50, quietDays: 60 }).filter(l => /admins can see/.test(l))).toEqual([]);
+        expect(lines[floor + 1]).toBe(`${TOLD} ${HALF}`);
+        expect(communityShapeLines({ beans: true, door: 'members', debtLinePct: 50, quietDays: 60 }).filter(l => /admins also keep a list/.test(l))).toEqual([]);
     });
 
     it('the join screen draws the floor and the rule together, or nothing', () => {
@@ -69,13 +73,13 @@ describe('the rule line', () => {
         expect(waitingLineSentences(waiting)).toEqual(['The line of 30% applies from 16 November.', 'The line of 45 days applies from 20 November.']);
         expect(waitingLineSentences(RULE)).toEqual([]);
         const lines = communityShapeLines({ beans: true, door: 'members', knownFloor: 100000, debtLinePct: 30, quietDays: 45 }, waiting);
-        expect(lines.indexOf('The line of 30% applies from 16 November.')).toBe(lines.indexOf(knownRuleLine(waiting) as string) + 1);
+        expect(lines.indexOf('The line of 30% applies from 16 November.')).toBe(lines.indexOf(knownRuleLine({ ...waiting, creditSight: true }) as string) + 1);
     });
 
     it('goes through the words layer: each sentence bracketed in the pseudo-locale, {days} in the language\'s plural', () => {
         setLanguage('xx');
         const days = pseudoLocalise('{n} days').replace('{n}', '60');
-        expect(knownRuleLine({ debtLinePct: 50, quietDays: 60 })).toBe(pseudoLocalise(String(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf)).replace('{days}', days));
+        expect(knownRuleLine({ debtLinePct: 50, quietDays: 60 })).toBe(pseudoLocalise(String(COMMUNITY_SHAPE_CARD_WORDS.listLineHalf)).replace('{days}', days));
     });
 });
 
@@ -265,7 +269,7 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
     });
 
     it('the rule states what the server tests: in debit now, and no sale for {days}, with no wait on the debit', () => {
-        for (const line of [COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf, COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct]) {
+        for (const line of [COMMUNITY_SHAPE_CARD_WORDS.listLineHalf, COMMUNITY_SHAPE_CARD_WORDS.listLinePct]) {
             expect(String(line)).toContain("or are in debit and haven't made a sale for {days}.");
             expect(String(line)).not.toMatch(WAIT);
         }
@@ -288,8 +292,8 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
         expect(Object.keys(OLD_WAIT).sort()).toEqual(coreCatalogs().map(f => f.replace('.json', '')).sort());
         for (const file of coreCatalogs()) {
             const catalog = read('packages/beanpool-core/words', file);
-            const half = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf)];
-            const pct = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct)];
+            const half = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.listLineHalf)];
+            const pct = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.listLinePct)];
             const wait = OLD_WAIT[file.replace('.json', '')]!;
             expect(half, `${file}: the half line`).toContain('{days}');
             expect(pct, `${file}: the percentage line`).toContain('{days}');

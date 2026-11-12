@@ -593,6 +593,7 @@ export const SUITES = [
     'test-owner-vouch',
     'test-vouchers',
     'test-credit-gift',
+    'test-credit-sight',
     'test-credit-notices',
     'test-invite-asks',
     'test-knowledge-publish',

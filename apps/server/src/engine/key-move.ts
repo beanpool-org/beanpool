@@ -358,6 +358,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('money_requests', 'payer_pubkey');
     move('known_floor_log', 'actor_pubkey');
     move('known_floor_log', 'member_pubkey');
+    // Who looked at whose credit (engine/credit-looks.ts): both keys, so the owners and admins still read a re-keyed member's
+    // looks, and the looks they took. The new key of a re-key is no member before it, so no line already names it.
+    move('credit_look_log', 'actor_pubkey');
+    move('credit_look_log', 'subject_pubkey');
     // A voucher's budget, the lines that wrote it, and the credit line each vouch or gift gave, beside invited_by (engine/vouchers.ts):
     // the budget and the room follow the person.
     move('vouchers', 'member_pubkey');

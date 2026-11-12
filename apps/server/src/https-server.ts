@@ -173,6 +173,7 @@ import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createNamesListRoutes } from './routes/names-list.js';
 import { createContactsRoutes } from './routes/contacts.js';
+import { createCreditSightRoutes } from './routes/credit-sight.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
 import { createNodeClaimRoutes } from './routes/node-claim.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
@@ -2066,6 +2067,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createNamesListRoutes(deps),
         // A member's locked contacts list (engine/contact-copies.ts).
         createContactsRoutes(),
+        // The giver's sight: credit on the People list, and who looked (engine/credit-sight.ts, engine/credit-looks.ts).
+        createCreditSightRoutes(deps),
         createSettingsSigninRoutes(deps),
         createNodeClaimRoutes(deps),
         createRecoveryCollectRoutes(deps),

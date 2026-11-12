@@ -154,6 +154,7 @@ export * from './busy-answer.js';
 export * from './knock-status-watch.js';
 export * from './messaging.js';
 export * from './community-shape-card.js';
+export * from './credit-sight.js';
 export * from './known-rule.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's

@@ -319,7 +319,7 @@ describe("a phone that has never heard the worldwide community's profile", () =>
 describe("the joined community's rule on People's Join Another Community", () => {
     const OTHER = 'https://riverside.example';
     const RULE = { known: true, knownFloor: 100, debtLinePct: 30, quietDays: 21, debtLineFrom: null, quietDaysFrom: null };
-    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than 30% of their credit line, or are in debit and haven't made a sale for 21 days. Each look is logged.";
+    const SENTENCE = "The admins also keep a list of confirmed members who owe more than 30% of their credit line, or are in debit and haven't made a sale for 21 days.";
     const rules = { by: new Map<string, unknown>() };
     beforeEach(() => {
         rules.by.clear();

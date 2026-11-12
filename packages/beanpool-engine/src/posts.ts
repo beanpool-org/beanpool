@@ -1312,7 +1312,7 @@ export function hasListedOffer(db: Db, publicKey: string): boolean {
  * listed Offer and comes back to the board when the loan ends (apps/server engine/escrow.ts). A loan, which any member
  * can start with a one-step accept, never takes away the lender's credit line.
  */
-const LIVE_OFFER_WHERE = `${OWN_OFFER_WHERE} AND active = 1 AND (status = 'active' OR (status = 'pending' AND lendable = 1))`;
+export const LIVE_OFFER_WHERE = `${OWN_OFFER_WHERE} AND active = 1 AND (status = 'active' OR (status = 'pending' AND lendable = 1))`;
 
 export function hasLiveOffer(db: Db, publicKey: string): boolean {
     const row = db.prepare(`SELECT 1 FROM posts WHERE ${LIVE_OFFER_WHERE} LIMIT 1`).get(publicKey);

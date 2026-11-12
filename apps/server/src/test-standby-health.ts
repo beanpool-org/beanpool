@@ -515,9 +515,10 @@ async function main(): Promise<void> {
         // Version 33: a new table, bills (a request to pay, engine/bills.ts; DESIGN-getting-paid-fable slice B1).
         // Version 34: three new tables, Local knowledge's waiting list (knowledge_drafts, knowledge_draft_photos,
         // knowledge_helped; engine/knowledge-drafts.ts, slice K3).
-        assert(snap?.tableHashes?.v === 34 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
+        // Version 35: a new table, credit_look_log (who looked at whose credit; engine/credit-looks.ts, credit sight C1).
+        assert(snap?.tableHashes?.v === 35 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
             'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests', 'contact_copies', 'bills',
-            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped', 'credit_look_log'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

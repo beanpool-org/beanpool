@@ -51,6 +51,7 @@ import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
+import { pruneOldLooks } from './engine/credit-looks.js';
 import { avatarValueRefusal, photoValueRefusal, photoRefusalError, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './engine/photo-upload-budget.js';
 import { stripImageValue } from './storage/image-metadata.js';
@@ -1095,6 +1096,8 @@ function armMainServerTimers(): void {
         try { expireOldRequests(); } catch (e) { console.warn('[Messaging] Request expiry failed:', e); }
         // Bills past their 30 days expire (engine/bills.ts): a state flip, no Beans move.
         try { expireBills(); } catch (e) { console.warn('[Bills] Expiry failed:', e); }
+        // Lines of the log of credit looks 12 months old go (engine/credit-looks.ts; the manifest's age rule, no tombstone).
+        try { pruneOldLooks(); } catch (e) { console.warn('[Credit] Could not drop old credit looks:', e); }
     }), 60 * 60 * 1000);
 
     // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,

@@ -75,7 +75,7 @@ describe('the rule line', () => {
     it('goes through the words layer: each sentence bracketed in the pseudo-locale, {days} in the language\'s plural', () => {
         setLanguage('xx');
         const days = pseudoLocalise('{n} days').replace('{n}', '60');
-        expect(knownRuleLine({ debtLinePct: 50, quietDays: 60 })).toBe(pseudoLocalise(String(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf)).replace('{days}', days));
+        expect(knownRuleLine({ debtLinePct: 50, quietDays: 60 })).toBe(pseudoLocalise(String(COMMUNITY_SHAPE_CARD_WORDS.listLineHalf)).replace('{days}', days));
     });
 });
 
@@ -265,7 +265,7 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
     });
 
     it('the rule states what the server tests: in debit now, and no sale for {days}, with no wait on the debit', () => {
-        for (const line of [COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf, COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct]) {
+        for (const line of [COMMUNITY_SHAPE_CARD_WORDS.listLineHalf, COMMUNITY_SHAPE_CARD_WORDS.listLinePct]) {
             expect(String(line)).toContain("or are in debit and haven't made a sale for {days}.");
             expect(String(line)).not.toMatch(WAIT);
         }
@@ -288,8 +288,8 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
         expect(Object.keys(OLD_WAIT).sort()).toEqual(coreCatalogs().map(f => f.replace('.json', '')).sort());
         for (const file of coreCatalogs()) {
             const catalog = read('packages/beanpool-core/words', file);
-            const half = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf)];
-            const pct = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct)];
+            const half = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.listLineHalf)];
+            const pct = catalog[String(COMMUNITY_SHAPE_CARD_WORDS.listLinePct)];
             const wait = OLD_WAIT[file.replace('.json', '')]!;
             expect(half, `${file}: the half line`).toContain('{days}');
             expect(pct, `${file}: the percentage line`).toContain('{days}');

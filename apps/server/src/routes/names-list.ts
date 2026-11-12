@@ -55,6 +55,7 @@
  * are no admin now (reconcileHolders).
  */
 import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js';
+import { creditSightOn } from '../engine/credit-sight.js';
 import { HealthError, healthSummary, knownRule, openExceptions, readHealthAccessLog, setHealthSettings, stepBackFromConfirmed } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
@@ -246,9 +247,11 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     }));
 
     // A known community's rule, in its own numbers: public, for the join screen; the words are core's, in the reader's language.
+    // `creditSight`: owners, admins and vouchers here see each member's balance and credit line (routes/credit-sight.ts), so
+    // the join screen says so on every node with Beans, known or not (DESIGN-credit-list-amend-fable.md §5.3).
     router.get('/api/community/known-rule', (ctx) => {
         ctx.set('Cache-Control', 'no-store');
-        ctx.body = knownRule();
+        ctx.body = { ...knownRule(), creditSight: creditSightOn() };
     });
     // A member stepping back from being confirmed: the signer's own, and nobody else's. Nothing here names a member, and a
     // body that does is refused rather than read as the signer's own: an admin who means someone else steps nobody back.

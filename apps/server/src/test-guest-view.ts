@@ -1480,6 +1480,7 @@ async function main(): Promise<void> {
             'GET /api/names/vouchers', 'POST /api/names/vouchers', 'POST /api/names/vouchers/settings', 'GET /api/names/vouchers/:member',
             'DELETE /api/names/vouchers/:member', 'POST /api/names/vouchers/:member/budget', 'POST /api/names/committee',
             'POST /api/vouch', 'GET /api/vouchers/me', 'GET /api/credit/gift', 'POST /api/credit/gift',
+            'GET /api/credit/people', 'GET /api/credit/people/:member', 'GET /api/credit/looks', 'GET /api/credit/me',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',

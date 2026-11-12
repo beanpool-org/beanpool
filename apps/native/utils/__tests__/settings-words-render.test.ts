@@ -870,7 +870,8 @@ describe('Settings → "How this community works": the floor and the rule throug
     // What GET /api/community/me says to a member of a known community (apps/server config/features-for.ts), through the
     // screen's real reader read, profile and sheet: nothing of the path is stubbed but the node.
     const WIRE = { beans: true, escrow: true, door: 'members', knownFloor: 1000, debtLinePct: 50, quietDays: 60 };
-    const RULE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    // Beans on: who sees each balance, then the admins' list (credit sight C1, core knownRuleLine).
+    const RULE = "People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded. The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
     const shapeSheet = () => host.querySelector('[data-testid="community-shape-sheet"]')?.textContent ?? '';
     const open = () => click(host.querySelector('[data-testid="settings-how-this-community-works"]'), 'the row');
 

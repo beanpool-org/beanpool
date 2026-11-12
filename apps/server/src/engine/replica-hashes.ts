@@ -213,7 +213,14 @@ export interface TableHashes {
  * both tables over more columns. REPLICA_FORMAT stays, as for the knowledge columns (31): all four are NULL on every row until
  * a seller prices a listing for each one, which no app offers until every slice is in (config/node-profile.ts `perItem`).
  */
-export const TABLE_HASHES_VERSION = 35;
+/**
+ * 36: the log of credit looks (engine/credit-looks.ts, DESIGN-credit-list-amend-fable.md §5.2, slice C1): a new plain table,
+ * credit_look_log. Raised for the same reason as 8: a standby updated before its main server hashes one more table.
+ * REPLICA_FORMAT stays: each side's import writes only the tables its own database has. What an older importer drops is
+ * who looked at whose credit: after a take-over from such a copy the owners and admins read no looks from before it; no
+ * balance or Bean is in it.
+ */
+export const TABLE_HASHES_VERSION = 36;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

@@ -10,10 +10,11 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines, pollWeekGroupNote, pollWeekNotice } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DEFAULT, pollOtherLines, pollWeekGroupNote, pollWeekNotice, type PollDays } from '@beanpool/core';
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { usePollNextStart } from '../lib/poll-week';
+import { usePollDayChoices } from '../lib/poll-length';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
@@ -354,7 +355,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [eventEdit, setEventEdit] = useState<{ id: string; before: EventEditForm } | null>(null);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
-    const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
+    const [pollDurationDays, setPollDurationDays] = useState<PollDays>(POLL_DAYS_DEFAULT);
     // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
     const [pollOpenVote, setPollOpenVote] = useState(false);
     // A typed Other, off unless the maker asks, and offered only where the node says it can (@beanpool/core poll-other).
@@ -371,6 +372,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // Everyone, and says a group is still open to them. `pollWeekHolds` is that: it replaces the fields and the Create button.
     const pollWaitUntil = usePollNextStart(!!identity && showNewPost && newPostType === 'poll');
     const pollWeekHolds = newPostType === 'poll' && pollWaitUntil !== null && audienceScope === 'public';
+    // 3, 7 and 14 days for every member; 30 and 90 for an owner or an admin (@beanpool/core poll-length), read the way the other owner
+    // controls are. A length the form no longer offers (the role was lost between two openings) falls back to the default.
+    const pollDayChoices = usePollDayChoices(!!identity && showNewPost && newPostType === 'poll');
+    const pollDays: PollDays = pollDayChoices.includes(pollDurationDays) ? pollDurationDays : POLL_DAYS_DEFAULT;
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTags, setNewPostTags] = useState<string[]>([]);
     const [newPostFreeTags, setNewPostFreeTags] = useState<string[]>([]);
@@ -1381,7 +1386,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     authorPublicKey: identity?.publicKey || '',
                     repeatable: false,
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
-                    durationDays: pollDurationDays,
+                    durationDays: pollDays,
                     pollOpenVote,
                     ...(pollOther && nodeHasPollOther ? { pollOther: true } : {}),
                     audienceScope,
@@ -1391,7 +1396,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 setNewPostDescription('');
                 setPollOther(false);
                 setPollOptions(['', '']);
-                setPollDurationDays(7);
+                setPollDurationDays(POLL_DAYS_DEFAULT);
                 setPollOpenVote(false);
                 setAudienceScope('public');
                 setTargetGroupId('');
@@ -3277,15 +3282,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
                                 {t('Duration')}
                             </label>
-                            <div className="flex gap-2">
-                                {([3, 7, 14] as const).map(days => (
+                            {/* Wraps: an owner or an admin has five lengths, three then two on a narrow screen; a member's three share one row. */}
+                            <div className="flex flex-wrap gap-2">
+                                {pollDayChoices.map(days => (
                                     <button
                                         key={days}
                                         type="button"
-                                        aria-pressed={pollDurationDays === days}
+                                        aria-pressed={pollDays === days}
                                         onClick={() => setPollDurationDays(days)}
-                                        className={`flex-1 min-h-[44px] py-2 rounded-xl border text-sm font-semibold transition-all ${
-                                            pollDurationDays === days
+                                        className={`grow basis-[28%] min-w-0 min-h-[44px] px-1 py-2 rounded-xl border text-sm font-semibold transition-all ${
+                                            pollDays === days
                                                 ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
                                                 : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300'
                                         }`}

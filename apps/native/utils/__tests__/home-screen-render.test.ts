@@ -2295,7 +2295,7 @@ describe('Home\'s "How this community works": the floor and the rule, from what 
         expect(summary).toBeTruthy();
         await act(async () => { summary.click(); });
         expect(document.querySelector('[data-testid="community-shape-sheet"]')?.textContent)
-            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.");
+            .toContain("(the known floor)People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded. The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.");
     });
 
     it('who decides a removal, from beside the features a member\'s Home says (removal jury J3)', async () => {

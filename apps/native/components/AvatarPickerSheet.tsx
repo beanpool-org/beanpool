@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { pickPicture, type WorkingPicture } from '../utils/picture-crop';
 import { BUNDLED_AVATARS } from '../utils/bundled-avatars';
+// Static colours: the sheet's own light look (slate) when no `colors` is passed. Callers pass their set in dark and none in light, on purpose; light is one set, so a colour set reaches every dark use through the prop.
 import { colors as lightColors, palette, type AppColors } from '../constants/colors';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
 import { PictureCropView } from './PictureCrop';

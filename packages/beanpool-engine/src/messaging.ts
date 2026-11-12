@@ -47,6 +47,13 @@ export interface TypedMessagePayload {
     transactionId?: string;
     /** A standing deal's record line (STANDING_DEAL) or a bill's (BILL): what it says, as the node wrote it. */
     text?: string;
+    /**
+     * A per-item deal's trust line (ESCROW_FUNDED; DESIGN-per-item-price-fable.md §2.3): which way it was taken up, 'each' (a
+     * number of them) or 'lot' (all of them), and how many, so the line says "3 for 900 Beans" as the push does. Only on such a
+     * deal's line.
+     */
+    itemOption?: 'each' | 'lot';
+    count?: number;
 }
 
 export interface Message {

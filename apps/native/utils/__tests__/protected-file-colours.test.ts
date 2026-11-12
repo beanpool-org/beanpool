@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { contrastRatio } from '@beanpool/core';
-import { darkColors, lightColors, palette } from '../../constants/colors';
+import { BRAND_SETS, brandScheme, contrastRatio } from '@beanpool/core';
+import { COLOUR_SETS, palette } from '../../constants/colors';
 
 /**
  * map.tsx, GlobalHeader.tsx, UnifiedMapPin.tsx and Map.web.tsx are protected: only Marty edits them. They still read
@@ -128,16 +128,24 @@ const PALETTE_ON_MAIN: Record<string, string> = {
  * They wait for Marty's look at the map in dark (the PR's screenshots); drop them once he has seen it.
  */
 const S4_LOOK = "Marty's look at the map's sheets in dark on the lifted card (#222822), home look S4";
+/**
+ * Colour themes T2 (Marty and Damo, 12 Nov 2026): Dark (`night`) has its own card, #24262c, as light as Classic's within
+ * 0.3 % and never lighter (core's lightness rule), so the same three pairs read a little better than Classic's (the
+ * design's §5: 15.12, 13.74, 5.96) and, like them, worse than main's #1a1a1a. They wait for the same look, in Dark, in
+ * the picker's screenshots (slice T3); no member can choose Dark before then.
+ */
+const NIGHT_LOOK = `${S4_LOOK}, and in Dark on its card (#24262c), in slice T3's screenshots`;
 const AWAITING_MARTY: Record<string, { floor: number; fix: string }> = {
     'dark map.tsx text.heading words on surface.card': { floor: 15.06, fix: S4_LOOK },
     'dark map.tsx text.body words on surface.card': { floor: 13.68, fix: S4_LOOK },
     'dark map.tsx text.secondary words on surface.card': { floor: 5.93, fix: S4_LOOK },
+    'night map.tsx text.heading words on surface.card': { floor: 15.12, fix: NIGHT_LOOK },
+    'night map.tsx text.body words on surface.card': { floor: 13.74, fix: NIGHT_LOOK },
+    'night map.tsx text.secondary words on surface.card': { floor: 5.96, fix: NIGHT_LOOK },
 };
 
-const THEMES = [
-    ['light', lightColors, 0],
-    ['dark', darkColors, 1],
-] as const;
+/** Every colour set of the library; a dark set is judged against main's dark value (index 1), a light one its light. */
+const THEMES = BRAND_SETS.map((set) => [set, COLOUR_SETS[set], brandScheme(set) === 'dark' ? 1 : 0] as const);
 
 function resolve(tree: unknown, token: string): string {
     if (token.startsWith('#')) return token;
@@ -163,6 +171,10 @@ const CASES = THEMES.flatMap(([name, tree, index]) =>
 );
 
 describe('the protected files read every colour token at least as well as on main', () => {
+    it('judges every colour set of the library', () => {
+        expect(THEMES.map(([name]) => name)).toEqual(['light', 'dark', 'night']);
+    });
+
     it.each(CASES.map((c) => [c.key, c] as const))('%s', (_key, c) => {
         const waiting = AWAITING_MARTY[c.key];
         const floor = waiting ? Math.min(waiting.floor, c.main) : c.main;

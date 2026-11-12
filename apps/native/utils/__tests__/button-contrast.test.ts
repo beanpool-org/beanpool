@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as ts from 'typescript';
-import { scanSource, scanTree, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
+import { ALL_SETS, scanSource, scanTree, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
+import { COLOUR_SETS } from '../../constants/colors';
 
 /**
  * The button-contrast scanner (utils/button-contrast.ts) on small fixture screens. The whole-tree run is
@@ -542,7 +543,10 @@ describe('what it could not read is counted and named, never silently clean', ()
                 mkdirSync(join(root, dir));
                 writeFileSync(join(root, dir, 'x.tsx'), SAVE_PROFILE);
             }
-            expect(scanTree(root, []).findings.map((f) => f.file).sort()).toEqual(['app/x.tsx', 'components/x.tsx', 'tools/x.tsx']);
+            // In every set (scanTree's default): Save Profile's white on white fails in Classic dark and in Dark, in each folder.
+            expect(scanTree(root, []).findings.map((f) => `${f.file} ${f.theme}`).sort()).toEqual([
+                'app/x.tsx dark', 'app/x.tsx night', 'components/x.tsx dark', 'components/x.tsx night', 'tools/x.tsx dark', 'tools/x.tsx night',
+            ]);
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
@@ -923,5 +927,37 @@ describe('the shipped style box can be read by the scanner', () => {
         const problems = chipDrawProblems(source.replace(from, to));
         expect(problems.length).toBeGreaterThan(0);
         expect(problems.join('\n')).toMatch(expected);
+    });
+});
+
+// Colour themes T2: the whole tree is measured in every set of the library (scanTree's default, ALL_SETS); the canaries
+// above measure Classic's two (scanSource's default). These measure Dark (`night`) as well.
+describe('every colour set, Dark (night) included', () => {
+    const scanAll = (src: string) => scanSource(FILE, `function Fixture() { const { colors, theme } = useTheme(); ${src}\n}`, [], {}, ALL_SETS);
+
+    it('measures each set in its own tree: the card is the set\'s card', () => {
+        const r = scanAll(`<View style={{ backgroundColor: colors.surface.card }}><Text style={{ color: colors.surface.card }}>x</Text></View>`);
+        expect(themes(r)).toEqual(['dark', 'light', 'night']);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1, night: 1 });
+        const night = r.findings.find((f) => f.theme === 'night');
+        expect(night?.background.hex).toBe(COLOUR_SETS.night.surface.card);
+        expect(COLOUR_SETS.night.surface.card).not.toBe(COLOUR_SETS.dark.surface.card);
+    });
+
+    it("folds `theme === 'dark'`, `isDark` and `isLight` by the set's scheme: Dark is dark", () => {
+        const bad = scanAll(`<View style={{ backgroundColor: theme === 'dark' ? colors.text.heading : colors.brand.fill }}><Text style={{ color: colors.text.inverse }}>x</Text></View>`);
+        expect(themes(bad)).toEqual(['dark', 'night']);
+        const good = scanAll(`<View style={{ backgroundColor: theme === 'dark' ? colors.brand.fill : colors.text.heading }}><Text style={{ color: colors.text.inverse }}>x</Text></View>`);
+        expect(themes(good)).toEqual([]);
+        const isLight = scanAll(`const isLight = theme === 'light'; return <View style={{ backgroundColor: isLight ? colors.brand.fill : colors.text.heading }}><Text style={{ color: colors.text.inverse }}>x</Text></View>;`);
+        expect(themes(isLight)).toEqual(['dark', 'night']);
+    });
+
+    it('catches a pair that reads in Classic dark but not in Dark', () => {
+        // Words in Classic dark's sage tint on Dark's blue accent tint: nothing on main draws this; it only proves a Dark-only
+        // failure is reported under its own set and not hidden by Classic passing.
+        const r = scanAll(`<View style={{ backgroundColor: colors.accent.tint }}><Text style={{ color: '${COLOUR_SETS.night.accent.tint}' }}>x</Text></View>`);
+        expect(themes(r)).toContain('night');
+        expect(r.findings.filter((f) => f.theme === 'night')).toHaveLength(1);
     });
 });

@@ -200,7 +200,9 @@ async function main(): Promise<void> {
     assert(meOff.status === 200 && meOff.body?.confirmed === false && meOff.body?.confirmedAt === null && !('debtLinePct' in (meOff.body?.features ?? {})) && !('quietDays' in (meOff.body?.features ?? {})),
         `with the dial off the rule reaches nobody: a member confirmed against the names list isn't told it does (${show(meOff)})`);
     const ruleOff = await call('GET', null, '/api/community/known-rule');
-    assert(ruleOff.status === 200 && Object.keys(ruleOff.body ?? {}).join() === 'known' && ruleOff.body?.known === false, `and the join screen reads no rule (${show(ruleOff)})`);
+    // `creditSight` (credit sight C1): on a node with Beans the join screen says who sees each balance, known or not.
+    assert(ruleOff.status === 200 && Object.keys(ruleOff.body ?? {}).join() === 'known,creditSight' && ruleOff.body?.known === false && ruleOff.body?.creditSight === true,
+        `and the join screen reads no rule, only that givers see balances (${show(ruleOff)})`);
 
     // ── 3. the dial on ────────────────────────────────────────────────────────────────────────────
     console.log('── 3. the dial on ──');
@@ -219,8 +221,8 @@ async function main(): Promise<void> {
     assert(getBalance(kim.pk).balance_c === hc(-600) && getBalance(kim.pk).floor_c !== 0, `Kimberly is 600 in debit with a known floor (${JSON.stringify(getBalance(kim.pk)).slice(0, 120)})`);
     const rule = await call('GET', null, '/api/community/known-rule');
     assert(rule.status === 200 && rule.body?.known === true && rule.body?.knownFloor === hc(1000) && rule.body?.debtLinePct === 50 && rule.body?.quietDays === 60
-        && rule.body?.debtLineFrom === null && rule.body?.quietDaysFrom === null
-        && Object.keys(rule.body).sort().join() === 'debtLineFrom,debtLinePct,known,knownFloor,quietDays,quietDaysFrom',
+        && rule.body?.debtLineFrom === null && rule.body?.quietDaysFrom === null && rule.body?.creditSight === true
+        && Object.keys(rule.body).sort().join() === 'creditSight,debtLineFrom,debtLinePct,known,knownFloor,quietDays,quietDaysFrom',
         `the join screen reads the rule's numbers before joining, and no sentence: the words are the app's (${show(rule)})`);
     assert((await call('GET', kim, '/api/community/consent-terms')).status === 404 && (await call('GET', kim, '/api/names/consent')).status === 404
         && (await call('POST', kim, '/api/names/consent', { version: '6:50:60' })).status === 404 && (await call('DELETE', kim, '/api/names/consent')).status === 404,

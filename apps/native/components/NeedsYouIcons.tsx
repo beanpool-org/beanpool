@@ -8,7 +8,7 @@ import { palette } from '../constants/colors';
 import { getUnreadByConversation, getMarketplaceTransactions, signedGet } from '../utils/db';
 import { createRefreshGate } from '../utils/refresh-gate';
 import { anchorUrl, signedPost } from '../utils/node-post';
-import { noticeRoute } from '../utils/push-notice-check';
+import { noticeHasDestination, noticeRoute } from '../utils/push-notice-check';
 import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
 import { getCachedNodeProfile, decisionsOn, type NodeFeatures } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
@@ -18,7 +18,7 @@ import {
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import {
-    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
+    BELL_EVENTS, bellBadge, bellClearWords, bellLabel, bellReadWords, isOthersListingDoorbell, isPushNoticeKind, needsYouCounts, t, timeAgo, unseenBellNotices, withoutBellNotices, type BellNotice,
 } from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
@@ -28,10 +28,13 @@ import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../
 // count of the notices not yet opened (the node's list, GET /api/notices/push?unseen=1: what this phone is buzzed with, and
 // what a phone with no push still gets), an amber dot when nothing is new but something needs the member, and a sheet with
 // the open things at the top ("Needs you": what the icons were; what counts, the order, the accent and the wording live in
-// utils/needs-you.ts) and what happened under it, newest first, with the real words. A row leaves only when it is tapped
-// (it opens its thing, by the push tap's own route table, and is marked), when its ✕ is pressed (marked, opens nothing), when
-// "Clear all" is pressed (every notice, one request: { all: true }) or when its thing is opened (a chat read: the node marks
-// it and tells the sockets, `bell_activity` here); opening the sheet marks nothing. "Needs you" is none of those: its rows
+// utils/needs-you.ts) and what happened under it, newest first, with the real words. A tap on a notice reads it in full
+// (Marty, 12 Nov 2026: it used to open its page and take it off the bell, and the row cuts its words, so a long one could
+// not be read): the whole title and body, its time, and Open (only where it has somewhere to go: it goes there by the push
+// tap's own route table, and THEN is marked), Clear (marked, opens nothing) and Back (leaves it as it was). A row leaves only
+// when Open or Clear is pressed there, when its ✕ is pressed (marked, opens nothing), when "Clear all" is pressed (every
+// notice, one request: { all: true }) or when its thing is opened (a chat read: the node marks it and tells the sockets,
+// `bell_activity` here); reading and opening the sheet mark nothing. "Needs you" is none of those: its rows
 // are the open things, and leave when they are done (Marty, 10 Nov 2026, replacing the 9 Nov rule that had no "Clear all").
 //
 // Home's answer (GET /api/home, utils/home-store.ts) carries the same lines (design §5.2 "The header reads Home's
@@ -164,6 +167,8 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const [entries, setEntries] = useState<NeedsYouEntry[]>([]);
     const [notices, setNotices] = useState<BellNotice[]>([]);
     const [sheet, setSheet] = useState(false);
+    // The notice being read in full (its id): reading marks nothing, and the sheet always opens on the list.
+    const [readingId, setReadingId] = useState<string | null>(null);
     const [width, setWidth] = useState(0);
     const me = identity?.publicKey;
     const identityRef = useRef(identity);
@@ -307,10 +312,17 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         goToNeedsTarget(t);
     };
 
-    // A tap on a notice: off the bell at once (and on the node, which tells the member's other apps), then to its thing by
-    // the push tap's own fixed routes (utils/push-notice-check.ts noticeRoute).
+    const closeSheet = () => { setSheet(false); setReadingId(null); };
+    // The notice being read, while the node still has it unseen (marked elsewhere meanwhile, the sheet is the list again).
+    const reading = readingId ? notices.find(n => n.id === readingId) ?? null : null;
+    // Gone from the list (marked elsewhere): forget it, so a later read of the list that returns it shows the row, not its full view.
+    useEffect(() => { if (readingId && !reading) setReadingId(null); }, [readingId, reading]);
+
+    // "Open" on a notice read in full: to its thing by the push tap's own fixed routes (utils/push-notice-check.ts
+    // noticeRoute) first, and then off the bell (and on the node, which tells the member's other apps).
     const openNotice = (n: BellNotice) => {
-        setSheet(false);
+        router.push(noticeRoute(isPushNoticeKind(n.kind) ? n.kind : null, n.data) as never);
+        closeSheet();
         setNotices(list => withoutBellNotices(list, [n.id]));
         const id = identityRef.current;
         (async () => {
@@ -319,12 +331,12 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
             const r = await signedPost(url, '/api/notices/push/seen', { ids: [n.id] }, id);
             if (!r.ok) refreshBell();
         })().catch(() => { refreshBell(); });
-        router.push(noticeRoute(isPushNoticeKind(n.kind) ? n.kind : null, n.data) as never);
     };
 
-    // A notice's ✕: the same mark as a tap, and it opens nothing and leaves the sheet up. A failed mark reads the list again,
-    // so the row comes back.
+    // A notice's ✕, and "Clear" in the full view: marked, and it opens nothing and leaves the sheet up (on the list). A failed
+    // mark reads the list again, so the row comes back.
     const clearNotice = (n: BellNotice) => {
+        setReadingId(null);
         setNotices(list => withoutBellNotices(list, [n.id]));
         const id = identityRef.current;
         (async () => {
@@ -349,6 +361,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     };
 
     const clearWords = bellClearWords();
+    const readWords = bellReadWords();
     const unseen = notices.length;
     // The payee's line of a short standing deal is listed, not counted (core needsYouCounts).
     const counted = entries.filter(needsYouCounts).length;
@@ -370,9 +383,40 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                 </Pressable>
             )}
 
-            <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => setSheet(false)}>
-                <Pressable style={s.sheetBg} onPress={() => setSheet(false)} accessibilityRole="button" accessibilityLabel={t('Close')}>
+            <Modal visible={sheet} transparent animationType="fade" onRequestClose={() => (reading ? setReadingId(null) : closeSheet())}>
+                <Pressable style={s.sheetBg} onPress={closeSheet} accessibilityRole="button" accessibilityLabel={t('Close')}>
                     <View style={[s.sheet, { marginTop: sheetTop, backgroundColor: colors.surface.card }]}>
+                        {reading ? (
+                            // The notice in full. A tap inside it is not a tap on the backdrop (which would close the sheet).
+                            <Pressable accessible={false} onPress={() => undefined} style={s.readWrap} testID="bell-read">
+                                <Pressable style={({ pressed }) => [s.readBack, pressed && { backgroundColor: colors.surface.subtle }]}
+                                    onPress={() => setReadingId(null)} accessibilityRole="button" accessibilityLabel={readWords.back}>
+                                    <MaterialCommunityIcons name="chevron-left" size={22} color={colors.text.link} />
+                                    <Text style={[s.readBackText, { color: colors.text.link }]}>{readWords.back}</Text>
+                                </Pressable>
+                                <ScrollView style={s.sheetScroll} contentContainerStyle={s.readContent}>
+                                    <Text style={[s.readTitle, { color: colors.text.heading }]} selectable accessibilityRole="header" testID="bell-read-title">
+                                        {reading.title || reading.body}
+                                    </Text>
+                                    {!!reading.title && !!reading.body && (
+                                        <Text style={[s.readBody, { color: colors.text.body }]} selectable testID="bell-read-body">{reading.body}</Text>
+                                    )}
+                                    <Text style={[s.noticeWhen, { color: colors.text.muted }]}>{timeAgo(Math.max(0, now - reading.sentAt * 1000))}</Text>
+                                </ScrollView>
+                                <View style={s.readActions}>
+                                    <Pressable style={({ pressed }) => [s.readButton, { borderColor: colors.border.strong, borderWidth: 1 }, pressed && { backgroundColor: colors.surface.subtle }]}
+                                        onPress={() => clearNotice(reading)} accessibilityRole="button" accessibilityLabel={clearWords.one}>
+                                        <Text style={[s.readButtonText, { color: colors.text.heading }]}>{readWords.clear}</Text>
+                                    </Pressable>
+                                    {noticeHasDestination(isPushNoticeKind(reading.kind) ? reading.kind : null, reading.data) && (
+                                        <Pressable style={({ pressed }) => [s.readButton, { backgroundColor: pressed ? colors.brand.fillPressed : colors.brand.fill }]}
+                                            onPress={() => openNotice(reading)} accessibilityRole="button" accessibilityLabel={readWords.open}>
+                                            <Text style={[s.readButtonText, { color: colors.text.onBrand }]}>{readWords.open}</Text>
+                                        </Pressable>
+                                    )}
+                                </View>
+                            </Pressable>
+                        ) : (<>
                         <Text style={[s.sheetTitle, { color: colors.text.secondary }]} accessibilityRole="header">{t('Notifications')}</Text>
                         <ScrollView style={s.sheetScroll}>
                             {entries.length > 0 && (
@@ -404,7 +448,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                             {notices.map(n => (
                                 <View key={n.id} style={s.noticeLine}>
                                     <Pressable style={({ pressed }) => [s.sheetRow, s.noticeRow, s.noticeOpen, pressed && { backgroundColor: colors.surface.subtle }]}
-                                        onPress={() => openNotice(n)} accessibilityRole="button" accessibilityLabel={[n.title, n.body].filter(Boolean).join('. ')}>
+                                        onPress={() => setReadingId(n.id)} accessibilityRole="button" accessibilityLabel={[n.title, n.body].filter(Boolean).join('. ')}>
                                         <View style={[s.unseenDot, { backgroundColor: colors.feedback.danger.solid }]} />
                                         <View style={s.noticeWords}>
                                             <Text style={[s.noticeTitle, { color: colors.text.heading }]} numberOfLines={2}>{n.title || n.body}</Text>
@@ -422,6 +466,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                             ))}
                             <Text style={[s.lifetime, { color: colors.text.muted }]}>{t('Older notices are gone after 7 days.')}</Text>
                         </ScrollView>
+                        </>)}
                     </View>
                 </Pressable>
             </Modal>
@@ -463,5 +508,15 @@ const s = StyleSheet.create({
     noticeTitle: { fontSize: 15, fontWeight: '700' },
     noticeBody: { fontSize: 15 },
     noticeWhen: { fontSize: 12, marginTop: 2 },
+    // A notice read in full: nothing is cut. Back on top, the words scrolling in the middle, the two buttons always in view.
+    readWrap: { flexShrink: 1 },
+    readBack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', minHeight: 44, paddingLeft: 8, paddingRight: 12, marginLeft: 4, borderRadius: 8 },
+    readBackText: { fontSize: 14, fontWeight: '700' },
+    readContent: { paddingHorizontal: 16, paddingVertical: 4, gap: 8 },
+    readTitle: { fontSize: 17, fontWeight: '700' },
+    readBody: { fontSize: 15, lineHeight: 22 },
+    readActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+    readButton: { minHeight: 44, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    readButtonText: { fontSize: 15, fontWeight: '700' },
     lifetime: { fontSize: 12, textAlign: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
 });

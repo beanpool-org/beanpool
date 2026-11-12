@@ -2,7 +2,10 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, formatHundredths, halves, loanDays, shareOf, standingLines, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import {
+    isSyntheticAccount, isBeanAmount, formatHundredths, halves, isPerItem, loanDays, perItemLines, shareOf, standingLines, type ItemOption, type ItemTakeUp,
+    type ItemTakeUpIn, type PushNoticeKind, word, wordsFor,
+} from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -13,7 +16,7 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import { isDealQuantity, DEAL_QUANTITY_ERROR, dealAmountFor, quantityHundredths } from './post-fields.js';
 import { hasBlocked } from './member-blocks.js';
-import { assertNoItemDealYet } from './per-item.js';
+import { assertItemStock, assertNotAskedForItems, isItemDeal, itemTakeUpFor, itemTakeUpRefusal, reserveUnits, settleItemDeal } from './per-item.js';
 import { checkStandingStart, firstPeriodOf, insertStandingDeal, type CheckedStandingStart, type StandingStart } from './standing-deals.js';
 import type { KeptNoticePushOptions } from './kept-notices.js';
 import crypto from 'node:crypto';
@@ -370,8 +373,9 @@ export function requestPost(
         throw Object.assign(new Error(word('Post not found')), { code: POST_GONE_CODE });
     }
     assertNoDealOnCopy(post.shown_from_host);
-    // A listing priced for each one is taken up in one step, and not before slice P1 (engine/per-item.ts).
-    assertNoItemDealYet(post);
+    // A listing priced for each one is taken up in one step, never asked for: nothing waits unfunded against its count
+    // (engine/per-item.ts, 409 each_accept_only).
+    assertNotAskedForItems(post);
     // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
     if (post.lendable === 1 && post.status === 'pending') throw loanOut();
     if (post.status !== 'active') throw Object.assign(new Error(word('Post is not active')), { code: POST_GONE_CODE });
@@ -592,6 +596,11 @@ export interface HoldOpening {
     createdAt: string;
     /** The listing comes off the board under this deal (one deal at a time): the words when it is no longer there. */
     takeListing: { gone: string } | null;
+    /**
+     * A deal on a listing priced for each one (engine/per-item.ts): which way it was taken up, on its row beside `hours` (how
+     * many). Its count was lowered in the same transaction (reserveUnits) and is settled where the deal ends (settleItemDeal).
+     */
+    itemOption?: ItemOption | null;
 }
 
 /**
@@ -632,8 +641,8 @@ export function openHold(cb: EscrowCallbacks, h: HoldOpening): void {
     }
 
     if (h.row === 'insert') {
-        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`)
-            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount_c, h.hours ?? null, h.createdAt);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, item_option) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`)
+            .run(h.txId, h.postId, h.parties.payer, h.parties.payee, h.amount_c, h.hours ?? null, h.createdAt, h.itemOption ?? null);
     }
 }
 
@@ -853,6 +862,9 @@ export function approvePostRequest(
     // after the checks that say the request is not this caller's to approve, as for any approval.
     assertNoDealOnCopy(post.shown_from_host);
     if ((post.type === 'offer' ? row.seller_pubkey : row.buyer_pubkey) !== authorPublicKey) return null;
+    // No request waits on a listing priced for each one (requestPost refuses it, and the unit can't change under one,
+    // engine/posts.ts assertPriceNotFrozen); one there all the same is never approved: its hold would not move the count.
+    assertNotAskedForItems(post);
     const standing = opts?.standing
         ? checkStandingStart(cb, opts.standing, { postId: post.id, priceType: post.price_type, price: post.price_c, payer: row.buyer_pubkey, payee: row.seller_pubkey, signer: opts.authSigner })
         : null;
@@ -1114,7 +1126,10 @@ export function offerHoldChecks(
         assertHoldFunded(cb, parties, finalCredits, {
             payerName: buyerMember?.callsign || 'This enterprise',
             insufficient: word('Insufficient balance to accept this offer'),
-            claim: opts.scheduled ? null : { postId: post.id },
+            // A listing priced for each one is refused with no claim (DESIGN-per-item-price-fable.md §4.5: nothing waits
+            // unfunded against its count). A claim is paid later with no further step (state-engine.ts
+            // processDeferredWageClaims), for items the count never gave up: another buyer could take and pay for them too.
+            claim: opts.scheduled || isPerItem(post) ? null : { postId: post.id },
         });
     }
     return { ...parties, amount_c: finalCredits, buyerCallsign: buyerMember?.callsign };
@@ -1134,7 +1149,15 @@ export function acceptPost(
     postId: string,
     buyerPublicKey: string,
     hours?: number,
-    opts?: { authSigner?: string; standing?: StandingStart }
+    opts?: {
+        authSigner?: string;
+        standing?: StandingStart;
+        /**
+         * The take-up of a listing priced for each one, raw from the body (design §3): how many (`n`, the body's `hours`
+         * unread, so "3" is refused there and never read as 3), which way, and the total the buyer's screen showed.
+         */
+        item?: ItemTakeUpIn;
+    }
 ): MarketplaceTransaction {
     assertFeatureOn('escrow');
     assertBuyerMayTrade(buyerPublicKey);
@@ -1147,8 +1170,9 @@ export function acceptPost(
         if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
         throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
-    // A listing priced for each one: its count moves with the Beans from slice P1 on (engine/per-item.ts); until then, no deal.
-    assertNoItemDealYet(post);
+    // A listing priced for each one (DESIGN-per-item-price-fable.md §4.1; engine/per-item.ts): taken up for a number of them or
+    // all of them, with the total the buyer saw.
+    const perItem = isPerItem(post);
 
     // A standing deal (DESIGN-standing-deals-upfront-fable; Marty, 10 Nov 2026): a listing priced per week or per month,
     // taken up with the payer's signed authorisation. What they signed must be this listing, its author and its price per
@@ -1158,8 +1182,21 @@ export function acceptPost(
         : null;
 
     let keptHours: number | undefined;
+    let item: ItemTakeUp | null = null;
     const parties = offerHoldChecks(cb, post, buyerPublicKey, () => {
         if (standing) return standing.auth.beansPerPeriod_c;
+        if (perItem) {
+            // How many, which way, and what that comes to at the listing's own figures, which must be the total the buyer
+            // saw (price_changed, count_refused). Never the hourly path's 0.01 fractions (F2): whole numbers only.
+            item = itemTakeUpFor(post, opts?.item);
+            // Still there, as the listing was read: a plain refusal, before the funding check below, so a buyer asking for
+            // more than are left is told how many are, not whether they could pay for more (that check records no wage
+            // claim for a listing priced for each one: offerHoldChecks). No count moves until every guard has passed; the
+            // guarded write inside the hold is the authority.
+            assertItemStock(post, item);
+            keptHours = item.n;
+            return item.amount_c;
+        }
         if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
         if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
             throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
@@ -1168,10 +1205,20 @@ export function acceptPost(
         return post.priceType !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
     }, { authSigner: opts?.authSigner, standing: !!standing });
     const finalCredits = parties.amount_c;
+    // A take-up that says how a listing priced for each one is taken, of one that is not (its seller changed the unit while
+    // the buyer's screen was open), is refused, never paid at what it costs now; and a total the buyer's screen showed, sent
+    // with any other take-up, holds it to that total too. Asked after the listing's own refusals (a copy, a Need, a loan).
+    // null is none, as absent is (a body's JSON null for "no way", "no total").
+    if (!perItem && opts?.item && (opts.item.option != null
+        || (!standing && opts.item.expect_c != null && opts.item.expect_c !== finalCredits))) {
+        throw itemTakeUpRefusal({ code: 'price_changed' });
+    }
     if (standing) {
         cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
         return startStanding(cb, standing, { txId: crypto.randomUUID(), row: 'insert', post, parties: { ...parties, oneAtATime: !post.repeatable }, actor: buyerPublicKey });
     }
+    // (Set inside the price callback above, which the type checker does not follow.)
+    const taken = item as ItemTakeUp | null;
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(),
@@ -1184,12 +1231,15 @@ export function acceptPost(
         amount_c: finalCredits,
         hours: keptHours,
         status: 'pending',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ...(taken ? { itemOption: taken.option } : {}),
     };
 
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
 
     cb.conservingTransaction(() => {
+        // The count and the Beans in one transaction (design D1): two buyers can never hold Beans for the same last one.
+        if (taken) reserveUnits(post.id, post.price_c, taken, tx.createdAt);
         openHold(cb, {
             txId: tx.id,
             postId: post.id,
@@ -1200,7 +1250,9 @@ export function acceptPost(
             auth: (parties.isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined,
             row: 'insert',
             createdAt: tx.createdAt,
-            takeListing: !post.repeatable ? { gone: word('Post is no longer available — it is already committed to another deal') } : null,
+            // A listing priced for each one stays on the board under its deals: its count says what is left (D3).
+            takeListing: taken ? null : !post.repeatable ? { gone: word('Post is no longer available — it is already committed to another deal') } : null,
+            itemOption: taken?.option ?? null,
         });
     });
     const held = tx;
@@ -1215,7 +1267,9 @@ export function acceptPost(
             transactionId: tx.id,
             actorPubkey: buyerPublicKey,
             buyerPubkey: buyerPublicKey,
-            sellerPubkey: post.authorPublicKey
+            sellerPubkey: post.authorPublicKey,
+            // A per-item deal's trust line carries how many and which way, as its push does (design §2.3).
+            ...(taken ? { itemOption: taken.option, count: taken.n } : {}),
         }, buyerPublicKey, post.authorPublicKey);
     } catch (e) {
         console.warn('[Marketplace] ESCROW_FUNDED system message failed:', e);
@@ -1229,7 +1283,11 @@ export function acceptPost(
         hasBlocked(post.authorPublicKey, buyerPublicKey) || !repeatDealPushDue(post.id, buyerPublicKey, tx.id) ? [] : [post.authorPublicKey],
         buyerPublicKey,
         '🛒 Offer Accepted',
-        `${tx.buyerCallsign || 'A member'} accepted "${post.title}" — ${formatHundredths(finalCredits, 'en')} Beans are now in escrow.`,
+        // A per-item deal says how many it took, in core's words (design §2.3): 'Dana took 3 of "Solar Panels". 900 Beans are
+        // held in trust.' The node writes the English, as it does for every push.
+        taken
+            ? perItemLines.pushTook(taken.option, tx.buyerCallsign || 'A member', taken.n, post.title, finalCredits)
+            : `${tx.buyerCallsign || 'A member'} accepted "${post.title}" — ${formatHundredths(finalCredits, 'en')} Beans are now in escrow.`,
         { screen: 'post', postId: post.id, txId: tx.id },
         'marketplace',
         'market.request'
@@ -1288,7 +1346,10 @@ export function releaseHeld(cb: EscrowCallbacks, row: any, post: any, opts: {
     const releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts.authSigner ? { signer: opts.authSigner } : undefined);
     if (!releaseResult) throw new Error(word('Failed to release escrow funds'));
 
-    if (post) {
+    if (isItemDeal(row)) {
+        // A per-item deal: sold, nothing goes back; the listing closes once none are left and nothing else is held on it.
+        settleItemDeal(row, 'sold', opts.completedAt);
+    } else if (post) {
         if (!backOnBoardAfterDeal(post)) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(opts.completedAt, opts.completedAt, row.post_id);
         } else {
@@ -1442,6 +1503,12 @@ export function completePostTransaction(
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event' || post.type === 'knowledge')) return null;
+    // A per-item deal pays what it holds (design D5): never re-rated, so a buyer can't "confirm 1" on a deal for 5. A final
+    // quantity other than its own is refused, in words that say what to do instead; its own, or none, releases the hold.
+    const itemDeal = isItemDeal(row);
+    if (itemDeal && finalHours != null && finalHours !== Number(row.hours)) {
+        throw itemTakeUpRefusal({ code: 'deal_count_fixed', count: Number(row.hours) });
+    }
     // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
     // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
     // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
@@ -1453,7 +1520,7 @@ export function completePostTransaction(
     // lending hold while the deal is open (engine/posts.ts assertPriceNotFrozen, lendColumnsOnEdit), so what they say
     // here is what the deal was struck under.
     const oneFeeLoan = post?.lendable === 1 && (post?.price_type || 'fixed') === 'fixed';
-    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan;
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0 && !oneFeeLoan && !itemDeal;
 
     // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
     // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.
@@ -1604,9 +1671,12 @@ export function cancelPostTransaction(
             }
         }
 
-        // Back on the board, unless a prune cancelled the listing under this trade (adminPruneUser leaves its
-        // open trades for the other party to close): a pruned member's listing stays down.
-        if (post) {
+        if (isItemDeal(row)) {
+            // A per-item deal: its count goes back, and the listing's status stays as it is (a paused one stays paused).
+            settleItemDeal(row, 'returned', completedAt);
+        } else if (post) {
+            // Back on the board, unless a prune cancelled the listing under this trade (adminPruneUser leaves its
+            // open trades for the other party to close): a pruned member's listing stays down.
             db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
         }
     });
@@ -1759,7 +1829,10 @@ export function resolveEscrowDispute(
                 }
             }
 
-            if (post && !backOnBoardAfterDeal(post)) {
+            if (isItemDeal(row)) {
+                // A per-item deal, released by the ruling: sold, as completePostTransaction's release is.
+                settleItemDeal(row, 'sold', completedAt);
+            } else if (post && !backOnBoardAfterDeal(post)) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
             } else if (post) {
                 // Repeatable, or a loan. Not a listing a prune cancelled under this deal, as in completePostTransaction: it
@@ -1791,9 +1864,12 @@ export function resolveEscrowDispute(
                 }
             }
 
-            // Back on the board, unless a prune cancelled the listing under this deal (as in cancelPostTransaction): a
-            // removed member's listing stays down when an admin refunds the buyer.
-            if (post) {
+            if (isItemDeal(row)) {
+                // A per-item deal, refunded by the ruling: its count goes back, as a cancel's does; the status stays.
+                settleItemDeal(row, 'returned', completedAt);
+            } else if (post) {
+                // Back on the board, unless a prune cancelled the listing under this deal (as in cancelPostTransaction): a
+                // removed member's listing stays down when an admin refunds the buyer.
                 db.prepare(`UPDATE posts SET status = 'active', accepted_by = NULL, accepted_at = NULL, pending_transaction_id = NULL, updated_at = ? WHERE id = ? AND status != 'cancelled'`).run(completedAt, row.post_id);
             }
         } else if (action === 'split') {
@@ -1849,7 +1925,10 @@ export function resolveEscrowDispute(
                 }
             }
 
-            if (post && !backOnBoardAfterDeal(post)) {
+            if (isItemDeal(row)) {
+                // A per-item deal, split by the ruling: the items went (sold), and nothing comes back to the count.
+                settleItemDeal(row, 'sold', completedAt);
+            } else if (post && !backOnBoardAfterDeal(post)) {
                 db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
             } else if (post) {
                 // Repeatable, or a loan. Not a listing a prune cancelled under this deal, as in completePostTransaction: it

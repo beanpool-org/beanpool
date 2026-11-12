@@ -192,6 +192,8 @@ vi.mock('../member-area', async (importOriginal) => ({
 vi.mock('../db', () => ({
     // The poll form asks when this member may start their next poll (poll-once-a-week): null = now.
     getPollNextStart: async () => null,
+    // The poll form asks the signer's role for its 30 and 90 day lengths (poll-length-render.test.ts): a member here.
+    isOwnerOrAdminHere: async () => false,
     // db.ts getBalance's answer: every figure whole hundredths of a Bean (`*_c`): a pot of 1,234.50 Beans.
     getBalance: async () => ({ earnedCredit_c: 0, commons_c: 123450, canOperate: true }),
     getTreasuries: async () => node.treasuries,

@@ -15,8 +15,6 @@
  * last block. The claim's key rule (utils/claim-key.ts) is stubbed here, answer by answer: node-claim.test.ts runs it.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -124,12 +122,10 @@ import { claimCodeDigits, claimCodeFromDigits, readClaimStatus } from '../node-c
 import { checkOwnClaim, claimKeyForThisPhone, claimWithKey, finishClaim, releaseClaimKey } from '../claim-key';
 import { hasDeviceLock, requireDeviceUnlock } from '../node-admin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lightColors, darkColors, type AppColors } from '../../constants/colors';
+import { lightColors, darkColors, doodleGround, type AppColors } from '../../constants/colors';
 
 const ORIGIN = 'https://beans.example.org';
 // The doodle pattern's ground, which the hint sits on (read as text-ink-contrast.test.ts reads it).
-const PATTERN = /const PATTERN_GROUND = \{ light: '(#[0-9a-f]{6})', dark: '(#[0-9a-f]{6})' \}/
-    .exec(readFileSync(join(__dirname, '..', '..', 'app', 'ThemeContext.tsx'), 'utf8'));
 const CODE = 'claim-a1b2-c3d4-e5f6-7890';
 
 /** WCAG 2 contrast of two #rrggbb colours, worked here (not a helper of the app's). */
@@ -222,8 +218,8 @@ describe('the empty claim code box reads as empty', () => {
         const hint = style(q(host, '[data-testid="claim-code-hint"]'));
         // Body ink, not the labels' grey: the pattern's strokes run through the hint (emulator, 18 Oct).
         expect(hint.color).toBe(colors.text.body);
-        expect(PATTERN, 'PATTERN_GROUND in app/ThemeContext.tsx moved: point this test at it').not.toBeNull();
-        for (const ground of [colors.surface.app, colors.surface.card, PATTERN![theme === 'light' ? 1 : 2]]) {
+        // The doodle's ground (the library's since colour themes T2, constants/colors.ts doodleGround; ThemeContext's copy is gone).
+        for (const ground of [colors.surface.app, colors.surface.card, doodleGround(theme)]) {
             expect(contrast(hint.color as string, ground)).toBeGreaterThanOrEqual(4.5);
         }
     });

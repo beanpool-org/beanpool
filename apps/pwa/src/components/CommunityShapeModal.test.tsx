@@ -64,7 +64,8 @@ describe('CommunityShapeModal', () => {
     });
 
     describe('the rule, on "How this community works"', () => {
-        const SOURCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+        // Beans on: who sees each balance, then the admins' list (credit sight C1, core knownRuleLine).
+        const SOURCE = "People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded. The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
         const stubRule = (rule: unknown) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rule), { status: rule ? 200 : 404, headers: { 'Content-Type': 'application/json' } })));
         afterEach(() => vi.unstubAllGlobals());
 

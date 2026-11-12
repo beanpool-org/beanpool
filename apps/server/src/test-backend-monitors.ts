@@ -5,11 +5,13 @@
  */
 
 import {
-    initStateEngine, adminSetTier,
+    initStateEngine,
     runWashSybilMetricsAudit, runWashSybilMetricsAuditSliced, getCommunityHealth,
     reconcileLedgerFromDb, washAnalysisCount
 } from './state-engine.js';
 import { db } from './db/db.js';
+/** A floor set by hand in the granted lane (members.earned_credit_c): a tier badge gives no credit (engine/badges.ts). */
+const grantLine = (pk: string, c: number) => { db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(c, pk); };
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -56,8 +58,8 @@ async function main() {
         reconcileLedgerFromDb();
 
         // Give them some floor so their balances are valid credit uses
-        adminSetTier(user1, 'Resident'); // floor -200
-        adminSetTier(user2, 'Resident'); // floor -200
+        grantLine(user1, hc(200)); // floor -200
+        grantLine(user2, hc(200)); // floor -200
 
         // Run the audit
         const metrics1 = runWashSybilMetricsAudit()!;
@@ -88,7 +90,7 @@ async function main() {
         const residents = Array.from({ length: 3 }, (_, i) => `res${i}-${Date.now()}`);
         for (const u of residents) {
             seedMember(u, 0, 9);
-            adminSetTier(u, 'Resident'); // floor -200
+            grantLine(u, hc(200)); // floor -200
         }
         const metricsResidents = runWashSybilMetricsAudit()!;
         assert(metricsResidents.cohortAnomalies === 0,
@@ -100,7 +102,7 @@ async function main() {
         const cohortUsers = Array.from({ length: 4 }, (_, i) => `coh${i}-${Date.now()}`);
         for (const u of cohortUsers) {
             seedMember(u, 0, 2); // 2 days old (new member)
-            adminSetTier(u, 'Steward'); // sets floor to -600 (reached Stewardship in under 14 days)
+            grantLine(u, hc(600)); // floor -600 (reached Steward's line in under 14 days)
         }
 
         // Run metrics audit. Since all 4 accounts in the same week cohort reached floor <= -600 in <14 days,

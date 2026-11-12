@@ -329,7 +329,7 @@ export async function startMain(pair: Pair): Promise<{ main: NodeProc; m: string
     const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
         type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk, photos: [TINY_PNG],
     })).post;
-    built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
+    built('Gwen is given a 1,400-Bean line to buy with (a tier gives none)', await main.send('grant-line', { pk: gwen.pk, amount_c: 140000 }));
     await offer(gwen, 'Sourdough', 400);
     const honey = await offer(ann, 'Honey', 2000);
     const tx = built('Gwen asks for the honey', await As(gwen, '/api/marketplace/posts/request', { postId: honey.id, buyerPublicKey: gwen.pk })).transaction;

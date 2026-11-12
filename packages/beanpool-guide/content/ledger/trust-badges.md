@@ -16,7 +16,7 @@ Your trust badge shows how much trust you have built:
 
 A member who has not traded yet shows **FOUNDING** on their posts.
 
-Trust comes from completed trades and from trust an admin has granted. In a community that confirms its members, being confirmed gives you a higher credit limit, not a higher badge: your badge counts only what you have done, so it never shows that you are confirmed.
+Trust comes from completed trades. In a community that confirms its members, being confirmed gives you a higher credit limit, not a higher badge: your badge counts only what you have done, so it never shows that you are confirmed.
 
 ## They unlock nothing
 
@@ -34,4 +34,4 @@ On the phone, the Market's **Trust** filter can show only posts from members wit
 
 ## Admins and badges
 
-A community's admins can give a member a badge. That deepens their credit line, like earned trust. It does not count as trades: it adds no voice credits and does not let them send gifts.
+A community's owners and admins can give a member a badge, but never themselves. A badge is recognition only: it gives no credit, it does not count as trades, it adds no voice credits and it does not let them send gifts. A member shows whichever is higher, the badge they were given or the one their trades give them. The member is told who gave it. Choosing Newcomer takes a badge back.

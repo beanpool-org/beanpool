@@ -32,6 +32,8 @@ export interface MemberItem {
     nodeRole?: MemberNodeRole | null;
     /** The member's granted credit, whole hundredths of a Bean under its old name (server engine members.ts: earned_credit_c). */
     earnedCredit?: number;
+    /** The badge an owner or admin gave them (server engine/badges.ts), or null: recognition only, no credit. */
+    badge?: 'Resident' | 'Steward' | 'Elder' | null;
     canOperate?: boolean;
     can_operate?: boolean;
     isOperator?: boolean;
@@ -319,7 +321,7 @@ export function MembersModule({
             onRefresh();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
-            alert(msg || 'Failed to update member tier');
+            alert(msg || 'The badge was not saved.');
         } finally {
             setIsUpdatingTier(false);
         }
@@ -854,17 +856,14 @@ export function MembersModule({
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setTierEditMember(m);
-                                                                const currentTier = getMemberTier(m);
-                                                                const valid = (['Newcomer', 'Resident', 'Steward', 'Elder'] as const).find(
-                                                                    (t) => t.toLowerCase() === currentTier.toLowerCase()
-                                                                );
-                                                                setSelectedTierValue(valid || 'Elder');
+                                                                // The badge they hold now; Newcomer for none.
+                                                                setSelectedTierValue(m.badge ?? 'Newcomer');
                                                             }}
-                                                            title="Click to upgrade or edit member standing tier"
+                                                            title="Give or take back a badge (recognition only: no credit)"
                                                             className="px-2.5 py-1 rounded bg-nature-900 hover:bg-nature-800 text-amber-400 hover:text-amber-300 font-bold text-xs border border-nature-800 transition-all hover:scale-105 flex items-center gap-1.5 cursor-pointer shadow-sm"
                                                         >
                                                             <span>{getMemberTier(m)}</span>
-                                                            <span className="text-[10px] text-nature-400 hover:text-white">✏️ Upgrade</span>
+                                                            <span className="text-[10px] text-nature-400 hover:text-white">✏️ Badge</span>
                                                         </button>
                                                     )}
                                                 </div>
@@ -1019,9 +1018,9 @@ export function MembersModule({
                     <div className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-md w-full space-y-5 text-left shadow-2xl">
                         <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                             <div className="min-w-0 flex-1">
-                                <h3 className="text-base font-bold text-white m-0">🌟 Upgrade Member Standing Tier</h3>
+                                <h3 className="text-base font-bold text-white m-0">🌟 Give a badge</h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Assign tier badge & granted credit floor for <code className="text-bp-ink-terra font-bold break-all">{getMemberDisplayName(tierEditMember, profilesMap)}</code>
+                                    A badge for <code className="text-bp-ink-terra font-bold break-all">{getMemberDisplayName(tierEditMember, profilesMap)}</code>. Recognition only: a badge gives no credit. They are told.
                                 </p>
                             </div>
                             <button
@@ -1035,13 +1034,13 @@ export function MembersModule({
 
                         <div className="space-y-3 text-xs">
                             <div>
-                                <label className="block text-nature-300 font-semibold mb-2">Select Standing / Tier Badge:</label>
+                                <label className="block text-nature-300 font-semibold mb-2">Badge:</label>
                                 <div className="space-y-2">
                                     {[
-                                        { id: 'Newcomer', name: '🌱 NEWCOMER', desc: 'Entry floor (0 granted credit limit)' },
-                                        { id: 'Resident', name: '🏠 RESIDENT', desc: '-200 granted credit floor (verified community member)' },
-                                        { id: 'Steward', name: '🏛️ STEWARD', desc: '-600 granted credit floor (active steward)' },
-                                        { id: 'Elder', name: '⛰️ ELDER', desc: '-1400 granted credit floor (founding governance tier)' },
+                                        { id: 'Newcomer', name: '🌱 NEWCOMER', desc: 'No badge: they show the level their own trades give them' },
+                                        { id: 'Resident', name: '🏠 RESIDENT', desc: 'Recognition only: no credit' },
+                                        { id: 'Steward', name: '🏛️ STEWARD', desc: 'Recognition only: no credit' },
+                                        { id: 'Elder', name: '⛰️ ELDER', desc: 'Recognition only: no credit' },
                                     ].map((t) => (
                                         <label
                                             key={t.id}
@@ -1082,7 +1081,7 @@ export function MembersModule({
                                 className="px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 font-bold text-bp-cta-on text-xs transition-all shadow-md flex items-center gap-2"
                             >
                                 {isUpdatingTier && <span className="animate-spin">🔄</span>}
-                                <span>{isUpdatingTier ? 'Applying Upgrade...' : 'Apply Tier Upgrade'}</span>
+                                <span>{isUpdatingTier ? 'Saving…' : 'Save badge'}</span>
                             </button>
                         </div>
                     </div>

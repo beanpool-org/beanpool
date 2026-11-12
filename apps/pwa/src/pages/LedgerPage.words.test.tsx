@@ -213,7 +213,7 @@ describe('the Ledger in English', () => {
         await open(RESIDENT);
         expect(bracketed()).toBe(0);
         expect(screen.getByTestId('ledger-balance').textContent).toBe('+450B');
-        expect(screen.getByText('Level 2 of 4 · 400 trust')).toBeInTheDocument();
+        expect(screen.getByText('Level 2 of 4 · credit line 1,000 Beans')).toBeInTheDocument();
         expect(document.body.textContent).toContain('more trust to');
         expect(screen.getByText('Spending paused — your balance is below what your 1 active offer unlock (−200). Post an Offer or trade back up to lift it. You can still receive and sell.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'View Elder level details' })).toBeInTheDocument();

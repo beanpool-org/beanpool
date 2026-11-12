@@ -411,7 +411,7 @@ async function main(): Promise<void> {
             return tx.id as string;
         };
 
-        built('the admin makes Gwen an Elder (a credit line to buy with)', await A(`/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
+        built('Gwen is given a 1,400-Bean line to buy with (a tier gives none)', await main.send('grant-line', { pk: gwen.pk, amount_c: 140000 }));
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
         const annOffer = await offer(ann, 'Honey', 20);
         await deal(gwen, ann, annOffer.id, true);
@@ -478,10 +478,11 @@ async function main(): Promise<void> {
         for (const who of [eve, fay, hal, lou]) await join(who);
         built('Ann, who held Beans at the first copy, gives Bo 2', await S_(ann, '/api/ledger/transfer', { to: bo.pk, amount_c: hc(2), memo: 'for the compost' }));
         await pull('the new members');
-        for (const who of [cy, hal]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
+        for (const who of [cy, hal]) built(`${who.name} is given a 1,400-Bean line (a tier gives none)`, await main.send('grant-line', { pk: who.pk, amount_c: 140000 }));
         const knitters = built('Hal starts a group on his own', await S_(hal, '/api/groups', { name: 'Knitters', description: 'Anyone who knits' }));
         const knittersId = knitters.group?.id ?? knitters.id;
-        built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
+        built('the admin gives Eve a Resident badge (recognition only: a row in member_badges the take-over carries)', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
+        built('and a 200-Bean line to buy with, which a badge never gives', await main.send('grant-line', { pk: eve.pk, amount_c: 20000 }));
         built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
         await offer(eve, 'Mending', 2);
         const deeCash = await offer(dee, 'Kindling', 3, { cashAlsoNeeded: true });

@@ -1763,7 +1763,9 @@ export async function updateNodeUserTier(
         body: JSON.stringify({ tier }),
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        // The node's own words for a refusal (your own badge, a key session only), else the status.
+        const refusal = await res.json().catch(() => null) as { error?: unknown } | null;
+        throw new Error(typeof refusal?.error === 'string' && refusal.error ? refusal.error : `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

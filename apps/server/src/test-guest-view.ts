@@ -1433,7 +1433,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/treasury/:treasury/offer', 'GET /api/local/admin/treasury/:treasury/operators',
             'POST /api/local/admin/treasury/:treasury/operators', 'DELETE /api/local/admin/treasury/:treasury/operators/:pubkey',
             'GET /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/cancel',
-            'POST /api/local/admin/users/:pubkey/elder', 'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
+            'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
             'POST /api/local/admin/users/:pubkey/prune', 'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
             'POST /api/local/admin/users/:pubkey/tier', 'GET /api/local/admin/web-visits',
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',

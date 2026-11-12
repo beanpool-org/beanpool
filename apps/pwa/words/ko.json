@@ -103,7 +103,6 @@
   "A member": "멤버",
   "A neighbour offered to do this. Approve to hold the Beans safely.": "이웃이 이 일을 하겠다고 제안했어요. 승인하여 콩을 안전하게 보관하세요.",
   "A new post": "새 글",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "공유 공간의 기둥입니다. 가능한 가장 깊은 신용 한도와 커뮤니티 최고의 인정을 받습니다.",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a collaborator.": "0을 약정해도 유효해요. 신용을 약정하지 않고 운영을 돕는 사람도 협력자가 될 수 있어요.",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.": "0을 약정해도 유효해요. 신용을 약정하지 않고 운영을 돕는 사람도 운영자가 될 수 있어요.",
   "A project needs a goal in Beans": "프로젝트에는 콩 모금 목표가 필요해요",
@@ -117,7 +116,6 @@
   "A spare computer, or a few dollars a month for a rented server. The software is free.": "집에 있는 남는 컴퓨터나 한 달에 몇 달러 정도의 가상 서버 대여료만 들어요. 소프트웨어는 무료입니다.",
   "A town or area": "동네 또는 지역",
   "A trade dispute was resolved": "거래 분쟁이 해결되었어요",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "다양한 이웃들과 교류하는 믿을 수 있는 거래자입니다. 커뮤니티의 인정을 받으며 신용 한도가 한층 더 늘어납니다.",
   "ACCOUNT & IDENTITY": "계정 및 신원",
   "ACTIVE\u0004listing status": "진행 중",
   "ACTUAL DAYS WORKED": "실제 근무 일수",
@@ -632,9 +630,6 @@
   "Creator account linking:": "크리에이터 계정 연결:",
   "Credit Line": "신용 한도",
   "Credit balance gauge": "신용 잔액 게이지",
-  "Credit floor can reach -2000 (the maximum)": "신용 한도가 최대 -2000까지 늘어날 수 있습니다",
-  "Credit floor continues deepening": "신용 한도가 계속해서 늘어납니다",
-  "Credit floor deepens with the value you trade": "거래하는 가치에 따라 신용 한도가 늘어납니다",
   "Credits (B)": "크레딧 (콩)",
   "Credits (🫘 Beans)": "크레딧 (🫘 콩)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "크레딧은 상호 신용 통화예요. 거래하면 크레딧이 멤버 사이에서 오가요. 모든 멤버는 0에서 시작해요. 서로 주고받기를 북돋우고 가치가 지역 안에서 계속 돌도록 만들어졌어요.",
@@ -1164,11 +1159,6 @@
   "Let's Begin! 🚀": "시작해 볼까요! 🚀",
   "Let's look at how this community economy works.": "이 커뮤니티의 경제가 어떻게 돌아가는지 살펴볼게요.",
   "Level {level} of {levels}": "{levels}단계 중 {level}단계",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "{levels}단계 중 {level}단계 · 신뢰 {n}"
-  },
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "등급은 명예 배지일 뿐 특정 행동을 막지 않아요. 누구나 초대할 수 있어요. 직접 보내기는 잔액이 플러스이고 완료된 거래가 1건 이상 있어야 해요. 등급이 높을수록 신용 한도가 늘어나고 커뮤니티의 인정을 받아요.",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "등급은 명예 배지일 뿐 특정 행동을 막지 않아요. 직접 보내기는 잔액이 플러스이고 완료된 거래가 1건 이상 있어야 해요. 등급이 높을수록 신용 한도가 늘어나고 커뮤니티의 인정을 받아요.",
   "Light\u0004appearance": "라이트",
   "Light or dark, or the same as your device": "라이트 또는 다크 모드, 또는 기기 설정과 동일",
   "Link copied.": "링크가 복사되었어요.",
@@ -2775,7 +2765,6 @@
   "You've posted {n} new thing on {platform} since your last visit.|You've posted {n} new things on {platform} since your last visit.": {
     "other": "마지막 방문 이후 {platform}에 새 글 {n}개를 올리셨네요."
   },
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "커뮤니티와 의미 있는 가치를 나누셨군요. 거래할 때마다 신용 한도가 늘어나며 교환하는 가치가 클수록 더 깊어집니다.",
   "Your 12 words are always in Settings → Recovery Phrase.": "12개 단어는 언제든 설정 → 복구 문구에 있어요.",
   "Your 12 words are the **only** way to recover your account.": "12개 단어는 계정을 복구할 수 있는 **유일한** 방법이에요.",
   "Your 12 words are the way back to this account. Keep them safe.": "12개 단어는 이 계정으로 다시 돌아오는 열쇠예요. 안전하게 보관하세요.",

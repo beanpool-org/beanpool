@@ -46,7 +46,8 @@ turns an *earned limit* into a *reciprocal, discoverable line*.
 **Usable floor = min( what you've *earned*, what your *live offers* unlock ).**
 
 - **Dial A — earned limit** (how deep you *could* go): trust from completed, diversity-capped
-  trades, plus optional welcome voucher / vouch gift / admin tier grant. Unchanged from v2 except
+  trades, plus optional welcome voucher / vouch gift. (A tier is a badge only since 12 Nov 2026 and grants nothing:
+  apps/server engine/badges.ts.) Unchanged from v2 except
   activation is restored.
 - **Dial B — offer access** (how deep you *may* go right now): a step function of your live-offer
   count. A copy of an Offer shown from another community is never a live offer here: nobody can
@@ -65,7 +66,7 @@ who *earned* a −1500/−2000 limit ever needs 5 offers.
 ── Dial A: earned limit (magnitude, 0…2000) ────────────────────────────────
 vouchGift       = vouched ? vouchCreditForLevel(level) : 0       // 25 / 50 / 100
 earnedCredit    = floor(1920 · V / (V + 5000)) · ratingMultiplier  where V = qualifiedTradeValue
-grantedCredit   = admin tier-badge grant (0 / 200 / 600 / 1400)
+grantedCredit   = members.earned_credit_c, which no tier or genesis invite writes any more (12 Nov 2026: badges only)
 earnedLimit     = min(2000, earnedCredit + grantedCredit + vouchGift)
 activated       = earnedLimit > 0     ← RESTORED: a real trade (earnedCredit>0) opens the floor on
                                         its own — no vouch needed, and no separate +20 welcome voucher

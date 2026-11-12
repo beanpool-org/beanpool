@@ -334,8 +334,6 @@
   "ADD POST": "WEKA TANGAZO",
   "The amount is a number of Beans above 0, to the cent.": "Kiasi ni idadi ya Maharagwe zaidi ya 0, hadi senti.",
   "Send Beans": "Tuma Maharagwe",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Viwango ni beji za sifa — havizuii hatua yoyote. Utumaji wa moja kwa moja unahitaji salio chanya na biashara moja iliyokamilika. Viwango vya juu vinamaanisha kikomo kikubwa cha mkopo na kutambuliwa na jumuiya.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Viwango ni beji za sifa — havizuii hatua yoyote. Mtu yeyote anaweza kualika. Utumaji wa moja kwa moja unahitaji salio chanya na biashara moja iliyokamilika. Viwango vya juu vinamaanisha kikomo kikubwa cha mkopo na kutambuliwa na jumuiya.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "Hakuna kinachoenda kwenye Mali za Pamoja unaposhikilia Maharagwe {free} au machache zaidi.",
   "✨ Generate Ticket": "✨ Tengeneza Tiketi",
   "✨ Generate Offline Ticket": "✨ Tengeneza Tiketi ya Nje ya Mtandao",
@@ -3184,13 +3182,7 @@
   "Browse & trade the marketplace": "Vinjari na ufanye biashara sokoni",
   "Receive credits": "Pokea mikopo",
   "Send credits after first trade (needs positive balance)": "Tuma mikopo baada ya biashara ya kwanza (inahitaji salio chanya)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "Umefanya biashara ya thamani halisi na jumuiya. Mstari wako wa mkopo unapanuka kwa kila biashara — kadiri unavyobadilishana thamani zaidi, ndivyo unavyozidi kukua.",
-  "Credit floor deepens with the value you trade": "Kiwango cha chini cha mkopo kinapanuka kulingana na thamani unayofanya biashara",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "Mfanyabiashara anayeaminika na mduara mpana wa washirika. Jumuiya inakutambua, na mstari wako wa mkopo unazidi kuongezeka.",
-  "Credit floor continues deepening": "Kiwango cha chini cha mkopo kinaendelea kupanuka",
   "Trusted-trader recognition": "Utambuzi kama mfanyabiashara anayeaminika",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "Nguzo ya mali ya pamoja — mstari wa mkopo wa kina zaidi na utambuzi wa juu zaidi wa jumuiya.",
-  "Credit floor can reach -2000 (the maximum)": "Kiwango cha chini cha mkopo kinaweza kufikia -2000 (kiwango cha juu)",
   "Recognised as a community Elder": "Anatambuliwa kama Mzee wa jumuiya",
   "Export failed": "Uhamishaji umeshindwa",
   "Export my transactions": "Hamisha miamala yangu",
@@ -3205,10 +3197,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "Unaweza tu kutuma maharagwe unayoshikilia kwa sasa — kutuma moja kwa moja kunahitaji salio chanya.",
   "How trust works": "Jinsi uaminifu unavyofanya kazi",
   "YOUR TRUST LEVEL": "KIWANGO CHAKO CHA UAMINIFU",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "Kiwango cha {level} kati ya {levels} · uaminifu {n}",
-    "other": "Kiwango cha {level} kati ya {levels} · uaminifu {n}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "Uaminifu **{n}** zaidi kufikia {emoji} {tier}",
     "other": "Uaminifu **{n}** zaidi kufikia {emoji} {tier}"
@@ -3438,7 +3426,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "Wanachama wapya huonyesha beji ya **🔑 Waanzilishi** hadi biashara yao ya kwanza.",
   "Tiers & Perks": "Madaraja na Manufaa",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "Madaraja ni **hatua za utambuzi** — zinaashiria jinsi uaminifu wako ulivyokua. Zawadi moja inayoongezeka nayo ni **kiwango chako cha chini cha mkopo** (kiasi unachoweza kutumia chini ya sifuri). Kiwango chako kinapanuka mfululizo kulingana na thamani unayofanya biashara; madaraja ni alama tu njiani.",
   "🔑 Founding Status (before 1st trade)": "🔑 Hali ya Waanzilishi (kabla ya biashara ya 1)",
   "A starting state that lasts until you complete your **very first trade**": "Hali ya kuanzia inayodumu hadi utakapokamilisha **biashara yako ya kwanza kabisa**",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "Inaonekana kama **🔑 WAANZILISHI** ili wanachama wajue kukusaidia kuanza",

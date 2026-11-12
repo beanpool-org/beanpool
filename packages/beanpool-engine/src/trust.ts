@@ -6,9 +6,10 @@
 // so the node and the fleet manager compute an identical floor instead of the
 // manager keeping a hand-copied, drift-prone reimplementation.
 import type Database from 'better-sqlite3';
-import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { earnedCreditFromValue, getTier, withBadge, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
+import { memberBadge } from './badges.js';
 import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf, enterpriseHasKnownPledge, isConfirmed, knownFloorException } from './known-floor.js';
 
 type Db = Database.Database;
@@ -979,8 +980,8 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     /** An admin froze this member's whole credit line (members.credit_frozen, the manager's "Freeze"): no line while it lasts. */
     creditFrozen: boolean;
     /**
-     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): what the member did, earned + granted
-     * under the cap, never the known grant (an enterprise: its line less its keepers' known pledges). A freeze doesn't move
+     * The credit `tier` is read from: what the member did, earned + granted under the cap, never the known grant, and
+     * never a badge (`tier` is tierForCredit(tierCredit), or the member's badge where that is higher) (an enterprise: its line less its keepers' known pledges). A freeze doesn't move
      * it. A post card's badge takes it, so every surface shows the same tier.
      */
     tierCredit: number;
@@ -1022,10 +1023,9 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
         };
     }
 
-    // GRANTED-credit lane: genesis pre-seed + admin tier-badge grants (adminSetTier).
-    // Stored in members.earned_credit_c (legacy column name). It is a credit-*limit* input only —
-    // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
-    // the floor but never count as "earned" (governance votes use earned/value only, not grants).
+    // GRANTED-credit lane: members.earned_credit_c (its old name). Nothing in the product writes it for a member any more:
+    // a tier is a badge only (badges.ts) and a genesis invite gives a badge, not credit (Marty, 12 Nov 2026). It is a
+    // credit-*limit* input only — it mints/moves no beans — kept SEPARATE from the earned score.
     const grantedCredit = memberRow?.earned_credit_c || 0;
     const isCreditFrozen = memberRow?.credit_frozen === 1;
 
@@ -1066,7 +1066,9 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // the whole line's (members.credit_frozen) or the known floor's, nor a lowered or raised exception, moves a tier.
     const knownFrozen = confirmationDialOn(db) && knownFloorException(db, publicKey)?.frozen === true && isConfirmed(db, publicKey);
     const tierCredit = Math.min(cap, otherAllowance);
-    const tier = getTier(c.CREDIT_BASE_FLOOR - tierCredit);
+    // A badge an owner or admin gave them (badges.ts) shows where it is higher than that: recognition only, so it moves
+    // neither the floor above nor tierCredit (Marty, 12 Nov 2026: "tiers badge only").
+    const tier = withBadge(getTier(c.CREDIT_BASE_FLOOR - tierCredit), memberBadge(db, publicKey));
 
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation

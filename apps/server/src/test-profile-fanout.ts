@@ -80,6 +80,7 @@ async function main() {
     const wsl: any = await import('./ws-limits.js');
     const { initTls } = await import('./services/tls.js');
     const se: any = await import('./state-engine.js');
+    const { setMemberBadge } = await import('./engine/badges.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
@@ -228,7 +229,7 @@ async function main() {
         setProfile('global');
         const s = await sockets();
         await sleep(200);
-        se.adminSetTier(pia.pubKeyHex, 'Resident');
+        setMemberBadge('owner:password', pia.pubKeyHex, 'Resident');
         await sleep(300);
         const members = ['piaPhone', 'piaWeb', 'dan', 'gus', 'olive', 'vic'] as const;
         assert(members.every(k => heard(s[k], pia.pubKeyHex) === 1), `a tier badge reaches every member's socket (${report(s, pia.pubKeyHex)})`);
@@ -268,7 +269,10 @@ async function main() {
         }
         await afterChange('a node role granted', () => grantNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === 'moderator');
         await afterChange('a node role revoked', () => revokeNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === null);
-        await afterChange('a tier badge', () => se.adminSetTier(wes.pubKeyHex, 'Steward'), 'earnedCredit', r => r.earnedCredit > 0);
+        // A badge is recognition only (engine/badges.ts): it gives no credit, so the list's earnedCredit (the granted lane) stays 0.
+        setMemberBadge('owner:password', wes.pubKeyHex, 'Steward');
+        const listed = ((await get(olive, '/api/members')).json ?? []).find((m: any) => m.publicKey === wes.pubKeyHex);
+        assert(!!listed && listed.earnedCredit === 0, `a tier badge gives no credit: the list's earnedCredit stays 0 (${JSON.stringify(listed?.earnedCredit)})`);
     }
 
     console.log(`\n${passed}/${run} passed`);

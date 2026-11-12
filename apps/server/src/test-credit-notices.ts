@@ -199,6 +199,15 @@ async function main(): Promise<void> {
     const fayHalf = await confirm(ada, fay);
     assert(fayHalf.body?.status === 'awaiting_second', `setup: Fay's waits for a second admin (${show(fayHalf.body)})`);
     silent("Ben revokes Fay's confirmation before any second", await noticesOf(() => call('POST', ben, `/api/names/confirmations/${fayHalf.body?.id}/revoke`)));
+    // A work-off waiting for a second admin: nobody at the first half; the second says the work-off.
+    const ivyDebt = hex(16);
+    db.prepare(`INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at) VALUES (?, ?, ?, 'removed', ?)`).run(ivyDebt, makeEntry(), hc(25), ago(10 * DAY));
+    const ivy = makeMember('Ivy');
+    const ivyHalf = await noticesOf(() => call('POST', ada, `/api/names/debts/${ivyDebt}/work-off`, { memberPubkey: ivy.pk }));
+    silent('two admins: Ada confirms Ivy to work off a debt, the first half', ivyHalf);
+    const ivyTold = toldOnly('Ben seconds Ivy\'s work-off', ivy, await noticesOf(() => call('POST', ben, `/api/names/confirmations/${ivyHalf.res.body?.id}/second`)), 'credit_confirmed');
+    assert(ivyTold.body.startsWith('@Ada confirmed you on the names list to work off the debt') && ivyTold.data.workOff === true && !ivyTold.body.includes('spend up to'),
+        `the second of a work-off says the work-off (${ivyTold.body})`);
     twoAdmins(false);
 
     // ── 3. A work-off confirmation ──────────────────────────────────────────────────────────────────────────────────

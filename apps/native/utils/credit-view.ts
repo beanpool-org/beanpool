@@ -18,6 +18,7 @@ import {
     type CreditPosition, type RiskLevel, type RiskReason,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
+import { signedGet, signedPost } from './node-post';
 
 // ── What the node answers (engine/credit-sight.ts, engine/vouchers.ts; whole hundredths of a Bean throughout) ──────────
 
@@ -121,7 +122,6 @@ async function answer<T>(res: Response): Promise<CreditResult<T>> {
 
 async function get<T>(anchor: string, path: string, identity: BeanPoolIdentity): Promise<CreditResult<T>> {
     try {
-        const { signedGet } = await import('./node-post');
         return await answer<T>(await signedGet(anchor, path, identity));
     } catch {
         return OFFLINE;
@@ -130,7 +130,6 @@ async function get<T>(anchor: string, path: string, identity: BeanPoolIdentity):
 
 async function post<T>(anchor: string, path: string, body: unknown, identity: BeanPoolIdentity): Promise<CreditResult<T>> {
     try {
-        const { signedPost } = await import('./node-post');
         return await answer<T>(await signedPost(anchor, path, body, identity));
     } catch {
         return OFFLINE;

@@ -60,9 +60,9 @@ export function CreditRow({ person, sight, onOpenProfile, onGive }: {
                             {budget.noLimit
                                 ? t('Owner · no limit')
                                 : t('Voucher · {left} of {level} left', { left: formatHundredths(budget.left_c ?? 0), level: formatHundredths(budget.setLevel_c ?? budget.level_c ?? 0) })}
-                            {budget.runningLow ? <Text style={styles.low}>{'  ' + marked('!', budget.nothingLeft ? t('Nothing left to vouch with') : t('Running low'))}</Text> : null}
                         </Text>
                     ) : null}
+                    {budget && budget.runningLow ? <Text style={[styles.budget, styles.low]} maxFontSizeMultiplier={1.3}>{marked('!', budget.nothingLeft ? t('Nothing left to vouch with') : t('Running low'))}</Text> : null}
                     {budget && asked ? <Text style={styles.budget} maxFontSizeMultiplier={1.3} testID="credit-voucher-asked">{t('Asked for more on {day}', { day: asked })}</Text> : null}
                 </View>
             </Pressable>

@@ -1244,6 +1244,7 @@ export default function PeopleScreen() {
                     </View>}
                     {showsCredit && creditOn && identity && anchorUrl ? (
                         <CreditList
+                            key={creditStart ? `${creditStart.filter}:${creditStart.voucher ?? ''}` : 'plain'}
                             anchorUrl={anchorUrl}
                             identity={identity}
                             query={searchQuery}

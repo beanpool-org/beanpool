@@ -9,6 +9,7 @@
  *                           admin and the open-debt rule are the list's own; on return the row is read again
  *   Raise their known floor owners and admins, a confirmed member, never their own: POST /api/credit/known-floor, raise only
  *
+ * A community that doesn't confirm its members (the node's known-rule answer is null) shows neither known line: Confirm and Raise.
  * Below zero, or unable to be given part of a credit line: the presets are greyed under the node's own sentence and no
  * request is sent (the node still refuses a hand-made one). After a give the person is READ AGAIN from the node (never
  * updated here) and Next › opens the next person. Credit you give can't be taken back, and the sheet says so.
@@ -24,6 +25,7 @@ import { VouchPresetChoice } from './VouchPresetChoice';
 import { RiskLine } from './CreditRisk';
 import { AskForMore } from './AskForMore';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
+import { fetchKnownRule } from '../utils/known-rule';
 import { askMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import {
     NOT_ENOUGH_BUDGET_CODE, creditRowText, fetchCreditPerson, floorRaiseSteps, mayGive, presetsGreyedBecause, presetsGreyedWords,
@@ -78,6 +80,13 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
     const [refusal, setRefusal] = useState<{ message: string; code: string | null } | null>(null);
     const [done, setDone] = useState<{ said: string; line: string | null } | null>(null);
     const [floor, setFloor] = useState<number | null>(null);
+    // The node's own word on whether this community confirms its members (the dial): neither known line is shown where it doesn't.
+    const [confirms, setConfirms] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        void fetchKnownRule(anchorUrl).then((rule) => { if (alive) setConfirms(rule !== null); });
+        return () => { alive = false; };
+    }, [anchorUrl]);
 
     // The sheet's own read of the person (a look the node records, once a day for this pair) and of the viewer's budget.
     useEffect(() => {
@@ -95,9 +104,9 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
     const noLimit = mine?.noLimit === true;
     const atMax = prior >= vouchMaxFor(noLimit);
     const confirmed = !!person.standsBehind?.confirmedBy;
-    const canConfirm = offersNamesList && !!person.standsBehind && !confirmed && mayGive(person);
+    const canConfirm = confirms && offersNamesList && !!person.standsBehind && !confirmed && mayGive(person);
     const knownFrozen = !!(person.frozen && (person.frozen.credit || person.frozen.known));
-    const steps = useMemo(() => (person.parts && confirmed && !knownFrozen && !person.own ? floorRaiseSteps(person.parts.known_c, person.parts.cap_c) : null), [person, confirmed, knownFrozen]);
+    const steps = useMemo(() => (confirms && person.parts && confirmed && !knownFrozen && !person.own ? floorRaiseSteps(person.parts.known_c, person.parts.cap_c) : null), [person, confirmed, knownFrozen, confirms]);
     const target = floor ?? steps?.min ?? null;
 
     /** Read the person again from the node (never updated here), hand it up, and say what the line is now. */

@@ -541,8 +541,8 @@ export default function PublicProfileScreen() {
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
     // The credit card (slice C4): asked of the node each time a profile opens, for someone who gives credit there; a plain
-    // member's phone makes no credit request.
-    const creditGiver = useCreditGiver(anchorUrl, identity, !isSelf && showsBeans && !!anchorUrl && !!pubKeyStr, pubKeyStr);
+    // member's phone makes no credit request. The budget answer this screen already asks for is handed in, not asked twice.
+    const creditGiver = useCreditGiver(anchorUrl, identity, !isSelf && showsBeans && !!anchorUrl && !!pubKeyStr, pubKeyStr, myVouching);
 
     useEffect(() => {
         if (!anchorUrl || !identity || isSelf) {

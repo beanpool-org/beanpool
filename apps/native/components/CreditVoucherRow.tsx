@@ -76,10 +76,8 @@ export function CreditVoucherRow({ row, anchorUrl, identity, highlighted, onChan
     return (
         <View style={[styles.row, highlighted && { borderLeftWidth: 4, borderLeftColor: colors.brand.fill }]} testID={`credit-voucher-${row.callsign}`}>
             <Text style={styles.name} maxFontSizeMultiplier={1.3}>{row.callsign}</Text>
-            <Text style={styles.line} maxFontSizeMultiplier={1.3}>
-                {words.head}
-                {words.flag ? <Text style={styles.flag}>{'   ' + marked('!', words.flag)}</Text> : null}
-            </Text>
+            <Text style={styles.line} maxFontSizeMultiplier={1.3}>{words.head}</Text>
+            {words.flag ? <Text style={[styles.line, styles.flag]} maxFontSizeMultiplier={1.3} testID="credit-voucher-flag">{marked('!', words.flag)}</Text> : null}
             <Text style={styles.line} maxFontSizeMultiplier={1.3}>{words.held ? `${words.vouched} · ${words.held}` : words.vouched}</Text>
             <Text style={styles.line} maxFontSizeMultiplier={1.3}>{words.health}</Text>
             {words.asked ? <Text style={styles.line} maxFontSizeMultiplier={1.3} testID="credit-voucher-asked">{words.asked}</Text> : null}

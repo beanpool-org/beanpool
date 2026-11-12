@@ -29,6 +29,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
+// What the share sheet was given and what the clipboard was told to hold ("Use BeanPool on a computer"'s Share and Copy).
+const sent = vi.hoisted(() => ({ shared: [] as unknown[], copied: [] as string[] }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', switch: 'switch', checkbox: 'checkbox' };
@@ -75,7 +77,7 @@ vi.mock('react-native', () => {
                 for (const b of buttons ?? []) { if (b.text) alerts.said.push(b.text); alerts.buttons.push(b); }
             },
         },
-        Share: { share: async () => ({}) },
+        Share: { share: async (content: unknown) => { sent.shared.push(content); return {}; } },
         Linking: { openURL: async () => {}, openSettings: async () => {} },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
@@ -109,7 +111,7 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {}, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1, WHEN_UNLOCKED: 2, AFTER_FIRST_UNLOCK: 3 }));
-vi.mock('expo-clipboard', () => ({ setStringAsync: async () => true }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: async (text: string) => { sent.copied.push(text); return true; } }));
 vi.mock('expo-web-browser', () => ({ openBrowserAsync: async () => ({}), openAuthSessionAsync: async () => ({ type: 'cancel' }), maybeCompleteAuthSession: () => ({}) }));
 vi.mock('react-native-qrcode-svg', () => ({ default: () => createElement('div', { 'data-qr': 'true' }) }));
 vi.mock('react-native-safe-area-context', () => ({
@@ -319,6 +321,7 @@ import { readerFeaturesHeld } from '../reads-own';
 import SettingsScreen from '../../app/(tabs)/settings';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addSavedNode, clearGuestNode, markGuestNode } from '../nodes';
+import { transferTarget } from '../pair-device-target';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const NODE = 'https://mullum.example';
@@ -327,7 +330,8 @@ const NODE = 'https://mullum.example';
 const OTHERS = [
     'Ana', 'Mia', 'Grows beans by the river', '0400 000 000', 'Mullum Commons', 'Castlemaine', 'Hills', NODE, 'https://castle.example',
     'beanpool.org', 'CONFIRM', 'WIPE', 'DELETE', 'Google', 'mia-key', `${KEY.slice(0, 6)}...${KEY.slice(-6)}`, KEY.slice(0, 16),
-    'yourtown.beanpool.org', 'INV-', 'mullum.example', ...WORDS.split(' '),
+    // "Use BeanPool on a computer" draws the address a piece to each dotted part ("mullum." "example"), without its https://.
+    'yourtown.beanpool.org', 'INV-', 'mullum.example', 'mullum.', 'example', ...WORDS.split(' '),
 ].sort((a, b) => b.length - a.length);
 
 let host: HTMLDivElement;
@@ -339,6 +343,8 @@ beforeEach(() => {
     params.now = {};
     alerts.said.length = 0;
     alerts.buttons.length = 0;
+    sent.shared.length = 0;
+    sent.copied.length = 0;
     visits.n = 0;
     visits.pushed.length = 0;
     visits.visiting = false;
@@ -748,6 +754,215 @@ describe('Notification Preferences: "When a neighbour asks for something I\'m in
         expect(askedSwitch()).toBeNull();
         expect(host.textContent).not.toContain(SWITCH);
         expect(node.prefsSaved).toEqual([]);
+    });
+});
+
+describe('Settings → "Use BeanPool on a computer: open <address>": every member, with this community\'s address (computer-line)', () => {
+    // What Share sends and a screen reader reads: the whole line, https:// and all. What is drawn leaves the https:// off the address.
+    const LINE = `Use BeanPool on a computer: open ${NODE}`;
+    const SHOWN = 'Use BeanPool on a computer: open mullum.example';
+    const lineRow = () => host.querySelector('[data-testid="settings-use-on-computer"]') as HTMLElement | null;
+    /** The address as drawn: one piece per dotted part (it may break after a dot), put back together. */
+    const addressShown = () => lineRow()?.querySelector('[data-testid="settings-use-on-computer-address"]')?.textContent ?? '';
+    /** The line as drawn: the lead-in, then the address on the line under it (separate blocks, so a space is put between). */
+    const lineShown = () => {
+        const lead = Array.from(lineRow()?.querySelectorAll('span') ?? []).find((e) => e.getAttribute('data-font') === '15');
+        return lead ? `${lead.textContent} ${addressShown()}` : '';
+    };
+    /** What this phone kept of what its community last said of its own names (the tab strip keeps it at each start and switch). */
+    const keepNames = (url: string, names: { primaryAddress?: string; addresses?: string[] }) => store.map.set('beanpool_node_profiles', JSON.stringify({
+        [url]: { profile: 'local', features: { beans: true }, checkedAt: new Date().toISOString(), ...names },
+    }));
+    const copyButton = () => host.querySelector('[data-testid="settings-use-on-computer-copy"]') as HTMLElement | null;
+    const shareButton = () => host.querySelector('[data-testid="settings-use-on-computer-share"]') as HTMLElement | null;
+    /** The rows under a section's header, as the phone draws them: the header, then its group. */
+    const groupUnder = (header: string) => Array.from(host.querySelectorAll('span')).find((e) => e.textContent === header)?.nextElementSibling ?? null;
+    const holdTheAnswer = () => {
+        let release = () => {};
+        node.hold = new Promise<void>((resolve) => { release = resolve; });
+        return release;
+    };
+
+    it('a member with no role sees the line with this community\'s address, and not the owners\' row', async () => {
+        await renderIn('en');
+        expect(lineRow(), 'the row').toBeTruthy();
+        expect(lineShown()).toBe(SHOWN);
+        expect(host.textContent).not.toContain('Manage this community from a computer');
+        expect(host.textContent).not.toContain('Moderate this community from a computer');
+    });
+
+    it('it sits in Account & identity, right above Link a device, where a member looks for a computer', async () => {
+        await renderIn('en');
+        const group = groupUnder('ACCOUNT & IDENTITY');
+        expect(group, 'the group').toBeTruthy();
+        expect(group!.contains(lineRow())).toBe(true);
+        expect(lineRow()!.nextElementSibling?.getAttribute('aria-label')).toBe('Link a device');
+    });
+
+    it('it does not wait for the node: shown while the role is still being asked', async () => {
+        const release = holdTheAnswer();
+        await renderIn('en');
+        expect(lineShown()).toBe(SHOWN);
+        release();
+        await settle();
+        expect(lineShown()).toBe(SHOWN);
+    });
+
+    it('an owner sees both rows: Manage this community from a computer in the admin group, and this line outside it', async () => {
+        node.role = 'owner';
+        await renderIn('en');
+        const manage = byLabel('Manage this community from a computer');
+        expect(manage, 'the owners\' row').toBeTruthy();
+        expect(groupUnder('COMMUNITY ADMIN')!.contains(manage!)).toBe(true);
+        expect(lineShown()).toBe(SHOWN);
+        expect(groupUnder('COMMUNITY ADMIN')!.contains(lineRow())).toBe(false);
+        expect(groupUnder('ACCOUNT & IDENTITY')!.contains(lineRow())).toBe(true);
+    });
+
+    it.each([['admin', 'Manage this community from a computer'], ['moderator', 'Moderate this community from a computer']] as const)('%s: keeps %s and sees the line too', async (role, label) => {
+        node.role = role;
+        await renderIn('en');
+        expect(byLabel(label)).toBeTruthy();
+        expect(lineShown()).toBe(SHOWN);
+    });
+
+    it('Copy puts this community\'s address on the clipboard, and says Copied', async () => {
+        await renderIn('en');
+        expect(copyButton()!.textContent).toBe('Copy');
+        await click(copyButton(), 'Copy');
+        expect(sent.copied).toEqual([NODE]);
+        expect(copyButton()!.textContent).toBe('Copied');
+    });
+
+    it('Share hands the share sheet the same line', async () => {
+        await renderIn('en');
+        await click(shareButton(), 'Share');
+        expect(sent.shared).toEqual([{ message: LINE }]);
+    });
+
+    it('the address is the one the phone uses now: another community\'s, with a path or a slash on it, is shown as an origin', async () => {
+        store.map.set('beanpool_anchor_url', 'https://byron.beanpool.org/');
+        await renderIn('en');
+        expect(lineShown()).toBe('Use BeanPool on a computer: open byron.beanpool.org');
+        await click(copyButton(), 'Copy');
+        expect(sent.copied).toEqual(['https://byron.beanpool.org']);
+    });
+
+    // Rounds 3 and 4: a phone still on mullum, in a community whose main name is byron (measured: GET /api/community/info on either
+    // host answers primaryAddress byron, addresses [byron, mullum]). The row says the main name ONLY when Link a device (the row under
+    // it) would take a code from it: the phone's own community or a saved one. Else the phone's own address. Display only: the
+    // phone's own address is never changed.
+    describe('the community\'s main address, only where Link a device would take its code (rounds 3 and 4)', () => {
+        const MULLUM = 'https://mullum.beanpool.org';
+        const BYRON = 'https://byron.beanpool.org';
+        const BYRON_NAMES = { primaryAddress: 'byron.beanpool.org', addresses: ['byron.beanpool.org', 'mullum.beanpool.org'] };
+        const BYRON_LINE = 'Use BeanPool on a computer: open https://byron.beanpool.org';
+        const MULLUM_LINE = 'Use BeanPool on a computer: open https://mullum.beanpool.org';
+        /** What Link a device (app/pair-device.tsx) asks of the code a computer's page at `address` shows: the same inputs it reads. */
+        const linkADeviceTakesTheCodeAt = (address: string) => {
+            const saved = (JSON.parse(store.map.get('beanpool_saved_nodes') ?? '[]') as Array<{ url: string }>).map((n) => n.url);
+            return transferTarget(address, store.map.get('beanpool_anchor_url') ?? null, saved).kind === 'ok';
+        };
+
+        it('anchor mullum + primary byron, byron not saved: shows mullum (Link a device would refuse byron\'s code), Copy and Share give the full https://mullum.beanpool.org', async () => {
+            store.map.set('beanpool_anchor_url', MULLUM);
+            keepNames(MULLUM, BYRON_NAMES);
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open mullum.beanpool.org');
+            expect(lineRow()!.textContent).not.toContain('https://');
+            expect(byLabel(MULLUM_LINE), 'a screen reader gets the whole line, https:// and all').toBeTruthy();
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual([MULLUM]);
+            await click(shareButton(), 'Share');
+            expect(sent.shared).toEqual([{ message: MULLUM_LINE }]);
+            expect(store.map.get('beanpool_anchor_url'), 'display only: the phone talks to the node it did').toBe(MULLUM);
+            // The row and Link a device agree: the address shown is one Link a device takes a code from; byron's is not.
+            expect(linkADeviceTakesTheCodeAt(MULLUM)).toBe(true);
+            expect(linkADeviceTakesTheCodeAt(BYRON)).toBe(false);
+        });
+
+        it('anchor byron + primary byron: shows byron.beanpool.org (no https://), Copy and Share give the full https://byron.beanpool.org', async () => {
+            store.map.set('beanpool_anchor_url', BYRON);
+            keepNames(BYRON, BYRON_NAMES);
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open byron.beanpool.org');
+            expect(lineRow()!.textContent).not.toContain('https://');
+            expect(byLabel(BYRON_LINE)).toBeTruthy();
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual([BYRON]);
+            await click(shareButton(), 'Share');
+            expect(sent.shared).toEqual([{ message: BYRON_LINE }]);
+            expect(linkADeviceTakesTheCodeAt(BYRON)).toBe(true);
+        });
+
+        it('anchor mullum + primary byron, byron saved on this phone: shows byron (Link a device takes its code), and the phone stays on mullum', async () => {
+            store.map.set('beanpool_anchor_url', MULLUM);
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: MULLUM }, { url: BYRON }]));
+            keepNames(MULLUM, BYRON_NAMES);
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open byron.beanpool.org');
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual([BYRON]);
+            expect(linkADeviceTakesTheCodeAt(BYRON)).toBe(true);
+            expect(store.map.get('beanpool_anchor_url'), 'display only: the phone talks to the node it did').toBe(MULLUM);
+        });
+
+        it('a main name that is not one of the community\'s own addresses is never shown: the phone\'s own address', async () => {
+            store.map.set('beanpool_anchor_url', MULLUM);
+            keepNames(MULLUM, { primaryAddress: 'evil.example', addresses: ['mullum.beanpool.org'] });
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open mullum.beanpool.org');
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual([MULLUM]);
+        });
+
+        it('no answer kept from the community: the phone\'s own address, as before', async () => {
+            store.map.set('beanpool_anchor_url', MULLUM);
+            store.map.delete('beanpool_node_profiles');
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open mullum.beanpool.org');
+        });
+
+        it('a plain-http address (a home network\'s) keeps itself, with its http://', async () => {
+            store.map.set('beanpool_anchor_url', 'http://192.168.1.20:3000');
+            keepNames('http://192.168.1.20:3000', BYRON_NAMES);
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open http://192.168.1.20:3000');
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual(['http://192.168.1.20:3000']);
+        });
+    });
+
+    it('a phone with no community address has no row: never a line with a blank in it', async () => {
+        store.map.delete('beanpool_anchor_url');
+        await renderIn('en');
+        expect(lineRow()).toBeNull();
+        expect(host.textContent).not.toContain('Use BeanPool on a computer');
+    });
+
+    it('at 320 dp and 1.3x text: the sentence and the address wrap (no line count, no shrinking), read as one line, the buttons are 48 dp and wrap beside them', async () => {
+        await renderIn('en');
+        const words = Array.from(lineRow()!.querySelectorAll('span')).filter((e) => e.getAttribute('data-font') === '15');
+        expect(lineShown()).toBe(SHOWN);
+        // The address on its own line under the lead-in: ONE text holding a nested piece for each dotted part ("mullum." "example").
+        expect(words.map((e) => e.textContent)).toEqual(['Use BeanPool on a computer: open', 'mullum.example']);
+        const address = lineRow()!.querySelector('[data-testid="settings-use-on-computer-address"]')!;
+        expect(Array.from(address.querySelectorAll('span')).map((e) => e.textContent)).toEqual(['mullum.', 'example']);
+        for (const e of words) {
+            expect(e.getAttribute('data-lines'), e.textContent!).toBeNull();
+            expect(e.getAttribute('data-shrinks'), e.textContent!).toBeNull();
+        }
+        expect(byLabel(LINE), 'a screen reader gets the whole line at once').toBeTruthy();
+        for (const b of [copyButton()!, shareButton()!]) expect(Number(b.getAttribute('data-min-height'))).toBeGreaterThanOrEqual(48);
+        expect(copyButton()!.parentElement!.getAttribute('data-wrap')).toBe('wrap');
+    });
+
+    it('in the pseudo-locale every word of it came through t(), the address as written', async () => {
+        await renderIn('xx');
+        expect(lineShown()).toBe(`${pseudoLocalise('Use BeanPool on a computer: open')} mullum.example`);
+        expect(copyButton()!.textContent).toBe(pseudoLocalise('Copy'));
+        expect(shareButton()!.textContent).toBe(pseudoLocalise('Share'));
+        expect(bypassing()).toEqual([]);
     });
 });
 

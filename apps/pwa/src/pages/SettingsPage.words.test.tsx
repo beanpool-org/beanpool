@@ -112,6 +112,15 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(unwrapped()).toEqual([]);
     });
 
+    it('"BeanPool works in any browser: open <address> on any computer or phone": its words through t(), the address as written', async () => {
+        await showIn('xx');
+        renderSettings();
+        const line = await screen.findByTestId('settings-use-in-browser-line');
+        expect(line.textContent).toBe(xx('BeanPool works in any browser: open {address} on any computer or phone').replace('{address}', window.location.origin));
+        expect(screen.getByRole('button', { name: xx("Copy this community's link") }).textContent).toBe(xx('📋 Copy'));
+        expect(unwrapped()).toEqual([]);
+    });
+
     it('the working style card, once the member has taken the quiz', async () => {
         vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: 'me-pk', callsign: 'Kim', avatar: null, bio: '', contact: null, archetype: ARCHETYPE } as any);
         await showIn('xx');

@@ -2,7 +2,7 @@
 slug: faq
 title: Questions
 summary: Short answers to the questions members ask most.
-related: your-12-words, recovery, communities, beans-and-the-global-community, holiday-mode, leaving-or-deleting, getting-help
+related: your-12-words, recovery, communities, beans-and-the-global-community, holiday-mode, leaving-or-deleting, getting-help, web-app
 ---
 
 ## Who runs my community?
@@ -62,6 +62,10 @@ Tap **Start a community** in the app. A community runs on its own small server: 
 ## Can I belong to more than one community?
 
 Yes. On the phone you can save several communities and switch between them, using the same identity in each. In the web app, each community opens at its own address. Each community has its own beans, rules and members.
+
+## Is there a desktop app? Can I use BeanPool on a computer?
+
+There is no desktop app. BeanPool on a computer: open your community's address in a browser; it's the same account. In the phone app, **Settings** shows the address under **Use BeanPool on a computer**, with **Copy** and **Share**. To bring your account across, tap **Link a device** in the phone's **Settings**. See "Using BeanPool in a web browser".
 
 ## Can I join another community that anyone can join?
 

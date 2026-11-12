@@ -7,7 +7,9 @@ related: home, the-bean, your-12-words, joining, messages, reporting
 
 ## The same account, a different screen
 
-Your community can also be used in a web browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently.
+BeanPool on a computer: open your community's address in a browser; it's the same account. There is no separate desktop app to download: the web app is BeanPool in a browser, on a computer or a phone. This guide is written for the phone app. The web app works the same way, but some things are named or placed differently.
+
+Your community's address is in Settings. In the phone app, **Use BeanPool on a computer** shows it, with **Copy** and **Share** so you can send it to your own computer. In the web app, **Settings** → **BeanPool** says **BeanPool works in any browser**, with the address and **Copy**. To have the same account on the computer, bring it across: see "Using your phone account on a computer", below.
 
 Use one account on both. Joined in a browser? Put that same account on your phone: see "Putting your web account on a phone", below. Joined on your phone? Bring it to the browser: see "Using your phone account on a computer". Joining again makes a second account, and two accounts can never be joined into one.
 
@@ -140,7 +142,7 @@ Screen 1 of joining in a browser says the same the other way round: if you are a
 
 ## Installing it
 
-On a computer, you can install BeanPool so it opens in its own window from your desktop or dock: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, supports notifications, and avoids creating a second account or icon.
+On a computer, you can install the web app so it opens in its own window, like an app, from your dock or taskbar: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. It is still the web app at your community's address, not a separate desktop app. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, supports notifications, and avoids creating a second account or icon.
 
 ## Keep your 12 words
 

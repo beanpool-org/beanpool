@@ -167,6 +167,22 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         expect(bell().textContent).toBe('2');
     });
 
+    it("a credit notice (the node's engine/credit-notices.ts: community.notice, data kind credit_*) is a row with its own words", async () => {
+        const words: Record<string, string> = {
+            credit_confirmed: '@Ada confirmed you on the names list. You can now spend up to 1,000 Beans. Your credit opens when you post an Offer.',
+            credit_known_floor: '@Olive lowered your known floor to 300 Beans. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+            credit_confirmation_revoked: '@Ben revoked your confirmation on the names list, so it gives you no credit now. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+        };
+        node.notices = Object.entries(words).map(([kind, body], i) =>
+            notice(`c${i}`, { kind: 'community.notice', title: 'Your credit here', body, data: { kind, by: 'c'.repeat(64), amount: 30000, noticeId: `k${i}` } }));
+        await renderHeader();
+        expect(bell().textContent).toBe('3');
+        await openSheet();
+        const labels = Array.from(document.querySelectorAll('[role="dialog"] button'))
+            .map(b => b.getAttribute('aria-label') ?? '').filter(l => l.startsWith('Your credit here. '));
+        expect(labels).toEqual(Object.values(words).map(body => `Your credit here. ${body}`));
+    });
+
     it("a row's tap opens its thing by the push tap's routes and marks it, and only it", async () => {
         node.notices = [notice('n1'), notice('n2', { kind: 'market.request', title: '🤝 Request', body: 'Ben asked for your jam', data: { screen: 'post', postId: POST } })];
         await renderHeader();

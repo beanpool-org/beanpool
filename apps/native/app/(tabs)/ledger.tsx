@@ -40,6 +40,7 @@ import {
     ledgerCreditLine, ledgerBudget, formatHistoryLine, VOUCH_PRESET_WORDS,
 } from '@beanpool/core';
 import { askMyVouching, type MyVouching } from '../../utils/vouchers';
+import { AskForMore } from '../../components/AskForMore';
 import { Modal } from 'react-native';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { richWords } from '../../components/info-content/rich-words';
@@ -204,6 +205,8 @@ export default function LedgerScreen() {
     const [trustInfoTab, setTrustInfoTab] = useState<'levels' | 'perks'>('levels');
     const [showSliderInfo, setShowSliderInfo] = useState(false);
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    // The node this budget was read from: the panel's Ask for more asks the same one.
+    const [vouchAnchor, setVouchAnchor] = useState<string | null>(null);
     const [showBudgetModal, setShowBudgetModal] = useState(false);
 
     const [showSend, setShowSend] = useState(false);
@@ -466,6 +469,7 @@ export default function LedgerScreen() {
             getPledgeHistory(identity.publicKey).then(latest(setPledgeHistory)).catch(() => {});
             AsyncStorage.getItem('beanpool_anchor_url').then(anchor => {
                 if (anchor && identity) {
+                    latest(setVouchAnchor)(anchor);
                     askMyVouching(anchor, identity).then(latest(setMyVouching)).catch(() => {});
                 }
             }).catch(() => {});
@@ -1447,9 +1451,14 @@ export default function LedgerScreen() {
                                     <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 4 }}>
                                         {t('Ask for more')}
                                     </Text>
-                                    <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
-                                        {t('To get a bigger budget to vouch from, ask an owner of this community.')}
-                                    </Text>
+                                    {myVouching.ask && vouchAnchor && identity ? (
+                                        // The node's state: one tap, no words and no amount, once a week (slice C4).
+                                        <AskForMore anchorUrl={vouchAnchor} identity={identity} ask={myVouching.ask} onAsked={(ask) => setMyVouching((mv) => (mv ? { ...mv, ask } : mv))} testID="ledger-ask-for-more" />
+                                    ) : (
+                                        <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
+                                            {t('To get a bigger budget to vouch from, ask an owner of this community.')}
+                                        </Text>
+                                    )}
                                 </View>
                             </ScrollView>
                         </Pressable>

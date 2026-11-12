@@ -313,6 +313,8 @@ async function nodeFetch(input: unknown): Promise<Response> {
 
 import { darkColors, lightColors, type AppColors } from '../../constants/colors';
 import * as db from '../db';
+// People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
+vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import PeopleScreen from '../../app/(tabs)/people';
 import NewMessageScreen from '../../app/new-message';
 import ChatsScreen from '../../app/(tabs)/chats';

@@ -546,7 +546,8 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('components', 'learn', 'KnowledgeDetail.tsx')]: 1,
             // The full Community Pulse list: a row about a member opens them.
             [path.join('app', '(tabs)', 'market.tsx')]: 1,
-            [path.join('app', '(tabs)', 'people.tsx')]: 2,
+            // Community's rows and the Friends' rows, and (slice C4) a row of the credit list: a person the node lists for someone who gives credit, never an enterprise.
+            [path.join('app', '(tabs)', 'people.tsx')]: 3,
             [path.join('app', '(tabs)', 'ledger.tsx')]: 1,
             // A connection in common on a profile. The inviter link moved into InvitedByCard (I3).
             [path.join('app', 'public-profile.tsx')]: 1,

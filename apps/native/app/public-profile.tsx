@@ -40,6 +40,8 @@ import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } fr
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InvitedByCard } from '../components/InvitedByCard';
 import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
+import { CreditCard } from '../components/CreditCard';
+import { useCreditGiver } from '../utils/use-credit-giver';
 
 
 
@@ -538,6 +540,9 @@ export default function PublicProfileScreen() {
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
+    // The credit card (slice C4): asked of the node each time a profile opens, for someone who gives credit there; a plain
+    // member's phone makes no credit request. The budget answer this screen already asks for is handed in, not asked twice.
+    const creditGiver = useCreditGiver(anchorUrl, identity, !isSelf && showsBeans && !!anchorUrl && !!pubKeyStr, pubKeyStr, myVouching);
 
     useEffect(() => {
         if (!anchorUrl || !identity || isSelf) {
@@ -554,6 +559,8 @@ export default function PublicProfileScreen() {
     }, [anchorUrl, identity, isSelf]);
 
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
+    // Counts the vouches that landed from the Vouch box on this screen: the credit card above it reads the person again on each.
+    const [vouchesLanded, setVouchesLanded] = useState(0);
 
     // What you have vouched for this person, from your own budget's history: whole hundredths, summed exactly (a line whose
     // figure isn't whole hundredths counts nothing).
@@ -1449,6 +1456,11 @@ export default function PublicProfileScreen() {
                                 <InvitedByCard vouchedInBy={trust.vouchedInBy} broughtIn={trust.broughtIn} isSelf={false} targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
                             )}
 
+                            {/* Credit (slice C4): above the names-list button and the Vouch box, for owners, admins and vouchers only. */}
+                            {!isSelf && showsBeans && creditGiver === 'giver' && identity && anchorUrl && pubKeyStr && (
+                                <CreditCard anchorUrl={anchorUrl} identity={identity} memberPubkey={pubKeyStr} reread={vouchesLanded} />
+                            )}
+
                             {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only, and
                                 says none where Beans are off (a voucher is a Beans budget). Gated here as the web is, and as the card above. */}
                             {!isSelf && showsBeans && (
@@ -1529,6 +1541,7 @@ export default function PublicProfileScreen() {
                                                             ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: formatHundredths(res.total) })
                                                             : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: formatHundredths(profileVouchPreset) }));
                                                         setProfileVouchPreset(null);
+                                                        setVouchesLanded((n) => n + 1);
                                                         // A failed re-read keeps the card, its figures and this banner.
                                                         void rereadMyVouching(anchorUrl, identity, setMyVouching);
                                                     } else {

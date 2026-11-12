@@ -136,6 +136,8 @@ vi.mock('../../components/MyJoinRequests', () => ({ MyJoinRequests: () => null }
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span') }));
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 
+// People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
+vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import PeopleScreen from '../../app/(tabs)/people';
 import { t } from '@beanpool/core';
 

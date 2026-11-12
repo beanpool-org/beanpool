@@ -196,6 +196,8 @@ import { yourGroupsStore } from '../../components/useYourGroups';
 import { joinRequestMeta, wantsToJoinTitle, WANTS_TO_JOIN_HELP } from '../knock-inbox';
 import { KNOCK_MESSAGES } from '../knock';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
+// People asks where the member is to end a Show credit visit (utils/people-visit.ts; its own test and people-show-credit-visit-render.test.ts): nothing here leaves the tab.
+vi.mock('../people-visit', () => ({ usePeopleVisitEnds: () => 0 }));
 import ChatsScreen from '../../app/(tabs)/chats';
 import NewMessageScreen from '../../app/new-message';
 

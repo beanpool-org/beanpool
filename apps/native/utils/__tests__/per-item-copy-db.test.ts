@@ -48,7 +48,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string, body: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { applyDelta, getDb, getPosts, getPost } from '../db';
+import { acceptMarketplacePost, applyDelta, getDb, getDealsBetween, getMarketplaceTransactions, getPosts, getPost } from '../db';
 import { perItemCard } from '@beanpool/core';
 import { DEFAULT_MARKET_FILTERS, feedPostVisible } from '../market-filters';
 
@@ -195,6 +195,71 @@ describe('a listing priced for each one in the phone\'s copy', () => {
             await applyDelta({ posts: [node({ id: 'p-fixed', priceType: 'fixed', unitsLeft: undefined, lot: undefined, price_c: 4000 })] });
             await applyDelta({ marketplaceTransactions: [dealOn('p-fixed', { id: 'tx-2' })] });
             expect(row('p-fixed')).toMatchObject({ status: 'completed', active: 0 });
+        });
+    });
+});
+
+/**
+ * Per-item prices, slice P3 (DESIGN-per-item-price-fable.md §2.3, §3): a deal on a listing priced for each one says which way it
+ * was taken up (`item_option`, the node's `itemOption`), kept on the phone's copy of the deal by the sync and by the accept, and
+ * read back by Your deals and the chat, so they say "3 × Solar panels". An accept of such a listing leaves it on the board.
+ */
+describe("a per-item deal in the phone's copy (slice P3)", () => {
+    const deal = (over: Record<string, unknown> = {}) => ({
+        id: 'tx-3', postId: 'p-panels', buyerPublicKey: 'me-pubkey', sellerPublicKey: 'rob-key', amount_c: 90000, hours: 3, itemOption: 'each',
+        status: 'pending', createdAt: '2026-11-11T10:00:00.000Z', postTitle: 'Solar panels', ...over,
+    });
+    const listing = { id: 'p-panels', type: 'offer', category: 'tools', title: 'Solar panels', description: 'Second-hand', price_c: 30000, priceType: 'each', unitsLeft: 20, lot: { units: 20, price_c: 550000 }, author_pubkey: 'rob-key', status: 'active' };
+    const kept = (id: string) => sql.prepare('SELECT item_option, hours, amount_c FROM marketplace_transactions WHERE id = ?').get(id) as any;
+    beforeEach(async () => {
+        await getDb();
+        sql.exec('DELETE FROM posts; DELETE FROM marketplace_transactions');
+    });
+
+    it('the sync keeps the way on the deal, NULL on any other (red if the row writer leaves item_option out)', async () => {
+        await applyDelta({ posts: [listing], marketplaceTransactions: [deal(), deal({ id: 'tx-all', itemOption: 'lot', hours: 20, amount_c: 550000 }), deal({ id: 'tx-hr', postId: 'p-other', itemOption: undefined, hours: 2 })] });
+        expect(kept('tx-3')).toEqual({ item_option: 'each', hours: 3, amount_c: 90000 });
+        expect(kept('tx-all')).toEqual({ item_option: 'lot', hours: 20, amount_c: 550000 });
+        expect(kept('tx-hr').item_option).toBeNull();
+    });
+
+    it('Your deals and the chat read it back: itemOption on such a deal only, item_option and hours beside it in the chat (red if a reader drops it)', async () => {
+        await applyDelta({ posts: [listing], marketplaceTransactions: [deal(), deal({ id: 'tx-hr', postId: 'p-other', itemOption: undefined, hours: 2 })] });
+        const mine = await getMarketplaceTransactions('me-pubkey');
+        expect(mine.find((t) => t.id === 'tx-3')).toMatchObject({ itemOption: 'each', hours: 3 });
+        expect(mine.find((t) => t.id === 'tx-hr')).not.toHaveProperty('itemOption');
+        const between = await getDealsBetween('me-pubkey', 'rob-key');
+        expect(between.find((d) => d.txId === 'tx-3')).toMatchObject({ item_option: 'each', hours: 3 });
+    });
+
+    describe('the accept', () => {
+        let sent: Array<{ url: string; body: any }> = [];
+        const answer = (tx: Record<string, unknown>) => {
+            sent = [];
+            globalThis.fetch = vi.fn(async (url: any, init?: any) => {
+                sent.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+                return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ success: true, transaction: tx }) } as any;
+            }) as any;
+        };
+        const status = (id: string) => (sql.prepare('SELECT status FROM posts WHERE id = ?').get(id) as any)?.status;
+
+        it('of a listing priced each: sends how many, the way and the total shown; the listing stays active; the deal keeps its way (red if the phone takes it off the board)', async () => {
+            await applyDelta({ posts: [listing] });
+            answer(deal({ id: 'tx-new' }));
+            await acceptMarketplacePost('p-panels', 'me-pubkey', 3, undefined, { itemOption: 'each', expect_c: 90000 });
+            expect(sent[0].url).toBe(`${ANCHOR}/api/marketplace/posts/accept`);
+            expect(sent[0].body).toEqual({ postId: 'p-panels', buyerPublicKey: 'me-pubkey', hours: 3, itemOption: 'each', expect_c: 90000 });
+            expect(status('p-panels')).toBe('active');
+            expect(kept('tx-new')).toEqual({ item_option: 'each', hours: 3, amount_c: 90000 });
+        });
+
+        it('of a one-off listing: unchanged, its body has no way or total and the listing goes pending', async () => {
+            await applyDelta({ posts: [{ ...listing, id: 'p-stool', priceType: 'fixed', unitsLeft: undefined, lot: undefined, price_c: 4000 }] });
+            answer(deal({ id: 'tx-stool', postId: 'p-stool', itemOption: undefined, hours: undefined, amount_c: 4000 }));
+            await acceptMarketplacePost('p-stool', 'me-pubkey');
+            expect(sent[0].body).toEqual({ postId: 'p-stool', buyerPublicKey: 'me-pubkey' });
+            expect(status('p-stool')).toBe('pending');
+            expect(kept('tx-stool').item_option).toBeNull();
         });
     });
 });

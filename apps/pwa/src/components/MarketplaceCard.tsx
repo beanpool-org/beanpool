@@ -131,7 +131,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // how many are left (and the price for all of them while it is on offer) as its own phrases. Where the price is not shown (a
     // copy, Beans off, the Pulse) there is no count either. Any other listing reads as it always did.
     const each = showPrice ? perItemCard(post) : null;
-    const foundingChip =!!post.authorFoundingNeeded && !beansMarked;
+    const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
 
     // On the photo: at most ONE status chip, by precedence PENDING > YOU.
     // RECURRING is placed under the photo in grid view so overlays fit at 320dp / 1.3x text (market-card-43).
@@ -457,11 +457,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Price pill bottom-trailing */}
                     {showPrice && (
-                        <div className="ml-auto bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm pointer-events-auto">
+                        <div className={`ml-auto bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 ${each && !freePrice ? 'px-2' : 'px-2.5'} py-1 rounded-lg text-sm pointer-events-auto`}>
                             {each && !freePrice ? (
                                 <span data-testid="grid-each-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                    <BeansText text={each.price!} />
-                                    {each.allShort && <BeansText text={each.allShort} px={10} className="text-[10px] font-normal opacity-80" />}
+                                    <BeansText text={each.price!} className="whitespace-nowrap" />
+                                    {each.allShort && <BeansText text={each.allShort} px={10} className="text-[10px] font-normal opacity-80 whitespace-nowrap leading-none" />}
                                 </span>
                             ) : (
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>

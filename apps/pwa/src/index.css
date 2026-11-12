@@ -114,6 +114,7 @@
   --success: rgb(var(--bp-n-600));
   --scrollbar-thumb: rgb(var(--bp-n-300));
   --header-bg: var(--bp-web-banner);      /* oat-50: the leafy banner's ground, and the browser bar's */
+  --banner-image: url('/assets/neon-vines-banner.png'); /* the leafy banner: the header and the bottom bar (Dark swaps it, below) */
   --pattern-image: url('/pattern-light.webp');
   --pattern-image-hidpi: image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
   --pattern-image-hidpi-webkit: -webkit-image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
@@ -193,6 +194,18 @@
   --pattern-bg: var(--bp-doodle-ground);
   --nav-bg: var(--bp-web-card);
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* ——— Dark's doodle and banner (slice T5; Marty, 12 Nov 2026: "Dark has no green") ———
+   Dark is Classic's dark colours with the charcoal set on top (the plugin's block of the same selector holds the
+   colours); this block holds its two pictures, baked from Classic dark's by scripts/bake-dark-doodle.mjs. Only a browser
+   in Dark fetches them: the variables are read where the wallpaper and the banner are drawn, so Classic and Light never
+   request these files. The doodle's ground (--pattern-bg) is the library's, in the plugin's block. */
+:root.dark-theme[data-bp-theme="night"] {
+  --pattern-image: url('/pattern-night.webp');
+  --pattern-image-hidpi: image-set(url('/pattern-night.webp') 1x, url('/pattern-night-2x.webp') 2x);
+  --pattern-image-hidpi-webkit: -webkit-image-set(url('/pattern-night.webp') 1x, url('/pattern-night-2x.webp') 2x);
+  --banner-image: url('/assets/vines-banner-night.jpg');
 }
 
 /*
@@ -285,7 +298,8 @@ html, body, #root {
 :root.plain-background { --page-surface: #fbfaf8; }            /* oat-50, as the pages had */
 :root.dark-theme.plain-background { --page-surface: var(--bp-web-page); } /* nature-950, as the pages had */
 
-:root.plain-background {
+:root.plain-background,
+:root.plain-background[data-bp-theme="night"] { /* the second is as specific as Dark's own block above, and comes after it */
   --pattern-image: none;
   --pattern-image-hidpi: none;
   --pattern-image-hidpi-webkit: none;

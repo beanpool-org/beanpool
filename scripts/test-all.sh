@@ -459,6 +459,17 @@ run_website_colours() {
   node --test scripts/website-colours.test.mjs
 }
 run_check "website_colours" run_website_colours
+
+# Dark's doodle tiles and header banner (slice T5; Marty, 12 Nov 2026: "Dark has no green"), baked by
+# scripts/bake-dark-doodle.mjs: each tile's ground is the library's brandGrounds('night').doodle.ground (to one level, which a
+# lossy tile cannot beat), the doodle stands off it as far as Classic dark's does, nothing is green, no file is bigger than
+# the Classic one it stands in for, and the banner's gaps are web.banner under the header's wash. Reads core's dist, so it
+# starts once build has finished; about two seconds. No network, no browser.
+run_dark_doodle() {
+  wait_for_build || return 1
+  node --test scripts/dark-doodle.test.mjs
+}
+run_check "dark_doodle" run_dark_doodle
 run_check "website_contrast_light" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs --theme=light'
 run_check "website_contrast_dark"  bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs --theme=dark'
 # beanpool.org/status, the public status line of our servers (mothership slice A8): drawn from a stubbed status.json at

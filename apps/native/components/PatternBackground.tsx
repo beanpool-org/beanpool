@@ -21,15 +21,20 @@
  */
 
 import { Image, StyleSheet, View } from 'react-native';
+import type { BrandSet } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 
-const TILES = {
+// One tile per colour set (core's BRAND_SETS), so a new set cannot be added without its own wallpaper. `dark` is Classic's
+// olive tile; `night` is Dark's charcoal one, baked from it by scripts/bake-dark-doodle.mjs (slice T5). The @2x file of each
+// sits beside it and Metro picks it on a 2x screen.
+const TILES: Record<BrandSet, number> = {
     light: require('../assets/images/pattern-light.webp'),
     dark: require('../assets/images/pattern-dark.webp'),
-} as const;
+    night: require('../assets/images/pattern-night.webp'),
+};
 
 export default function PatternBackground() {
-    const { theme, colors, patternEnabled } = useTheme();
+    const { set, colors, patternEnabled } = useTheme();
 
     // The solid colour stays underneath: it is what shows with the pattern switched off, and
     // what fills the frame for the moment before the tile decodes. While the pattern is on it
@@ -42,7 +47,7 @@ export default function PatternBackground() {
         >
             {patternEnabled && (
                 <Image
-                    source={TILES[theme === 'dark' ? 'dark' : 'light']}
+                    source={TILES[set]}
                     style={StyleSheet.absoluteFill}
                     resizeMode="repeat"
                     // Decorative only — never announced, never focusable.

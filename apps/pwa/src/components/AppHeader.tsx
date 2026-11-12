@@ -59,7 +59,7 @@ export function MobileHeader({
             left: 0,
             right: 0,
             zIndex: 100,
-            backgroundImage: "url('/assets/neon-vines-banner.png')",
+            backgroundImage: 'var(--banner-image)',
             backgroundSize: '150% auto',
             backgroundPosition: 'center',
         }}>

@@ -23,10 +23,10 @@
  *  10. The paths that don't change: a Total (with the total it showed, and a wrong one), an hourly with its re-rate,
  *      Repeatable, a loan, a standing deal: one case each.
  *  11. The count never blocks a refund: a cancel with the count at 9,999 puts back what fits, and the Beans go back.
- *  12. An enterprise buying from its own keeper more than are left: told how many are left, and no deferred wage claim is
- *      recorded for items that aren't there (the stock is asked before the funding check, which records one as it refuses);
- *      one it can't pay for yet: refused, and no claim either (nothing waits unfunded against the count), so none is paid
- *      later; and a claim from before the listing was priced for each one pays without closing it.
+ *  12. An enterprise buying from its own keeper more than are left: told how many are left (the stock is asked before the
+ *      funding check), and no deferred wage claim is recorded; one it can't pay for yet: refused, and no claim either
+ *      (nothing waits unfunded against the count), so none is paid later; and a claim from before the listing was priced
+ *      for each one pays without closing it.
  *  13. A standby copy carries the hold's row and the count it moved, together.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-per-item-deals)
@@ -570,8 +570,8 @@ async function main(): Promise<void> {
     const claims = () => (db.prepare('SELECT COUNT(*) AS n FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(crateCo, crates) as { n: number }).n;
     let tooMany = '';
     try { acceptPost(crates, crateCo, undefined, { authSigner: kim.pk, item: { n: 3, option: 'each', expect_c: hc(30) } }); } catch (e: any) { tooMany = `${e?.code}:${e?.unitsLeft}`; }
-    // Red if the stock is asked after assertHoldFunded: Crate Co has no earned surplus, so that check refuses first and
-    // records a wage claim of 30 Beans, paid later with no further step, for crates that were never there.
+    // Red if the stock is asked after assertHoldFunded: Crate Co has no earned surplus, so that check refuses first, in the
+    // keeper-pay words, and Crate Co is never told how many are left. Red too if the take-up records a claim (below).
     assert(tooMany === 'units_gone:2' && claims() === 0 && listing(crates).units_left === 2 && dealsOn(crates) === 0,
         `Crate Co asks for 3 of Kay's 2 crates: told 2 are left, and no wage claim is recorded (${tooMany}, claims ${claims()})`);
     // One crate, which Crate Co can't pay its own keeper for yet (no profit: Rules 5 and 6): refused, nothing held, and no

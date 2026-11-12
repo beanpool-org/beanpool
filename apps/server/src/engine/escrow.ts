@@ -1189,9 +1189,10 @@ export function acceptPost(
             // How many, which way, and what that comes to at the listing's own figures, which must be the total the buyer
             // saw (price_changed, count_refused). Never the hourly path's 0.01 fractions (F2): whole numbers only.
             item = itemTakeUpFor(post, opts?.item);
-            // Still there, as the listing was read: a plain refusal, before the funding check below, which records a
-            // keeper's deferred wage claim as it refuses (assertHoldFunded): never one for items that aren't there. No
-            // count moves until every guard has passed; the guarded write inside the hold is the authority.
+            // Still there, as the listing was read: a plain refusal, before the funding check below, so a buyer asking for
+            // more than are left is told how many are, not whether they could pay for more (that check records no wage
+            // claim for a listing priced for each one: offerHoldChecks). No count moves until every guard has passed; the
+            // guarded write inside the hold is the authority.
             assertItemStock(post, item);
             keptHours = item.n;
             return item.amount_c;

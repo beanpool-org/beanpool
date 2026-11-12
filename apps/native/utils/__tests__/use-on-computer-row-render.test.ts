@@ -30,6 +30,7 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android' },
+        StyleSheet: { create: (s: unknown) => s },
         View: el('div'), Text: el('span'), Pressable: el('button'),
         Share: { share: vi.fn(async () => ({})) },
         AccessibilityInfo: { announceForAccessibility: vi.fn() },
@@ -39,8 +40,12 @@ vi.mock('react-native', () => {
 vi.mock('expo-router', () => ({
     useFocusEffect: (effect: () => void | (() => void)) => { useEffect(() => effect(), [effect]); },
 }));
-const look = vi.hoisted(() => ({ colors: null as any }));
-vi.mock('../../app/ThemeContext', () => ({ useTheme: () => ({ colors: look.colors }) }));
+const look = vi.hoisted(() => ({ colors: null as any, theme: 'dark' as string }));
+// The row reads its own colours through useStyles (not Settings' table: the contrast check cannot read a table passed as a prop).
+vi.mock('../../app/ThemeContext', () => ({
+    useTheme: () => ({ theme: look.theme, colors: look.colors }),
+    useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ theme: look.theme, colors: look.colors, patternEnabled: false }),
+}));
 vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://mullum.example/' }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn(async () => true) }));
 
@@ -49,19 +54,12 @@ import { COLOUR_SETS } from '../../constants/colors';
 
 const LOOKS = [['Classic', 'dark'], ['Light', 'light'], ['Dark', 'night']] as const;
 
-/** Settings' own row styles (app/(tabs)/settings.tsx), in the look being drawn. */
-const menuStyles = (c: any) => ({
-    menuBtn: { flexDirection: 'row', alignItems: 'center', padding: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: c.surface.subtle },
-    menuIconWrap: { width: 36, height: 36, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    menuIcon: { fontSize: 18 },
-    menuText: { fontSize: 15, fontWeight: '600', color: c.text.body },
-});
-
 async function render(set: (typeof BRAND_SETS)[number]): Promise<HTMLElement> {
     look.colors = COLOUR_SETS[set];
+    look.theme = set;
     const host = document.createElement('div');
     document.body.appendChild(host);
-    await act(async () => { createRoot(host).render(createElement(UseOnComputerRow, { styles: menuStyles(look.colors) }) as unknown as Parameters<Root['render']>[0]); });
+    await act(async () => { createRoot(host).render(createElement(UseOnComputerRow) as unknown as Parameters<Root['render']>[0]); });
     await act(async () => {});
     return host;
 }

@@ -41,6 +41,8 @@ beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })));
 });
 afterEach(() => {
+    // jsdom has no execCommand; the tests below that need one put it there.
+    Reflect.deleteProperty(document, 'execCommand');
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
@@ -72,6 +74,62 @@ describe('Settings → "BeanPool works in any browser: open <address> on any com
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(ORIGIN));
         await waitFor(() => expect(within(row).getByRole('button').textContent).toBe('✓ Copied!'));
         expect(writeText).toHaveBeenCalledTimes(1);
+    });
+
+    // The browser may not let the page copy: a plain http:// home-network node has no clipboard API (navigator.clipboard is
+    // undefined), and the older copy command answers false when it is refused, or throws. Copy must say so, never "Copied".
+    describe('when the browser will not copy', () => {
+        const noClipboard = () => Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+        const refusingClipboard = () => Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => { throw new Error('denied'); }) }, configurable: true });
+        const execCommand = (impl: () => boolean) => {
+            const fn = vi.fn(impl);
+            Object.defineProperty(document, 'execCommand', { value: fn, configurable: true });
+            return fn;
+        };
+        const press = async () => {
+            openSettings();
+            const row = await lineBlock();
+            fireEvent.click(within(row).getByRole('button', { name: "Copy this community's link" }));
+            return row;
+        };
+
+        it('the clipboard refuses and the older command answers false: "Could not copy", never "Copied", and no helper box is left in the page', async () => {
+            refusingClipboard();
+            const exec = execCommand(() => false);
+            const row = await press();
+            await waitFor(() => expect(within(row).getByRole('button').textContent).toBe('Could not copy'));
+            expect(exec).toHaveBeenCalledWith('copy');
+            expect(row.textContent).not.toContain('Copied');
+            expect(within(row).getByRole('status').textContent).toBe('Could not copy');
+            expect(document.querySelector('textarea')).toBeNull();
+        });
+
+        it('there is no clipboard at all (a plain http:// page) and the older command throws: "Could not copy", and the page is left as it was', async () => {
+            noClipboard();
+            execCommand(() => { throw new Error('refused'); });
+            const row = await press();
+            await waitFor(() => expect(within(row).getByRole('button').textContent).toBe('Could not copy'));
+            expect(row.textContent).not.toContain('Copied');
+            expect(document.querySelector('textarea')).toBeNull();
+        });
+
+        it('there is no clipboard but the older command works (a plain http:// page): the address is copied that way and it says Copied', async () => {
+            noClipboard();
+            let copied = '';
+            execCommand(() => { copied = document.querySelector('textarea')?.value ?? ''; return true; });
+            const row = await press();
+            await waitFor(() => expect(within(row).getByRole('button').textContent).toBe('✓ Copied!'));
+            expect(copied).toBe(ORIGIN);
+            expect(document.querySelector('textarea')).toBeNull();
+        });
+
+        it('the answer goes back to Copy after a moment, so a second try can be made', async () => {
+            refusingClipboard();
+            execCommand(() => false);
+            const row = await press();
+            await waitFor(() => expect(within(row).getByRole('button').textContent).toBe('Could not copy'));
+            await waitFor(() => expect(within(row).getByRole('button').textContent).toBe('📋 Copy'), { timeout: 3500 });
+        });
     });
 
     it('an owner sees both: the Manage link and this line, and the line is not in the owners\' block', async () => {

@@ -18,21 +18,34 @@
  * can pick it up by hand if the clipboard refuses), and the two 48 dp buttons sit side by side or stack, never cut.
  */
 import React, { useCallback, useState } from 'react';
-import { View, Text, Pressable, Share } from 'react-native';
+import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { t, USE_ON_COMPUTER_WORDS, addressToOpenOnAComputer } from '@beanpool/core';
-import { useTheme } from '../app/ThemeContext';
+import { useStyles } from '../app/ThemeContext';
+import { palette } from '../constants/colors';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { useCopyMessage } from './chat/useCopyMessage';
 
-/** The Settings screen's own menu styles, so the row looks like every other row. */
-interface MenuStyles {
-    menuBtn: any; menuIconWrap: any; menuIcon: any; menuText: any;
-}
-
-export function UseOnComputerRow({ styles }: { styles: MenuStyles }) {
-    const { colors } = useTheme();
+export function UseOnComputerRow() {
+    // The row's own table, with Settings' menu-row values (app/(tabs)/settings.tsx: menuBtn, menuIconWrap, menuIcon, menuText), so it
+    // looks like every other row. It is not handed Settings' `styles`: the contrast check (e2e/button-contrast.check.ts) cannot read a
+    // table passed in as a prop, and a row whose colours it cannot read is a row it cannot check in Light, Classic and Dark.
+    const styles = useStyles(({ theme, colors }) => StyleSheet.create({
+        row: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
+        iconWrap: {
+            width: 36, height: 36, borderRadius: 12,
+            backgroundColor: theme === 'dark' ? 'rgba(34, 197, 94, 0.15)' : palette.green50,
+            justifyContent: 'center', alignItems: 'center', marginRight: 12,
+        },
+        icon: { fontSize: 18 },
+        column: { flex: 1 },
+        text: { fontSize: 15, fontWeight: '600', color: colors.text.body },
+        address: { fontSize: 15, fontWeight: '700', color: colors.text.body },
+        buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+        button: { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', borderColor: colors.border.strong, backgroundColor: colors.surface.card },
+        buttonText: { fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.text.heading },
+    }));
     const [address, setAddress] = useState<string | null>(null);
     // The same hook as a chat message's Copy: the address on the clipboard, "Copied" for a moment, or "Could not copy".
     const { answer, copy } = useCopyMessage(address ?? undefined);
@@ -60,35 +73,33 @@ export function UseOnComputerRow({ styles }: { styles: MenuStyles }) {
     // The address is one unbreakable word, longer than a 320 dp column at 1.3x text, so it gets its own block under the
     // lead-in, which wraps it by letter (as the follow card's address does) and lets it be picked up by hand. To a screen
     // reader it is still one line: the whole sentence.
-    const button = { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center' as const, justifyContent: 'center' as const, borderColor: colors.border.strong, backgroundColor: colors.surface.card };
-    const buttonText = { fontSize: 14, fontWeight: '700' as const, textAlign: 'center' as const, color: colors.text.heading };
 
     return (
-        <View style={[styles.menuBtn, { alignItems: 'flex-start' }]} testID="settings-use-on-computer">
-            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💻</Text></View>
-            <View style={{ flex: 1 }}>
+        <View style={styles.row} testID="settings-use-on-computer">
+            <View style={styles.iconWrap}><Text style={styles.icon}>💻</Text></View>
+            <View style={styles.column}>
                 <View accessible accessibilityLabel={line}>
-                    <Text style={styles.menuText}>{t(USE_ON_COMPUTER_WORDS.phoneLead)}</Text>
-                    <Text style={[styles.menuText, { fontWeight: '700' }]} selectable>{address}</Text>
+                    <Text style={styles.text}>{t(USE_ON_COMPUTER_WORDS.phoneLead)}</Text>
+                    <Text style={styles.address} selectable>{address}</Text>
                 </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                <View style={styles.buttons}>
                     <Pressable
-                        style={button}
+                        style={styles.button}
                         onPress={() => { copy().catch(() => {}); }}
                         accessibilityRole="button"
                         accessibilityLabel={t('Copy')}
                         testID="settings-use-on-computer-copy"
                     >
-                        <Text style={buttonText}>{answer === 'copied' ? t('Copied') : answer === 'failed' ? t('Could not copy') : t('Copy')}</Text>
+                        <Text style={styles.buttonText}>{answer === 'copied' ? t('Copied') : answer === 'failed' ? t('Could not copy') : t('Copy')}</Text>
                     </Pressable>
                     <Pressable
-                        style={button}
+                        style={styles.button}
                         onPress={() => { Share.share({ message: line }).catch(() => {}); }}
                         accessibilityRole="button"
                         accessibilityLabel={t('Share')}
                         testID="settings-use-on-computer-share"
                     >
-                        <Text style={buttonText}>{t('Share')}</Text>
+                        <Text style={styles.buttonText}>{t('Share')}</Text>
                     </Pressable>
                 </View>
             </View>

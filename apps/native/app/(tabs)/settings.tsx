@@ -2061,7 +2061,7 @@ export default function SettingsScreen() {
                     )}
 
                     {/* For every member, owners too: BeanPool on a computer is the web app at this community's address (there is no desktop app). Above Link a device, which brings the account across. Not the owners' "Manage this community from a computer" (NodeAdminEntry). */}
-                    <UseOnComputerRow styles={styles} />
+                    <UseOnComputerRow />
 
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel={t('Link a device')} accessibilityHint={t('Copies your own account to a browser, to use BeanPool there as you')}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>

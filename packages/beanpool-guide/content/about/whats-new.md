@@ -10,7 +10,7 @@ related: home, the-bean, how-it-works, rules, faq, communities
 On the phone you get this with an up-to-date app; in a web browser, when your community's server is updated.
 
 - **Open your community's address in a browser.** BeanPool on a computer is the web app, and it's the same account. There is no separate desktop app. See "Using BeanPool in a web browser".
-- **Say it in Settings.** The phone's **Settings** has **Use BeanPool on a computer** with your community's address, **Copy** and **Share**. In the web app, **Settings** → **BeanPool** says **BeanPool works in any browser**, with the address and **Copy**.
+- **Use BeanPool on a computer: it's in Settings.** The phone's **Settings** has **Use BeanPool on a computer** with your community's address, **Copy** and **Share**. In the web app, **Settings** → **BeanPool** says **BeanPool works in any browser**, with the address and **Copy**.
 
 ## Credit on the People list
 

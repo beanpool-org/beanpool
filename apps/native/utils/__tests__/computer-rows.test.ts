@@ -55,7 +55,7 @@ describe("Settings' computer rows", () => {
 
     it('the plain one: in Settings for every member, above Link a device, outside the owners\' block, and it asks no role', () => {
         const settings = read('app/(tabs)/settings.tsx');
-        expect(settings).toContain('<UseOnComputerRow styles={styles} />');
+        expect(settings).toContain('<UseOnComputerRow />');
         expect(settings.indexOf('<UseOnComputerRow')).toBeLessThan(settings.indexOf("router.push('/pair-device')"));
         expect(read('components/NodeAdminEntry.tsx')).not.toContain('UseOnComputerRow');
         const row = read('components/UseOnComputerRow.tsx');

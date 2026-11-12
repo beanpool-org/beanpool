@@ -4,6 +4,7 @@
  */
 
 import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressToOpenOnAComputer, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
+import { copyChatText } from '../lib/copy-chat-text';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -2146,23 +2147,19 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     // The address this page is served from: BeanPool on a computer is this web app, in any browser, at the community's own
     // address (the phone's Settings says the matching line, from the address its community uses). Null for no http(s) address.
     const browserAddress = addressToOpenOnAComputer(window.location.origin);
-    const [addressCopied, setAddressCopied] = useState(false);
+    // 'copied' only when the address is on the clipboard; 'failed' when the browser refused (a plain http:// home-network node has no
+    // clipboard API, and its older copy command can be refused too): the button then says so, as the phone's row does, never "Copied".
+    const [addressCopy, setAddressCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
+    const addressCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => () => { if (addressCopyTimer.current) clearTimeout(addressCopyTimer.current); }, []);
     const copyBrowserAddress = async () => {
         if (!browserAddress) return;
-        try {
-            await navigator.clipboard.writeText(browserAddress);
-        } catch {
-            // No clipboard for this page (an older browser, an insecure page): the old way, from a field held off screen.
-            const el = document.createElement('textarea');
-            el.value = browserAddress;
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-        }
-        setAddressCopied(true);
-        setTimeout(() => setAddressCopied(false), 2000);
+        const done = await copyChatText(browserAddress);
+        setAddressCopy(done ? 'copied' : 'failed');
+        if (addressCopyTimer.current) clearTimeout(addressCopyTimer.current);
+        addressCopyTimer.current = setTimeout(() => setAddressCopy('idle'), 2000);
     };
+    const addressCopySaid = addressCopy === 'copied' ? t('✓ Copied!') : addressCopy === 'failed' ? t('Could not copy') : '';
 
     const handleDesktopInstall = async () => {
         if (deferredPrompt) {
@@ -2263,14 +2260,16 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                                 type="button"
                                 onClick={() => { void copyBrowserAddress(); }}
                                 className={`mt-2 min-h-[44px] py-2 px-4 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
-                                    addressCopied
+                                    addressCopy === 'copied'
                                         ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
                                         : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
                                 }`}
-                                aria-label={t("Copy this community's link")}
+                                aria-label={addressCopySaid || t("Copy this community's link")}
                             >
-                                {addressCopied ? t('✓ Copied!') : t('📋 Copy')}
+                                {addressCopySaid || t('📋 Copy')}
                             </button>
+                            {/* Announced, not just drawn: a screen reader hears the answer too. */}
+                            <span role="status" className="sr-only">{addressCopySaid}</span>
                         </span>
                     </div>
                 )}

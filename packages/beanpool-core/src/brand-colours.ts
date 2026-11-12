@@ -370,8 +370,9 @@ export const BRAND_GROUNDS = {
      * surface.chrome and pattern ground, the web's --pattern-bg). `line` is the doodle's line as a member sees it: the
      * median, by lightness, of the @2x tile's pixels that stand 1.3:1 or more off the ground (measured 12 Nov 2026 on main
      * 6513fb9e: light #c1c4b3 at 1.56:1, Classic dark #303a37 at 1.50:1, the "lift" of #998). Dark (`night`) re-draws the
-     * doodle in charcoal (slice T5): the ground and the line are each as light as Classic dark's, with the hue of Dark's
-     * greys, so the doodle stands off its ground as much as Classic's does.
+     * doodle in charcoal (slice T5, the pattern-night tiles baked by scripts/bake-dark-doodle.mjs): the ground and the line
+     * are each as light as Classic dark's, with the hue of Dark's greys, so the doodle stands off its ground as much as
+     * Classic's does. A lossy tile shows `ground` to within one level per channel (scripts/dark-doodle.test.mjs).
      */
     doodle: {
         ground: themed('#f1f1e4', '#141a1a', { night: '#17191c' }),

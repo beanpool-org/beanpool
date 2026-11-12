@@ -22,6 +22,14 @@
  * aborts every request but its own.
  *
  *   node apps/native/e2e/appearance-t3-320.mjs --shots <dir>
+ *
+ * Colour themes T5 (the doodle): after the checks above, Classic and Dark are drawn once more with the app's own
+ * components/PatternBackground behind them and the colours the app gives a screen with the wallpaper on (utils/drawn-colours: a
+ * see-through page, the tile's ground as the chrome): the chat thread, and three of Home's real cards (components/home/HomeParts).
+ * Pictures only (chat-<look>-doodle.png, home-<look>-doodle.png), plus "no page error" and "the wallpaper drawn from the tile of
+ * its set": the drawn data URL is compared with the base64 of THAT set's own 1x file (Classic's pattern-dark.webp, Dark's
+ * pattern-night.webp), so a look drawing another look's tile (the bug T5 fixed) fails. The tile is the 1x file at its own 890 dp
+ * (a phone on a 2x screen draws the @2x).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -85,6 +93,9 @@ import { createRoot } from 'react-dom/client';
 import { View, Text } from 'react-native';
 import { setLanguage, t } from '@beanpool/core';
 import { COLOUR_SETS } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { drawnColours } from ${JSON.stringify(path.join(NATIVE, 'utils/drawn-colours'))};
+import PatternBackground from ${JSON.stringify(path.join(NATIVE, 'components/PatternBackground'))};
+import { HomeCard, HomeRow, HomeLink, homeStyles } from ${JSON.stringify(path.join(NATIVE, 'components/home/HomeParts'))};
 import { AppearanceChoice } from ${JSON.stringify(path.join(NATIVE, 'components/AppearanceChoice'))};
 import { ChatBubble } from ${JSON.stringify(path.join(NATIVE, 'components/chat/ChatBubble'))};
 import { makeChatStyles } from ${JSON.stringify(path.join(NATIVE, 'components/chat/styles'))};
@@ -94,8 +105,9 @@ const set = ['light', 'dark', 'night'].includes(q.get('set')) ? q.get('set') : '
 const view = q.get('view') || 'settings';
 const choice = q.get('choice') || 'dark';
 if (q.get('lang') === 'xx') setLanguage('xx');
-const colors = COLOUR_SETS[set];
-globalThis.__theme = { theme: set === 'light' ? 'light' : 'dark', set, colors };
+const doodle = q.get('doodle') === '1';
+const colors = doodle ? drawnColours(set, true) : COLOUR_SETS[set];
+globalThis.__theme = { theme: set === 'light' ? 'light' : 'dark', set, colors, patternEnabled: doodle };
 
 const t0 = Date.now();
 const clock = (n) => { const d = new Date(t0 - 60000 * (10 - n)); return d.toISOString(); };
@@ -118,7 +130,7 @@ const Settings = () => (
 );
 
 const Thread = () => (
-    <View style={{ flex: 1, backgroundColor: colors.surface.app, justifyContent: 'center' }}>
+    <View style={{ flex: 1, backgroundColor: doodle ? 'transparent' : colors.surface.app, justifyContent: 'center' }}>
         <View style={styles.listContent}>
             {[['1', 'Are you coming to the working bee on Saturday?', false], ['22', 'Yes, I will bring a spade and some gloves.', true],
               ['333', 'Lovely. We start at nine by the creek gate, and there is tea after.', false], ['4444', 'Thanks Ben, see you there.', true]].map(([id, text, mine]) => (
@@ -130,9 +142,31 @@ const Thread = () => (
     </View>
 );
 
+// Three of Home's real cards, as app/(tabs)/index.tsx lists them for a member: Needs you, New in the Market, and the community card.
+const hs = homeStyles(colors);
+const noop = () => {};
+const Home = () => (
+    <View style={{ flex: 1, backgroundColor: 'transparent', paddingTop: 12 }}>
+        <Text style={{ marginHorizontal: 16, marginBottom: 8, fontSize: 24, fontWeight: '800', color: colors.text.heading }}>Home</Text>
+        <HomeCard id="needs" caption="Needs you" colors={colors} hue="amber" accent testID="home-card-needs">
+            <HomeRow colors={colors} text="Kofi sent you a message" a11y="Kofi sent you a message" onPress={noop} />
+            <HomeRow colors={colors} text="Your event Seed swap has 3 new answers" a11y="Your event Seed swap has 3 new answers" onPress={noop} />
+        </HomeCard>
+        <HomeCard id="market" caption="New in the Market" colors={colors} hue="orange" testID="home-card-market">
+            <HomeRow colors={colors} text="Sourdough" sub="OFFER · 12 Beans" a11y="Sourdough" onPress={noop} left={<View style={[hs.thumb, hs.thumbEmpty]} />} />
+            <HomeRow colors={colors} text="Help moving a couch" sub="NEED · labour" a11y="Help moving a couch" onPress={noop} left={<View style={[hs.thumb, hs.thumbEmpty]} />} />
+            <HomeLink id="market" text="See all" a11y="See all" onPress={noop} colors={colors} />
+        </HomeCard>
+        <HomeCard id="community" caption="The community" colors={colors} hue="sage" testID="home-card-community">
+            <Text style={hs.note}>81 members, 23 trades this month.</Text>
+        </HomeCard>
+    </View>
+);
+
 createRoot(document.getElementById('root')).render(
-    <View data-view={view} style={{ height: '100vh', width: '100%', backgroundColor: colors.surface.app }}>
-        {view === 'settings' ? <Settings /> : <Thread />}
+    <View data-view={view} data-set={set} style={{ height: '100vh', width: '100%', backgroundColor: doodle ? 'transparent' : colors.surface.app }}>
+        {doodle ? <PatternBackground /> : null}
+        {view === 'settings' ? <Settings /> : view === 'home' ? <Home /> : <Thread />}
     </View>
 );
 `);
@@ -252,6 +286,33 @@ try {
         check(own.length === 2 && own.every((b) => b.ratio >= 4.5), `the own bubble's words read at ${Math.min(...own.map((b) => b.ratio)).toFixed(2)}:1 (4.5 needed), fill ${JSON.stringify(own[0]?.fill)}`);
         if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `chat-${name.toLowerCase()}.png`) });
         await page.close();
+    }
+    // The doodle (T5): the chat thread and Home's cards over each look's own tile, Classic's olive one and Dark's charcoal one.
+    for (const [set, name] of SETS.filter(([x]) => x !== 'light')) {
+        for (const view of ['chat', 'home']) {
+            const page = await browser.newPage({ viewport: { width: WIDTH, height: 700 }, deviceScaleFactor: 2 });
+            const errors = [];
+            page.on('pageerror', (e) => errors.push(String(e)));
+            await page.route((u) => u.hostname !== '127.0.0.1', (route) => route.abort());
+            await page.goto(`${base}/?view=${view}&set=${set}&doodle=1`);
+            await page.waitForTimeout(900);
+            // The wallpaper is a background image of the tile the app picks for the set (react-native-web draws the Image as one).
+            const tile = await page.evaluate(() => {
+                const el = Array.from(document.querySelectorAll('#root *')).find((e) => /^url\("data:image\/webp/.test(getComputedStyle(e).backgroundImage));
+                if (!el) return null;
+                const m = /^url\("data:image\/webp;base64,([^"]+)"\)/.exec(getComputedStyle(el).backgroundImage);
+                return m ? { data: m[1] } : null;
+            });
+            console.log(`\n${view} on the doodle / ${name}`);
+            check(errors.length === 0, `no page error${errors[0] ? `: ${errors[0]}` : ''}`);
+            // The set's own 1x file, as esbuild's dataurl loader embeds it: the base64 of its bytes. Only Classic's and Dark's are drawn here.
+            const own = fs.readFileSync(path.join(NATIVE, 'assets/images', set === 'night' ? 'pattern-night.webp' : 'pattern-dark.webp')).toString('base64');
+            const other = fs.readFileSync(path.join(NATIVE, 'assets/images', set === 'night' ? 'pattern-dark.webp' : 'pattern-night.webp')).toString('base64');
+            check(tile !== null && tile.data === own, `the wallpaper is the tile of its set (${tile?.data.length} base64 characters drawn, ${own.length} in ${set === 'night' ? 'pattern-night' : 'pattern-dark'}.webp)`);
+            check(tile !== null && tile.data !== other, `and not the other look's tile (${other.length} characters)`);
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${view}-${name.toLowerCase()}-doodle.png`) });
+            await page.close();
+        }
     }
 } finally {
     await browser.close();

@@ -20,6 +20,11 @@
  *   node apps/native/e2e/market-order-320.mjs --shots <dir>
  *   node apps/native/e2e/market-order-320.mjs --sets light,dark,night --shots <dir>   # Light, Classic and Dark (colour themes T3)
  *   node apps/native/e2e/market-order-320.mjs --view grid --shots <dir>
+ *   node apps/native/e2e/market-order-320.mjs --sets night,dark --doodle --shots <dir>   # with the real PatternBackground behind the screen
+ *
+ * --doodle (colour themes T5): the app's own components/PatternBackground behind the screen, and the screen drawn on the colours
+ * the app gives it with the wallpaper on (utils/drawn-colours: a see-through page, the tile's ground as the chrome), so each set shows
+ * its own tile (Classic's olive one, Dark's charcoal one). The tile is the 1x file at its own 890 dp (a phone on a 2x screen draws the @2x).
  *
  * --view grid (market grid PG1, DESIGN-market-grid-sizes-fable.md §2.1) taps the real "Grid view" button, then runs the cases
  * `local` and `global` (the New since line is a list-view line). In the grid there is no Pinned heading or block: the pin is the
@@ -72,6 +77,7 @@ if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
 // --sets light,dark,night: the colour sets to draw (Light, Classic, Dark; default light,dark as before the picker).
 const setsAt = process.argv.indexOf('--sets');
 const SETS = setsAt > 0 ? process.argv[setsAt + 1].split(',') : ['light', 'dark'];
+const DOODLE = process.argv.includes('--doodle');
 const fontAt = process.argv.indexOf('--font');
 const FONT = fontAt > 0 ? fs.readFileSync(path.resolve(process.argv[fontAt + 1])) : null;
 // The reader's zone for the grid's cross-zone event (a Byron event, NSW clock): Queensland while NSW is on daylight time, else
@@ -257,12 +263,15 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { View } from 'react-native';
 import { COLOUR_SETS } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { drawnColours } from ${JSON.stringify(path.join(NATIVE, 'utils/drawn-colours'))};
+import PatternBackground from ${JSON.stringify(path.join(NATIVE, 'components/PatternBackground'))};
 import MarketScreen from ${JSON.stringify(path.join(NATIVE, 'app/(tabs)/market'))};
 import { nearbyAreaKeyOf } from ${JSON.stringify(path.join(NATIVE, 'utils/nearby-area'))};
 
 const q = new URLSearchParams(location.search);
 const scheme = ['light', 'dark', 'night'].includes(q.get('scheme')) ? q.get('scheme') : 'light';
-globalThis.__theme = { theme: scheme === 'light' ? 'light' : 'dark', set: scheme, colors: COLOUR_SETS[scheme] };
+const doodle = q.get('doodle') === '1';
+globalThis.__theme = { theme: scheme === 'light' ? 'light' : 'dark', set: scheme, patternEnabled: doodle, colors: doodle ? drawnColours(scheme, true) : COLOUR_SETS[scheme] };
 globalThis.__identity = { publicKey: 'my-own-member-key', callsign: 'Kim' };
 
 const MIN = 60 * 1000;
@@ -365,6 +374,7 @@ if (c === 'local') {
 }
 createRoot(document.getElementById('root')).render(
     <View style={{ width: ${WIDTH}, height: ${HEIGHT}, backgroundColor: globalThis.__theme.colors.surface.page, overflow: 'hidden' }}>
+        {doodle ? <PatternBackground /> : null}
         <MarketScreen />
     </View>
 );
@@ -402,7 +412,7 @@ for (const scheme of SETS) {
         const errors = [];
         page.on('pageerror', e => errors.push(String(e)));
         page.on('console', m => { if (process.env.DEBUG_TEXT) console.log('  [console.' + m.type() + ']', m.text().slice(0, 300)); if (m.type() === 'error') errors.push(m.text()); });
-        await page.goto(`http://127.0.0.1:${port}/?case=${which}&scheme=${scheme}`);
+        await page.goto(`http://127.0.0.1:${port}/?case=${which}&scheme=${scheme}${DOODLE ? '&doodle=1' : ''}`);
         await page.waitForTimeout(1500);
         if (VIEW !== 'list') {
             // The Market opens in list view; its view button goes list → grid → compact.
@@ -717,7 +727,7 @@ for (const scheme of SETS) {
             console.log('  listing rows:', rows.listings.map(r => Math.round(r.height)).join(', '), 'dp');
             console.log('  rows:', rows.kinds.map(r => `${r.id} ${Math.round(r.height)} dp [${r.text.join(' | ')}]`).join(' || '));
         }
-        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `market-order-${which}${VIEW !== 'list' ? `-${VIEW}` : ''}-${scheme}.png`) });
+        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `market-order-${which}${VIEW !== 'list' ? `-${VIEW}` : ''}-${scheme}${DOODLE ? '-doodle' : ''}.png`) });
         await page.close();
     }
 }

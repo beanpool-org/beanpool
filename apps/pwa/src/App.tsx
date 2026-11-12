@@ -1664,7 +1664,7 @@ export function App() {
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    backgroundImage: "url('/assets/neon-vines-banner.png')",
+                    backgroundImage: 'var(--banner-image)',
                     backgroundSize: '150% auto',
                     backgroundPosition: 'center',
                     borderTop: '1px solid #111',

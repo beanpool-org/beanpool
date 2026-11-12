@@ -326,14 +326,30 @@ derived from them (`brandInkGrounds(set)`, `brandWebInkGrounds(set)`), and the m
   the median, by lightness, of the @2x tile's pixels that stand 1.3:1 or more off the ground. Measured on main 6513fb9e,
   12 Nov 2026: light `#c1c4b3` at **1.56:1**, Classic dark `#303a37` at **1.50:1** (the "lift" of #998; the 1x tile
   measures 1.45 and 1.42).
-- **Dark's doodle is charcoal, not olive** (Marty and Damo, 12 Nov; slice T5 re-draws the tile). Its ground `#17191c`
-  and line `#343841` take the hue of Dark's greys (216 and 222 degrees) at Classic dark's lightness: the ground 0.01 %
-  darker, the line 0.11 % lighter, so the line stands **1.50:1** off its ground as Classic's does (1.500 against
-  1.498), and the phone card lifts **1.16** off it (Classic 1.17; the bar is 1.15). A tile baked by moving each pixel's
-  hue and keeping its lightness lands on these.
+- **Dark's doodle is charcoal, not olive** (Marty and Damo, 12 Nov; slice T5 baked it). Its ground `#17191c` and line
+  `#343841` take the hue of Dark's greys (216 and 222 degrees) at Classic dark's lightness: the ground 0.01 % darker, the
+  line 0.11 % lighter, so the line stands **1.50:1** off its ground as Classic's does, and the phone card lifts **1.16**
+  off it (Classic 1.17; the bar is 1.15). `node scripts/bake-dark-doodle.mjs` makes the tiles (repeatable: the same bytes
+  every run) by moving each pixel of Classic dark's tile onto the line between Dark's ground and line at the same distance,
+  so each pixel keeps its lightness. Measured on the baked files: the @2x tile's line stands **1.502:1** off its ground
+  (Classic dark's tile 1.498), the 1x tile's **1.427:1** (Classic 1.419). A lossy tile cannot show every grey: no input
+  decodes to exactly `#17191c` (checked), and the nearest, `#17181c`, is one level off in green (a contrast of under
+  1.01:1). `scripts/dark-doodle.test.mjs` holds each tile's most common colour to within that one level of the library's
+  ground. The files: the phone's `pattern-night.webp` and `pattern-night@2x.webp`, the web's `pattern-night.webp` and
+  `pattern-night-2x.webp`, each no bigger than Classic dark's (163,606 and 428,476 bytes against 166,654 and 444,336).
+  The phone picks a tile by colour set (`PatternBackground`); the web's `:root.dark-theme[data-bp-theme="night"]` swaps
+  `--pattern-image`, so a browser in Classic or Light never fetches them.
 - **`web.banner`** is the ground of the leafy header banner (`--header-bg`) and the browser bar's colour that runs on
   from it. Classic dark's is the olive charcoal `#1d231d`; Dark's is its own charcoal page `#202126` (0.26 % darker).
   The banner picture itself (`neon-vines-banner`) has a near-black ground of its own, `#01080e`, under a black scrim.
+  **Dark's banner picture is charcoal too** (`vines-banner-night.jpg`, 31,981 bytes, Classic's 45,838): the same vines,
+  each pixel's brightness kept between the gaps and the brightest glow, drawn in Dark's greys. The header draws the
+  banner under a 50 % black wash, so the file's gaps are twice `web.banner` and the header shows `web.banner` itself (the
+  bottom bar's wash is 30 %); the brightest line is Dark's grey step 700 as the header shows it. The web draws it through
+  `--banner-image`, which Dark swaps. The phone's header (`GlobalHeader.tsx`, no longer protected: Marty took it off the
+  list on 15 Oct) takes its banner from `utils/header-banner.ts` by colour set, as `PatternBackground` takes its tile:
+  Classic and Light keep `neon-vines-banner.jpg`, Dark draws `vines-banner-night.jpg` (the web's file, byte for byte),
+  under the same 50 % black wash.
 - **The picker's dots**: `brandSwatch(set, 'phone' | 'web')` gives the page (the doodle's ground), that app's card and
   the accent, read from here so a swatch cannot drift from the real colours.
 

@@ -18,7 +18,7 @@
  * state.
  */
 import Router from '@koa/router';
-import { CREDIT_SIGHT_WORDS, t, word, type CreditSight } from '@beanpool/core';
+import { CREDIT_SIGHT_WORDS, word, type CreditSight } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey } from '../state-engine.js';
 import { getNodeRole, STANDBY_CODE, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
@@ -30,6 +30,8 @@ import { SERVER_FAULT_TEXT } from './member-error-text.js';
 import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
 
+/** The told sentence (core), in the English it is keyed by: the apps draw it in the reader's language (creditSightLine). */
+const TOLD = String(CREDIT_SIGHT_WORDS.told);
 const NOT_A_GIVER = word('Only the owners, admins and vouchers here can see credit.');
 const OWNERS_ADMINS_ONLY = word('Only the owners and admins here can read who looked.');
 const NOT_LISTED = word('Nobody here by that key.');
@@ -117,7 +119,7 @@ export function createCreditSightRoutes(deps: RouteDeps): Router {
         answerAfterLooks(ctx, () => {
             const page = creditPeople(viewer, sight, { filter: ctx.query.filter, q: ctx.query.q, after: ctx.query.after });
             return {
-                body: { sight, told: t(CREDIT_SIGHT_WORDS.told), ...page },
+                body: { sight, told: TOLD, ...page },
                 viewer, sight, subjects: page.people.map((p) => p.memberPubkey).filter((pk) => pk !== viewer), surface: 'list',
             };
         });
@@ -133,7 +135,7 @@ export function createCreditSightRoutes(deps: RouteDeps): Router {
         answerAfterLooks(ctx, () => {
             const person = creditPerson(viewer, sight, member);
             if (!person) return null;
-            return { body: { sight, told: t(CREDIT_SIGHT_WORDS.told), person }, viewer, sight, subjects: member === viewer ? [] : [member], surface: 'card' };
+            return { body: { sight, told: TOLD, person }, viewer, sight, subjects: member === viewer ? [] : [member], surface: 'card' };
         });
     });
 
@@ -160,7 +162,7 @@ export function createCreditSightRoutes(deps: RouteDeps): Router {
         const me = creditMe(viewer);
         if (!me) return answer(ctx, 404, NOT_LISTED, 'not_listed');
         ctx.status = 200;
-        ctx.body = { told: t(CREDIT_SIGHT_WORDS.told), me };
+        ctx.body = { told: TOLD, me };
     });
 
     return router;

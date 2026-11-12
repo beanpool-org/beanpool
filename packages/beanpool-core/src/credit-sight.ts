@@ -4,7 +4,7 @@
  * disagree.
  *
  * - {@link position}: the balance with its sign beside the credit line (amendment §3.2), from the stored balance, the line
- *   and the part of it their Offers unlock. A balance is never shown without its line (§4.3, 6).
+ *   and the part of it their Offers unlock. A balance always comes with its line beside it (§4.3, 6).
  * - {@link creditRisk}: one of four levels, from rules anyone can read (§4.2), each reason marked `open` (any member can read
  *   it on a profile), `giver` (built only from the balance and the line) or `admins` (owners' and admins' alone). The level
  *   is the worst rule's; the server drops the admins' reasons from a voucher's answer and says `more` where one of them
@@ -204,14 +204,16 @@ export function riskReasons(f: CreditRiskFacts): RiskReason[] {
     if (f.ring) add('ring', 'high', 'admins');
     if (p.line_c > 0 && p.owed_c * 10 >= p.line_c * ALMOST_ALL_TENTHS && quiet(f)) add('almost_all_quiet', 'high', 'admins', { owed: p.owed_c, line: p.line_c, days: f.quietDays });
     if (f.disputeAgainst) add('dispute', 'high', 'admins');
-    if (ended >= COMPLETION_MIN_ENDED && f.completed * 2 < ended) add('completion', 'high', 'open');
+    const poorCompletion = ended >= COMPLETION_MIN_ENDED && f.completed * 2 < ended;
+    if (poorCompletion) add('completion', 'high', 'open');
     if (f.writtenOff_c > 0) add('written_off', 'high', 'admins');
     // Medium.
     if (p.over_c === 0 && p.line_c > 0 && p.owed_c * 100 > p.line_c * f.debtLinePct) add('over_half', 'medium', 'giver', { owed: p.owed_c, line: p.line_c, pct: f.debtLinePct });
     if (p.owed_c > 0 && quiet(f)) add('below_zero_quiet', 'medium', 'admins', { owed: p.owed_c, days: f.quietDays });
     if (f.branchBelowZero >= BRANCH_BELOW_MIN && f.branchBelowZero * 2 >= f.branchPeople) add('branch_below', 'medium', 'admins', { n: f.branchBelowZero, m: f.branchPeople });
     if (f.insideOnly) add('inside_only', 'medium', 'admins');
-    if (f.cancelled >= CANCELLED_MIN && f.completed * 10 < ended * 8) add('cancelled', 'medium', 'open', { n: f.cancelled });
+    // Fewer than half completed says it already, at high: the cancellations are its reason, not a second one.
+    if (!poorCompletion && f.cancelled >= CANCELLED_MIN && f.completed * 10 < ended * 8) add('cancelled', 'medium', 'open', { n: f.cancelled });
     // Low: a reason to trust. A balance above zero is never one (amendment §4.2; §4.3, 2).
     if (f.confirmed) add('confirmed', 'low', 'admins');
     if (f.outsideTrades >= LOW_TRADES && f.outsidePartners >= LOW_PARTNERS && f.daysHere >= LOW_DAYS_HERE) add('established', 'low', 'admins', { n: f.outsideTrades, k: f.outsidePartners });

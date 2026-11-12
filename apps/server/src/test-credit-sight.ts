@@ -32,7 +32,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CREDIT_SIGHT_WORDS, t } from '@beanpool/core';
+import { CREDIT_SIGHT_WORDS } from '@beanpool/core';
 import { clearWashTradingCache } from '@beanpool/engine';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
@@ -325,14 +325,14 @@ async function main(): Promise<void> {
         `3. a standby answers no look (409) and still reads the log (${show(standbyList)} | ${show(standbyLooks)})`);
     // ── 13. The told sentence ────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 13. the told sentence —');
-    const told = t(CREDIT_SIGHT_WORDS.told);
+    const told = String(CREDIT_SIGHT_WORDS.told);
     assert(ruleOn.body?.creditSight === true && ruleOff.body?.creditSight === false,
         `13. the known-rule answer says creditSight with Beans on, and not with them off (red when the sentence is dropped while the route answers) (${show(ruleOn)} | ${show(ruleOff)})`);
     assert(owenPeople.body?.told === told && owenDebCard.body?.told === told && melMe.body?.told === told,
         '13. every answer that shows a balance carries the told sentence');
     const here = path.dirname(fileURLToPath(import.meta.url));
     const routeSource = fs.readFileSync(path.join(here, 'routes/credit-sight.ts'), 'utf8');
-    assert(/import \{[^}]*\bCREDIT_SIGHT_WORDS\b[^}]*\} from '@beanpool\/core'/.test(routeSource) && routeSource.includes('t(CREDIT_SIGHT_WORDS.told)'),
+    assert(/import \{[^}]*\bCREDIT_SIGHT_WORDS\b[^}]*\} from '@beanpool\/core'/.test(routeSource) && routeSource.includes('String(CREDIT_SIGHT_WORDS.told)'),
         '13. the route module imports the sentence\'s constant and answers with it');
 
     // ── 17. A look moves no Bean ─────────────────────────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import {
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
 import {
-    carryTotalToEach, itemsHeldIn, perItemEditFields, perItemEditStart, perItemFeeLine, perItemHeldNote, perItemLines, perItemLotForOtherLine,
+    carryTotalToEach, itemsHeldIn, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines, perItemLotForOtherLine,
     perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
 } from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';

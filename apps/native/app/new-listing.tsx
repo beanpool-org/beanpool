@@ -280,7 +280,8 @@ export default function NewListingScreen() {
     const [postTitle, setPostTitle] = useState('');
     const [postDescription, setPostDescription] = useState('');
     const [postCredits, setPostCredits] = useState('');
-    const [postPriceType, setPostPriceType] = useState<string>('fixed');
+    /** The unit the member picked; `postPriceType` below is the one in force (Total where the list lacks it). */
+    const [pickedPriceType, setPickedPriceType] = useState<string>('fixed');
     // A price for each one (DESIGN-per-item-price-fable.md §2.4): how many the seller has, and the optional price for all of them.
     const [postItemCount, setPostItemCount] = useState('');
     const [postItemLot, setPostItemLot] = useState('');
@@ -296,8 +297,8 @@ export default function NewListingScreen() {
     const showsBeans = marketShowsBeans(nodeFeatures);
     // The units the button cycles: Each (right after Total) only on an Offer and only once the node says it takes them up.
     const priceUnits = priceUnitsOffered(nodeFeatures, postType);
-    const unit: string = (priceUnits as readonly string[]).includes(postPriceType) ? postPriceType : 'fixed';
-    const eachChosen = showsBeans && unit === 'each';
+    const postPriceType: string = (priceUnits as readonly string[]).includes(pickedPriceType) ? pickedPriceType : 'fixed';
+    const eachChosen = showsBeans && postPriceType === 'each';
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
@@ -410,7 +411,7 @@ export default function NewListingScreen() {
     const resetNewPost = () => {
         setAlsoOnGlobal(false);
         setPostType('offer'); setPostCategory(''); setPostTags([]); setPostFreeTags([]); setPostTitle(''); setPostDescription('');
-        setPostCredits(''); setPostPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]);
+        setPostCredits(''); setPickedPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
     };
@@ -430,12 +431,12 @@ export default function NewListingScreen() {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const draft = {
                 anchorUrl, postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits,
-                postPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
+                postPriceType: pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
                 postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, postPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, pickedPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -447,7 +448,7 @@ export default function NewListingScreen() {
         setPostTitle(d.postTitle || '');
         setPostDescription(d.postDescription || '');
         setPostCredits(d.postCredits || '');
-        setPostPriceType(d.postPriceType || 'fixed');
+        setPickedPriceType(d.postPriceType || 'fixed');
         setPostItemCount(typeof d.postItemCount === 'string' ? d.postItemCount : '');
         setPostItemLot(typeof d.postItemLot === 'string' ? d.postItemLot : '');
         setPostRepeatable(!!d.postRepeatable);
@@ -638,9 +639,9 @@ export default function NewListingScreen() {
      * for" and the price for one is emptied and focused (§2.4: so "the lot, or ___ each" is how it feels). Each has no Repeatable.
      */
     const nextPostUnit = () => {
-        const next = priceUnits[(priceUnits.indexOf(unit as (typeof priceUnits)[number]) + 1) % priceUnits.length];
+        const next = priceUnits[(priceUnits.indexOf(postPriceType as (typeof priceUnits)[number]) + 1) % priceUnits.length];
         if (next === 'each') {
-            if (unit === 'fixed') {
+            if (postPriceType === 'fixed') {
                 const moved = carryTotalToEach({ price: postCredits, count: postItemCount, lot: postItemLot });
                 if (moved.price !== postCredits) {
                     setPostCredits(moved.price);
@@ -651,7 +652,7 @@ export default function NewListingScreen() {
             setPostRepeatable(false);
         }
         setItemRefusal(null);
-        setPostPriceType(next);
+        setPickedPriceType(next);
     };
 
     const handleSubmit = async () => {
@@ -687,7 +688,7 @@ export default function NewListingScreen() {
                 title: postTitle.trim(),
                 description: postDescription.trim(),
                 price_c: postFormPrice_c(postCredits, nodeFeatures),
-                price_type: eachChosen ? 'each' : postFormPriceType(unit, nodeFeatures),
+                price_type: postFormPriceType(postPriceType, nodeFeatures),
                 ...(item && item.ok ? { unitsLeft: item.fields.unitsLeft, ...(item.fields.lot ? { lot: item.fields.lot } : {}) } : {}),
                 repeatable: postRepeatable && !eachChosen ? 1 : 0,
                 cash_also_needed: postCashAlsoNeeded ? 1 : 0,
@@ -996,7 +997,8 @@ export default function NewListingScreen() {
                             <View style={styles.priceInputRow}>
                                 <TextInput
                                     ref={priceInputRef}
-                                    accessibilityLabel={eachChosen ? perItemLines.priceForOne() : t('Price')}
+                                    accessibilityLabel={t('Price')}
+                                    aria-label={eachChosen ? perItemLines.priceForOne() : undefined}
                                     style={[styles.creditsInputCompact, fieldBorder('credits')]}
                                     placeholder="0"
                                     placeholderTextColor={colors.text.muted}
@@ -1007,7 +1009,7 @@ export default function NewListingScreen() {
                                 />
                                 <Pressable accessibilityRole="button" onPress={nextPostUnit} style={styles.priceTypeBtn}>
                                     <Text style={styles.priceTypeBtnText}>{
-                                        { fixed: t('Total', undefined, 'price unit'), each: perItemLines.unitEach(), hourly: t('/ Hr', undefined, 'price per hour'), daily: t('/ Dy', undefined, 'price per day'), weekly: t('/ Wk', undefined, 'price per week'), monthly: t('/ Mo', undefined, 'price per month') }[unit] || t('Total', undefined, 'price unit')
+                                        { fixed: t('Total', undefined, 'price unit'), hourly: t('/ Hr', undefined, 'price per hour'), daily: t('/ Dy', undefined, 'price per day'), weekly: t('/ Wk', undefined, 'price per week'), monthly: t('/ Mo', undefined, 'price per month'), each: perItemLines.unitEach() }[postPriceType] || t('Total', undefined, 'price unit')
                                     }</Text>
                                 </Pressable>
                                 <Pressable

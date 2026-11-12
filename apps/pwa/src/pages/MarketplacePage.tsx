@@ -67,7 +67,7 @@ import {
 } from '../lib/live-posts';
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 import {
-    amountAsTyped, carryTotalToEach, itemsHeldIn, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines, perItemLotForOtherLine,
+    carryTotalToEach, itemsHeldIn, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines, perItemLotForOtherLine,
     perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
 } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';

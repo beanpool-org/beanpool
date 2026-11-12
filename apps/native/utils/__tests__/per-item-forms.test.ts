@@ -48,7 +48,7 @@ describe('the create form (app/new-listing.tsx) reads core\'s rules', () => {
     it('Total -> Each carries the figure into the price for all and focuses the price for one (red if the carry-over is dropped)', () => {
         expect(src).toContain('carryTotalToEach(');
         expect(src).toContain('priceInputRef.current?.focus()');
-        expect(src).toMatch(/if \(unit === 'fixed'\)/);
+        expect(src).toMatch(/if \(postPriceType === 'fixed'\)/);
     });
 
     it('the extra fields and the refusal come from core, and a refused count or price for all stops the post with its sentence (red if the screen sends without asking)', () => {
@@ -59,7 +59,9 @@ describe('the create form (app/new-listing.tsx) reads core\'s rules', () => {
     });
 
     it('the body carries the unit, the count and the price for all of them (and no Repeatable) only for Each (red if they leak to other units)', () => {
-        expect(src).toContain("price_type: eachChosen ? 'each' :");
+        // The unit in force (`postPriceType`) is the picked one only where core's list has it, so 'each' never goes for a Need.
+        expect(src).toContain('const postPriceType: string = (priceUnits as readonly string[]).includes(pickedPriceType) ? pickedPriceType');
+        expect(src).toContain('price_type: postFormPriceType(postPriceType, nodeFeatures),');
         expect(src).toMatch(/\.\.\.\(item && item\.ok \? \{ unitsLeft: item\.fields\.unitsLeft/);
         expect(src).toContain('repeatable: postRepeatable && !eachChosen ? 1 : 0');
     });

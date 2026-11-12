@@ -168,8 +168,8 @@ function askFor(origin: string, now: number): Promise<NodeKeyDocument | null> | 
             }
             remember(kept, origin, { doc, trustUntil: Math.min(doc.validUntil, Date.now() + NODE_KEY_VALIDITY_MS) }, NODE_KEYS_KEPT);
             return doc;
-        } catch (e: any) {
-            noteFailedDocument(origin, String(e?.message || e));
+        } catch (e) {
+            noteFailedDocument(origin, e instanceof Error ? e.message : String(e));
             return null;
         } finally {
             fetching.delete(origin);
@@ -268,7 +268,8 @@ export async function verifyNodeRequest(
 export async function requireNodeSignature(ctx: Koa.Context, next: Koa.Next): Promise<void> {
     if (!isNodeSignedPath(ctx.path)) return next();
     const verdict = await verifyNodeRequest({
-        header: ctx.get(NODE_REQUEST_HEADER) || undefined, method: ctx.method, path: ctx.path, body: (ctx as any).rawBody ?? '',
+        header: ctx.get(NODE_REQUEST_HEADER) || undefined, method: ctx.method, path: ctx.path,
+        body: (ctx as unknown as { rawBody?: string }).rawBody ?? '',
     });
     if (!verdict.ok) {
         ctx.status = verdict.status;

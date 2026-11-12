@@ -38,8 +38,8 @@ export function createNodeKeyRoutes(): Router {
         let doc;
         try {
             doc = await ownNodeKeyDocument();
-        } catch (e: any) {
-            console.warn(`[NodeKey] The node key could not be read: ${e?.message || e}`);
+        } catch (e) {
+            console.warn(`[NodeKey] The node key could not be read: ${e instanceof Error ? e.message : String(e)}`);
             doc = null;
         }
         if (!doc) {
@@ -60,7 +60,7 @@ export function createNodeKeyRoutes(): Router {
             ctx.body = { error: 'This path takes only requests signed by a community\'s server.', code: 'node_signature_missing' };
             return;
         }
-        const items = (ctx.request as any).body?.items;
+        const items = ((ctx.request as unknown as { body?: { items?: unknown } }).body)?.items;
         if (!Array.isArray(items) || items.length > NODE_CHECK_ITEMS_MAX) {
             ctx.status = 400;
             ctx.body = { error: `items is a list of at most ${NODE_CHECK_ITEMS_MAX} relay items.`, code: 'bad_items' };
@@ -73,7 +73,7 @@ export function createNodeKeyRoutes(): Router {
             items: items.map((item: unknown) => {
                 const verdict = checkRelayItem(item, { signedBy: from.origin, isHere });
                 if (verdict.ok) return { itemId: verdict.item.envelope.itemId, ok: true };
-                const id = (item as any)?.envelope?.itemId;
+                const id = (item as { envelope?: { itemId?: unknown } } | null)?.envelope?.itemId;
                 return { itemId: typeof id === 'string' && id.length <= 64 ? id : null, ok: false, reason: verdict.reason };
             }),
         };

@@ -36,10 +36,8 @@ const ENVELOPE: RelayEnvelope = {
 /** Ana and Ben's conversation, frozen. */
 const CONVERSATION = 'ddd3ee08-0d30-4589-89c6-6769a723b882';
 
-const fieldsOf = (e: RelayEnvelope): RelayEnvelopeFields => {
-    const { v: _v, sig: _sig, ...fields } = e;
-    return fields;
-};
+const fieldsOf = ({ kind, itemId, senderKey, senderHome, recipient, recipientHome, at, payloadHash }: RelayEnvelope): RelayEnvelopeFields =>
+    ({ kind, itemId, senderKey, senderHome, recipient, recipientHome, at, payloadHash });
 const atB = (host: string) => host === 'b.example';
 
 describe('the envelope, frozen', () => {

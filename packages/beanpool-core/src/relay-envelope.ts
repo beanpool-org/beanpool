@@ -189,7 +189,7 @@ export function checkRelayItem(item: unknown, ctx: { signedBy: string; isHere: (
     const payload = o.payload;
     if (!envelope || typeof payload !== 'string' || payload.length > RELAY_PAYLOAD_MAX_CHARS) return { ok: false, reason: 'malformed' };
     if (!relayEnvelopeFromItsHome(envelope, ctx.signedBy)) return { ok: false, reason: 'wrong-home' };
-    let here = false;
+    let here: boolean;
     try {
         here = ctx.isHere(envelope.recipientHome);
     } catch {

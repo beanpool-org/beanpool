@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
@@ -6846,7 +6846,7 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction {
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart; item?: ItemTakeUpIn }): MarketplaceTransaction {
     assertLedgerWritable();
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }

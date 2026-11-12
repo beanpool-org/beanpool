@@ -36,7 +36,7 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
-import { ITEM_DEALS_NOT_YET_CODE, itemRefusalOf } from '../engine/per-item.js';
+import { itemRefusalOf, itemTakeUpRefusalOf } from '../engine/per-item.js';
 import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -1521,12 +1521,6 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
 function respondCopyNoDeal(ctx: any, err: any): boolean {
-    if (err?.code === ITEM_DEALS_NOT_YET_CODE) {
-        // A listing priced for each one, before slice P1 takes it up (engine/per-item.ts): 409 and its code.
-        ctx.status = 409;
-        ctx.body = { error: memberErrorText(err, word('Failed to accept post')), code: ITEM_DEALS_NOT_YET_CODE };
-        return true;
-    }
     if (err?.code !== LISTING_COPY_CODE) return false;
     ctx.status = 409;
     ctx.body = { error: err.message, code: LISTING_COPY_CODE };
@@ -1539,6 +1533,20 @@ function respondCopyNoDeal(ctx: any, err: any): boolean {
  */
 function respondItemRefusal(ctx: any, err: any, fallback: string): boolean {
     const r = itemRefusalOf(err);
+    if (!r) return false;
+    ctx.status = r.status;
+    ctx.body = { error: memberErrorText(err, fallback), code: r.code, ...(r.unitsLeft !== undefined ? { unitsLeft: r.unitsLeft } : {}) };
+    return true;
+}
+
+/**
+ * A take-up, a request or a release on a listing priced for each one refused (engine/per-item.ts; core ITEM_TAKE_UP_REFUSALS):
+ * 409 when the listing moved on since the buyer's screen read it (price_changed, units_gone with how many are left now,
+ * lot_gone, each_accept_only), 400 for a count that isn't one or a release for another number; its code beside its words, so
+ * an app can refresh the listing and say what changed.
+ */
+function respondItemTakeUpRefusal(ctx: any, err: any, fallback: string): boolean {
+    const r = itemTakeUpRefusalOf(err);
     if (!r) return false;
     ctx.status = r.status;
     ctx.body = { error: memberErrorText(err, fallback), code: r.code, ...(r.unitsLeft !== undefined ? { unitsLeft: r.unitsLeft } : {}) };
@@ -1588,7 +1596,7 @@ function respondStandingRefusal(ctx: any, err: any): boolean {
 
 router.post('/api/marketplace/posts/accept', async (ctx) => {
     try {
-        const { postId, buyerPublicKey, hours, standing } = (ctx as any).requestBody || {};
+        const { postId, buyerPublicKey, hours, standing, itemOption, expect_c } = (ctx as any).requestBody || {};
         if (!postId || !buyerPublicKey) {
             ctx.status = 400;
             ctx.body = { error: 'postId and buyerPublicKey are required' };
@@ -1597,8 +1605,10 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const actor = ctx.state?.actor as string | undefined;
         const standingStart = standingFromBody(ctx, standing);
+        // A listing priced for each one is taken up for a number or all (DESIGN-per-item-price-fable.md §3): the count goes
+        // to the engine as the body holds it, unread, so a count that isn't a whole number is refused there, never rounded.
         const tx = acceptPost(postId, buyerPublicKey, standingStart ? undefined : dealQuantityFromBody(hours),
-            actor || standingStart ? { authSigner: actor, standing: standingStart } : undefined);
+            { authSigner: actor, standing: standingStart, item: { n: hours, option: itemOption, expect_c } });
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -1613,6 +1623,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         if (respondCopyNoDeal(ctx, err)) return;
         if (respondStandingRefusal(ctx, err)) return;
+        if (respondItemTakeUpRefusal(ctx, err, word('Failed to accept post'))) return;
         // A post taken or changed since the app showed it: the 400 it always was, with its code (engine/escrow.ts).
         if (err?.code === POST_GONE_CODE) {
             ctx.status = 400;
@@ -1639,6 +1650,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
         if (respondCopyNoDeal(ctx, err)) return;
+        if (respondItemTakeUpRefusal(ctx, err, word('Failed to request post'))) return;
         // As accept: a post gone or changed since the app showed it, the 400 it always was, with its code.
         if (err?.code === POST_GONE_CODE) {
             ctx.status = 400;
@@ -1670,6 +1682,7 @@ router.post('/api/marketplace/transactions/approve', async (ctx) => {
     } catch (err: any) {
         if (respondCopyNoDeal(ctx, err)) return;
         if (respondStandingRefusal(ctx, err)) return;
+        if (respondItemTakeUpRefusal(ctx, err, word('Failed to approve request'))) return;
         respondSettlementAware(ctx, err, 'Failed to approve request');
     }
 });
@@ -1740,6 +1753,8 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
         syncPulseMarketplaceGate();
         ctx.body = { success: true, transaction: tx, alreadyCompleted: !!(tx as any).alreadyCompleted };
     } catch (e: any) {
+        // A per-item deal released for another number than its own (engine/escrow.ts, design D5): 400 with its code.
+        if (respondItemTakeUpRefusal(ctx, e, word('Escrow release failed'))) return;
         const rawCode = e?.status ?? e?.statusCode;
         const statusCode = typeof rawCode === 'number' && Number.isInteger(rawCode) && rawCode >= 400 && rawCode <= 599
             ? rawCode

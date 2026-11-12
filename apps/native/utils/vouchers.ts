@@ -40,6 +40,11 @@ export interface MyVouching {
     presets: number[];
     vouchMax: number;
     budgetMax: number;
+    /**
+     * Their own Ask for more button's state, from the node (slice C3): null for an owner and for a member who is no voucher;
+     * absent from an older node. Never worked out on the phone.
+     */
+    ask?: { askedAt: string | null; lastAskedAt: string | null; askAgainAt: string | null; blocked: 'paused' | 'frozen' | null } | null;
     vouchedBy: Array<{
         memberPubkey: string;
         callsign: string;

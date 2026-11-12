@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { AddedYouLines } from '../../components/AddedYouLines';
-import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter, Modal, Switch } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -30,7 +30,7 @@ import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inv
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
-import { invitesOn, membersByKey } from '../../utils/node-profile';
+import { beansOn, invitesOn, membersByKey } from '../../utils/node-profile';
 import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
 import { InviteNamesBoxes, useInviteNames, useRoleOnInvites } from '../../components/InviteNamesBoxes';
@@ -62,6 +62,9 @@ import { fetchVouchers, type VoucherSummaryRow, type VoucherSettings, type Vouch
 import { VoucherCard } from '../../components/VoucherCard';
 import { VouchersBlock } from '../../components/VouchersBlock';
 import { MakeVoucherSheet } from '../../components/MakeVoucherSheet';
+import { CreditList } from '../../components/CreditList';
+import { useCreditGiver } from '../../utils/use-credit-giver';
+import { CREDIT_FILTERS, type CreditFilter } from '../../utils/credit-view';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -136,6 +139,10 @@ export default function PeopleScreen() {
         sortPillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         sortPillTextActive: { color: colors.text.inverse },
 
+        creditSwitchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 48, paddingHorizontal: 16, paddingTop: 8, backgroundColor: colors.surface.app },
+        creditSwitchLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text.heading },
+        creditDoor: { minHeight: 48, justifyContent: 'center', paddingVertical: 8, marginBottom: 12 },
+        creditDoorText: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
         sectionHeader: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         sectionDesc: { fontSize: 13, color: colors.text.secondary, marginBottom: 20, lineHeight: 18 },
         input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 12, fontSize: 15, fontWeight: '500', marginBottom: 16, color: colors.text.heading },
@@ -184,7 +191,7 @@ export default function PeopleScreen() {
         },
     }));
 
-    const params = useLocalSearchParams<{ view?: string; from?: string }>();
+    const params = useLocalSearchParams<{ view?: string; from?: string; credit?: string; voucher?: string }>();
     const [view, setView] = useState<SubView>(initialPeopleView(params.view));
     const [keyboardHeight, setKeyboardHeight] = useState(0);
     // A notice ("someone asked to join": the push, or the app's own copy of it) opened this screen. Taken
@@ -241,6 +248,11 @@ export default function PeopleScreen() {
     const [redeemNodeUrl, setRedeemNodeUrl] = useState('');
     const [redeeming, setRedeeming] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState('');
+    // Show credit (slice C4): off at every visit. Whether to OFFER it is the node's fresh answer (useCreditGiver), never a
+    // role the phone kept; the pane lives in memory only. `creditStart` is where a door opened it (Invites' "Give credit to
+    // people already here", the bell's "A voucher asks for more").
+    const [creditOn, setCreditOn] = useState(false);
+    const [creditStart, setCreditStart] = useState<{ filter: CreditFilter; voucher?: string } | null>(null);
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
@@ -338,6 +350,26 @@ export default function PeopleScreen() {
     });
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
+    // Show credit (slice C4): offered only where Beans are on, to someone the NODE just said gives credit (owner or admin by
+    // its role answer, voucher by its budget answer; both asked again each time Community or Invites is shown). A moderator
+    // or a plain member gets 'no' and this phone never asks for a credit answer.
+    const creditPossible = !isGuest && !isGlobalNode && beansOn(nodeProfile?.features) && (view === 'community' || view === 'invites');
+    const giver = useCreditGiver(anchorUrl, identity, creditPossible, view);
+    const showsCredit = giver === 'giver' && creditPossible;
+    useEffect(() => { if (view !== 'community') setCreditOn(false); }, [view]);
+    useEffect(() => {
+        // A bell row ("A voucher asks for more") lands here on the Vouchers chip, with Show credit on.
+        if (!params.credit) return;
+        const filter = (CREDIT_FILTERS as readonly string[]).includes(params.credit) ? (params.credit as CreditFilter) : 'all';
+        setCreditStart({ filter, voucher: typeof params.voucher === 'string' ? params.voucher : undefined });
+        setView('community');
+        setCreditOn(true);
+        router.setParams({ credit: undefined, voucher: undefined });
+    }, [params.credit, params.voucher]);
+    const creditRefused = useCallback(() => setCreditOn(false), []);
+    const openCreditProfile = useCallback((p: { memberPubkey: string; callsign: string }) => {
+        router.push({ pathname: '/public-profile', params: { publicKey: p.memberPubkey, callsign: p.callsign || t('Unknown') } });
+    }, []);
     useEffect(() => {
         // The tab stays mounted across a switch of community: a count read on the last one must not ride along.
         if (!identity || !anchorUrl || !profileKnown || !takesKnocks || isGuest) { setKnockCount(0); return; }
@@ -1184,7 +1216,19 @@ export default function PeopleScreen() {
                             autoCorrect={false}
                         />
                     </View>
-                    {!membersOnDemand && <View style={styles.sortRow}>
+                    {showsCredit && (
+                        <View style={styles.creditSwitchRow} testID="credit-switch-row">
+                            <Text style={styles.creditSwitchLabel} maxFontSizeMultiplier={1.3}>{t('Show credit')}</Text>
+                            <Switch
+                                value={creditOn}
+                                onValueChange={(v) => { setCreditOn(v); if (!v) setCreditStart(null); }}
+                                accessibilityLabel={t('Show credit')}
+                                trackColor={{ false: colors.border.strong, true: colors.brand.fill }}
+                                testID="credit-switch"
+                            />
+                        </View>
+                    )}
+                    {!membersOnDemand && !(showsCredit && creditOn) && <View style={styles.sortRow}>
                         {SORT_OPTIONS.map(opt => (
                             <Pressable
                                 key={opt.key}
@@ -1198,6 +1242,18 @@ export default function PeopleScreen() {
                             </Pressable>
                         ))}
                     </View>}
+                    {showsCredit && creditOn && identity && anchorUrl ? (
+                        <CreditList
+                            anchorUrl={anchorUrl}
+                            identity={identity}
+                            query={searchQuery}
+                            initialFilter={creditStart?.filter}
+                            focusVoucher={creditStart?.voucher}
+                            nodeProfile={nodeProfile?.profile as 'local' | 'global' | null | undefined}
+                            onOpenProfile={openCreditProfile}
+                            onRefused={creditRefused}
+                        />
+                    ) : (
                     <FlatList
                         ref={listRef}
                         data={members}
@@ -1359,6 +1415,7 @@ export default function PeopleScreen() {
                     );
                     }}
                 />
+                    )}
                 </>
             )}
 
@@ -1457,6 +1514,23 @@ export default function PeopleScreen() {
                                     onMakeVoucher={() => setMakingVoucher(true)}
                                     onOpenWaiting={() => router.push('/names-list')}
                                 />
+                            )}
+
+                            {/* The second door to Show credit (slice C4): people already here who have no credit yet. Only for someone the node just said gives credit. */}
+                            {showsCredit && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    style={styles.creditDoor}
+                                    testID="credit-door"
+                                    onPress={() => {
+                                        setCreditStart({ filter: 'no_credit' });
+                                        setView('community');
+                                        setCreditOn(true);
+                                        router.setParams({ view: 'community' });
+                                    }}
+                                >
+                                    <Text style={styles.creditDoorText} maxFontSizeMultiplier={1.3}>{t('Give credit to people already here ›')}</Text>
+                                </Pressable>
                             )}
 
                             {/* GENERATE INVITE SECTION */}

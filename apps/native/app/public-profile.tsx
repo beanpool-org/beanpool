@@ -40,6 +40,8 @@ import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } fr
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { InvitedByCard } from '../components/InvitedByCard';
 import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
+import { CreditCard } from '../components/CreditCard';
+import { useCreditGiver } from '../utils/use-credit-giver';
 
 
 
@@ -538,6 +540,9 @@ export default function PublicProfileScreen() {
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
+    // The credit card (slice C4): asked of the node each time a profile opens, for someone who gives credit there; a plain
+    // member's phone makes no credit request.
+    const creditGiver = useCreditGiver(anchorUrl, identity, !isSelf && showsBeans && !!anchorUrl && !!pubKeyStr, pubKeyStr);
 
     useEffect(() => {
         if (!anchorUrl || !identity || isSelf) {
@@ -1447,6 +1452,11 @@ export default function PublicProfileScreen() {
                             {/* Invited by, and Brought in n people (I3): the server says who reads which (InvitedByCard). */}
                             {showsBeans && (
                                 <InvitedByCard vouchedInBy={trust.vouchedInBy} broughtIn={trust.broughtIn} isSelf={false} targetPubkey={pubKeyStr ?? ''} tierWords={tierWords} />
+                            )}
+
+                            {/* Credit (slice C4): above the names-list button and the Vouch box, for owners, admins and vouchers only. */}
+                            {!isSelf && showsBeans && creditGiver === 'giver' && identity && anchorUrl && pubKeyStr && (
+                                <CreditCard anchorUrl={anchorUrl} identity={identity} memberPubkey={pubKeyStr} />
                             )}
 
                             {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only, and

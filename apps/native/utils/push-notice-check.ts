@@ -515,11 +515,14 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites&from=notice' | '/find-community' | '/shared-outside'
     | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
+    | '/(tabs)/people?view=community&credit=vouchers' | `/(tabs)/people?view=community&credit=vouchers&voucher=${string}`
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
 /** An enterprise's key as the node writes it: 32 bytes, lower-case hex. */
 const ENTERPRISE_KEY = /^[0-9a-f]{64}$/;
+/** A member's key, in the same spelling. */
+const MEMBER_KEY = ENTERPRISE_KEY;
 
 const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
     // Home is the tabs' first screen (app/(tabs)/index.tsx); the Market has its own route since Home came (H2).
@@ -558,6 +561,13 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // Commons, Decide, where the case, who brought it and the member's reply sit side by side.
     if (d.screen === 'decide') return '/(tabs)/projects?section=decide';
     if (d.screen === 'settings') return '/(tabs)/settings';
+    // A voucher asks for more (credit, `voucher_ask`): People, Community, Show credit on and the Vouchers chip, on that voucher's
+    // row when the notice names them. Only the key's shape is taken from the answer.
+    if (d.screen === 'credit') {
+        return typeof d.by === 'string' && MEMBER_KEY.test(d.by)
+            ? `/(tabs)/people?view=community&credit=vouchers&voucher=${d.by}`
+            : '/(tabs)/people?view=community&credit=vouchers';
+    }
     // Someone asked to join after a listing this member shared (community.knock-shared, shared-listing door A3): their
     // Shared outside, where that link's row counts who asked.
     if (d.screen === 'shared-outside') return '/shared-outside';

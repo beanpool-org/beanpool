@@ -17,6 +17,7 @@ import { db } from '../db/db.js';
 import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, formatHundredths, isHundredths } from '@beanpool/core';
 import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, confirmationDialSetFrom, savedCreditCap, knownFloor, isConfirmed, memberKnownGrant } from '@beanpool/engine';
 import { getProfileSwitches } from './node-profile.js';
+import { assertPlainTablesWritable } from './node-role.js';
 import { getMember } from '../state-engine.js';
 import { clearEnterpriseFloorCache } from '@beanpool/engine';
 import { workOffHoldsFloor } from '../engine/names-debts.js';
@@ -209,6 +210,8 @@ export function knownFloorForMember(pk: string, viewerKey: string | null = null)
  * that writes nothing tells nothing.
  */
 export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount_c?: unknown; frozen?: unknown; clear?: unknown }, tell?: TellVoucher) {
+    // A standby writes no line, log line or notice of its own: they are its main server's rows alone.
+    assertPlainTablesWritable();
     const pk = body.memberPubkey;
     if (typeof pk !== 'string' || !pk) throw new KnownFloorError(400, 'bad_member', 'memberPubkey is required.');
     const m = getMember(pk);

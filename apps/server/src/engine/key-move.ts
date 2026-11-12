@@ -358,6 +358,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('money_requests', 'payer_pubkey');
     move('known_floor_log', 'actor_pubkey');
     move('known_floor_log', 'member_pubkey');
+    // A member's badge (engine/badges.ts) and the badges an owner or admin gave: recognition follows the person.
+    move('member_badges', 'member_pubkey');
+    move('member_badges', 'set_by');
     // A voucher's budget, the lines that wrote it, and the credit line each vouch or gift gave, beside invited_by (engine/vouchers.ts):
     // the budget and the room follow the person.
     move('vouchers', 'member_pubkey');

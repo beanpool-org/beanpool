@@ -12,6 +12,10 @@
  *   6. A genesis invite of type elder gives its joiner the Elder badge, not credit: earned_credit_c 0, floor 0.
  *   7. A key session only: an automation token is refused (key_session_only), and an unknown tier (400) and an enterprise or
  *      unknown member (404) are refused too.
+ *   8. A re-key keeps the badge: it moves to the new key (and a badge an admin gave names the admin's new key).
+ *   9. The enterprise's page (shopfrontOf) shows a keeper's badge, the tier their profile shows.
+ *  10. A standby gives no badge and sets no known floor: both routes answer 409 standby, the writers under them refuse,
+ *      and nothing is written or told.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-tiers-badge-only-http.ts
  */
@@ -35,6 +39,11 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
+import { moveMemberKeyRows } from './engine/key-move.js';
+import { shopfrontOf } from './engine/enterprise-shopfront.js';
+import { setNodeRole } from './config/node-role.js';
+import { setMemberBadge } from './engine/badges.js';
+import { setKnownFloorException } from './config/known-floor.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 
@@ -214,6 +223,52 @@ async function main(): Promise<void> {
     assert(toEnt.status === 404 && !badgeRow(ent), `an enterprise has no badge (${show(toEnt)})`);
     const nobody = await call('POST', null, `/api/local/admin/users/${'ab'.repeat(32)}/tier`, { tier: 'Elder' }, owner);
     assert(nobody.status === 404, `an unknown member is refused (${show(nobody)})`);
+
+    // ── 8. a re-key keeps the badge ─────────────────────────────────────────────────────────────────────────────────
+    // A member who replaces a lost phone keeps their badge, and a badge an admin gave still names that admin after theirs.
+    console.log('── 8. a re-key keeps the badge ──');
+    const sidNew = keypair('Sid');
+    db.transaction(() => moveMemberKeyRows(sid.pk, sidNew.pk, new Date().toISOString(), { keepStamps: false }))();
+    assert(badgeRow(sidNew)?.tier === 'Elder' && !badgeRow(sid), `Sid's Elder badge is on his new key, none on the old (new ${JSON.stringify(badgeRow(sidNew))}, old ${JSON.stringify(badgeRow(sid))})`);
+    assert(getMemberTrustProfile(sidNew.pk).tier.name === 'Elder', `and the new key shows Elder (${getMemberTrustProfile(sidNew.pk).tier.name})`);
+    const adaNew = keypair('Ada');
+    db.transaction(() => moveMemberKeyRows(ada.pk, adaNew.pk, new Date().toISOString(), { keepStamps: false }))();
+    assert(badgeRow(pat)?.set_by === adaNew.pk, `Pat's badge, given by Ada, names Ada's new key (${badgeRow(pat)?.set_by?.slice(0, 8)} for ${adaNew.pk.slice(0, 8)})`);
+
+    // ── 9. the enterprise's page shows a keeper's badge ─────────────────────────────────────────────────────────────
+    console.log('── 9. the shopfront ──');
+    const keeper = shopfrontOf(ent.pk, [{ publicKey: sidNew.pk }], kim.pk).keepers[0];
+    assert(keeper?.tier === 'Elder' && keeper.tier === getMemberTrustProfile(sidNew.pk).tier.name,
+        `a keeper with the Elder badge shows Elder on the enterprise's page, as on their profile (${keeper?.tier})`);
+
+    // ── 10. a standby gives no badge and sets no known floor ────────────────────────────────────────────────────────
+    // A standby's plain tables are its main server's alone: nothing written, nobody told.
+    console.log('── 10. a standby refuses ──');
+    const rowsNow = () => ({
+        badges: (db.prepare('SELECT COUNT(*) AS n FROM member_badges').get() as { n: number }).n,
+        log: (db.prepare('SELECT COUNT(*) AS n FROM known_floor_log').get() as { n: number }).n,
+        notices: (db.prepare('SELECT COUNT(*) AS n FROM moderation_notices').get() as { n: number }).n,
+        exceptions: (db.prepare('SELECT COUNT(*) AS n FROM known_floor_exceptions').get() as { n: number }).n,
+    });
+    const beforeStandby = rowsNow();
+    setNodeRole('backup');
+    try {
+        const onStandby = await setBadge(kim, 'Steward');
+        assert(onStandby.status === 409 && onStandby.body?.code === 'standby', `the badge route answers 409 standby (${show(onStandby)})`);
+        const floorOnStandby = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, amount_c: hc(50) }, owner);
+        assert(floorOnStandby.status === 409 && floorOnStandby.body?.code === 'standby', `and so does the known floor's exception route (${show(floorOnStandby)})`);
+        let thrown = '';
+        try { setMemberBadge(founder.pk, kim.pk, 'Steward'); } catch (e) { thrown = (e as Error).name; }
+        let floorThrown = '';
+        try { setKnownFloorException(founder.pk, { memberPubkey: kim.pk, amount_c: hc(50) }); } catch (e) { floorThrown = (e as Error).name; }
+        assert(thrown === 'StandbyLedgerError' && floorThrown === 'StandbyLedgerError', `under the routes, the writers refuse too (${thrown || 'no throw'}, ${floorThrown || 'no throw'})`);
+        assert(JSON.stringify(rowsNow()) === JSON.stringify(beforeStandby) && !badgeRow(kim),
+            `nothing written, nobody told: no badge row, log line, notice or exception (${JSON.stringify(beforeStandby)} → ${JSON.stringify(rowsNow())})`);
+    } finally {
+        setNodeRole('primary');
+    }
+    const back = await setBadge(kim, 'Steward');
+    assert(back.status === 200 && badgeRow(kim)?.tier === 'Steward', `back on the main server the same badge is given (${show(back)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

@@ -14,6 +14,7 @@ import { genesisBadgeFor, tierIndexForName, word, wordsFor, type BadgeTier, type
 import { getMember, memberBadge } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
 import { writeKnownFloorLog } from '../config/known-floor.js';
+import { assertPlainTablesWritable } from '../config/node-role.js';
 import { keepNotice } from './kept-notices.js';
 import type { TellVoucher, VoucherNotice } from './vouchers.js';
 import { broadcast } from '../state-engine.js';
@@ -48,6 +49,8 @@ const shown = (badge: BadgeTier | null): TierName => badge ?? 'Newcomer';
  * transaction. Returns the notice to tell once it has committed, or undefined when nothing changed.
  */
 function writeBadge(actor: string, member: string, tier: TierName): VoucherNotice | undefined {
+    // A standby writes none of these (the badge, its log line, the notice): they are its main server's rows alone.
+    assertPlainTablesWritable();
     const before = memberBadge(db, member);
     const after: BadgeTier | null = tier === 'Newcomer' ? null : tier;
     if (before === after) return undefined;
@@ -73,6 +76,7 @@ function writeBadge(actor: string, member: string, tier: TierName): VoucherNotic
  * committed every app is told the member changed (profile_updated) and the member by `tell`. Returns the member's badge now.
  */
 export function setMemberBadge(actor: string, member: string, tier: unknown, tell?: TellVoucher): { memberPubkey: string; badge: TierName; changed: boolean } {
+    assertPlainTablesWritable();
     if (typeof tier !== 'string' || !TIERS.includes(tier as TierName)) throw new BadgeError(400, 'bad_tier', BADGE_WORDS.badTier);
     const m = getMember(db, member);
     if (!m || (m.status ?? 'active') !== 'active' || m.isTreasury) throw new BadgeError(404, 'not_member', BADGE_WORDS.notMember);

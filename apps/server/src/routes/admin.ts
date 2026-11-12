@@ -75,6 +75,7 @@ import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpo
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import { setMemberBadge, BadgeError } from '../engine/badges.js';
+import { StandbyLedgerError } from '../config/node-role.js';
 import { tellVoucherNotice } from '../engine/vouchers.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
@@ -1844,7 +1845,7 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
         if (result.changed) logger.info('ADMIN', `Badge ${result.badge} for ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
         ctx.body = { success: true, tier: result.badge, changed: result.changed };
     } catch (e) {
-        if (!(e instanceof BadgeError)) throw e;
+        if (!(e instanceof BadgeError) && !(e instanceof StandbyLedgerError)) throw e;
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code };
     }

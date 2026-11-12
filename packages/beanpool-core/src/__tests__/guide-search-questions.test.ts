@@ -209,6 +209,33 @@ describe('searchGuide: a filler word of one language never drops a real word of 
         expect(searchGuide(vi, 'thăm dò', 20, 'en')[0].page.slug).toBe('polls');
     });
 
+    it('Vietnamese is compared with its tones, as typed: "đậu" (Beans) is not "đâu" (where), nor "đề" "để", "Nhu" "như" or "cửa" "của"', () => {
+        const gifts = page('gifts', 'Gửi đậu', 'Gửi đậu cho người khác.', ['x']);
+        const messages = page('messages', 'Gửi tin nhắn', 'Nhắn tin.', ['y']);
+        const limit = page('trading-partner-limit', 'Hạn mức 500 đậu cho đối tác', 'Giới hạn.', ['z']);
+        const credit = page('credit-line', 'Hạn mức tín dụng', 'Tín dụng.', ['w']);
+        const posting = page('posting', 'Lời đề nghị và Nhu cầu', 'Đăng bài.', ['v']);
+        const bridge = page('bridge', 'Cầu nối cộng đồng', 'Kết nối.', ['u']);
+        const proposals = page('proposals', 'Nghị quyết', 'Bỏ phiếu.', ['t']);
+        const shop = page('shop', 'Cửa hàng', 'Bán hàng.', ['s']);
+        const vi = guide(messages, gifts, credit, limit, bridge, proposals, posting, shop);
+        // Each of these lost the word that names the page when the list was folded, and so found the page that has only the rest.
+        expect(slugsIn(vi, 'gửi đậu', 'vi')).toEqual(['gifts']);
+        expect(slugsIn(vi, 'hạn mức đậu', 'vi')).toEqual(['trading-partner-limit']);
+        expect(slugsIn(vi, 'nhu cầu', 'vi')).toEqual(['posting']);
+        expect(slugsIn(vi, 'đề nghị', 'vi')).toEqual(['posting']);
+        expect(slugsIn(vi, 'cửa hàng của tôi', 'vi')).toEqual(['shop']);
+        // The little words, typed with their tones, are still dropped.
+        expect(slugsIn(vi, 'làm thế nào để gửi đậu', 'vi')).toEqual(['gifts']);
+        expect(slugsIn(vi, 'đậu của tôi', 'vi').sort()).toEqual(['gifts', 'trading-partner-limit']);
+        expect(slugsIn(vi, 'như thế nào là hạn mức đậu', 'vi')).toEqual(['trading-partner-limit']);
+        // Typed without the tones, a word is not known to be a little one: it stays, as it did before the question words.
+        expect(slugsIn(vi, 'lam the nao de gui dau', 'vi')).toEqual([]);
+        // The list holds the tones, and not the toneless "nhu" that was written for "như".
+        expect(GUIDE_FILLER_WORDS.vi).toEqual(expect.arrayContaining(['đâu', 'để', 'của', 'như', 'làm', 'thế', 'nào']));
+        for (const w of ['đậu', 'đề', 'cửa', 'nhu']) expect(GUIDE_FILLER_WORDS.vi, w).not.toContain(w);
+    });
+
     it('French "don" (a gift) is not English filler', () => {
         expect(GUIDE_FILLER_WORDS.en).not.toContain('don');
         const gift = page('gifts', 'Envoyer un don', 'Envoyer des Beans.', ['x']);

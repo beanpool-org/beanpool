@@ -403,7 +403,11 @@ const words = (s: string) => fold(s).split(SEPARATORS).filter(Boolean);
 // are dropped from the query before it is matched, unless nothing else is left (a query made only of them, "how do I",
 // searches as typed). One list for each language the guide has, drafted from that language's commonest question openers,
 // helpers, articles, prepositions and "I/my" words, as members type them (a word is listed as written; accents and case
-// are folded when the list is read, so "Cómo" and "como" are one).
+// are folded when the list is read, so "Cómo" and "como" are one). The exception is a language whose tones tell words
+// apart (TONAL: Vietnamese). Its list is written with its tones and a word is compared as typed, because folded "đâu"
+// (where) is "đậu" (Beans), "để" (in order to) is "đề" (as in đề nghị, Offer), "như" is "Nhu" (as in Nhu cầu, Need) and
+// "của" (of) is "cửa" (as in Cửa hàng, shop). A Vietnamese word typed without its tones is not known to be a little one,
+// so it stays in the query, as it did before the question words.
 // A search drops the words of TWO lists only: that of the language the guide is shown in (the `lang` the screens pass),
 // and English, because members often type English whatever their language is (the guide is searched by both). Never the
 // lists of all 25 together: a word that is filler in one language is a real word in another ("beni" is Turkish "me" and
@@ -437,19 +441,22 @@ export const GUIDE_FILLER_WORDS: Readonly<Record<Lang, readonly string[]>> = {
     uk: list('як що де коли хто чому навіщо який яка яке які це мені мій моя моє мої можна чи на із по для від до та але хочу можу зробити робити'),
     ur: list('کیسے کیا کہاں کب کون کیوں کونسا میں مجھے میرا میری میرے کو کا کی کے سے پر ہے ہیں یہ وہ اور یا لیے ہو ہوں کر کرنا کروں کریں سکتا سکتی سکتے چاہتا چاہتی'),
     fa: list('چگونه چطور چه چی چیست کجا کی چرا آیا کدام من ما را به در از که این آن با برای یا است هست می توانم میتوانم میخواهم خواهم کنم بکنم'),
-    vi: list('lam the nao sao nhu gi la dau đâu khi toi minh cua va hoac voi trong tren de để co mot cac nhung'),
+    vi: list('làm thế nào sao như gì là đâu khi tôi mình của và hoặc với trong trên để có một các những'),
     el: list('πώς τι ποιος ποια ποιο ποιοι ποιες που πότε γιατί είναι το οι τα των του της τον την ένα μια ενας και να για με σε από στο στη στην στον στα μου μας μπορώ θέλω θα κάνω κάνει'),
     fil: list('paano ano anong saan kailan sino bakit alin ang ng sa mga ko ako ba at na ay para isang mo ka natin namin maaari pwede puwede po kung ito iyon yung'),
     ja: list('どう どうやって どのように どうすれば どうやったら 方法 やり方 ですか ますか とは について できますか できる したい ください 教えて どこ いつ なぜ だれ どれ どの これ それ あの'),
     ko: list('어떻게 무엇 어디 언제 누가 누구 어떤 무슨 어느 제가 내가 나는 저는 에서 으로 하는 하나요 할까요 있나요 있어요 방법 알려줘 알려주세요 인가요 이란 하려면 뭐예요 무엇인가요 가능한가요'),
 };
 
+/** The languages whose tone marks tell words apart: their list keeps the marks, and a query word is compared with them. */
+const TONAL: ReadonlySet<Lang> = new Set<Lang>(['vi']);
+
 const fillerSets = new Map<Lang, ReadonlySet<string>>();
-/** One language's filler words, folded the way a query is. */
+/** One language's filler words, folded the way a query is (a tonal language's: split the way a query is, tones kept). */
 function fillerSet(lang: Lang): ReadonlySet<string> {
     let set = fillerSets.get(lang);
     if (!set) {
-        set = new Set(GUIDE_FILLER_WORDS[lang].flatMap(w => words(w)));
+        set = new Set(GUIDE_FILLER_WORDS[lang].flatMap(w => TONAL.has(lang) ? accentedWords(w) : words(w)));
         fillerSets.set(lang, set);
     }
     return set;
@@ -480,7 +487,7 @@ function snippetAround(text: string, term: string, max = 110): string {
     return `${start > 0 ? '…' : ''}${plain.slice(start, start + max).trim()}${start + max < plain.length ? '…' : ''}`;
 }
 
-/** `words(query)` with the accents kept, to tell a Vietnamese "dò" from the English "do" (`words` folds both to "do"). */
+/** `words(query)` with the accents kept, to tell a Vietnamese "dò" from the English "do" or "đậu" from "đâu" (`words` folds each pair together). */
 function accentedWords(query: string): string[] {
     let out = query.toLowerCase();
     try { out = out.normalize('NFKD'); } catch { /* keep accents */ }
@@ -500,9 +507,12 @@ function searchTerms(query: string, lang: string | undefined): { terms: string[]
     const folded = words(query);
     const kept = accentedWords(query);
     const lined = kept.length === folded.length;
-    // A word is filler for the language of the guide when it is on that list (accents folded: "como" for "cómo"), or for
-    // English when it is on that list and was typed without accents.
-    const isFiller = (w: string, i: number) => own.has(w) || (english !== null && english.has(w) && (!lined || kept[i] === w));
+    // A word is filler for the language of the guide when it is on that list (accents folded: "como" for "cómo"; a tonal
+    // language's tones kept: "đâu" is filler, "đậu" is not; a word that cannot be lined up with what was typed is kept),
+    // or for English when it is on that list and was typed without accents.
+    const tonal = TONAL.has(key);
+    const isOwn = (w: string, i: number) => tonal ? lined && own.has(kept[i]) : own.has(w);
+    const isFiller = (w: string, i: number) => isOwn(w, i) || (english !== null && english.has(w) && (!lined || kept[i] === w));
     // Each word once, as filler only when every time it was typed it was.
     const fillerOnly = new Map<string, boolean>();
     folded.forEach((w, i) => { if (w.length >= 2) fillerOnly.set(w, (fillerOnly.get(w) ?? true) && isFiller(w, i)); });

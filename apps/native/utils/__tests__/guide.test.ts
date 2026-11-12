@@ -560,6 +560,38 @@ describe("the guide's titles in the member's language", () => {
         expect(at('de', 'KI Hilfe')[0]).toBe('admins-ai-assistants');
     });
 
+    it('Vietnamese tones tell words apart: "đậu" (Beans), "đề" (as in đề nghị), "Nhu" (as in Nhu cầu) and "cửa" are not the little words "đâu", "để", "như", "của"', () => {
+        // The list is written with its tones and a word is compared as typed. Folded, "đâu" (where) caught "đậu" (Beans), "để"
+        // (in order to) caught "đề" (Offer), "nhu" (written for "như") caught "Nhu cầu" (Need), and "của" caught "cửa" (shop).
+        const vi = guideInLanguage(PAGES, 'vi', guideTitlesFor('vi'));
+        const at = (q: string) => searchGuide(vi, q, 20, 'vi').map(r => r.page.slug);
+        expect(at('gửi đậu')[0]).toBe('gifts');
+        expect(at('nhu cầu')[0]).toBe('posting');
+        expect(at('đề nghị')[0]).toBe('posting');
+        expect(at('hạn mức đậu')[0]).toBe('trading-partner-limit');
+        // The little words are still little words when they are typed with their tones.
+        expect(at('làm thế nào để gửi đậu')[0]).toBe('gifts');
+        expect(at('gửi đậu của tôi')[0]).toBe('gifts');
+    });
+
+    it('a word of the Vietnamese titles that is not on the Vietnamese list as typed is never dropped from a query', () => {
+        // For every word the Vietnamese pages are titled and summarised by (as typed, tones and all): put a little word that is
+        // dropped ("làm") before it. The same pages as the word alone come back only if the word was kept.
+        const vi = guideInLanguage(PAGES, 'vi', guideTitlesFor('vi'));
+        const listed = new Set(GUIDE_FILLER_WORDS.vi.map(w => w.toLowerCase().normalize('NFKD')));
+        const english = new Set(GUIDE_FILLER_WORDS.en);
+        const typed = new Set<string>();
+        for (const p of vi.guides) for (const w of `${p.title} ${p.summary}`.toLowerCase().normalize('NFKD').split(/[^\p{L}\p{M}\p{N}]+/u)) {
+            // (A word of one letter once its tones are off, "ở" or "ý", is never searched.)
+            if (w.replace(/[\u0300-\u036f]/g, '').length >= 2 && !listed.has(w) && !english.has(w)) typed.add(w);
+        }
+        expect(typed.size).toBeGreaterThan(300);
+        const slugs = (q: string) => searchGuide(vi, q, 200, 'vi').map(r => r.page.slug).sort();
+        const dropped: string[] = [];
+        for (const w of typed) if (slugs(`làm ${w}`).join() !== slugs(w).join()) dropped.push(w);
+        expect(dropped).toEqual([]);
+    }, 60_000);
+
     it("no English question word drops a word of another language's page titles, unless that language lists it too", () => {
         // English is always used with the guide's own language, so an English filler must not be a real word of a translated
         // title. Compared as typed, accents and all: Vietnamese "dò" (survey) is not "do", "bè" is not "be", "án" is not "an".

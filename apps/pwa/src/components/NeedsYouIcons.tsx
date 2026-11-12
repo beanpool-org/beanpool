@@ -679,7 +679,7 @@ function NeedsSheet({
                             type="button"
                             onClick={() => setReadingId(null)}
                             data-testid="bell-read-back"
-                            className="flex items-center gap-1 min-h-[44px] pl-1 pr-3 rounded-lg text-sm font-semibold text-bp-ink-accent hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            className="flex items-center gap-1 min-h-[44px] pl-1 pr-3 rounded-lg text-sm font-semibold text-bp-ink-accent dark:text-bp-chip-quiet-ink hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                         >
                             <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -777,7 +777,7 @@ function NeedsSheet({
                                     focusSheetTitle();
                                 }}
                                 data-testid="bell-clear-all"
-                                className="min-h-[44px] px-3 rounded-lg text-sm font-semibold text-bp-ink-accent hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                                className="min-h-[44px] px-3 rounded-lg text-sm font-semibold text-bp-ink-accent dark:text-bp-chip-quiet-ink hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
                             >
                                 {clearWords.all}
                             </button>

@@ -33,7 +33,7 @@
  * SETS (DESIGN-themes-fable.md, with Marty and Damo's decisions of 12 Nov 2026). A set is one complete column of values:
  *   `light`  BeanPool Classic in light. Members see it as "Light".
  *   `dark`   BeanPool Classic in dark: the olive pages and the green doodle. Members see it as "Classic", and it is the
- *            default on both apps (DEFAULT_BRAND_SET; the phone still opens Light until the picker, slice T3, moves it).
+ *            default on both apps (DEFAULT_BRAND_SET; the picker, slice T3, look.ts, lists the four choices).
  *   `night`  charcoal and bright blue, always dark. Members see it as "Dark".
  * So the word "dark" in code is Classic's dark column, as it always was; the look a member calls Dark is `night`. Each set
  * has a scheme (`light` or `dark`, BrandTheme): `night` is dark, so everything that asks "is it dark?" keeps asking that.

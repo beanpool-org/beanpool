@@ -125,6 +125,7 @@ export * from './chat-links.js';
 export * from './tour.js';
 export * from './help-map.js';
 export * from './brand-colours.js';
+export * from './look.js';
 export * from './event-when.js';
 export * from './event-repeat.js';
 export * from './words.js';

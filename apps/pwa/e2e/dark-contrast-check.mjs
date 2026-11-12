@@ -17,6 +17,8 @@
  * Run:  pnpm --filter @beanpool/pwa dark-contrast-check
  *   DARK_SWEEP=1     every screen, every finding listed, never fails (the survey behind scratch/darkmode/REPORT-web-dark.md)
  *   DARK_THEME=light the same screens in light mode (screenshots for a before/after diff; measures nothing)
+ *   DARK_THEME=night the same screens in Dark (the charcoal-and-blue look, stored as 'night'); measured exactly as Classic dark is.
+ *                    The default is Classic dark. The look is set the way a member sets it: the stored choice, read by theme-boot.js.
  *   DARK_BUILD=<dir> serve the web app built from another checkout's apps/pwa (the light diff against origin/main)
  *   DARK_SHOTS=<dir> where screenshots go (default e2e/screenshots/dark-sweep/<theme>)
  * Without DARK_SWEEP it is the regression check: the screens below must measure clean in dark (no text under AA, no light
@@ -39,7 +41,9 @@ const SERVER_DIR = path.resolve(PWA_DIR, '../server');
 process.chdir(PWA_DIR);
 
 const SWEEP = process.env.DARK_SWEEP === '1';
-const THEME = process.env.DARK_THEME === 'light' ? 'light' : 'dark';
+const THEME = process.env.DARK_THEME === 'light' || process.env.DARK_THEME === 'night' ? process.env.DARK_THEME : 'dark';
+/** Classic dark and Dark are both dark: everything that measures a dark page measures both. */
+const IS_DARK = THEME !== 'light';
 const BUILD_FROM = process.env.DARK_BUILD ? path.resolve(process.env.DARK_BUILD) : PWA_DIR;
 const SHOTS_DIR = process.env.DARK_SHOTS || path.join(PWA_DIR, 'e2e/screenshots/dark-sweep', THEME);
 const VIEW = { width: 320, height: 720 };
@@ -422,6 +426,12 @@ const SCREENS = [
     { name: 'member-people-profile', profile: 'local', who: 'member', check: true, go: steps(tab('People'), clickRole('tab', /community/i), clickText('Kofi')) },
     { name: 'member-ledger', profile: 'local', who: 'member', check: true, go: tab('Ledger') },
     { name: 'member-settings', profile: 'local', who: 'member', check: true, go: clickRole('button', 'Settings') },
+    // The Appearance list (components/AppearanceChoice.tsx), scrolled to its middle so all four rows show (slice T3).
+    { name: 'member-settings-appearance', profile: 'local', who: 'member', check: true, go: steps(clickRole('button', 'Settings'), async (p) => {
+        const group = p.getByRole('radiogroup', { name: 'Appearance' });
+        await group.scrollIntoViewIfNeeded();
+        await group.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    }) },
     { name: 'member-settings-account', profile: 'local', who: 'member', go: steps(clickRole('button', 'Settings'), clickText('⚠️ Account Deletion & Sign Out')) },
     { name: 'member-invite', profile: 'local', who: 'member', check: true, go: steps(tab('People'), clickRole('tab', /invites/i)) },
     { name: 'global-member-home', profile: 'global', who: 'member', check: true, ready: (p) => p.getByTestId('home-card-community').waitFor({ timeout: 30_000 }) },
@@ -429,6 +439,36 @@ const SCREENS = [
     { name: 'global-member-people', profile: 'global', who: 'member', go: tab('People') },
     { name: 'global-member-settings', profile: 'global', who: 'member', go: clickRole('button', 'Settings') },
 ];
+
+/**
+ * DARK_LIST_PASS=1: the Appearance list used with a keyboard and read as a screen reader reads it (slice T3), in this browser:
+ * the accessibility tree of the group (names, descriptions, checked), Tab to the group, the arrow keys, and what is stored.
+ * Prints what it finds and throws when the list is not what the design says (one tab stop, arrows choose, 4 rows).
+ * It changes the stored look as a member's keys would, so run it alone (DARK_ONLY=member-settings-appearance) and ignore the
+ * measurement that follows it: that is of the page it left, not of the look the run started in.
+ */
+async function listPass(page) {
+    const group = page.getByRole('radiogroup', { name: 'Appearance' });
+    console.log('  accessibility tree of the list:');
+    for (const line of (await group.ariaSnapshot()).split('\n')) console.log(`    ${line}`);
+    const rows = group.getByRole('radio');
+    if ((await rows.count()) !== 4) throw new Error(`the list has ${await rows.count()} rows, not 4`);
+    const stops = await page.evaluate(() => Array.from(document.querySelectorAll('[role="radiogroup"][aria-label] [role="radio"]')).filter((r) => r.tabIndex === 0).map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')).textContent));
+    if (stops.length !== 1) throw new Error(`the list has ${stops.length} tab stops, not 1`);
+    const stored = () => page.evaluate(() => localStorage.getItem('beanpool-theme-mode'));
+    const focused = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent?.slice(0, 20));
+    await group.getByRole('radio', { checked: true }).focus();
+    console.log(`  focus on the chosen row: ${JSON.stringify(await focused())}; stored ${await stored()}`);
+    const trail = [];
+    for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp', 'End', 'Home']) {
+        await page.keyboard.press(key);
+        await page.waitForTimeout(150);
+        const checked = await group.getByRole('radio', { checked: true }).locator('[id*="-name-"]').innerText();
+        trail.push(`${key} -> ${checked} (stored ${await stored()}, focus on ${(await page.evaluate(() => document.activeElement?.getAttribute('aria-checked')))})`);
+    }
+    for (const t of trail) console.log(`    ${t}`);
+    if ((await group.getByRole('radio', { checked: true }).count()) !== 1) throw new Error('more than one row is checked');
+}
 
 const fmt = (x) => `${x.ratio.toFixed(2)}:1 < ${x.need} ${x.fg ?? ''} on ${x.bg ?? ''} ${x.el} "${x.text}"${x.disabled ? ' (disabled)' : ''}`;
 
@@ -463,8 +503,9 @@ async function main() {
                 await page.evaluate(() => document.fonts?.ready);
                 await wait(400);
                 await page.screenshot({ path: path.join(SHOTS_DIR, `${s.name}.png`) });
-                if (THEME === 'dark') {
-                    Object.assign(r, await page.evaluate(measure, THEME === 'dark'));
+                if (s.name === 'member-settings-appearance' && process.env.DARK_LIST_PASS === '1') await listPass(page);
+                if (IS_DARK) {
+                    Object.assign(r, await page.evaluate(measure, IS_DARK));
                     r.focus = await focusStops(page);
                     r.hover = await hoverStops(page);
                 }
@@ -475,7 +516,7 @@ async function main() {
                 await context.close();
             }
             results.push(r);
-            if (THEME !== 'dark') { console.log(`  ${r.reached ? '📸' : '✗'} ${s.name}${r.error ? ` — ${r.error}` : ''}`); continue; }
+            if (!IS_DARK) { console.log(`  ${r.reached ? '📸' : '✗'} ${s.name}${r.error ? ` — ${r.error}` : ''}`); continue; }
             if (!r.reached) { console.log(`  ✗ ${s.name}: not reached — ${r.error}`); if (!SWEEP) failures.push(`${s.name}: not reached`); continue; }
             const bad = [...r.text.filter((x) => !x.disabled), ...r.placeholders.filter((x) => !x.disabled), ...r.fields.filter((x) => !x.disabled), ...r.icons.filter((x) => !x.disabled)];
             const n = bad.length + r.slabs.length + r.focus.length + r.hover.found.length;

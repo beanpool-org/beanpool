@@ -10,9 +10,10 @@ import { onboardingColors } from '../utils/onboarding-colors';
 import {
     type ResolvedTheme,
     type ThemePreference,
+    DEFAULT_PREFERENCE,
     THEME_PREFERENCE_KEY,
     loadThemePreference,
-    resolveTheme,
+    resolveSet,
 } from '../utils/theme-preference';
 
 export type ThemeMode = ResolvedTheme;
@@ -26,12 +27,12 @@ export interface ThemeContextType {
     theme: ThemeMode;
     /**
      * The colour set being drawn (core's BRAND_SETS: `light`, `dark` = Classic, `night` = Dark); `colors` is its tree.
-     * Today the stored preference only reaches `light` and `dark`, so the set is the theme; the picker (slice T3) widens it.
+     * The stored choice (Same as phone, Classic, Light, Dark) resolves to it through core's resolveLook.
      */
     set: BrandSet;
     /** The stored choice is still being read, so `theme` may not be the member's yet. The Map waits this out: its first draw fixes its base. */
     themeLoading: boolean;
-    /** What the member chose in Settings: follow the phone, or always light/dark. */
+    /** What the member chose in Settings: follow the phone, or Classic, Light or Dark (core's LookChoice). */
     themePreference: ThemePreference;
     /** Whether the doodle background is drawn. Off = the flat colour, per device. */
     patternEnabled: boolean;
@@ -47,22 +48,22 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Live: re-renders when the phone switches light/dark while the app is open.
     const systemScheme = useColorScheme();
-    // Light until the stored preference loads. This is the value the first render draws with, and on
+    // The default (Classic) until the stored preference loads. This is the value the first render draws with, and on
     // Android the map bakes its base light/dark in when it is created (userInterfaceStyle is an
-    // initialProp there), so a 'system' default made a dark-phone user's map dark even after the
-    // stored 'light' arrived. See utils/theme-preference.ts.
-    const [themePreference, setThemePreferenceState] = useState<ThemePreference>('light');
+    // initialProp there), so a first guess that differs from the stored choice would leave the map on the
+    // wrong base even after the stored value arrived: the Map waits on `themeLoading`. See utils/theme-preference.ts.
+    const [themePreference, setThemePreferenceState] = useState<ThemePreference>(DEFAULT_PREFERENCE);
     const [themeLoading, setThemeLoading] = useState(true);
     // On by default; 'plain' is the opt-out, stored per device like the theme choice.
     const [patternEnabled, setPatternEnabledState] = useState(true);
-    // The set: 'light' or 'dark' (Classic), the only two the stored preference names until the picker (T3).
-    const set: BrandSet = resolveTheme(themePreference, systemScheme);
+    // The set to draw (core's resolveLook, through utils/theme-preference.ts): Classic, Light or Dark, and Same as phone as one of the first two.
+    const set: BrandSet = resolveSet(themePreference, systemScheme);
     const theme: ThemeMode = brandScheme(set);
 
     useEffect(() => {
         loadThemePreference(AsyncStorage)
             .then(setThemePreferenceState)
-            .catch(() => { /* keep 'light' */ })
+            .catch(() => { /* keep the default */ })
             // On a failed read too: nothing waits for ever on this.
             .finally(() => setThemeLoading(false));
         AsyncStorage.getItem(PATTERN_KEY)

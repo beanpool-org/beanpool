@@ -16,6 +16,15 @@ On the phone you get these with an up-to-date app; in a web browser, when your c
 - **What people who give credit see.** On your own Ledger you can read what they see about you.
 - **Every look is recorded.** The owners, admins and vouchers can see your balance and your credit line, and the owners and admins can read who looked, for 12 months. The join screen and "How this community works" say so. See "What the admins can see".
 
+## Classic, Light and Dark
+
+On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.
+
+- **One list in Settings.** Under **Appearance**: **Same as phone**, **Classic**, **Light** and **Dark**. You choose one and it changes at once. See "Classic, Light and Dark".
+- **Classic is how BeanPool starts.** It is the dark look you may know, with olive green, and it is now the starting look on the phone as well as in the web app. A phone or browser that already has a choice keeps it, and the phone app used to start light.
+- **Dark is new.** Charcoal and blue, always dark.
+- **Yours, on each device.** The choice stays on your phone or in your browser, the same in every community. It is not sent to your community's server.
+
 ## The Market in one order
 
 On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.

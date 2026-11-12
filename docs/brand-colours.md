@@ -21,8 +21,9 @@ So `dark` in code is Classic's dark column, exactly as before; the look a member
 `brandColours('light')`, `brandColours('dark')`, `brandCssVariableMap('light')`, `brandCssVariableMap('dark')` and
 `INK_GROUNDS` are what they were before sets (the test holds them to a snapshot of main, 6513fb9e; the one addition is
 the phone's own chat bubble, `bubble`, moved in with its values unchanged). Dusk and Ember were dropped (12 Nov). The picker
-(slice T3) lists Same as phone (Light when the phone is light, Classic when it is dark), Classic, Light and Dark; until it
-ships the phone still opens Light and the web Classic.
+(slice T3, Settings → Appearance on both apps) lists Same as phone (Light when the phone is light, Classic when it is dark),
+Classic, Light and Dark, and both apps open in Classic. One core function, `resolveLook` (`look.ts`), turns the stored
+choice (`system`, `dark` = Classic, `light`, `night` = Dark) into a set; a value it does not know is Classic.
 
 **What a set may change.** Only 17 leaves carry a Dark value of their own: the sage accent family (`accent.*`,
 `sage.fill`, `sage.hover`, `chip.accent.*`, `ink.accent`), the grey chip, tile and card band (`chip.quiet.*`,

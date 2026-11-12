@@ -86,7 +86,7 @@ At medium:
 - **By their own trading they would owe 900 of 1,000: more than half. A gift of Beans paid 900 of it in the last 30 days.** Every giver reads this.
 - **By their own trading they would be below zero (900), with no sale for 60 days. A gift of Beans paid 900 of it in the last 30 days.** Owners and admins read this.
 
-A gift to someone who owes nothing is not counted, so nobody's word gets worse because they were sent Beans. A sale, a refund, a paid bill or a grant from the Commons is not a gift. The reason never says who sent the Beans or when.
+A gift to someone who owes nothing is not counted, so nobody's word gets worse because they were sent Beans. A sale, a refund, a paid bill or a grant from the Commons is not a gift. A deal they take that is then cancelled within the 30 days earns nothing back: the Beans that went into it and came back count as if they had never moved. The reason never says who sent the Beans or when.
 
 ## What a voucher sees
 
@@ -114,7 +114,7 @@ Said plainly, because the people who give credit should know where the word can 
 - **A figure invites false precision.** Minus 40 is small on a line of 2,000 and nearly everything on a line of 50, so a balance always comes with the line beside it.
 - **Spending fast to be topped up.** A voucher vouches their whole budget to friends, asks for more and is refilled. The ask carries how their people are doing, a voucher can ask once a week, and the ceiling of 2,000 and the limits on one person hold.
 - **Looking, not giving.** Every look is recorded with who looked and at whom, and the credit committee can read how many people a voucher looked at beside how many they vouched for. Stopping a voucher's budget ends their sight at once.
-- **A gift dressed as a sale or a bill.** The friend buys an Offer or pays a bill instead of sending a gift, and that counts as the member's own trading. It costs the 1.5% circulation fee each way, leaves a deal or a bill on record, and the circle and ring checks read the deal. It is expensive, not impossible.
+- **A gift dressed as a sale or a bill.** The friend buys an Offer or pays a bill instead of sending a gift, and that counts as the member's own trading. It costs the 1.5% market fee each way, leaves a deal or a bill on record, and the circle and ring checks read the deal. It is expensive, not impossible.
 - **Parking the Beans for 30 days.** The friend leaves the Beans there for the whole 30 days, and the word clears. By then it is a month's loan that can't come back as a gift, and the member has owed nothing for a month.
 - **Paying your people's debts before asking.** A voucher sends Beans to the people they stood behind, so that "2 of 9 below zero" reads 0 of 9 when they ask for more. That count is a plain count of who is below zero now. It costs the voucher real Beans they can't take back, and each of those people's own word still counts the gift.
 

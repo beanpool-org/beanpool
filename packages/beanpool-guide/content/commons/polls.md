@@ -24,7 +24,7 @@ While a poll is open it says nothing about this. If it did, someone checking the
 - Write the **Question**.
 - Add **Context / Notes** if it helps. This is optional.
 - Write 2 to 4 **Options**. Tap **+ Add Option** for more.
-- Choose how long it runs: **3 Days**, **7 Days** or **14 Days**.
+- Choose how long it runs: **3 Days**, **7 Days** or **14 Days**. An owner or admin of the community also sees **30 Days** and **90 Days**, for a question that should stay open longer. Other members don't see those two.
 - If you want to hear what you didn't think of, tick **Offer "Other" with a typed answer**. It adds **Other** after your options, where a member types their own line. It is off unless you tick it, and your community's server must be new enough to offer it.
 - Choose whether it is an **Open vote** before you tap **Create**. Leave it off and the poll is anonymous. Tick it and members can see who chose what. You can't change it in the app after the poll is posted. An owner's AI assistant can change it on a poll it made, only until the first vote.
 - Tap **Create**.
@@ -64,4 +64,6 @@ If you started the poll and a line is abusive, tap **Report** beside it. The rep
 
 ## Closing a poll early
 
-If you started it, tap **Close Poll**, then **Close Poll** again to confirm (**OK** in the web app).
+If you started it, tap **Close Poll**, then **Close Poll** again to confirm (**OK** in the web app). Only the person who started a poll can close it, whatever its length, and that includes a 30 or 90 day poll. The votes stay as they were cast, no more votes are taken, and the result shows as it does for a poll that has ended.
+
+On Home, the **Decide** card shows one open poll. A 30 or 90 day poll you have already answered goes below the polls still waiting for your vote, so it doesn't sit at the top for weeks.

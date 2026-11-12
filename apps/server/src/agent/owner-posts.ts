@@ -68,7 +68,8 @@
  *   can use in future to get DIRECT market feedback from new users"): create_poll runs what POST /api/marketplace/posts runs for
  *   type poll, as the owner only: no route posts a poll as an enterprise, and closePoll takes only its author. It takes what the
  *   apps' forms take (no photo, price, place or tag: no form has one, and the engine would drop all but the tags without a word,
- *   and no card shows those) and the engine holds it to 2 to 4 answers, 3, 7 or 14 days and the open-poll limits. update_post
+ *   and no card shows those) and the engine holds it to 2 to 4 answers, 3, 7 or 14 days (30 or 90 too while the owner is an owner or an admin now, which the engine
+ *   reads at the create: @beanpool/core poll-length) and the open-poll limits. update_post
  *   takes what the engine stores on a poll (neither app has an edit screen for one: the route's updatePost is the person's path):
  *   the question, the answers and open_vote until the first vote, the description always. close_poll is the card's Close Poll
  *   (closePoll). poll_results reads counts through the engine's own read, which is asked for no voters, so it answers the
@@ -84,7 +85,7 @@ import crypto from 'node:crypto';
 import {
     approximateLocation, FREE_TAG_MAX_CHARS, FREE_TAG_MAX_WORDS, FREE_TAG_MIN_CHARS, FREE_TAGS_MAX, freeTagsOf, isTagId, LEGACY_CATEGORY_ALIASES, LISTING_DESCRIPTION_LIMIT, placelessListingNote, plainWords,
     POST_TAGS_MAX, postTagsOf, PRICING_CATEGORIES, singulars, TAG_LIBRARY, tagIndex,
-    POLL_OTHER_WORDS_MAX,
+    POLL_OTHER_WORDS_MAX, pollDayChoices,
 } from '@beanpool/core';
 import { EVENT_REPEAT_WEEKDAYS, readRepeatRule } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -223,7 +224,7 @@ export const AGENT_TITLE_MAX = { listing: 50, event: 140, poll: 140 } as const;
 export const POLL_OPTIONS_MIN = 2;
 export const POLL_OPTIONS_MAX = 4;
 export const POLL_OPTION_MAX_CHARS = 80;
-export const POLL_DAYS: readonly number[] = [3, 7, 14];
+export const POLL_DAYS: readonly number[] = pollDayChoices(true);
 /** A poll's description at most, as the phone's form takes it (NewPollModal): the stricter of the two composers (design §2.1 rule 3). */
 export const POLL_DESCRIPTION_MAX = 400;
 
@@ -1152,7 +1153,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
                     items: { type: 'string', maxLength: POLL_OPTION_MAX_CHARS },
                     description: `the ${POLL_OPTIONS_MIN} to ${POLL_OPTIONS_MAX} answers, each different and at most ${POLL_OPTION_MAX_CHARS} characters`,
                 },
-                days: { type: 'integer', enum: [...POLL_DAYS], description: `how long it runs: ${POLL_DAYS.join(', ')} days. It can't be changed afterwards` },
+                days: { type: 'integer', enum: [...POLL_DAYS], description: `how long it runs: ${POLL_DAYS.join(', ')} days. 30 and 90 are for an owner or an admin, which this assistant acts as. It can't be changed afterwards` },
                 description: { type: 'string', maxLength: POLL_DESCRIPTION_MAX, description: `context or notes for members, optional: at most ${POLL_DESCRIPTION_MAX} characters` },
                 open_vote: { type: 'boolean', description: 'false (the default): anonymous, members see only the counts. true: an open vote, every member sees who chose what' },
                 other: { type: 'boolean', description: `true offers Other after the answers, where a member types their own, at most ${POLL_OTHER_WORDS_MAX} characters. Off by default: set it only when the owner asks. On an anonymous poll each answer is then final. Don't list Other in options` },

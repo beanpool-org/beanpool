@@ -36,7 +36,7 @@ import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
-import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
 import { hundredthsAsDecimalText, isHundredths } from '@beanpool/core';
@@ -2631,18 +2631,31 @@ export interface PollOtherRead {
     canRemove: boolean;
 }
 
-let ownerHereRead: { anchor: string | null; owner: Promise<boolean> } | null = null;
+let roleHereRead: { anchor: string | null; role: Promise<string | null> } | null = null;
 
-/** Whether the signer is an owner on this community (GET /api/node-admin/me), asked once per community a run, and only by a poll card with words to offer. It decides nothing: the node checks every read. */
-export async function isOwnerHere(): Promise<boolean> {
+/** The signer's role on this community (GET /api/node-admin/me: owner, admin, moderator or none), asked once per community a run. It decides nothing: the node checks every read. */
+async function roleHere(): Promise<string | null> {
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (ownerHereRead?.anchor === anchor) return ownerHereRead.owner;
-    const owner = signedGet('/api/node-admin/me')
+    if (roleHereRead?.anchor === anchor) return roleHereRead.role;
+    const role = signedGet('/api/node-admin/me')
         .then(res => (res.ok ? res.json() : null))
-        .then((body: { role?: unknown } | null) => body?.role === 'owner')
-        .catch(() => { ownerHereRead = null; return false; });
-    ownerHereRead = { anchor, owner };
-    return owner;
+        .then((body: { role?: unknown } | null) => (typeof body?.role === 'string' ? body.role : null))
+        .catch(() => { roleHereRead = null; return null; });
+    roleHereRead = { anchor, role };
+    return role;
+}
+
+/** Whether the signer is an owner on this community, asked only by a poll card with words to offer. It decides nothing: the node checks every read. */
+export async function isOwnerHere(): Promise<boolean> {
+    return (await roleHere()) === 'owner';
+}
+
+/**
+ * Whether the signer is an owner or an admin on this community, asked when the poll form opens: they alone are offered a poll of 30 or
+ * 90 days (@beanpool/core poll-length). It decides nothing: the node checks at Create, and a role it could not read offers the short lengths.
+ */
+export async function isOwnerOrAdminHere(): Promise<boolean> {
+    return mayChooseLongPolls(await roleHere());
 }
 
 /**

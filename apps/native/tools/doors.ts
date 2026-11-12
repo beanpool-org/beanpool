@@ -63,6 +63,10 @@ export function composerDraft(
         postDescription: draft.description ?? '',
         postCredits: type === 'offer' ? String(fee ? beans : (offer?.credits ?? 0)) : '',
         postPriceType: fee ? (fee.kind === 'free' ? 'fixed' : fee.kind) : (offer?.priceType ?? 'fixed'),
+        // How many and the price for all of them: the composer's own two boxes for an Offer priced for each one. A tool's draft is
+        // never priced each (its unit is free, per day, per week or a fixed number of Beans), so both are empty.
+        postItemCount: '',
+        postItemLot: '',
         postRepeatable: !!offer?.repeatable,
         postCashAlsoNeeded: !!offer?.cashAlsoNeeded,
         postPhotos: photos.slice(0, DRAFT_PHOTOS),

@@ -127,6 +127,8 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         postDescription: 'Available all weekend, sharp blade.',
         postCredits: '5',
         postPriceType: 'daily',
+        postItemCount: '',
+        postItemLot: '',
         postRepeatable: false,
         postCashAlsoNeeded: false,
         postPhotos: ['data:image/jpeg;base64,abc'],
@@ -149,6 +151,8 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         postDescription: 'For mulch this Saturday',
         postCredits: '',
         postPriceType: 'fixed',
+        postItemCount: '',
+        postItemLot: '',
         postRepeatable: false,
         postCashAlsoNeeded: false,
         postPhotos: [],
@@ -182,7 +186,9 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         expect(decideDraftOpen(JSON.parse(stored), ANCHOR, toolDraft.savedAt + 2_000)).toBe('open-tool');
         expect(restoredByMap(stored)).toEqual({
             PostType: 'offer', PostCategory: 'tools', PostTags: [], PostFreeTags: [], PostTitle: 'Lawnmower for loan', PostDescription: 'Available all weekend, sharp blade.',
-            PostCredits: '5', PostPriceType: 'daily', PostRepeatable: false, PostCashAlsoNeeded: false, PostPhotos: ['data:image/jpeg;base64,abc'],
+            // The unit the draft names goes to the composer's PICKED unit (the one in force is derived from it, and is Total again
+            // where the node does not take Each); the count and the price for all of them go with it, empty for a door's draft.
+            PostCredits: '5', PickedPriceType: 'daily', PostItemCount: '', PostItemLot: '', PostRepeatable: false, PostCashAlsoNeeded: false, PostPhotos: ['data:image/jpeg;base64,abc'],
             PostLat: null, PostLng: null, PostReach: 'local', PostReachPeers: [],
         });
     });

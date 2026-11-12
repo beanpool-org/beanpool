@@ -67,6 +67,11 @@ import {
 } from '../lib/live-posts';
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 import {
+    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
+} from '@beanpool/core';
+import { PerItemFields } from '../components/PerItemFields';
+import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
     getMemberProfile, createConversationApi, sendTransfer,
@@ -886,8 +891,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
     const [editCredits, setEditCredits] = useState('');
-    const [editPriceType, setEditPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
+    const [editPriceType, setEditPriceType] = useState<'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
+    // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
+    // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
+    // whether the count is still being read.
+    const [editItemCount, setEditItemCount] = useState('');
+    const [editItemLot, setEditItemLot] = useState('');
+    const [editLotTouched, setEditLotTouched] = useState(false);
+    const [editItemRefusal, setEditItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
+    const [editItemStored, setEditItemStored] = useState<{ unitsLeft: number | null; lot: ItemLot | null } | null>(null);
+    const [editItemLoading, setEditItemLoading] = useState(false);
+    const editPriceRef = useRef<HTMLInputElement>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
@@ -1791,6 +1806,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const deals = listingDeals(keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions,
             { id: selectedPost.id, authorPublicKey: selectedPost.authorPublicKey, type: selectedPost.type, status: selectedPost.status }, me, keeperOf);
         const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === selectedTxId) - Number(a.tx.id === selectedTxId)) : [];
+        // The edit's units: Each (right after Total) on an Offer once the node says it takes them up, and for a listing already
+        // priced each, so an edit never takes its unit away. The unit chosen falls back to Total where the list lacks it (a Need).
+        const editUnits = priceUnitsOffered(communityInfo?.features, editType, selectedPost.priceType);
+        const editUnit: typeof editPriceType = editUnits.includes(editPriceType) ? editPriceType : 'fixed';
+        const editEach = !priceMarked && editUnit === 'each';
+        /** What the node held of this listing when the form opened: the count the save is made against, and a stored price for all. */
+        const editStoredItems = selectedPost.priceType === 'each' && editItemStored
+            ? { wasEach: true, unitsLeft: editItemStored.unitsLeft, lot: editItemStored.lot }
+            : { wasEach: false, unitsLeft: null, lot: null };
         // The reader's own request, by core's one rule (dealMoves), as on the phone: theirs to withdraw, a keeper's too (the node
         // lets a keeper ask for their enterprise's lendable Offer or offer to help with its Need), and never on its own people's
         // list to approve or deny as the enterprise. Every other request stays on that list.
@@ -3106,6 +3130,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditCredits(selectedPost.price_c ? formatHundredths(selectedPost.price_c).replace(/,(?=\d{3})/g, '') : '');
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
+                                        // Priced for each one: its count and price for all of them are read from the node now, and the count
+                                        // read is the one the save is made against (a list read a while ago may have been sold from since).
+                                        setEditItemCount(''); setEditItemLot(''); setEditLotTouched(false); setEditItemRefusal(null); setEditItemStored(null);
+                                        setEditItemLoading(selectedPost.priceType === 'each');
+                                        if (selectedPost.priceType === 'each') {
+                                            const listingId = selectedPost.id;
+                                            void getMarketplacePosts({ id: listingId }).then((found) => {
+                                                const now = found.find((p) => p.id === listingId);
+                                                if (!now || typeof now.unitsLeft !== 'number') throw new Error('no count');
+                                                const start = perItemEditStart({ wasEach: true, unitsLeft: now.unitsLeft, lot: now.lot ?? null });
+                                                setEditItemStored({ unitsLeft: now.unitsLeft, lot: now.lot ?? null });
+                                                setEditItemCount(start.count);
+                                                setEditItemLot(start.lot);
+                                            }).catch(() => {
+                                                // Not opened on a count it never saw: the node couldn't be read, so the form closes and says so.
+                                                setEditMode(false);
+                                                setError(t("Your community couldn't be reached. Try again."));
+                                            }).finally(() => setEditItemLoading(false));
+                                        }
                                         setEditPhotos(selectedPost.photos || []);
                                         editTagsFrom.current = postTagsOf(selectedPost.tags);
                                         setEditTags(editTagsFrom.current);
@@ -3233,12 +3276,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     style={{ ...inputStyle, minHeight: '100px' }}
                                 />
 
-                                {/* Credits + Unit */}
-                                <div className="flex gap-2 mb-4">
+                                {/* Credits + Unit; Each: PRICE FOR ONE with its two extra boxes below (core per-item-form) */}
+                                {editEach && (
+                                    <p className="text-xs font-bold text-nature-500 dark:text-nature-300 uppercase tracking-widest mb-1">
+                                        {upperCase(perItemLines.priceForOne())} <span className="text-bp-ink-danger">*</span>
+                                    </p>
+                                )}
+                                <div className={`flex gap-2 ${editEach ? 'mb-2' : 'mb-4'}`}>
                                     {/* Text, not type="number": a number box reads "2,5" by the browser's language, not the member's (#2202). */}
                                     <input
+                                        ref={editPriceRef}
                                         type="text"
                                         inputMode="decimal"
+                                        aria-label={editEach ? perItemLines.priceForOne() : undefined}
                                         value={editCredits}
                                         onChange={(e) => setEditCredits(e.target.value)}
                                         placeholder={t('Credits (B)')}
@@ -3246,12 +3296,30 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     />
                                     <select
-                                        value={editPriceType}
-                                        onChange={(e) => setEditPriceType(e.target.value as any)}
+                                        value={editUnit}
+                                        onChange={(e) => {
+                                            const next = e.target.value as typeof editPriceType;
+                                            if (next === 'each') {
+                                                // Total -> Each (§2.4): the figure typed as the Total moves to "Or all of them for", and the price for
+                                                // one is emptied and focused. Each has no Repeatable.
+                                                if (editUnit === 'fixed') {
+                                                    const moved = carryTotalToEach({ price: editCredits, count: editItemCount, lot: editItemLot });
+                                                    if (moved.price !== editCredits) {
+                                                        setEditCredits(moved.price);
+                                                        setEditItemLot(moved.lot);
+                                                        setTimeout(() => editPriceRef.current?.focus(), 0);
+                                                    }
+                                                }
+                                                setEditRepeatable(false);
+                                            }
+                                            setEditItemRefusal(null);
+                                            setEditPriceType(next);
+                                        }}
                                         className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     >
                                         <option value="fixed">{t('Total', undefined, 'a price for the whole job')}</option>
+                                        {editUnits.includes('each') && <option value="each">{perItemLines.unitEach()}</option>}
                                         <option value="hourly">{t('/ Hr', undefined, 'price per hour')}</option>
                                         <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
                                         <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
@@ -3259,7 +3327,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </select>
                                 </div>
 
-                                {/* Repeatable Toggle */}
+                                {/* Each: how many are left, and the price for all of them, with their live line (core per-item-form) */}
+                                {editEach && (editItemLoading ? (
+                                    <p className="text-sm text-nature-500 dark:text-nature-300 mb-4" data-testid="per-item-loading">{t('Loading...')}</p>
+                                ) : (
+                                    <PerItemFields
+                                        edit
+                                        variant="edit"
+                                        inputStyle={{ ...inputStyle, marginBottom: 0, width: undefined }}
+                                        text={{ price: editCredits, count: editItemCount, lot: editItemLot }}
+                                        onCount={(v) => { setEditItemCount(v); setEditItemRefusal(null); }}
+                                        onLot={(v) => { setEditItemLot(v); setEditLotTouched(true); setEditItemRefusal(null); }}
+                                        refusal={editItemRefusal}
+                                        heldNote={perItemHeldNote(itemsHeldIn(ownRows.map((m) => m.tx)))}
+                                        lotForOtherLine={editItemStored?.lot && editItemStored.unitsLeft !== null && editItemStored.lot.units !== editItemStored.unitsLeft ? perItemLotForOtherLine(editItemStored.lot, editItemStored.unitsLeft) : null}
+                                    />
+                                ))}
+
+                                {/* Repeatable Toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
+                                {!editEach && (
                                 <div className="mb-4">
                                     <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white dark:hover:bg-nature-900 transition-colors cursor-pointer group">
                                         <div className="relative flex items-center justify-center w-6 h-6 shrink-0">
@@ -3279,6 +3365,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </div>
                                     </label>
                                 </div>
+                                )}
 
                                 {/* Photos */}
                                 <div className="mb-5">
@@ -3365,6 +3452,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             // is 1,250, never saved as 0; a third decimal is refused in words. An empty box is 0, as before.
                                             const price = parseHundredths(editCredits);
                                             if (!price.ok && price.refusal !== 'empty') { setError(amountRefusalWords(price.refusal)); return; }
+                                            // Priced for each one: how many, and the price for all of them, held to the node's own rules (core
+                                            // per-item-form). An empty price box is 0 here, as it is for every unit, so a Free listing is checked as one.
+                                            if (editEach && editItemLoading) return;
+                                            const itemSave = editEach
+                                                ? perItemEditFields({ price: editCredits.trim() === '' ? '0' : editCredits, count: editItemCount, lot: editItemLot }, editStoredItems, editLotTouched)
+                                                : null;
+                                            if (itemSave && !itemSave.ok) {
+                                                setEditItemRefusal({ field: itemSave.refusal.field, text: itemSave.refusal.text });
+                                                setError(itemSave.refusal.text);
+                                                return;
+                                            }
+                                            setEditItemRefusal(null);
                                             setSaving(true);
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
@@ -3377,8 +3476,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     title: editTitle.trim(),
                                                     description: editDescription.trim(),
                                                     price_c: price.ok ? price.value : 0,
-                                                    priceType: editPriceType,
-                                                    repeatable: editRepeatable,
+                                                    priceType: editEach ? 'each' : editUnit,
+                                                    ...(itemSave && itemSave.ok ? itemSave.fields : {}),
+                                                    repeatable: editEach ? false : editRepeatable,
                                                     photos: editPhotos,
                                                     ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(freeTagsChanged ? { freeTags: editFreeTags } : {}),
@@ -3388,14 +3488,28 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 setEditMode(false);
                                                 refresh();
                                             } catch (e: any) {
-                                                setError(e.message || t('Failed to save'));
+                                                if (e?.code === 'units_changed' && typeof e.unitsLeft === 'number') {
+                                                    // A take-up landed while the seller edited (§2.5): the count box now shows what is left, the save is
+                                                    // made against it, and the seller is told to check the number and save again. Nothing of this save was written.
+                                                    // The price-for-all box is read again for that count (core): one the seller did not touch showed the stored
+                                                    // price because it was for the old count, and sent back unchanged the node would keep it for that number.
+                                                    const text = perItemRefusalText({ code: 'units_changed', count: e.unitsLeft });
+                                                    const after = perItemAfterUnitsChanged(editItemStored?.lot ?? null, e.unitsLeft, editItemLot, editLotTouched);
+                                                    setEditItemStored(after.stored);
+                                                    setEditItemCount(after.count);
+                                                    setEditItemLot(after.lot);
+                                                    setEditItemRefusal({ field: 'count', text });
+                                                    setError(text);
+                                                } else {
+                                                    setError(e.message || t('Failed to save'));
+                                                }
                                             } finally {
                                                 setSaving(false);
                                             }
                                         }}
-                                        disabled={saving || !editTitle.trim() || Boolean(selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0)}
+                                        disabled={saving || editItemLoading || !editTitle.trim() || Boolean(selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0)}
                                         className={`flex-1 py-3 rounded-xl font-bold text-[15px] transition-colors shadow-sm ${
-                                            saving || !editTitle.trim() || Boolean(selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0) ? 'bg-nature-300 text-white cursor-not-allowed' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
+                                            saving || editItemLoading || !editTitle.trim() || Boolean(selectedPost.photos && selectedPost.photos.length > 0 && editPhotos.length === 0) ? 'bg-nature-300 text-white cursor-not-allowed' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                         }`}
                                     >
                                         {saving ? t('Saving...') : t('💾 Save')}

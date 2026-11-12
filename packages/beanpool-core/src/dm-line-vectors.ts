@@ -142,7 +142,7 @@ export const DM_OLD_LINE_TIMES = {
 export interface DmOldLineFixture {
     from: 'ana' | 'ben';
     messageId: string;
-    part: 'body' | 'attachment';
+    part: 'body' | 'attachment' | 'about';
     text: string;
     format: 2 | 3;
     after: string | null;
@@ -151,7 +151,10 @@ export interface DmOldLineFixture {
     payload: DmPayload;
 }
 
-export const DM_OLD_LINES: Record<'anaFormat3' | 'benFormat3Reply' | 'benFormat2' | 'benFormat3AfterNew' | 'anaPhotoFormat3', DmOldLineFixture> = {
+export const DM_OLD_LINES: Record<
+    'anaFormat3' | 'benFormat3Reply' | 'benFormat2' | 'benFormat3AfterNew' | 'anaPhotoFormat3' | 'benPhotoFormat2' | 'benNotPhotoFormat2' | 'anaAboutFormat3',
+    DmOldLineFixture
+> = {
     anaFormat3: {
         from: 'ana', messageId: 'a1000000-0000-4000-8000-0000000000a1', part: 'body', format: 3, after: null, metadata: null,
         text: 'See you at the market on Saturday',
@@ -179,6 +182,34 @@ export const DM_OLD_LINES: Record<'anaFormat3' | 'benFormat3Reply' | 'benFormat2
         from: 'ana', messageId: 'a1000000-0000-4000-8000-0000000000a1', part: 'attachment', format: 3, after: null, metadata: null,
         text: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==',
         payload: { ciphertext: 'Nusq7/5x37w4bDDL1B4AABX39k5fbsKnL9hmOkM2R6lUeyBylWwtMQBJ6noEw3wlpnYgJvx9Mn5a6EHfmg==', nonce: 'x25519-xc20p-v2:xGu+UXZMTvUc9au4+KV0zmZ5cZS5yJAm' },
+    },
+    // Old chat's photos and cards (Marty, 13 Nov 2026: "if they are there why not view them?"; the same OLDCHAT row). Each
+    // nonce the first 24 bytes of SHA-256("beanpool old-chat vector: nonce <name>"), the name in the line above it.
+    /** The photo of benFormat2's message, as an app before 2 October 2026 sealed one (format 2). Nonce: "photo format 2". */
+    benPhotoFormat2: {
+        from: 'ben', messageId: 'b3000000-0000-4000-8000-0000000000b3', part: 'attachment', format: 2, after: null, metadata: null,
+        text: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==',
+        payload: { ciphertext: 'Ha7xEhCH65PKLLC+wOfX0fLktdaeuj0RcVvnhOm841Izx+SyXqKSywA+GLwMEnKG4f1nAr1hfPWt/5xRS4w=', nonce: 'x25519-xc20p-v2:SfphUxkcIq8gf9J7Sx1lBGQuR6Qb+SG8' },
+    },
+    /**
+     * Format-2 words Ben sealed in the same conversation: format 2 binds nothing but the conversation, so a node serving them
+     * as benFormat2's photo gets them opened, and only the photo check stands between them and a broken image. Nonce:
+     * "not a photo format 2".
+     */
+    benNotPhotoFormat2: {
+        from: 'ben', messageId: 'b3000000-0000-4000-8000-0000000000b3', part: 'attachment', format: 2, after: null, metadata: null,
+        text: 'Not a photo: these are words',
+        payload: { ciphertext: 'QpMXfh02qyIhS8qTbfxjeTj96p4lAxmxs2eWWgtb8hq5Jjpqj+igu/gWpb0=', nonce: 'x25519-xc20p-v2:j5p0zFJ83iahe55LdzgzEYB5jYxeHKlK' },
+    },
+    /**
+     * The listing anaFormat3's message is about, sealed as the apps sealed one in format 3 (#3007, 9 to 10 November 2026:
+     * `git show 138245e6:packages/beanpool-core/src/chat-about.ts`, sealChatAbout). It rides in the line's metadata under
+     * `about`. Nonce: "about format 3".
+     */
+    anaAboutFormat3: {
+        from: 'ana', messageId: 'a1000000-0000-4000-8000-0000000000a1', part: 'about', format: 3, after: null, metadata: null,
+        text: '{"v":1,"post":"old-eggs-1","title":"Fresh eggs","kind":"offer"}',
+        payload: { ciphertext: 'uKLX4e46eriDoWGk6YJGv1mNA7m/Usqz8Z8QJH4C4ofYgn3DXRDjtjnKIwk8TaZ3+eEHjhzgXurqlfq65Zrx1geb8tLtSozFqgFUoivMzFt+', nonce: 'x25519-xc20p-v2:goO1K74NOUQFHr6r00voSrp/RiHSC2ao' },
     },
 };
 // ─── end of old chat (OLDCHAT) ───────────────────────────────────────────────────────────────────────────────────────

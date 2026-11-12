@@ -21,13 +21,17 @@ import { StyleSheet, View, Text, ScrollView, TextInput, Pressable, Dimensions, I
 import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../components/useKeepCaretVisible';
+import { PerItemFields } from '../components/PerItemFields';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MapAreaRing } from '../components/MapAreaRing';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
-import { POST_TYPE_LINES, feeOf, formatHundredths, parseHundredths, t, upperCase } from '@beanpool/core';
+import {
+    POST_TYPE_LINES, carryTotalToEach, feeOf, formatHundredths, parseHundredths, perItemCreateFields, perItemFeeLine, perItemLines,
+    priceUnitsOffered, t, upperCase, type PerItemField,
+} from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getReachablePeers } from '../utils/db';
 import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
@@ -171,7 +175,7 @@ export default function NewListingScreen() {
         priceRow: { flexDirection: 'row', gap: 8, marginBottom: 4, alignItems: 'center' },
         creditsInputWide: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 14, paddingVertical: 12, color: colors.text.heading, fontSize: 16, fontWeight: '800' },
 
-        priceTypeBtn: { width: 72, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
+        priceTypeBtn: { minWidth: 72, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
         priceTypeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
         freeChip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12, borderWidth: 2, borderColor: theme === 'dark' ? 'rgba(16,185,129,0.6)' : 'rgba(16,185,129,0.4)', backgroundColor: theme === 'dark' ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)' },
         freeChipActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
@@ -277,6 +281,12 @@ export default function NewListingScreen() {
     const [postDescription, setPostDescription] = useState('');
     const [postCredits, setPostCredits] = useState('');
     const [postPriceType, setPostPriceType] = useState<string>('fixed');
+    // A price for each one (DESIGN-per-item-price-fable.md §2.4): how many the seller has, and the optional price for all of them.
+    const [postItemCount, setPostItemCount] = useState('');
+    const [postItemLot, setPostItemLot] = useState('');
+    /** The box a refusal of the two above is about, with its sentence under it. */
+    const [itemRefusal, setItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
+    const priceInputRef = useRef<TextInput>(null);
     // Where the community has Beans off (the global one), the form has no price and the preview no amount.
     const nodeProfile = useNodeProfile();
     const nodeFeatures = nodeProfile?.features;
@@ -284,6 +294,10 @@ export default function NewListingScreen() {
     const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
     const [takesQuestions, setTakesQuestions] = useTakeQuestionsTick(alsoOnGlobal);
     const showsBeans = marketShowsBeans(nodeFeatures);
+    // The units the button cycles: Each (right after Total) only on an Offer and only once the node says it takes them up.
+    const priceUnits = priceUnitsOffered(nodeFeatures, postType);
+    const unit: string = (priceUnits as readonly string[]).includes(postPriceType) ? postPriceType : 'fixed';
+    const eachChosen = showsBeans && unit === 'each';
     const [postRepeatable, setPostRepeatable] = useState(false);
     const [postCashAlsoNeeded, setPostCashAlsoNeeded] = useState(false);  // #108
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
@@ -396,7 +410,7 @@ export default function NewListingScreen() {
     const resetNewPost = () => {
         setAlsoOnGlobal(false);
         setPostType('offer'); setPostCategory(''); setPostTags([]); setPostFreeTags([]); setPostTitle(''); setPostDescription('');
-        setPostCredits(''); setPostPriceType('fixed'); setPostRepeatable(false); setPostPhotos([]);
+        setPostCredits(''); setPostPriceType('fixed'); setPostItemCount(''); setPostItemLot(''); setItemRefusal(null); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
     };
@@ -416,12 +430,12 @@ export default function NewListingScreen() {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const draft = {
                 anchorUrl, postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits,
-                postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
+                postPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
                 postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTags, postFreeTags, postTitle, postDescription, postCredits, postPriceType, postItemCount, postItemLot, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
@@ -434,6 +448,8 @@ export default function NewListingScreen() {
         setPostDescription(d.postDescription || '');
         setPostCredits(d.postCredits || '');
         setPostPriceType(d.postPriceType || 'fixed');
+        setPostItemCount(typeof d.postItemCount === 'string' ? d.postItemCount : '');
+        setPostItemLot(typeof d.postItemLot === 'string' ? d.postItemLot : '');
         setPostRepeatable(!!d.postRepeatable);
         setPostCashAlsoNeeded(!!d.postCashAlsoNeeded);
         setPostPhotos(Array.isArray(d.postPhotos) ? d.postPhotos : []);
@@ -617,19 +633,45 @@ export default function NewListingScreen() {
         setShowPricingModal(true);
     };
 
+    /**
+     * The unit button: the next unit in the list. Into Each from Total, the figure typed as the Total moves to "Or all of them
+     * for" and the price for one is emptied and focused (§2.4: so "the lot, or ___ each" is how it feels). Each has no Repeatable.
+     */
+    const nextPostUnit = () => {
+        const next = priceUnits[(priceUnits.indexOf(unit as (typeof priceUnits)[number]) + 1) % priceUnits.length];
+        if (next === 'each') {
+            if (unit === 'fixed') {
+                const moved = carryTotalToEach({ price: postCredits, count: postItemCount, lot: postItemLot });
+                if (moved.price !== postCredits) {
+                    setPostCredits(moved.price);
+                    setPostItemLot(moved.lot);
+                    setTimeout(() => priceInputRef.current?.focus(), 60);
+                }
+            }
+            setPostRepeatable(false);
+        }
+        setItemRefusal(null);
+        setPostPriceType(next);
+    };
+
     const handleSubmit = async () => {
         Keyboard.dismiss();
         
         const errors = new Set<string>();
         if (!postTitle.trim()) errors.add('title');
         if (postFormPriceInvalid(postCredits, nodeFeatures)) errors.add('credits');
+        // A price for each one: how many, and the optional price for all of them, held to the node's own rules (core per-item-form).
+        const item = eachChosen ? perItemCreateFields({ price: postCredits, count: postItemCount, lot: postItemLot }) : null;
+        setItemRefusal(item && !item.ok ? { field: item.refusal.field, text: item.refusal.text } : null);
+        if (item && !item.ok) errors.add(item.refusal.field === 'lot' ? 'itemLot' : item.refusal.field === 'count' ? 'itemCount' : 'credits');
         if (!postDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (!postCategory) errors.add('category');
         if (photoRequired && postPhotos.length < 1) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) {
-            setValidationToast(t('⚠️ Please complete all required fields'));
+            // Only a refused count or price for all: its own sentence (it is under the box too, which may be off screen).
+            setValidationToast(item && !item.ok && errors.size === 1 ? item.refusal.text : t('⚠️ Please complete all required fields'));
             setTimeout(() => setValidationToast(''), 3000);
             return;
         }
@@ -645,8 +687,9 @@ export default function NewListingScreen() {
                 title: postTitle.trim(),
                 description: postDescription.trim(),
                 price_c: postFormPrice_c(postCredits, nodeFeatures),
-                price_type: postFormPriceType(postPriceType, nodeFeatures),
-                repeatable: postRepeatable ? 1 : 0,
+                price_type: eachChosen ? 'each' : postFormPriceType(unit, nodeFeatures),
+                ...(item && item.ok ? { unitsLeft: item.fields.unitsLeft, ...(item.fields.lot ? { lot: item.fields.lot } : {}) } : {}),
+                repeatable: postRepeatable && !eachChosen ? 1 : 0,
                 cash_also_needed: postCashAlsoNeeded ? 1 : 0,
                 author_pubkey: identity.publicKey,
                 lat: postLat,
@@ -813,7 +856,7 @@ export default function NewListingScreen() {
                                     <Text style={[styles.typeBtnText, postType === 'offer' && styles.typeBtnTextActive]}>{t('🟢 Offer')}</Text>
                                     <Text style={[styles.typeBtnHint, postType === 'offer' && styles.typeBtnTextActive]} testID="type-hint-offer">{t(POST_TYPE_LINES.offer)}</Text>
                                 </Pressable>
-                                <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'need' }} style={[styles.typeBtn, postType === 'need' && styles.typeBtnNeed]} onPress={() => setPostType('need')}>
+                                <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'need' }} style={[styles.typeBtn, postType === 'need' && styles.typeBtnNeed]} onPress={() => { setPostType('need'); setItemRefusal(null); }}>
                                     <Text style={[styles.typeBtnText, postType === 'need' && styles.typeBtnTextActive]}>{t('🟠 Need')}</Text>
                                     <Text style={[styles.typeBtnHint, postType === 'need' && styles.typeBtnTextActive]} testID="type-hint-need">{t(POST_TYPE_LINES.need)}</Text>
                                 </Pressable>
@@ -949,10 +992,11 @@ export default function NewListingScreen() {
                             )}
                             {showsBeans && (<>
                             {/* Price */}
-                            <Text style={styles.sectionLabel}>{upperCase(t('Price'))} <Text style={styles.requiredStar}>*</Text></Text>
+                            <Text style={styles.sectionLabel}>{upperCase(eachChosen ? perItemLines.priceForOne() : t('Price'))} <Text style={styles.requiredStar}>*</Text></Text>
                             <View style={styles.priceInputRow}>
                                 <TextInput
-                                    accessibilityLabel={t('Price')}
+                                    ref={priceInputRef}
+                                    accessibilityLabel={eachChosen ? perItemLines.priceForOne() : t('Price')}
                                     style={[styles.creditsInputCompact, fieldBorder('credits')]}
                                     placeholder="0"
                                     placeholderTextColor={colors.text.muted}
@@ -961,12 +1005,9 @@ export default function NewListingScreen() {
                                     onChangeText={v => { setPostCredits(v); setValidationErrors(prev => { const n = new Set(prev); n.delete('credits'); return n; }); }}
                                     maxLength={5}
                                 />
-                                <Pressable accessibilityRole="button" onPress={() => {
-                                    const types = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'];
-                                    setPostPriceType(types[(types.indexOf(postPriceType) + 1) % types.length]);
-                                }} style={styles.priceTypeBtn}>
+                                <Pressable accessibilityRole="button" onPress={nextPostUnit} style={styles.priceTypeBtn}>
                                     <Text style={styles.priceTypeBtnText}>{
-                                        { fixed: t('Total', undefined, 'price unit'), hourly: t('/ Hr', undefined, 'price per hour'), daily: t('/ Dy', undefined, 'price per day'), weekly: t('/ Wk', undefined, 'price per week'), monthly: t('/ Mo', undefined, 'price per month') }[postPriceType] || t('Total', undefined, 'price unit')
+                                        { fixed: t('Total', undefined, 'price unit'), each: perItemLines.unitEach(), hourly: t('/ Hr', undefined, 'price per hour'), daily: t('/ Dy', undefined, 'price per day'), weekly: t('/ Wk', undefined, 'price per week'), monthly: t('/ Mo', undefined, 'price per month') }[unit] || t('Total', undefined, 'price unit')
                                     }</Text>
                                 </Pressable>
                                 <Pressable
@@ -978,6 +1019,16 @@ export default function NewListingScreen() {
                                     <Text style={[styles.freeChipText, postCredits === '0' && styles.freeChipTextActive]}>{t('FREE')}</Text>
                                 </Pressable>
                             </View>
+
+                            {/* Each: how many, and the optional price for all of them, with their live line (core per-item-form) */}
+                            {eachChosen && (
+                                <PerItemFields
+                                    text={{ price: postCredits, count: postItemCount, lot: postItemLot }}
+                                    onCount={v => { setPostItemCount(v); setItemRefusal(null); }}
+                                    onLot={v => { setPostItemLot(v); setItemRefusal(null); }}
+                                    refusal={itemRefusal}
+                                />
+                            )}
 
                             <Pressable accessibilityRole="button" onPress={showPricingGuide} hitSlop={8} style={styles.pricingTipBanner}>
                                 <Text style={styles.pricingTipBannerEmoji}>❓</Text>
@@ -991,6 +1042,9 @@ export default function NewListingScreen() {
                             >
                                 <Text style={{ color: colors.text.secondary, fontSize: 13.5, lineHeight: 19 }}>
                                     {(() => {
+                                        // Each: what the seller receives for one, and for all of them (core per-item-form).
+                                        const eachFee = eachChosen ? perItemFeeLine({ price: postCredits, count: postItemCount, lot: postItemLot }) : null;
+                                        if (eachFee) return eachFee;
                                         // The price as typed, in whole hundredths (core parseHundredths), less the fee the node takes
                                         // (core feeOf, truncated once): what reaches the one paid, exactly.
                                         const parsed = parseHundredths(postCredits);
@@ -1005,13 +1059,15 @@ export default function NewListingScreen() {
                             </Pressable>
                             </>)}
 
-                            {/* Repeatable Toggle */}
+                            {/* Repeatable Toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
+                            {!eachChosen && (
                             <Pressable accessibilityRole="button" accessibilityState={{ selected: postRepeatable }} style={styles.repeatableRow} onPress={() => setPostRepeatable(!postRepeatable)}>
                                 <View style={[styles.checkbox, postRepeatable && styles.checkboxActive]}>
                                     {postRepeatable && <Text style={styles.checkboxTick}>✓</Text>}
                                 </View>
                                 <Text style={styles.repeatableText}>{t('🔁 Repeatable — keep listing active for ongoing bookings')}</Text>
                             </Pressable>
+                            )}
 
                             {/* #108 Cash-also-needed toggle. The nudge appears on tick, where the
                                 decision is being made. No amount field: the app can escrow beans, not

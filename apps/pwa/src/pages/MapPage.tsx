@@ -12,6 +12,8 @@
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, POLL_DAYS_DEFAULT, pollOtherLines, pollWeekGroupNote, pollWeekNotice, type PollDays } from '@beanpool/core';
 import { POST_TYPE_LINES, upperCase, feeOf, formatHundredths, parseHundredths } from '@beanpool/core';
+import { carryTotalToEach, perItemCreateFields, perItemFeeLine, perItemLines, priceUnitsOffered, type PerItemField } from '@beanpool/core';
+import { PerItemFields } from '../components/PerItemFields';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { usePollNextStart } from '../lib/poll-week';
 import { usePollDayChoices } from '../lib/poll-length';
@@ -397,7 +399,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const openMembershipRef = useRef(openMembership);
     openMembershipRef.current = openMembership;
     const eventHostLetsIn = eventHostLetsInChoice ?? openMembership;
-    const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
+    const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
+    // A price for each one (DESIGN-per-item-price-fable.md §2.4): how many the seller has, and the optional price for all of them.
+    const [newPostItemCount, setNewPostItemCount] = useState('');
+    const [newPostItemLot, setNewPostItemLot] = useState('');
+    /** The box a refusal of the two above is about, with its sentence under it. */
+    const [itemRefusal, setItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
+    const newPostPriceRef = useRef<HTMLInputElement>(null);
+    // The units the list offers: Each (right after Total) only on an Offer and only once the node says it takes them up.
+    const postUnits = priceUnitsOffered(nodeInfo?.features, newPostType);
+    const postUnit: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly' = postUnits.includes(newPostPriceType) ? newPostPriceType : 'fixed';
+    const eachChosen = !priceMarked && postUnit === 'each';
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
@@ -658,6 +670,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setNewPostFreeTags([]);
         setNewPostCredits(openDraft.credits === null ? '' : String(openDraft.credits));
         setNewPostPriceType(openDraft.priceType ?? 'fixed');
+        setNewPostItemCount('');
+        setNewPostItemLot('');
+        setItemRefusal(null);
         setNewPostRepeatable(openDraft.repeatable);
         setNewPostCashAlsoNeeded(openDraft.cashAlsoNeeded);
         setNewPostReach('local');
@@ -1419,6 +1434,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         const priceRead = parseHundredths(newPostCredits);
         const priceValue = priceRead.ok ? priceRead.value : NaN;
         if (!priceMarked && (newPostCredits.trim() === '' || isNaN(priceValue) || priceValue < 0)) errors.add('credits');
+        // A price for each one: how many, and the optional price for all of them, held to the node's own rules (core per-item-form).
+        const item = eachChosen ? perItemCreateFields({ price: newPostCredits, count: newPostItemCount, lot: newPostItemLot }) : null;
+        setItemRefusal(item && !item.ok ? { field: item.refusal.field, text: item.refusal.text } : null);
+        if (item && !item.ok && item.refusal.field !== 'price') errors.add(item.refusal.field === 'lot' ? 'itemLot' : 'itemCount');
         if (!newPostDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (photoRequired && newPostPhotos.length < 1) errors.add('photos');
@@ -1456,9 +1475,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
                 price_c: priceMarked ? 0 : priceValue || 0,
-                priceType: priceMarked ? 'fixed' : newPostPriceType,
+                priceType: priceMarked ? 'fixed' : postUnit,
+                ...(item && item.ok ? { unitsLeft: item.fields.unitsLeft, ...(item.fields.lot ? { lot: item.fields.lot } : {}) } : {}),
                 authorPublicKey: identity?.publicKey || '',
-                repeatable: newPostRepeatable,
+                repeatable: newPostRepeatable && !eachChosen,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
                 ...(shopId ? { shopId } : {}),
                 reach: audienceScope === 'group' ? 'local' : newPostReach,
@@ -1478,6 +1498,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setNewPostFreeTags([]);
             setNewPostCredits('');
             setNewPostPriceType('fixed');
+            setNewPostItemCount('');
+            setNewPostItemLot('');
+            setItemRefusal(null);
             setNewPostRepeatable(false);
             setNewPostCashAlsoNeeded(false);
             setNewPostReach('local');
@@ -3384,22 +3407,29 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
 
                         {renderLocationPicker()}
 
-                        {/* Title + Credits */}
-                        <div className="flex gap-2 mb-3">
+                        {/* Title + Credits. Each wraps: the title on its own line, then PRICE FOR ONE with its box and unit (§2.4). */}
+                        <div className={`flex gap-2 mb-3 ${eachChosen ? 'flex-wrap items-center' : ''}`}>
                             <input
                                 placeholder={t('What do you need/offer?')}
                                 value={newPostTitle}
                                 onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
-                                className={`flex-1 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all ${
+                                className={`flex-1 ${eachChosen ? 'basis-full' : ''} py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all ${
                                     validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
                                 }`}
                             />
                             {!priceMarked && (<>
+                            {eachChosen && (
+                                <span className="basis-full text-xs font-bold text-nature-500 dark:text-nature-300 uppercase tracking-widest -mb-1">
+                                    {upperCase(perItemLines.priceForOne())} <span className="text-bp-ink-danger">*</span>
+                                </span>
+                            )}
                             {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                             <input
                                 placeholder={t('B', undefined, 'the Beans sign')}
                                 type="text"
                                 inputMode="decimal"
+                                ref={newPostPriceRef}
+                                aria-label={eachChosen ? perItemLines.priceForOne() : undefined}
                                 value={newPostCredits}
                                 onChange={e => { setNewPostCredits(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('credits'); return n; }); }}
                                 className={`w-20 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm text-center font-bold tracking-tight transition-all ${
@@ -3407,11 +3437,29 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 }`}
                             />
                             <select
-                                value={newPostPriceType}
-                                onChange={e => setNewPostPriceType(e.target.value as 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly')}
+                                value={postUnit}
+                                onChange={e => {
+                                    const next = e.target.value as typeof newPostPriceType;
+                                    if (next === 'each') {
+                                        // Total -> Each (§2.4): the figure typed as the Total moves to "Or all of them for", and the price for one
+                                        // is emptied and focused. Each has no Repeatable.
+                                        if (postUnit === 'fixed') {
+                                            const moved = carryTotalToEach({ price: newPostCredits, count: newPostItemCount, lot: newPostItemLot });
+                                            if (moved.price !== newPostCredits) {
+                                                setNewPostCredits(moved.price);
+                                                setNewPostItemLot(moved.lot);
+                                                setTimeout(() => newPostPriceRef.current?.focus(), 0);
+                                            }
+                                        }
+                                        setNewPostRepeatable(false);
+                                    }
+                                    setItemRefusal(null);
+                                    setNewPostPriceType(next);
+                                }}
                                 className="w-24 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[14px] font-semibold focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 cursor-pointer appearance-auto"
                             >
                                 <option value="fixed">{t('Total', undefined, 'a price for the whole job')}</option>
+                                {postUnits.includes('each') && <option value="each">{perItemLines.unitEach()}</option>}
                                 <option value="hourly">{t('/ Hr', undefined, 'price per hour')}</option>
                                 <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
                                 <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
@@ -3419,6 +3467,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             </select>
                             </>)}
                         </div>
+
+                        {/* Each: how many, and the optional price for all of them, with their live line (core per-item-form) */}
+                        {eachChosen && (
+                            <PerItemFields
+                                text={{ price: newPostCredits, count: newPostItemCount, lot: newPostItemLot }}
+                                onCount={v => { setNewPostItemCount(v); setItemRefusal(null); }}
+                                onLot={v => { setNewPostItemLot(v); setItemRefusal(null); }}
+                                refusal={itemRefusal}
+                            />
+                        )}
 
                         {priceMarked && (
                             <div className="mt-1 mb-3" data-testid="composer-price-line">
@@ -3444,6 +3502,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
                         >
                             {(() => {
+                                // Each: what the seller receives for one, and for all of them (core per-item-form).
+                                const eachFee = eachChosen ? perItemFeeLine({ price: newPostCredits, count: newPostItemCount, lot: newPostItemLot }) : null;
+                                if (eachFee) return eachFee;
                                 // The price as the post sends it (handleCreatePost): what could be a thousand says so here.
                                 const read = parseHundredths(newPostCredits);
                                 if (!read.ok && isAmbiguousAmount(read.refusal)) return `${amountRefusalWords(read.refusal)} `;
@@ -3460,7 +3521,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">{t('(100% community owned)')}</span>
                         </p>}
 
-                        {/* Repeatable toggle */}
+                        {/* Repeatable toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
+                        {!eachChosen && (
                         <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1 mb-1">
                             <input
                                 type="checkbox"
@@ -3470,6 +3532,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             />
                             {t('🔁 Repeatable — keep listing active for ongoing bookings')}
                         </label>
+                        )}
 
                         {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
                             moment of ticking is where the rule actually lands. No amount field by design:

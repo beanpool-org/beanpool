@@ -132,6 +132,11 @@ export interface NodeFeatures {
      * before Learn has none (knowledgeFeatureMode reads `=== true`).
      */
     knowledge?: boolean;
+    /**
+     * This node takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6; core perItemOffered): the create and
+     * edit forms offer the unit Each only then. Absent until every slice is merged, and from a node older than the unit: off.
+     */
+    perItem?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -146,7 +151,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge',
+    'askedPush', 'knowledge', 'perItem',
 ];
 
 export interface NodeProfile {

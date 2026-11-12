@@ -124,7 +124,11 @@ describe('a listing priced for each one in the phone\'s copy', () => {
             id: 'tx-1', postId, buyerPublicKey: 'buyer-key', sellerPublicKey: 'rob-key', amount_c: 30000, status: 'completed', ...over,
         });
         const row = (id: string) => sql.prepare('SELECT status, active, units_left FROM posts WHERE id = ?').get(id) as any;
-        const inFeed = async (id: string) => feedPostVisible((await getPosts()).find((p: any) => p.id === id), DEFAULT_MARKET_FILTERS, { blockedUsers: [], favCategories: [] });
+        // The Market reads getPosts (active, pending and completed rows only), then feedPostVisible: a paused row never reaches it.
+        const inFeed = async (id: string) => {
+            const post = (await getPosts()).find((p: any) => p.id === id);
+            return !!post && feedPostVisible(post, DEFAULT_MARKET_FILTERS, { blockedUsers: [], favCategories: [] });
+        };
 
         it('19 left on the node, one deal released: the row stays active, the card says 19 left, and it stays in the Market feed (red if the heal closes it)', async () => {
             await applyDelta({ posts: [node({ unitsLeft: 19 })] });
@@ -143,6 +147,48 @@ describe('a listing priced for each one in the phone\'s copy', () => {
             await applyDelta({ posts: [node({ unitsLeft: 0, lot: null, status: 'completed', active: 0, updatedAt: new Date().toISOString() })] });
             expect(row('p-panels')).toMatchObject({ status: 'completed', units_left: 0 });
             expect(await inFeed('p-panels')).toBe(false);
+        });
+
+        /**
+         * The same holds for a cancelled deal (review of #3090, round 3). The phone reads the member's latest deals, newest first, and the
+         * heal runs after the node's own post row in the same delta; a cancelled deal puts a one-off listing back on offer, but an Each
+         * listing's status is the node's alone: settleItemDeal('returned') never changes it ("a paused listing stays paused, a removed one
+         * removed"), and the node moves updated_at when a count comes back, so the post arrives with its true count and status.
+         */
+        it('sold out on the node (0 left, completed) with an older deal cancelled in the same list: the row stays completed and leaves the feed (red if the cancelled heal reopens it)', async () => {
+            await applyDelta({
+                posts: [node({ unitsLeft: 0, lot: null, status: 'completed', active: 0, updatedAt: new Date().toISOString() })],
+                // Newest first, as the node lists them: the last deal completed, an older one cancelled.
+                marketplaceTransactions: [
+                    dealOn('p-panels', { id: 'tx-new', status: 'completed', createdAt: '2026-11-12T03:00:00.000Z' }),
+                    dealOn('p-panels', { id: 'tx-old', status: 'cancelled', createdAt: '2026-11-12T01:00:00.000Z' }),
+                ],
+            });
+            expect(row('p-panels')).toMatchObject({ status: 'completed', units_left: 0 });
+            expect(perItemCard((await getPosts()).find((p: any) => p.id === 'p-panels'))?.line).toMatch(/sold out/i);
+            expect(await inFeed('p-panels')).toBe(false);
+        });
+
+        it('paused on the node (20 left) after a held deal is cancelled: the row stays paused and out of the feed (red if the cancelled heal reopens it)', async () => {
+            await applyDelta({
+                posts: [node({ unitsLeft: 20, status: 'paused', updatedAt: new Date().toISOString() })],
+                marketplaceTransactions: [dealOn('p-panels', { id: 'tx-held', status: 'cancelled' })],
+            });
+            expect(row('p-panels')).toMatchObject({ status: 'paused', units_left: 20 });
+            expect(await inFeed('p-panels')).toBe(false);
+        });
+
+        it('an Each listing that is active keeps its count and stays in the feed when a deal on it is cancelled', async () => {
+            await applyDelta({ posts: [node({ unitsLeft: 20 })], marketplaceTransactions: [dealOn('p-panels', { id: 'tx-c', status: 'cancelled' })] });
+            expect(row('p-panels')).toMatchObject({ status: 'active', active: 1, units_left: 20 });
+            expect(await inFeed('p-panels')).toBe(true);
+        });
+
+        it('a one-off listing is put back on offer by its cancelled deal (the heal is unchanged for it)', async () => {
+            await applyDelta({ posts: [node({ id: 'p-fixed', priceType: 'fixed', unitsLeft: undefined, lot: undefined, price_c: 4000 })] });
+            sql.prepare("UPDATE posts SET status = 'pending', accepted_by = 'buyer-key', pending_transaction_id = 'tx-3' WHERE id = 'p-fixed'").run();
+            await applyDelta({ marketplaceTransactions: [dealOn('p-fixed', { id: 'tx-3', status: 'cancelled' })] });
+            expect(sql.prepare('SELECT status, accepted_by, pending_transaction_id FROM posts WHERE id = ?').get('p-fixed')).toEqual({ status: 'active', accepted_by: null, pending_transaction_id: null });
         });
 
         it('a one-off listing is still closed by its released deal (the heal is unchanged for it)', async () => {

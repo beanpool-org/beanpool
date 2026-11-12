@@ -4610,19 +4610,22 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
 
                 // Heal corresponding post status to match terminal transaction status
                 const associatedPostId = tx.postId ?? tx.post_id;
-                if (associatedPostId) {
-                    if (incomingStatus === 'completed') {
-                        const postRow = await txn.getFirstAsync<{ repeatable: number; price_type: string | null }>('SELECT repeatable, price_type FROM posts WHERE id = ?', [associatedPostId]);
-                        if (postRow && postRow.price_type === 'each') {
-                            // A listing priced for each one is never a one-off: one deal taking some of the units leaves the rest on
-                            // offer. The node closes it itself when the count reaches 0 (settleItemDeal) and moves updated_at then,
-                            // so the next delta brings the `completed` status; closing it here would say "Sold out" with units left.
-                        } else if (postRow && postRow.repeatable !== 1) {
+                if (associatedPostId && (incomingStatus === 'completed' || incomingStatus === 'cancelled')) {
+                    const postRow = await txn.getFirstAsync<{ repeatable: number; price_type: string | null }>('SELECT repeatable, price_type FROM posts WHERE id = ?', [associatedPostId]);
+                    if (postRow && postRow.price_type === 'each') {
+                        // A listing priced for each one is never a one-off, and its status is the node's alone: one deal taking some
+                        // of the units leaves the rest on offer, and a deal that comes back (cancelled) changes nothing about it, so a
+                        // paused listing stays paused and a sold-out one stays sold out (settleItemDeal). The node closes it itself when
+                        // the count reaches 0 and moves updated_at whenever a count comes back, so the same delta brings the post with
+                        // its true count and status; writing a status here, from a deal list that holds every deal on it, would put a
+                        // sold-out or paused listing back on the Market, or close one with units left.
+                    } else if (incomingStatus === 'completed') {
+                        if (postRow && postRow.repeatable !== 1) {
                             await txn.runAsync("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [associatedPostId]);
                         } else if (postRow && postRow.repeatable === 1) {
                             await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);
                         }
-                    } else if (incomingStatus === 'cancelled') {
+                    } else {
                         await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);
                     }
                 }

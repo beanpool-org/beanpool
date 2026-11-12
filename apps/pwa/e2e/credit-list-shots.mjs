@@ -113,7 +113,7 @@ const MEASURE = () => {
         // The switch is a native checkbox inside a 44 px label; the label is the target.
         .filter(({ el, box }) => (el.type === 'checkbox' ? el.closest('label').getBoundingClientRect().height : box.height) < 44)
         .map(({ el, box }) => `${el.tagName.toLowerCase()} "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30)}" ${Math.round(box.height)}px`);
-    const cut = [...document.querySelectorAll('[data-testid=credit-sentence], [data-testid=credit-balance], [data-testid=credit-risk-reasons], [data-testid=voucher-line]')]
+    const cut = [...document.querySelectorAll('[data-testid=credit-sentence], [data-testid=credit-balance], [data-testid=credit-risk-reasons], [data-testid=voucher-line], [data-testid=voucher-vouched], [data-testid=credit-made-of], [data-testid=credit-confirmed-by], [data-testid=credit-vouched-by], [data-testid=credit-live-offers], [data-testid=give-blocked]')]
         .filter((el) => /…/.test(el.textContent || '') || ['ellipsis'].includes(getComputedStyle(el).textOverflow) || getComputedStyle(el).webkitLineClamp !== 'none')
         .map((el) => (el.textContent || '').slice(0, 40));
     const give = [...document.querySelectorAll('[data-testid=credit-give]')].map((b) => Math.round(b.getBoundingClientRect().height)).filter((h) => h < 48);
@@ -133,8 +133,15 @@ const SCREENS = [
     { name: 'list-voucher', view: 'list', role: 'voucher', ready: '[data-testid=credit-list]' },
     { name: 'sheet-rob', view: 'list', role: 'voucher', ready: '[data-testid=credit-list]', act: async (page) => { await page.click('[data-testid=credit-give]'); await page.waitForSelector('[data-testid=give-credit-sheet]'); }, sheet: true },
     { name: 'sheet-jane-owner', view: 'list', role: 'owner', ready: '[data-testid=credit-list]', act: async (page) => { await page.locator('[data-testid=credit-row][data-pubkey="' + JANE + '"] [data-testid=credit-give]').click(); await page.waitForSelector('[data-testid=give-credit-sheet]'); }, sheet: true },
+    // Someone below zero, as a voucher sees them: the node's sentence, and the presets greyed (inert) under it.
+    { name: 'sheet-val-voucher', view: 'list', role: 'voucher', ready: '[data-testid=credit-list]', act: async (page) => { await page.locator('[data-testid=credit-row][data-pubkey="' + VAL + '"] [data-testid=credit-give]').click(); await page.waitForSelector('[data-testid=give-credit-sheet]'); await page.locator('[data-testid=give-blocked]').scrollIntoViewIfNeeded(); await page.waitForTimeout(200); }, sheet: true },
+    // Sam after the gift (amendment 2): Balance 0, the high word and the two-sentence reason, as a voucher reads it.
+    { name: 'sheet-sam-voucher', view: 'list', role: 'voucher', ready: '[data-testid=credit-list]', act: async (page) => { await page.locator('[data-testid=credit-row][data-pubkey="' + SAM + '"] [data-testid=credit-give]').click(); await page.waitForSelector('[data-testid=give-credit-sheet]'); }, sheet: true },
     { name: 'vouchers', view: 'vouchers', role: 'owner', ready: '[data-testid=voucher-row]' },
     { name: 'card-owner', view: 'card', role: 'owner', ready: '[data-testid=credit-looked-at-by]' },
+    // Every line of an owner's card, in the design's order: the line, live Offers, the balance, made of, who confirmed, who vouched, the word, who looked.
+    { name: 'card-jane-owner', view: 'card', who: 'jane', role: 'owner', ready: '[data-testid=credit-looked-at-by]' },
+    { name: 'card-jane-voucher', view: 'card', who: 'jane', role: 'voucher', ready: '[data-testid=credit-card]' },
     { name: 'card-voucher', view: 'card', role: 'voucher', ready: '[data-testid=credit-card]' },
     { name: 'ask', view: 'ask', role: 'owner', ready: '[data-testid=ask-for-more]' },
     { name: 'looks', view: 'looks', role: 'owner', ready: '[data-testid=credit-looks-toggle]', act: async (page) => { await page.click('[data-testid=credit-looks-toggle]'); await page.waitForSelector('[data-testid=credit-looks-groups]'); } },
@@ -159,7 +166,7 @@ try {
                     try { localStorage.setItem('beanpool-theme-mode', stored); } catch { /* private mode */ }
                     document.addEventListener('DOMContentLoaded', () => { document.documentElement.style.fontSize = `${scale * 100}%`; });
                 }, [look.stored, vp.scale]);
-                await page.goto(`${base}/e2e/credit-list-harness.html?view=${s.view}&role=${s.role}`, { waitUntil: 'load' });
+                await page.goto(`${base}/e2e/credit-list-harness.html?view=${s.view}&role=${s.role}${s.who ? `&who=${s.who}` : ''}`, { waitUntil: 'load' });
                 await page.waitForSelector(s.ready, { timeout: 30_000 });
                 if (s.act) await s.act(page);
                 await page.waitForTimeout(300);

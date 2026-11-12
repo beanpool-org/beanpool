@@ -223,11 +223,43 @@ describe('the give flow (tests 11 and 12)', () => {
         fireEvent.click(within(sheet).getByTestId('invite-vouch-100'));
         fireEvent.click(within(sheet).getByTestId('give-vouch-submit'));
         await waitFor(() => expect(api.vouchForMember).toHaveBeenCalledWith(ROB, { vouchAmount: 10000 }));
-        expect(await within(sheet).findByTestId('give-done')).toHaveTextContent('Vouched 100 for @Rob. Their credit line is now 100.');
+        expect(await within(sheet).findByTestId('give-done')).toHaveTextContent('Vouched 100 Beans for @Rob.');
+        expect(within(sheet).getByTestId('give-line')).toHaveTextContent('Their credit line is now 100.');
         expect(NODE.calls.some((c) => c.method === 'GET' && c.path === `/api/credit/people/${ROB}`)).toBe(true);
         // The row follows the node's fresh answer, not a local sum.
         expect(within(screen.getAllByTestId('credit-row')[0]!).getByTestId('credit-sentence').textContent).toBe('Credit line 100 · can use all of it now');
         // Red when the body grows, or the row is updated before the node answers.
+    });
+
+    it('raising a vouch says "Raised vouch for @Rob to 200 Beans." from the total the node recorded', async () => {
+        NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING;
+        NODE.people = [person({ youVouched_c: 10000, line_c: 10000, usable_c: 10000 })];
+        NODE.cards[ROB] = person({ youVouched_c: 20000, line_c: 20000, usable_c: 20000 });
+        vi.mocked(api.vouchForMember).mockResolvedValueOnce({ id: 'v', memberPubkey: ROB, amount: 10000, total: 20000, budget: {} });
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getByTestId('credit-give'));
+        const sheet = await screen.findByTestId('give-credit-sheet');
+        fireEvent.click(within(sheet).getByTestId('invite-vouch-200'));
+        fireEvent.click(within(sheet).getByTestId('give-vouch-submit'));
+        await waitFor(() => expect(api.vouchForMember).toHaveBeenCalledWith(ROB, { raiseTo: 20000 }));
+        expect(await within(sheet).findByTestId('give-done')).toHaveTextContent('Raised vouch for @Rob to 200 Beans.');
+        expect(within(sheet).getByTestId('give-line')).toHaveTextContent('Their credit line is now 200.');
+        // Red when a raise says "Vouched 200 Beans" (it is not a second vouch), or the total is the app's own sum.
+    });
+
+    it('a give that gets no answer says "Connect to your community to give credit.", never the browser’s own words', async () => {
+        vi.mocked(api.vouchForMember).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getAllByTestId('credit-give')[0]!);
+        const sheet = await screen.findByTestId('give-credit-sheet');
+        fireEvent.click(within(sheet).getByTestId('invite-vouch-100'));
+        fireEvent.click(within(sheet).getByTestId('give-vouch-submit'));
+        const said = await within(sheet).findByTestId('give-refusal');
+        expect(said).toHaveTextContent('Connect to your community to give credit.');
+        expect(said.textContent).not.toContain('Failed to fetch');
+        // Red when the thrown message is shown as it came.
     });
 
     it('a refusal shows the node’s sentence, changes nothing, and (not enough budget) offers Ask for more under it', async () => {
@@ -244,22 +276,28 @@ describe('the give flow (tests 11 and 12)', () => {
         expect(NODE.calls.some((c) => c.path === `/api/credit/people/${ROB}`)).toBe(false);
     });
 
-    it('someone below zero: the presets are not offered, the node’s sentence says why, and the tap sends no request', async () => {
+    it('someone below zero: the presets are greyed and inert under the node’s sentence, and no request can be sent', async () => {
         NODE.people = [person({ balance_c: -43713, owed_c: 43713, line_c: 100000, usable_c: 100000 })];
         await draw();
         await turnOn();
         fireEvent.click(screen.getByTestId('credit-give'));
         const sheet = await screen.findByTestId('give-credit-sheet');
         expect(within(sheet).getByTestId('give-blocked')).toHaveTextContent('@Rob is below zero: a credit-line gift or a Decision can help.');
-        expect(within(sheet).queryByTestId('invite-vouch-100')).toBeNull();
+        // Greyed, not taken away (design §3.3): the presets are in view inside an inert box, and the button cannot send.
+        expect(within(sheet).getByTestId('invite-vouch-100')).toBeInTheDocument();
+        expect(within(sheet).getByTestId('give-presets')).toHaveAttribute('inert');
+        expect(within(sheet).getByTestId('give-vouch-submit')).toBeDisabled();
+        fireEvent.click(within(sheet).getByTestId('give-vouch-submit'));
         expect(api.vouchForMember).not.toHaveBeenCalled();
+        // Red when the presets are live below zero, or leave the page altogether (the phone greys them).
     });
 
-    it('a frozen or paused line: the sheet says so under the gift’s own sentence and offers no preset', async () => {
+    it('a frozen or paused line: the sheet says so under the gift’s own sentence and greys the presets', async () => {
         const { GiveCreditSheet } = await import('./GiveCreditSheet');
         render(<GiveCreditSheet person={person({ canGive: false }) as never} myVouching={VOUCHER as never} knownFloor_c={100000} full={false} onClose={() => {}} onChanged={() => {}} />);
         expect(screen.getByTestId('give-blocked')).toHaveTextContent('@Rob can’t be given part of a credit line right now.');
-        expect(screen.queryByTestId('invite-vouch-100')).toBeNull();
+        expect(screen.getByTestId('give-presets')).toHaveAttribute('inert');
+        expect(screen.getByTestId('give-vouch-submit')).toBeDisabled();
     });
 
     it('Next opens the next person who can be given credit', async () => {
@@ -322,7 +360,7 @@ describe('the give flow (tests 11 and 12)', () => {
         fireEvent.click(screen.getByTestId('credit-give'));
         const sheet = await screen.findByTestId('give-credit-sheet');
         expect(within(sheet).getByTestId('give-raise-amount')).toHaveTextContent('1,100');
-        for (let i = 0; i < 4; i++) fireEvent.click(within(sheet).getByRole('button', { name: 'Raise the amount by 100 Beans' }));
+        for (let i = 0; i < 4; i++) fireEvent.click(within(sheet).getByRole('button', { name: 'Raise the amount' }));
         expect(within(sheet).getByTestId('give-raise-amount')).toHaveTextContent('1,500');
         fireEvent.click(within(sheet).getByTestId('give-raise-submit'));
         await waitFor(() => expect(NODE.calls.some((c) => c.path === '/api/credit/known-floor')).toBe(true));
@@ -362,6 +400,19 @@ describe("vouchers' budgets (amendment §3.5; tests 18 and 19)", () => {
         // Order and words come from the node: this draws them as sent.
     });
 
+    it('the vouched line says what is held on invites only when something is held, and counts "1 person", never "1 people"', async () => {
+        NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING;
+        NODE.chip = [row(), row({ memberPubkey: K('5'), callsign: 'Olive', left: 90000, held: 0, vouched: 10000, peopleVouched: 1, belowZero: 0, runningLow: false, askedAt: null })];
+        await draw();
+        fireEvent.click(await screen.findByTestId('credit-switch'));
+        fireEvent.click(await screen.findByTestId('credit-chip-vouchers'));
+        const rows = await screen.findAllByTestId('voucher-row');
+        expect(within(rows[0]!).getByTestId('voucher-vouched').textContent).toBe('Vouched 800 to 9 people · 50 held on invites');
+        expect(within(rows[1]!).getByTestId('voucher-vouched').textContent).toBe('Vouched 100 to 1 person');
+        expect(rows[1]!.textContent).toContain('0 of 1 below zero · written off 0');
+        // Red when a voucher with nothing held reads "· 0 held on invites" (the design's Olive reads "Vouched 100 to 1 person").
+    });
+
     it('Top up sends the node’s offer unchanged (setVoucherBudget(pk, topUpTo_c)) and says the result in the node’s figures', async () => {
         NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING; NODE.chip = [row()];
         await draw();
@@ -369,8 +420,20 @@ describe("vouchers' budgets (amendment §3.5; tests 18 and 19)", () => {
         fireEvent.click(await screen.findByTestId('credit-chip-vouchers'));
         fireEvent.click(await screen.findByTestId('voucher-topup'));
         await waitFor(() => expect(api.setVoucherBudget).toHaveBeenCalledWith(JANE, 100000));
-        expect(await screen.findByTestId('topup-note')).toHaveTextContent('Jane’s budget is 1,000 again: 1,000 left to vouch with.');
+        expect(await screen.findByTestId('topup-note')).toHaveTextContent('Jane’s budget is 1,000 now: 1,000 left to vouch with.');
         // Red when the app works out a level of its own.
+    });
+
+    it('a Top up that gets no answer says "Could not top up just now.", never the browser’s own words', async () => {
+        NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING; NODE.chip = [row()];
+        vi.mocked(api.setVoucherBudget).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        await draw();
+        fireEvent.click(await screen.findByTestId('credit-switch'));
+        fireEvent.click(await screen.findByTestId('credit-chip-vouchers'));
+        fireEvent.click(await screen.findByTestId('voucher-topup'));
+        const note = await screen.findByTestId('topup-note');
+        expect(note).toHaveTextContent('Could not top up just now.');
+        expect(note.textContent).not.toContain('Failed to fetch');
     });
 
     it('at the most a voucher can hold, frozen and paused: no button, the node’s reason in words; an owner reads "Owner · no limit"', async () => {
@@ -388,7 +451,7 @@ describe("vouchers' budgets (amendment §3.5; tests 18 and 19)", () => {
         expect(screen.queryAllByTestId('voucher-topup')).toHaveLength(0);
         expect(within(rows[0]!).getByTestId('topup-blocked')).toHaveTextContent('At the most a voucher can hold.');
         expect(within(rows[1]!).getByTestId('topup-blocked')).toHaveTextContent('Their credit line is frozen, so their budget can’t be raised.');
-        expect(within(rows[2]!).getByTestId('topup-blocked')).toHaveTextContent('Their account is paused, so their budget can’t be raised while it lasts.');
+        expect(within(rows[2]!).getByTestId('topup-blocked')).toHaveTextContent('Their account is paused, so their budget can’t be raised.');
         expect(rows[3]!).toHaveTextContent('Owner · no limit');
         expect(within(rows[3]!).queryByTestId('voucher-card')).toBeNull();
     });

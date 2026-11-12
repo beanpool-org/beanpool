@@ -11,8 +11,9 @@
  *                            `{ memberPubkey, raiseTo_c }`: raise only, in 100s, up to the cap. Lowering and freezing stay in Settings.
  *
  * A giver now sees the balance, so the sheet says "below zero" or "can't be given credit" before the tap in place of a refusal
- * after it (amendment §3.3); the node still refuses either. After a give the person is read again from the node (never updated
- * locally), the result is said, and Next opens the next person in the list.
+ * after it (amendment §3.3), with the presets greyed under that sentence (inert: nothing can be picked, nothing is sent); the
+ * node still refuses either. After a give the person is read again from the node (never updated locally), the result is said
+ * in two lines (what was given, then "Their credit line is now …"), and Next opens the next person in the list.
  */
 import { useId, useRef, useState } from 'react';
 import { INVITE_ADDS_WORDS, beans, formatHundredths, raiseVouchFor, t, vouchFor, vouchMaxFor } from '@beanpool/core';
@@ -50,7 +51,7 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
     const [preset, setPreset] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<{ text: string; code?: string } | null>(null);
-    const [done, setDone] = useState<string | null>(null);
+    const [done, setDone] = useState<{ said: string; line: string } | null>(null);
     const [doneInApp, setDoneInApp] = useState(false);
 
     const name = person.callsign;
@@ -71,7 +72,9 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
     const raiseTarget = Math.min(cap, Math.max(held + STEP_C, target));
     const mayConfirm = full && !confirmed && person.canGive && knownFloor_c !== null && knownFloor_c > 0;
 
-    const lineAfter = (fresh: CreditPerson) => formatHundredths(fresh.line_c);
+    const lineAfter = (fresh: CreditPerson) => t(W.lineNow, { line: formatHundredths(fresh.line_c) });
+    // The node's own sentence for a refusal it made; a request that got no answer at all reads as offline, never as the browser's own "Failed to fetch".
+    const refusalOf = (e: unknown, fallback: string) => (typeof (e as { status?: unknown } | null)?.status === 'number' ? refusalText(e, fallback) : t(W.offlineGive));
 
     async function vouch() {
         if (!preset) return;
@@ -80,16 +83,19 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
         setDone(null);
         try {
             // A raise posts the total it ends at, a first vouch its amount; the node lands the difference.
-            await vouchForMember(person.memberPubkey, isRaise ? { raiseTo: preset } : { vouchAmount: preset });
+            const res = await vouchForMember(person.memberPubkey, isRaise ? { raiseTo: preset } : { vouchAmount: preset });
             setPreset(null);
             const fresh = (await getCreditPerson(person.memberPubkey)).person;
             onChanged(fresh);
-            setDone(t(W.vouched, { amount: formatHundredths(preset), name, line: lineAfter(fresh) }));
+            setDone({
+                said: isRaise ? t(W.raisedVouch, { name, total: formatHundredths(res.total) }) : t(W.vouched, { amount: formatHundredths(preset), name }),
+                line: lineAfter(fresh),
+            });
             void getMyVouching().then(setVouching).catch(() => {});
         } catch (e) {
             // The node's sentence, shown as it is; nothing is changed in the list.
             setPreset(null);
-            setRefusal({ text: refusalText(e, t('Could not vouch.')), code: (e as { code?: string })?.code });
+            setRefusal({ text: refusalOf(e, t('Could not vouch.')), code: (e as { code?: string })?.code });
         } finally {
             setBusy(false);
         }
@@ -103,10 +109,10 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
             const out = await raiseKnownFloor(person.memberPubkey, raiseTarget);
             const fresh = (await getCreditPerson(person.memberPubkey)).person;
             onChanged(fresh);
-            setDone(t(W.raised, { name, amount: formatHundredths(out.knownFloor_c), line: lineAfter(fresh) }));
+            setDone({ said: t(W.raised, { name, amount: formatHundredths(out.knownFloor_c) }), line: lineAfter(fresh) });
             setTarget(Math.min(fresh.parts?.cap_c ?? cap, (fresh.parts?.known_c ?? out.knownFloor_c) + STEP_C));
         } catch (e) {
-            setRefusal({ text: refusalText(e, t('Could not raise the known floor.')), code: (e as { code?: string })?.code });
+            setRefusal({ text: refusalOf(e, t('Could not raise the known floor.')), code: (e as { code?: string })?.code });
         } finally {
             setBusy(false);
         }
@@ -156,12 +162,12 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
                 {vouching?.voucher && (
                     <div className={box} data-testid="give-vouch">
                         <h3 className={heading}>{isRaise ? raiseVouchFor(name) : vouchFor(name)}</h3>
-                        {belowZero ? (
-                            <p className={sentence} data-testid="give-blocked">{t(W.belowZero, { name })}</p>
-                        ) : !person.canGive ? (
-                            <p className={sentence} data-testid="give-blocked">{t(W.cantBeGiven, { name })}</p>
-                        ) : atMax ? null : (
-                            <>
+                        {(belowZero || !person.canGive) && (
+                            <p className={`${sentence} mb-2`} data-testid="give-blocked">{belowZero ? t(W.belowZero, { name }) : t(W.cantBeGiven, { name })}</p>
+                        )}
+                        {!atMax && (
+                            // Below zero or unable to be given part of a line: the presets stay in view, greyed and inert (design §3.3), and no request can be sent.
+                            <div inert={belowZero || !person.canGive} className={belowZero || !person.canGive ? 'opacity-40' : undefined} data-testid="give-presets">
                                 <VouchPresetChoice
                                     value={preset}
                                     onChange={setPreset}
@@ -171,11 +177,13 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
                                     raiseFrom={isRaise ? prior : undefined}
                                 />
                                 <button type="button" disabled={busy || !preset || !mayVouch} onClick={vouch} className={btn} data-testid="give-vouch-submit">
-                                    {preset
-                                        ? t('Vouch {amount} for @{name}', { amount: formatHundredths(preset), name })
-                                        : (isRaise ? raiseVouchFor(name) : vouchFor(name))}
+                                    {busy
+                                        ? t(W.saving)
+                                        : preset
+                                            ? t('Vouch {amount} for @{name}', { amount: formatHundredths(preset), name })
+                                            : (isRaise ? raiseVouchFor(name) : vouchFor(name))}
                                 </button>
-                            </>
+                            </div>
                         )}
                         {refusal?.code === 'not_enough' && <div className="mt-3"><AskForMore ask={vouching.ask ?? null} /></div>}
                     </div>
@@ -241,8 +249,9 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
                     </p>
                 )}
                 {done && (
-                    <div role="status" className="p-3 rounded-xl bg-bp-chip-ok-tint text-bp-chip-ok-ink text-[13px] font-bold leading-relaxed break-words" data-testid="give-done">
-                        {done}
+                    <div role="status" className="p-3 rounded-xl bg-bp-chip-ok-tint text-bp-chip-ok-ink text-[13px] font-bold leading-relaxed break-words space-y-1" data-testid="give-done">
+                        <p className="m-0">{done.said}</p>
+                        <p className="m-0" data-testid="give-line">{done.line}</p>
                     </div>
                 )}
 

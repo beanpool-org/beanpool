@@ -76,7 +76,11 @@ describe('the profile card (§3.4)', () => {
         const card = await screen.findByTestId('credit-card');
         expect(within(card).getByTestId('credit-sentence').textContent).toBe('Credit line 1,300 · can use all of it now');
         expect(within(card).getByTestId('credit-balance').textContent).toContain('Balance −420 · using 420 of 1,300');
-        expect(within(card).getByTestId('credit-made-of').textContent).toBe('Made of: known floor 1,000 · vouched 200 (@marty 100, @olive 100) · earned 100');
+        expect(within(card).getByTestId('credit-made-of').textContent).toBe('Made of: known floor 1,000 · vouched 200 · earned 100');
+        // Who stands behind the person (amendment 2 §5 item 4: who confirmed, each vouch): owners and admins only.
+        expect(within(card).getByTestId('credit-confirmed-by').textContent).toBe('Confirmed by @marty');
+        expect(within(card).getByTestId('credit-vouched-by').textContent).toBe('Vouched by @marty 100, @olive 100');
+        expect(within(card).getByTestId('credit-live-offers').textContent).toBe('1 live Offer');
         expect(card.textContent).toContain('Only people who can give credit see this. Each look is recorded.');
         expect(within(card).getByTestId('credit-risk-reasons').textContent).toContain('Confirmed as known by an admin.');
         await waitFor(() => expect(within(card).getByTestId('credit-looked-at-by').textContent).toBe('Looked at by: @jane 12 Nov · @marty 11 Nov'));
@@ -88,6 +92,8 @@ describe('the profile card (§3.4)', () => {
         render(<CreditCard memberPubkey={SAM} myVouching={VOUCHER as never} />);
         const card = await screen.findByTestId('credit-card');
         expect(screen.queryByTestId('credit-made-of')).toBeNull();
+        expect(screen.queryByTestId('credit-confirmed-by')).toBeNull();
+        expect(screen.queryByTestId('credit-vouched-by')).toBeNull();
         expect(screen.queryByTestId('credit-looked-at-by')).toBeNull();
         expect(within(card).getByTestId('credit-you-vouched')).toHaveTextContent('You vouched 50');
         expect(card.textContent).toContain('An owner or admin can say more.');
@@ -110,10 +116,43 @@ describe('the profile card (§3.4)', () => {
         expect(container.textContent).toBe('');
     });
 
-    it('over the cap it says so: "Capped at 2,000, the most this community allows."', async () => {
-        NODE.card = { ...FULL, line_c: 200000, usable_c: 200000 };
+    it('over the cap it says so: "Capped at 2,000, the most this community allows." (the parts add up to more than the cap)', async () => {
+        NODE.card = { ...FULL, line_c: 200000, usable_c: 200000, parts: { known_c: 150000, room_c: 50000, earned_c: 20000, granted_c: 0, cap_c: 200000 } };
         render(<CreditCard memberPubkey={SAM} myVouching={null} />);
         expect(await screen.findByTestId('credit-capped')).toHaveTextContent('Capped at 2,000, the most this community allows.');
+        // Red when the card says "Capped" from the line alone (a line that merely reaches the cap loses nothing).
+    });
+
+    it('a line that reaches the cap exactly loses nothing, so the card does not say "Capped"', async () => {
+        NODE.card = { ...FULL, line_c: 200000, usable_c: 200000, parts: { known_c: 150000, room_c: 50000, earned_c: 0, granted_c: 0, cap_c: 200000 } };
+        render(<CreditCard memberPubkey={SAM} myVouching={null} />);
+        await screen.findByTestId('credit-card');
+        expect(screen.queryByTestId('credit-capped')).toBeNull();
+    });
+
+    it('a person with nothing yet: no "Made of" line, no "Confirmed by", no "Vouched by" (a part of 0 is left out)', async () => {
+        NODE.card = base({
+            line_c: 0, usable_c: 0, liveOffers: 4, balance_c: 0, owed_c: 0,
+            parts: { known_c: 0, room_c: 0, earned_c: 0, granted_c: 0, cap_c: 200000 },
+            standsBehind: { confirmedBy: null, vouchedBy: [] }, frozen: { credit: false, known: false },
+            risk: { level: 'not_known', more: false, reasons: [] },
+        });
+        render(<CreditCard memberPubkey={SAM} myVouching={null} />);
+        const card = await screen.findByTestId('credit-card');
+        expect(within(card).getByTestId('credit-sentence').textContent).toBe('No credit yet · 4 live Offers');
+        expect(card.textContent).not.toMatch(/Made of|Confirmed by|Vouched by|known floor 0/);
+        // Red when a part of 0 is printed ("known floor 0 · vouched 0 · earned 0").
+    });
+
+    it('the lines come in the design’s order, the risk word last but for who looked', async () => {
+        NODE.looks = { groups: [], looks: [{ actorPubkey: 'j', actorCallsign: 'jane', subjectPubkey: SAM, subjectCallsign: 'Sam', surface: 'list', sight: 'voucher', day: '2026-11-12', at: '2026-11-12T01:00:00Z' }] };
+        render(<CreditCard memberPubkey={SAM} myVouching={null} />);
+        const card = await screen.findByTestId('credit-card');
+        await waitFor(() => within(card).getByTestId('credit-looked-at-by'));
+        const order = ['credit-sentence', 'credit-live-offers', 'credit-balance', 'credit-made-of', 'credit-confirmed-by', 'credit-vouched-by', 'credit-risk-word', 'credit-looked-at-by'];
+        const at = order.map((id) => Array.from(card.querySelectorAll('*')).indexOf(within(card).getByTestId(id)));
+        expect(at).toEqual([...at].sort((a, b) => a - b));
+        // Red when the risk word moves above "Made of" (the phone's and the design's order is the line, the balance, who stands behind, then the word).
     });
 
     it('nothing is kept: the card leaves no balance in browser storage', async () => {
@@ -195,6 +234,17 @@ describe('Ask for more (§3.6)', () => {
         render(<AskForMore ask={ASK} />);
         fireEvent.click(screen.getByTestId('ask-for-more'));
         expect(await screen.findByTestId('ask-refusal')).toHaveTextContent('You asked on 12 Nov. You can ask again on 19 Nov.');
+    });
+
+    it('a tap that gets no answer says "Could not ask just now.", never the browser’s own "Failed to fetch"', async () => {
+        NODE.vouching = { ...VOUCHER, ask: ASK };
+        NODE.ask.mockImplementation(() => { throw new TypeError('Failed to fetch'); });
+        render(<AskForMore ask={ASK} />);
+        fireEvent.click(screen.getByTestId('ask-for-more'));
+        const said = await screen.findByTestId('ask-refusal');
+        expect(said).toHaveTextContent('Could not ask just now.');
+        expect(said.textContent).not.toContain('Failed to fetch');
+        // Red when a thrown message with no status from the node is shown as it came.
     });
 
     it('the Ledger’s budget panel replaces the static sentence with the button, keeps it for a node that sends no `ask`, and shows an owner neither', () => {

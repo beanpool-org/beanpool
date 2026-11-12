@@ -95,7 +95,9 @@ export const CREDIT_LIST_WORDS = {
     showCredit: word('Show credit'),
     offline: word('Connect to your community to see credit lines.'),
     loading: word('Reading credit lines…'),
-    nobody: word('Nobody is on this list.'),
+    nobody: word('Nobody to show here.'),
+    unreadable: word('Credit lines could not be read just now. Try again in a moment.'),
+    offlineGive: word('Connect to your community to give credit.'),
     tryAgain: word('Try again'),
     chipAll: word('All'),
     chipNoCredit: word('No credit yet'),
@@ -113,39 +115,42 @@ export const CREDIT_LIST_WORDS = {
     belowZero: word('@{name} is below zero: a credit-line gift or a Decision can help.'),
     cantBeGiven: word('@{name} can’t be given part of a credit line right now.'),
     next: word('Next ›'),
-    nextNone: word('That was the last one.'),
-    vouched: word('Vouched {amount} for @{name}. Their credit line is now {line}.'),
+    vouched: word('Vouched {amount} Beans for @{name}.'),
+    raisedVouch: word('Raised vouch for @{name} to {total} Beans.'),
+    lineNow: word('Their credit line is now {line}.'),
+    saving: word('Saving...'),
     confirmTitle: word('Confirm @{name} as known'),
     confirmAdds: word('Adds the known floor: {floor} Beans ›'),
     raiseTitle: word('Raise their known floor'),
     raiseAction: word('Raise to {amount}'),
-    raiseLess: word('Lower the amount by 100 Beans'),
-    raiseMore: word('Raise the amount by 100 Beans'),
-    raised: word('@{name}’s known floor is now {amount} Beans. Their credit line is now {line}.'),
-    waitingSecond: word('Waiting for a second admin'),
+    raiseLess: word('Lower the amount'),
+    raiseMore: word('Raise the amount'),
+    raised: word('Raised the known floor for @{name} to {amount} Beans.'),
     youVouched: word('You vouched {amount}'),
     capped: word('Capped at {cap}, the most this community allows.'),
     cardTitle: word('Credit'),
-    madeOf: word('Made of: known floor {known} · vouched {vouched}{who} · earned {earned}'),
-    madeOfGranted: word('Made of: known floor {known} · vouched {vouched}{who} · earned {earned} · granted {granted}'),
+    madeOf: word('Made of: {parts}'),
+    partKnown: word('known floor {amount}'),
+    partVouched: word('vouched {amount}'),
+    partEarned: word('earned {amount}'),
+    partGranted: word('granted {amount}'),
+    confirmedBy: word('Confirmed by @{name}'),
+    vouchedBy: word('Vouched by {list}'),
     lookedAtBy: word('Looked at by: {who}'),
-    riskWhy: word('Why this word'),
-    cardUnavailable: word('Credit can’t be read right now.'),
-    joined: word('Joined {when} · invited by @{name}'),
     // Vouchers' budgets (amendment §3.5)
     voucherLine: word('Voucher · {left} of {level} left'),
     ownerLine: word('Owner · no limit'),
     runningLow: word('Running low'),
     nothingLeftToVouch: word('Nothing left to vouch with'),
-    vouchedTo: word('Vouched {amount} to {people} · {held} held on invites'),
-    belowZeroCount: word('{below} of {people} below zero · written off {written}'),
+    heldOnInvites: word('{amount} held on invites'),
+    belowZeroCount: word('{below} of {people} below zero · written off {amount}'),
     askedOn: word('Asked for more on {day}'),
     topUp: word('Top up to {level}'),
     theirCard: word('Their card ›'),
     atMost: word('At the most a voucher can hold.'),
     voucherFrozen: word('Their credit line is frozen, so their budget can’t be raised.'),
-    voucherPaused: word('Their account is paused, so their budget can’t be raised while it lasts.'),
-    toppedUp: word('@{name}’s budget is {level} again: {left} left to vouch with.'),
+    voucherPaused: word('Their account is paused, so their budget can’t be raised.'),
+    toppedUp: word('{name}’s budget is {level} now: {left} left to vouch with.'),
     noVouchers: word('No vouchers here yet.'),
     // Ask for more (amendment §3.6)
     ask: word('Ask for more'),
@@ -155,6 +160,7 @@ export const CREDIT_LIST_WORDS = {
     askPaused: word('Your account is paused, so your budget can’t be raised while it lasts.'),
     // The log of looks (amendment §5.2)
     looksTitle: word('Who looked at credit'),
+    cardUnavailable: word('Credit can’t be read right now.'),
     looksIntro: word('Every time an owner, an admin or a voucher looks at someone’s credit, a line is kept for 12 months. Only owners and admins read this.'),
     looksGroup: word('@{name} · {day} · looked at {people} ›'),
     looksNone: word('Nobody has looked at credit yet.'),
@@ -233,8 +239,12 @@ export function notAGiver(e: unknown): boolean {
     return err?.status === 403 && (err.code === 'not_a_giver' || err.code === 'committee_only');
 }
 
-/** The node's own words for a refusal, else ours. */
+/**
+ * The node's own words for a refusal it made, else ours. Only an error with a `status` came from the node (api.ts refusalError,
+ * and the busy answer's 429); a request that got no answer at all throws the browser's own message ("Failed to fetch"), which a
+ * member never reads.
+ */
 export function refusalText(e: unknown, fallback: string): string {
-    const m = (e as { message?: unknown } | null)?.message;
-    return typeof m === 'string' && m.length > 0 ? m : fallback;
+    const err = e as { status?: unknown; message?: unknown } | null;
+    return typeof err?.status === 'number' && typeof err.message === 'string' && err.message.length > 0 ? err.message : fallback;
 }

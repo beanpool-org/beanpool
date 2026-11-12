@@ -20,7 +20,9 @@ const SEED = new Uint8Array(32).fill(7);
 const me: BeanPoolIdentity = { publicKey: bytesToHex(ed25519.getPublicKey(SEED)), privateKey: bytesToHex(toEd25519Pkcs8(SEED)), callsign: 'Marty', createdAt: '2026-01-01T00:00:00.000Z' };
 const view = new URLSearchParams(location.search).get('view') ?? 'list';
 const role = new URLSearchParams(location.search).get('role') ?? 'owner';
+// The card's person: Sam after the gift by default, or `&who=jane` (confirmed, two vouches: every line of an owner's card).
 const SAM = '3'.repeat(64);
+const CARD_OF = new URLSearchParams(location.search).get('who') === 'jane' ? '2'.repeat(64) : SAM;
 
 function Harness() {
     useTheme();
@@ -28,7 +30,7 @@ function Harness() {
         <main style={{ minHeight: '100vh', background: 'var(--bg-primary)' }} className="p-4 max-w-4xl mx-auto">
             {view === 'list' && <CreditPeoplePanel query="" blocked={new Set()} start={{ chip: 'all', nonce: 1 }} />}
             {view === 'vouchers' && <CreditPeoplePanel query="" blocked={new Set()} start={{ chip: 'vouchers', nonce: 1 }} />}
-            {view === 'card' && <CreditCard memberPubkey={SAM} myVouching={role === 'voucher' ? ({ voucher: true } as never) : null} />}
+            {view === 'card' && <CreditCard memberPubkey={CARD_OF} myVouching={role === 'voucher' ? ({ voucher: true } as never) : null} />}
             {view === 'looks' && <CreditLooksSection />}
             {view === 'ask' && (
                 <div className="space-y-4">

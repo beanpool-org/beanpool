@@ -17,7 +17,7 @@
  * reads "Connect to your community to see credit lines." Rows wrap to as many lines as they need and are never cut with "…".
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CREDIT_SIGHT_WORDS, creditSightLine, formatHundredths, t, tn } from '@beanpool/core';
+import { CREDIT_SIGHT_WORDS, creditSightLine, formatCount, formatHundredths, t, tn } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { setVoucherBudget, type MyVouching } from '../lib/api';
 import { fetchKnownRule } from '../lib/known-rule';
@@ -63,6 +63,13 @@ function BudgetMark({ nothingLeft, runningLow }: { nothingLeft: boolean; running
             <span>{nothingLeft ? t(W.nothingLeftToVouch) : t(W.runningLow)}</span>
         </span>
     );
+}
+
+/** "Vouched 800 to 9 people · 50 held on invites": the held part only when something is held (a sentence of its own, joined here, never inside a template). */
+function vouchedLine(v: VoucherChipRow): string {
+    const vouched = tn(v.peopleVouched, 'Vouched {amount} to {n} person', 'Vouched {amount} to {n} people', { n: formatCount(v.peopleVouched), amount: formatHundredths(v.vouched) });
+    const held = v.held > 0 ? t(W.heldOnInvites, { amount: formatHundredths(v.held) }) : null;
+    return held ? [vouched, held].join(' · ') : vouched;
 }
 
 /** A voucher's budget on a row: "Voucher · 150 of 1,000 left ! Running low", "Owner · no limit", and when they asked. */
@@ -168,7 +175,7 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
                 if (notAGiver(e)) { setGiver(null); return; }
                 const status = (e as { status?: number })?.status;
                 // The node's own sentence for a refusal it made (a spent hour of looks); no answer at all reads as offline.
-                if (typeof status === 'number') { setRefusal(refusalText(e, t(W.cardUnavailable))); setPageState('failed'); } else setPageState('offline');
+                if (typeof status === 'number') { setRefusal(refusalText(e, t(W.unreadable))); setPageState('failed'); } else setPageState('offline');
             });
         }, query ? 350 : 0);
         return () => clearTimeout(wait);
@@ -183,7 +190,7 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
             setPeople((p) => [...p, ...page.people]);
             setNext(page.next);
         } catch (e) {
-            if (notAGiver(e)) setGiver(null); else setRefusal(refusalText(e, t(W.cardUnavailable)));
+            if (notAGiver(e)) setGiver(null); else setRefusal(refusalText(e, t(W.unreadable)));
         }
     }
 
@@ -291,11 +298,11 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
                                                                 {t(W.voucherLine, { left: formatHundredths(v.left), level: formatHundredths(v.setLevel_c ?? v.level) })}
                                                                 <BudgetMark nothingLeft={v.nothingLeft} runningLow={v.runningLow} />
                                                             </span>
-                                                            <span className="block text-[12px] text-nature-700 dark:text-nature-300 break-words">
-                                                                {t(W.vouchedTo, { amount: formatHundredths(v.vouched), people: tn(v.peopleVouched, '{n} person', '{n} people'), held: formatHundredths(v.held) })}
+                                                            <span className="block text-[12px] text-nature-700 dark:text-nature-300 break-words" data-testid="voucher-vouched">
+                                                                {vouchedLine(v)}
                                                             </span>
                                                             <span className="block text-[12px] text-nature-700 dark:text-nature-300 break-words">
-                                                                {t(W.belowZeroCount, { below: v.belowZero, people: v.peopleVouched, written: formatHundredths(v.writtenOff) })}
+                                                                {t(W.belowZeroCount, { below: formatCount(v.belowZero), people: formatCount(v.peopleVouched), amount: formatHundredths(v.writtenOff) })}
                                                             </span>
                                                             {v.askedAt && <span className="block text-[12px] font-bold text-nature-800 dark:text-nature-200" data-testid="voucher-asked">{t(W.askedOn, { day: dayWords(v.askedAt) })}</span>}
                                                         </>

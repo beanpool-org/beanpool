@@ -65,6 +65,8 @@ import { MakeVoucherSheet } from '../../components/MakeVoucherSheet';
 import { CreditList } from '../../components/CreditList';
 import { useCreditGiver } from '../../utils/use-credit-giver';
 import { CREDIT_FILTERS, type CreditFilter } from '../../utils/credit-view';
+import { usePeopleVisitEnds } from '../../utils/people-visit';
+import { useShowCredit } from '../../utils/use-show-credit';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -250,9 +252,12 @@ export default function PeopleScreen() {
     const [anchorUrl, setAnchorUrl] = useState('');
     // Show credit (slice C4): off at every visit. Whether to OFFER it is the node's fresh answer (useCreditGiver), never a
     // role the phone kept; the pane lives in memory only. `creditStart` is where a door opened it (Invites' "Give credit to
-    // people already here", the bell's "A voucher asks for more").
-    const [creditOn, setCreditOn] = useState(false);
-    const [creditStart, setCreditStart] = useState<{ filter: CreditFilter; voucher?: string } | null>(null);
+    // people already here", the bell's "A voucher asks for more"). This tab stays mounted, so a visit ends when the member
+    // leaves it for another tab or the app goes to the background (utils/people-visit.ts): the switch goes off and the list
+    // with the balances it held, and the start with them. A profile or the names list pushed on top is not a leave.
+    const visitEnds = usePeopleVisitEnds();
+    const credit = useShowCredit(view === 'community', visitEnds);
+    const { on: creditOn, start: creditStart, open: openCredit, close: closeCredit } = credit;
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
@@ -356,17 +361,14 @@ export default function PeopleScreen() {
     const creditPossible = !isGuest && !isGlobalNode && beansOn(nodeProfile?.features) && (view === 'community' || view === 'invites');
     const giver = useCreditGiver(anchorUrl, identity, creditPossible, view);
     const showsCredit = giver === 'giver' && creditPossible;
-    useEffect(() => { if (view !== 'community') setCreditOn(false); }, [view]);
     useEffect(() => {
         // A bell row ("A voucher asks for more") lands here on the Vouchers chip, with Show credit on.
         if (!params.credit) return;
         const filter = (CREDIT_FILTERS as readonly string[]).includes(params.credit) ? (params.credit as CreditFilter) : 'all';
-        setCreditStart({ filter, voucher: typeof params.voucher === 'string' ? params.voucher : undefined });
         setView('community');
-        setCreditOn(true);
+        openCredit({ filter, voucher: typeof params.voucher === 'string' ? params.voucher : undefined });
         router.setParams({ credit: undefined, voucher: undefined });
     }, [params.credit, params.voucher]);
-    const creditRefused = useCallback(() => setCreditOn(false), []);
     const openCreditProfile = useCallback((p: { memberPubkey: string; callsign: string }) => {
         router.push({ pathname: '/public-profile', params: { publicKey: p.memberPubkey, callsign: p.callsign || t('Unknown') } });
     }, []);
@@ -1210,7 +1212,7 @@ export default function PeopleScreen() {
                             <Text style={styles.creditSwitchLabel} maxFontSizeMultiplier={1.3}>{t('Show credit')}</Text>
                             <Switch
                                 value={creditOn}
-                                onValueChange={(v) => { setCreditOn(v); if (!v) setCreditStart(null); }}
+                                onValueChange={(v) => { if (v) openCredit(); else closeCredit(); }}
                                 accessibilityLabel={t('Show credit')}
                                 trackColor={{ false: colors.border.strong, true: colors.brand.fill }}
                                 testID="credit-switch"
@@ -1253,7 +1255,7 @@ export default function PeopleScreen() {
                             focusVoucher={creditStart?.voucher}
                             nodeProfile={nodeProfile?.profile as 'local' | 'global' | null | undefined}
                             onOpenProfile={openCreditProfile}
-                            onRefused={creditRefused}
+                            onRefused={closeCredit}
                         />
                     ) : (
                     <FlatList
@@ -1525,9 +1527,8 @@ export default function PeopleScreen() {
                                     style={styles.creditDoor}
                                     testID="credit-door"
                                     onPress={() => {
-                                        setCreditStart({ filter: 'no_credit' });
                                         setView('community');
-                                        setCreditOn(true);
+                                        openCredit({ filter: 'no_credit' });
                                         router.setParams({ view: 'community' });
                                     }}
                                 >

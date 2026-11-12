@@ -559,6 +559,8 @@ export default function PublicProfileScreen() {
     }, [anchorUrl, identity, isSelf]);
 
     const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
+    // Counts the vouches that landed from the Vouch box on this screen: the credit card above it reads the person again on each.
+    const [vouchesLanded, setVouchesLanded] = useState(0);
 
     // What you have vouched for this person, from your own budget's history: whole hundredths, summed exactly (a line whose
     // figure isn't whole hundredths counts nothing).
@@ -1456,7 +1458,7 @@ export default function PublicProfileScreen() {
 
                             {/* Credit (slice C4): above the names-list button and the Vouch box, for owners, admins and vouchers only. */}
                             {!isSelf && showsBeans && creditGiver === 'giver' && identity && anchorUrl && pubKeyStr && (
-                                <CreditCard anchorUrl={anchorUrl} identity={identity} memberPubkey={pubKeyStr} />
+                                <CreditCard anchorUrl={anchorUrl} identity={identity} memberPubkey={pubKeyStr} reread={vouchesLanded} />
                             )}
 
                             {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only, and
@@ -1539,6 +1541,7 @@ export default function PublicProfileScreen() {
                                                             ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: formatHundredths(res.total) })
                                                             : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: formatHundredths(profileVouchPreset) }));
                                                         setProfileVouchPreset(null);
+                                                        setVouchesLanded((n) => n + 1);
                                                         // A failed re-read keeps the card, its figures and this banner.
                                                         void rereadMyVouching(anchorUrl, identity, setMyVouching);
                                                     } else {

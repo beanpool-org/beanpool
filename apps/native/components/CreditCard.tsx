@@ -2,7 +2,10 @@
  * The credit card on a profile (DESIGN-credit-list-fable.md §3.4 with its amendment 1), above "Add to the names list" and the
  * Vouch box, for the same viewers: owners, admins and vouchers. Read from the node when the profile opens (one logged look a
  * day per viewer and person); drawn nothing for anyone the node does not answer (a plain member's phone never asks), and
- * nothing is kept: the card lives in this component's state while the profile is open.
+ * nothing is kept: the card lives in this component's state while the profile is open. The profile stays mounted while a
+ * credit is given on it, so the card is read again (the deciding review of #3096): when `reread` changes (a vouch from the
+ * Vouch box under it) and when the screen is shown again (back from the names list after a Confirm). The card on screen stays
+ * until the new answer lands; a read that fails changes nothing.
  *
  *   Credit · only people who can give credit see this · each look is recorded
  *   Credit line 1,300 · can use all of it now
@@ -13,22 +16,37 @@
  *
  * A voucher's card is every line but "Made of" and who stands behind (the node does not send them). Every sentence is core's.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { CREDIT_SIGHT_WORDS, formatCount, formatHundredths, t, tn } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { RiskLine } from './CreditRisk';
 import { cappedWords, creditRowText, marked, fetchCreditPerson, madeOfWords, standsBehindWords, type CreditPerson, type CreditSightKind } from '../utils/credit-view';
 import type { BeanPoolIdentity } from '../utils/identity';
 
-export function CreditCard({ anchorUrl, identity, memberPubkey }: { anchorUrl: string; identity: BeanPoolIdentity; memberPubkey: string }) {
-    const [read, setRead] = useState<{ sight: CreditSightKind; person: CreditPerson } | null>(null);
+export function CreditCard({ anchorUrl, identity, memberPubkey, reread }: {
+    anchorUrl: string;
+    identity: BeanPoolIdentity;
+    memberPubkey: string;
+    /** Changes when a credit was given on the profile (the Vouch box under the card): the person is read again. */
+    reread?: unknown;
+}) {
+    // What was read, and for whom: a different person's card is never drawn for this one while it is read.
+    const who = `${anchorUrl}|${identity.publicKey}|${memberPubkey}`;
+    const [read, setRead] = useState<{ who: string; sight: CreditSightKind; person: CreditPerson } | null>(null);
+    // The screen shown again (back from the names list): read again. Its first showing is the read below, not a second one.
+    const [shownAgain, setShownAgain] = useState(0);
+    const shownBefore = useRef(false);
+    useFocusEffect(useCallback(() => {
+        if (!shownBefore.current) { shownBefore.current = true; return; }
+        setShownAgain((n) => n + 1);
+    }, []));
     useEffect(() => {
         let alive = true;
-        setRead(null);
-        void fetchCreditPerson(anchorUrl, identity, memberPubkey).then((r) => { if (alive && r.ok) setRead({ sight: r.value.sight, person: r.value.person }); });
+        void fetchCreditPerson(anchorUrl, identity, memberPubkey).then((r) => { if (alive && r.ok) setRead({ who, sight: r.value.sight, person: r.value.person }); });
         return () => { alive = false; };
-    }, [anchorUrl, identity, memberPubkey]);
+    }, [anchorUrl, identity, memberPubkey, reread, shownAgain]);
     const styles = useStyles(({ colors }) => StyleSheet.create({
         card: { marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card },
         title: { fontSize: 15, fontWeight: '800', color: colors.text.heading },
@@ -36,7 +54,7 @@ export function CreditCard({ anchorUrl, identity, memberPubkey }: { anchorUrl: s
         line: { fontSize: 14, lineHeight: 20, color: colors.text.body, marginTop: 2 },
         small: { fontSize: 12, lineHeight: 18, color: colors.text.secondary, marginTop: 2 },
     }));
-    if (!read || read.person.own) return null;
+    if (!read || read.who !== who || read.person.own) return null;
     const { person, sight } = read;
     const text = creditRowText(person, sight);
     const made = madeOfWords(person);

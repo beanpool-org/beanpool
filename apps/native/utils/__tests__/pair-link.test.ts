@@ -335,8 +335,11 @@ describe('a refused server: join it on this phone first, through its own door, t
         expect(people).not.toContain('pair-device-target');
         expect(people).not.toContain('params.server');
         expect(people).not.toContain('params.then');
-        // Its route carries the pill (`view`) and, since the notice "someone asked to join", `from=notice`: still nothing to pair with.
-        expect(people).toContain("const params = useLocalSearchParams<{ view?: string; from?: string }>();");
+        // Its route carries the pill (`view`), since the notice "someone asked to join" `from=notice`, and since Show credit (slice C4)
+        // the bell's "A voucher asks for more": `credit` (a chip name, checked against CREDIT_FILTERS) and `voucher` (the key that chip
+        // highlights). None of them is a server, a code or a way back to pairing: still nothing to pair with. A further param is a
+        // decision made here on purpose, with the three guards above.
+        expect(people).toContain("const params = useLocalSearchParams<{ view?: string; from?: string; credit?: string; voucher?: string }>();");
     });
 
     it('the refusal words: the way through at the phone\'s own server; "join" only for global; never "join {host}" or the 12 words', () => {

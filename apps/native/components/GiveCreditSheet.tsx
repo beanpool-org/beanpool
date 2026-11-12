@@ -26,7 +26,7 @@ import { RiskLine } from './CreditRisk';
 import { AskForMore } from './AskForMore';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
 import { fetchKnownRule } from '../utils/known-rule';
-import { askMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
+import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import {
     NOT_ENOUGH_BUDGET_CODE, creditRowText, fetchCreditPerson, floorRaiseSteps, mayGive, presetsGreyedBecause, presetsGreyedWords,
     raiseKnownFloor, type CreditPerson, type CreditSightKind,
@@ -60,6 +60,7 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
         section: { marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border.default },
         sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         grey: { fontSize: 13, lineHeight: 19, color: colors.text.secondary, marginBottom: 8 },
+        unread: { fontSize: 13, lineHeight: 19, color: colors.text.secondary, marginTop: 10 },
         primary: { minHeight: 48, borderRadius: 12, backgroundColor: colors.brand.fill, paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
         primaryText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700', textAlign: 'center' },
         secondary: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'center', marginTop: 8 },
@@ -75,6 +76,9 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
 
     const [person, setPerson] = useState<CreditPerson>(shown);
     const [mine, setMine] = useState<MyVouching | null>(null);
+    // The viewer's budget could not be read (the first read, or the one after a vouch): said plainly, and what is on screen stays.
+    // `askMyVouching`'s null is "could not read", never "not a voucher", so it is never written over `mine`.
+    const [budgetUnread, setBudgetUnread] = useState(false);
     const [preset, setPreset] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<{ message: string; code: string | null } | null>(null);
@@ -93,10 +97,13 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
 
     // The sheet's own read of the person (a look the node records, once a day for this pair) and of the viewer's budget.
     useEffect(() => {
-        setPerson(shown); setPreset(null); setRefusal(null); setDone(null); setFloor(null);
+        setPerson(shown); setPreset(null); setRefusal(null); setDone(null); setFloor(null); setBudgetUnread(false);
         let alive = true;
         void fetchCreditPerson(anchorUrl, identity, shown.memberPubkey).then((r) => { if (alive && r.ok) setPerson(r.value.person); });
-        void askMyVouching(anchorUrl, identity).then((mv) => { if (alive) setMine(mv); });
+        void askMyVouching(anchorUrl, identity).then((mv) => {
+            if (!alive) return;
+            if (mv) { setMine(mv); setBudgetUnread(false); } else setBudgetUnread(true);
+        });
         return () => { alive = false; };
     }, [shown.memberPubkey, anchorUrl, identity]);
 
@@ -130,7 +137,8 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
         setBusy(true); setRefusal(null); setDone(null);
         const res = await vouchFromProfile(anchorUrl, identity, isRaise ? { memberPubkey: person.memberPubkey, raiseTo: preset } : { memberPubkey: person.memberPubkey, vouchAmount: preset });
         if (res.ok) {
-            void askMyVouching(anchorUrl, identity).then(setMine);
+            // A failed read keeps the section on screen (rereadMyVouching never hands null over), says so, and tries once more quietly.
+            void rereadMyVouching(anchorUrl, identity, (mv) => { setMine(mv); setBudgetUnread(false); }, undefined, () => setBudgetUnread(true));
             await afterGive(isRaise
                 ? t('Raised vouch for @{name} to {total} Beans.', { name: person.callsign, total: formatHundredths(res.total) })
                 : t('Vouched {amount} Beans for @{name}.', { name: person.callsign, amount: formatHundredths(preset) }));
@@ -159,6 +167,10 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
                         <Text style={styles.line} maxFontSizeMultiplier={1.3}>{text.credit}</Text>
                         <Text style={styles.line} maxFontSizeMultiplier={1.3} accessibilityLabel={text.balanceSpoken}>{text.balance}</Text>
                         <RiskLine risk={person.risk} word={text.risk} shape={text.riskShape} />
+
+                        {budgetUnread ? (
+                            <Text style={styles.unread} accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.3} testID="give-budget-unread">{t('We couldn’t read your vouch budget just now.')}</Text>
+                        ) : null}
 
                         {mine?.voucher && !atMax && (
                             <View style={styles.section} testID="give-vouch">

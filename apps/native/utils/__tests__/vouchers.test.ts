@@ -239,4 +239,46 @@ describe('rereadMyVouching', () => {
         expect(apply).toHaveBeenCalledWith(GOOD);
         expect(signedGets.calls).toHaveLength(2);
     });
+
+    // The sheet over the credit list says plainly when the budget could not be read (the deciding review of #3096, finding 3).
+    describe('onUnread: the screen can say it could not read', () => {
+        // The tests above swap signedGet for their own sequence; these read what `signedGets.res` says.
+        beforeEach(async () => {
+            const { signedGet } = await import('../node-post');
+            vi.mocked(signedGet).mockImplementation(async (anchor: string, path: string, identity: any) => {
+                signedGets.calls.push({ anchor, path, identity });
+                return signedGets.res;
+            });
+        });
+
+        it('is not called when the read works', async () => {
+            signedGets.res = { ok: true, json: async () => GOOD };
+            const unread = vi.fn();
+            await rereadMyVouching(ANCHOR, ID, vi.fn(), 0, unread);
+            expect(unread).not.toHaveBeenCalled();
+        });
+
+        it('is called once, as soon as the first read fails (before the quiet second try), and not again when that fails too', async () => {
+            signedGets.res = { ok: false, json: async () => ({}) };
+            const apply = vi.fn();
+            const unread = vi.fn();
+            await rereadMyVouching(ANCHOR, ID, apply, 0, unread);
+            expect(unread).toHaveBeenCalledTimes(1);
+            expect(apply).not.toHaveBeenCalled();
+            expect(signedGets.calls).toHaveLength(2);
+        });
+
+        it('a second try that works still hands the figures over after it was called', async () => {
+            let n = 0;
+            const { signedGet } = await import('../node-post');
+            vi.mocked(signedGet).mockImplementation(async (anchor: string, path: string, identity: any) => {
+                signedGets.calls.push({ anchor, path, identity });
+                n += 1;
+                return (n === 1 ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => GOOD }) as any;
+            });
+            const order: string[] = [];
+            await rereadMyVouching(ANCHOR, ID, () => order.push('apply'), 0, () => order.push('unread'));
+            expect(order).toEqual(['unread', 'apply']);
+        });
+    });
 });

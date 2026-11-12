@@ -25,10 +25,18 @@ vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
     SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
 }));
-const nav = vi.hoisted(() => ({ pushed: [] as any[] }));
+const nav = vi.hoisted(() => ({ pushed: [] as any[], shownAgain: new Set<() => void>() }));
 vi.mock('expo-router', async () => {
-    const { useEffect } = await import('react');
-    return { router: { push: (r: unknown) => { nav.pushed.push(r); }, setParams() {} }, useFocusEffect: (cb: () => void) => useEffect(() => { cb(); }, [cb]) };
+    const { useEffect, useState } = await import('react');
+    return {
+        router: { push: (r: unknown) => { nav.pushed.push(r); }, setParams() {} },
+        // The focus effect runs when the screen first shows and again each time it is shown again (`nav.shownAgain`: a return from a pushed screen).
+        useFocusEffect: (cb: () => void) => {
+            const [shown, setShown] = useState(0);
+            useEffect(() => { const again = () => setShown((n) => n + 1); nav.shownAgain.add(again); return () => { nav.shownAgain.delete(again); }; }, []);
+            useEffect(() => { cb(); }, [cb, shown]);
+        },
+    };
 });
 vi.mock('../../app/ThemeContext', async () => {
     const { COLOUR_SETS } = await import('../../constants/colors');
@@ -65,6 +73,8 @@ const world = vi.hoisted(() => ({
     known: true,
     /** How many people a page of the fake node holds (0 = all of them on one page); the cursor is the offset. */
     pageSize: 0,
+    /** How many of the next reads of the viewer's budget (GET /api/vouchers/me) the fake node fails with a 500. */
+    mineFail: 0,
 }));
 const forSight = (p: any) => {
     if (world.sight !== 'voucher') return p;
@@ -76,7 +86,10 @@ vi.mock('../node-post', () => ({
     signedGet: async (_u: string, p: string) => {
         world.log.push(`GET ${p}`);
         if (world.pageStatus === 'offline' && p.startsWith('/api/credit/people?')) throw new Error('offline');
-        if (p === '/api/vouchers/me') return reply(200, world.mine);
+        if (p === '/api/vouchers/me') {
+            if (world.mineFail > 0) { world.mineFail--; return reply(500, { error: 'try again' }); }
+            return reply(200, world.mine);
+        }
         if (p === '/api/credit/people?filter=vouchers') {
             return world.chip.status === 200 ? reply(200, { sight: world.sight, filter: 'vouchers', vouchers: world.chip.rows, next: null }) : reply(403, { error: 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.', code: 'committee_only' });
         }
@@ -158,7 +171,7 @@ const list = (extra: Record<string, unknown> = {}) => el(CreditList, { anchorUrl
 
 const seed = () => {
     world.sight = 'owner'; world.pageStatus = 200; world.role = null; world.vouchRefusal = null; world.known = true; world.pageSize = 0;
-    world.log.length = 0; world.posts.length = 0; world.topUps.length = 0; nav.pushed.length = 0; refused.mockClear();
+    world.log.length = 0; world.posts.length = 0; world.topUps.length = 0; nav.pushed.length = 0; refused.mockClear(); world.mineFail = 0;
     world.chip = { status: 403, rows: [] };
     world.mine.voucher = true; world.mine.noLimit = false; world.mine.ask = { askedAt: null, lastAskedAt: null, askAgainAt: null, blocked: null };
     world.mine.budget = { left: 15000, held: 0, heldInvites: 0, vouched: 85000, peopleVouched: 4, level: 100000 };
@@ -326,6 +339,45 @@ describe('Give credit (test 11)', () => {
         await press(byId('give-vouch-submit'));
         expect(byId('give-next')).toBeNull();
     });
+    describe('a vouch that landed, then the budget could not be read (the deciding review of #3096, finding 3)', () => {
+        const vouchRob = async () => {
+            await mount(list());
+            await press(byId('credit-row-Rob')!.querySelector('[data-testid="credit-give"]'));
+            await press(byId('invite-vouch-50'));
+        };
+        const wait = async (ms: number) => { await act(async () => { await new Promise((r) => setTimeout(r, ms)); }); };
+        it('keeps the Vouch section (never writes null over it) and says plainly the budget could not be read', async () => {
+            await vouchRob();
+            world.mineFail = 2; // the read after the vouch fails, and so does the quiet second try
+            const budgetReads = () => world.log.filter((l) => l === 'GET /api/vouchers/me').length;
+            const before = budgetReads();
+            await press(byId('give-vouch-submit'));
+            expect(byId('give-done')!.textContent).toBe('Vouched 50 Beans for @Rob.');
+            expect(byId('give-vouch')).not.toBeNull();
+            expect(byId('give-budget-unread')!.textContent).toBe('We couldn’t read your vouch budget just now.');
+            await wait(3300);
+            expect(byId('give-vouch')).not.toBeNull();
+            expect(byId('give-budget-unread')).not.toBeNull();
+            expect(budgetReads() - before).toBe(2);
+        }, 15000);
+        it('the quiet second try that works takes the sentence away and shows the budget again', async () => {
+            await vouchRob();
+            world.mineFail = 1;
+            await press(byId('give-vouch-submit'));
+            expect(byId('give-budget-unread')).not.toBeNull();
+            expect(byId('give-vouch')).not.toBeNull();
+            await wait(3300);
+            expect(byId('give-budget-unread')).toBeNull();
+            expect(byId('give-vouch')).not.toBeNull();
+        }, 15000);
+        it('a sheet whose first read of the budget fails says so too (a voucher is not left wondering where the Vouch section went)', async () => {
+            await mount(list());
+            world.mineFail = 1; // the list has read its own copy; the sheet's read is the next one
+            await press(byId('credit-row-Rob')!.querySelector('[data-testid="credit-give"]'));
+            expect(byId('give-budget-unread')!.textContent).toBe('We couldn’t read your vouch budget just now.');
+            expect(byId('give-vouch')).toBeNull();
+        });
+    });
     it('below zero: the presets are greyed under the node\'s sentence, there is no submit, and no request is sent', async () => {
         await mount(list());
         await press(byId('credit-row-Mel')!.querySelector('[data-testid="credit-give"]'));
@@ -421,6 +473,47 @@ describe('the profile card (test 14)', () => {
         expect(text()).toContain('Vouched by @olive 100');
         expect(text()).toContain('✓ Credit risk: low');
         expect(world.log).toEqual([`GET /api/credit/people/${JANE}`]);
+    });
+    describe('read again after a give on the same screen (the deciding review of #3096, finding 2)', () => {
+        const robsLine = () => byId('credit-card-line')?.textContent;
+        const vouchRobOnTheNode = () => {
+            const rob = world.people.find((x) => x.memberPubkey === ROB);
+            rob.line_c = 5000; rob.usable_c = 5000; rob.youVouched_c = 5000;
+        };
+        it('after a vouch from the Vouch box under it: the profile hands the card a new re-read key, and the card shows the node\'s new line and "You vouched"', async () => {
+            await mount(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: ROB, reread: 0 }));
+            expect(robsLine()).toBe('No credit yet · 4 live Offers');
+            expect(text()).not.toContain('You vouched');
+            vouchRobOnTheNode();
+            await mount(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: ROB, reread: 1 }));
+            expect(robsLine()).toBe('Credit line 50 · can use all of it now');
+            expect(text()).toContain('You vouched 50');
+            expect(world.log.filter((l) => l === `GET /api/credit/people/${ROB}`).length).toBe(2);
+        });
+        it('the card stays on screen while it is read again (no flicker to nothing)', async () => {
+            await mount(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: ROB, reread: 0 }));
+            act(() => { root.render(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: ROB, reread: 1 }) as any); });
+            expect(byId('credit-card')).not.toBeNull(); // the new read has not landed yet
+            await flush();
+            expect(byId('credit-card')).not.toBeNull();
+        });
+        it('after a return from the names list (the screen shown again): read again, and the first showing is not a second read', async () => {
+            await mount(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: JANE }));
+            expect(world.log.filter((l) => l === `GET /api/credit/people/${JANE}`).length).toBe(1);
+            const jane = world.people.find((x) => x.memberPubkey === JANE);
+            jane.line_c = 230000; jane.usable_c = 230000;
+            await act(async () => { nav.shownAgain.forEach((f) => f()); });
+            await flush();
+            expect(robsLine()).toBe('Credit line 2,300 · can use all of it now');
+            expect(world.log.filter((l) => l === `GET /api/credit/people/${JANE}`).length).toBe(2);
+        });
+        it('a different person starts from nothing, a re-read of the same person does not', async () => {
+            await mount(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: ROB, reread: 0 }));
+            act(() => { root.render(el(CreditCard, { anchorUrl: 'https://n.test', identity: id, memberPubkey: JANE, reread: 0 }) as any); });
+            expect(byId('credit-card')).toBeNull(); // Rob's card is never drawn for Jane while hers is read
+            await flush();
+            expect(robsLine()).toBe('Credit line 1,300 · can use all of it now');
+        });
     });
     it('the viewer\'s own profile draws no card', async () => {
         world.people.push(person({ memberPubkey: ME, callsign: 'Me', own: true, canGive: false }));

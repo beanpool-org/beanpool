@@ -22,7 +22,7 @@
 //   Classic dark). Pixels within noise of the ground (under SNAP_CONTRAST) are set to the ground itself: Classic's lossy
 //   tile has a few levels of noise on its flat ground, and a flat ground is what lets the tile's ground be the library's
 //   exactly, and keeps the file small.
-//   Ground. The tile is lossy (WebP, as Classic's: a lossless tile is 1.5 to 2.3 times as big), and 8-bit 4:2:0 colour cannot
+//   Ground. The tile is lossy (WebP, as Classic's: a lossless tile is 1.3 to 2.3 times as big), and 8-bit 4:2:0 colour cannot
 //   show every grey: no input at all decodes to exactly the library's #17191c (checked: all 729 colours within 4 levels of it,
 //   as a flat patch, at quality 75), and the nearest a decode gets is one level off in one channel. So the script encodes,
 //   decodes, reads the most common colour (the ground) and corrects the colour it put in by the difference, until the

@@ -596,6 +596,7 @@ export const SUITES = [
     'test-credit-sight',
     'test-credit-give',
     'test-credit-notices',
+    'test-credit-budgets',
     // Tiers are badges only: a badge gives no credit, never your own, logged, the member told; a genesis invite's too.
     'test-tiers-badge-only-http',
     'test-invite-asks',

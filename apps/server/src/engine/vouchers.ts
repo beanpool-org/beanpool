@@ -64,6 +64,7 @@ import crypto from 'node:crypto';
 import {
     VOUCH_MAX, VOUCHES_PER_PERSON, VOUCHER_BUDGET_MAX, VOUCHER_BUDGET_DEFAULT, MEMBER_GIFT_DEFAULT, VOUCH_PRESETS,
     isVouchPreset, isOwnerVouchPreset, isBudgetLevel, isMemberGiftSetting, vouchPresetsFor, vouchMaxFor, personVouchMax, word, wordsFor, formatHundredths,
+    runningLow, nothingLeft, topUpTarget,
 } from '@beanpool/core';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -71,11 +72,12 @@ import { AMOUNT_C_REQUIRED, AMOUNT_C_REQUIRED_TEXT, carriesOldMoneyKey } from '.
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { assertBeansOn, getProfileSwitches, getNodeProfile } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin, heldPrivilegedRole, NODE_ROLE_ACTS } from './node-roles.js';
-import { keepNotice, keptNoticeDetails, type KeptNoticePushOptions } from './kept-notices.js';
+import { keepNotice, keptNoticeDetails, markKeptNoticesSeen, type KeptNoticePushOptions } from './kept-notices.js';
+import { markPushNoticesSeenWhere } from './push-notices.js';
 import { ownCoreLockRow } from '../config/core-settings.js';
 
 // A refusal with values in it, in English as a template literal wrote it, marked for the way out (member-words.ts).
-const { t: tr } = wordsFor('en');
+const { t: tr, tn: trn } = wordsFor('en');
 
 export const VOUCHER_BUDGET_KEY = 'voucher_budget';
 export const MEMBER_GIFT_KEY = 'member_gift';
@@ -125,6 +127,11 @@ export const VOUCHER_WORDS = {
     frozen: word('Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.'),
     noticeTitle: word('Your budget to vouch from'),
     noticeStopped: word('Your budget to vouch from was stopped. The credit lines you gave stay with the people you gave them to.'),
+    askTitle: word('A voucher asks for more'),
+    askOwner: word('You vouch as an owner, with no limit, so there is no budget to ask for.'),
+    askFrozen: word('Your credit line is frozen, so your budget can’t be raised until an admin unfreezes it.'),
+    askPaused: word('Your account is paused, so your budget can’t be raised while it lasts.'),
+    askNoBody: word('Ask for more takes no words and no amount: an owner or the credit committee picks the level.'),
 } as const;
 
 /** A figure (whole hundredths) in these English words. */
@@ -152,6 +159,18 @@ const raisePaused = (name: string) => tr('@{name}’s account is paused, so thei
 const raiseFrozen = (name: string) => tr('@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.', { name });
 const noticeMade = (level: number) => tr('You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.', { level: B(level), max: B(VOUCH_MAX) });
 const noticeRaised = (level: number, left: number) => tr('Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
+/** A day as the refusal says it, "12 Nov" (UTC); the apps get the moment itself beside it and say it in their own language. */
+const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const askedThisWeek = (asked: string, again: string) => tr('You asked on {asked}. You can ask again on {again}.', { asked: dayOf(asked), again: dayOf(again) });
+const askAsks = (name: string) => tr('@{name} asks for a bigger budget to vouch from.', { name });
+const askLeft = (left: number, level: number) => tr('They have {left} of {level} Beans left.', { left: B(left), level: B(level) });
+const askBranch = (vouched: number, people: number, below: number, writtenOff: number, pct: number, inside: number) => trn(people,
+    'Vouched {vouched} to {n} person: {below} below zero, written off {writtenOff} ({pct}%), {inside} trading only inside their own circle.',
+    'Vouched {vouched} to {n} people: {below} below zero, written off {writtenOff} ({pct}%), {inside} trading only inside their own circle.',
+    { vouched: B(vouched), below, writtenOff: B(writtenOff), pct, inside });
+const askVoucherAge = (days: number) => trn(days, 'A voucher for {n} day.', 'A voucher for {n} days.');
+const askConfirmedAge = (days: number) => trn(days, 'Confirmed for {n} day.', 'Confirmed for {n} days.');
+const askNotConfirmed = () => tr('Not confirmed on the names list.');
 const noticeLowered = (level: number, left: number) => tr('Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.', { level: B(level), left: B(left) });
 
 const now = () => new Date().toISOString();
@@ -576,18 +595,20 @@ function mayStop(viewer: string, pk: string): boolean {
  * budget the role gave an admin before slice I5 stays until an owner stops it here. A member's, the committee's. A notice
  * to them.
  */
-export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) {
+export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher, bellSeen?: BellSeen) {
     assertCommittee(actor);
     const pk = memberKey(member);
     const live = openBudgetRow(pk);
     if (!live) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
     if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'role_voucher', ownerVoucher(callsignOf(pk)));
     assertMayMakeOrStop(actor, pk);
-    const notice = db.transaction(() => {
+    const done = db.transaction(() => {
         stopBudget(pk, actor, 'stopped');
-        return keepVoucherNotice(pk, 'stopped', VOUCHER_WORDS.noticeStopped, 0);
+        // Stopped, there is no budget left to raise: an ask they left open leaves the bells with it (slice C3).
+        return { notice: keepVoucherNotice(pk, 'stopped', VOUCHER_WORDS.noticeStopped, 0), cleared: clearAskNotices(pk) };
     })();
-    tell?.(notice);
+    tell?.(done.notice);
+    tellCleared(done.cleared, bellSeen);
     return voucherCard(pk);
 }
 
@@ -600,8 +621,11 @@ export function stopVoucher(actor: string, member: unknown, tell?: TellVoucher) 
  * budget while they hold the role (409 `no_limit`): what the role gave them waits, whole, for a step down to admin. These routes take a member's own signature and nothing else (no
  * admin session or automation token reaches /api/names), so the signer here is who acts.
  * Each change is a notice to the voucher (§10.2), kept in the transaction and told by `tell` after it.
+ * A change answers the voucher's open Ask for more (DESIGN-credit-list-amend-fable.md §3.6, slice C3): its `budget_topup`
+ * or `budget_lower` line closes the ask ({@link openAskOf}), and in the same transaction every recipient's copy of it
+ * leaves their bell, kept copy and bell row together ({@link clearAskNotices}); `bellSeen` tells their open apps after it.
  */
-export function setBudgetLevel(actor: string, member: unknown, body: { level?: unknown }, tell?: TellVoucher) {
+export function setBudgetLevel(actor: string, member: unknown, body: { level?: unknown }, tell?: TellVoucher, bellSeen?: BellSeen) {
     assertCommittee(actor);
     const pk = memberKey(member);
     if (!openBudgetRow(pk)) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
@@ -609,7 +633,7 @@ export function setBudgetLevel(actor: string, member: unknown, body: { level?: u
     const level = body.level;
     if (!isBudgetLevel(level)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
     if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'no_limit', ownerNoLimit(callsignOf(pk)));
-    const notice = db.transaction((): VoucherNotice | undefined => {
+    const done = db.transaction((): { notice: VoucherNotice; cleared: ClearedAsk[] } | undefined => {
         returnLapsedHolds(pk);
         const before = budgetOf(pk);
         if (level < before.held) throw new VoucherError(409, 'below_held', belowHeld(callsignOf(pk), before.held));
@@ -624,10 +648,14 @@ export function setBudgetLevel(actor: string, member: unknown, body: { level?: u
         assertUnderCeiling(pk);
         logLine(actor, n > 0 ? 'budget_topup' : 'budget_lower', pk, before.level, level);
         const { left } = budgetOf(pk);
-        return keepVoucherNotice(pk, n > 0 ? 'raised' : 'lowered', n > 0 ? noticeRaised(level, left) : noticeLowered(level, left), level);
+        const notice = keepVoucherNotice(pk, n > 0 ? 'raised' : 'lowered', n > 0 ? noticeRaised(level, left) : noticeLowered(level, left), level);
+        return { notice, cleared: clearAskNotices(pk) };
     })();
-    if (notice) tell?.(notice);
-    return { ...voucherCard(pk), changed: notice !== undefined };
+    if (done) {
+        tell?.(done.notice);
+        tellCleared(done.cleared, bellSeen);
+    }
+    return { ...voucherCard(pk), changed: done !== undefined };
 }
 
 /** An owner puts an admin on the credit committee, or takes them off (POST /api/names/committee `{ memberPubkey, on }`). */
@@ -673,6 +701,161 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
         }
     })();
     return voucherSettings();
+}
+
+// ── Ask for more (DESIGN-credit-list-amend-fable.md §3.6, §6; slice C3) ─────────────────────────────────────────────
+
+/** One ask a week: a voucher may ask again this long after their last ask, topped up or not. */
+export const ASK_EVERY_DAYS = 7;
+/** The log lines that answer an open ask: the budget set again (raised, lowered), made again, or stopped. */
+const ASK_ANSWERED_BY = ['budget_topup', 'budget_lower', 'budget_grant', 'voucher_stopped'] as const;
+/** The kind of a voucher's ask in the bell: told to every owner and committee admin but the asker, nobody else. */
+export const VOUCHER_ASK_KIND = 'voucher_ask';
+
+/** A voucher's newest ask (its `budget_asked` line), whatever came after it. */
+function lastAskOf(pk: string): { at: string; rowid: number } | undefined {
+    return db.prepare(`SELECT at, rowid FROM known_floor_log WHERE action = 'budget_asked' AND member_pubkey = ? AND actor_pubkey = member_pubkey
+        ORDER BY at DESC, rowid DESC LIMIT 1`).get(pk) as { at: string; rowid: number } | undefined;
+}
+
+/**
+ * When this voucher's ask is open, or null: their newest `budget_asked` line, under {@link ASK_EVERY_DAYS} old, with no
+ * later line that answers it (a top-up, a lower, a new grant, a stop). Read from the log, as effectiveLines reads its
+ * lines: nothing is kept outside it. An ask nobody answered lapses after the week, and the voucher's button comes back.
+ */
+export function openAskOf(pk: string, at = Date.now()): string | null {
+    const ask = lastAskOf(pk);
+    if (!ask || Date.parse(ask.at) <= at - ASK_EVERY_DAYS * DAY_MS) return null;
+    const answered = db.prepare(`SELECT 1 FROM known_floor_log WHERE member_pubkey = ? AND action IN (${ASK_ANSWERED_BY.map(() => '?').join(', ')})
+        AND (at > ? OR (at = ? AND rowid > ?)) LIMIT 1`).get(pk, ...ASK_ANSWERED_BY, ask.at, ask.at, ask.rowid);
+    return answered ? null : ask.at;
+}
+
+/**
+ * Who hears an ask: every owner whose role acts and every admin an owner put on the credit committee (isOnCreditCommittee),
+ * never a plain admin, a moderator, a voucher or a member.
+ */
+function committeeKeys(): string[] {
+    const rows = db.prepare(`SELECT DISTINCT nr.member_pubkey AS pk FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
+        WHERE ${NODE_ROLE_ACTS} AND (nr.role = 'owner' OR (nr.role = 'admin' AND m.credit_committee = 1)) ORDER BY nr.member_pubkey`).all() as { pk: string }[];
+    return rows.map((r) => r.pk).filter((pk) => isOnCreditCommittee(pk));
+}
+
+/** What a voucher's own Ask for more button says (GET /api/vouchers/me `ask`), from the node, never worked out in an app. */
+export interface AskState {
+    /** The ask open now (the button reads "Asked on …"), or null. */
+    askedAt: string | null;
+    /** Their last ask inside the week, open or answered, and when they may ask again; nulls when they may ask now. */
+    lastAskedAt: string | null;
+    askAgainAt: string | null;
+    /** Why they can't ask at all now: their account paused, or their credit line frozen. */
+    blocked: 'paused' | 'frozen' | null;
+}
+
+export function askStateOf(pk: string, at = Date.now()): AskState {
+    const last = lastAskOf(pk);
+    const recent = last && Date.parse(last.at) > at - ASK_EVERY_DAYS * DAY_MS ? last.at : null;
+    const m = getMember(db, pk);
+    return {
+        askedAt: openAskOf(pk, at),
+        lastAskedAt: recent,
+        askAgainAt: recent ? new Date(Date.parse(recent) + ASK_EVERY_DAYS * DAY_MS).toISOString() : null,
+        blocked: !m || m.status !== 'active' ? 'paused' : isFrozen(pk) ? 'frozen' : null,
+    };
+}
+
+/**
+ * Ask for more (POST /api/vouchers/ask): one tap, no words and no amount (5 Nov §10: every allocation is the giver's pick),
+ * from a live voucher who is not an owner (an owner vouches with no limit), whose account is active and credit line not
+ * frozen, once in {@link ASK_EVERY_DAYS} days whether or not anyone answered. One plain transaction on a main server with
+ * Beans on: one `budget_asked` line in the known floor's log (old: what is left, new: the level last set), and one kept
+ * notice for each owner and committee admin but the asker, with what is left, the level, and the five facts of the branch
+ * health (5 Nov): below zero, written off and its share, trading only inside their own circle, how long a voucher, how long
+ * confirmed. Counts and sums of vouches only, never a balance. Each is told by the route after the commit (`tell`). Nothing
+ * here moves a budget: a top-up stays setBudgetLevel's, through POST /api/names/vouchers/:member/budget.
+ */
+export function askForMore(pk: string, at = Date.now()): { askedAt: string; askAgainAt: string; notices: VoucherNotice[] } {
+    assertPlainTablesWritable();
+    assertBeansOn();
+    const m = getMember(db, pk);
+    if (!m || isVisitorKey(db, pk) || m.isTreasury || !openBudgetRow(pk)) throw new VoucherError(403, 'not_a_voucher', VOUCHER_WORDS.notAVoucher);
+    if (heldPrivilegedRole(pk) === 'owner') throw new VoucherError(409, 'no_limit', VOUCHER_WORDS.askOwner);
+    if (m.status !== 'active') throw new VoucherError(409, 'paused', VOUCHER_WORDS.askPaused);
+    if (isFrozen(pk)) throw new VoucherError(409, 'frozen', VOUCHER_WORDS.askFrozen);
+    const askedAt = new Date(at).toISOString();
+    const askAgainAt = new Date(at + ASK_EVERY_DAYS * DAY_MS).toISOString();
+    const notices = db.transaction((): VoucherNotice[] => {
+        const last = lastAskOf(pk);
+        if (last && Date.parse(last.at) > at - ASK_EVERY_DAYS * DAY_MS) {
+            const again = new Date(Date.parse(last.at) + ASK_EVERY_DAYS * DAY_MS).toISOString();
+            throw new VoucherError(409, 'asked_this_week', askedThisWeek(last.at, again), { askedAt: last.at, askAgainAt: again });
+        }
+        const s = voucherSummary(pk);
+        const setLevel = Math.max(lastLevelOf(pk), s.level);
+        logLine(pk, 'budget_asked', pk, s.left, setLevel, askedAt);
+        const title = VOUCHER_WORDS.askTitle;
+        const body = askBody(s, setLevel, at);
+        const data = { kind: VOUCHER_ASK_KIND, by: pk, screen: 'credit' };
+        return committeeKeys().filter((to) => to !== pk).map((to) => ({ to, title, body, data, id: keepNotice(to, title, body, data, at) }));
+    })();
+    return { askedAt, askAgainAt, notices };
+}
+
+/** The facts an ask's words carry: counts and sums of vouches, never a balance. */
+export interface AskFacts {
+    callsign: string; left: number; level: number; vouched: number; people: number; belowZero: number; writtenOff: number;
+    insideOnly: number; voucherDays: number; confirmedDays: number | null;
+}
+
+/** The ask's words: who, what is left of the level, and the branch health in counts and sums (amendment §3.6). */
+export function askNoticeBody(f: AskFacts): string {
+    const pct = f.vouched > 0 ? Math.min(100, Math.round((f.writtenOff * 100) / f.vouched)) : 0;
+    return [
+        askAsks(f.callsign),
+        askLeft(f.left, f.level),
+        askBranch(f.vouched, f.people, f.belowZero, f.writtenOff, pct, f.insideOnly),
+        askVoucherAge(f.voucherDays),
+        f.confirmedDays === null ? askNotConfirmed() : askConfirmedAge(f.confirmedDays),
+    ].join(' ');
+}
+
+function askBody(s: ReturnType<typeof voucherSummary>, setLevel: number, at: number): string {
+    const days = (iso: string | null) => (iso && Number.isFinite(Date.parse(iso)) ? Math.max(0, Math.floor((at - Date.parse(iso)) / DAY_MS)) : null);
+    return askNoticeBody({
+        callsign: s.callsign, left: s.left, level: setLevel, vouched: s.vouched, people: s.peopleVouched, belowZero: s.belowZero,
+        writtenOff: s.writtenOff, insideOnly: s.trading.insideOnly, voucherDays: days(s.madeAt) ?? 0, confirmedDays: days(s.confirmedSince),
+    });
+}
+
+/** What a budget change took off each recipient's bell: their kept copies' ids and their bell rows' ids. */
+interface ClearedAsk { recipient: string; bellIds: string[] }
+/** Tells a recipient's open apps which bell rows another member's act took off (state-engine.ts tellBellSeen). */
+export type BellSeen = (recipient: string, bellIds: string[]) => void;
+
+/**
+ * Inside a budget writer's transaction: every copy of this voucher's ask is marked seen for every recipient, the kept copy
+ * and its bell row together (as POST /api/notices/seen does for one member), so the same row leaves every owner's and
+ * committee admin's bell once anyone answers. Only `voucher_ask` copies about `pk`; nobody else's notice is touched.
+ */
+function clearAskNotices(pk: string): ClearedAsk[] {
+    const rows = db.prepare(`SELECT id, recipient FROM moderation_notices WHERE json_valid(data) AND json_extract(data, '$.kind') = ?
+        AND json_extract(data, '$.by') = ?`).all(VOUCHER_ASK_KIND, pk) as { id: string; recipient: string }[];
+    const byRecipient = new Map<string, string[]>();
+    for (const r of rows) byRecipient.set(r.recipient, [...(byRecipient.get(r.recipient) ?? []), r.id]);
+    const out: ClearedAsk[] = [];
+    for (const [recipient, ids] of byRecipient) {
+        markKeptNoticesSeen(recipient, ids);
+        const bellIds = markPushNoticesSeenWhere(recipient, 'noticeId', ids);
+        if (bellIds.length > 0) out.push({ recipient, bellIds });
+    }
+    return out;
+}
+
+/** After the commit: each recipient's open apps hear which rows left their bell. Never throws: the marks are the record. */
+function tellCleared(cleared: readonly ClearedAsk[], bellSeen?: BellSeen): void {
+    for (const c of cleared) {
+        try { bellSeen?.(c.recipient, c.bellIds); } catch (e) { console.warn('[Vouchers] A bell mark was not told:', (e as Error)?.message || e); }
+    }
 }
 
 // ── The vouch ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1071,6 +1254,61 @@ export function voucherSummary(pk: string) {
         noLimit: isNodeOwner(pk),
         ...b, belowZero: below, writtenOff, passedOn: passedOnOf(pk), invitesWithVouch: sent,
         trading: { withOthers: marks.filter((m) => m === 'others').length, insideOnly: marks.filter((m) => m === 'inside').length },
+        // Two of the branch health's five facts (amendment §6, slice C3): how long they are confirmed on the names list (the
+        // live confirmation, seconded where two admins confirm; null when not), and since when they are a member here.
+        confirmedSince: confirmedSinceOf(pk), memberSince: getMember(db, pk)?.joinedAt ?? null,
+    };
+}
+
+/** When their live confirmation took effect (the second admin's, where one was needed), or null. */
+function confirmedSinceOf(pk: string): string | null {
+    const row = db.prepare(`SELECT COALESCE(seconded_at, confirmed_at) AS at FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL
+        AND (needs_second = 0 OR seconded_at IS NOT NULL) ORDER BY confirmed_at DESC LIMIT 1`).get(pk) as { at: string | null } | undefined;
+    return row?.at ?? null;
+}
+
+/**
+ * The level last set for this voucher: the newest `budget_grant`, `budget_topup` or `budget_lower` line's new level for
+ * them; the community's setting when there is none (the log was emptied at the 1.4.0 step, amendment F13).
+ */
+function lastLevelOf(pk: string): number {
+    const row = db.prepare(`SELECT new_value FROM known_floor_log WHERE member_pubkey = ? AND action IN ('budget_grant', 'budget_topup', 'budget_lower')
+        ORDER BY at DESC, rowid DESC LIMIT 1`).get(pk) as { new_value: string | null } | undefined;
+    const n = row?.new_value == null ? NaN : Number(row.new_value);
+    return isBudgetLevel(n) ? n : voucherBudgetSetting();
+}
+
+/** Why a row offers no Top up: an owner (no limit), the viewer's own, a paused account, a frozen line, or the ceiling. */
+export type TopUpBlocked = 'no_limit' | 'own' | 'paused' | 'frozen' | 'at_most';
+
+/**
+ * A voucher's budget as the committee's rows read it (amendment §3.5; slice C3), for owners and committee admins only:
+ *   runningLow    under 100 left (core runningLow); nothingLeft under 25 (core nothingLeft); never for an owner
+ *   askedAt       their open Ask for more ({@link openAskOf}), or null
+ *   topUpTo_c     the one level "Top up to" offers (core topUpTarget: the level last set when they have less in hand, else
+ *                 the next of 500 · 1,000 · 1,500 · 2,000), or null with `topUpBlocked` saying why
+ * The tap is today's route and writer (POST /api/names/vouchers/:member/budget `{ level }`, setBudgetLevel): nothing here
+ * writes, and no app works out a level.
+ */
+export interface BudgetSight {
+    /** The level they were last set to, never below what they hold now: the "of 1,000" in "150 of 1,000 left". */
+    setLevel_c: number | null;
+    runningLow: boolean;
+    nothingLeft: boolean;
+    askedAt: string | null;
+    topUpTo_c: number | null;
+    topUpBlocked: TopUpBlocked | null;
+}
+
+export function budgetSightOf(viewer: string, pk: string, b: { left: number; level: number; noLimit: boolean }, at = Date.now()): BudgetSight {
+    if (b.noLimit) return { setLevel_c: null, runningLow: false, nothingLeft: false, askedAt: null, topUpTo_c: null, topUpBlocked: 'no_limit' };
+    const m = getMember(db, pk);
+    const lastLevel = lastLevelOf(pk);
+    const target = topUpTarget(b.level, lastLevel);
+    const blocked: TopUpBlocked | null = viewer === pk ? 'own' : !m || m.status !== 'active' ? 'paused' : isFrozen(pk) ? 'frozen' : target === null ? 'at_most' : null;
+    return {
+        setLevel_c: Math.max(lastLevel, b.level), runningLow: runningLow(b.left), nothingLeft: nothingLeft(b.left), askedAt: openAskOf(pk, at),
+        topUpTo_c: blocked ? null : target, topUpBlocked: blocked,
     };
 }
 
@@ -1132,6 +1370,17 @@ function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confir
 }
 
 /**
+ * Every live voucher by callsign, each with their numbers and the committee's budget sight (slice C3: running low, an open
+ * ask, the top-up offer). The committee's alone: the vouchers block (routes/names-list.ts) and the Vouchers chip
+ * (routes/credit-sight.ts) both refuse anyone else first.
+ */
+function voucherRows(viewer: string) {
+    const keys = db.prepare(`SELECT v.member_pubkey AS pk FROM vouchers v JOIN members m ON m.public_key = v.member_pubkey
+        WHERE v.stopped_at IS NULL AND m.status = 'active' AND m.is_visitor = 0 ORDER BY m.callsign COLLATE NOCASE ASC, v.member_pubkey ASC`).all() as { pk: string }[];
+    return keys.map((k) => { const v = voucherSummary(k.pk); return { ...v, ...budgetSightOf(viewer, k.pk, v) }; });
+}
+
+/**
  * The vouchers block (GET /api/names/vouchers, owners and committee admins): every live voucher with their numbers, owners
  * first (they vouch by role, with no limit: "Owners · no limit") and then by callsign, `waiting`: the promised budgets of
  * invites not used yet, and `candidates`: whom "+ Make someone a voucher" offers this viewer (voucherCandidates). The
@@ -1139,14 +1388,46 @@ function voucherCandidates(viewer: string): { admins: VoucherCandidate[]; confir
  * entry id, and the phone puts the block in the list's own order.
  */
 export function vouchersBlock(viewer: string) {
-    const keys = db.prepare(`SELECT v.member_pubkey AS pk FROM vouchers v JOIN members m ON m.public_key = v.member_pubkey
-        WHERE v.stopped_at IS NULL AND m.status = 'active' AND m.is_visitor = 0 ORDER BY m.callsign COLLATE NOCASE ASC, v.member_pubkey ASC`).all() as { pk: string }[];
-    const vouchers = keys.map((k) => voucherSummary(k.pk));
+    const vouchers = voucherRows(viewer);
     return {
         vouchers: [...vouchers.filter((v) => v.noLimit), ...vouchers.filter((v) => !v.noLimit)],
         waiting: waitingToJoin(),
         candidates: voucherCandidates(viewer),
         settings: voucherSettings(),
+    };
+}
+
+/**
+ * The Vouchers chip (GET /api/credit/people?filter=vouchers; amendment §3.5, slice C3), for owners and committee admins only
+ * (the route refuses anyone else before this is read): every live voucher, each with their numbers, their branch health and
+ * the committee's budget sight; asked first (the oldest ask first), then running low, then least left; owners last, by
+ * callsign ("Owner · no limit"). No look is recorded: a row shows a budget and counts, never anyone's balance.
+ */
+export function vouchersChip(viewer: string) {
+    const rows = voucherRows(viewer);
+    const byName = (a: { callsign: string; memberPubkey: string }, b: { callsign: string; memberPubkey: string }) =>
+        a.callsign.localeCompare(b.callsign, 'en', { sensitivity: 'base' }) || a.memberPubkey.localeCompare(b.memberPubkey);
+    const others = rows.filter((v) => !v.noLimit).sort((a, b) =>
+        (a.askedAt ? 0 : 1) - (b.askedAt ? 0 : 1)
+        || (a.askedAt && b.askedAt ? a.askedAt.localeCompare(b.askedAt) : 0)
+        || (a.runningLow ? 0 : 1) - (b.runningLow ? 0 : 1)
+        || a.left - b.left
+        || byName(a, b));
+    return [...others, ...rows.filter((v) => v.noLimit).sort(byName)];
+}
+
+/**
+ * A voucher's budget in one line, on their row in every other chip (amendment §3.5, "Voucher · 150 of 1,000 left ! Running
+ * low"), for owners and committee admins only (engine/credit-sight.ts asks it for no one else). Null: not a live voucher.
+ */
+export function voucherBudgetLine(pk: string, at = Date.now()) {
+    if (!liveVoucher(pk)) return null;
+    const noLimit = isNodeOwner(pk);
+    if (noLimit) return { noLimit, left_c: null, held_c: null, level_c: null, setLevel_c: null, runningLow: false, nothingLeft: false, askedAt: null };
+    const b = budgetOf(pk, at);
+    return {
+        noLimit, left_c: b.left, held_c: b.held, level_c: b.level, setLevel_c: Math.max(lastLevelOf(pk), b.level),
+        runningLow: runningLow(b.left), nothingLeft: nothingLeft(b.left), askedAt: openAskOf(pk, at),
     };
 }
 
@@ -1285,6 +1566,9 @@ export function myVouching(pk: string) {
         voucher: live,
         ...(live ? { budget: budgetOf(pk), source: voucherRow(pk)!.source, history: historyOf(pk, 50) } : {}),
         noLimit: owner, presets: [...vouchPresetsFor(owner)], vouchMax: vouchMaxFor(owner), budgetMax: VOUCHER_BUDGET_MAX,
+        // Their own Ask for more button (slice C3): whether an ask is open, when they may ask again, or why they can't. An
+        // owner vouches with no limit and has nothing to ask for: null, as for a member who is no voucher.
+        ask: live && !owner ? askStateOf(pk) : null,
         // The vouches people gave the signer, as their Ledger shows them (§6 `vouchedBy`).
         vouchedBy: (db.prepare(`SELECT from_pubkey AS pk, SUM(amount_c) AS amount_c, MIN(at) AS at FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
             GROUP BY from_pubkey ORDER BY MIN(at) ASC`).all(pk) as { pk: string; amount_c: number; at: string }[])

@@ -33,7 +33,7 @@ import {
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin } from './node-roles.js';
-import { isVoucher } from './vouchers.js';
+import { isVoucher, isOnCreditCommittee, voucherBudgetLine } from './vouchers.js';
 import { confirmationOf, effectiveLines } from './community-health.js';
 import { getMemberTrustProfile, usableFloor, isAdminPubkey, getWashTradingEnforcement } from '../state-engine.js';
 
@@ -151,9 +151,14 @@ interface PageContext {
     balances: Map<string, number>;
     cap: number;
     now: number;
+    /**
+     * The viewer is on the credit committee (an owner, or an admin an owner put on it), decided at this request: a voucher's
+     * row then carries their budget in one line (slice C3, amendment §3.5). Never for a plain admin, a voucher or a member.
+     */
+    committee: boolean;
 }
 
-function pageContext(viewer: string | null, subjects: readonly string[], now = Date.now()): PageContext {
+function pageContext(viewer: string | null, subjects: readonly string[], now = Date.now(), sight: CreditSight | null = null): PageContext {
     const { debtLinePct, quietDays } = effectiveLines(now);
     const wash = getWashTradingEnforcement();
     const ring = new Set<string>(wash.flaggedClusters.keys());
@@ -164,7 +169,8 @@ function pageContext(viewer: string | null, subjects: readonly string[], now = D
         const rows = db.prepare(`SELECT public_key, balance_c FROM accounts WHERE public_key IN (${subjects.map(() => '?').join(', ')})`).all(...subjects) as { public_key: string; balance_c: number }[];
         for (const r of rows) balances.set(r.public_key, Math.trunc(Number(r.balance_c) || 0));
     }
-    return { viewer, debtLinePct, quietDays, ring, balances, cap: creditCap(db), now };
+    const committee = !!viewer && (sight === 'owner' || sight === 'admin') && isOnCreditCommittee(viewer);
+    return { viewer, debtLinePct, quietDays, ring, balances, cap: creditCap(db), now, committee };
 }
 
 const one = <T>(sql: string, ...p: unknown[]) => db.prepare(sql).get(...p) as T;
@@ -250,6 +256,11 @@ export interface CreditPersonFull extends CreditPersonVoucher {
         vouchedBy: { memberPubkey: string; callsign: string; amount_c: number }[];
     };
     frozen: { credit: boolean; known: boolean };
+    /**
+     * A live voucher's budget in one line (slice C3: "Voucher · 150 of 1,000 left ! Running low"), only in the answer to an
+     * owner or a committee admin, and only on a voucher's row: absent for a plain admin, whatever the person is.
+     */
+    voucherBudget?: NonNullable<ReturnType<typeof voucherBudgetLine>>;
 }
 
 const callsignOf = (pk: string | null | undefined): string => (pk ? getMember(db, pk)?.callsign ?? '' : '');
@@ -288,8 +299,10 @@ function buildPerson(pk: string, sight: CreditSight, ctx: PageContext, withYouVo
         WHERE member_pubkey = ? AND revoked_at IS NULL AND (needs_second = 0 OR seconded_at IS NOT NULL) ORDER BY confirmed_at DESC LIMIT 1`, pk);
     const vouchedBy = many<{ k: string; n: number }>(`SELECT from_pubkey AS k, SUM(amount_c) AS n FROM room_gifts WHERE kind = 'vouch' AND to_pubkey = ?
         GROUP BY from_pubkey ORDER BY MIN(at) ASC`, pk);
+    const budget = ctx.committee ? voucherBudgetLine(pk, ctx.now) : null;
     return {
         ...base,
+        ...(budget ? { voucherBudget: budget } : {}),
         parts: { known_c: trust.knownGrant, room_c: trust.roomHeld, earned_c: trust.earnedCredit, granted_c: trust.grantedCredit, cap_c: ctx.cap },
         standsBehind: {
             confirmedBy: facts.confirmed && confirmation
@@ -325,7 +338,7 @@ export function creditPeople(viewer: string, sight: CreditSight, opts: { filter?
     const rows = db.prepare(`SELECT m.public_key AS pk, lower(m.callsign) AS c, grp FROM (SELECT *, ${GROUP_SQL} AS grp FROM members m) m
         WHERE ${where.join(' AND ')} ORDER BY grp, lower(m.callsign), m.public_key LIMIT @limit`).all(params) as { pk: string; c: string; grp: number }[];
     const page = rows.slice(0, PAGE_SIZE);
-    const ctx = pageContext(viewer, page.map((r) => r.pk));
+    const ctx = pageContext(viewer, page.map((r) => r.pk), Date.now(), sight);
     const people = page.map((r) => buildPerson(r.pk, sight, ctx, true)).filter((p): p is CreditPersonVoucher => !!p);
     const last = page.at(-1);
     return { people, next: rows.length > PAGE_SIZE && last ? encodeCursor({ g: last.grp, c: last.c, k: last.pk }) : null };
@@ -333,7 +346,7 @@ export function creditPeople(viewer: string, sight: CreditSight, opts: { filter?
 
 /** The card or sheet for one person (GET /api/credit/people/:member). Null: nobody listed by that key. */
 export function creditPerson(viewer: string, sight: CreditSight, member: string): CreditPersonVoucher | CreditPersonFull | null {
-    return buildPerson(member, sight, pageContext(viewer, [member]), true);
+    return buildPerson(member, sight, pageContext(viewer, [member], Date.now(), sight), true);
 }
 
 /**

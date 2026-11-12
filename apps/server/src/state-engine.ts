@@ -7359,6 +7359,14 @@ export function markBellNoticesSeen(pubkey: string, ids: readonly string[]): str
     return afterBellMark(pubkey, markPushNoticesSeen(pubkey, ids));
 }
 
+/**
+ * Rows another member's act took off this member's bell (a voucher's Ask for more answered by a budget change:
+ * engine/vouchers.ts clearAskNotices marks them in its transaction): their open apps hear which, as for their own mark.
+ */
+export function tellBellSeen(pubkey: string, ids: readonly string[]): void {
+    toldBellSeen(pubkey, [...ids]);
+}
+
 /** Rows just marked: each kept alert's copy is marked with its row, and the member's sockets hear which. */
 function afterBellMark(pubkey: string, marked: string[]): string[] {
     const kept = keptNoticeIdsOf(pubkey, marked);

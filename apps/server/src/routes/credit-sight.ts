@@ -14,6 +14,12 @@
  *       floor, never their own, never lower (slice C2, engine/credit-give.ts): Settings' writer underneath, the member told
  *       by the credit notice it makes. → { memberPubkey, was_c, knownFloor_c }. Records no look (it shows no balance). A
  *       voucher, a moderator or a member 403 `owners_admins_only`; a standby 409 `standby`.
+ *   GET /api/credit/people?filter=vouchers   owners and committee admins (slice C3): the Vouchers chip, every live
+ *       voucher's budget, branch health and the top-up offer (engine/vouchers.ts vouchersChip); 403 `committee_only` for
+ *       anyone else who gives credit. No look recorded: it shows budgets and counts, never a balance.
+ *   POST /api/vouchers/ask          a live voucher who is not an owner (slice C3): Ask for more, one tap, no body (any key
+ *       in it: 400 `no_body`), once a week (409 `asked_this_week`); told to every owner and committee admin
+ *       (engine/vouchers.ts askForMore). A standby refuses it (409).
  *
  * Refusals: unsigned 401; a member, a moderator, a visitor or a stranger 403 `not_a_giver` (`looks`: a voucher too,
  * `owners_admins_only`); a standby 409 `standby` for every read that records a look (it records nothing); a look that can't
@@ -29,11 +35,12 @@ import { getNodeRole, STANDBY_CODE, STANDBY_WRITE_MESSAGE } from '../config/node
 import { BEANS_OFF_MESSAGE } from '../config/node-profile.js';
 import { NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CreditSightError, creditMe, creditPeople, creditPerson, creditSightOn, giverSight, memberKeyOf } from '../engine/credit-sight.js';
+import { VoucherError, VOUCHER_WORDS, askForMore, isOnCreditCommittee, tellVoucherNotice, vouchersChip } from '../engine/vouchers.js';
 import { readLooks, recordLooks } from '../engine/credit-looks.js';
 import { CreditGiveError, CREDIT_GIVE_WORDS, raiseKnownFloor } from '../engine/credit-give.js';
-import { tellVoucherNotice } from '../engine/vouchers.js';
 import { KnownFloorError } from '../config/known-floor.js';
 import { SERVER_FAULT_TEXT } from './member-error-text.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
 
@@ -44,6 +51,8 @@ const OWNERS_ADMINS_ONLY = word('Only the owners and admins here can read who lo
 const NOT_LISTED = word('Nobody here by that key.');
 const SIGN_IT = word('Sign this request with your member key.');
 const TOO_MANY = word('That is a lot of looking for one hour. Try again later.');
+/** The committee's chip (slice C3): budgets, not people's credit. */
+const VOUCHERS_FILTER = 'vouchers';
 
 /** The list's reads per viewer an hour (design §5.2): 120, then the node's sentence. Per process. */
 const LIST_READS_PER_HOUR = 120;
@@ -123,6 +132,13 @@ export function createCreditSightRoutes(deps: RouteDeps): Router {
         if (window.n >= LIST_READS_PER_HOUR) return answer(ctx, 429, TOO_MANY, 'too_many_looks');
         window.n++;
         listReads.set(viewer, window);
+        if (ctx.query.filter === VOUCHERS_FILTER) {
+            // The Vouchers chip is the committee's (slice C3): a plain admin, a voucher or anyone else gets no budget row.
+            if (sight === 'voucher' || !isOnCreditCommittee(viewer)) return answer(ctx, 403, VOUCHER_WORDS.committeeOnly, 'committee_only');
+            ctx.status = 200;
+            ctx.body = { sight, filter: VOUCHERS_FILTER, vouchers: vouchersChip(viewer), next: null };
+            return;
+        }
         answerAfterLooks(ctx, () => {
             const page = creditPeople(viewer, sight, { filter: ctx.query.filter, q: ctx.query.q, after: ctx.query.after });
             return {
@@ -159,6 +175,33 @@ export function createCreditSightRoutes(deps: RouteDeps): Router {
         }
         ctx.status = 200;
         ctx.body = readLooks({ limit: clampLimit(ctx.query.limit, 50), offset: clampOffset(ctx.query.offset), actor, day, member });
+    });
+
+    router.post('/api/vouchers/ask', (ctx) => {
+        const viewer = signer(ctx);
+        if (!viewer) return;
+        // One tap, no words and no amount: the level is the giver's pick (5 Nov §10). A body that says anything is refused
+        // whole, before anything is read or written.
+        const body = (ctx as any).requestBody;
+        if (body !== undefined && body !== null && (typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length > 0)) {
+            return answer(ctx, 400, VOUCHER_WORDS.askNoBody, 'no_body');
+        }
+        if (refusedOnStandby(ctx)) return;
+        try {
+            const out = askForMore(viewer);
+            for (const n of out.notices) tellVoucherNotice(n, { broadcast, dispatchPushNotification });
+            ctx.status = 200;
+            ctx.body = { askedAt: out.askedAt, askAgainAt: out.askAgainAt };
+        } catch (e) {
+            if (e instanceof VoucherError) {
+                ctx.status = e.status;
+                ctx.body = { error: e.message, code: e.code, ...(e.extra ?? {}) };
+                return;
+            }
+            if ((e as { code?: unknown })?.code === STANDBY_CODE) return answer(ctx, 409, STANDBY_WRITE_MESSAGE, STANDBY_CODE);
+            if (respondProfileRefusal(ctx, e)) return;
+            throw e;
+        }
     });
 
     router.get('/api/credit/me', (ctx) => {

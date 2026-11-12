@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import * as api from '../lib/api';
 import * as sync from '../lib/sync';
 import { HeaderControls, HeaderTitle } from './HeaderControls';
-import { goToNoticeTarget, NeedsYouIcons } from './NeedsYouIcons';
+import { goToNoticeTarget, NeedsYouIcons, noticeHasDestination } from './NeedsYouIcons';
 import { BELL_PAGE_EVENT, type BellNotice } from '@beanpool/core';
 import { HomePage } from '../pages/HomePage';
 import type { NeedsItem } from '../lib/home-cards';
@@ -390,20 +390,110 @@ describe('The bell: what happened, until it is opened', () => {
         expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
     });
 
-    it('a row tap opens its thing and marks it, and only it', async () => {
+    // Marty, 12 Nov 2026: "when I click on a bell notification that has more to view I don't see the full message and it goes to
+    // a page in BP and then the notification is gone." A tap reads it; Open goes there and then marks it; Clear marks it.
+    const LONG_TITLE = '🤖 An assistant took posts down, and it has more to say than a row can show';
+    const LONG_BODY = 'An AI assistant connected to your community today and took two posts down. '.repeat(12).trim();
+
+    it('a row tap reads the notice in full and marks nothing: the whole title and body, no cut, no page, no mark', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { kind: 'market.request', title: LONG_TITLE, body: LONG_BODY, data: { screen: 'post', postId: 'p-jam' } })]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        const sheet = openSheet();
+        // In the list the row is cut to a few lines, as always.
+        expect(within(sheet).getAllByTestId('bell-notice')[1].querySelector('.line-clamp-2')).not.toBeNull();
+        fireEvent.click(within(sheet).getAllByTestId('bell-notice')[1]);
+        const full = within(screen.getByRole('dialog')).getByTestId('bell-read');
+        expect(within(full).getByTestId('bell-read-title')).toHaveTextContent(LONG_TITLE);
+        expect(within(full).getByTestId('bell-read-body').textContent).toBe(LONG_BODY);
+        expect(full.querySelector('[class*="line-clamp"]')).toBeNull();
+        expect(full).toHaveTextContent('2 minutes ago');
+        expect(within(screen.getByRole('dialog')).queryAllByTestId('bell-notice')).toHaveLength(0);
+        expect(mark).not.toHaveBeenCalled();
+        expect(onNavigate).not.toHaveBeenCalled();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+    });
+
+    it('Open goes to its thing, THEN marks it, and only it', async () => {
         const onNavigate = vi.fn();
         vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { data: { screen: 'post', postId: 'p-jam', txId: 'tx-9' }, kind: 'market.request' })]);
         const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
         render(<HeaderRow onNavigate={onNavigate} />);
         await settle();
         fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        fireEvent.click(within(screen.getByTestId('bell-read')).getByRole('button', { name: 'Open' }));
         expect(onNavigate).toHaveBeenCalledWith('messages', 'dm-maya');
         expect(mark).toHaveBeenCalledWith(['n1']);
+        expect(onNavigate.mock.invocationCallOrder[0]).toBeLessThan(mark.mock.invocationCallOrder[0]);
         expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+        expect(screen.queryByRole('dialog')).toBeNull();
         fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        fireEvent.click(within(screen.getByTestId('bell-read')).getByRole('button', { name: 'Open' }));
         expect(onNavigate).toHaveBeenLastCalledWith('marketplace', 'p-jam', 'tx-9');
         expect(mark).toHaveBeenLastCalledWith(['n2']);
         expect(screen.queryByTestId('bell-count')).toBeNull();
+    });
+
+    it('Clear marks it seen, opens nothing, and goes back to the list with the rest', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { title: '🤝 Request', body: 'Ben asked for your jam' })]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[1]);
+        fireEvent.click(within(screen.getByTestId('bell-read')).getByRole('button', { name: 'Clear this notice' }));
+        expect(mark).toHaveBeenCalledTimes(1);
+        expect(mark).toHaveBeenCalledWith(['n2']);
+        expect(onNavigate).not.toHaveBeenCalled();
+        const after = screen.getByRole('dialog');
+        expect(within(after).queryByTestId('bell-read')).toBeNull();
+        expect(within(after).getAllByTestId('bell-notice').map(r => r.dataset.noticeId)).toEqual(['n1']);
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('1');
+    });
+
+    it('Back, Escape and close leave the notice in the bell, unseen, whatever was read', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2')]);
+        const mark = vi.spyOn(api, 'markBellNoticesSeen').mockResolvedValue(1);
+        render(<HeaderRow onNavigate={onNavigate} />);
+        await settle();
+        fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        fireEvent.click(within(screen.getByTestId('bell-read')).getByRole('button', { name: 'Back' }));
+        expect(screen.queryByTestId('bell-read')).toBeNull();
+        expect(within(screen.getByRole('dialog')).getAllByTestId('bell-notice')).toHaveLength(2);
+        // Escape in the full view is Back, not a close of the whole sheet.
+        fireEvent.click(within(screen.getByRole('dialog')).getAllByTestId('bell-notice')[1]);
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByTestId('bell-read')).toBeNull();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        // The sheet's own Close, from the full view.
+        fireEvent.click(within(screen.getByRole('dialog')).getAllByTestId('bell-notice')[1]);
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(mark).not.toHaveBeenCalled();
+        expect(onNavigate).not.toHaveBeenCalled();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
+        // Reopened, the list is back, not the full view.
+        const again = openSheet();
+        expect(within(again).queryByTestId('bell-read')).toBeNull();
+        expect(within(again).getAllByTestId('bell-notice')).toHaveLength(2);
+    });
+
+    it('a notice with nowhere to go has no Open, only Clear; one marked meanwhile takes the full view back to the list', async () => {
+        const fire = catchBellEvents();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1', { kind: 'something.newer', title: 'A word from your community', body: 'Read this one here.', data: {} }), notice('n2')]);
+        render(<HeaderRow onNavigate={vi.fn()} />);
+        await settle();
+        fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        const full = screen.getByTestId('bell-read');
+        expect(full).toHaveTextContent('Read this one here.');
+        expect(within(full).queryByRole('button', { name: 'Open' })).toBeNull();
+        expect(within(full).getByRole('button', { name: 'Clear this notice' })).toBeInTheDocument();
+        fire({ type: 'push_notices_seen', ids: ['n1'] });
+        expect(screen.queryByTestId('bell-read')).toBeNull();
+        expect(within(screen.getByRole('dialog')).getAllByTestId('bell-notice').map(r => r.dataset.noticeId)).toEqual(['n2']);
     });
 
     it("a row's ✕ clears it without opening it: off the list and the count, marked on the node, the sheet stays open", async () => {
@@ -582,5 +672,16 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
             goToNoticeTarget(kind, data, nav);
             expect(nav).toHaveBeenCalledWith(...args);
         }
+    });
+
+    it('"Open" is offered only where the notice has somewhere of its own to go (parity with the phone)', () => {
+        // A kind this build knows has its tab; a screen the details name is a place.
+        expect(noticeHasDestination('chat.message', {})).toBe(true);
+        expect(noticeHasDestination('decision.open', {})).toBe(true);
+        expect(noticeHasDestination('not.a.kind', { screen: 'post', postId: 'p1' })).toBe(true);
+        expect(noticeHasDestination('not.a.kind', { screen: 'settings' })).toBe(true);
+        // A kind it does not know, naming nothing (or naming a post with no id), falls to Home: nowhere in particular.
+        expect(noticeHasDestination('not.a.kind', {})).toBe(false);
+        expect(noticeHasDestination('not.a.kind', { screen: 'post' })).toBe(false);
     });
 });

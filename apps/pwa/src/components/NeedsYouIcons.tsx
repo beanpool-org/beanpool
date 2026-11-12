@@ -3,9 +3,12 @@
  * bell takes the needs-you row): parity with the phone's apps/native/components/NeedsYouIcons.tsx. One control: a red count
  * of the notices not yet opened (@beanpool/core notice-bell.ts), an amber dot when nothing is new but something needs the
  * member, and a sheet with what needs them now at the top ("Needs you", the open things, as the icons were) and what
- * happened under it, newest first, with the real words. A row leaves when it is tapped (it opens its thing and is
- * marked), when its ✕ is pressed (marked, opens nothing), when "Clear all" is pressed (every notice, one request), or when
- * its thing is opened (a chat read: the node marks it and tells the sockets); opening the sheet marks nothing. "Needs you"
+ * happened under it, newest first, with the real words. A tap on a notice reads it in full (Marty, 12 Nov 2026: it used to
+ * open its page and take it off the bell, and the row cuts its words, so a long one could not be read): the whole title and
+ * body, its time, and Open (only where it has somewhere to go: it goes there and THEN is marked), Clear (marked, opens
+ * nothing) and Back (leaves it as it was). A row leaves when Open or Clear is pressed there, when its ✕ is pressed (marked,
+ * opens nothing), when "Clear all" is pressed (every notice, one request), or when its thing is opened (a chat read: the
+ * node marks it and tells the sockets); reading and opening the sheet mark nothing. "Needs you"
  * is none of those: its rows are the open things, and leave when they are done (Marty, 10 Nov 2026). Members only.
  *
  * Where it is drawn (AppHeader.tsx):
@@ -20,7 +23,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-    BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellClearWords, bellLabel, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
+    BELL_EVENTS, BELL_PAGE_EVENT, bellBadge, bellClearWords, bellLabel, bellReadWords, capitalFirst, createRefreshGate, inviteAskNeedsLine, isOwnInviteChange,
     isPushNoticeKind, NEEDS_YOU_PRIORITY, needsYouCounts, PUSH_NOTICE_KINDS, timeAgo, withoutBellNotices, type BellNotice, type NeedsYouKind,
 } from '@beanpool/core';
 import { t } from '@beanpool/core';
@@ -85,6 +88,19 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
     if (kind === 'community.knock') return onNavigate('people-invites', 'asked');
     const web: Record<string, string> = { home: 'home', market: 'marketplace', chats: 'messages', settings: 'settings', people: 'people-invites' };
     return onNavigate(web[tab] ?? 'home');
+}
+
+/**
+ * Whether {@link goToNoticeTarget} lands this notice somewhere of its own (the bell's "Open" is offered only then): parity with
+ * the phone's noticeHasDestination (apps/native utils/push-notice-check.ts). A kind this build knows has its tab, and the
+ * notice's details can name a more exact place; a kind it does not know, naming nothing, falls to Home, which is nowhere in
+ * particular: the notice is read where it is and cleared.
+ */
+export function noticeHasDestination(kind: string, data: Record<string, unknown>): boolean {
+    if (isPushNoticeKind(kind)) return true;
+    let landed: string | undefined;
+    goToNoticeTarget(kind, data, tab => { landed = tab; });
+    return landed !== undefined && landed !== 'home';
 }
 
 /** The bell's size: 44 px matches tour-check and pill height. */
@@ -461,13 +477,15 @@ export function NeedsYouIcons({
         forgetHomeForHeader();
         goToWebNeedsTarget(target, onNavigate, kind);
     };
-    // A tap on a notice: off the bell at once (and on the node, which tells the member's other apps), then to its thing.
+    // "Open" on a notice read in full: to its thing first, and then off the bell (and on the node, which tells the member's
+    // other apps).
     const openNotice = (n: BellNotice) => {
+        goToNoticeTarget(n.kind, n.data, onNavigate);
         setNotices(list => withoutBellNotices(list, [n.id]));
         api.markBellNoticesSeen([n.id]).catch(() => { refreshBell(); });
-        goToNoticeTarget(n.kind, n.data, onNavigate);
     };
-    // A notice's ✕: the same mark, and it opens nothing. A failed mark reads the list again, so the row comes back.
+    // A notice's ✕, and "Clear" in the full view: the same mark, and it opens nothing. A failed mark reads the list again, so
+    // the row comes back.
     const clearNotice = (n: BellNotice) => {
         setNotices(list => withoutBellNotices(list, [n.id]));
         api.markBellNoticesSeen([n.id]).catch(() => { refreshBell(); });
@@ -519,6 +537,7 @@ export function NeedsYouIcons({
             notices={notices}
             onClose={() => setSheet(false)}
             onPick={go}
+            canOpenNotices={!!onNavigate}
             onOpenNotice={openNotice}
             onClearNotice={clearNotice}
             onClearAll={clearAll}
@@ -575,6 +594,7 @@ function NeedsSheet({
     notices,
     onClose,
     onPick,
+    canOpenNotices,
     onOpenNotice,
     onClearNotice,
     onClearAll,
@@ -583,14 +603,37 @@ function NeedsSheet({
     notices: BellNotice[];
     onClose: () => void;
     onPick: (target: NeedsTarget, kind: NeedsItem['kind']) => void;
+    /** Whether the page can take a notice to its thing (an `onNavigate` was given): "Open" is offered only then. */
+    canOpenNotices: boolean;
     onOpenNotice: (notice: BellNotice) => void;
     onClearNotice: (notice: BellNotice) => void;
     onClearAll: () => void;
 }) {
     const dialogRef = useRef<HTMLDivElement | null>(null);
-    useDialogFocus(dialogRef, onClose);
+    // The notice being read in full (its id): reading marks nothing, and the sheet always opens on the list. Marked elsewhere
+    // meanwhile (the node's word), it is no longer in `notices` and the sheet is the list again.
+    const [readingId, setReadingId] = useState<string | null>(null);
+    const reading = readingId ? notices.find(n => n.id === readingId) ?? null : null;
+    // Escape in the full view is Back; on the list it closes the sheet.
+    useDialogFocus(dialogRef, () => { if (reading) setReadingId(null); else onClose(); });
+    const readTitleRef = useRef<HTMLHeadingElement | null>(null);
+    const lastRead = useRef<string | null>(null);
+    // Focus follows the view: into the notice's title on the way in, back to its row (or the sheet's title) on the way out.
+    useEffect(() => {
+        if (reading) {
+            lastRead.current = reading.id;
+            readTitleRef.current?.focus();
+            return;
+        }
+        const id = lastRead.current;
+        lastRead.current = null;
+        if (!id) return;
+        const row = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('[data-testid="bell-notice"]') ?? []).find(el => el.dataset.noticeId === id);
+        (row ?? dialogRef.current?.querySelector<HTMLElement>('#needs-sheet-title'))?.focus();
+    }, [reading?.id]);
     const now = Date.now();
     const clearWords = bellClearWords();
+    const readWords = bellReadWords();
     // A cleared row takes the button with it: keep the keyboard inside the sheet, on its title.
     const focusSheetTitle = () => { dialogRef.current?.querySelector<HTMLElement>('#needs-sheet-title')?.focus(); };
 
@@ -628,6 +671,63 @@ function NeedsSheet({
                         </svg>
                     </button>
                 </div>
+                {reading ? (
+                    <div data-testid="bell-read" className="py-1">
+                        <button
+                            type="button"
+                            onClick={() => setReadingId(null)}
+                            data-testid="bell-read-back"
+                            className="flex items-center gap-1 min-h-[44px] pl-1 pr-3 rounded-lg text-sm font-semibold text-bp-ink-accent hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                        >
+                            <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" aria-hidden="true">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                            </svg>
+                            {readWords.back}
+                        </button>
+                        {/* The whole notice: nothing is cut to a number of lines, and a long one scrolls here while the buttons stay in view. */}
+                        <div className="max-h-[45vh] overflow-y-auto px-2 py-1">
+                            <h3
+                                ref={readTitleRef}
+                                tabIndex={-1}
+                                data-testid="bell-read-title"
+                                className="text-base font-bold text-text-primary break-words whitespace-pre-wrap outline-none"
+                            >
+                                {reading.title || reading.body}
+                            </h3>
+                            {reading.title && reading.body && (
+                                <p data-testid="bell-read-body" className="mt-2 text-sm text-text-primary break-words whitespace-pre-wrap">{reading.body}</p>
+                            )}
+                            <p className="mt-2 text-xs text-text-secondary">{timeAgo(Math.max(0, now - reading.sentAt * 1000))}</p>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2 px-2 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    onClearNotice(reading);
+                                    focusSheetTitle();
+                                }}
+                                aria-label={clearWords.one}
+                                data-testid="bell-read-clear"
+                                className="min-h-[44px] px-5 rounded-xl border border-border-secondary bg-transparent text-sm font-bold text-text-primary hover:bg-bg-hover transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                            >
+                                {readWords.clear}
+                            </button>
+                            {canOpenNotices && noticeHasDestination(reading.kind, reading.data) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onClose();
+                                        onOpenNotice(reading);
+                                    }}
+                                    data-testid="bell-read-open"
+                                    className="min-h-[44px] px-5 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
+                                >
+                                    {readWords.open}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ) : (
                 <div className="py-1 max-h-[65vh] overflow-y-auto">
                     {entries.length > 0 && (
                         <div data-testid="needs-sheet-needs" className="pb-1 mb-1 border-b border-border-secondary">
@@ -685,10 +785,7 @@ function NeedsSheet({
                         <div key={n.id} data-testid="bell-notice-row" className="flex items-start gap-1">
                             <button
                                 type="button"
-                                onClick={() => {
-                                    onClose();
-                                    onOpenNotice(n);
-                                }}
+                                onClick={() => setReadingId(n.id)}
                                 data-testid="bell-notice"
                                 data-notice-id={n.id}
                                 className="flex-1 min-w-0 flex items-start gap-3 py-2.5 px-2 rounded-lg hover:bg-bg-hover text-left transition-colors cursor-pointer min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill"
@@ -720,6 +817,7 @@ function NeedsSheet({
                     ))}
                     <p data-testid="needs-sheet-lifetime" className="px-2 pt-2 pb-1 text-xs text-text-muted text-center">{t('Older notices are gone after 7 days.')}</p>
                 </div>
+                )}
             </div>
         </div>
     );

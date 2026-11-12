@@ -37,7 +37,8 @@
  *
  * Run:  pnpm --filter @beanpool/pwa dark-class-check
  *   DARK_CLASSES_PWA=<dir>  check another checkout's apps/pwa (fail-first on an older commit; its node_modules linked)
- *   DARK_CLASSES_ALL=1      also write every measurement to e2e/screenshots/dark-classes.json
+ *   DARK_CLASSES_ALL=1      also write every measurement to e2e/screenshots/dark-classes.json (dark, and under `light` the same
+ *                           places in light: a colour-library change compares the two files before and after)
  *   DARK_CLASSES_JSON=<f>   also write the failures (and the palette's) to that file
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
@@ -460,7 +461,7 @@ async function measurePlaces(browser, css, places) {
             }
         }
     });
-    return { failures, palette, drawn: drawn.length, hovered, focused: focusable.length, rest, hover, focus, drawnPlaces: drawn, hoverable };
+    return { failures, palette, drawn: drawn.length, hovered, focused: focusable.length, rest, hover, focus, restLight, hoverLight, focusLight, drawnPlaces: drawn, hoverable };
 }
 
 /** Relative luminance of an 'r,g,b' string. */
@@ -533,7 +534,8 @@ try {
     if (process.env.DARK_CLASSES_ALL === '1') {
         const file = path.join(HERE, 'e2e/screenshots/dark-classes.json');
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify(result.drawnPlaces.map((p, i) => ({ at: `${p.rel}:${p.line}`, cls: p.cls, tag: p.tag, rest: result.rest[i], hover: p.hovers ? result.hover[i] : undefined, focus: p.focuses ? result.focus[i] : undefined })), null, 1));
+        fs.writeFileSync(file, JSON.stringify(result.drawnPlaces.map((p, i) => ({ at: `${p.rel}:${p.line}`, cls: p.cls, tag: p.tag, rest: result.rest[i], hover: p.hovers ? result.hover[i] : undefined, focus: p.focuses ? result.focus[i] : undefined,
+            light: { rest: result.restLight[i], hover: p.hovers ? result.hoverLight[i] : undefined, focus: p.focuses ? result.focusLight[i] : undefined } })), null, 1));
     }
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     console.log(`${canaryCount} canaries as expected; ${new Set(places.map((p) => p.cls)).size} class strings in ${places.length} places, ${result.drawn} drawn and measured in dark at rest, ${result.hovered} elements hovered, ${result.focused} focused (${secs} s).`);

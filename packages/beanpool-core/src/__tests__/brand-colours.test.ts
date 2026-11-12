@@ -119,25 +119,28 @@ describe('brand colours are readable in every set', () => {
         }
     });
 
-    it("judges inks on every page, card and sunken ground the web app declares (index.css), in both themes", () => {
-        // Each of --bg-primary / --bg-secondary / --bg-card is declared twice: under :root (light), then under
-        // :root.dark-theme (dark). Dark --bg-secondary (#384038) sits under words in Messages, the consent card and the
-        // radius picker; leaving it out let 4.23:1 and 3.88:1 inks pass (review of #1904, finding 4).
-        const css = readFileSync(WEB_CSS, 'utf8');
-        for (const name of ['primary', 'secondary', 'card']) {
-            const values = [...css.matchAll(new RegExp(`--bg-${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))].map((m) => m[1].toLowerCase());
-            expect(values.length, `--bg-${name} declarations in index.css`).toBe(2);
-            expect(INK_GROUNDS.light, `light --bg-${name}`).toContain(values[0]);
-            expect(INK_GROUNDS.dark, `dark --bg-${name}`).toContain(values[1]);
+    // The web app's page, sunken row and card (index.css --bg-primary / --bg-secondary / --bg-card) read the library's web
+    // grounds since slice T1: each is declared twice, under :root (light) then :root.dark-theme (dark), as the variable the
+    // web's Tailwind plugin writes per set from brandGrounds(set).web (apps/pwa/src/themeBase.test.ts holds that side).
+    const WEB_GROUND_VARIABLE = { primary: ['page', '--bp-web-page'], secondary: ['sunken', '--bp-web-sunken'], card: ['card', '--bp-web-card'] } as const;
+    const webDeclared = (name: string) => [...readFileSync(WEB_CSS, 'utf8').matchAll(new RegExp(`--bg-${name}:\\s*([^;]+);`, 'g'))].map((m) => m[1].trim());
+
+    it("judges inks on every page, card and sunken ground the web app declares (index.css), in every set", () => {
+        // Dark --bg-secondary (#384038) sits under words in Messages, the consent card and the radius picker; leaving it out
+        // let 4.23:1 and 3.88:1 inks pass (review of #1904, finding 4).
+        for (const [name, [ground, variable]] of Object.entries(WEB_GROUND_VARIABLE)) {
+            expect(webDeclared(name), `--bg-${name} declarations in index.css`).toEqual([`var(${variable})`, `var(${variable})`]);
+            for (const set of BRAND_SETS) expect(brandInkGrounds(set), `${set} --bg-${name}`).toContain(brandGrounds(set).web[ground]);
         }
+        // Can fail: --bg-hover is a ground index.css still declares itself (oat-200 in light), not a library one.
+        expect(webDeclared('hover')).not.toEqual(['var(--bp-web-hover)', 'var(--bp-web-hover)']);
     });
 
     it("judges a web-only ink on exactly the web app's page, card and sunken grounds, and the phone never reads one", () => {
-        const css = readFileSync(WEB_CSS, 'utf8');
-        const declared = (i: number) => ['primary', 'secondary', 'card']
-            .map((name) => [...css.matchAll(new RegExp(`--bg-${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))][i][1].toLowerCase()).sort();
-        expect([...WEB_INK_GROUNDS.light].sort()).toEqual(declared(0));
-        expect([...WEB_INK_GROUNDS.dark].sort()).toEqual(declared(1));
+        const declared = (set: BrandSet) => Object.values(WEB_GROUND_VARIABLE).map(([ground]) => brandGrounds(set).web[ground]).sort();
+        for (const [name, [, variable]] of Object.entries(WEB_GROUND_VARIABLE)) expect(webDeclared(name)).toEqual([`var(${variable})`, `var(${variable})`]);
+        expect([...WEB_INK_GROUNDS.light].sort()).toEqual(declared('light'));
+        expect([...WEB_INK_GROUNDS.dark].sort()).toEqual(declared('dark'));
         for (const theme of ['light', 'dark'] as const) for (const g of WEB_INK_GROUNDS[theme]) expect(INK_GROUNDS[theme]).toContain(g);
         const phone = readFileSync(resolve(ROOT, 'apps/native/constants/colors.ts'), 'utf8');
         for (const name of WEB_ONLY_INKS) {
@@ -661,10 +664,14 @@ describe("Dark's doodle and banner: charcoal, not olive (Marty and Damo, 12 Nov 
     it("Classic's doodle and banner are as the apps draw them today", () => {
         const phone = readFileSync(resolve(ROOT, 'apps/native/app/ThemeContext.tsx'), 'utf8');
         expect(phone).toContain(`PATTERN_GROUND = { light: '${brandGrounds('light').doodle.ground}', dark: '${classic.doodle.ground}' }`);
+        // The web reads them from the library since slice T1 (light, then dark), as the variables its Tailwind plugin writes
+        // per set (apps/pwa/src/themeBase.test.ts); Classic's values stay main's.
         const css = readFileSync(WEB_CSS, 'utf8');
-        const declared = (name: string) => [...css.matchAll(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))].map((m) => m[1].toLowerCase());
-        expect(declared('pattern-bg')).toEqual([brandGrounds('light').doodle.ground, classic.doodle.ground]);
-        expect(declared('header-bg')).toEqual([brandGrounds('light').web.banner, classic.web.banner]);
+        const declared = (name: string) => [...css.matchAll(new RegExp(`--${name}:\\s*([^;]+);`, 'g'))].map((m) => m[1].trim());
+        expect(declared('pattern-bg').slice(0, 2)).toEqual(['var(--bp-doodle-ground)', 'var(--bp-doodle-ground)']);
+        expect(declared('header-bg')).toEqual(['var(--bp-web-banner)', 'var(--bp-web-banner)']);
+        expect([brandGrounds('light').doodle.ground, classic.doodle.ground]).toEqual(['#f1f1e4', '#141a1a']);
+        expect([brandGrounds('light').web.banner, classic.web.banner]).toEqual(['#fbfaf8', '#1d231d']);
     });
 
     it("Dark's doodle ground and banner ground are charcoal; Classic's are not", () => {

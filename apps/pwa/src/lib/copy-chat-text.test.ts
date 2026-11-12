@@ -59,7 +59,9 @@ describe("a member's own bubble: its selection can be seen", () => {
         expect(rule, 'a .bp-bubble-mine ::selection rule').toBeTruthy();
         const background = rule![1].match(/background:\s*([^;]+);/)?.[1].trim();
         expect(background).toBeTruthy();
-        // The global ::selection is accent on white, which is the own bubble's colour: accent on accent shows nothing.
-        expect(background).not.toBe('var(--accent)');
+        // The global ::selection is the sage fill under white, which is the own bubble's colour: fill on fill shows nothing.
+        const global = css.replace(/\/\*[\s\S]*?\*\//g, '').match(/(?:^|\})\s*::selection\s*\{([^}]*)\}/)?.[1].match(/background:\s*([^;]+);/)?.[1].trim();
+        expect(global).toBe('var(--bp-sage-fill)');
+        expect(background).not.toBe(global);
     });
 });

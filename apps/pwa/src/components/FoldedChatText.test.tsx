@@ -26,7 +26,7 @@ describe('a long message folds with …more', () => {
             return color;
         };
         expect(inkOf({ mine: true })).toBe('rgb(255, 255, 255)');
-        expect(inkOf({})).toBe('var(--accent)');
+        expect(inkOf({})).toBe('var(--bp-accent-fill)');
         expect(inkOf({ ink: 'var(--bp-chip-danger-ink)' })).toBe('var(--bp-chip-danger-ink)');
     });
 

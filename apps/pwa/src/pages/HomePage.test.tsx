@@ -831,7 +831,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         // A known place still offers the town, quietly.
         expect(screen.getByTestId('home-type-town-instead')).toHaveTextContent('Not here? Type your town');
         // The library's link role, light and dark alike, never a raw shade (finding 5).
-        expect(screen.getByTestId('home-type-town-instead').className).toMatch(/\btext-link\b.*\bring-accent\b/);
+        expect(screen.getByTestId('home-type-town-instead').className).toMatch(/\btext-link\b.*\bring-bp-accent-fill\b/);
         expect(screen.getByTestId('home-type-town-instead').className).not.toMatch(/nature-|emerald-/);
         fireEvent.click(screen.getByTestId('home-type-town-instead'));
         expect(screen.getByTestId('town-search')).toBeInTheDocument();

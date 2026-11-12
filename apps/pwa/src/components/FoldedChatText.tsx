@@ -119,7 +119,7 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
                         fontWeight: 600,
                         textDecoration: 'underline',
                         textUnderlineOffset: '2px',
-                        color: ink ?? (mine ? '#ffffff' : 'var(--accent)'),
+                        color: ink ?? (mine ? '#ffffff' : 'var(--bp-accent-fill)'),
                         cursor: 'pointer',
                     }}
                 >

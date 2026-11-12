@@ -96,7 +96,7 @@ function hex(value: string): Rgba | null {
 /** The app's palette (tailwind.config.js over Tailwind's own), the brand library's dark roles and the `:root.dark-theme` variables in index.css. */
 async function darkPalette(): Promise<Palette> {
     const configUrl = pathToFileURL(path.resolve(SRC, '../tailwind.config.js')).href;
-    const { default: config } = await import(/* @vite-ignore */ configUrl);
+    const { default: config, webSetVariableMap } = await import(/* @vite-ignore */ configUrl);
     const flat = new Map<string, string>();
     const walk = (prefix: string, value: unknown) => {
         if (typeof value === 'string') flat.set(prefix, value);
@@ -106,8 +106,9 @@ async function darkPalette(): Promise<Palette> {
     };
     walk('', resolveConfig(config).theme.colors);
 
-    // The brand roles (bg-bp-commit-fill …) are the library's variables, which tailwind.config.js adds to index.css.
-    const vars = new Map<string, string>(Object.entries(brandCssVariableMap('dark')));
+    // The brand roles (bg-bp-commit-fill …) and the web's base (the `nature` ramp as channels, the grounds) are the library's
+    // variables, which tailwind.config.js adds to index.css.
+    const vars = new Map<string, string>(Object.entries({ ...brandCssVariableMap('dark'), ...webSetVariableMap('dark') }));
     const css = fs.readFileSync(path.join(SRC, 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     for (const block of css.matchAll(/:root\.dark-theme\s*\{([^}]*)\}/g)) {
         for (const decl of block[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) vars.set(decl[1], decl[2].trim());
@@ -115,6 +116,14 @@ async function darkPalette(): Promise<Palette> {
     const value = (v: string, depth = 0): Rgba | null => {
         const ref = /^var\((--[\w-]+)\)$/.exec(v.trim());
         if (ref) return depth < 5 && vars.has(ref[1]) ? value(vars.get(ref[1])!, depth + 1) : null;
+        // A ramp step as channels: rgb(var(--bp-n-800) / <alpha-value>) in the config (the class's own opacity applies on top,
+        // in paint()), rgb(var(--bp-n-400)) or rgb(var(--bp-n-950) / 0.85) in index.css.
+        const rgb = /^rgb\(var\((--[\w-]+)\)(?:\s*\/\s*(<alpha-value>|[\d.]+))?\)$/.exec(v.trim());
+        if (rgb) {
+            const ch = vars.get(rgb[1])?.split(/\s+/).map(Number);
+            if (!ch || ch.length !== 3 || ch.some((c) => !Number.isFinite(c))) return null;
+            return [ch[0], ch[1], ch[2], rgb[2] == null || rgb[2] === '<alpha-value>' ? 1 : Number(rgb[2])];
+        }
         if (v === 'transparent') return [0, 0, 0, 0];
         return hex(v);
     };

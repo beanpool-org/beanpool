@@ -1775,6 +1775,8 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /** A deal on an Offer priced for each one (DESIGN-per-item-price-fable.md §3): 'each' (`hours` is how many) or 'lot' (all of them). */
+    itemOption?: 'each' | 'lot';
     /**
      * A period of a standing deal (DESIGN-standing-deals-fable §2.3; the node's read, @beanpool/engine escrow.ts): which one
      * and its number; on its CURRENT period's row only, its phase, Beans per period, unit, count (null: until stopped), when
@@ -2384,10 +2386,17 @@ export async function getEventZones(): Promise<{ zones: EventZone[] }> {
  * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
  * `standing` carries the payer's signed authorisation (signStandingStart) and no hours.
  */
+/**
+ * Take up an Offer. A listing priced for each one (DESIGN-per-item-price-fable.md §3) is taken up for `hours` of them, or all of
+ * them, with the total the box showed (`item`: core itemTakeUpBox's send); the node refuses any other figure, and holds nothing.
+ */
 export async function acceptMarketplacePost(
     postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody,
+    item?: { itemOption: 'each' | 'lot'; expect_c: number },
 ): Promise<{ success: boolean; transaction: MarketplaceTransaction }> {
-    return request('POST', '/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
+    return request('POST', '/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing }
+        : item ? { postId, buyerPublicKey, hours, itemOption: item.itemOption, expect_c: item.expect_c }
+        : { postId, buyerPublicKey, hours });
 }
 
 /**

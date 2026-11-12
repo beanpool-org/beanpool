@@ -14,7 +14,7 @@
  * says which deal it acts on; colours are the shared library's roles (light and dark come with them).
  */
 
-import { dealMoves, dealStateWords, dealStep, t, tn, formatHundredths } from '@beanpool/core';
+import { dealMoves, dealStateWords, dealStep, itemDealTitle, t, tn, formatHundredths } from '@beanpool/core';
 import type { MarketplaceTransaction } from '../lib/api';
 
 interface Props {
@@ -61,7 +61,8 @@ export function ChatDealStrip({ deals, me, peerName, showsBeans, busy, onOpen, o
                     const releasable = !!moves && moves.release;
                     const awaiting = tx.status === 'pending' && !releasable;
                     const reviewable = tx.status === 'completed';
-                    const title = tx.postTitle || t('Deal');
+                    // A per-item deal says how many, as Your deals does: "3 × Solar Panels".
+                    const title = tx.postTitle ? itemDealTitle(tx, tx.postTitle) : t('Deal');
                     return (
                         <div
                             key={tx.id}

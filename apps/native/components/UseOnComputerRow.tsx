@@ -23,8 +23,8 @@
  * keeps its "http://"); Copy and Share still give the whole https:// address. The address is ONE selectable Text (its dotted
  * parts nested inside it), so a long press picks up the whole address, not a piece of it. Too wide for one line (the platform
  * reports a second line, onTextLayout), it is drawn as one piece per dotted part in a wrapping row instead, so it breaks only
- * after a dot and never inside a name (a plain run of text has no break opportunity after a dot). The two 48 dp buttons sit side
- * by side or stack, never cut.
+ * after a dot and never inside a name (a plain run of text has no break opportunity after a dot); a long press on that row copies
+ * the whole address. The two 48 dp buttons sit side by side or stack, never cut.
  */
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
@@ -107,8 +107,8 @@ export function UseOnComputerRow() {
     // goes into it), so a long press picks up the whole address. Measured in Chromium (13 Nov; a phone's line breaker is ICU-based too
     // but was not measured on a device): a run of text, nested spans or not, has NO break opportunity after a dot, so a name too wide
     // for the line is split at a letter ("...beanpool.o" / "rg"). The platform says so (onTextLayout: more than one line), and that
-    // address is then drawn as pieces in a wrapping row, which break only after a dot (each piece selectable; Copy and Share still
-    // give the whole address). To a screen reader it is still one line: the whole sentence, https:// and all.
+    // address is then drawn as pieces in a wrapping row, which break only after a dot (a long press on it copies the whole address;
+    // Copy and Share give it too). To a screen reader it is still one line: the whole sentence, https:// and all.
     const shown = addressBreakPoints(addressToShow(address));
     const pieces = brokenFor === address;
 
@@ -119,9 +119,11 @@ export function UseOnComputerRow() {
                 <View accessible accessibilityLabel={line}>
                     <Text style={styles.text}>{t(USE_ON_COMPUTER_WORDS.phoneLead)}</Text>
                     {pieces ? (
-                        <View style={styles.addressWrap} testID="settings-use-on-computer-address">
-                            {shown.map((piece, i) => <Text key={i} style={styles.addressPiece} selectable>{piece}</Text>)}
-                        </View>
+                        // Pieces are not selectable one by one (a long press would pick up "castlemaine." and not the address): a long
+                        // press anywhere on the address copies the whole address, as the Copy button does.
+                        <Pressable style={styles.addressWrap} onLongPress={() => { copy().catch(() => {}); }} testID="settings-use-on-computer-address">
+                            {shown.map((piece, i) => <Text key={i} style={styles.addressPiece}>{piece}</Text>)}
+                        </Pressable>
                     ) : (
                         <Text
                             style={styles.address}

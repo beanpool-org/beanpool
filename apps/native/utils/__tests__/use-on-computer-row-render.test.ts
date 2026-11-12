@@ -20,10 +20,12 @@ const layout = vi.hoisted(() => ({ last: null as null | ((e: unknown) => void) }
 vi.mock('react-native', () => {
     const flat = (s: unknown): Record<string, unknown> => Object.assign({}, ...[s].flat(3).filter(Boolean));
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, selectable, style, onTextLayout } = props;
+        const { children, onPress, onLongPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, selectable, style, onTextLayout } = props;
         if (onTextLayout) layout.last = onTextLayout;
         const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(style)) };
         if (onPress) attrs.onClick = () => onPress();
+        // A long press is a context-menu event here: one gesture, whichever element it lands on.
+        if (onLongPress) attrs.onContextMenu = () => onLongPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole) attrs['data-role'] = accessibilityRole;
         if (testID) attrs['data-testid'] = testID;
@@ -211,7 +213,6 @@ describe('the address: one selectable text, and pieces only when it did not fit 
         expect(layout.last, 'the one text asks to be told how it was laid out').toBeTruthy();
         await sayLines(2);
         const address = addressOf(host);
-        expect(address.tagName).toBe('DIV');
         expect(styleOf(address).flexDirection).toBe('row');
         expect(styleOf(address).flexWrap).toBe('wrap');
         expect(address.textContent).toBe('castlemaine.beanpool.org');
@@ -220,6 +221,21 @@ describe('the address: one selectable text, and pieces only when it did not fit 
         // Each piece no wider than the column, so even a piece too wide for it is the only one that breaks.
         for (const p of pieces) expect(styleOf(p).maxWidth, p.textContent!).toBe('100%');
         expect(host.textContent).not.toContain('https://');
+    });
+
+    it('too wide for one line: no piece selects by itself; a long press on the address copies the WHOLE address', async () => {
+        const { setStringAsync } = await import('expo-clipboard');
+        vi.mocked(setStringAsync).mockClear();
+        phoneKeeps(CASTLE, CASTLE_NAMES);
+        const host = await render('dark');
+        await sayLines(2);
+        const address = addressOf(host);
+        // Nothing in the row is selectable now: a long press that selected "castlemaine." alone is what this replaces.
+        expect(Array.from(host.querySelectorAll('[data-selectable]'))).toEqual([]);
+        expect(address.getAttribute('data-testid')).toBe('settings-use-on-computer-address');
+        await act(async () => { address.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); });
+        expect(setStringAsync).toHaveBeenCalledTimes(1);
+        expect(setStringAsync).toHaveBeenCalledWith(CASTLE);
     });
 
     it('Copy and Share give the whole https:// address either way', async () => {
@@ -242,7 +258,8 @@ describe('the address: one selectable text, and pieces only when it did not fit 
         phoneKeeps(CASTLE, CASTLE_NAMES);
         const host = await render('dark');
         await sayLines(2);
-        expect(addressOf(host).tagName).toBe('DIV');
+        expect(addressOf(host).getAttribute('data-selectable')).toBeNull();
+        expect(styleOf(addressOf(host)).flexWrap).toBe('wrap');
         phoneKeeps('https://byron.beanpool.org', BYRON_NAMES);
         await act(async () => { communitySwitched(); });
         await act(async () => {});

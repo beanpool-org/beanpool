@@ -20,6 +20,7 @@ import {
     type GuidePage,
 } from '@beanpool/core';
 import { useGuide, useLearnVideos } from '../lib/guide';
+import { useLanguage } from '../lib/useLanguage';
 import { getCommunityHealth } from '../lib/api';
 
 type View = { kind: 'home' } | { kind: 'section'; id: string } | { kind: 'page'; slug: string };
@@ -72,12 +73,14 @@ function useCommunityStatus(): 'checking' | 'online' | 'offline' {
 
 export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, initialPage }: Props) {
     const { guide, source } = useGuide();
+    // The guide is searched in the language it is shown in (and English): search drops that language's little words only.
+    const [lang] = useLanguage();
     const [stack, setStack] = useState<View[]>(() => (initialPage ? [{ kind: 'home' }, { kind: 'page', slug: initialPage }] : [{ kind: 'home' }]));
     const [query, setQuery] = useState('');
     const topRef = useRef<HTMLDivElement>(null);
     const view = stack[stack.length - 1];
     const status = useCommunityStatus();
-    const results = useMemo(() => searchGuide(guide, query), [guide, query]);
+    const results = useMemo(() => searchGuide(guide, query, 20, lang), [guide, query, lang]);
     const searching = query.trim().length >= 2;
 
     const go = (next: View) => setStack(s => [...s, next]);

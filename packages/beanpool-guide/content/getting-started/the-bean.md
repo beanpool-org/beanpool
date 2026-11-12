@@ -23,7 +23,7 @@ In the web app, it is in the same place: **Settings**, then **Help & how it work
 
 ## Searching
 
-Type a word or two in **Search the guide** (at the top in the web app; under **Your communities** on the phone). It shows every page with all of your words. It works without a connection.
+Type a word or two in **Search the guide** (at the top in the web app; under **Your communities** on the phone). It shows the pages that have your words. Little words like "how", "do" or "the" don't have to match, so you can type a question the way you would ask it. It works without a connection.
 
 - Short words work: "vot" finds "vote" and "voting".
 - If nothing comes up, try one simpler word, like "gift", "photo" or "block".

@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from './ThemeContext';
 import { useGuide } from '../utils/use-guide';
+import { useWords } from '../components/LanguageProvider';
 import {
     findGuidePage, manualSections, searchGuide, beanPoolSheetEntries, GUIDE_SLUGS, BEANPOOL_WEBSITE_URL,
     type GuidePage,
@@ -87,13 +88,15 @@ export default function BeanPoolSheet() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { guide, source } = useGuide();
+    // The guide is searched in the language it is shown in (and English): search drops that language's little words only.
+    const { lang } = useWords();
     const communities = useCommunities();
     // The notices each other community sent since it was last open, counted on this phone (utils/notice-counts.ts).
     const noticeCounts = useNoticeCounts();
     const status: CommunityStatus | 'none' = communities.active === null ? 'none'
         : communities.current?.status ?? 'checking';
     const [query, setQuery] = useState('');
-    const results = useMemo(() => searchGuide(guide, query), [guide, query]);
+    const results = useMemo(() => searchGuide(guide, query, 20, lang), [guide, query, lang]);
     const searching = query.trim().length >= 2;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({

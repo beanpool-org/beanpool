@@ -7,7 +7,7 @@ import {
     loadCachedLanguageGuide, refreshLanguageGuideFromWebsite, guidePageNewerInEnglish, guidePageBodyState, guideBodyHash, guideUrl, guideCacheKey,
     GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_URL, type Guide,
 } from '../guide';
-import { FEEDBACK_LIVE, LANGS, guideInLanguage, guidePageBodyInEnglish, guideSourceHash, type GuideTitles } from '@beanpool/core';
+import { FEEDBACK_LIVE, GUIDE_FILLER_WORDS, LANGS, guideInLanguage, guidePageBodyInEnglish, guideSourceHash, type GuideTitles } from '@beanpool/core';
 import { loadGuide, serializeGuide, GUIDE_LANGS } from '../../../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash as toolingHash, titleEntries, readGuideTitles, checkGuideTitles } from '../../../../packages/beanpool-guide/src/titles.mjs';
 import { guideTitlesFor } from '../guide-titles';
@@ -232,6 +232,53 @@ describe('the manual (on the pages)', () => {
         }
     });
 
+    it('search: a question finds the page its words are about, though the page never says "how" or "do"', () => {
+        // The question words are not among the words a page must have (core's GUIDE_FILLER_WORDS), so a member can type the
+        // way they would ask. The web app calls the same core search, so this is its pin too.
+        const asks: Array<[string, string[]]> = [
+            ['gifts', ['how do I send a gift', 'how to send a gift', 'how send gift', 'How can I send a gift?', 'how do I give beans to someone']],
+            ['posting', ['how do I post an offer', 'how to post a need']],
+            ['the-pulse', ['what is the pulse', "what's the pulse", 'where is the pulse']],
+            ['trust-badges', ['what are trust badges']],
+            ['circulation-fee', ['what is the circulation fee']],
+            ['your-12-words', ['where do I find my 12 words']],
+            ['blocking', ['how do I block someone']],
+            ['reporting', ['how do I report a problem']],
+            ['leaving-or-deleting', ['can I delete my account']],
+            ['recovery', ['how do I get my account back']],
+            ['credit-line', ['what is my credit line']],
+            ['joining', ['how do I join a community']],
+            ['events', ['how do I create an event']],
+            ['groups', ['how do I start a group']],
+            ['your-profile', ['how do I change my profile']],
+        ];
+        for (const [slug, queries] of asks) for (const q of queries) expect(searchGuide(guide, q)[0]?.page.slug, q).toBe(slug);
+    });
+
+    it('search: every page still leads for its own title, and a question made of its title finds it', () => {
+        for (const p of guide.guides) {
+            expect(searchGuide(guide, p.title)[0].page.slug, p.title).toBe(p.slug);
+            for (const opener of ['how do I', 'what is']) {
+                const at = searchGuide(guide, `${opener} ${p.title}`).findIndex(r => r.page.slug === p.slug);
+                expect(at, `${opener} ${p.title}`).toBeGreaterThanOrEqual(0);
+                expect(at, `${opener} ${p.title}`).toBeLessThan(3);
+            }
+        }
+    });
+
+    it('search: a query of only question words searches as typed', () => {
+        for (const q of ['how do i', 'what is the', 'how', 'does it']) {
+            const found = searchGuide(guide, q, 200);
+            expect(found.length, q).toBeGreaterThan(0);
+            // Every word typed (one letter is not searched) is on each page found, as before.
+            const typed = q.split(' ').filter(w => w.length >= 2);
+            for (const r of found) {
+                const text = [r.page.title, r.page.summary, ...r.page.blocks.flatMap(b => b.type === 'ul' ? b.items : [b.text])].join(' ').toLowerCase();
+                for (const w of typed) expect(text, `${q}: ${r.page.slug}`).toContain(w);
+            }
+        }
+    });
+
     it('search: the page named for a word leads, and the credit-risk page still answers its own name', () => {
         expect(searchGuide(guide, 'credit risk')[0].page.slug).toBe('credit-risk');
         expect(searchGuide(guide, 'risk')[0].page.slug).toBe('credit-risk');
@@ -447,6 +494,123 @@ describe("the guide's titles in the member's language", () => {
         expect(sectionPages(pt, pt.sections.find(s => s.id === 'market')!).find(p => p.slug === 'posting')!.title).toBe('Publicar uma Oferta ou um Pedido');
         const relatedToPosting = PAGES.guides.find(p => p.related.includes('posting'))!;
         expect(relatedPages(pt, findGuidePage(pt, relatedToPosting.slug)!).find(p => p.slug === 'posting')!.title).toBe('Publicar uma Oferta ou um Pedido');
+    });
+
+    it("a question in each language finds the gifts page by its real title, and an English question finds it in every language's guide", () => {
+        // How a member asks, in their language, for the page "Sending a gift" as that language's titles file calls it.
+        const OPENER: Record<string, string> = {
+            es: 'cómo puedo', pt: 'como posso', fr: 'comment puis-je', it: 'come posso', de: 'wie kann ich', ru: 'как мне', uk: 'як мені',
+            tr: 'nasıl', id: 'bagaimana cara', fil: 'paano', sw: 'jinsi ya', vi: 'làm thế nào để', el: 'πώς μπορώ να', ar: 'كيف يمكنني',
+            fa: 'چگونه', ur: 'کیسے', hi: 'कैसे', bn: 'কিভাবে', ta: 'எப்படி', ml: 'എങ്ങനെ', ja: 'どうやって', ko: '어떻게',
+            'zh-Hans': '怎么', 'zh-Hant': '怎麼',
+        };
+        expect(Object.keys(OPENER).sort()).toEqual(LANGS.filter(l => l !== 'en').sort());
+        for (const lang of LANGS) {
+            const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
+            const gifts = findGuidePage(shown, 'gifts')!;
+            // A member may type English whatever their language is (the search finds the English title too).
+            expect(searchGuide(shown, 'how do I send a gift', 20, lang)[0]?.page.slug, `${lang}: how do I send a gift`).toBe('gifts');
+            if (lang === 'en') continue;
+            const q = `${OPENER[lang]} ${gifts.title}`;
+            expect(searchGuide(shown, q, 20, lang)[0]?.page.slug, `${lang}: ${q}`).toBe('gifts');
+        }
+    });
+
+    it('no question word of any language is a word the English pages are named by', () => {
+        // A guide is searched by its own language's list, and an English page title is searched in every guide: a Vietnamese
+        // or Italian filler must not drop a word a member needs in English. (English fillers are the exception: the pages
+        // "How BeanPool works" and "The Pulse" carry them on purpose, and a title typed whole still finds its page.)
+        const fold = (w: string) => w.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+        const english = new Set(GUIDE_FILLER_WORDS.en.map(fold));
+        const titleWords = new Set(PAGES.guides.flatMap(p => p.title.split(/[^A-Za-z0-9]+/).filter(Boolean).map(fold)));
+        expect(titleWords.size).toBeGreaterThan(80);
+        for (const lang of LANGS) {
+            if (lang === 'en') continue;
+            for (const w of GUIDE_FILLER_WORDS[lang]) {
+                if (!english.has(fold(w))) expect(titleWords.has(fold(w)), `${lang} ${w}`).toBe(false);
+            }
+        }
+    });
+
+    it("every page's own title, typed in its language, still finds that page first, in all 25 languages (no list of another language drops a word)", () => {
+        // The pages that came second before the question words too, because another page carries the same title.
+        const SECOND = new Set(['es:events', 'pt:events', 'fr:events', 'ru:events', 'it:events', 'hi:keepers', 'sw:keepers', 'fa:keepers', 'fil:holiday-mode', 'ko:your-12-words', 'ko:notifications']);
+        const wrong: string[] = [];
+        for (const lang of LANGS) {
+            const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
+            for (const p of shown.guides) {
+                const at = searchGuide(shown, p.title, 20, lang).findIndex(r => r.page.slug === p.slug);
+                const want = SECOND.has(`${lang}:${p.slug}`) ? 1 : 0;
+                if (at !== want) wrong.push(`${lang} ${p.slug} "${p.title}": ${at}, wanted ${want}`);
+            }
+        }
+        expect(wrong).toEqual([]);
+    }, 120_000);
+
+    it('the words a member types for a page keep ranking it in its own language: Italian "beni comuni", Vietnamese "số dư", German "Admin KI"', () => {
+        // The first was 1st of 1, the second 1st of 20, the third 1st before another language's list (Turkish "beni" and "ki",
+        // French "du") dropped one of their words; none of them is a word of the language it is searched in.
+        const at = (lang: 'it' | 'vi' | 'de', q: string) => searchGuide(guideInLanguage(PAGES, lang, guideTitlesFor(lang)), q, 20, lang).map(r => r.page.slug);
+        expect(at('it', 'beni comuni')).toEqual(['commons-fund']);
+        expect(at('it', 'I Beni comuni')[0]).toBe('commons-fund');
+        expect(at('vi', 'số dư')[0]).toBe('your-balance');
+        expect(at('vi', 'so du')[0]).toBe('your-balance');
+        expect(at('vi', 'số dư của tôi')[0]).toBe('your-balance');
+        expect(at('de', 'Admin KI')[0]).toBe('admins-ai-assistants');
+        expect(at('de', 'KI Hilfe')[0]).toBe('admins-ai-assistants');
+    });
+
+    it('Vietnamese tones tell words apart: "đậu" (Beans), "đề" (as in đề nghị), "Nhu" (as in Nhu cầu) and "cửa" are not the little words "đâu", "để", "như", "của"', () => {
+        // The list is written with its tones and a word is compared as typed. Folded, "đâu" (where) caught "đậu" (Beans), "để"
+        // (in order to) caught "đề" (Offer), "nhu" (written for "như") caught "Nhu cầu" (Need), and "của" caught "cửa" (shop).
+        const vi = guideInLanguage(PAGES, 'vi', guideTitlesFor('vi'));
+        const at = (q: string) => searchGuide(vi, q, 20, 'vi').map(r => r.page.slug);
+        expect(at('gửi đậu')[0]).toBe('gifts');
+        expect(at('nhu cầu')[0]).toBe('posting');
+        expect(at('đề nghị')[0]).toBe('posting');
+        expect(at('hạn mức đậu')[0]).toBe('trading-partner-limit');
+        // The little words are still little words when they are typed with their tones.
+        expect(at('làm thế nào để gửi đậu')[0]).toBe('gifts');
+        expect(at('gửi đậu của tôi')[0]).toBe('gifts');
+    });
+
+    it('a word of the Vietnamese titles that is not on the Vietnamese list as typed is never dropped from a query', () => {
+        // For every word the Vietnamese pages are titled and summarised by (as typed, tones and all): put a little word that is
+        // dropped ("làm") before it. The same pages as the word alone come back only if the word was kept.
+        const vi = guideInLanguage(PAGES, 'vi', guideTitlesFor('vi'));
+        const listed = new Set(GUIDE_FILLER_WORDS.vi.map(w => w.toLowerCase().normalize('NFKD')));
+        const english = new Set(GUIDE_FILLER_WORDS.en);
+        const typed = new Set<string>();
+        for (const p of vi.guides) for (const w of `${p.title} ${p.summary}`.toLowerCase().normalize('NFKD').split(/[^\p{L}\p{M}\p{N}]+/u)) {
+            // (A word of one letter once its tones are off, "ở" or "ý", is never searched.)
+            if (w.replace(/[\u0300-\u036f]/g, '').length >= 2 && !listed.has(w) && !english.has(w)) typed.add(w);
+        }
+        expect(typed.size).toBeGreaterThan(300);
+        const slugs = (q: string) => searchGuide(vi, q, 200, 'vi').map(r => r.page.slug).sort();
+        const dropped: string[] = [];
+        for (const w of typed) if (slugs(`làm ${w}`).join() !== slugs(w).join()) dropped.push(w);
+        expect(dropped).toEqual([]);
+    }, 60_000);
+
+    it("no English question word drops a word of another language's page titles, unless that language lists it too", () => {
+        // English is always used with the guide's own language, so an English filler must not be a real word of a translated
+        // title. Compared as typed, accents and all: Vietnamese "dò" (survey) is not "do", "bè" is not "be", "án" is not "an".
+        // (French "don", a gift, is why "don" is not on the English list; Italian and German "in" are on theirs.)
+        const fold = (w: string) => w.normalize('NFKD').replace(/[̀-ͯ]/g, '');
+        const english = new Set(GUIDE_FILLER_WORDS.en);
+        const bad: string[] = [];
+        for (const lang of LANGS) {
+            if (lang === 'en') continue;
+            const own = new Set(GUIDE_FILLER_WORDS[lang].map(w => fold(w.toLowerCase())));
+            const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
+            for (const p of shown.guides) {
+                if (!p.english?.title || p.title === p.english.title) continue; // English as it stands ("The Pulse"): English words are right in it
+                for (const w of p.title.toLowerCase().normalize('NFC').split(/[^\p{L}\p{M}\p{N}]+/u)) {
+                    if (w.length >= 2 && english.has(w) && !own.has(fold(w))) bad.push(`${lang} ${p.slug} "${p.title}": ${w}`);
+                }
+            }
+        }
+        expect(bad).toEqual([]);
     });
 
     it('search finds a page by its translated title and by its English one, and shows it in the member\'s language', () => {

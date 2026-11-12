@@ -19,7 +19,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
-import { PSEUDO_LANG, isLang, pseudoLocalise, type UiLang } from './words.js';
+import { PSEUDO_LANG, isLang, pseudoLocalise, type Lang, type UiLang } from './words.js';
 
 /** Bump when the JSON shape changes in a way an older app could not read. An app refuses other schemas. */
 export const GUIDE_SCHEMA = 2;
@@ -364,10 +364,13 @@ export function splitBold(text: string): Array<{ text: string; bold: boolean }> 
 // of a longer one: "vot" finds "voting"; a plural finds its singular: "gifts" finds "gift"). Titles weigh most, then
 // summaries, headings, then the body. A page whose title (best) or summary has more of the typed words comes before
 // one that only says them in its body, however often (the credit-risk page says "gift" in most paragraphs; the page
-// named for sending one is "Sending a gift"). Pages that tie on that are ordered by score, then title.
+// named for sending one is "Sending a gift"). Pages that tie on that are ordered by score, then title. The question and
+// filler words of a query ("how do I", "what is the", "cómo puedo") are not among the words that must match. If any was
+// left out, a query that is exactly a page's title still puts that page first ("your deals" is "Your deals", not one of
+// the four pages named "deals").
 
 /** Words members may type that the guide deliberately says differently. */
-const SEARCH_SYNONYMS: Record<string, string[]> = {
+export const GUIDE_SEARCH_SYNONYMS: Record<string, string[]> = {
     tier: ['badge'], tiers: ['badge'], rank: ['badge'], level: ['badge'],
     escrow: ['held'], deposit: ['held'],
     demurrage: ['circulation'], tax: ['fee'],
@@ -388,8 +391,76 @@ function fold(s: string): string {
     try { out = out.normalize('NFKD').replace(/[\u0300-\u036f]/g, ''); } catch { /* keep accents */ }
     return out.replace(/\*\*/g, '');
 }
-const SEPARATORS = /[\s!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u206f\u3000-\u303f]+/;
+// Beside ASCII and general punctuation: the Devanagari danda (\u0964\u0965) and the Arabic comma, semicolon and question
+// mark and the Urdu full stop (\u060c\u061b\u061f\u06d4), which normalize() leaves as they are, so that a question typed in
+// Hindi, Arabic, Persian or Urdu does not carry its "?" into its last word. (Full-width marks fold to ASCII ones.)
+const SEPARATORS = /[\s!-/:-@[-`{-~\u00a0-\u00bf\u2000-\u206f\u3000-\u303f\u0964\u0965\u060c\u061b\u061f\u06d4]+/;
 const words = (s: string) => fold(s).split(SEPARATORS).filter(Boolean);
+
+// ─── Question and filler words ───────────────────────────────────────────────
+// Members type questions ("how do I send a gift"), but the page that answers one never says "how" or "do". So the words
+// that only make a sentence a question, or only join its parts (articles, "can", "my", "of"), do not have to match: they
+// are dropped from the query before it is matched, unless nothing else is left (a query made only of them, "how do I",
+// searches as typed). One list for each language the guide has, drafted from that language's commonest question openers,
+// helpers, articles, prepositions and "I/my" words, as members type them (a word is listed as written; accents and case
+// are folded when the list is read, so "Cómo" and "como" are one). The exception is a language whose tones tell words
+// apart (TONAL: Vietnamese). Its list is written with its tones and a word is compared as typed, because folded "đâu"
+// (where) is "đậu" (Beans), "để" (in order to) is "đề" (as in đề nghị, Offer), "như" is "Nhu" (as in Nhu cầu, Need) and
+// "của" (of) is "cửa" (as in Cửa hàng, shop). A Vietnamese word typed without its tones is not known to be a little one,
+// so it stays in the query, as it did before the question words.
+// A search drops the words of TWO lists only: that of the language the guide is shown in (the `lang` the screens pass),
+// and English, because members often type English whatever their language is (the guide is searched by both). Never the
+// lists of all 25 together: a word that is filler in one language is a real word in another ("beni" is Turkish "me" and
+// Italian "goods", as in "I Beni comuni"; "dư" folds to French "du"), and a query must not lose its words to a language
+// it is not in. English is compared as typed, accents and all, in another language's guide: Vietnamese "dò" (survey)
+// folds to "do" but is not the English "do". Nothing goes on the English list that is a word of another language's page
+// titles (French "don" is "gift": it stays off), unless that language lists it too ("in", Italian and German), and
+// nothing goes on any list that is a search synonym (GUIDE_SEARCH_SYNONYMS: Vietnamese "ban" stays off). The guide tests
+// check the first against every translated title and the second against GUIDE_SEARCH_SYNONYMS.
+// Chinese and Japanese are written without spaces, so only a question word typed as a word of its own is dropped there.
+// A word of one letter is never searched, so none is listed.
+const list = (s: string): readonly string[] => s.split(' ');
+export const GUIDE_FILLER_WORDS: Readonly<Record<Lang, readonly string[]>> = {
+    en: list('how do does did doing can could should would will what whats where when who whom whose why which is are am was were be it its the an of to for in on at with from about into and or if me my we us our you your there please want wanna doesn didn isn aren wasn weren couldn shouldn wouldn ll ve re'),
+    es: list('como que donde cuando quien quienes cual cuales cuanto cuantos porque por es son esta estan el la los las un una unos unas de del al en con para mi mis me yo se lo puedo puede pueden hago hay quiero'),
+    pt: list('como que onde quando quem qual quais quanto quantos porque por esta estao sao um uma uns umas os as de do da dos das em na nos nas com para pra ou eu me meu minha meus minhas posso pode podem se ao aos pelo pela quero faco fazer'),
+    hi: list('कैसे क्या कहाँ कहां कब कौन क्यों कौनसा मैं मुझे मेरा मेरी मेरे को का की के से में पर है हैं यह ये वह वो और या लिए करें करना करूं कर सकता सकती सकते हो कृपया चाहिए चाहता चाहती हूँ हूं तरीका'),
+    bn: list('কিভাবে কীভাবে কি কী কোথায় কখন কে কেন কোন আমি আমার আমাকে এবং এই সেই একটি একটা করতে করব করি করবো করুন পারি পারব পারবো হয় আছে কিছু জন্য থেকে সম্পর্কে'),
+    fr: list('comment que quoi ou quand qui pourquoi quel quelle quels quelles combien est sont ce cet cette ces qu je me mon ma mes le la les un une des du de au aux en dans sur pour avec et peux peut puis dois veux faire il on'),
+    ar: list('كيف كيفية ما ماذا ماهو هل أين اين متى من لماذا في على إلى الى عن هو هي أنا انا لي أن ان مع هذا هذه ذلك أو او أريد اريد أستطيع استطيع يمكنني يمكن ممكن'),
+    id: list('bagaimana gimana bagaimanakah apa apakah siapa kapan kenapa mengapa mana dimana di ke dari yang ini itu adalah ada dan atau untuk dengan pada saya aku bisa bisakah dapat cara tolong ingin mau sebuah suatu'),
+    ru: list('как что где когда кто почему зачем какой какая какое какие какую это мне мой моя мое мои можно ли на по для от до из со во или но же бы хочу могу сделать делать'),
+    'zh-Hans': list('怎么 怎样 如何 怎么样 什么 是什么 哪里 哪儿 什么时候 为什么 为何 可以 能否 请问 我的 我想 我要 我该 有没有 怎么才能'),
+    'zh-Hant': list('怎麼 怎樣 如何 怎麼樣 什麼 是什麼 哪裡 哪裏 哪兒 什麼時候 為什麼 為何 可以 能否 請問 我的 我想 我要 我該 有沒有 怎麼才能'),
+    it: list('come cosa che cos dove quando chi perche quale quali quanto sono il lo la gli le un uno una di del dello della dei degli delle al allo alla agli alle da dal dalla in nel nella su sul sulla con per mio mia miei mie mi io posso voglio faccio fare'),
+    de: list('wie was wo wann wer wen wem warum wieso weshalb welche welcher welches welchen ist sind kann kannst konnen ich mich mir mein meine meinen meiner meinem der die das den dem des ein eine einen einem einer und oder zu zum zur von vom fur mit in im auf an am bei man wird muss es gibt habe mochte will'),
+    tr: list('nasıl nasil ne nedir nelerdir nerede nereden nereye neden niçin kim kimin hangi kaç mı mi mu mü bir bu ve ile için ben bana benim beni var yapılır yapilir yapabilirim edebilirim olur da de ki ya'),
+    sw: list('jinsi vipi nini wapi lini nani kwa ya wa za la kwenye na ni mimi yangu wangu langu zangu naweza ninaweza ninawezaje unaweza je hii huu huo hili hizi ile kuhusu ili au pia'),
+    ml: list('എങ്ങനെ എന്ത് എന്താണ് എവിടെ എപ്പോൾ ആര് ആരാണ് എന്തിന് ഞാൻ എന്റെ എനിക്ക് ഒരു ചെയ്യാം ചെയ്യണം ചെയ്യാൻ എങ്ങനെയാണ് ഉണ്ടോ ആണ് പറ്റുമോ കഴിയുമോ വേണം'),
+    ta: list('எப்படி என்ன என்னது எங்கே எங்கு எப்போது யார் ஏன் எது எந்த நான் என் எனக்கு என்னுடைய ஒரு இந்த அந்த மற்றும் அல்லது உள்ள இருக்கிறது முடியுமா செய்வது செய்ய வேண்டும் எவ்வாறு'),
+    uk: list('як що де коли хто чому навіщо який яка яке які це мені мій моя моє мої можна чи на із по для від до та але хочу можу зробити робити'),
+    ur: list('کیسے کیا کہاں کب کون کیوں کونسا میں مجھے میرا میری میرے کو کا کی کے سے پر ہے ہیں یہ وہ اور یا لیے ہو ہوں کر کرنا کروں کریں سکتا سکتی سکتے چاہتا چاہتی'),
+    fa: list('چگونه چطور چه چی چیست کجا کی چرا آیا کدام من ما را به در از که این آن با برای یا است هست می توانم میتوانم میخواهم خواهم کنم بکنم'),
+    vi: list('làm thế nào sao như gì là đâu khi tôi mình của và hoặc với trong trên để có một các những'),
+    el: list('πώς τι ποιος ποια ποιο ποιοι ποιες που πότε γιατί είναι το οι τα των του της τον την ένα μια ενας και να για με σε από στο στη στην στον στα μου μας μπορώ θέλω θα κάνω κάνει'),
+    fil: list('paano ano anong saan kailan sino bakit alin ang ng sa mga ko ako ba at na ay para isang mo ka natin namin maaari pwede puwede po kung ito iyon yung'),
+    ja: list('どう どうやって どのように どうすれば どうやったら 方法 やり方 ですか ますか とは について できますか できる したい ください 教えて どこ いつ なぜ だれ どれ どの これ それ あの'),
+    ko: list('어떻게 무엇 어디 언제 누가 누구 어떤 무슨 어느 제가 내가 나는 저는 에서 으로 하는 하나요 할까요 있나요 있어요 방법 알려줘 알려주세요 인가요 이란 하려면 뭐예요 무엇인가요 가능한가요'),
+};
+
+/** The languages whose tone marks tell words apart: their list keeps the marks, and a query word is compared with them. */
+const TONAL: ReadonlySet<Lang> = new Set<Lang>(['vi']);
+
+const fillerSets = new Map<Lang, ReadonlySet<string>>();
+/** One language's filler words, folded the way a query is (a tonal language's: split the way a query is, tones kept). */
+function fillerSet(lang: Lang): ReadonlySet<string> {
+    let set = fillerSets.get(lang);
+    if (!set) {
+        set = new Set(GUIDE_FILLER_WORDS[lang].flatMap(w => TONAL.has(lang) ? accentedWords(w) : words(w)));
+        fillerSets.set(lang, set);
+    }
+    return set;
+}
 
 export interface GuideSearchResult<P = GuidePage> {
     page: P;
@@ -416,15 +487,58 @@ function snippetAround(text: string, term: string, max = 110): string {
     return `${start > 0 ? '…' : ''}${plain.slice(start, start + max).trim()}${start + max < plain.length ? '…' : ''}`;
 }
 
-/** Pages matching every word of `query`, best first. An empty query finds nothing. */
+/** `words(query)` with the accents kept, to tell a Vietnamese "dò" from the English "do" or "đậu" from "đâu" (`words` folds each pair together). */
+function accentedWords(query: string): string[] {
+    let out = query.toLowerCase();
+    try { out = out.normalize('NFKD'); } catch { /* keep accents */ }
+    return out.replace(/\*\*/g, '').split(SEPARATORS).filter(Boolean);
+}
+
+/**
+ * The words of `query` that are searched: each one once, none of one letter, the first eight. Question and filler words
+ * (the lists of `lang` and of English: "how", "do", "the", "cómo", "wie"...) are left out, but never all of it: a query
+ * made only of them is searched as typed. `dropped` says whether any filler word was left out. A language the guide does
+ * not have (the pseudo-locale, or none given) gets the English list only.
+ */
+function searchTerms(query: string, lang: string | undefined): { terms: string[]; dropped: boolean } {
+    const key: Lang = isLang(lang) ? lang : 'en';
+    const own = fillerSet(key);
+    const english = key === 'en' ? null : fillerSet('en');
+    const folded = words(query);
+    const kept = accentedWords(query);
+    const lined = kept.length === folded.length;
+    // A word is filler for the language of the guide when it is on that list (accents folded: "como" for "cómo"; a tonal
+    // language's tones kept: "đâu" is filler, "đậu" is not; a word that cannot be lined up with what was typed is kept),
+    // or for English when it is on that list and was typed without accents.
+    const tonal = TONAL.has(key);
+    const isOwn = (w: string, i: number) => tonal ? lined && own.has(kept[i]) : own.has(w);
+    const isFiller = (w: string, i: number) => isOwn(w, i) || (english !== null && english.has(w) && (!lined || kept[i] === w));
+    // Each word once, as filler only when every time it was typed it was.
+    const fillerOnly = new Map<string, boolean>();
+    folded.forEach((w, i) => { if (w.length >= 2) fillerOnly.set(w, (fillerOnly.get(w) ?? true) && isFiller(w, i)); });
+    const typed = [...fillerOnly.keys()];
+    const asked = typed.filter(w => !fillerOnly.get(w));
+    if (asked.length === 0) return { terms: typed.slice(0, 8), dropped: false };
+    return { terms: asked.slice(0, 8), dropped: asked.length < typed.length };
+}
+
+const sameWords = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((w, i) => w === b[i]);
+
+/**
+ * Pages matching every word of `query`, best first. An empty query finds nothing. The question and filler words of a
+ * query ("how do I send a gift") do not have to match; see GUIDE_FILLER_WORDS. Only the words of `lang` (the language the
+ * guide is shown in; else the guide's own `language`; else none) and of English are left out, never another language's.
+ */
 export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>(
     guide: Guide<P>,
     query: string,
     limit = 20,
+    lang?: string,
 ): Array<GuideSearchResult<P>> {
-    const terms = [...new Set(words(query).filter(t => t.length >= 2))].slice(0, 8);
+    const { terms, dropped } = searchTerms(query, lang ?? guide.language);
     if (terms.length === 0) return [];
-    const results: Array<{ result: GuideSearchResult<P>; named: number }> = [];
+    const typedWords = dropped ? words(query) : [];
+    const results: Array<{ result: GuideSearchResult<P>; named: number; exact: number }> = [];
     for (const page of guide.guides) {
         // A page shown in the member's language is found by its English too: a member may type either.
         const title = [...words(page.title), ...(page.english?.title ? words(page.english.title) : [])];
@@ -437,7 +551,7 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
         let firstHit: { text: string; term: string } | null = null;
         let everyTerm = true;
         for (const term of terms) {
-            const alternatives = [term, ...(SEARCH_SYNONYMS[term] ?? [])];
+            const alternatives = [term, ...(GUIDE_SEARCH_SYNONYMS[term] ?? [])];
             // A plural also finds the whole singular word (not its prefix: "beans" must not find every "BeanPool").
             const singular = term.length > 3 && term.endsWith('s') && !term.endsWith('ss') ? term.slice(0, -1) : null;
             const matches = (w: string) => alternatives.some(a => w.startsWith(a)) || w === singular;
@@ -456,10 +570,12 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
             named += inTitle > 0 ? 2 : inSummary > 0 ? 1 : 0;
         }
         if (!everyTerm) continue;
-        results.push({ result: { page, score, snippet: firstHit ? snippetAround(firstHit.text, firstHit.term) : page.summary }, named });
+        /** 1 when filler was left out of the query and what was typed is the page's whole title (or its English one). */
+        const exact = dropped && (sameWords(typedWords, words(page.title)) || (page.english?.title !== undefined && sameWords(typedWords, words(page.english.title)))) ? 1 : 0;
+        results.push({ result: { page, score, snippet: firstHit ? snippetAround(firstHit.text, firstHit.term) : page.summary }, named, exact });
     }
     return results
-        .sort((a, b) => b.named - a.named || b.result.score - a.result.score || a.result.page.title.localeCompare(b.result.page.title))
+        .sort((a, b) => b.exact - a.exact || b.named - a.named || b.result.score - a.result.score || a.result.page.title.localeCompare(b.result.page.title))
         .slice(0, limit)
         .map(r => r.result);
 }

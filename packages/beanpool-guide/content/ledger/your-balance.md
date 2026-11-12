@@ -1,7 +1,7 @@
 ---
 slug: your-balance
 title: Your balance and history
-summary: How many beans you have, what is held, and every trade and gift.
+summary: How many beans you have, what is held, every trade and gift, and who can see your balance.
 help: Your Beans: what you have, what is held in a deal, and every trade and gift. Everyone starts at zero.
 related: credit-line, gifts, circulation-fee, my-deals, beans-and-the-global-community
 ---
@@ -32,7 +32,7 @@ Every trade, gift and fee, newest first, with a note, the time, and plus or minu
 
 A line for beans held in a deal (or paid out or returned from one) opens that deal when you tap it, on the phone and in the web app. You land on the post, where you release or cancel the deal.
 
-Your balance and these transactions are private. If your community has a rule on when the admins can see a balance, it's under "How this community works". See "Your privacy" for the rest. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
+The people who give credit here (the owners, admins and vouchers) can see your balance and your credit line, never these transactions, and each look is recorded. Members who don't give credit see neither, and these transactions are yours. **What people who give credit see**, on this screen, shows what they see about you. Your community's rules, including this one, are under "How this community works". See "What the admins can see" and "Your privacy" for the rest. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
 
 The list has no search or filters yet.
 

@@ -5,6 +5,17 @@ summary: What changed in the app, in plain words.
 related: home, the-bean, how-it-works, rules, faq, communities
 ---
 
+## Credit on the People list
+
+On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated. The first three are for the people who give credit here: the owners, admins and vouchers. Other members see no new switch, and their app never asks.
+
+- **Show credit.** In **People**, under **Community**, a switch shows each person's credit line, how much of it they can use now, their balance with its sign, and their credit risk. People with no credit yet come first. See "People and friends".
+- **Give credit.** One button on each row opens a sheet to vouch, confirm someone as known (owners and admins) or raise a known floor (owners and admins), then **Next ›** opens the next person.
+- **Vouchers' budgets.** Owners and the credit committee see each voucher's budget, a flag when one is running low (under 100 Beans left) and a one-tap **Top up**. A voucher can tap **Ask for more**, once a week.
+- **Credit risk: what it reads.** One word with its reasons, and a page that says how it is worked out and how it can be gamed.
+- **What people who give credit see.** On your own Ledger you can read what they see about you.
+- **Every look is recorded.** The owners, admins and vouchers can see your balance and your credit line, and the owners and admins can read who looked, for 12 months. The join screen and "How this community works" say so. See "What the admins can see".
+
 ## The Market in one order
 
 On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.
@@ -54,7 +65,7 @@ You get these when the global community's server is updated. On the phone they n
 
 These changes live on your community's server. You get them when your community's server is updated. The Poll choice needs an up-to-date app.
 
-- **Your balance and trades are yours.** Other members can't read your balance or your history. A trade shows only its two people, on the community activity too. A vote on removing a member shows that member's balance to the people who can vote in it, and nowhere else.
+- **Your trades are yours.** Members who don't give credit can't read your balance or your history. The people who give credit (the owners, admins and vouchers) can see your balance and your credit line, never your history, and each look is recorded: see "What the admins can see". A trade shows only its two people, on the community activity too. A vote on removing a member shows that member's balance to the people who can vote in it, and nowhere else.
 - **Listings are for members.** Someone who has not joined can't see your community's listings or their photos. They are shown the way to the global community instead, where anyone can look around.
 - **Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.
 - **Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see.

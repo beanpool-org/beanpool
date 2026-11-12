@@ -20,13 +20,25 @@ Tap the sliders button at the top right of the screen. In the web app on a wide 
 
 ## What only you can see
 
-- **Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.
+- **Your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person. Your balance is private from other members in the same way, with one exception: the people who give credit (below).
 - **Your friends list, who you chat with, and the invites you made.** Only you can read them, in the app or from your community's server. Others see only the connections in common you share with them.
 - If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.
 - If your account is removed (after your community voted for it, after an owner decided it because too few members could vote, or by an admin where votes are switched off), the admin who settles it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.
-- In a known community, if an admin has confirmed you, the admins can see your balance when it passes one of your community's lines. That comes with being confirmed: there is nothing to agree to and nothing to withdraw. In any community, any admin can also see some of your trades: a trade that isn't finished yet or that an admin settled, a trade whose Beans were left stuck when a member was removed on an older server, fraud alerts, and an alert if no Beans have moved in or out of your account for a set number of days. Every look at one of those trades is logged, and a look at the alerts that name you is logged the first time each admin opens them in 24 hours. The owner and the admins can see that log. The admins also see how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours; and, as every member does, your trust profile, unlogged. Whoever runs your community's server holds its whole database, with its backups, snapshots and standby copies. See "What the admins can see".
+- In a known community, the admins also keep a list of confirmed members who owe more than a share of their credit line, or are in debit and haven't made a sale for a number of days, so an admin who knows them can have a word. That comes with being confirmed: there is nothing to agree to and nothing to withdraw. In any community, any admin can also see some of your trades: a trade that isn't finished yet or that an admin settled, a trade whose Beans were left stuck when a member was removed on an older server, fraud alerts, and an alert if no Beans have moved in or out of your account for a set number of days. Every look at one of those trades is logged, and a look at the alerts that name you is logged the first time each admin opens them in 24 hours. The owner and the admins can see that log. The admins also see how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours; and, as every member does, your trust profile, unlogged. Whoever runs your community's server holds its whole database, with its backups, snapshots and standby copies. See "What the admins can see".
 
 The owners and admins who run your community's server can still see what is stored there. See "Who else can see things".
+
+## People who give credit
+
+In a community with Beans, the owners, admins and vouchers can see your balance and your credit line, and each look is recorded. This is what the join screen and "How this community works" say.
+
+- **They see:** your credit line and how much you can use now, your balance with its sign and its figure, how much of your line you are using, and your credit risk with the reasons any giver may read. Owners and admins also see what your line is made of, who confirmed you and who vouched for you, a freeze, and the reasons built from those.
+- **They never see:** your trades, a history or an older balance. A notification never carries your balance, and their phone does not keep it.
+- **A member who is not a giver, and a moderator, see none of it.** Nor is it on the global community.
+- **Every look is recorded:** who looked, at whom, on which day. Every owner and admin can read the record; a voucher can't, and you are not shown the names. A line is kept 12 months.
+- **You can read what they see about you** on your Ledger, under **What people who give credit see**.
+
+See "What the admins can see" and "Credit risk: what it reads".
 
 ## People who have not joined
 

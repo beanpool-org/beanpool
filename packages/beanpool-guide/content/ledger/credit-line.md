@@ -2,7 +2,7 @@
 slug: credit-line
 title: Your credit line
 summary: How far below zero you can go, and how it grows.
-related: trust-badges, trading-partner-limit, how-it-works, posting
+related: trust-badges, trading-partner-limit, how-it-works, posting, credit-risk, what-the-admins-can-see
 ---
 
 ## What it is
@@ -23,6 +23,10 @@ On the phone, tap the bar for **Credit Slider Info**, which explains each part.
 ## How it opens
 
 It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when a voucher vouches for you on the invite that brought you in or on your profile. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
+
+## Who can see it
+
+The people who give credit here (the owners, admins and vouchers) can see your credit line and your balance, and each look is recorded. Members who don't give credit see neither. They use it to decide whether to give you more, and beside it they see your **credit risk**, one word with its reasons: see "Credit risk: what it reads". On your Ledger, **What people who give credit see** shows you what they see about you. See "What the admins can see".
 
 ## How it grows
 
@@ -62,6 +66,8 @@ Your community's admins can freeze a member's credit line: all of it, or, in a k
 
 - If they freeze all of it, or the confirmed part is all the line you have, the Ledger says **Your credit line is frozen**: you can't spend into debit while it lasts, but you can still sell and receive Beans, and spend what you hold above zero. If you were in debit when they froze it, the Ledger also says how many Beans you are in debit: selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.
 - If they freeze the confirmed part and you also have credit from a vouch, a credit-line gift, trading or a grant, the bar stays, with a note under it that the confirmed part is frozen and the rest works as before. If you are below what is left, the Ledger says **Spending paused** too (below).
+
+While your credit line is frozen, a voucher can't vouch for you, and the app tells them so.
 
 Your level doesn't change, on your profile and on your listings alike: it counts what you have done (your trades and any trust an admin granted you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins.
 

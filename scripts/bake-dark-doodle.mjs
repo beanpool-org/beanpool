@@ -12,7 +12,9 @@
 //   apps/pwa/public/pattern-night.webp                 the same bytes as the phone's 1x
 //   apps/pwa/public/pattern-night-2x.webp              the same bytes as the phone's 2x
 //   apps/pwa/public/assets/vines-banner-night.jpg      640 x 640, the web's header and bottom bar
-// Classic's and Light's files are INPUTS here and are never written.
+//   apps/native/assets/images/vines-banner-night.jpg   the same bytes: the phone's header (components/GlobalHeader.tsx)
+// Classic's and Light's files are INPUTS here and are never written. (The phone's Classic banner, neon-vines-banner.jpg, is the
+// same bytes as the web's, which is why one baked banner serves both; the test holds that.)
 //
 // HOW (the rule of §3.3: a look changes the hue of a colour, never how light it is)
 //   Tiles. Every pixel of Classic dark's tile keeps its linear luminance. It is placed on the line between Dark's ground
@@ -32,9 +34,10 @@
 //
 //   Banner. The same art, in charcoal. Its vines are a glowing neon green; here each pixel's brightness keeps its place
 //   between the gaps (Dark's banner ground) and the brightest glow (VINE_PEAK), and the colour is Dark's charcoal blue-grey
-//   at that place. The header and the bottom bar draw it under a black wash (50 % in the header, 30 % in the bar), so the
-//   file's gaps are twice the library's web.banner and the header shows web.banner itself, the colour the browser's own bar
-//   runs on from. The lines are quieter than Classic's glow, so the light words over them read at least as well.
+//   at that place. The web's header and bottom bar draw it under a black wash (50 % in the header, 30 % in the bar; the phone's
+//   header draws it under the same 50 %), so the file's gaps are twice the library's web.banner and the header shows
+//   web.banner itself, the colour the browser's own bar runs on from. The lines are quieter than Classic's glow, so the light
+//   words over them read at least as well.
 //
 import fs from 'node:fs';
 import path from 'node:path';
@@ -62,7 +65,14 @@ export const TILES = [
     { from: 'apps/native/assets/images/pattern-dark.webp', size: 890, to: ['apps/native/assets/images/pattern-night.webp', 'apps/pwa/public/pattern-night.webp'] },
     { from: 'apps/native/assets/images/pattern-dark@2x.webp', size: 1780, to: ['apps/native/assets/images/pattern-night@2x.webp', 'apps/pwa/public/pattern-night-2x.webp'] },
 ];
-export const BANNER = { from: 'apps/pwa/public/assets/neon-vines-banner.png', to: 'apps/pwa/public/assets/vines-banner-night.jpg' };
+export const BANNER = {
+    from: 'apps/pwa/public/assets/neon-vines-banner.png',
+    to: 'apps/pwa/public/assets/vines-banner-night.jpg',
+    /** The phone's copy (same bytes): GlobalHeader draws it behind the bean, the help and the Settings icons, under a 50 % black wash. */
+    phone: 'apps/native/assets/images/vines-banner-night.jpg',
+    /** The phone's Classic banner: the same bytes as `from`, so one baked banner stands in for both. */
+    phoneFrom: 'apps/native/assets/images/neon-vines-banner.jpg',
+};
 
 // ——— colour arithmetic (sRGB bytes <-> linear light) ———
 export const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -190,6 +200,7 @@ async function main() {
     }
     const banner = await bakeBanner();
     write(BANNER.to, banner.file);
+    write(BANNER.phone, banner.file);
     console.log(`${BANNER.to}: ${banner.file.length} bytes (Classic's ${BANNER_MAX_BYTES}), quality ${banner.quality}, brightness ${banner.floor.toFixed(1)} to ${banner.ceil.toFixed(1)} mapped onto charcoal`);
 }
 

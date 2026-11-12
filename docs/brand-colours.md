@@ -346,8 +346,10 @@ derived from them (`brandInkGrounds(set)`, `brandWebInkGrounds(set)`), and the m
   each pixel's brightness kept between the gaps and the brightest glow, drawn in Dark's greys. The header draws the
   banner under a 50 % black wash, so the file's gaps are twice `web.banner` and the header shows `web.banner` itself (the
   bottom bar's wash is 30 %); the brightest line is Dark's grey step 700 as the header shows it. The web draws it through
-  `--banner-image`, which Dark swaps. The phone's header banner is inside the protected `GlobalHeader.tsx` and keeps
-  Classic's picture in every look.
+  `--banner-image`, which Dark swaps. The phone's header (`GlobalHeader.tsx`, no longer protected: Marty took it off the
+  list on 15 Oct) takes its banner from `utils/header-banner.ts` by colour set, as `PatternBackground` takes its tile:
+  Classic and Light keep `neon-vines-banner.jpg`, Dark draws `vines-banner-night.jpg` (the web's file, byte for byte),
+  under the same 50 % black wash.
 - **The picker's dots**: `brandSwatch(set, 'phone' | 'web')` gives the page (the doodle's ground), that app's card and
   the accent, read from here so a swatch cannot drift from the real colours.
 

@@ -14,6 +14,7 @@ import { NeedsYouIcons } from './NeedsYouIcons';
 import Constants from 'expo-constants';
 import appConfig from '../app.json';
 import { evaluateUpdate, normaliseVersion, pickStoreVersion } from '../utils/app-version';
+import { headerBanner } from '../utils/header-banner';
 import { t } from '@beanpool/core';
 
 // The floor is a property of the COMMUNITY, not of the phone: two nodes can disagree about
@@ -50,7 +51,7 @@ const AVATAR_SIZE = 32;
 export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => void } = {}) {
     const insets = useSafeAreaInsets();
     const pathname = usePathname();
-    const { colors } = useTheme();
+    const { colors, set } = useTheme();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         headerWrapper: {
             width: '100%',
@@ -374,7 +375,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
         >
             <View style={StyleSheet.absoluteFillObject}>
                 <Image
-                    source={require('../assets/images/neon-vines-banner.jpg')}
+                    source={headerBanner(set)}
                     style={[StyleSheet.absoluteFillObject, { width: '100%', height: '100%', transform: [{ scale: 1.5 }] }]}
                     resizeMode="cover"
                     accessibilityElementsHidden={true}

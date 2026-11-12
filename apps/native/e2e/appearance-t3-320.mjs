@@ -27,7 +27,9 @@
  * components/PatternBackground behind them and the colours the app gives a screen with the wallpaper on (utils/drawn-colours: a
  * see-through page, the tile's ground as the chrome): the chat thread, and three of Home's real cards (components/home/HomeParts).
  * Pictures only (chat-<look>-doodle.png, home-<look>-doodle.png), plus "no page error" and "the wallpaper drawn from the tile of
- * its set". The tile is the 1x file at its own 890 dp (a phone on a 2x screen draws the @2x).
+ * its set": the drawn data URL is compared with the base64 of THAT set's own 1x file (Classic's pattern-dark.webp, Dark's
+ * pattern-night.webp), so a look drawing another look's tile (the bug T5 fixed) fails. The tile is the 1x file at its own 890 dp
+ * (a phone on a 2x screen draws the @2x).
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -299,11 +301,15 @@ try {
                 const el = Array.from(document.querySelectorAll('#root *')).find((e) => /^url\("data:image\/webp/.test(getComputedStyle(e).backgroundImage));
                 if (!el) return null;
                 const m = /^url\("data:image\/webp;base64,([^"]+)"\)/.exec(getComputedStyle(el).backgroundImage);
-                return m ? m[1].length : null;
+                return m ? { data: m[1] } : null;
             });
             console.log(`\n${view} on the doodle / ${name}`);
             check(errors.length === 0, `no page error${errors[0] ? `: ${errors[0]}` : ''}`);
-            check(tile !== null, `the wallpaper is drawn from a tile (${tile} base64 characters)`);
+            // The set's own 1x file, as esbuild's dataurl loader embeds it: the base64 of its bytes. Only Classic's and Dark's are drawn here.
+            const own = fs.readFileSync(path.join(NATIVE, 'assets/images', set === 'night' ? 'pattern-night.webp' : 'pattern-dark.webp')).toString('base64');
+            const other = fs.readFileSync(path.join(NATIVE, 'assets/images', set === 'night' ? 'pattern-dark.webp' : 'pattern-night.webp')).toString('base64');
+            check(tile !== null && tile.data === own, `the wallpaper is the tile of its set (${tile?.data.length} base64 characters drawn, ${own.length} in ${set === 'night' ? 'pattern-night' : 'pattern-dark'}.webp)`);
+            check(tile !== null && tile.data !== other, `and not the other look's tile (${other.length} characters)`);
             if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${view}-${name.toLowerCase()}-doodle.png`) });
             await page.close();
         }

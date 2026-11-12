@@ -6,7 +6,8 @@
 //     one level per channel (a lossy tile cannot show #17191c exactly: the bake's header says why);
 //   - the doodle's line does not stand off its ground as far as Classic dark's does (the "lift"), or is not the library's line;
 //   - the tile has green in it (Classic's has, and the same check fails on Classic's);
-//   - a file is bigger than the Classic file it stands in for, or the phone's and the web's copies differ;
+//   - a file is bigger than the Classic file it stands in for, or the phone's and the web's copies differ (the banner's too, and the
+//     phone's Classic banner must be the web's, or one baked banner would not stand in for both);
 //   - the banner's gaps are not the library's web.banner once the header's black wash is on, or it has green in it;
 //   - the bake would write over a Classic or Light file.
 // Each check can fail: the last test of each group runs it on the wrong input and asserts it is red.
@@ -104,6 +105,11 @@ test('the phone\'s and the web\'s copies of a Dark tile are the same bytes', () 
     }
 });
 
+test('the phone\'s and the web\'s copies of Dark\'s banner are the same bytes, and the phone\'s Classic banner is the web\'s (so one baked banner stands in for both)', () => {
+    assert.ok(fs.readFileSync(at(BANNER.phone)).equals(fs.readFileSync(at(BANNER.to))), `${BANNER.phone} and ${BANNER.to} differ`);
+    assert.ok(fs.readFileSync(at(BANNER.phoneFrom)).equals(fs.readFileSync(at(BANNER.from))), `${BANNER.phoneFrom} and ${BANNER.from} differ`);
+});
+
 test('the ground check can fail: Classic dark\'s and Light\'s tiles are not Dark\'s ground, and Classic dark\'s tile is green', async () => {
     const classic = await decode('apps/native/assets/images/pattern-dark@2x.webp');
     assert.ok(!within(mostCommonColour(classic.data), NIGHT_GROUND, GROUND_TOLERANCE), 'Classic dark\'s tile passes as Dark\'s ground');
@@ -154,8 +160,8 @@ test('the banner check can fail: Classic\'s banner is green and is not web.banne
 });
 
 test('the bake writes only new Dark files: never a Classic or Light tile, nor Classic\'s banner', () => {
-    const outputs = [...TILES.flatMap((t) => t.to), BANNER.to];
-    const inputs = [...TILES.map((t) => t.from), BANNER.from];
+    const outputs = [...TILES.flatMap((t) => t.to), BANNER.to, BANNER.phone];
+    const inputs = [...TILES.map((t) => t.from), BANNER.from, BANNER.phoneFrom];
     for (const out of outputs) {
         assert.ok(!inputs.includes(out), `${out} is an input`);
         assert.match(path.basename(out), /night/, `${out} is not named for Dark`);

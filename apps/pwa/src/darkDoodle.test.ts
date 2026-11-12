@@ -14,7 +14,8 @@
  *     rule, which is why the rule names Dark too), and leaves the banner alone;
  *   - the four places that draw the banner read the variable, so none still names the neon file;
  *   - every picture index.css names is a file in public/.
- * The Chromium proof (which files a browser fetches per look) is e2e/dark-doodle-shots.mjs.
+ * The Chromium proof (which files a browser fetches per look) is e2e/dark-contrast-check.mjs (DARK_THEME=night,
+ * DARK_DEVICE=light|dark), which prints a "pictures fetched:" line per run.
  */
 import fs from 'node:fs';
 import path from 'node:path';

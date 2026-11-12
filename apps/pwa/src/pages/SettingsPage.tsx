@@ -41,7 +41,8 @@ import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../lib/event-extras';
 import { ProfilePage } from './ProfilePage';
-import { type ThemePreference, THEME_PREFERENCE_OPTIONS } from '../lib/useTheme';
+import { type ThemePreference } from '../lib/useTheme';
+import { AppearanceChoice } from '../components/AppearanceChoice';
 import { LANGUAGE_NAMES, WORDS_FEEDBACK_URL } from '../lib/language';
 import { useLanguage } from '../lib/useLanguage';
 import { LanguageLoadNote } from '../components/LanguageSwitch';
@@ -1091,34 +1092,16 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 {t('APP SETTINGS')}
                             </div>
                             <div className="space-y-2.5">
-                                {/* Appearance: follow the device, or always light / dark */}
+                                {/* Appearance: the look, one list of four (components/AppearanceChoice.tsx); per device */}
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800">
                                     <div className="flex items-center gap-3">
                                         <span className="text-xl">🌙</span>
                                         <div>
                                             <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Appearance')}</div>
-                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('Light or dark, or the same as your device')}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t('How BeanPool looks on this device')}</div>
                                         </div>
                                     </div>
-                                    <div role="radiogroup" aria-label={t('Appearance')} className="mt-3 flex gap-1 p-1 rounded-xl bg-nature-100 dark:bg-nature-800">
-                                        {THEME_PREFERENCE_OPTIONS.map(({ value }, i) => {
-                                            const selected = themePreference === value;
-                                            return (
-                                                <button
-                                                    key={value}
-                                                    type="button"
-                                                    role="radio"
-                                                    aria-checked={selected}
-                                                    onClick={() => onThemePreferenceChange(value)}
-                                                    className={`flex-1 min-w-0 min-h-[48px] px-1.5 py-1.5 rounded-lg text-[13px] text-center leading-tight break-words cursor-pointer transition-colors ${selected
-                                                        ? 'bg-white dark:bg-nature-950 border border-nature-500 font-bold text-nature-900 dark:text-white'
-                                                        : 'border border-transparent font-medium text-nature-600 dark:text-nature-300'}`}
-                                                >
-                                                    {t(THEME_PREFERENCE_OPTIONS[i].label)}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
+                                    <AppearanceChoice value={themePreference} onChange={onThemePreferenceChange} />
                                 </div>
 
                                 {/* Language: per device, like Appearance (lib/language.ts). Each language listed in itself. */}

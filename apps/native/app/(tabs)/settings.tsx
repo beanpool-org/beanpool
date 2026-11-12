@@ -44,7 +44,7 @@ import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
 import { Spacing } from '../../constants/responsive';
 import { useTheme, useStyles } from '../ThemeContext';
-import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
+import { AppearanceChoice } from '../../components/AppearanceChoice';
 import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScreenLock, setAppLockEnabled } from '../../utils/LocalAuth';
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
@@ -239,29 +239,14 @@ export default function SettingsScreen() {
         },
         toggleThumbOn: { transform: [{ translateX: 22 }] },
 
-        // ─── Appearance (Same as phone / Light / Dark) ───
-        // Three equal segments that wrap rather than truncate: "Same as phone" takes two lines at
-        // 320dp + 1.3x text, and every segment keeps a 48dp touch target. A longer language's words shrink (to 0.6) to
-        // stay whole on their two lines.
+        // ─── Appearance (Same as phone / Classic / Light / Dark) ───
+        // The block holds the header and components/AppearanceChoice.tsx's list of four rows, each full width, at least
+        // 48dp tall, with words that wrap rather than truncate at 320dp + 1.3x text.
         appearanceBlock: {
             padding: 14,
             borderBottomWidth: 1, borderBottomColor: colors.surface.subtle,
         },
         appearanceHeader: { flexDirection: 'row', alignItems: 'center' },
-        segmentRow: {
-            flexDirection: 'row', marginTop: 12, padding: 3, gap: 3,
-            borderRadius: 12, backgroundColor: colors.surface.subtle,
-        },
-        segment: {
-            flex: 1, minHeight: 48, borderRadius: 9,
-            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, paddingVertical: 6,
-        },
-        segmentSelected: {
-            backgroundColor: colors.surface.card,
-            borderWidth: 1, borderColor: colors.brand.primary,
-        },
-        segmentText: { fontSize: 13, fontWeight: '500', color: colors.text.secondary, textAlign: 'center' },
-        segmentTextSelected: { fontWeight: '700', color: colors.text.heading },
 
         // ─── Danger Zone ───
         dangerGroup: {
@@ -2115,33 +2100,16 @@ export default function SettingsScreen() {
                 {/* ─── App Settings ─── */}
                 <Text style={styles.sectionHeader}>{t("APP SETTINGS")}</Text>
                 <View style={styles.menuGroup}>
-                    {/* Appearance: follow the phone, or always light / dark */}
+                    {/* Appearance: the look, one list of four (components/AppearanceChoice.tsx); per device, the same in every community */}
                     <View style={styles.appearanceBlock}>
                         <View style={styles.appearanceHeader}>
                             <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌙</Text></View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.menuText}>{t("Appearance")}</Text>
-                                <Text style={styles.menuSub}>{t("Light or dark, or the same as your phone")}</Text>
+                                <Text style={styles.menuSub}>{t("How BeanPool looks on this phone")}</Text>
                             </View>
                         </View>
-                        <View style={styles.segmentRow} accessibilityRole="radiogroup" accessibilityLabel={t("Appearance")}>
-                            {THEME_PREFERENCE_OPTIONS.map((option) => {
-                                const { value } = option;
-                                const selected = themePreference === value;
-                                return (
-                                    <Pressable
-                                        key={value}
-                                        style={[styles.segment, selected && styles.segmentSelected]}
-                                        accessibilityRole="radio"
-                                        accessibilityLabel={t(option.label)}
-                                        accessibilityState={{ checked: selected }}
-                                        onPress={() => setThemePreference(value)}
-                                    >
-                                        <Text style={[styles.segmentText, selected && styles.segmentTextSelected]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t(option.label)}</Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
+                        <AppearanceChoice value={themePreference} onChange={setThemePreference} />
                     </View>
 
                     {/* Language: per device, live; each language in its own name (components/LanguagePicker.tsx). */}

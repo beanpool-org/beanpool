@@ -4,7 +4,40 @@
 the phone, the web app and the manager take their brand and status colours from. Change a value there and every app
 follows; a screen names a role (`colors.brand.fill`, `var(--bp-cta-fill)`), never a hex.
 
-There are two sets, light and dark. The phone's old "Light Color Scheme" choice (Classic / Earth / Slate) is gone.
+The phone's old "Light Color Scheme" choice (Classic / Earth / Slate) is gone (#1904). Looks come back as sets, below
+(design `DESIGN-themes-fable.md`, with Marty and Damo's decisions of 12 Nov 2026).
+
+## Sets: Light, Classic and Dark
+
+A **set** is one complete column of colours. There are three, on both apps:
+
+| set in code | members see | what it is | scheme |
+|---|---|---|---|
+| `light` | Light | BeanPool Classic in light, as it has always been | light |
+| `dark` | Classic | BeanPool Classic in dark: olive pages, the green doodle. **The default on both apps** (`DEFAULT_BRAND_SET`) | dark |
+| `night` | Dark | charcoal and bright blue (`#4cc2ff`), always dark | dark |
+
+So `dark` in code is Classic's dark column, exactly as before; the look a member calls **Dark** is `night`.
+`brandColours('light')`, `brandColours('dark')`, `brandCssVariableMap('light')`, `brandCssVariableMap('dark')` and
+`INK_GROUNDS` are what they were before sets (the test holds them to a snapshot of main, 6513fb9e; the one addition is
+the phone's own chat bubble, `bubble`, moved in with its values unchanged). Dusk and Ember were dropped (12 Nov). The picker
+(slice T3) lists Same as phone (Light when the phone is light, Classic when it is dark), Classic, Light and Dark; until it
+ships the phone still opens Light and the web Classic.
+
+**What a set may change.** Only 17 leaves carry a Dark value of their own: the sage accent family (`accent.*`,
+`sage.fill`, `sage.hover`, `chip.accent.*`, `ink.accent`), the grey chip, tile and card band (`chip.quiet.*`,
+`tile.general.*`, `card.sage.*`, which take Dark's own grey, never the blue), and the phone's own chat bubble (`bubble.*`).
+Every other role, green, red, gold, orange, violet and the rest, is the same in every set; the test fails on an 18th.
+The names `sage` and `nature` stay: in Dark they name the accent family and the grey ramp by their Classic colour.
+
+**The rule that makes a set cheap to check: it changes hue, never lightness.** Each of Dark's greys, grounds, tints and
+borders is within 2 % of Classic dark's contrast against itself (the largest is 0.83 %, `chip.accent.tint`), and
+one-sided: the dark half (ramp 600 to 950, every page, card, tint, border and the bubble) is never lighter than
+Classic's, the light half (ramp 50 to 500, the grey words, the doodle's line) never darker. A pair of words and
+ground that passes 4.5 is always a light colour on a dark one, so every pair that reads in Classic dark reads as well or
+better in Dark, on every screen, without opening it. The blue accent is the one free colour and is judged directly:
+its words, its ink on every ground of Dark, its fill as a dot or bar at 3:1. A test also keeps every set's accent at
+least 30 degrees of hue from danger, warning, Need and success (an ember `#ff8a5c` fails it: why Ember is out).
 
 ## The rule (option C, Marty 14 Oct 2026)
 
@@ -35,7 +68,7 @@ On the phone, words and icons on `accent.fill` use `text.onAccent`, never `text.
 
 ## The bar
 
-Every pair is at least **4.5:1** (WCAG 2.x AA for normal text), in both themes. Members read at 320 dp with text at
+Every pair is at least **4.5:1** (WCAG 2.x AA for normal text), in every set. Members read at 320 dp with text at
 130 %, in the sun, where a button label is still "small" text; 3.0 is allowed only for a role listed in
 `LARGE_TEXT_ROLES` (none today). `packages/beanpool-core/src/__tests__/brand-colours.test.ts` computes every pair and
 fails below the bar: words on each fill and its hover, each chip's ink on its tint, and each ink on every page and
@@ -56,148 +89,150 @@ or handed to a child as a prop adds no colours), and the check fails when that n
 ## The roles
 
 Fill roles have `fill`, `hover` (pressed on the phone) and `on` (the words). The test checks that every row below
-matches the file.
+matches the file, in all three columns. A Dark value that equals Classic's is the role keeping Classic dark's colour.
 
-| role | light | dark |
-|---|---|---|
-| `cta.fill` | `#b85236` | `#b85236` |
-| `cta.hover` | `#a3472e` | `#a3472e` |
-| `cta.on` | `#ffffff` | `#ffffff` |
-| `commit.fill` | `#047857` | `#047857` |
-| `commit.hover` | `#065f46` | `#065f46` |
-| `commit.on` | `#ffffff` | `#ffffff` |
-| `event.fill` | `#6d28d9` | `#6d28d9` |
-| `event.hover` | `#5b21b6` | `#5b21b6` |
-| `event.on` | `#ffffff` | `#ffffff` |
-| `action.fill` | `#c2410c` | `#c2410c` |
-| `action.hover` | `#9a3412` | `#9a3412` |
-| `action.on` | `#ffffff` | `#ffffff` |
-| `danger.fill` | `#b91c1c` | `#b91c1c` |
-| `danger.hover` | `#991b1b` | `#991b1b` |
-| `danger.on` | `#ffffff` | `#ffffff` |
-| `info.fill` | `#2563eb` | `#2563eb` |
-| `info.hover` | `#1d4ed8` | `#1d4ed8` |
-| `info.on` | `#ffffff` | `#ffffff` |
-| `neutral.fill` | `#555555` | `#555555` |
-| `neutral.hover` | `#333333` | `#333333` |
-| `neutral.on` | `#ffffff` | `#ffffff` |
-| `gold.fill` | `#f59e0b` | `#f59e0b` |
-| `gold.hover` | `#fbbf24` | `#fbbf24` |
-| `gold.on` | `#1d231d` | `#1d231d` |
-| `accent.fill` | `#647664` | `#c0ccc0` |
-| `accent.hover` | `#526052` | `#dce3dc` |
-| `accent.on` | `#ffffff` | `#1d231d` |
-| `sage.fill` | `#647664` | `#647664` |
-| `sage.hover` | `#526052` | `#526052` |
-| `sage.on` | `#ffffff` | `#ffffff` |
-| `chip.ok.tint` | `#d1fae5` | `#022c22` |
-| `chip.ok.ink` | `#065f46` | `#6ee7b7` |
-| `chip.need.tint` | `#ffedd5` | `#7c2d12` |
-| `chip.need.ink` | `#9a3412` | `#fdba74` |
-| `chip.warn.tint` | `#fef3c7` | `#451a03` |
-| `chip.warn.ink` | `#92400e` | `#fcd34d` |
-| `chip.danger.tint` | `#fee2e2` | `#450a0a` |
-| `chip.danger.ink` | `#b91c1c` | `#fca5a5` |
-| `chip.accent.tint` | `#eef1ee` | `#384038` |
-| `chip.accent.ink` | `#5b6b5b` | `#c0ccc0` |
-| `chip.accent.border` | `#dce3dc` | `#434e43` |
-| `chip.poll.tint` | `#fae8ff` | `#4a044e` |
-| `chip.poll.ink` | `#86198f` | `#f0abfc` |
-| `chip.quiet.tint` | `#eef1ee` | `#434e43` |
-| `chip.quiet.ink` | `#526052` | `#c0ccc0` |
-| `chip.info.tint` | `#dbeafe` | `#172554` |
-| `chip.info.ink` | `#1e40af` | `#93c5fd` |
-| `chip.learn.tint` | `#ccfbf1` | `#042f2e` |
-| `chip.learn.ink` | `#115e59` | `#5eead4` |
-| `deal.held.tint` | `#d1fae5` | `#022c22` |
-| `deal.held.ink` | `#065f46` | `#6ee7b7` |
-| `deal.held.border` | `#10b981` | `#34d399` |
-| `deal.released.tint` | `#a7f3d0` | `#064e3b` |
-| `deal.released.ink` | `#065f46` | `#6ee7b7` |
-| `deal.released.border` | `#059669` | `#10b981` |
-| `deal.cancelled.tint` | `#fee2e2` | `#450a0a` |
-| `deal.cancelled.ink` | `#991b1b` | `#fca5a5` |
-| `deal.cancelled.border` | `#ef4444` | `#f87171` |
-| `tile.food.tint` | `#ffedd5` | `#431407` |
-| `tile.food.ink` | `#9a3412` | `#fdba74` |
-| `tile.services.tint` | `#dbeafe` | `#172554` |
-| `tile.services.ink` | `#1e40af` | `#93c5fd` |
-| `tile.labour.tint` | `#fef3c7` | `#451a03` |
-| `tile.labour.ink` | `#92400e` | `#fcd34d` |
-| `tile.tools.tint` | `#e7e5e4` | `#292524` |
-| `tile.tools.ink` | `#292524` | `#d6d3d1` |
-| `tile.goods.tint` | `#ebe6df` | `#5b5046` |
-| `tile.goods.ink` | `#5b5046` | `#ebe6df` |
-| `tile.garden.tint` | `#ecfccb` | `#1a2e05` |
-| `tile.garden.ink` | `#3f6212` | `#bef264` |
-| `tile.housing.tint` | `#fcedea` | `#3c180e` |
-| `tile.housing.ink` | `#863b28` | `#f0bcab` |
-| `tile.transport.tint` | `#cffafe` | `#083344` |
-| `tile.transport.ink` | `#155e75` | `#67e8f9` |
-| `tile.education.tint` | `#e0e7ff` | `#1e1b4b` |
-| `tile.education.ink` | `#3730a3` | `#a5b4fc` |
-| `tile.arts.tint` | `#fce7f3` | `#500724` |
-| `tile.arts.ink` | `#9d174d` | `#f9a8d4` |
-| `tile.health.tint` | `#ccfbf1` | `#042f2e` |
-| `tile.health.ink` | `#115e59` | `#5eead4` |
-| `tile.care.tint` | `#ffe4e6` | `#4c0519` |
-| `tile.care.ink` | `#9f1239` | `#fda4af` |
-| `tile.animals.tint` | `#d1fae5` | `#022c22` |
-| `tile.animals.ink` | `#065f46` | `#6ee7b7` |
-| `tile.tech.tint` | `#e0f2fe` | `#082f49` |
-| `tile.tech.ink` | `#075985` | `#7dd3fc` |
-| `tile.energy.tint` | `#fef9c3` | `#422006` |
-| `tile.energy.ink` | `#854d0e` | `#fde047` |
-| `tile.mindset.tint` | `#fae8ff` | `#4a044e` |
-| `tile.mindset.ink` | `#86198f` | `#f0abfc` |
-| `tile.general.tint` | `#eef1ee` | `#384038` |
-| `tile.general.ink` | `#434e43` | `#c0ccc0` |
-| `tile.event.tint` | `#ede9fe` | `#2e1065` |
-| `tile.event.ink` | `#5b21b6` | `#c4b5fd` |
-| `tile.pulse.tint` | `#fef3c7` | `#451a03` |
-| `tile.pulse.ink` | `#92400e` | `#fcd34d` |
-| `card.sage.tint` | `#eef1ee` | `#384038` |
-| `card.sage.ink` | `#5b6b5b` | `#c0ccc0` |
-| `card.sky.tint` | `#e0f2fe` | `#082f49` |
-| `card.sky.ink` | `#075985` | `#7dd3fc` |
-| `card.blue.tint` | `#dbeafe` | `#172554` |
-| `card.blue.ink` | `#1e40af` | `#93c5fd` |
-| `card.indigo.tint` | `#e0e7ff` | `#1e1b4b` |
-| `card.indigo.ink` | `#3730a3` | `#a5b4fc` |
-| `card.violet.tint` | `#ede9fe` | `#2e1065` |
-| `card.violet.ink` | `#5b21b6` | `#c4b5fd` |
-| `card.plum.tint` | `#fae8ff` | `#4a044e` |
-| `card.plum.ink` | `#86198f` | `#f0abfc` |
-| `card.pink.tint` | `#fce7f3` | `#500724` |
-| `card.pink.ink` | `#9d174d` | `#f9a8d4` |
-| `card.rose.tint` | `#ffe4e6` | `#4c0519` |
-| `card.rose.ink` | `#9f1239` | `#fda4af` |
-| `card.clay.tint` | `#fcedea` | `#3c180e` |
-| `card.clay.ink` | `#863b28` | `#f0bcab` |
-| `card.orange.tint` | `#ffedd5` | `#431407` |
-| `card.orange.ink` | `#9a3412` | `#fdba74` |
-| `card.yellow.tint` | `#fef9c3` | `#422006` |
-| `card.yellow.ink` | `#854d0e` | `#fde047` |
-| `card.lime.tint` | `#ecfccb` | `#1a2e05` |
-| `card.lime.ink` | `#3f6212` | `#bef264` |
-| `card.green.tint` | `#d1fae5` | `#022c22` |
-| `card.green.ink` | `#065f46` | `#6ee7b7` |
-| `card.teal.tint` | `#ccfbf1` | `#042f2e` |
-| `card.teal.ink` | `#115e59` | `#5eead4` |
-| `card.sand.tint` | `#ebe6df` | `#5b5046` |
-| `card.sand.ink` | `#5b5046` | `#ebe6df` |
-| `card.amber.tint` | `#fef3c7` | `#451a03` |
-| `card.amber.ink` | `#92400e` | `#fcd34d` |
-| `ink.brand` | `#047857` | `#34d399` |
-| `ink.success` | `#047857` | `#34d399` |
-| `ink.danger` | `#b91c1c` | `#fca5a5` |
-| `ink.warning` | `#92400e` | `#fbbf24` |
-| `ink.accent` | `#5b6b5b` | `#c0ccc0` |
-| `ink.terra` | `#a3472e` | `#e5967f` |
-| `ink.event` | `#5b21b6` | `#c4b5fd` |
-| `ink.learn` | `#115e59` | `#5eead4` |
-| `ink.info` | `#2563eb` | `#93c5fd` |
-| `map.ring` | `#92400e` | `#d4a24e` |
+| role | Light (`light`) | Classic (`dark`) | Dark (`night`) |
+|---|---|---|---|
+| `cta.fill` | `#b85236` | `#b85236` | `#b85236` |
+| `cta.hover` | `#a3472e` | `#a3472e` | `#a3472e` |
+| `cta.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `commit.fill` | `#047857` | `#047857` | `#047857` |
+| `commit.hover` | `#065f46` | `#065f46` | `#065f46` |
+| `commit.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `event.fill` | `#6d28d9` | `#6d28d9` | `#6d28d9` |
+| `event.hover` | `#5b21b6` | `#5b21b6` | `#5b21b6` |
+| `event.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `action.fill` | `#c2410c` | `#c2410c` | `#c2410c` |
+| `action.hover` | `#9a3412` | `#9a3412` | `#9a3412` |
+| `action.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `danger.fill` | `#b91c1c` | `#b91c1c` | `#b91c1c` |
+| `danger.hover` | `#991b1b` | `#991b1b` | `#991b1b` |
+| `danger.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `info.fill` | `#2563eb` | `#2563eb` | `#2563eb` |
+| `info.hover` | `#1d4ed8` | `#1d4ed8` | `#1d4ed8` |
+| `info.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `neutral.fill` | `#555555` | `#555555` | `#555555` |
+| `neutral.hover` | `#333333` | `#333333` | `#333333` |
+| `neutral.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `gold.fill` | `#f59e0b` | `#f59e0b` | `#f59e0b` |
+| `gold.hover` | `#fbbf24` | `#fbbf24` | `#fbbf24` |
+| `gold.on` | `#1d231d` | `#1d231d` | `#1d231d` |
+| `accent.fill` | `#647664` | `#c0ccc0` | `#4cc2ff` |
+| `accent.hover` | `#526052` | `#dce3dc` | `#8ad8ff` |
+| `accent.on` | `#ffffff` | `#1d231d` | `#0e1620` |
+| `sage.fill` | `#647664` | `#647664` | `#0f73c6` |
+| `sage.hover` | `#526052` | `#526052` | `#0c5ea2` |
+| `sage.on` | `#ffffff` | `#ffffff` | `#ffffff` |
+| `chip.ok.tint` | `#d1fae5` | `#022c22` | `#022c22` |
+| `chip.ok.ink` | `#065f46` | `#6ee7b7` | `#6ee7b7` |
+| `chip.need.tint` | `#ffedd5` | `#7c2d12` | `#7c2d12` |
+| `chip.need.ink` | `#9a3412` | `#fdba74` | `#fdba74` |
+| `chip.warn.tint` | `#fef3c7` | `#451a03` | `#451a03` |
+| `chip.warn.ink` | `#92400e` | `#fcd34d` | `#fcd34d` |
+| `chip.danger.tint` | `#fee2e2` | `#450a0a` | `#450a0a` |
+| `chip.danger.ink` | `#b91c1c` | `#fca5a5` | `#fca5a5` |
+| `chip.accent.tint` | `#eef1ee` | `#384038` | `#174061` |
+| `chip.accent.ink` | `#5b6b5b` | `#c0ccc0` | `#4cc2ff` |
+| `chip.accent.border` | `#dce3dc` | `#434e43` | `#1f4e73` |
+| `chip.poll.tint` | `#fae8ff` | `#4a044e` | `#4a044e` |
+| `chip.poll.ink` | `#86198f` | `#f0abfc` | `#f0abfc` |
+| `chip.quiet.tint` | `#eef1ee` | `#434e43` | `#474b55` |
+| `chip.quiet.ink` | `#526052` | `#c0ccc0` | `#c5c9d1` |
+| `chip.info.tint` | `#dbeafe` | `#172554` | `#172554` |
+| `chip.info.ink` | `#1e40af` | `#93c5fd` | `#93c5fd` |
+| `chip.learn.tint` | `#ccfbf1` | `#042f2e` | `#042f2e` |
+| `chip.learn.ink` | `#115e59` | `#5eead4` | `#5eead4` |
+| `deal.held.tint` | `#d1fae5` | `#022c22` | `#022c22` |
+| `deal.held.ink` | `#065f46` | `#6ee7b7` | `#6ee7b7` |
+| `deal.held.border` | `#10b981` | `#34d399` | `#34d399` |
+| `deal.released.tint` | `#a7f3d0` | `#064e3b` | `#064e3b` |
+| `deal.released.ink` | `#065f46` | `#6ee7b7` | `#6ee7b7` |
+| `deal.released.border` | `#059669` | `#10b981` | `#10b981` |
+| `deal.cancelled.tint` | `#fee2e2` | `#450a0a` | `#450a0a` |
+| `deal.cancelled.ink` | `#991b1b` | `#fca5a5` | `#fca5a5` |
+| `deal.cancelled.border` | `#ef4444` | `#f87171` | `#f87171` |
+| `tile.food.tint` | `#ffedd5` | `#431407` | `#431407` |
+| `tile.food.ink` | `#9a3412` | `#fdba74` | `#fdba74` |
+| `tile.services.tint` | `#dbeafe` | `#172554` | `#172554` |
+| `tile.services.ink` | `#1e40af` | `#93c5fd` | `#93c5fd` |
+| `tile.labour.tint` | `#fef3c7` | `#451a03` | `#451a03` |
+| `tile.labour.ink` | `#92400e` | `#fcd34d` | `#fcd34d` |
+| `tile.tools.tint` | `#e7e5e4` | `#292524` | `#292524` |
+| `tile.tools.ink` | `#292524` | `#d6d3d1` | `#d6d3d1` |
+| `tile.goods.tint` | `#ebe6df` | `#5b5046` | `#5b5046` |
+| `tile.goods.ink` | `#5b5046` | `#ebe6df` | `#ebe6df` |
+| `tile.garden.tint` | `#ecfccb` | `#1a2e05` | `#1a2e05` |
+| `tile.garden.ink` | `#3f6212` | `#bef264` | `#bef264` |
+| `tile.housing.tint` | `#fcedea` | `#3c180e` | `#3c180e` |
+| `tile.housing.ink` | `#863b28` | `#f0bcab` | `#f0bcab` |
+| `tile.transport.tint` | `#cffafe` | `#083344` | `#083344` |
+| `tile.transport.ink` | `#155e75` | `#67e8f9` | `#67e8f9` |
+| `tile.education.tint` | `#e0e7ff` | `#1e1b4b` | `#1e1b4b` |
+| `tile.education.ink` | `#3730a3` | `#a5b4fc` | `#a5b4fc` |
+| `tile.arts.tint` | `#fce7f3` | `#500724` | `#500724` |
+| `tile.arts.ink` | `#9d174d` | `#f9a8d4` | `#f9a8d4` |
+| `tile.health.tint` | `#ccfbf1` | `#042f2e` | `#042f2e` |
+| `tile.health.ink` | `#115e59` | `#5eead4` | `#5eead4` |
+| `tile.care.tint` | `#ffe4e6` | `#4c0519` | `#4c0519` |
+| `tile.care.ink` | `#9f1239` | `#fda4af` | `#fda4af` |
+| `tile.animals.tint` | `#d1fae5` | `#022c22` | `#022c22` |
+| `tile.animals.ink` | `#065f46` | `#6ee7b7` | `#6ee7b7` |
+| `tile.tech.tint` | `#e0f2fe` | `#082f49` | `#082f49` |
+| `tile.tech.ink` | `#075985` | `#7dd3fc` | `#7dd3fc` |
+| `tile.energy.tint` | `#fef9c3` | `#422006` | `#422006` |
+| `tile.energy.ink` | `#854d0e` | `#fde047` | `#fde047` |
+| `tile.mindset.tint` | `#fae8ff` | `#4a044e` | `#4a044e` |
+| `tile.mindset.ink` | `#86198f` | `#f0abfc` | `#f0abfc` |
+| `tile.general.tint` | `#eef1ee` | `#384038` | `#3a3e46` |
+| `tile.general.ink` | `#434e43` | `#c0ccc0` | `#c5c9d1` |
+| `tile.event.tint` | `#ede9fe` | `#2e1065` | `#2e1065` |
+| `tile.event.ink` | `#5b21b6` | `#c4b5fd` | `#c4b5fd` |
+| `tile.pulse.tint` | `#fef3c7` | `#451a03` | `#451a03` |
+| `tile.pulse.ink` | `#92400e` | `#fcd34d` | `#fcd34d` |
+| `card.sage.tint` | `#eef1ee` | `#384038` | `#3a3e46` |
+| `card.sage.ink` | `#5b6b5b` | `#c0ccc0` | `#c5c9d1` |
+| `card.sky.tint` | `#e0f2fe` | `#082f49` | `#082f49` |
+| `card.sky.ink` | `#075985` | `#7dd3fc` | `#7dd3fc` |
+| `card.blue.tint` | `#dbeafe` | `#172554` | `#172554` |
+| `card.blue.ink` | `#1e40af` | `#93c5fd` | `#93c5fd` |
+| `card.indigo.tint` | `#e0e7ff` | `#1e1b4b` | `#1e1b4b` |
+| `card.indigo.ink` | `#3730a3` | `#a5b4fc` | `#a5b4fc` |
+| `card.violet.tint` | `#ede9fe` | `#2e1065` | `#2e1065` |
+| `card.violet.ink` | `#5b21b6` | `#c4b5fd` | `#c4b5fd` |
+| `card.plum.tint` | `#fae8ff` | `#4a044e` | `#4a044e` |
+| `card.plum.ink` | `#86198f` | `#f0abfc` | `#f0abfc` |
+| `card.pink.tint` | `#fce7f3` | `#500724` | `#500724` |
+| `card.pink.ink` | `#9d174d` | `#f9a8d4` | `#f9a8d4` |
+| `card.rose.tint` | `#ffe4e6` | `#4c0519` | `#4c0519` |
+| `card.rose.ink` | `#9f1239` | `#fda4af` | `#fda4af` |
+| `card.clay.tint` | `#fcedea` | `#3c180e` | `#3c180e` |
+| `card.clay.ink` | `#863b28` | `#f0bcab` | `#f0bcab` |
+| `card.orange.tint` | `#ffedd5` | `#431407` | `#431407` |
+| `card.orange.ink` | `#9a3412` | `#fdba74` | `#fdba74` |
+| `card.yellow.tint` | `#fef9c3` | `#422006` | `#422006` |
+| `card.yellow.ink` | `#854d0e` | `#fde047` | `#fde047` |
+| `card.lime.tint` | `#ecfccb` | `#1a2e05` | `#1a2e05` |
+| `card.lime.ink` | `#3f6212` | `#bef264` | `#bef264` |
+| `card.green.tint` | `#d1fae5` | `#022c22` | `#022c22` |
+| `card.green.ink` | `#065f46` | `#6ee7b7` | `#6ee7b7` |
+| `card.teal.tint` | `#ccfbf1` | `#042f2e` | `#042f2e` |
+| `card.teal.ink` | `#115e59` | `#5eead4` | `#5eead4` |
+| `card.sand.tint` | `#ebe6df` | `#5b5046` | `#5b5046` |
+| `card.sand.ink` | `#5b5046` | `#ebe6df` | `#ebe6df` |
+| `card.amber.tint` | `#fef3c7` | `#451a03` | `#451a03` |
+| `card.amber.ink` | `#92400e` | `#fcd34d` | `#fcd34d` |
+| `ink.brand` | `#047857` | `#34d399` | `#34d399` |
+| `ink.success` | `#047857` | `#34d399` | `#34d399` |
+| `ink.danger` | `#b91c1c` | `#fca5a5` | `#fca5a5` |
+| `ink.warning` | `#92400e` | `#fbbf24` | `#fbbf24` |
+| `ink.accent` | `#5b6b5b` | `#c0ccc0` | `#4cc2ff` |
+| `ink.terra` | `#a3472e` | `#e5967f` | `#e5967f` |
+| `ink.event` | `#5b21b6` | `#c4b5fd` | `#c4b5fd` |
+| `ink.learn` | `#115e59` | `#5eead4` | `#5eead4` |
+| `ink.info` | `#2563eb` | `#93c5fd` | `#93c5fd` |
+| `map.ring` | `#92400e` | `#d4a24e` | `#d4a24e` |
+| `bubble.tint` | `#d8f2e1` | `#1e2923` | `#0f283c` |
+| `bubble.ink` | `#1e291e` | `#e6f4ea` | `#e8f4ff` |
 
 What each is for, and its ratios (the same in both themes for fills; lowest page or card for inks):
 
@@ -232,6 +267,74 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `ink.learn` | Learn's teal as words and icons: "See all ›", "In Learn: …" (the `chip.learn` ink) | 6.60 | 7.25 |
 | `ink.info` | the onboarding blue as words, outlines, rings, progress (web only, judged on the web's grounds: `WEB_ONLY_INKS`) | 4.71 | 5.95 |
 | `map.ring` | a community's area on a map, a thin dashed line and never words: judged at 3:1 on the map's own grounds (`MAP_GROUNDS`), and read with the map's theme, not the app's (`areaRingColour`); the web and the manager only have OSM's light map, so they draw the light one in both themes | 4.18 | 3.65 |
+| `bubble` | your own chat bubble on the phone, words on its ground. Phone only (`PHONE_ONLY_ROLES`): no CSS variable or Tailwind name; the web's own bubble is the `sage` button | 12.73 | 13.24 |
+
+### Dark (`night`): the lowest pair of each themed role, and the ones that keep Classic's colour
+
+Computed by the library's own formula; "lowest" is across every ground of the set, both apps. Classic dark beside it.
+
+| pair | bar | Classic (`dark`) | Dark (`night`) |
+|---|---|---|---|
+| `accent.on` on `accent.fill` | 4.5 | 9.65 | 9.07 |
+| white on `sage.fill` | 4.5 | 4.86 | 4.90 |
+| `sage.fill` against the web page | 3.0 | 3.29 | 3.28 |
+| `ink.accent`, lowest ground (the web's sunken row) | 4.5 | 6.45 | 5.35 |
+| `accent.fill` as a dot or badge, lowest ground | 3.0 | 6.45 | 5.35 |
+| `chip.accent` ink on tint | 4.5 | 6.45 | 5.39 |
+| `chip.quiet` ink on tint | 4.5 | 5.25 | 5.26 |
+| `tile.general`, `card.sage` ink on tint | 4.5 | 6.45 | 6.46 |
+| `bubble` ink on tint (phone) | 4.5 | 13.24 | 13.55 |
+| the web's muted words (ramp 400) on page / card / sunken | 4.5 | 6.93 / 5.72 / 4.64 | 6.98 / 5.74 / 4.66 |
+| `ink.brand` / `ink.danger` / `ink.warning` / `ink.terra` / `ink.event`, lowest | 4.5 | 5.58 / 5.65 / 6.42 / 4.60 / 5.81 | 5.58 / 5.65 / 6.43 / 4.60 / 5.81 |
+| the phone card off the doodle's ground / off the page | 1.15 / 1.25 | 1.17 / 1.31 | 1.16 / 1.31 |
+| the web card off the page; the sunken row off the card | none | 1.21 / 1.23 | 1.21 / 1.23 |
+
+## The grounds
+
+The pages, cards and rows words sit on, per set, in `BRAND_GROUNDS` (`brandGrounds(set)`). Classic's are the values the
+apps declare today (the phone's `constants/colors.ts` and `app/ThemeContext.tsx`, the web's `index.css` and
+`tailwind.config.js`); slices T1 (web) and T2 (phone) point the apps at these. `INK_GROUNDS` and `WEB_INK_GROUNDS` are
+derived from them (`brandInkGrounds(set)`, `brandWebInkGrounds(set)`), and the manager's three dark grounds stay in
+`MANAGER_GROUNDS` (Classic dark only: the manager has no picker). The test checks that every row below matches the file.
+
+| ground | Light (`light`) | Classic (`dark`) | Dark (`night`) |
+|---|---|---|---|
+| `doodle.ground` | `#f1f1e4` | `#141a1a` | `#17191c` |
+| `doodle.line` | `#c1c4b3` | `#303a37` | `#343841` |
+| `phone.page` | `#faf9f6` | `#0a0a0a` | `#0a0a0a` |
+| `phone.card` | `#ffffff` | `#222822` | `#24262c` |
+| `phone.sunken` | `#f1efea` | `#262626` | `#262626` |
+| `web.page` | `#f6f4f0` | `#1d231d` | `#202126` |
+| `web.card` | `#ffffff` | `#2a322a` | `#2d3036` |
+| `web.sunken` | `#fbfaf8` | `#384038` | `#3a3e46` |
+| `web.banner` | `#fbfaf8` | `#1d231d` | `#202126` |
+| `web.ramp.50` | `#f6f7f6` | `#f6f7f6` | `#f6f7f8` |
+| `web.ramp.100` | `#eef1ee` | `#eef1ee` | `#f0f1f3` |
+| `web.ramp.200` | `#dce3dc` | `#dce3dc` | `#e0e2e6` |
+| `web.ramp.300` | `#c0ccc0` | `#c0ccc0` | `#c5c9d1` |
+| `web.ramp.400` | `#9eaf9e` | `#9eaf9e` | `#a5abb8` |
+| `web.ramp.500` | `#809380` | `#809380` | `#878ea0` |
+| `web.ramp.600` | `#647664` | `#647664` | `#6b7180` |
+| `web.ramp.700` | `#526052` | `#526052` | `#575c69` |
+| `web.ramp.800` | `#434e43` | `#434e43` | `#474b55` |
+| `web.ramp.900` | `#384038` | `#384038` | `#3a3e46` |
+| `web.ramp.950` | `#1d231d` | `#1d231d` | `#202126` |
+
+- **The doodle** is the wallpaper both apps draw behind their pages, one baked tile per scheme. `doodle.ground` is the
+  tile's own ground (the phone's surface.chrome, the web's `--pattern-bg`). `doodle.line` is the line as a member sees it:
+  the median, by lightness, of the @2x tile's pixels that stand 1.3:1 or more off the ground. Measured on main 6513fb9e,
+  12 Nov 2026: light `#c1c4b3` at **1.56:1**, Classic dark `#303a37` at **1.50:1** (the "lift" of #998; the 1x tile
+  measures 1.45 and 1.42).
+- **Dark's doodle is charcoal, not olive** (Marty and Damo, 12 Nov; slice T5 re-draws the tile). Its ground `#17191c`
+  and line `#343841` take the hue of Dark's greys (216 and 222 degrees) at Classic dark's lightness: the ground 0.01 %
+  darker, the line 0.11 % lighter, so the line stands **1.50:1** off its ground as Classic's does (1.500 against
+  1.498), and the phone card lifts **1.16** off it (Classic 1.17; the bar is 1.15). A tile baked by moving each pixel's
+  hue and keeping its lightness lands on these.
+- **`web.banner`** is the ground of the leafy header banner (`--header-bg`) and the browser bar's colour that runs on
+  from it. Classic dark's is the olive charcoal `#1d231d`; Dark's is its own charcoal page `#202126` (0.26 % darker).
+  The banner picture itself (`neon-vines-banner`) has a near-black ground of its own, `#01080e`, under a black scrim.
+- **The picker's dots**: `brandSwatch(set, 'phone' | 'web')` gives the page (the doodle's ground), that app's card and
+  the accent, read from here so a swatch cannot drift from the real colours.
 
 ## Not covered (they keep their own hex)
 
@@ -243,6 +346,10 @@ five colour lines of `map.tsx` at the roles on 14 Oct: the Reach chooser and cat
 `gold.fill`, 9.78:1 on the header's black scrim in both themes.)
 
 ## How each app uses it
+
+Each function takes a set: `brandColours(set)`, `brandGrounds(set)`, `brandCssVariableMap(set)`. Today every app asks
+for `'light'` and `'dark'` only, so nothing a member sees has changed; slices T1 (web), T2 (phone) and T3 (the picker)
+bring `'night'` in.
 
 - **Phone** (`apps/native`): `constants/colors.ts` imports `brandColours('light')` and `brandColours('dark')` from
   `@beanpool/core` and builds its tokens from them. A fill under words uses `brand.fill` / `text.onBrand`,

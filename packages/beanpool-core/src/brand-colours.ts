@@ -30,20 +30,58 @@
  * Not here on purpose: the logo (an image), the phone's GlobalHeader and map pins, and the web map's pin colours,
  * which keep their own hex and are not re-coloured by this file.
  *
+ * SETS (DESIGN-themes-fable.md, with Marty and Damo's decisions of 12 Nov 2026). A set is one complete column of values:
+ *   `light`  BeanPool Classic in light. Members see it as "Light".
+ *   `dark`   BeanPool Classic in dark: the olive pages and the green doodle. Members see it as "Classic", and it is the
+ *            default on both apps (DEFAULT_BRAND_SET; the phone still opens Light until the picker, slice T3, moves it).
+ *   `night`  charcoal and bright blue, always dark. Members see it as "Dark".
+ * So the word "dark" in code is Classic's dark column, as it always was; the look a member calls Dark is `night`. Each set
+ * has a scheme (`light` or `dark`, BrandTheme): `night` is dark, so everything that asks "is it dark?" keeps asking that.
+ * A set changes the hue of a colour, never how light or dark it is (the tests hold it), and only the sage accent family,
+ * the own chat bubble and the grey base may change at all: green stays money and yes, red danger, gold Vouch, orange Need,
+ * violet events, in every set.
+ *
  * Pure: no I/O, no Node built-ins, no regular expressions (the barrel is bundled for the phone,
  * barrel-is-universal.test.ts).
  */
 
+/** A scheme: light or dark. Every set is one of the two (brandScheme). */
 export type BrandTheme = 'light' | 'dark';
 
-/** One colour as each theme draws it. */
+/** A complete column of colours: `light` and `dark` are BeanPool Classic ("Light", "Classic"); `night` is "Dark". */
+export type BrandSet = BrandTheme | 'night';
+
+/** Every set, in the order the docs and the tests list them. */
+export const BRAND_SETS: readonly BrandSet[] = ['light', 'dark', 'night'];
+
+/** The set both apps open in (Marty and Damo, 12 Nov 2026): BeanPool Classic, the code's `dark`. */
+export const DEFAULT_BRAND_SET: BrandSet = 'dark';
+
+/** A set's scheme: whether it is a light or a dark look. `night` is always dark. */
+export function brandScheme(set: BrandSet): BrandTheme {
+    return set === 'light' ? 'light' : 'dark';
+}
+
+/**
+ * One colour as each set draws it. `light` and `dark` are always given; a set with no value of its own (`night`) takes its
+ * scheme's. Only the leaves the tests list may carry a `night` value.
+ */
 export interface Themed {
     readonly light: string;
     readonly dark: string;
+    readonly night?: string;
 }
 
-const same = (hex: string): Themed => ({ light: hex, dark: hex });
-const themed = (light: string, dark: string): Themed => ({ light, dark });
+/** The sets beyond Classic's two, where a leaf has its own value. */
+type SetValues = { readonly night?: string };
+
+const same = (hex: string, sets: SetValues = {}): Themed => ({ light: hex, dark: hex, ...sets });
+const themed = (light: string, dark: string, sets: SetValues = {}): Themed => ({ light, dark, ...sets });
+
+/** A leaf's value in one set: its own, or its scheme's. */
+export function colourIn(colour: Themed, set: BrandSet): string {
+    return set === 'night' ? (colour.night ?? colour.dark) : colour[set];
+}
 
 // Tailwind's steps, named so a reader can place each value. terra-600′ is the brand terracotta deepened 4 %.
 const WHITE = '#ffffff';
@@ -96,6 +134,13 @@ const SAGE_650 = '#5b6b5b';
 const NATURE_700 = '#526052';
 const NATURE_800 = '#434e43';
 const NATURE_900 = '#384038';
+// Dark (`night`, DESIGN-themes-fable.md §3.2): the bright blue accent, its deep button blue, and the charcoal greys, each
+// as light as the Classic grey it stands in for.
+const NIGHT_BLUE = '#4cc2ff';
+const NIGHT_300 = '#c5c9d1';
+const NIGHT_800 = '#474b55';
+const NIGHT_900 = '#3a3e46';
+const NIGHT_950 = '#202126';
 
 /** A filled control: words (`on`) on a `fill`, and the darker `hover` (web) / pressed (phone) fill. */
 export interface FillRole {
@@ -154,22 +199,32 @@ export const BRAND_COLOURS = {
     gold: { fill: same(AMBER_500), hover: same(AMBER_400), on: same(CHARCOAL) },
     /**
      * The sage accent as a fill: chat's unread badge and send button, progress bars, selected toggles. White words on
-     * nature-600 in light; charcoal words on a light sage in dark (pressed goes lighter there, as gold does).
+     * nature-600 in light; charcoal words on a light sage in dark (pressed goes lighter there, as gold does). Dark
+     * (`night`): the bright blue under near-black words, pressing lighter, as Classic's dark does.
      */
-    accent: { fill: themed(NATURE_600, NATURE_300), hover: themed(NATURE_700, NATURE_200), on: themed(WHITE, CHARCOAL) },
+    accent: {
+        fill: themed(NATURE_600, NATURE_300, { night: NIGHT_BLUE }),
+        hover: themed(NATURE_700, NATURE_200, { night: '#8ad8ff' }),
+        on: themed(WHITE, CHARCOAL, { night: '#0e1620' }),
+    },
     /**
      * The sage accent as a button with words: the web's + Create Group, + Propose, Submit Decision. Light is the accent's
      * own (white words on nature-600); dark keeps that deep fill, as every other button does, where the accent's light
-     * sage drew a light block on the dark page (director, 16 Oct 2026, PR #1997: the web app now opens dark).
+     * sage drew a light block on the dark page (director, 16 Oct 2026, PR #1997: the web app now opens dark). Dark
+     * (`night`): a deep blue under the same white words, pressing deeper.
      */
-    sage: { fill: same(NATURE_600), hover: same(NATURE_700), on: same(WHITE) },
+    sage: { fill: same(NATURE_600, { night: '#0f73c6' }), hover: same(NATURE_700, { night: '#0c5ea2' }), on: same(WHITE) },
     /** Small badges and chips. `ok` is also the Offer chip, `need` the Need chip, `accent` a selected sage chip. */
     chip: {
         ok: { tint: themed(EMERALD_100, EMERALD_950), ink: themed(EMERALD_800, EMERALD_300) },
         need: { tint: themed(ORANGE_100, ORANGE_900), ink: themed(ORANGE_800, ORANGE_300) },
         warn: { tint: themed(AMBER_100, AMBER_950), ink: themed(AMBER_800, AMBER_300) },
         danger: { tint: themed(RED_100, RED_950), ink: themed(RED_700, RED_300) },
-        accent: { tint: themed(NATURE_100, NATURE_900), ink: themed(SAGE_650, NATURE_300), border: themed(NATURE_200, NATURE_800) },
+        accent: {
+            tint: themed(NATURE_100, NATURE_900, { night: '#174061' }),
+            ink: themed(SAGE_650, NATURE_300, { night: NIGHT_BLUE }),
+            border: themed(NATURE_200, NATURE_800, { night: '#1f4e73' }),
+        },
         /**
          * The three chips the Market's cards drew with raw hex until the one style box (DESIGN-card-style-box-fable.md §1.2,
          * Marty 4 Nov 2026: "make them look like they came out of the same style box"). `poll`: the POLL chip, the `card.plum`
@@ -178,7 +233,8 @@ export const BRAND_COLOURS = {
          * chip, the `tile.services` pair.
          */
         poll: { tint: themed('#fae8ff', '#4a044e'), ink: themed('#86198f', '#f0abfc') },
-        quiet: { tint: themed(NATURE_100, NATURE_800), ink: themed(NATURE_700, NATURE_300) },
+        /** In Dark (`night`) the quiet chip takes that set's own grey, never the blue: colour stays sparing. */
+        quiet: { tint: themed(NATURE_100, NATURE_800, { night: NIGHT_800 }), ink: themed(NATURE_700, NATURE_300, { night: NIGHT_300 }) },
         info: { tint: themed('#dbeafe', '#172554'), ink: themed('#1e40af', '#93c5fd') },
         /**
          * Learn and Local knowledge (DESIGN-local-knowledge-fable.md §3.1: a teal role, AA in both themes, never a literal):
@@ -217,7 +273,8 @@ export const BRAND_COLOURS = {
         tech: { tint: themed('#e0f2fe', '#082f49'), ink: themed('#075985', '#7dd3fc') },
         energy: { tint: themed('#fef9c3', '#422006'), ink: themed('#854d0e', '#fde047') },
         mindset: { tint: themed('#fae8ff', '#4a044e'), ink: themed('#86198f', '#f0abfc') },
-        general: { tint: themed('#eef1ee', '#384038'), ink: themed('#434e43', '#c0ccc0') },
+        /** The grey tile; in Dark (`night`) that set's own grey. */
+        general: { tint: themed('#eef1ee', '#384038', { night: NIGHT_900 }), ink: themed('#434e43', '#c0ccc0', { night: NIGHT_300 }) },
         event: { tint: themed('#ede9fe', '#2e1065'), ink: themed('#5b21b6', '#c4b5fd') },
         pulse: { tint: themed('#fef3c7', '#451a03'), ink: themed('#92400e', '#fcd34d') },
     },
@@ -225,7 +282,8 @@ export const BRAND_COLOURS = {
      * Card caption bands: `tint` fill, `ink` caption words, "Tune" and "…".
      */
     card: {
-        sage: { tint: themed('#eef1ee', '#384038'), ink: themed('#5b6b5b', '#c0ccc0') },
+        /** The default Home card band; in Dark (`night`) that set's own grey, never the blue. */
+        sage: { tint: themed('#eef1ee', '#384038', { night: NIGHT_900 }), ink: themed('#5b6b5b', '#c0ccc0', { night: NIGHT_300 }) },
         sky: { tint: themed('#e0f2fe', '#082f49'), ink: themed('#075985', '#7dd3fc') },
         blue: { tint: themed('#dbeafe', '#172554'), ink: themed('#1e40af', '#93c5fd') },
         indigo: { tint: themed('#e0e7ff', '#1e1b4b'), ink: themed('#3730a3', '#a5b4fc') },
@@ -252,8 +310,8 @@ export const BRAND_COLOURS = {
         danger: themed(RED_700, RED_300),
         /** Gold as words and icons (Action Required, a tip, a nudge): never the gold fill as words. */
         warning: themed(AMBER_800, AMBER_400),
-        /** The sage accent as text and icons. */
-        accent: themed(SAGE_650, NATURE_300),
+        /** The sage accent as text and icons; the blue in Dark (`night`). */
+        accent: themed(SAGE_650, NATURE_300, { night: NIGHT_BLUE }),
         /** Terracotta as words and icons: the manager's links, section labels and hovered titles. */
         terra: themed(TERRA_700, TERRA_400),
         /** The event violet as words and outlines: when, the answer's outline and words, "You're hosting". The `tile.event` inks. */
@@ -274,6 +332,15 @@ export const BRAND_COLOURS = {
     map: {
         ring: themed(AMBER_800, '#d4a24e'),
     },
+    /**
+     * Your own chat bubble on the phone: `ink` words on the `tint` ground (DESIGN-themes-fable.md §3.2). Classic's values are
+     * the phone's own until now (constants/colors.ts `chat.messageMeBg` / `messageTextMe`), moved here unchanged; slice T2
+     * points colors.ts at them. Phone only (PHONE_ONLY_ROLES): the web's own bubble is the `sage` button, white words.
+     */
+    bubble: {
+        tint: themed('#d8f2e1', '#1e2923', { night: '#0f283c' }),
+        ink: themed('#1e291e', '#e6f4ea', { night: '#e8f4ff' }),
+    },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };
 };
@@ -287,39 +354,122 @@ export type BrandColoursFor<T = BrandColours> = {
     readonly [K in keyof T]: T[K] extends Themed ? string : BrandColoursFor<T[K]>;
 };
 
+/** The steps of the web's grey ramp (Tailwind's `nature` scale). */
+export type RampStep = '50' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900' | '950';
+
 /**
- * The pages and cards an `ink.*` role may be drawn on, in either app, per theme: the phone's app background, card,
- * sunken row and doodle-pattern ground; the web app's page, card and sunken background. An ink must reach 4.5 on all.
+ * The grounds: the pages, cards and rows words sit on, per set (DESIGN-themes-fable.md §3.2 "Grounds"; Marty and Damo,
+ * 12 Nov 2026, for Dark's doodle and banner). Classic's values are the ones the apps declare today (the phone's
+ * constants/colors.ts and app/ThemeContext.tsx, the web's index.css and tailwind.config.js); slices T1 and T2 point the
+ * apps at these. Dark (`night`) changes the hue of a ground, never how light it is.
+ */
+export const BRAND_GROUNDS = {
+    /**
+     * The doodle wallpaper both apps draw behind their pages, one baked tile per scheme (the phone's
+     * assets/images/pattern-*.webp, the web's public/pattern-*.webp). `ground` is the tile's own ground (the phone's
+     * surface.chrome and pattern ground, the web's --pattern-bg). `line` is the doodle's line as a member sees it: the
+     * median, by lightness, of the @2x tile's pixels that stand 1.3:1 or more off the ground (measured 12 Nov 2026 on main
+     * 6513fb9e: light #c1c4b3 at 1.56:1, Classic dark #303a37 at 1.50:1, the "lift" of #998). Dark (`night`) re-draws the
+     * doodle in charcoal (slice T5): the ground and the line are each as light as Classic dark's, with the hue of Dark's
+     * greys, so the doodle stands off its ground as much as Classic's does.
+     */
+    doodle: {
+        ground: themed('#f1f1e4', '#141a1a', { night: '#17191c' }),
+        line: themed('#c1c4b3', '#303a37', { night: '#343841' }),
+    },
+    /** The phone: the page (surface.app), the card (surface.card) and the sunken row (surface.subtle). */
+    phone: {
+        page: themed('#faf9f6', '#0a0a0a'),
+        card: themed(WHITE, '#222822', { night: '#24262c' }),
+        sunken: themed('#f1efea', '#262626'),
+    },
+    /**
+     * The web app: the page (--bg-primary), the card (--bg-card), the sunken row (--bg-secondary: message rows, the
+     * radius picker), the banner (--header-bg: the ground of the leafy header banner, and the browser bar's colour that
+     * runs on from it), and the grey ramp (the `nature` scale, the same steps in light and dark; Dark's is its own).
+     */
+    web: {
+        page: themed('#f6f4f0', CHARCOAL, { night: NIGHT_950 }),
+        card: themed(WHITE, '#2a322a', { night: '#2d3036' }),
+        sunken: themed('#fbfaf8', NATURE_900, { night: NIGHT_900 }),
+        banner: themed('#fbfaf8', CHARCOAL, { night: NIGHT_950 }),
+        ramp: {
+            '50': same('#f6f7f6', { night: '#f6f7f8' }),
+            '100': same(NATURE_100, { night: '#f0f1f3' }),
+            '200': same(NATURE_200, { night: '#e0e2e6' }),
+            '300': same(NATURE_300, { night: NIGHT_300 }),
+            '400': same('#9eaf9e', { night: '#a5abb8' }),
+            '500': same('#809380', { night: '#878ea0' }),
+            '600': same(NATURE_600, { night: '#6b7180' }),
+            '700': same(NATURE_700, { night: '#575c69' }),
+            '800': same(NATURE_800, { night: NIGHT_800 }),
+            '900': same(NATURE_900, { night: NIGHT_900 }),
+            '950': same(CHARCOAL, { night: NIGHT_950 }),
+        } satisfies { readonly [S in RampStep]: Themed },
+    },
+} as const;
+
+/**
+ * The manager's grounds: dark only (its index.html sets `dark`), Classic only (it has no picker), with its own deeper
+ * sage scale (apps/manager/tailwind.config.js): page (nature-950), card (nature-900), raised row and input (nature-800).
+ */
+export const MANAGER_GROUNDS = { page: '#0b110b', card: '#151e16', raised: '#2b422c' } as const;
+
+/** BRAND_GROUNDS with each leaf resolved to one set's hex. */
+export type BrandGroundsFor = BrandColoursFor<typeof BRAND_GROUNDS>;
+
+/** One set's grounds, the same shape as BRAND_GROUNDS with plain hex leaves. */
+export function brandGrounds(set: BrandSet): BrandGroundsFor {
+    return mapThemed(BRAND_GROUNDS, set) as BrandGroundsFor;
+}
+
+const unique = (values: readonly string[]): string[] => values.filter((v, i) => values.indexOf(v) === i);
+
+/**
+ * The web app's own grounds in one set: page, card and sunken row, and first any of them the phone shares (light's white
+ * card), so Classic's lists keep the order apps index into (server routes read WEB_INK_GROUNDS.light[1] as the page).
+ */
+export function brandWebInkGrounds(set: BrandSet): string[] {
+    const g = brandGrounds(set);
+    const phone = [g.phone.page, g.phone.card, g.phone.sunken];
+    const web = [g.web.page, g.web.card, g.web.sunken];
+    return unique([...web.filter((v) => phone.includes(v)), ...web]);
+}
+
+/**
+ * Every page, card and row an `ink.*` role may be drawn on in one set, in either app: a ground both apps share (light's
+ * white card) first, then the phone's page, card, sunken row and the doodle's ground, then the web's page, card and
+ * sunken row, then the manager's (Classic dark only). An ink must reach 4.5 on all of them.
+ */
+export function brandInkGrounds(set: BrandSet): string[] {
+    const g = brandGrounds(set);
+    const phone = [g.phone.page, g.phone.card, g.phone.sunken, g.doodle.ground];
+    const web = [g.web.page, g.web.card, g.web.sunken];
+    const manager = set === 'dark' ? [MANAGER_GROUNDS.page, MANAGER_GROUNDS.card, MANAGER_GROUNDS.raised] : [];
+    return unique([...phone.filter((v) => web.includes(v)), ...phone, ...web, ...manager]);
+}
+
+/**
+ * Classic's ink grounds per scheme, derived from BRAND_GROUNDS (brandInkGrounds): light is
+ * [card both apps, phone page, phone sunken, doodle ground, web page, web sunken]; dark is
+ * [phone page, phone card, phone sunken, doodle ground, web page, web card, web sunken, manager page, card, raised].
  */
 export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
-    light: [
-        '#ffffff', // card, both apps
-        '#faf9f6', // phone surface.app
-        '#f1efea', // phone surface.subtle
-        '#f1f1e4', // phone pattern ground
-        '#f6f4f0', // web --bg-primary (oat-100)
-        '#fbfaf8', // web --bg-secondary (oat-50)
-    ],
-    dark: [
-        '#0a0a0a', // phone surface.app
-        '#222822', // phone surface.card
-        '#262626', // phone surface.subtle
-        '#141a1a', // phone pattern ground
-        '#1d231d', // web --bg-primary (nature-950)
-        '#2a322a', // web --bg-card
-        '#384038', // web --bg-secondary (nature-900): message rows, the radius picker
-        // The manager is dark only (index.html sets `dark`) and has its own deeper sage scale (tailwind.config.js):
-        '#0b110b', // manager page (nature-950)
-        '#151e16', // manager card (nature-900)
-        '#2b422c', // manager raised row and input (nature-800)
-    ],
+    light: brandInkGrounds('light'),
+    dark: brandInkGrounds('dark'),
 };
 
-/** The web app's own grounds, a subset of INK_GROUNDS: page, card and sunken background in each theme. */
+/** The web app's own grounds in Classic, a subset of INK_GROUNDS: light [card, page, sunken], dark [page, card, sunken]. */
 export const WEB_INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
-    light: ['#ffffff', '#f6f4f0', '#fbfaf8'],
-    dark: ['#1d231d', '#2a322a', '#384038'],
+    light: brandWebInkGrounds('light'),
+    dark: brandWebInkGrounds('dark'),
 };
+
+/**
+ * Roles only the phone draws: not written as CSS variables or Tailwind names, so the web and the manager never get one.
+ * `bubble`: the web's own chat bubble is the `sage` button (white words), not a tint.
+ */
+export const PHONE_ONLY_ROLES: readonly string[] = ['bubble'];
 
 /**
  * Inks only the web app draws, judged on WEB_INK_GROUNDS (still 4.5). The phone's colors.ts never reads them
@@ -351,16 +501,38 @@ function isThemed(node: unknown): node is Themed {
     return typeof node === 'object' && node !== null && typeof (node as Themed).light === 'string' && typeof (node as Themed).dark === 'string';
 }
 
-function mapThemed(node: unknown, theme: BrandTheme): unknown {
-    if (isThemed(node)) return node[theme];
+function mapThemed(node: unknown, set: BrandSet): unknown {
+    if (isThemed(node)) return colourIn(node, set);
     const out: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(node as Record<string, unknown>)) out[key] = mapThemed(child, theme);
+    for (const [key, child] of Object.entries(node as Record<string, unknown>)) out[key] = mapThemed(child, set);
     return out;
 }
 
-/** One theme's brand colours, the same shape as BRAND_COLOURS with plain hex leaves. */
-export function brandColours(theme: BrandTheme): BrandColoursFor {
-    return mapThemed(BRAND_COLOURS, theme) as BrandColoursFor;
+/**
+ * One set's brand colours, the same shape as BRAND_COLOURS with plain hex leaves. `brandColours('light')` and
+ * `brandColours('dark')` are Classic, exactly as before sets (the test holds them to a snapshot of main).
+ */
+export function brandColours(set: BrandSet): BrandColoursFor {
+    return mapThemed(BRAND_COLOURS, set) as BrandColoursFor;
+}
+
+/** The three dots a look's row in the picker starts with: the page, the card and the accent, as that set draws them. */
+export interface BrandSwatch {
+    /** The page as members see it by default: the doodle wallpaper's ground (both apps draw the doodle unless it is off). */
+    page: string;
+    /** That app's card. */
+    card: string;
+    /** The accent as a fill (`accent.fill`): a selected chip, an unread badge. */
+    accent: string;
+}
+
+/**
+ * The swatch for a look's row in the picker (slice T3), read from the library so it cannot drift from the real colours.
+ * "Same as phone" draws two dots: `brandSwatch('light', app).page` and `brandSwatch('dark', app).page`.
+ */
+export function brandSwatch(set: BrandSet, app: 'phone' | 'web'): BrandSwatch {
+    const g = brandGrounds(set);
+    return { page: g.doodle.ground, card: g[app].card, accent: brandColours(set).accent.fill };
 }
 
 /** Every `{ light, dark }` leaf with its dotted path (`cta.fill`, `chip.ok.ink`, `ink.brand`), in source order. */
@@ -415,7 +587,8 @@ export function contrastRatio(a: string, b: string): number {
 
 /** One pair a reader sees: `ink` words on `ground`, the bar it must clear, and what it reaches. */
 export interface BrandContrastPair {
-    theme: BrandTheme;
+    /** The set the pair is drawn in (`light`, `dark` or `night`); the field keeps its old name. */
+    theme: BrandSet;
     /** The role, e.g. `cta`, `chip.ok`, `ink.brand`. */
     role: string;
     /** What is being judged, e.g. `on / fill`, `on / hover`, `ink / tint`, `ink / #faf9f6`. */
@@ -426,44 +599,41 @@ export interface BrandContrastPair {
     min: number;
 }
 
-/** Every words-on-colour pair the brand colours make, in both themes. */
+/** Every words-on-colour pair the brand colours make, in every set, each ink on that set's own grounds. */
 export function brandContrastPairs(): BrandContrastPair[] {
     const pairs: BrandContrastPair[] = [];
     const min = (role: string) => (LARGE_TEXT_ROLES.includes(role) ? 3 : 4.5);
-    const add = (theme: BrandTheme, role: string, pair: string, ink: string, ground: string) =>
-        pairs.push({ theme, role, pair, ink, ground, ratio: contrastRatio(ink, ground), min: min(role) });
-    for (const theme of ['light', 'dark'] as const) {
+    for (const set of BRAND_SETS) {
+        const at = (colour: Themed) => colourIn(colour, set);
+        const add = (role: string, pair: string, ink: string, ground: string) =>
+            pairs.push({ theme: set, role, pair, ink, ground, ratio: contrastRatio(ink, ground), min: min(role) });
+        const webGrounds = brandWebInkGrounds(set);
+        const inkGrounds = brandInkGrounds(set);
         for (const [role, node] of Object.entries(BRAND_COLOURS)) {
             // A line on a map is not words: __tests__/map-area-ring.test.ts judges it on MAP_GROUNDS.
             if (role === 'map') continue;
             if (role === 'deal') {
                 // Only the web draws these words, over the chat: judged on the web's grounds through the tint.
                 for (const [name, line] of Object.entries(node as BrandColours['deal'])) {
-                    for (const ground of WEB_INK_GROUNDS[theme]) {
-                        add(theme, `deal.${name}`, `ink / tint at ${DEAL_TINT_ALPHA} over ${ground}`, line.ink[theme], blendOver(line.tint[theme], DEAL_TINT_ALPHA, ground));
+                    for (const ground of webGrounds) {
+                        add(`deal.${name}`, `ink / tint at ${DEAL_TINT_ALPHA} over ${ground}`, at(line.ink), blendOver(at(line.tint), DEAL_TINT_ALPHA, ground));
                     }
                 }
-            } else if (role === 'chip') {
-                for (const [name, chip] of Object.entries(node as BrandColours['chip'])) {
-                    add(theme, `chip.${name}`, 'ink / tint', chip.ink[theme], chip.tint[theme]);
+            } else if (role === 'chip' || role === 'tile' || role === 'card') {
+                for (const [name, chip] of Object.entries(node as { [name: string]: ChipRole })) {
+                    add(`${role}.${name}`, 'ink / tint', at(chip.ink), at(chip.tint));
                 }
-            } else if (role === 'tile') {
-                for (const [name, tile] of Object.entries(node as BrandColours['tile'])) {
-                    add(theme, `tile.${name}`, 'ink / tint', tile.ink[theme], tile.tint[theme]);
-                }
-            } else if (role === 'card') {
-                for (const [name, card] of Object.entries(node as BrandColours['card'])) {
-                    add(theme, `card.${name}`, 'ink / tint', card.ink[theme], card.tint[theme]);
-                }
+            } else if (role === 'bubble') {
+                const bubble = node as BrandColours['bubble'];
+                add(role, 'ink / tint', at(bubble.ink), at(bubble.tint));
             } else if (role === 'ink') {
                 for (const [name, ink] of Object.entries(node as BrandColours['ink'])) {
-                    const grounds = WEB_ONLY_INKS.includes(name) ? WEB_INK_GROUNDS[theme] : INK_GROUNDS[theme];
-                    for (const ground of grounds) add(theme, `ink.${name}`, `ink / ${ground}`, ink[theme], ground);
+                    for (const ground of WEB_ONLY_INKS.includes(name) ? webGrounds : inkGrounds) add(`ink.${name}`, `ink / ${ground}`, at(ink), ground);
                 }
             } else {
                 const fill = node as FillRole;
-                add(theme, role, 'on / fill', fill.on[theme], fill.fill[theme]);
-                add(theme, role, 'on / hover', fill.on[theme], fill.hover[theme]);
+                add(role, 'on / fill', at(fill.on), at(fill.fill));
+                add(role, 'on / hover', at(fill.on), at(fill.hover));
             }
         }
     }
@@ -477,14 +647,20 @@ export function brandCssVariableName(path: string): string {
     return `--bp-${path.split('.').join('-')}`;
 }
 
+/** The leaves the web and the manager get as CSS variables and Tailwind names: all but PHONE_ONLY_ROLES'. */
+function webLeaves(): Array<{ path: string; colour: Themed }> {
+    return brandColourLeaves().filter(({ path }) => !PHONE_ONLY_ROLES.includes(path.split('.')[0]));
+}
+
 /**
- * One theme's custom properties: `{ '--bp-cta-fill': '#b85236', … }`, and each deal tint as the web lays it, a plain
- * rgba (`--bp-deal-held-wash: rgba(209, 250, 229, 0.4)`): no color-mix(), which old Android WebViews drop.
+ * One set's custom properties: `{ '--bp-cta-fill': '#b85236', … }`, and each deal tint as the web lays it, a plain
+ * rgba (`--bp-deal-held-wash: rgba(209, 250, 229, 0.4)`): no color-mix(), which old Android WebViews drop. A phone-only
+ * role (PHONE_ONLY_ROLES) is not written. `'light'` and `'dark'` are Classic, exactly as before sets.
  */
-export function brandCssVariableMap(theme: BrandTheme): Record<string, string> {
+export function brandCssVariableMap(set: BrandSet): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const { path, colour } of brandColourLeaves()) out[brandCssVariableName(path)] = colour[theme];
-    for (const [name, line] of Object.entries(BRAND_COLOURS.deal)) out[`--bp-deal-${name}-wash`] = rgbaOf(line.tint[theme], DEAL_TINT_ALPHA);
+    for (const { path, colour } of webLeaves()) out[brandCssVariableName(path)] = colourIn(colour, set);
+    for (const [name, line] of Object.entries(BRAND_COLOURS.deal)) out[`--bp-deal-${name}-wash`] = rgbaOf(colourIn(line.tint, set), DEAL_TINT_ALPHA);
     return out;
 }
 
@@ -515,6 +691,6 @@ export function brandCssVariables(options: BrandCssOptions = {}): string {
  */
 export function brandTailwindColours(): { bp: Record<string, string> } {
     const bp: Record<string, string> = {};
-    for (const { path } of brandColourLeaves()) bp[path.split('.').join('-')] = `var(${brandCssVariableName(path)})`;
+    for (const { path } of webLeaves()) bp[path.split('.').join('-')] = `var(${brandCssVariableName(path)})`;
     return { bp };
 }

@@ -16,6 +16,7 @@ const guide = (...guides: GuidePage[]): Guide => ({
     guides,
 });
 const slugs = (g: Guide, q: string) => searchGuide(g, q).map(r => r.page.slug);
+const slugsIn = (g: Guide, q: string, lang?: string) => searchGuide(g, q, 20, lang).map(r => r.page.slug);
 
 const REPEATS = Array.from({ length: 12 }, (_, i) => `Paragraph ${i}: a gift of Beans, and what a gift changes; give a gift and the gift counts.`);
 const GIVER = page('credit-risk', 'Credit risk: what it reads', 'What the people who give credit see.', REPEATS);
@@ -159,9 +160,61 @@ describe('searchGuide: the question words of each language the guide has', () =>
             const target = page('gifts', c.title, c.summary, ['x']);
             // The other page says the question words in its title, so before they were dropped it could only be found by them.
             const other = page('how-it-works', c.other, 'Beans.', ['y']);
-            expect(slugs(guide(other, target), c.query)).toEqual(['gifts']);
+            expect(searchGuide(guide(other, target), c.query, 20, lang).map(r => r.page.slug)).toEqual(['gifts']);
         });
     }
+
+    it('a question in a language is searched with that language\'s words only: asked of the guide without it, its words stay', () => {
+        const target = page('gifts', CASES.es.title, CASES.es.summary, ['x']);
+        const other = page('how-it-works', CASES.es.other, 'Beans.', ['y']);
+        const es = guide(other, target);
+        // "cómo puedo" (how can I) is Spanish filler: in the Spanish guide only "enviar un regalo" has to match.
+        expect(searchGuide(es, CASES.es.query, 20, 'es').map(r => r.page.slug)).toEqual(['gifts']);
+        // Searched as English (no language given), "como" and "puedo" are words like any other, and no page has them all.
+        expect(searchGuide(es, CASES.es.query).map(r => r.page.slug)).toEqual([]);
+        // ...and the guide's own language is used when the caller gives none.
+        expect(searchGuide({ ...es, language: 'es' }, CASES.es.query).map(r => r.page.slug)).toEqual(['gifts']);
+        // A language the guide does not have (the pseudo-locale) is English.
+        expect(searchGuide(es, CASES.es.query, 20, 'xx').map(r => r.page.slug)).toEqual([]);
+    });
+});
+
+describe('searchGuide: a filler word of one language never drops a real word of another', () => {
+    it('Italian "beni comuni" keeps "beni" (Turkish for "me") when the search runs in Italian or English; only the Turkish guide drops it', () => {
+        expect(GUIDE_FILLER_WORDS.tr).toContain('beni');
+        const commons = page('commons-fund', 'I Beni comuni', 'Il fondo di tutti.', ['Il fondo comune.']);
+        const towns = page('towns', 'Comuni', 'I comuni della zona.', ['x']);
+        const it = guide(towns, commons);
+        for (const lang of ['it', 'en', 'de', undefined]) expect(slugsIn(it, 'beni comuni', lang), String(lang)).toEqual(['commons-fund']);
+        // In the Turkish guide "beni" is the Turkish word and does not have to match: the page without it is found too.
+        expect(slugsIn(it, 'beni comuni', 'tr').sort()).toEqual(['commons-fund', 'towns']);
+    });
+
+    it('English little words are still dropped in another language\'s guide: "how do I send a gift" in the German guide', () => {
+        const gifts = { ...page('gifts', 'Bohnen schenken', 'Beans an jemanden schicken.', ['x']), english: { title: 'Sending a gift' } };
+        const risk = page('credit-risk', 'Kreditrisiko', 'Wer Kredit gibt.', ['gift gift gift']);
+        expect(slugsIn(guide(risk, gifts), 'how do I send a gift', 'de')).toEqual(['gifts']);
+    });
+
+    it('English is compared as typed in another language\'s guide: Vietnamese "dò" (survey) is not the English "do"', () => {
+        const poll = page('polls', 'Thăm dò', 'Hỏi ý kiến mọi người.', ['x']);
+        const post = page('posting', 'Thăm bạn bè', 'Đăng bài.', ['y']);
+        const vi = guide(post, poll);
+        // "do" (no accent) is English filler: dropped, and the rest finds both pages that say "tham".
+        expect(searchGuide(vi, 'how do tham', 20, 'vi').map(r => r.page.slug).sort()).toEqual(['polls', 'posting']);
+        // "dò" is a Vietnamese word, kept: only the survey page has it, not the other page that says "thăm".
+        // (Dropped as the English "do", both pages would be found. An unaccented "do" is English.)
+        expect(searchGuide(vi, 'thăm dò', 20, 'vi').map(r => r.page.slug)).toEqual(['polls']);
+        // In the English guide, "dò" is just an accented "do": folded, as it always was.
+        expect(searchGuide(vi, 'thăm dò', 20, 'en')[0].page.slug).toBe('polls');
+    });
+
+    it('French "don" (a gift) is not English filler', () => {
+        expect(GUIDE_FILLER_WORDS.en).not.toContain('don');
+        const gift = page('gifts', 'Envoyer un don', 'Envoyer des Beans.', ['x']);
+        const send = page('sending', 'Envoyer un paiement', 'Envoyer des Beans.', ['y']);
+        expect(searchGuide(guide(send, gift), 'envoyer un don', 20, 'fr').map(r => r.page.slug)).toEqual(['gifts']);
+    });
 });
 
 describe('GUIDE_FILLER_WORDS', () => {
@@ -178,7 +231,7 @@ describe('GUIDE_FILLER_WORDS', () => {
     });
 
     it('no filler word is a word members search by: not a synonym, nor a word a synonym stands for', () => {
-        // Lists are used together, whatever the language of the query, so Vietnamese "ban" (you) must not drop English "ban".
+        // English is always used with the guide's own list, so Vietnamese "ban" (you) must not drop an English "ban" typed in the Vietnamese guide.
         const fold = (w: string) => w.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
         const searchedBy = new Set(Object.entries(GUIDE_SEARCH_SYNONYMS).flatMap(([typed, said]) => [typed, ...said]));
         expect(searchedBy.size).toBeGreaterThan(20);

@@ -509,17 +509,18 @@ describe("the guide's titles in the member's language", () => {
             const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
             const gifts = findGuidePage(shown, 'gifts')!;
             // A member may type English whatever their language is (the search finds the English title too).
-            expect(searchGuide(shown, 'how do I send a gift')[0]?.page.slug, `${lang}: how do I send a gift`).toBe('gifts');
+            expect(searchGuide(shown, 'how do I send a gift', 20, lang)[0]?.page.slug, `${lang}: how do I send a gift`).toBe('gifts');
             if (lang === 'en') continue;
             const q = `${OPENER[lang]} ${gifts.title}`;
-            expect(searchGuide(shown, q)[0]?.page.slug, `${lang}: ${q}`).toBe('gifts');
+            expect(searchGuide(shown, q, 20, lang)[0]?.page.slug, `${lang}: ${q}`).toBe('gifts');
         }
     });
 
     it('no question word of any language is a word the English pages are named by', () => {
-        // The lists are used together, so a Vietnamese or Italian filler must not drop a word a member needs in English.
-        // (English fillers are the exception: the pages "How BeanPool works" and "The Pulse" carry them on purpose.)
-        const fold = (w: string) => w.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+        // A guide is searched by its own language's list, and an English page title is searched in every guide: a Vietnamese
+        // or Italian filler must not drop a word a member needs in English. (English fillers are the exception: the pages
+        // "How BeanPool works" and "The Pulse" carry them on purpose, and a title typed whole still finds its page.)
+        const fold = (w: string) => w.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
         const english = new Set(GUIDE_FILLER_WORDS.en.map(fold));
         const titleWords = new Set(PAGES.guides.flatMap(p => p.title.split(/[^A-Za-z0-9]+/).filter(Boolean).map(fold)));
         expect(titleWords.size).toBeGreaterThan(80);
@@ -529,6 +530,55 @@ describe("the guide's titles in the member's language", () => {
                 if (!english.has(fold(w))) expect(titleWords.has(fold(w)), `${lang} ${w}`).toBe(false);
             }
         }
+    });
+
+    it("every page's own title, typed in its language, still finds that page first, in all 25 languages (no list of another language drops a word)", () => {
+        // The pages that came second before the question words too, because another page carries the same title.
+        const SECOND = new Set(['es:events', 'pt:events', 'fr:events', 'ru:events', 'it:events', 'hi:keepers', 'sw:keepers', 'fa:keepers', 'fil:holiday-mode', 'ko:your-12-words', 'ko:notifications']);
+        const wrong: string[] = [];
+        for (const lang of LANGS) {
+            const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
+            for (const p of shown.guides) {
+                const at = searchGuide(shown, p.title, 20, lang).findIndex(r => r.page.slug === p.slug);
+                const want = SECOND.has(`${lang}:${p.slug}`) ? 1 : 0;
+                if (at !== want) wrong.push(`${lang} ${p.slug} "${p.title}": ${at}, wanted ${want}`);
+            }
+        }
+        expect(wrong).toEqual([]);
+    }, 120_000);
+
+    it('the words a member types for a page keep ranking it in its own language: Italian "beni comuni", Vietnamese "số dư", German "Admin KI"', () => {
+        // The first was 1st of 1, the second 1st of 20, the third 1st before another language's list (Turkish "beni" and "ki",
+        // French "du") dropped one of their words; none of them is a word of the language it is searched in.
+        const at = (lang: 'it' | 'vi' | 'de', q: string) => searchGuide(guideInLanguage(PAGES, lang, guideTitlesFor(lang)), q, 20, lang).map(r => r.page.slug);
+        expect(at('it', 'beni comuni')).toEqual(['commons-fund']);
+        expect(at('it', 'I Beni comuni')[0]).toBe('commons-fund');
+        expect(at('vi', 'số dư')[0]).toBe('your-balance');
+        expect(at('vi', 'so du')[0]).toBe('your-balance');
+        expect(at('vi', 'số dư của tôi')[0]).toBe('your-balance');
+        expect(at('de', 'Admin KI')[0]).toBe('admins-ai-assistants');
+        expect(at('de', 'KI Hilfe')[0]).toBe('admins-ai-assistants');
+    });
+
+    it("no English question word drops a word of another language's page titles, unless that language lists it too", () => {
+        // English is always used with the guide's own language, so an English filler must not be a real word of a translated
+        // title. Compared as typed, accents and all: Vietnamese "dò" (survey) is not "do", "bè" is not "be", "án" is not "an".
+        // (French "don", a gift, is why "don" is not on the English list; Italian and German "in" are on theirs.)
+        const fold = (w: string) => w.normalize('NFKD').replace(/[̀-ͯ]/g, '');
+        const english = new Set(GUIDE_FILLER_WORDS.en);
+        const bad: string[] = [];
+        for (const lang of LANGS) {
+            if (lang === 'en') continue;
+            const own = new Set(GUIDE_FILLER_WORDS[lang].map(w => fold(w.toLowerCase())));
+            const shown = guideInLanguage(PAGES, lang, guideTitlesFor(lang));
+            for (const p of shown.guides) {
+                if (!p.english?.title || p.title === p.english.title) continue; // English as it stands ("The Pulse"): English words are right in it
+                for (const w of p.title.toLowerCase().normalize('NFC').split(/[^\p{L}\p{M}\p{N}]+/u)) {
+                    if (w.length >= 2 && english.has(w) && !own.has(fold(w))) bad.push(`${lang} ${p.slug} "${p.title}": ${w}`);
+                }
+            }
+        }
+        expect(bad).toEqual([]);
     });
 
     it('search finds a page by its translated title and by its English one, and shows it in the member\'s language', () => {

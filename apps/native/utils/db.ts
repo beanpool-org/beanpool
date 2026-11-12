@@ -3863,18 +3863,21 @@ export async function deletePost(id: string) {
     const payload = JSON.stringify({ id, authorPublicKey: identity.publicKey });
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/marketplace/posts/remove`, payload, identity.privateKey, identity.publicKey);
 
+    // Only a send that never got an answer is "offline". The node's refusal is its own sentence, in the member's language (a listing
+    // priced for each one can be deleted by a phone seller while buyers hold some of it; the node refuses, and says why): not wrapped.
+    let res: Response;
     try {
-        const res = await fetch(`${anchorUrl}/api/marketplace/posts/remove`, {
+        res = await fetch(`${anchorUrl}/api/marketplace/posts/remove`, {
             method: 'POST',
             headers,
             body: payload
         });
-        if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error || 'Failed to remove post on Node');
-        }
     } catch (e: any) {
         throw new Error(`Offline or anchor node unreachable: ${e.message}`);
+    }
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to remove post on Node');
     }
 
     repeatOnGlobalCopy((copy) => copy.stopShowing(id, identity));

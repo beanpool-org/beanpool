@@ -11,8 +11,9 @@
  *   3. Edit: into Each, a count changed with the count the seller saw, a stale or missing one refused 409 `units_changed` with
  *      the count now; an edit that leaves the count alone writes none (a take-up made while the screen was open survives);
  *      the count's own write refuses a row that moved; 0 refused; the price for all bound to the count saved with it, kept
- *      when sent back as it is, cleared by null, refused when the price for one drops under it; out of Each clears all three.
- *      The count is never frozen by an open deal; the unit is.
+ *      when sent back as it is, cleared by null, refused when the price for one drops under it, and a new one refused 409
+ *      `units_changed` when the count moved under the screen; out of Each clears all three. The count is never frozen by an
+ *      open deal; the unit is, and a weekly listing with a live standing deal can't be edited into Each.
  *   4. No deal yet: a request and a one-step accept on a per-item Offer are refused 409 `each_not_yet`, nothing is held, the
  *      count stays; a Total Offer is still taken up as before.
  *   5. The features answer offers no Each yet (no `perItem`).
@@ -206,7 +207,7 @@ async function main(): Promise<void> {
     // The price for all: bound to the count saved with it.
     const sentBack = await edit(rob, robs, { lot: { price_c: hc(5500) }, unitsLeft: 22, unitsLeftWas: 22 });
     assert(sentBack.status === 200 && row(robs).lot_units === 20 && row(robs).lot_price_c === hc(5500), 'sent back as it is, the price for all keeps the 20 it was for');
-    const rebound = await edit(rob, robs, { lot: { price_c: hc(6000) } });
+    const rebound = await edit(rob, robs, { lot: { price_c: hc(6000) }, unitsLeft: 22, unitsLeftWas: 22 });
     assert(rebound.status === 200 && row(robs).lot_units === 22 && row(robs).lot_price_c === hc(6000) && rebound.body.post.lot?.units === 22,
         `a new price for all is for the 22 left (6,000 < 6,600) (${brief(rebound)})`);
     const lower = await edit(rob, robs, { price_c: hc(250) });
@@ -215,6 +216,19 @@ async function main(): Promise<void> {
     const withCount = await edit(rob, robs, { unitsLeft: 18, unitsLeftWas: 22, lot: { price_c: hc(5000) } });
     assert(withCount.status === 200 && row(robs).units_left === 18 && row(robs).lot_units === 18 && row(robs).lot_price_c === hc(5000),
         'a new count and a price for all in one edit: the price is for the new count');
+    // A cancel while the edit screen was open (P1's settleItemDeal puts 2 back; made here by hand): 18 → 20. Rob's screen
+    // still reads 18 and he names all 18 for 4,500. Red if itemColumnsOnEdit binds a new price for all to the stored count
+    // without the count seen: 200, and "All 20 for 4,500" on offer, 2 more panels than he priced.
+    db.prepare('UPDATE posts SET units_left = 20 WHERE id = ?').run(robs);
+    const staleLot = await edit(rob, robs, { lot: { price_c: hc(4500) }, unitsLeft: 18, unitsLeftWas: 18, title: 'Stale price for all' });
+    const r8 = row(robs);
+    assert(staleLot.status === 409 && staleLot.body?.code === 'units_changed' && staleLot.body?.unitsLeft === 20 && staleLot.body?.error === said('units_changed', { count: 20 })
+        && r8.units_left === 20 && r8.lot_price_c === hc(5000) && r8.lot_units === 18 && r8.title === 'Solar panels, 300 W',
+        `a new price for all with the count moved under the screen: refused 409 with the count now, nothing of the edit lands (${brief(staleLot)})`);
+    const noSeen = await edit(rob, robs, { lot: { price_c: hc(4500) } });
+    assert(noSeen.status === 409 && noSeen.body?.code === 'units_changed' && row(robs).lot_price_c === hc(5000), `a new price for all with no count seen is refused the same (${brief(noSeen)})`);
+    const reasked = await edit(rob, robs, { lot: { price_c: hc(4500) }, unitsLeft: 20, unitsLeftWas: 20 });
+    assert(reasked.status === 200 && row(robs).lot_units === 20 && row(robs).lot_price_c === hc(4500), 'saved again with the count now: the price for all is for the 20 he saw');
     const cleared = await edit(rob, robs, { lot: null });
     assert(cleared.status === 200 && row(robs).lot_price_c === null && row(robs).lot_units === null && !('lot' in cleared.body.post), 'null takes the price for all off');
     const needEach = await call('POST', '/api/marketplace/posts', rob, { type: 'need', title: 'Seedlings wanted', category: 'garden', description: '', authorPublicKey: rob.pk, photos: TEST_PHOTOS, price_c: hc(2) });
@@ -225,13 +239,35 @@ async function main(): Promise<void> {
                 VALUES ('deal-open', ?, ?, ?, ?, 2, 'pending', 'each')`).run(robs, dana.pk, rob.pk, hc(600));
     const outFrozen = await edit(rob, robs, { priceType: 'fixed', price_c: hc(300) });
     assert(outFrozen.status === 400 && outFrozen.body?.error === PRICE_FROZEN_ERROR && row(robs).price_type === 'each', `out of Each under an open deal: refused, as any unit change is (${brief(outFrozen)})`);
-    const stock = await edit(rob, robs, { unitsLeft: 16, unitsLeftWas: 18 });
+    const stock = await edit(rob, robs, { unitsLeft: 16, unitsLeftWas: 20 });
     assert(stock.status === 200 && row(robs).units_left === 16, 'the count still changes under an open deal: it is the seller\'s stock, never frozen');
     db.prepare("UPDATE marketplace_transactions SET status = 'cancelled' WHERE id = 'deal-open'").run();
     const out = await edit(rob, robs, { priceType: 'fixed', price_c: hc(5000), unitsLeft: 16, unitsLeftWas: 16, lot: { price_c: hc(1) } });
     const r9 = row(robs);
     assert(out.status === 200 && r9.price_type === 'fixed' && r9.units_left === null && r9.lot_price_c === null && r9.lot_units === null && !('unitsLeft' in out.body.post),
         `out of Each: all three cleared, whatever the screen sent back (${brief(out)})`);
+    // A weekly Offer with a live standing deal (made here by hand: the arrangement and its paid period in trust). Its periods
+    // don't freeze the unit (assertPriceNotFrozen), so the edit into Each is the per-item rule's to refuse. Red if
+    // itemColumnsOnEdit lets it in: Repeatable goes to 0, and the next period takes the listing off the board under that
+    // standing deal and ends any other on it (design §1: Each is never weekly, no standing deal).
+    const box = await offer(rob, { title: 'Weekly veg box', priceType: 'weekly', price_c: hc(15), repeatable: true });
+    const veg = box.body.post.id as string;
+    const nowIso = new Date().toISOString();
+    db.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period_c, period_unit, starts_at, phase, periods_done,
+                current_tx_id, next_due_at, auth_signer, auth_signature, auth_payload)
+                VALUES ('sd-veg', ?, ?, ?, ?, 'week', ?, 'paid', 1, 'period-veg', ?, ?, 'sig', 'text')`)
+        .run(veg, dana.pk, rob.pk, hc(15), nowIso, new Date(Date.now() + 7 * 86_400_000).toISOString(), dana.pk);
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, standing_id, period_no)
+                VALUES ('period-veg', ?, ?, ?, ?, 1, 'pending', 'sd-veg', 1)`).run(veg, dana.pk, rob.pk, hc(15));
+    const underStanding = await edit(rob, veg, { priceType: 'each', price_c: hc(15), unitsLeft: 5 });
+    const v1 = row(veg);
+    assert(underStanding.status === 400 && underStanding.body?.error === PRICE_FROZEN_ERROR && v1.price_type === 'weekly' && v1.repeatable === 1 && v1.units_left === null,
+        `into Each under a live standing deal: refused, as a unit change under an open deal is; still weekly and Repeatable (${brief(underStanding)})`);
+    db.prepare("UPDATE marketplace_transactions SET status = 'completed' WHERE id = 'period-veg'").run();
+    db.prepare("UPDATE standing_deals SET phase = 'ended', ended_at = ?, ended_reason = 'stopped' WHERE id = 'sd-veg'").run(nowIso);
+    const afterStanding = await edit(rob, veg, { priceType: 'each', price_c: hc(15), unitsLeft: 5 });
+    assert(afterStanding.status === 200 && row(veg).price_type === 'each' && row(veg).units_left === 5 && row(veg).repeatable === 0,
+        `once that standing deal has ended, the edit into Each is made (${brief(afterStanding)})`);
 
     // ── 4. No deal yet ──────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 4. No deal yet');

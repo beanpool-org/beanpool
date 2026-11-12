@@ -10,7 +10,9 @@
  *    holds `unitsLeftWas`: the edit screen sends every field back, and a blind write would undo a take-up made while it was
  *    open (§4.6). The compare is the UPDATE's own WHERE ({@link writeItemCount}), inside the edit's transaction, so a
  *    future change that yields between the check and the write still can't lose a sale; a miss is 409 `units_changed`.
- *  - A price for all is bound to the count saved with it. Sent back unchanged with the count unchanged, it keeps its own.
+ *  - A price for all is bound to the count saved with it. Sent back unchanged with the count unchanged, it keeps its own;
+ *    a new one with the count unchanged needs `unitsLeftWas` to be the count now, as a changed count does.
+ *  - A listing with a live standing deal is never edited into Each (Each is never weekly or monthly).
  *
  * The deals (take-up with a number or all, the count held with the Beans, the five ends) are slice P1's. Until then no deal
  * starts on a listing priced for each one ({@link assertNoItemDealYet}), and the forms don't offer Each: the node's features
@@ -22,6 +24,8 @@ import {
 } from '@beanpool/core';
 import type { MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
+// posts.ts imports this module too; the sentence is read only when an edit is refused, never while the modules load.
+import { PRICE_FROZEN_ERROR } from './posts.js';
 
 const en = wordsFor('en');
 
@@ -82,12 +86,19 @@ export interface ItemEdit {
 /**
  * An edit's three columns, or null when it leaves them as they are (a listing that is not, and does not become, priced
  * `each`). Sets `updates.repeatable` to 0 for one that is. Refused before anything is written: a unit changed under an open
- * deal is engine/posts.ts assertPriceNotFrozen's, which runs first.
+ * deal is engine/posts.ts assertPriceNotFrozen's, which runs first; one changed into Each under a live standing deal, whose
+ * periods that check skips, is this one's.
  */
 export function itemColumnsOnEdit(existing: MarketplacePost, updates: Record<string, any>): ItemEdit | null {
     const wasEach = isPerItem(existing);
     if ((updates.priceType ?? existing.priceType) !== EACH) return wasEach ? { cols: { ...NOT_PER_ITEM }, count: null } : null;
     if (existing.type !== 'offer') throw itemRefusal({ code: 'each_offer_only' });
+    // Each is never weekly or monthly (design §1: no standing deal). A standing deal's periods don't freeze the unit
+    // (assertPriceNotFrozen), so a live one is refused here as a unit change under an open deal is: made Each, the listing
+    // would stop being Repeatable and its next period would take it off the board, ending any other standing deal on it.
+    if (!wasEach && db.prepare("SELECT 1 FROM standing_deals WHERE post_id = ? AND phase != 'ended' LIMIT 1").get(existing.id)) {
+        throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
+    }
     updates.repeatable = false;
     const stored = wasEach ? (existing.unitsLeft ?? null) : null;
     let units = stored;
@@ -107,7 +118,12 @@ export function itemColumnsOnEdit(existing: MarketplacePost, updates: Record<str
         const price = lotIn(updates.lot);
         // Sent back as it is, with the count left as it is, a price for all keeps the number it was set for.
         if (price === null) { lot_price_c = null; lot_units = null; }
-        else if (count !== null || price !== lot_price_c) { lot_price_c = price; lot_units = units; }
+        else if (count !== null || price !== lot_price_c) {
+            // A new price is for the count the seller saw (§4.6, §5): with the count left as it is, the row must still hold
+            // `unitsLeftWas`, line for line the changed count's rule above, else 409 with the count now.
+            if (count === null && updates.unitsLeftWas !== stored) throw itemRefusal({ code: 'units_changed', count: stored ?? 0 });
+            lot_price_c = price; lot_units = units;
+        }
     }
     const price_c = typeof updates.price_c === 'number' ? updates.price_c : existing.price_c;
     return { cols: assertColumns(price_c, { units_left: units, lot_price_c, lot_units }), count };

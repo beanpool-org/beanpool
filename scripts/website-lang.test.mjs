@@ -11,7 +11,11 @@
 //   - main.js WORDS object adapts strings by document.documentElement.lang;
 //   - main.js on English pages shows one-line "Read this in <language>" when navigator.language matches and no choice cookie is set, without redirecting;
 //   - layout at 320px in ar has no horizontal overflow (scrollWidth <= 320) in headless Chromium;
-//   - apps/website/_headers keeps at most one rule per path.
+//   - apps/website/_headers keeps at most one rule per path, and the home page's phone pictures (/assets/screenshots/*) a week in the cache;
+//   - every image on every English page and <lang> copy resolves to a file, and a translated copy moves every srcset candidate (img and
+//     picture <source>) under ../assets/, as it does src;
+//   - the home page's "A look inside" section (#see-it) lays out 2, 3 and 5 across with no sideways scroll, and the browser picks the dark
+//     or light picture and the 360 or 720 px file for the visitor's setting.
 //
 // Run: node --test scripts/website-lang.test.mjs
 
@@ -870,6 +874,174 @@ test('apps/website/_headers matches at most one rule per path', () => {
     for (const p of testPaths) {
         const hits = rules.filter(r => matches(r, p));
         assert.ok(hits.length <= 1, `${p} matched ${hits.length} rules: ${hits.join(', ')}`);
+    }
+});
+
+test('apps/website/_headers keeps the home page phone pictures a week in the cache, under one rule', () => {
+    const headers = fs.readFileSync(path.join(WEBSITE_DIR, '_headers'), 'utf8').split('\n');
+    const at = headers.findIndex(l => l.trim() === '/assets/screenshots/*');
+    assert.ok(at >= 0, '_headers has a rule for /assets/screenshots/*');
+    assert.equal(headers[at + 1].trim(), 'Cache-Control: public, max-age=604800', 'the rule is a week (604800 s) in the cache');
+    const rules = headers.filter(l => l.startsWith('/')).map(l => l.trim());
+    assert.equal(rules.filter(r => r === '/assets/screenshots/*').length, 1, 'the rule is there once');
+    // No other rule reaches a picture's path (Cloudflare would join two rules' headers).
+    const others = rules.filter(r => r !== '/assets/screenshots/*' && new RegExp(`^${r.split('*').map(s => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test('/assets/screenshots/phone-home-light-360.webp'));
+    assert.deepEqual(others, [], 'no other rule matches a screenshot path');
+});
+
+/** Every file name the home page's "A look inside" section points at: five screens, light and dark, 360 and 720 px wide. */
+const SEE_IT_FILES = ['home', 'market', 'listing', 'deal', 'ledger'].flatMap(screen =>
+    ['light', 'dark'].flatMap(scheme => [360, 720].map(w => `assets/screenshots/phone-${screen}-${scheme}-${w}.webp`)));
+
+test('a translated copy moves every srcset candidate (img and picture <source>) to ../assets/, not only src', () => {
+    const english = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
+    assert.ok(english.includes('id="see-it"'), 'the English home page has the #see-it section');
+
+    // The English page stands in for a translated source: the same markup and paths a translator copies.
+    const render = (html) => renderTranslatedPage('es', 'index.html', `<!-- source-hash: ${pageContentHash(english)} -->\n${html}`, english);
+    const rendered = render(english);
+    assert.ok(
+        rendered.includes('<source media="(prefers-color-scheme: dark)" srcset="../assets/screenshots/phone-home-dark-360.webp 1x, ../assets/screenshots/phone-home-dark-720.webp 2x">'),
+        'the dark <source> lists both of its candidates under ../assets/');
+    assert.ok(
+        rendered.includes('src="../assets/screenshots/phone-home-light-360.webp" srcset="../assets/screenshots/phone-home-light-360.webp 1x, ../assets/screenshots/phone-home-light-720.webp 2x"'),
+        'the light <img> moves its src and both srcset candidates');
+    const stray = [...rendered.matchAll(/\b(?:src|srcset)="([^"]*)"/g)]
+        .flatMap(m => m[1].split(',').map(c => c.trim().split(/\s+/)[0]))
+        .filter(u => /^assets\//.test(u) || /^\.\.\/\.\.\/assets\//.test(u));
+    assert.deepEqual(stray, [], 'no src or srcset candidate is left as assets/… (or moved twice)');
+    for (const file of SEE_IT_FILES) {
+        assert.ok(rendered.includes(`../${file}`), `the copy points at ../${file}`);
+    }
+
+    // A list written across lines, and a candidate that is already one level up, are each handled.
+    const spread = english.replace('srcset="assets/screenshots/phone-market-dark-360.webp 1x, assets/screenshots/phone-market-dark-720.webp 2x"',
+        'srcset="\n  assets/screenshots/phone-market-dark-360.webp 1x,\n  assets/screenshots/phone-market-dark-720.webp 2x"');
+    assert.notEqual(spread, english, 'the test page really has the list spread across lines');
+    const renderedSpread = render(spread);
+    assert.ok(renderedSpread.includes('srcset="\n  ../assets/screenshots/phone-market-dark-360.webp 1x,\n  ../assets/screenshots/phone-market-dark-720.webp 2x"'),
+        'a list spread over several lines moves every candidate');
+    const already = english.replace('srcset="assets/screenshots/phone-listing-dark-360.webp 1x, assets/screenshots/phone-listing-dark-720.webp 2x"',
+        'srcset="../assets/screenshots/phone-listing-dark-360.webp 1x, assets/screenshots/phone-listing-dark-720.webp 2x"');
+    assert.ok(render(already).includes('srcset="../assets/screenshots/phone-listing-dark-360.webp 1x, ../assets/screenshots/phone-listing-dark-720.webp 2x"'),
+        'a candidate already under ../assets/ is left alone and its neighbour still moves');
+});
+
+test('every image on the English pages and on every <lang> copy resolves to a file (src, srcset and picture sources)', () => {
+    const IMAGE_ATTRS = [['img', 'src'], ['img', 'srcset'], ['source', 'srcset']];
+    let checked = 0;
+    const missing = [];
+    for (const lang of LANGS) {
+        for (const page of lang === 'en' ? ALL_PAGES : TRANSLATED_PAGES) {
+            const file = lang === 'en' ? path.join(WEBSITE_DIR, page) : path.join(WEBSITE_DIR, lang, page);
+            const { document } = new JSDOM(fs.readFileSync(file, 'utf8')).window;
+            for (const [tag, attr] of IMAGE_ATTRS) {
+                for (const el of document.querySelectorAll(`${tag}[${attr}]`)) {
+                    const urls = attr === 'srcset' ? el.getAttribute(attr).split(',').map(c => c.trim().split(/\s+/)[0]) : [el.getAttribute(attr).trim()];
+                    for (const url of urls.filter(Boolean)) {
+                        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(url)) continue; // https:, data:, … (not files of ours)
+                        const clean = url.replace(/[?#].*$/, '');
+                        const target = clean.startsWith('/') ? path.join(WEBSITE_DIR, clean) : path.resolve(path.dirname(file), clean);
+                        checked++;
+                        if (!fs.existsSync(target)) missing.push(`${path.relative(REPO_ROOT, file)}: <${tag} ${attr}> ${url}`);
+                    }
+                }
+            }
+        }
+    }
+    assert.deepEqual(missing, [], `images that do not resolve:\n  ${missing.join('\n  ')}`);
+    assert.ok(checked > 20, `the check really looked at images (${checked})`);
+});
+
+test('the home page "A look inside" section uses exactly the 20 phone pictures on disk, five figures with captions and sizes', () => {
+    const english = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
+    const { document } = new JSDOM(english).window;
+    const section = document.getElementById('see-it');
+    assert.ok(section, 'index.html has #see-it');
+    const ids = [...document.querySelectorAll('section[id]')].map(s => s.id);
+    assert.ok(ids.indexOf('how-it-works') < ids.indexOf('see-it') && ids.indexOf('see-it') < ids.indexOf('features'),
+        `#see-it sits between #how-it-works and #features (${ids.join(', ')})`);
+    const figures = [...section.querySelectorAll('figure')];
+    assert.equal(figures.length, 5, 'five figures');
+    for (const f of figures) {
+        assert.equal(f.querySelectorAll('picture > source[media="(prefers-color-scheme: dark)"]').length, 1, 'one dark <source>');
+        const img = f.querySelector('picture > img');
+        assert.ok(img, 'a light <img> in the <picture>');
+        assert.equal(img.getAttribute('width'), '360');
+        assert.equal(img.getAttribute('height'), '640');
+        assert.equal(img.getAttribute('loading'), 'lazy');
+        assert.equal(img.getAttribute('decoding'), 'async');
+        assert.ok(img.getAttribute('alt').length > 20, 'alt text names what is shown');
+        assert.ok(f.querySelector('figcaption')?.textContent.trim().length > 0, 'a caption');
+    }
+    const used = new Set([...section.querySelectorAll('img, source')].flatMap(el => [el.getAttribute('src'), ...(el.getAttribute('srcset') ?? '').split(',').map(c => c.trim().split(/\s+/)[0])]).filter(Boolean));
+    assert.deepEqual([...used].sort(), [...SEE_IT_FILES].sort(), 'the section uses the 20 files, no other');
+    const onDisk = fs.readdirSync(path.join(WEBSITE_DIR, 'assets', 'screenshots')).map(f => `assets/screenshots/${f}`).sort();
+    assert.deepEqual(onDisk, [...SEE_IT_FILES].sort(), 'assets/screenshots holds those 20 files and nothing left over');
+});
+
+test('"A look inside" lays out 2, 3 and 5 across, never scrolls sideways, and picks the picture for the visitor\'s light or dark setting', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2' };
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const browser = await launchBrowser();
+    try {
+        const cases = [
+            { width: 320, across: 2, scale: 1 },
+            { width: 390, across: 2, scale: 2 },
+            { width: 640, across: 2, scale: 1 },
+            { width: 641, across: 3, scale: 1 },
+            { width: 1023, across: 3, scale: 1 },
+            { width: 1024, across: 5, scale: 1 },
+            { width: 1280, across: 5, scale: 2 },
+        ];
+        for (const { width, across, scale } of cases) {
+            for (const scheme of ['light', 'dark']) {
+                const page = await browser.newPage({ viewport: { width, height: 900 }, colorScheme: scheme, deviceScaleFactor: scale });
+                await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load' });
+                await page.locator('#see-it').scrollIntoViewIfNeeded();
+                await page.waitForFunction(() => [...document.querySelectorAll('#see-it img')].every(i => i.complete), null, { timeout: 15000 });
+                const m = await page.evaluate(() => {
+                    const figs = [...document.querySelectorAll('#see-it figure')];
+                    const rects = figs.map(f => f.getBoundingClientRect());
+                    const imgs = [...document.querySelectorAll('#see-it img')];
+                    return {
+                        count: figs.length,
+                        firstRow: rects.filter(r => Math.abs(r.top - rects[0].top) < 2).length,
+                        rowTops: [...new Set(rects.map(r => Math.round(r.top)))].length,
+                        rightMost: Math.max(...rects.map(r => r.right)),
+                        leftMost: Math.min(...rects.map(r => r.left)),
+                        scrollWidth: document.documentElement.scrollWidth,
+                        clientWidth: document.documentElement.clientWidth,
+                        loaded: imgs.map(i => i.naturalWidth > 0),
+                        current: imgs.map(i => i.currentSrc),
+                        shapes: imgs.map(i => Math.abs(i.getBoundingClientRect().height / i.getBoundingClientRect().width - 16 / 9) < 0.02),
+                    };
+                });
+                const where = `${width}px ${scheme} @${scale}x`;
+                assert.equal(m.count, 5, `${where}: five figures`);
+                assert.equal(m.firstRow, across, `${where}: ${across} across in the first row`);
+                assert.equal(m.rowTops, Math.ceil(5 / across), `${where}: ${Math.ceil(5 / across)} rows`);
+                assert.ok(m.scrollWidth <= m.clientWidth, `${where}: no sideways scroll (scrollWidth ${m.scrollWidth} <= clientWidth ${m.clientWidth})`);
+                assert.ok(m.leftMost >= 0 && m.rightMost <= width, `${where}: every figure inside the viewport (${m.leftMost}..${m.rightMost})`);
+                assert.ok(m.loaded.every(Boolean), `${where}: every picture loaded`);
+                assert.ok(m.shapes.every(Boolean), `${where}: every picture keeps the phone's 9:16 shape`);
+                for (const src of m.current) {
+                    assert.ok(src.includes(`-${scheme}-${scale === 2 ? 720 : 360}.webp`), `${where}: picked ${src}`);
+                }
+                await page.close();
+            }
+        }
+    } finally {
+        await browser.close();
+        server.close();
     }
 });
 

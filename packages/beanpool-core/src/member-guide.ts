@@ -361,7 +361,10 @@ export function splitBold(text: string): Array<{ text: string; bold: boolean }> 
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 // Offline, over the text on the phone. Every word typed must appear somewhere on a page (a word may be the start
-// of a longer one: "vot" finds "voting"). Titles weigh most, then summaries, headings, then the body.
+// of a longer one: "vot" finds "voting"; a plural finds its singular: "gifts" finds "gift"). Titles weigh most, then
+// summaries, headings, then the body. A page whose title or summary has more of the typed words comes before one that
+// only says them in its body, however often (the credit-risk page says "gift" in most paragraphs; the page named for
+// sending one is "Sending a gift"). Pages that tie on that are ordered by score.
 
 /** Words members may type that the guide deliberately says differently. */
 const SEARCH_SYNONYMS: Record<string, string[]> = {
@@ -371,6 +374,7 @@ const SEARCH_SYNONYMS: Record<string, string[]> = {
     seed: ['words'], phrase: ['words'], password: ['words'], mnemonic: ['words'], backup: ['words'],
     chat: ['message', 'talk'], dm: ['message'], inbox: ['message'],
     money: ['beans'], coins: ['beans'], currency: ['beans'], credits: ['beans'],
+    give: ['gift'],
     delete: ['delete', 'remove'], quit: ['leave'], ban: ['block', 'remove'],
     dark: ['dark', 'appearance'], theme: ['appearance'],
     vote: ['vote', 'decision'], proposal: ['decision'], governance: ['decision'],
@@ -420,7 +424,7 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
 ): Array<GuideSearchResult<P>> {
     const terms = [...new Set(words(query).filter(t => t.length >= 2))].slice(0, 8);
     if (terms.length === 0) return [];
-    const results: Array<GuideSearchResult<P>> = [];
+    const results: Array<{ result: GuideSearchResult<P>; named: number }> = [];
     for (const page of guide.guides) {
         // A page shown in the member's language is found by its English too: a member may type either.
         const title = [...words(page.title), ...(page.english?.title ? words(page.english.title) : [])];
@@ -428,28 +432,36 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
         const allBlocks = page.englishBlocks ? [...page.blocks, ...page.englishBlocks] : page.blocks;
         const blocks = blockTexts({ blocks: allBlocks as readonly OperatorGuideBlock[] }).map(b => ({ ...b, words: words(b.text) }));
         let score = 0;
+        /** How many of the typed words the page's title or summary has. */
+        let named = 0;
         let firstHit: { text: string; term: string } | null = null;
         let everyTerm = true;
         for (const term of terms) {
             const alternatives = [term, ...(SEARCH_SYNONYMS[term] ?? [])];
-            const hits = (ws: string[]) => ws.filter(w => alternatives.some(a => w.startsWith(a))).length;
-            let termScore = hits(title) * 10 + hits(summary) * 5;
+            // A plural also finds the whole singular word (not its prefix: "beans" must not find every "BeanPool").
+            const singular = term.length > 3 && term.endsWith('s') && !term.endsWith('ss') ? term.slice(0, -1) : null;
+            const matches = (w: string) => alternatives.some(a => w.startsWith(a)) || w === singular;
+            const hits = (ws: string[]) => ws.filter(matches).length;
+            const inTitle = hits(title);
+            const inSummary = hits(summary);
+            let termScore = inTitle * 10 + inSummary * 5;
             for (const b of blocks) {
                 const n = hits(b.words);
                 if (n === 0) continue;
                 termScore += Math.min(n, 3) * (b.heading ? 3 : 1);
-                if (!firstHit) {
-                    const matched = b.words.find(w => alternatives.some(a => w.startsWith(a)))!;
-                    firstHit = { text: b.text, term: matched };
-                }
+                if (!firstHit) firstHit = { text: b.text, term: b.words.find(matches)! };
             }
             if (termScore === 0) { everyTerm = false; break; }
             score += termScore;
+            if (inTitle + inSummary > 0) named++;
         }
         if (!everyTerm) continue;
-        results.push({ page, score, snippet: firstHit ? snippetAround(firstHit.text, firstHit.term) : page.summary });
+        results.push({ result: { page, score, snippet: firstHit ? snippetAround(firstHit.text, firstHit.term) : page.summary }, named });
     }
-    return results.sort((a, b) => b.score - a.score || a.page.title.localeCompare(b.page.title)).slice(0, limit);
+    return results
+        .sort((a, b) => b.named - a.named || b.result.score - a.result.score || a.result.page.title.localeCompare(b.result.page.title))
+        .slice(0, limit)
+        .map(r => r.result);
 }
 
 // ─── Learn videos ────────────────────────────────────────────────────────────

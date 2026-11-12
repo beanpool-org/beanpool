@@ -481,7 +481,8 @@ async function main(): Promise<void> {
         for (const who of [cy, hal]) built(`${who.name} is given a 1,400-Bean line (a tier gives none)`, await main.send('grant-line', { pk: who.pk, amount_c: 140000 }));
         const knitters = built('Hal starts a group on his own', await S_(hal, '/api/groups', { name: 'Knitters', description: 'Anyone who knits' }));
         const knittersId = knitters.group?.id ?? knitters.id;
-        built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
+        built('the admin gives Eve a Resident badge (recognition only: a row in member_badges the take-over carries)', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
+        built('and a 200-Bean line to buy with, which a badge never gives', await main.send('grant-line', { pk: eve.pk, amount_c: 20000 }));
         built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
         await offer(eve, 'Mending', 2);
         const deeCash = await offer(dee, 'Kindling', 3, { cashAlsoNeeded: true });

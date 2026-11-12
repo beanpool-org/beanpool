@@ -58,7 +58,7 @@ async function main() {
     const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { getMemberTrustProfile } = await import('@beanpool/engine');
-    const { tierForCredit } = await import('@beanpool/core');
+    const { TIER_LEVELS, tierIndexForName } = await import('@beanpool/core');
 
     await initTls();
     se.initStateEngine();
@@ -106,7 +106,8 @@ async function main() {
         return { status: res.status, text: await res.text() };
     }
     // Each author's badge worked out fresh, as rowToPost did for every post before this change.
-    const badgeOf = (pk: string) => { try { return tierForCredit(getMemberTrustProfile(db, pk).tierCredit).minCredit; } catch { return 0; } };
+    // The least credit of the tier the profile shows: what they did, or a badge an owner or admin gave where higher (engine/badges.ts).
+    const badgeOf = (pk: string) => { try { return TIER_LEVELS[Math.max(0, tierIndexForName(getMemberTrustProfile(db, pk).tier.name))].minCredit; } catch { return 0; } };
 
     // Every time a trust profile is worked out: getMemberTrustStats' first statement, run once a profile.
     const Statement = Object.getPrototypeOf(db.prepare('SELECT 1')) as { get: (...a: unknown[]) => unknown };

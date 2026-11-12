@@ -6,7 +6,9 @@
  *
  *   1. the count is the notices not yet opened (GET /api/notices/push?unseen=1), never more than 99+
  *   2. opening the sheet marks nothing: the rows, with their real words, and the count stay
- *   3. a row's tap opens its thing by the push tap's own routes (noticeRoute) and marks it, and only it
+ *   3. a row's tap reads the notice in full and marks nothing (Marty, 12 Nov 2026: "I don't see the full message and it goes to a
+ *      page in BP and then the notification is gone"); Open goes to its thing by the push tap's own routes (noticeRoute) and
+ *      THEN marks it, Clear marks it, Back and close leave it where it was
  *   4. opening the chat marks its rows: the node marks them and tells the sockets (`bell_activity` here), and the count follows
  *   5. a notice kept: the node's word reads the list again, and the count goes up; nothing else is synced for it
  *
@@ -24,7 +26,7 @@ const bus = vi.hoisted(() => ({ listeners: new Map<string, Set<(d: unknown) => v
 vi.mock('react-native', async () => {
     const { useEffect } = await import('react');
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, onLayout } = props;
+        const { children, onPress, accessibilityLabel, onLayout, testID, numberOfLines } = props;
         // The header's row at the floor's width (320 dp less the bean and the right-hand icons).
         useEffect(() => { onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 120, height: 48 } } }); }, []);
         const attrs: Record<string, unknown> = {};
@@ -32,6 +34,9 @@ vi.mock('react-native', async () => {
         // backdrop behind the sheet (a DOM click would bubble to it).
         if (onPress) attrs.onClick = (e: { stopPropagation: () => void }) => { e.stopPropagation(); onPress(); };
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (testID) attrs['data-testid'] = testID;
+        // A Text cut to some lines carries the number, so a test can see that the full view cuts nothing.
+        if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     return {
@@ -135,7 +140,7 @@ async function renderHeader() {
 }
 const bell = () => document.querySelector('[data-icon="bell-outline"]')!.closest('button') as HTMLElement;
 const openSheet = async () => { await act(async () => { bell().click(); }); return document.querySelector('[role="dialog"]') as HTMLElement; };
-const rows = () => Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => /sent you a message|asked for/.test(b.getAttribute('aria-label') ?? '')) as HTMLElement[];
+const rows = () => Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => /sent you a message|asked for|AI assistant/.test(b.getAttribute('aria-label') ?? '')) as HTMLElement[];
 const fire = (data: unknown) => act(async () => { bus.listeners.get('bell_activity')?.forEach(fn => fn(data)); });
 
 describe('the bell (components/NeedsYouIcons.tsx)', () => {
@@ -167,22 +172,114 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         expect(bell().textContent).toBe('2');
     });
 
-    it("a row's tap opens its thing by the push tap's routes and marks it, and only it", async () => {
+    const LONG_BODY = 'An AI assistant connected to your community today and took two posts down. '.repeat(12).trim();
+    const LONG_TITLE = '🤖 An assistant took posts down, and it has more to say than a row can show';
+    const longNotice = () => notice('n3', { kind: 'market.request', title: LONG_TITLE, body: LONG_BODY, data: { screen: 'post', postId: POST } });
+    const read = () => document.querySelector('[data-testid="bell-read"]') as HTMLElement | null;
+    const inRead = (label: string) => Array.from(document.querySelectorAll('[data-testid="bell-read"] button')).find(b => b.getAttribute('aria-label') === label) as HTMLElement | undefined;
+
+    it("a row's tap reads the notice in full and marks nothing: the whole title and body, no cut, no page, no mark", async () => {
+        node.notices = [notice('n1'), longNotice()];
+        await renderHeader();
+        const sheet = await openSheet();
+        // In the list the row is cut to a few lines, as always.
+        expect(sheet.querySelector('[data-lines]')).not.toBeNull();
+        await act(async () => { rows()[1].click(); });
+        await settle();
+        expect(read()).not.toBeNull();
+        expect(read()!.querySelector('[data-testid="bell-read-title"]')!.textContent).toBe(LONG_TITLE);
+        expect(read()!.querySelector('[data-testid="bell-read-body"]')!.textContent).toBe(LONG_BODY);
+        // Nothing in the full view is cut to a number of lines.
+        expect(read()!.querySelector('[data-lines]')).toBeNull();
+        expect(read()!.textContent).toContain('2 minutes ago');
+        expect(nodePost.signedPost).not.toHaveBeenCalled();
+        expect(nav.push).not.toHaveBeenCalled();
+        expect(bell().textContent).toBe('2');
+    });
+
+    it("Open goes to its thing by the push tap's routes, THEN marks it, and only it", async () => {
         node.notices = [notice('n1'), notice('n2', { kind: 'market.request', title: '🤝 Request', body: 'Ben asked for your jam', data: { screen: 'post', postId: POST } })];
         await renderHeader();
         await openSheet();
         await act(async () => { rows()[1].click(); });
         await settle();
+        expect(inRead('Open')).toBeDefined();
+        await act(async () => { inRead('Open')!.click(); });
+        await settle();
         expect(nav.push).toHaveBeenCalledWith(`/post/${POST}`);
         expect(nodePost.signedPost).toHaveBeenCalledWith(NODE, '/api/notices/push/seen', { ids: ['n2'] }, IDENTITY);
+        // It went there first, and the mark came after.
+        expect(nav.push.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(nodePost.signedPost).mock.invocationCallOrder[0]);
         expect(bell().textContent).toBe('1');
         expect(document.querySelector('[role="dialog"]')).toBeNull();
         await openSheet();
         await act(async () => { rows()[0].click(); });
         await settle();
+        await act(async () => { inRead('Open')!.click(); });
+        await settle();
         expect(nav.push).toHaveBeenLastCalledWith(`/chat/${CHAT}`);
         expect(bell().getAttribute('aria-label')).toBe('Notifications');
         expect(bell().textContent).toBe('');
+    });
+
+    it('Clear marks it seen, opens nothing, and goes back to the list with the rest', async () => {
+        node.notices = [notice('n1'), notice('n2', { kind: 'market.request', title: '🤝 Request', body: 'Ben asked for your jam', data: { screen: 'post', postId: POST } })];
+        await renderHeader();
+        await openSheet();
+        await act(async () => { rows()[1].click(); });
+        await settle();
+        await act(async () => { inRead('Clear this notice')!.click(); });
+        await settle();
+        expect(nodePost.signedPost).toHaveBeenCalledTimes(1);
+        expect(nodePost.signedPost).toHaveBeenCalledWith(NODE, '/api/notices/push/seen', { ids: ['n2'] }, IDENTITY);
+        expect(nav.push).not.toHaveBeenCalled();
+        expect(read()).toBeNull();
+        expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+        expect(rows().map(r => r.getAttribute('aria-label'))).toEqual(['💬 New Message. Maya sent you a message']);
+        expect(bell().textContent).toBe('1');
+    });
+
+    it('Back and close leave the notice in the bell, unseen, whatever was read', async () => {
+        node.notices = [notice('n1'), notice('n2')];
+        await renderHeader();
+        await openSheet();
+        await act(async () => { rows()[0].click(); });
+        await settle();
+        await act(async () => { inRead('Back')!.click(); });
+        await settle();
+        expect(read()).toBeNull();
+        expect(rows()).toHaveLength(2);
+        expect(bell().textContent).toBe('2');
+        // Closing the sheet from the full view too (the backdrop).
+        await act(async () => { rows()[1].click(); });
+        await settle();
+        const close = Array.from(document.querySelectorAll('[role="dialog"] button')).find(b => b.getAttribute('aria-label') === 'Close') as HTMLElement;
+        await act(async () => { close.click(); });
+        await settle();
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+        expect(nodePost.signedPost).not.toHaveBeenCalled();
+        expect(nav.push).not.toHaveBeenCalled();
+        expect(bell().textContent).toBe('2');
+        // Reopened, the list is back, not the full view.
+        await openSheet();
+        expect(read()).toBeNull();
+        expect(rows()).toHaveLength(2);
+    });
+
+    it('a notice with nowhere to go has no Open, only Clear; one the node marks meanwhile takes the full view back to the list', async () => {
+        node.notices = [notice('n1', { kind: 'something.newer', title: 'A word from your community', body: 'Read this one here.', data: {} }), notice('n2')];
+        await renderHeader();
+        await openSheet();
+        const word = Array.from(document.querySelectorAll('[role="dialog"] button')).find(b => /Read this one here/.test(b.getAttribute('aria-label') ?? '')) as HTMLElement;
+        await act(async () => { word.click(); });
+        await settle();
+        expect(read()!.textContent).toContain('Read this one here.');
+        expect(inRead('Open')).toBeUndefined();
+        expect(inRead('Clear this notice')).toBeDefined();
+        await fire({ type: 'push_notices_seen', ids: ['n1'] });
+        expect(read()).toBeNull();
+        expect(rows()).toHaveLength(1);
+        expect(bell().textContent).toBe('1');
     });
 
     const xFor = (id: number) => Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => b.getAttribute('aria-label') === 'Clear this notice')[id] as HTMLElement;

@@ -187,8 +187,8 @@ export const palette = {
 function lightTree(set: BrandSet) {
     const brandLight = brandColours(set);
     const ground = brandGrounds(set).phone;
-    // brand.onDark only: the brand green as words on a dark ground. ink.brand is the same in every dark set (the library
-    // gives no role but the accent family a set value of its own).
+    // brand.onDark only: the brand green as words on a dark ground. ink.brand is the same in every dark set: only the
+    // library's 17 themed leaves (the accent family and the own bubble) carry a set value, and its test fails on an 18th.
     const brandDark = brandColours('dark');
     return {
     // Text
@@ -506,7 +506,7 @@ function darkTree(set: BrandSet) {
     } as const;
 }
 
-/** Light, as before: what a screen draws in light, and the static set the files listed in colour-sets.test.ts import. */
+/** Light, as before: what a screen draws in light, and the static set (utils/__tests__/static-colours-ceiling.test.ts lists who imports it). */
 export const lightColors = lightTree('light');
 /** Classic dark, as before. */
 export const darkColors = darkTree('dark');

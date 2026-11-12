@@ -1168,10 +1168,8 @@ export function acceptPost(
         throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
     // A listing priced for each one (DESIGN-per-item-price-fable.md §4.1; engine/per-item.ts): taken up for a number of them or
-    // all of them, the total the buyer saw sent with it. A take-up that says how one is taken, of a listing that is no longer
-    // priced so (its seller changed the unit while the buyer's screen was open), is refused, never paid at the new price.
+    // all of them, with the total the buyer saw.
     const perItem = isPerItem(post);
-    if (!perItem && opts?.item?.option !== undefined) throw itemTakeUpRefusal({ code: 'price_changed' });
 
     // A standing deal (DESIGN-standing-deals-upfront-fable; Marty, 10 Nov 2026): a listing priced per week or per month,
     // taken up with the payer's signed authorisation. What they signed must be this listing, its author and its price per
@@ -1188,6 +1186,10 @@ export function acceptPost(
             // How many, which way, and what that comes to at the listing's own figures, which must be the total the buyer
             // saw (price_changed, count_refused). Never the hourly path's 0.01 fractions (F2): whole numbers only.
             item = itemTakeUpFor(post, opts?.item);
+            // Still there, as the listing was read: a plain refusal, before the funding check below, which records a
+            // keeper's deferred wage claim as it refuses (assertHoldFunded): never one for items that aren't there. No
+            // count moves until every guard has passed; the guarded write inside the hold is the authority.
+            assertItemStock(post, item);
             keptHours = item.n;
             return item.amount_c;
         }
@@ -1199,19 +1201,19 @@ export function acceptPost(
         return post.priceType !== 'fixed' ? dealAmountFor(post.price_c, hours!) : post.price_c;
     }, { authSigner: opts?.authSigner, standing: !!standing });
     const finalCredits = parties.amount_c;
-    // A total the buyer's screen showed, sent with any other take-up, holds it to that too: never a figure they did not see.
-    if (!perItem && !standing && opts?.item?.expect_c !== undefined && opts.item.expect_c !== finalCredits) {
+    // A take-up that says how a listing priced for each one is taken, of one that is not (its seller changed the unit while
+    // the buyer's screen was open), is refused, never paid at what it costs now; and a total the buyer's screen showed, sent
+    // with any other take-up, holds it to that total too. Asked after the listing's own refusals (a copy, a Need, a loan).
+    if (!perItem && opts?.item && (opts.item.option !== undefined
+        || (!standing && opts.item.expect_c !== undefined && opts.item.expect_c !== finalCredits))) {
         throw itemTakeUpRefusal({ code: 'price_changed' });
     }
     if (standing) {
         cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
         return startStanding(cb, standing, { txId: crypto.randomUUID(), row: 'insert', post, parties: { ...parties, oneAtATime: !post.repeatable }, actor: buyerPublicKey });
     }
-    // Still there, once every other guard has passed (the floor, the two-person rule, a paused enterprise): a plain refusal,
-    // before anything is held. The guarded write inside the hold below is the authority.
     // (Set inside the price callback above, which the type checker does not follow.)
     const taken = item as ItemTakeUp | null;
-    if (taken) assertItemStock(post, taken);
 
     const tx: MarketplaceTransaction = {
         id: crypto.randomUUID(),

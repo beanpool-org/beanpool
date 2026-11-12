@@ -50,6 +50,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { Buffer } from 'buffer';
 import { toEd25519Seed } from './ed25519-key.js';
+import { readVoicePart, voicePartBytes, voiceSealedTooBig, VoiceRefusedError, VOICE_PART, type VoiceInput, type VoicePart } from './voice.js';
 import { word } from './words.js';
 
 /** The nonce column's prefix for every encrypted line. */
@@ -87,10 +88,11 @@ export interface DmKeyContext {
 export type DmKeys = Pick<DmKeyContext, 'myEdPrivHex' | 'peerEdPubHex'>;
 
 /**
- * The words of a message, its photo, or the listing it is about (chat-about.ts). Each part is sealed and signed on its own,
- * bound to its message id and to its part name, so one can never be shown in another's place.
+ * The words of a message, its photo, the listing it is about (chat-about.ts), or its voice message (voice.ts). Each part is
+ * sealed and signed on its own, bound to its message id and to its part name, so one can never be shown in another's
+ * place. The voice part is sealed as bytes, by sealDmVoice only, and opened by openDmVoice only: never as words.
  */
-export type DmPart = 'body' | 'attachment' | 'about';
+export type DmPart = 'body' | 'attachment' | 'about' | 'voice';
 
 /** What a line is bound to besides its conversation. */
 export interface DmLineBinding {
@@ -98,7 +100,7 @@ export interface DmLineBinding {
     senderPubHex: string;
     /** The message id, exactly as the node stores it: the client's own UUID v4, lower case (the node lowers it). */
     messageId: string;
-    /** The words (default), the photo, or the listing it is about. */
+    /** The words (default), the photo, the listing it is about, or the voice message. */
     part?: DmPart;
 }
 
@@ -219,11 +221,10 @@ export function dmReplyToOf(metadata: unknown): string | null | undefined {
     return typeof meta.replyToId === 'string' && meta.replyToId ? meta.replyToId : undefined;
 }
 
-/** The sealed plaintext: [4][length of after][after, UTF-8][the words, UTF-8]. */
-function frame(text: string, after: string | null | undefined): Uint8Array {
+/** The sealed plaintext: [4][length of after][after, UTF-8][the part: the words as UTF-8, or a voice part's bytes]. */
+function frame(t: Uint8Array, after: string | null | undefined): Uint8Array {
     let a = typeof after === 'string' && after ? utf8ToBytes(after) : new Uint8Array(0);
     if (a.length > MAX_AFTER_BYTES) a = new Uint8Array(0);
-    const t = utf8ToBytes(text);
     const out = new Uint8Array(2 + a.length + t.length);
     out[0] = DM_LINE_FORMAT;
     out[1] = a.length;
@@ -232,10 +233,10 @@ function frame(text: string, after: string | null | undefined): Uint8Array {
     return out;
 }
 
-function unframe(pt: Uint8Array): { text: string; after: string | null } {
+function unframe(pt: Uint8Array): { content: Uint8Array; after: string | null } {
     if (pt.length < 2 || pt[0] !== DM_LINE_FORMAT || pt.length < 2 + pt[1]) throw new DmLineNotVerifiedError();
     const len = pt[1];
-    return { after: len ? utf8(pt.subarray(2, 2 + len)) : null, text: utf8(pt.subarray(2 + len)) };
+    return { after: len ? utf8(pt.subarray(2, 2 + len)) : null, content: pt.subarray(2 + len) };
 }
 
 // ─── The signature beside the seal ──────────────────────────────────────────────────────────
@@ -350,10 +351,22 @@ export function dmLineSigVerifies(line: DmPayload, binding: Omit<DmLineSigBindin
  * Seal a line (its words, its photo as a data URI, or the listing it is about) in format 4, and sign it as me, to the other
  * person. `after` is the id of the newest line this person had from the node when they wrote it (an edit keeps its line's
  * own). Refuses to seal a line naming anyone but me as sender, or an id the node would store differently. `nonceForVectors`
- * and `at` pin the bytes for the vectors (dm-line-vectors.ts); the apps give neither.
+ * and `at` pin the bytes for the vectors (dm-line-vectors.ts); the apps give neither. Words are never sealed as the voice
+ * part: sealDmVoice seals a voice message.
  */
 export function sealDmLine(
     text: string,
+    ctx: DmKeyContext,
+    line: DmLineBinding & { after?: string | null; replyToId?: string | null; at?: string },
+    nonceForVectors?: Uint8Array,
+): DmPayload {
+    if ((line.part ?? 'body') === VOICE_PART) throw new Error('A voice message is sealed by sealDmVoice, as bytes.');
+    return sealDmContent(utf8ToBytes(text), ctx, line, nonceForVectors);
+}
+
+/** sealDmLine's seal and signature, around any part's bytes. */
+function sealDmContent(
+    content: Uint8Array,
     ctx: DmKeyContext,
     line: DmLineBinding & { after?: string | null; replyToId?: string | null; at?: string },
     nonceForVectors?: Uint8Array,
@@ -370,7 +383,7 @@ export function sealDmLine(
     if (nonce.length !== NONCE_LEN) throw new Error('A line nonce is 24 bytes.');
     const nonceColumn = DM_NONCE_PREFIX + b64(nonce);
     const part = line.part ?? 'body';
-    const sealed = xchacha20poly1305(key, nonce, dmLineAad(ctx.conversationId, line, line.replyToId)).encrypt(frame(text, line.after));
+    const sealed = xchacha20poly1305(key, nonce, dmLineAad(ctx.conversationId, line, line.replyToId)).encrypt(frame(content, line.after));
     const digest = dmLineSigDigest(nonceColumn, sealed, {
         conversationId: ctx.conversationId, senderPubHex: line.senderPubHex, recipientPubHex: ctx.peerEdPubHex, messageId: line.messageId, part, at,
     });
@@ -438,7 +451,15 @@ function keyFor(keys: DmKeys, conversationId: string, cache?: KeyCache): Uint8Ar
     return key;
 }
 
+/** A line's words, opened: never a voice part's bytes as words. */
 function openWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: string, cache?: KeyCache): OpenedDmLine {
+    if ((line.part ?? 'body') === VOICE_PART) throw new DmLineNotVerifiedError();
+    const { content, ...opened } = openContentWith(payload, keys, line, myPubHex, cache);
+    return { ...opened, text: utf8(content) };
+}
+
+/** One part's bytes, opened under each conversation id the line may have been written under, its signature verified. */
+function openContentWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: string, cache?: KeyCache): Omit<OpenedDmLine, 'text'> & { content: Uint8Array } {
     // Only the two of them share this key; a line the node names as anyone else's is no line of theirs.
     if (line.senderPubHex !== myPubHex && line.senderPubHex !== keys.peerEdPubHex) throw new DmLineNotVerifiedError();
     const recipientPubHex = line.senderPubHex === myPubHex ? keys.peerEdPubHex : myPubHex;
@@ -467,10 +488,58 @@ function openWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: s
 
 /**
  * Open one part of a line under each conversation id it may have been written under, its sender's signature verified.
- * Throws DmLineNotVerifiedError when it doesn't open, or opens but its named sender didn't sign it.
+ * Throws DmLineNotVerifiedError when it doesn't open, or opens but its named sender didn't sign it, and for the voice
+ * part, which is never words (openDmVoice opens it).
  */
 export function openDmLine(payload: DmPayload, keys: DmKeys, line: DmLineRef): OpenedDmLine {
     return openWith(payload, keys, line, dmPublicKeyOf(keys.myEdPrivHex));
+}
+
+// ─── Voice messages (voice.ts; DESIGN-cross-chat-voice-fable.md §5.4) ───────────────────────
+
+/** What sealDmVoice binds a voice part to: a line's binding, its part always the voice part. */
+export type SealDmVoiceLine = Omit<DmLineBinding, 'part'> & { after?: string | null; replyToId?: string | null; at?: string };
+
+/** A voice part that opened, its sender's signature verified, and passed voice.ts's checks. */
+export interface OpenedDmVoice extends VoicePart {
+    format: 4;
+    /** The newest line the sender had from the node when they recorded it; null if none. */
+    after: string | null;
+    /** The conversation id it opened under. */
+    conversationId: string;
+    /** It opened only under an older conversation id named in its metadata, not the one it is stored in. */
+    moved: boolean;
+}
+
+/**
+ * Seal a voice message as its message's voice part, as bytes, under the conversation's key, and sign it as me to the other
+ * person: sealDmLine's seal and signature, with the part name `voice` bound into both. Refuses (VoiceRefusedError) what a
+ * reader would refuse: a length over VOICE_MAX_MS, bars that aren't VOICE_BARS bytes, a sound that isn't an .m4a, and a
+ * part over VOICE_SEALED_MAX_BYTES once sealed. `nonceForVectors` and `at` pin the bytes for the vectors (voice-vectors.ts).
+ */
+export function sealDmVoice(voice: VoiceInput, ctx: DmKeyContext, line: SealDmVoiceLine, nonceForVectors?: Uint8Array): DmPayload {
+    const sealed = sealDmContent(voicePartBytes(voice), ctx, { ...line, part: VOICE_PART }, nonceForVectors);
+    if (voiceSealedTooBig(sealed.ciphertext)) throw new VoiceRefusedError('too-big');
+    return sealed;
+}
+
+/**
+ * Open a voice part as openDmLine opens a line (under each conversation id it may have been written under, bound to its
+ * sender, message, reply and the part name `voice`, its sender's signature verified), then check it (voice.ts). Throws
+ * VoiceRefusedError: 'too-big' unopened, 'not-verified' when it doesn't open as this message's voice part or its named
+ * sender didn't sign it (a photo or words never open here), else the first check it fails.
+ */
+export function openDmVoice(payload: DmPayload, keys: DmKeys, line: Omit<DmLineRef, 'part'>): OpenedDmVoice {
+    if (!payload || typeof payload.ciphertext !== 'string' || typeof payload.nonce !== 'string') throw new VoiceRefusedError('not-verified');
+    if (voiceSealedTooBig(payload.ciphertext)) throw new VoiceRefusedError('too-big');
+    let opened: ReturnType<typeof openContentWith>;
+    try {
+        opened = openContentWith(payload, keys, { ...line, part: VOICE_PART }, dmPublicKeyOf(keys.myEdPrivHex));
+    } catch {
+        throw new VoiceRefusedError('not-verified');
+    }
+    const { content, ...rest } = opened;
+    return { ...rest, ...readVoicePart(content) };
 }
 
 /**

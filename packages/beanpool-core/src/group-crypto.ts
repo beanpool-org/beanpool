@@ -53,6 +53,7 @@ import { Buffer } from 'buffer';
 import { toEd25519Seed } from './ed25519-key.js';
 import { dmPublicKeyOf, identityX25519Public, identityX25519Secret } from './dm-crypto.js';
 import { isGroupVectorRng } from './group-vector-rng.js';
+import { readVoicePart, voicePartBytes, voiceSealedTooBig, VoiceRefusedError, VOICE_PART, type VoiceInput, type VoicePart } from './voice.js';
 
 /** The nonce column's prefix for every encrypted group line. Not the DM's (see the header). */
 export const GROUP_NONCE_PREFIX = 'group-xc20p-v1:';
@@ -83,8 +84,12 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 export type GroupEpochReason = 'start' | 'join' | 'approve' | 'invite' | 'remove' | 'leave' | 'rekey' | 'rotate';
 export const GROUP_EPOCH_REASONS: readonly GroupEpochReason[] = ['start', 'join', 'approve', 'invite', 'remove', 'leave', 'rekey', 'rotate'];
 
-/** The words of a message, its photo, or an edit of its words (§7.2). */
-export type GroupLinePart = 'body' | 'attachment' | 'edit';
+/**
+ * The words of a message, its photo, an edit of its words (§7.2), or its voice message (voice.ts). The voice part is sealed
+ * as bytes, by sealGroupVoice only, and opened by openGroupVoice only: never as words.
+ */
+export type GroupLinePart = 'body' | 'attachment' | 'edit' | 'voice';
+/** The parts sealGroupLine seals and openGroupLine opens: every part but the voice part. */
 const GROUP_LINE_PARTS: readonly GroupLinePart[] = ['body', 'attachment', 'edit'];
 
 /**
@@ -695,11 +700,10 @@ export function groupLineAad(b: GroupLineBinding): Uint8Array {
     return utf8ToBytes(JSON.stringify(parts));
 }
 
-/** [format][after length][after, UTF-8][the words, UTF-8]: the frame without its signature. */
-function unsignedFrame(text: string, after: string | null | undefined): Uint8Array {
+/** [format][after length][after, UTF-8][the part: the words as UTF-8, or a voice part's bytes]: the frame without its signature. */
+function unsignedFrame(t: Uint8Array, after: string | null | undefined): Uint8Array {
     let a = typeof after === 'string' && after ? utf8ToBytes(after) : new Uint8Array(0);
     if (a.length > MAX_AFTER_BYTES) a = new Uint8Array(0);
-    const t = utf8ToBytes(text);
     const out = new Uint8Array(2 + a.length + t.length);
     out[0] = GROUP_LINE_FORMAT;
     out[1] = a.length;
@@ -729,11 +733,11 @@ export function isGroupEncryptedPayload(p: { ciphertext?: unknown; nonce?: unkno
     return ct.length >= MIN_LINE_CIPHERTEXT && b64(ct) === p.ciphertext;
 }
 
-function checkLineBinding(b: GroupLineBinding): void {
+function checkLineBinding(b: GroupLineBinding, parts: readonly GroupLinePart[] = GROUP_LINE_PARTS): void {
     if (!isGroupId(b.groupId) || !isEpoch(b.epoch) || !isPubHex(b.senderPubHex) || typeof b.messageId !== 'string' || !b.messageId) {
         throw new Error('A line is bound to one group, one epoch, one sender and one message id.');
     }
-    if (b.part !== undefined && !GROUP_LINE_PARTS.includes(b.part)) throw new Error('A line part is body, attachment or edit.');
+    if (b.part !== undefined && !parts.includes(b.part)) throw new Error(`A line part is ${parts.join(', ')}.`);
     if (b.replyToId !== undefined && b.replyToId !== null && (typeof b.replyToId !== 'string' || !b.replyToId)) {
         throw new Error('A reply is sealed to the id of the message it answers.');
     }
@@ -761,17 +765,22 @@ export interface SealGroupLineInput {
  */
 export function sealGroupLine(text: string, input: SealGroupLineInput, opts?: GroupCryptoRandom): GroupLinePayload {
     if (typeof text !== 'string') throw new Error('A line is text.');
+    return sealGroupContent(utf8ToBytes(text), input, GROUP_LINE_PARTS, opts);
+}
+
+/** sealGroupLine's signature and seal, around any part's bytes, for a part among `parts`. */
+function sealGroupContent(content: Uint8Array, input: SealGroupLineInput, parts: readonly GroupLinePart[], opts?: GroupCryptoRandom): GroupLinePayload {
     if (!UUID_V4.test(input.messageId)) throw new Error('A line is sealed under its own lower-case UUID v4.');
     const { seed, pubHex } = me(input.myEdPrivHex);
     const binding: GroupLineBinding = {
         groupId: input.groupId, epoch: input.epoch, senderPubHex: pubHex, messageId: input.messageId,
         part: input.part ?? 'body', replyToId: input.replyToId ?? null,
     };
-    checkLineBinding(binding);
+    checkLineBinding(binding, parts);
     const nonce = rngOf(opts)(NONCE_LEN);
     if (nonce.length !== NONCE_LEN) throw new Error('A line nonce is 24 bytes.');
     const aad = groupLineAad(binding);
-    const unsigned = unsignedFrame(text, input.after);
+    const unsigned = unsignedFrame(content, input.after);
     const sig = ed25519.sign(lineDigest(aad, nonce, unsigned), seed);
     const frame = concatBytes(unsigned.subarray(0, 1), sig, unsigned.subarray(1));
     const ct = xchacha20poly1305(groupMessageKey(input.groupKey, input.messageId), nonce, aad).encrypt(frame);
@@ -780,10 +789,19 @@ export function sealGroupLine(text: string, input: SealGroupLineInput, opts?: Gr
 
 /**
  * Open a line with its message key (a moderator holding one disclosed line's key, §13) and verify its sender's
- * signature. Throws GroupLineNotVerifiedError when it doesn't open, or opens but wasn't signed by the sender it names.
+ * signature. Throws GroupLineNotVerifiedError when it doesn't open, or opens but wasn't signed by the sender it names, and
+ * for the voice part, which is never words (openGroupVoiceWithMessageKey opens it).
  */
 export function openGroupLineWithMessageKey(payload: GroupLinePayload, ref: GroupLineBinding, messageKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupLine {
-    try { checkLineBinding(ref); } catch { throw new GroupLineNotVerifiedError(); }
+    const { after, content } = openGroupContentWithMessageKey(payload, ref, messageKey, GROUP_LINE_PARTS, memo);
+    return { after, text: utf8(content) };
+}
+
+/** openGroupLineWithMessageKey's opening and signature check, for a part among `parts`: the part's bytes. */
+function openGroupContentWithMessageKey(
+    payload: GroupLinePayload, ref: GroupLineBinding, messageKey: Uint8Array, parts: readonly GroupLinePart[], memo?: GroupLineVerifyMemo,
+): { after: string | null; content: Uint8Array } {
+    try { checkLineBinding(ref, parts); } catch { throw new GroupLineNotVerifiedError(); }
     if (!payload || !isGroupEncryptedNonce(payload.nonce) || typeof payload.ciphertext !== 'string') {
         throw new GroupLineNotVerifiedError('Not an encrypted group line.');
     }
@@ -809,7 +827,7 @@ export function openGroupLineWithMessageKey(payload: GroupLinePayload, ref: Grou
     }
     return {
         after: afterLen ? utf8(unsigned.subarray(2, 2 + afterLen)) : null,
-        text: utf8(unsigned.subarray(2 + afterLen)),
+        content: unsigned.subarray(2 + afterLen),
     };
 }
 
@@ -818,6 +836,59 @@ export function openGroupLine(payload: GroupLinePayload, ref: GroupLineBinding, 
     let mk: Uint8Array;
     try { mk = groupMessageKey(groupKey, ref.messageId); } catch { throw new GroupLineNotVerifiedError(); }
     return openGroupLineWithMessageKey(payload, ref, mk, memo);
+}
+
+// ─── Voice messages (voice.ts; DESIGN-cross-chat-voice-fable.md §5.4) ───────────────────────
+
+/** What sealGroupVoice needs besides the voice message: a line's, its part always the voice part. */
+export type SealGroupVoiceInput = Omit<SealGroupLineInput, 'part'>;
+
+/** What a voice part is bound to: a line's binding, its part always the voice part. */
+export type GroupVoiceBinding = Omit<GroupLineBinding, 'part'>;
+
+/** A voice part that opened, its sender's signature verified, and passed voice.ts's checks. */
+export interface OpenedGroupVoice extends VoicePart {
+    /** The newest line the sender had from the node when they recorded it; null if none. */
+    after: string | null;
+}
+
+/**
+ * Seal a voice message as its message's voice part, as bytes, as me: sealGroupLine's signature and seal under the
+ * message's own key, with the part name `voice` bound into both. Refuses (VoiceRefusedError) what a reader would refuse:
+ * a length over VOICE_MAX_MS, bars that aren't VOICE_BARS bytes, a sound that isn't an .m4a, and a part over
+ * VOICE_SEALED_MAX_BYTES once sealed. RNG order (pinned by the vectors): the nonce (24).
+ */
+export function sealGroupVoice(voice: VoiceInput, input: SealGroupVoiceInput, opts?: GroupCryptoRandom): GroupLinePayload {
+    const sealed = sealGroupContent(voicePartBytes(voice), { ...input, part: VOICE_PART }, [VOICE_PART], opts);
+    if (voiceSealedTooBig(sealed.ciphertext)) throw new VoiceRefusedError('too-big');
+    return sealed;
+}
+
+/**
+ * Open a voice part with its message key and verify its sender's signature, as openGroupLineWithMessageKey opens a line,
+ * bound to the part name `voice`; then check it (voice.ts). Throws VoiceRefusedError: 'too-big' unopened, 'not-verified'
+ * when it doesn't open as this message's voice part under this key or its named sender didn't sign it (a photo or words
+ * never open here), else the first check it fails.
+ */
+export function openGroupVoiceWithMessageKey(payload: GroupLinePayload, ref: GroupVoiceBinding, messageKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupVoice {
+    if (!payload || typeof payload.ciphertext !== 'string') throw new VoiceRefusedError('not-verified');
+    if (voiceSealedTooBig(payload.ciphertext)) throw new VoiceRefusedError('too-big');
+    let opened: { after: string | null; content: Uint8Array };
+    try {
+        opened = openGroupContentWithMessageKey(payload, { ...ref, part: VOICE_PART }, messageKey, [VOICE_PART], memo);
+    } catch {
+        throw new VoiceRefusedError('not-verified');
+    }
+    return { after: opened.after, ...readVoicePart(opened.content) };
+}
+
+/** Open a voice part with its epoch's key (its message key is derived from it), as openGroupVoiceWithMessageKey. */
+export function openGroupVoice(payload: GroupLinePayload, ref: GroupVoiceBinding, groupKey: Uint8Array, memo?: GroupLineVerifyMemo): OpenedGroupVoice {
+    if (!payload || typeof payload.ciphertext !== 'string') throw new VoiceRefusedError('not-verified');
+    if (voiceSealedTooBig(payload.ciphertext)) throw new VoiceRefusedError('too-big');
+    let mk: Uint8Array;
+    try { mk = groupMessageKey(groupKey, ref.messageId); } catch { throw new VoiceRefusedError('not-verified'); }
+    return openGroupVoiceWithMessageKey(payload, ref, mk, memo);
 }
 
 /**

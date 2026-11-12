@@ -167,14 +167,17 @@ export {
     groupEpochCanonical, makeGroupEpochRecord, verifyGroupEpochRecord, openGroupEpochRecord, openMyGroupKey,
     groupTopUpCanonical, makeGroupTopUp, verifyGroupTopUp, openGroupTopUp,
     groupMessageKey, groupLineAad, isGroupEncryptedNonce, isGroupEncryptedPayload, sealGroupLine, openGroupLineWithMessageKey, openGroupLine,
+    sealGroupVoice, openGroupVoiceWithMessageKey, openGroupVoice,
     detectMentions, makeGroupEpochRecordAsync, groupLineVerdictKey,
     KEY_SUCCESSION_TAG, KEY_SUCCESSION_MAX, keySuccessionCanonical, makeKeySuccession, verifyKeySuccession, walkKeySuccession,
 } from './group-crypto.js';
 export type {
     GroupEpochReason, GroupLinePart, GroupCryptoRandom, GroupKeyWrap, GroupEpochRecord, GroupTopUp, GroupLinePayload, GroupLineBinding,
     OpenedGroupLine, GroupWrapBinding, GroupWrapOpenBinding, GroupServedWrap, MakeGroupEpochInput, GroupEpochCheck, GroupKeyOpenCheck, GroupTopUpCheck, SealGroupLineInput,
-    GroupEpochProgress, GroupLineVerifyMemo, FormerKey,
+    GroupEpochProgress, GroupLineVerifyMemo, FormerKey, SealGroupVoiceInput, GroupVoiceBinding, OpenedGroupVoice,
 } from './group-crypto.js';
+// Voice messages (DESIGN-cross-chat-voice-fable.md §5, V1): the part's constants, frame and checks, read by the node and both apps.
+export * from './voice.js';
 export { activityTarget } from './activity-target.js';
 export type { ActivityTarget, ActivityTargetItem } from './activity-target.js';
 export * from './calendar-month.js';

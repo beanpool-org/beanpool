@@ -91,7 +91,7 @@ Open your post and tap **Edit Post**. You see the same boxes, and the count read
 
 - You can change the count and the price for all of them while deals are under way. They are your stock, and each deal keeps the figures it was made at.
 - You cannot change the price for one while a deal is under way, as for any Offer. Decline or cancel the deal first.
-- A price for all of them is for one number. If you change the count, it is left empty with a line such as **Your price for all of them was for 20. There are 17 left, so it is not showing. Set a price for the 17 left, or leave this empty.**
+- A price for all of them is for one number, the count you saved it with. If buyers have taken some since, so it no longer fits, its box opens empty with a line such as **Your price for all of them was for 20. There are 17 left, so it is not showing. Set a price for the 17 left, or leave this empty.** Leave it empty and it comes back by itself if those deals are cancelled. A price you set now is for the count you save with it.
 - If a buyer takes some while you are editing, saving stops with **Someone took some while you were editing. There are 17 left now. Check the number and save again.** Nothing of that save was kept.
 - A count of 0 is refused: **To stop selling, pause or remove the listing.** You can use **Pause Offer** as for any Offer.
 - You cannot delete a post while one of its deals is held. The app says so; complete or cancel the deal first.

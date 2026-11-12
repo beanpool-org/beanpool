@@ -605,6 +605,7 @@ export const SUITES = [
     'test-escrow-disputes',
     'test-lendable-offers',
     'test-per-item-listings',
+    'test-per-item-deals',
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',

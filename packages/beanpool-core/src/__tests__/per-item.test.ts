@@ -7,8 +7,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-    EACH, ITEM_COUNT_MAX, NOT_PER_ITEM, isItemCount, isUnitsLeft, itemColumnsRefusal, itemTotal, itemsAmount, lotOffered, lotPriceIn,
-    lotSaving, PER_ITEM_REFUSALS, perItemLine, perItemLines, perItemOffered, perItemRefusalText, sellerReceives, type PerItemListing,
+    EACH, ITEM_COUNT_MAX, ITEM_TAKE_UP_REFUSALS, NOT_PER_ITEM, isItemCount, isUnitsLeft, itemColumnsRefusal, itemStockRefusal, itemTakeUpOf,
+    itemTakeUpRefusalText, itemTotal, itemsAmount, lotOffered, lotPriceIn, lotSaving, PER_ITEM_REFUSALS, perItemLine, perItemLines,
+    perItemOffered, perItemRefusalText, sellerReceives, type PerItemListing,
 } from '../per-item';
 import { feeOf, formatHundredths } from '../hundredths';
 import { beansPriceWords, copyPriceLine, copyPriceOf, copyPriceText } from '../event-copy';
@@ -149,6 +150,64 @@ describe('the words, in English', () => {
     });
 });
 
+describe('the take-up (slice P1, design §4.1): a number of them or all of them, at the total the buyer saw', () => {
+    const took = (p: PerItemListing, take: Parameters<typeof itemTakeUpOf>[1]) => itemTakeUpOf(p, take);
+    it('3 of 20 at 300 is 900 Beans into trust; all 20 is the price for all, 5,500 (red if the amount reads anything but the listing)', () => {
+        expect(took(panels(20), { option: 'each', n: 3, expect_c: c(900) })).toEqual({ ok: true, take: { option: 'each', n: 3, amount_c: c(900) } });
+        expect(took(panels(20), { option: 'lot', n: 20, expect_c: c(5500) })).toEqual({ ok: true, take: { option: 'lot', n: 20, amount_c: c(5500) } });
+        // A free one: 0 Beans, as any free deal.
+        expect(took({ priceType: EACH, price_c: 0, unitsLeft: 12 }, { option: 'each', n: 4, expect_c: 0 })).toEqual({ ok: true, take: { option: 'each', n: 4, amount_c: 0 } });
+    });
+    it('an app from before sends no way and no total: refused price_changed, so it can never take one up by accident', () => {
+        expect(took(panels(20), { n: 3 })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+        expect(took(panels(20), { n: 3, option: 'each' })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+        expect(took(panels(20), { n: 3, expect_c: c(900) })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+        expect(took(panels(20), { n: 3, option: 'some', expect_c: c(900) })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+    });
+    it('a total other than what the listing comes to is refused (red if expect_c is not compared, or compared loosely)', () => {
+        for (const expect_c of [c(899.99), c(901), '90000', c(300), c(6000)]) {
+            expect(took(panels(20), { option: 'each', n: 3, expect_c })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+        }
+        expect(took(panels(20), { option: 'lot', n: 20, expect_c: c(6000) })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+    });
+    it('whole numbers only, 1 to 9,999: 2.5, 0, −1, "3", Infinity, 10,000 refused count_refused, never rounded', () => {
+        for (const n of [2.5, 0, -1, '3', Infinity, NaN, 10_000, null, undefined, [3]]) {
+            expect(took(panels(20), { option: 'each', n, expect_c: c(900) })).toEqual({ ok: false, refusal: { code: 'count_refused' } });
+        }
+    });
+    it('all of them with no price for all set: lot_gone; a listing not priced for each one: price_changed', () => {
+        expect(took(panels(20, null), { option: 'lot', n: 20, expect_c: c(5500) })).toEqual({ ok: false, refusal: { code: 'lot_gone' } });
+        expect(took({ ...panels(20), priceType: 'fixed' }, { option: 'each', n: 3, expect_c: c(900) })).toEqual({ ok: false, refusal: { code: 'price_changed' } });
+    });
+    it('still there: none left, fewer than asked, the price for all off or for another number (red if a case passes)', () => {
+        expect(itemStockRefusal(panels(20), { option: 'each', n: 20 })).toBeNull();
+        expect(itemStockRefusal(panels(20), { option: 'lot', n: 20 })).toBeNull();
+        expect(itemStockRefusal(panels(0), { option: 'each', n: 1 })).toEqual({ code: 'units_gone', count: 0 });
+        expect(itemStockRefusal(panels(0), { option: 'lot', n: 20 })).toEqual({ code: 'units_gone', count: 0 });
+        expect(itemStockRefusal(panels(2), { option: 'each', n: 3 })).toEqual({ code: 'units_gone', count: 2 });
+        expect(itemStockRefusal(panels(19), { option: 'lot', n: 20 })).toEqual({ code: 'lot_gone' });
+        expect(itemStockRefusal(panels(18, { units: 18, beans: 5000 }), { option: 'lot', n: 20 })).toEqual({ code: 'lot_gone' });
+        expect(itemStockRefusal(panels(19), { option: 'each', n: 19 })).toBeNull();
+    });
+    it("every refusal has its sentence, the design's words, English on the node whatever the active language", () => {
+        const en = wordsFor('en');
+        setLanguage('fr');
+        expect(ITEM_TAKE_UP_REFUSALS.length).toBe(6);
+        for (const code of ITEM_TAKE_UP_REFUSALS) {
+            const text = itemTakeUpRefusalText({ code, count: 3 }, en);
+            expect(text.length).toBeGreaterThan(10);
+            expect(text).not.toMatch(/[{}]/);
+        }
+        expect(itemTakeUpRefusalText({ code: 'units_gone', count: 2 }, en)).toBe('Only 2 left now. Choose 2 or fewer.');
+        expect(itemTakeUpRefusalText({ code: 'units_gone', count: 0 }, en)).toBe('They have all been taken up.');
+        expect(itemTakeUpRefusalText({ code: 'lot_gone' }, en)).toBe('One has just been taken, so the price for all of them is off. You can still take what is left one by one.');
+        expect(itemTakeUpRefusalText({ code: 'price_changed' }, en)).toBe('The price changed while you were looking. Check it and try again.');
+        expect(itemTakeUpRefusalText({ code: 'count_refused' }, en)).toBe('Choose a whole number, 1 or more.');
+        expect(itemTakeUpRefusalText({ code: 'deal_count_fixed', count: 3 }, en)).toBe('This deal is for 3. To change the number, cancel it and take it up again.');
+        expect(itemTakeUpRefusalText({ code: 'each_accept_only' }, en)).toBe('This is taken up in one step: tap Accept Offer and choose how many.');
+    });
+});
+
 describe('a copy on global says the price for one only (§6, the copy per)', () => {
     it("'each' is read back and said as the card says it (red if copyPriceOf drops the unit)", () => {
         expect(copyPriceOf(copyPriceText({ price_c: c(300), per: 'each' }))).toEqual({ price_c: c(300), per: 'each' });
@@ -174,7 +233,7 @@ describe('every sentence, in en/ru/fr/pt/es, with one and with many (§9 Core)',
         allCountFor: (n) => perItemLines.allCountFor(n, c(n)), lessOneByOne: (n) => perItemLines.lessOneByOne(c(n)),
         timesEquals: (n) => perItemLines.timesEquals(n, c(1)), intoTrust: (n) => perItemLines.intoTrust(c(n), 'Rob'),
         onlyLeft: (n) => perItemLines.onlyLeft(n), allTakenUp: () => perItemLines.allTakenUp(), lotGone: () => perItemLines.lotGone(),
-        priceChanged: () => perItemLines.priceChanged(), wholeNumber: () => perItemLines.wholeNumber(),
+        priceChanged: () => perItemLines.priceChanged(), wholeNumber: () => perItemLines.wholeNumber(), eachAcceptOnly: () => perItemLines.eachAcceptOnly(),
         youTookUp: (n) => `${perItemLines.youTookUp('each', n, '11 Nov', c(n))} ${perItemLines.youTookUp('lot', n, '11 Nov', c(n))}`,
         heldForBuyers: (n) => perItemLines.heldForBuyers(n),
         dealRow: (n) => `${perItemLines.dealRow('each', 'Dana', n, c(n), '11 Nov')} ${perItemLines.dealRow('lot', 'Dana', n, c(n), '11 Nov')}`,

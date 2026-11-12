@@ -74,6 +74,11 @@ import {
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
 } from '@beanpool/core';
 import { PerItemFields } from '../components/PerItemFields';
+// The buyer's "How many would you like?" and both sides' deal lines (slice P3).
+import {
+    ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
+} from '@beanpool/core';
+import { PerItemTakeUp } from '../components/PerItemTakeUp';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
     myNodeRoleOnce,
@@ -919,6 +924,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Accept & Complete Inline Forms
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
+    // The per-item box's choice (core ItemBoxState), and the node's refusal of its last Confirm, said until the count changes.
+    const [eachState, setEachState] = useState<ItemBoxState>(ITEM_BOX_START);
+    const [eachRefusal, setEachRefusal] = useState<string | null>(null);
     // The request on a standing Need whose author is agreeing to pay for it (DESIGN-standing-deals-fable §4): its payer screen shows.
     const [approvingStanding, setApprovingStanding] = useState<string | null>(null);
     // Contribution-first gate: accepting an Offer requires having listed one.
@@ -1809,6 +1817,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const deals = listingDeals(keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions,
             { id: selectedPost.id, authorPublicKey: selectedPost.authorPublicKey, type: selectedPost.type, status: selectedPost.status }, me, keeperOf);
         const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === selectedTxId) - Number(a.tx.id === selectedTxId)) : [];
+        // A deal on a listing priced each is for a number of items, not a time: Release asks none and pays what is held (D5).
+        const asksTime = selectedPost.priceType !== 'fixed' && selectedPost.priceType !== 'each';
+        // The buyer's "How many would you like?" (DESIGN-per-item-price-fable.md §2.2, slice P3): core's box, the phone's too; null for
+        // any listing not priced each, which keeps its own confirm. Its Confirm sends exactly the total it shows.
+        const eachTakeUp = selectedPost.type === 'offer' && !selectedPost.lendable ? itemTakeUpBox(selectedPost, eachState, selectedPost.authorCallsign) : null;
+        // The price box's stock line: its own people also read how many the deals under way hold, "17 left · 3 held for buyers" (§2.3).
+        const eachStock = deals.own ? itemSellerStock(selectedPost, ownRows.map((m) => m.tx)) : null;
         // The edit's units: Each (right after Total) on an Offer once the node says it takes them up, and for a listing already
         // priced each, so an edit never takes its unit away. The unit chosen falls back to Total where the list lacks it (a Need).
         const editUnits = priceUnitsOffered(communityInfo?.features, editType, selectedPost.priceType);
@@ -1838,7 +1853,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
         const releaseRow = async (m: DealMoves<MarketplaceTransaction>) => {
             if (!identity) return;
-            const finalHours = selectedPost.priceType !== 'fixed' ? completeHoursValue : undefined;
+            const finalHours = asksTime ? completeHoursValue : undefined;
             setAccepting(true);
             try {
                 if (m.asKeeper) await treasuryComplete(m.actingAs, m.tx.id, finalHours);
@@ -1934,6 +1949,40 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setAccepting(false);
             }
         };
+        // Confirm in the per-item box (§2.2): exactly the number, the way and the total it showed (core itemTakeUpBox's send). When
+        // the listing has moved on since (a count, the price for all, a price), the node holds nothing and says why: the sentence
+        // goes in the box and the listing is read again, so the member chooses on it as it is now. Never a different amount.
+        const takeUpEach = async (send: { hours: number; itemOption: 'each' | 'lot'; expect_c: number } | null) => {
+            if (!identity || !send || accepting || authorEnterpriseInactive) return;
+            setAccepting(true);
+            setEachRefusal(null);
+            try {
+                await acceptMarketplacePost(selectedPost.id, identity.publicKey, send.hours, undefined, { itemOption: send.itemOption, expect_c: send.expect_c });
+                setShowAcceptConfirm(false);
+                handleMessageAuthor();
+                afterDealStep();
+            } catch (err) {
+                const refused = itemTakeUpRefusalIn(err);
+                const open = refused ? null : openDealIn(err);
+                if (refused) {
+                    setEachRefusal(refused.text);
+                    const id = selectedPost.id;
+                    await getMarketplacePosts({ id })
+                        .then(rows => { if (rows[0]) setSelectedPost(prev => (prev?.id === id ? rows[0] : prev)); })
+                        .catch(() => {});
+                    refresh();
+                } else if (open) {
+                    alert(t('You already have a deal under way on this. Finish or cancel it first.'));
+                    setShowAcceptConfirm(false);
+                    if (open.transactionId) setSelectedTxId(open.transactionId);
+                    afterDealStep();
+                } else {
+                    alert(explainTradeError(err));
+                }
+            } finally {
+                setAccepting(false);
+            }
+        };
         const renderOwnDeal = (m: DealMoves<MarketplaceTransaction>) => {
             const tx = m.tx;
             const payer = tx.buyerPublicKey === m.actingAs;
@@ -1947,7 +1996,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     className={`bg-white dark:bg-nature-900 border rounded-lg p-3 shadow-sm flex flex-col gap-2 ${tx.id === selectedTxId ? 'border-emerald-400 dark:border-emerald-600' : 'border-nature-200 dark:border-nature-800'}`}
                 >
                     <p className="text-sm font-bold text-nature-900 dark:text-white break-words">
-                        {listingDealLines.heldRow(otherName, tx.amount_c, formatDate(new Date(tx.createdAt), 'day-month'))}
+                        {/* A per-item deal says how many (§2.3): "Dana · 3 for 900 Beans held · since 11 Nov". */}
+                        {itemDealRow(tx, otherName, formatDate(new Date(tx.createdAt), 'day-month'))
+                            ?? listingDealLines.heldRow(otherName, tx.amount_c, formatDate(new Date(tx.createdAt), 'day-month'))}
                     </p>
                     {!m.release && (
                         <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
@@ -1956,7 +2007,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     )}
                     {m.release && (confirming ? (
                         <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
-                            {selectedPost.priceType !== 'fixed' && (
+                            {asksTime && (
                                 <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-500 mb-2 uppercase tracking-wider">
                                     {actualWorkedLabel(selectedPost.priceType)}
                                     <input
@@ -1970,7 +2021,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                             {/* What Release moves on this deal, at its own rate for the time typed, and to whom (the panel's line). */}
                             <p data-testid={`release-line-${tx.id}`} className="text-center mb-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-nature-900 py-2 rounded-lg border border-emerald-100 dark:border-emerald-900 break-words">
-                                {releaseLine(tx, selectedPost, selectedPost.priceType !== 'fixed' ? completeHoursRead : null, otherName)}
+                                {releaseLine(tx, selectedPost, asksTime ? completeHoursRead : null, otherName)}
                             </p>
                             <div className="flex gap-2">
                                 <button
@@ -1984,7 +2035,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <button
                                     type="button"
                                     onClick={() => releaseRow(m)}
-                                    disabled={accepting || (selectedPost.priceType !== 'fixed' && !(completeHoursValue > 0))}
+                                    disabled={accepting || (asksTime && !(completeHoursValue > 0))}
                                     className="flex-1 py-2 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60"
                                 >
                                     {accepting ? t('Processing...') : t('Release Beans')}
@@ -1997,7 +2048,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             onClick={() => {
                                 setReleaseRowId(tx.id);
                                 setShowCompleteConfirm(true);
-                                if (selectedPost.priceType !== 'fixed') setCompleteHours(tx.hours ? formatNumber(tx.hours) : '1');
+                                if (asksTime) setCompleteHours(tx.hours ? formatNumber(tx.hours) : '1');
                             }}
                             disabled={accepting}
                             className="w-full py-2.5 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60"
@@ -2190,7 +2241,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     price does not carry it. */}
                                 {perItemCard(selectedPost) && (
                                     <>
-                                        <p data-testid="listing-each-stock" className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>{perItemCard(selectedPost)!.stock}</p>
+                                        <p data-testid="listing-each-stock" className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>{eachStock ?? perItemCard(selectedPost)!.stock}</p>
                                         {perItemCard(selectedPost)!.boxLot && (
                                             <p data-testid="listing-each-lot" className={`m-0 mt-0.5 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>{perItemCard(selectedPost)!.boxLot}</p>
                                         )}
@@ -2239,11 +2290,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                  {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
                                      deal's own date, never the post's while the deals are still loading. */}
                                  {!isOwnPost && activeTx?.createdAt && (
-                                     <p className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
-                                         {t('✅ You took this up on {date} · {n} Beans held in trust', {
-                                             date: formatDate(new Date(activeTx.createdAt), 'day-month'),
-                                             n: formatHundredths(activeTx.amount_c ?? selectedPost.price_c),
-                                         })}
+                                     <p data-testid="taker-line" className="text-emerald-600 dark:text-emerald-400 text-sm font-bold text-center mb-1">
+                                         {/* A per-item deal says how many it is for (§2.3): "✅ You took up 3 on 11 Nov · 900 Beans held in trust". */}
+                                         {itemDealTakenLine(activeTx, formatDate(new Date(activeTx.createdAt), 'day-month'))
+                                             ?? t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                                 date: formatDate(new Date(activeTx.createdAt), 'day-month'),
+                                                 n: formatHundredths(activeTx.amount_c ?? selectedPost.price_c),
+                                             })}
                                      </p>
                                  )}
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
@@ -2261,7 +2314,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                              {t('Finalize Transaction')}
                                          </p>
 
-                                         {selectedPost.priceType !== 'fixed' && (
+                                         {asksTime && (
                                              <div className="mb-3">
                                                  <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-500 mb-1 uppercase tracking-wider">
                                                      {actualWorkedLabel(selectedPost.priceType)}
@@ -2281,7 +2334,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                          <div className="text-center mb-4 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-nature-900 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900 shadow-sm">
                                              {/* The deal's own rate, as each row's confirm and the node work it out; the listing's price while it loads. */}
                                              {releaseLine(activeTx ?? { amount_c: selectedPost.price_c, hours: 1 }, selectedPost,
-                                                 selectedPost.priceType !== 'fixed' ? completeHoursRead : null, targetPeerCallsign)}
+                                                 asksTime ? completeHoursRead : null, targetPeerCallsign)}
                                          </div>
                                          
                                          <div className="flex gap-2">
@@ -2298,7 +2351,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                      if (!identity || !txToComplete) return;
                                                      setAccepting(true);
                                                      try {
-                                                         const isVariable = selectedPost.priceType !== 'fixed';
+                                                         const isVariable = asksTime;
                                                          const finalHours = isVariable ? completeHoursValue : undefined;
                                                          const txId = txToComplete;
                                                          const targetPubkey = isPayer ? (activeTx?.sellerPublicKey || (selectedPost as any).acceptedBy!) : (activeTx?.buyerPublicKey || selectedPost.authorPublicKey);
@@ -2326,7 +2379,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                          setAccepting(false);
                                                      }
                                                  }}
-                                                 disabled={accepting || (selectedPost.priceType !== 'fixed' && (!completeHours || !(completeHoursValue > 0)))}
+                                                 disabled={accepting || (asksTime && (!completeHours || !(completeHoursValue > 0)))}
                                                  className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                                      accepting 
                                                          ? 'bg-bp-commit-fill cursor-not-allowed opacity-60' 
@@ -2342,7 +2395,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                          onClick={() => {
                                              setShowCompleteConfirm(true);
                                              // The time the deal was struck for, as each row and the phone open it.
-                                             if (selectedPost.priceType !== 'fixed' && !completeHours) {
+                                             if (asksTime && !completeHours) {
                                                  setCompleteHours(activeTx?.hours ? formatNumber(activeTx.hours) : '1');
                                              }
                                          }}
@@ -2638,6 +2691,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     room={spendRoom}
                                     busy={accepting || isRemotePost || !!authorEnterpriseInactive} onCancel={() => setShowAcceptConfirm(false)}
                                     onAgree={(choice) => takeUpStanding(choice, selectedPost.authorPublicKey)} />
+                            ) : showAcceptConfirm && eachTakeUp ? (
+                            // An Offer priced for each one (§2.2): how many, or all of them, in the confirm box; Confirm sends its total.
+                            <div data-testid="each-confirm" className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
+                                <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">{eachTakeUp.title}</p>
+                                <PerItemTakeUp listing={selectedPost} box={eachTakeUp} state={eachState} nodeRefusal={eachRefusal} disabled={accepting}
+                                    onState={(next) => { setEachState(next); setEachRefusal(null); }} />
+                                <div className="flex gap-2">
+                                    <button type="button" onClick={() => { setShowAcceptConfirm(false); setEachRefusal(null); }} disabled={accepting}
+                                        className="flex-1 min-h-[48px] py-2.5 rounded-lg border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors text-sm">
+                                        {t('Cancel')}
+                                    </button>
+                                    <button type="button" data-testid="each-confirm-btn" onClick={() => takeUpEach(eachTakeUp.send)}
+                                        disabled={accepting || !eachTakeUp.send || isRemotePost || !!authorEnterpriseInactive}
+                                        className="flex-1 min-h-[48px] py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:cursor-not-allowed disabled:opacity-60">
+                                        {accepting ? t('Processing...') : t('Confirm')}
+                                    </button>
+                                </div>
+                            </div>
                             ) : showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
@@ -2956,6 +3027,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 : ''}
                                 </p>
                             </div>
+                        ) : eachTakeUp && perItemCard(selectedPost)?.stockOut ? (
+                            // None can be taken just now (all held in deals under way): the listing says so, and there is nothing to accept.
+                            <p data-testid="each-all-taken" className="text-sm text-center text-nature-600 dark:text-nature-400">{perItemCard(selectedPost)!.stock}</p>
                         ) : (
                             <button
                                 onClick={async () => {
@@ -2969,6 +3043,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     if (selectedPost.type === 'offer' && blockedFromTrading) {
                                         setShowContributionRequired(true);
                                     } else {
+                                        // A per-item box opens at one, with no refusal left from before.
+                                        setEachState(ITEM_BOX_START);
+                                        setEachRefusal(null);
                                         setShowAcceptConfirm(true);
                                     }
                                 }}

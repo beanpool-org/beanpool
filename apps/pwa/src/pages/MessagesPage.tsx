@@ -72,7 +72,7 @@ import { copyableChatText } from '../lib/copy-chat-text';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { ListPhoto } from '../components/ListPhoto';
-import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, dealMoves, dealStep, dealsNeedingMe, formatDate, itemTrustLine, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -173,7 +173,7 @@ interface Props {
 }
 
 // ⚡ Bolt: O(1) Map lookup helper for transaction seller resolution in system messages
-function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[] | Map<string, MarketplaceTransaction>) {
+function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[] | Map<string, MarketplaceTransaction>, dealsById?: Map<string, MarketplaceTransaction>) {
     let metaObj: any = null;
     try {
         if (msg.metadata) metaObj = JSON.parse(msg.metadata);
@@ -190,6 +190,11 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
     };
 
     if (msg.systemType === 'ESCROW_FUNDED') {
+        // A per-item deal's trust line carries how many, as its push does (DESIGN-per-item-price-fable.md §2.3): 'Dana took 3 of
+        // "Solar Panels". 900 Beans are held in trust.', from the line's own metadata; its deal names the buyer and the listing.
+        const deal = typeof metaObj?.transactionId === 'string' ? dealsById?.get(metaObj.transactionId) : undefined;
+        const counted = itemTrustLine(metaObj, deal?.buyerCallsign, deal?.postTitle);
+        if (counted) return counted;
         return sum ? tn(sum.n, '{n} Beans held in trust.', '{n} Beans held in trust.', sum.values) : t('Beans held in trust.');
     }
 
@@ -659,6 +664,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         return map;
     }, [userTransactions]);
+    // Each deal by its id: a trust line names its own deal (a per-item one says who took how many of what).
+    const userTransactionsById = useMemo(() => new Map(userTransactions.map((tx) => [tx.id, tx] as const)), [userTransactions]);
     const activePeerPubkey = useMemo(() => {
         if (!activeConv) return '';
         return activeConv.participants?.find(p => p !== identity.publicKey) || '';
@@ -1827,7 +1834,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     function decryptMessage(msg: ApiMessage): string {
         // A locked group chat's line, as drawn (groupLineShown): never a row's own words unless they opened.
         const g = groupShown?.get(msg.id);
-        if (g) return g.text ?? formatSystemMessage(msg, identity.publicKey, userTransactionsByPostId);
+        if (g) return g.text ?? formatSystemMessage(msg, identity.publicKey, userTransactionsByPostId, userTransactionsById);
         try {
             // A DM's line, as the thread check judged it: never a row's words unless they opened.
             const view = lineViews?.get(msg.id);
@@ -2693,7 +2700,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         borderRadius: '16px', padding: '0.4rem 0.8rem',
                                         fontSize: '0.8rem', fontWeight: 600
                                     }}>
-                                        {icon} {formatSystemMessage(msg, identity.publicKey, userTransactionsByPostId)}
+                                        {icon} {formatSystemMessage(msg, identity.publicKey, userTransactionsByPostId, userTransactionsById)}
                                     </div>
                                     
                                     {msg.systemType === 'ESCROW_FUNDED' && metaObj?.postId && (

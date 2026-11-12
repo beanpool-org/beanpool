@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, itemDealTitle, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey, formatHundredths } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
@@ -395,7 +395,7 @@ export function MyDealsModal({
                                                 data-testid={`deal-card-${item.id}`}
                                                 role={isInteractive ? 'button' : undefined}
                                                 tabIndex={isInteractive ? 0 : undefined}
-                                                aria-label={isInteractive ? t('View deal: {title}', { title: item.postTitle }) : undefined}
+                                                aria-label={isInteractive ? t('View deal: {title}', { title: item.postTitle ? itemDealTitle(item, item.postTitle) : item.postTitle }) : undefined}
                                                 onKeyDown={isInteractive ? (e) => {
                                                     if (e.key === 'Enter' || e.key === ' ') {
                                                         e.preventDefault();
@@ -459,7 +459,7 @@ export function MyDealsModal({
                                                             </div>
                                                         </div>
                                                         <h4 dir="auto" className="font-bold text-nature-950 dark:text-white text-[15px] truncate">
-                                                            {item.postTitle}
+                                                            {item.postTitle ? itemDealTitle(item, item.postTitle) : item.postTitle}
                                                         </h4>
                                                         {dealsTab === 'pending' && (
                                                             <p data-testid={`deal-state-${item.id}`} role={standing?.warning ? 'alert' : undefined}

@@ -185,6 +185,8 @@ export * from './bills.js';
 export * from './per-item.js';
 // The seller's fields for it: the boxes, the live line, the carry-over, what a create and an edit send (slice P4).
 export * from './per-item-form.js';
+// The buyer's "How many would you like?" box and both sides' deal lines (slice P3).
+export * from './per-item-deal.js';
 // Private contacts (scratch/fable-design/DESIGN-private-contacts-fable.md slice C0): the lock, the list, contacts files.
 export * from './contacts-crypto.js';
 export * from './contacts-list.js';

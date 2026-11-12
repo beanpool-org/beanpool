@@ -7,7 +7,7 @@ import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatHundredths, itemDealTitle, standingHistoryLine, standingLines, standingPanel, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -567,7 +567,8 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             </View>
                             )}
                         </View>
-                        <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle}</Text>
+                        {/* A per-item deal says how many (DESIGN-per-item-price-fable.md §2.3): "3 × Solar Panels". */}
+                        <Text style={styles.dealTitle} numberOfLines={1}>{item.postTitle ? itemDealTitle(item, item.postTitle) : item.postTitle}</Text>
                         {dealsTab === 'pending' && (
                             <Text testID={`deal-state-${item.id}`} accessibilityRole={standing?.warning ? 'alert' : undefined}
                                 style={[styles.dealStateText, standing?.warning && { color: colors.feedback.warning.fg, fontWeight: '800' }]}

@@ -284,12 +284,15 @@ describe('an edit: the count the screen read, the count now, and the price for a
 
     it('whatever an untouched or emptied price-for-all box does, the node takes the columns that result (red if the form lets the node refuse a box nobody sees)', () => {
         // The node's own rule for an edit's lot (itemColumnsOnEdit): absent keeps the stored price and the number it is for,
-        // null clears it, a figure is bound to the count saved with it. Then itemColumnsRefusal over the columns that result.
+        // null clears it, a figure is bound to the count saved with it unless it is the stored one still for that count. Then
+        // itemColumnsRefusal over the columns that result.
         const columns = (fields: { unitsLeft: number; unitsLeftWas?: number; lot?: { price_c: number } | null }, s: PerItemStored) => {
             let lot_price_c: number | null = s.lot?.price_c ?? null;
             let lot_units: number | null = s.lot?.units ?? null;
             if (fields.lot === null) { lot_price_c = null; lot_units = null; }
-            else if (fields.lot && (fields.unitsLeft !== fields.unitsLeftWas || fields.lot.price_c !== lot_price_c)) { lot_price_c = fields.lot.price_c; lot_units = fields.unitsLeft; }
+            else if (fields.lot && (fields.unitsLeft !== fields.unitsLeftWas || fields.lot.price_c !== lot_price_c || lot_units !== fields.unitsLeft)) {
+                lot_price_c = fields.lot.price_c; lot_units = fields.unitsLeft;
+            }
             return { units_left: fields.unitsLeft, lot_price_c, lot_units };
         };
         let ran = 0;

@@ -10,8 +10,9 @@
  *    holds `unitsLeftWas`: the edit screen sends every field back, and a blind write would undo a take-up made while it was
  *    open (§4.6). The compare is the UPDATE's own WHERE ({@link writeItemCount}), inside the edit's transaction, so a
  *    future change that yields between the check and the write still can't lose a sale; a miss is 409 `units_changed`.
- *  - A price for all is bound to the count saved with it. Sent back unchanged with the count unchanged, it keeps its own;
- *    a new one with the count unchanged needs `unitsLeftWas` to be the count now, as a changed count does.
+ *  - A price for all is bound to the count saved with it. Sent back unchanged with the count unchanged, and still set for
+ *    that count, it is left as it is; any other (a new figure, or the stored figure while it is set for another number) is
+ *    new, and with the count unchanged needs `unitsLeftWas` to be the count now, as a changed count does.
  *  - A listing with a live standing deal is never edited into Each (Each is never weekly or monthly).
  *
  * The deals (P1): a take-up for a number of them or all of them holds exactly their Beans and lowers the count in the same
@@ -118,9 +119,11 @@ export function itemColumnsOnEdit(existing: MarketplacePost, updates: Record<str
     let lot_units = wasEach ? (existing.lot?.units ?? null) : null;
     if (updates.lot !== undefined) {
         const price = lotIn(updates.lot);
-        // Sent back as it is, with the count left as it is, a price for all keeps the number it was set for.
+        // Sent back as it is, with the count left as it is and still for that count, a price for all is left alone. Sent at
+        // its stored figure while set for another number (20 for 5,000 with 17 left, typed again for the 17), it is new: the
+        // seller's form said "All 17 for 5,000", so it is bound to the 17, not kept for 20 where it is not on offer.
         if (price === null) { lot_price_c = null; lot_units = null; }
-        else if (count !== null || price !== lot_price_c) {
+        else if (count !== null || price !== lot_price_c || lot_units !== units) {
             // A new price is for the count the seller saw (§4.6, §5): with the count left as it is, the row must still hold
             // `unitsLeftWas`, line for line the changed count's rule above, else 409 with the count now.
             if (count === null && updates.unitsLeftWas !== stored) throw itemRefusal({ code: 'units_changed', count: stored ?? 0 });

@@ -229,9 +229,9 @@ export interface PerItemEditFields {
  * After the node answers `units_changed` (a take-up landed while the seller edited): the stored count the save is made
  * against is the count now, the count box shows it, and the price-for-all box is rebuilt for it unless the seller touched it
  * (§2.5). A box they did not touch showed the stored price because it was for the old count; for the count now it is empty
- * with the "was for 20" line, else the save would send it back unchanged and the node, which keeps a price sent back as it
- * is bound to the number it was set for, would keep it for 20 while the live line said "All 17 for…". A box they touched
- * stays as typed: a new price is bound by the node to the count seen.
+ * with the "was for 20" line, as an edit opened now would be, else the save would send it back and the node would bind it
+ * to the 17 (a price sent at its stored figure while set for another number is new there) though the seller never set it
+ * for 17. A box they touched stays as typed: the node binds it to the count seen.
  */
 export function perItemAfterUnitsChanged(
     storedLot: ItemLot | null, unitsLeft: number, lotText: string, lotTouched: boolean, lang?: UiLang,

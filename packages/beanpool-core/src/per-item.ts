@@ -287,20 +287,21 @@ export function perItemLine(p: PerItemListing & { status?: string | null }): str
 }
 
 /**
- * A refusal's sentence, in the words given: the node writes the English (`wordsFor('en')`, translated on the way out), the
- * apps their member's language (the default).
+ * A refusal's sentence, in the words given, its figures written in their language: the node writes the English
+ * (`wordsFor('en')`, translated on the way out), the apps their member's language (the default).
  */
-export function perItemRefusalText(r: PerItemRefusalOf, w: Pick<Words, 't' | 'tn'> = { t, tn }): string {
+export function perItemRefusalText(r: PerItemRefusalOf, w?: Pick<Words, 't' | 'tn' | 'lang'>): string {
+    const words = w ?? { t, tn };
     switch (r.code) {
-        case 'each_offer_only': return w.t(W.offerOnly);
-        case 'units_refused': return w.t(W.unitsRefused);
-        case 'units_zero': return w.t(W.unitsZero);
-        case 'units_changed': return w.tn(r.count ?? 0, W.unitsChanged.one, W.unitsChanged.other);
-        case 'lot_price_refused': return w.t(W.lotPriceRefused);
-        case 'lot_needs_two': return w.t(W.lotNeedsTwo);
+        case 'each_offer_only': return words.t(W.offerOnly);
+        case 'units_refused': return words.t(W.unitsRefused);
+        case 'units_zero': return words.t(W.unitsZero);
+        case 'units_changed': return words.tn(r.count ?? 0, W.unitsChanged.one, W.unitsChanged.other);
+        case 'lot_price_refused': return words.t(W.lotPriceRefused);
+        case 'lot_needs_two': return words.t(W.lotNeedsTwo);
         case 'lot_not_less': {
             const total = r.total_c ?? 0;
-            return w.tn(beansOf(total), W.lotNotLess.one, W.lotNotLess.other, { n: fig(total), count: r.count ?? 0 });
+            return words.tn(beansOf(total), W.lotNotLess.one, W.lotNotLess.other, { n: formatHundredths(total, w?.lang), count: r.count ?? 0 });
         }
     }
 }

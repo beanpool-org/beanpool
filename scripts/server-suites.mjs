@@ -601,6 +601,7 @@ export const SUITES = [
     'test-balance-rule-boot',
     'test-escrow-disputes',
     'test-lendable-offers',
+    'test-per-item-listings',
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',

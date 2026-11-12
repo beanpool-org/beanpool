@@ -147,6 +147,9 @@ describe('2. credit risk: one fixture per rule, worst wins, each reason marked',
 
 const gift = (beansIn: number): BalanceMove => ({ delta_c: beansIn * 100, gift: true });
 const own = (beans: number): BalanceMove => ({ delta_c: beans * 100, gift: false });
+/** Their own Beans into a deal's escrow (a hold), and Beans back out of an escrow (a refund, or a sale's payout when it was not theirs). */
+const held = (beans: number, escrow: string): BalanceMove => ({ delta_c: -beans * 100, gift: false, escrow });
+const outOf = (beans: number, escrow: string): BalanceMove => ({ delta_c: beans * 100, gift: false, escrow });
 /** What the word reads them as owing: what they owe now, plus what gifts paid. History oldest first, as it happened. */
 const readsOwing = (balanceBeans: number, oldestFirst: BalanceMove[]) => {
     const balance = balanceBeans * 100;
@@ -158,7 +161,14 @@ describe('24. paidByGifts: the table of amendment 2 §2', () => {
     const ROWS: Array<[string, BalanceMove[], number, number]> = [
         ['owed 900; a friend sent 900 (the director\'s case: the gift paid it)', [gift(900)], 0, 900],
         ['owed 900; sold for 900 (their own sale repaid it: forgiven at once)', [own(900)], 0, 0],
-        ['owed 100; a purchase held 800; cancelled and refunded (a refund is not a gift)', [own(-800), own(800)], -100, 100],
+        ['owed 100; a purchase held 800; cancelled and refunded (a refund is not a gift)', [held(800, 'escrow_d'), outOf(800, 'escrow_d')], -100, 100],
+        // The director's call on the deciding review (#3091): a hold and its refund inside the 30 days net to nothing, so a
+        // cancelled deal is not their own trading. Before it, the refund "earned back" the gift and the word read 0.
+        ['owed 900; sent 900; then took a 900 Offer and cancelled it (the hold and its refund net to nothing)', [gift(900), held(900, 'escrow_d'), outOf(900, 'escrow_d')], 0, 900],
+        ['owed 900; sent 900; then held 900, and 400 came back while 500 went to the seller (they spent 500)', [gift(900), held(900, 'escrow_d'), outOf(400, 'escrow_d')], -500, 900],
+        ['owed 900 with 800 of it in a hold from before the 30 days; sent 900; the deal cancelled and 800 came back (their own Beans back)', [gift(900), outOf(800, 'escrow_old')], 800, 100],
+        ['owed 900; sent 900; then sold for 900, paid out of the buyer\'s escrow (their own sale: forgiven at once)', [gift(900), outOf(900, 'escrow_theirs')], 900, 0],
+        ['owed 900; sent 900; held 900 on one deal, then paid 900 out of another deal\'s escrow for a sale (a payout from another escrow nets nothing: their sale, forgiven at once)', [gift(900), held(900, 'escrow_a'), outOf(900, 'escrow_b')], 0, 0],
         ['owed 900; sent 900; then bought for 900 (the debt is back, nothing counted twice)', [gift(900), own(-900)], -900, 900],
         ['owed 0; sent 100; spent 100 (a gift on a balance at or above zero is not counted)', [gift(100), own(-100)], 0, 0],
         ['owed 900; sent 900; then sold for 500 (their sale earned back 500 of it)', [gift(900), own(500)], 500, 400],
@@ -240,6 +250,41 @@ describe('25. paidByGifts over 500 seeded random histories: the two properties o
             expect(levelOf(added)).toBeLessThanOrEqual(levelOf(h));
         }
         expect(lowered).toBeGreaterThan(50);
+    });
+
+    it('a hold and its full refund inside the window change nothing, wherever they fall; both properties hold with deals in the moves (red when a refund earns back a gift again)', () => {
+        const r2 = seeded(20261113);
+        const int2 = (lo: number, hi: number) => lo + Math.floor(r2() * (hi - lo + 1));
+        const withDeals: History[] = histories.map((h) => {
+            // Some of their own trading becomes holds and Beans out of a few deals' escrows (refunds, part refunds, payouts).
+            const moves = h.moves.map((m): BalanceMove => (m.gift || r2() < 0.5 ? m : { ...m, escrow: `escrow_${int2(1, 3)}` }));
+            return { start: h.start, moves };
+        });
+        let moved = 0;
+        for (const h of withDeals) {
+            // A hold of x into a new deal's escrow, refunded whole later: the balance at the end is the same.
+            const x = int2(1, 150000);
+            const a = int2(0, h.moves.length);
+            const b = int2(a, h.moves.length);
+            const pair: History = {
+                start: h.start,
+                moves: [...h.moves.slice(0, a), { delta_c: -x, gift: false, escrow: 'escrow_new' }, ...h.moves.slice(a, b), { delta_c: x, gift: false, escrow: 'escrow_new' }, ...h.moves.slice(b)],
+            };
+            expect(finalOf(pair)).toBe(finalOf(h));
+            expect(paidOf(pair)).toBe(paidOf(h));
+            // Read with the pair as plain own trading, the refund could earn back what a gift paid (what the review found).
+            const plain: History = { start: h.start, moves: pair.moves.map((m) => ({ delta_c: m.delta_c, gift: m.gift })) };
+            if (paidOf(plain) < paidOf(pair)) moved++;
+            // The two properties of amendment 2 §3 still hold with escrow legs in the moves.
+            const paid = paidOf(h);
+            expect(paid).toBeGreaterThanOrEqual(0);
+            expect(paid).toBeLessThanOrEqual(giftsIn(h));
+            const at = int2(0, h.moves.length);
+            const added: History = { start: h.start, moves: [...h.moves.slice(0, at), { delta_c: int2(1, 150000), gift: true }, ...h.moves.slice(at)] };
+            expect(countedOf(added)).toBeLessThanOrEqual(countedOf(h));
+        }
+        // The histories reach the case the rule is for.
+        expect(moved).toBeGreaterThan(20);
     });
 });
 

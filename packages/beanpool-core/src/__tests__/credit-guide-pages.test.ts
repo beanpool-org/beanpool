@@ -257,6 +257,13 @@ describe('Credit risk: what it reads says what core\'s rules say', () => {
         expect(paidByGifts(0, [{ delta_c: 90000, gift: false }])).toBe(0);
         expect(paidByGifts(10000, [{ delta_c: 10000, gift: true }])).toBe(0);
         expect(page).toContain("A gift to someone who owes nothing is not counted, so nobody's word gets worse because they were sent Beans.");
+        // A deal taken and cancelled inside the window earns nothing back (the director's call on #3091): the hold and its
+        // refund net to nothing, so Sam still reads high. A sale paid out of a buyer's escrow still earns it back at once.
+        const tookAndCancelled = paidByGifts(0, [{ delta_c: 90000, gift: false, escrow: 'escrow_d' }, { delta_c: -90000, gift: false, escrow: 'escrow_d' }, { delta_c: 90000, gift: true }]);
+        expect(tookAndCancelled).toBe(90000);
+        expect(creditRisk({ ...sam, balance_c: 0, giftPaid_c: tookAndCancelled }).level).toBe('high');
+        expect(paidByGifts(90000, [{ delta_c: 90000, gift: false, escrow: 'escrow_buyers' }, { delta_c: 90000, gift: true }])).toBe(0);
+        expect(page).toContain(`A deal they take that is then cancelled within the ${GIFT_DAYS} days earns nothing back: the Beans that went into it and came back count as if they had never moved.`);
         // What a gift does not clear: their last sale (no input a gift changes), and a balance above zero is never a reason to trust.
         expect(creditRisk({ ...sam, balance_c: 5000, giftPaid_c: 0 }).level).toBe('not_known');
         expect(page).toContain('A gift is not a sale, so their last sale does not move, and a balance above zero is never a reason to trust.');

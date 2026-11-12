@@ -209,7 +209,44 @@ const quiet = (f: CreditRiskFacts) => f.lastSaleDays === null || f.lastSaleDays 
 // ── What a gift of Beans paid (amendment 2 §2, §4) ───────────────────────────────────────────────────────────────
 
 /** One change to a stored balance, from its ledger row: what it added (+) or took (−), and whether it was a gift of Beans. */
-export interface BalanceMove { delta_c: number; gift: boolean }
+export interface BalanceMove {
+    delta_c: number;
+    gift: boolean;
+    /**
+     * The escrow account on the row's other side (`escrow_<deal or project>`), when it is one: their own Beans into it (a
+     * hold, a top-up, a pledge) or Beans back out of it (a refund, a pledge returned, or a sale's payout from a buyer's
+     * escrow). Absent for every other row. {@link paidByGifts} nets a refund against their own hold into the same escrow.
+     */
+    escrow?: string;
+}
+
+/**
+ * The moves with each escrow's legs netted inside the window (the director's call on #3091, amendment 2 §2 row 3): Beans
+ * back out of an escrow first cancel their own holds into that same escrow made earlier in these moves, the newest hold
+ * first, and both legs drop by what cancelled; what is left of a hold stays at the hold's place. So a deal taken and
+ * cancelled inside the 30 days is not their own trading, and earns back nothing a gift paid. A refund of a hold made
+ * before the window, and a sale's payout from a buyer's escrow (no hold of theirs in it), stay as their own Beans in.
+ * The sum of the moves is unchanged, so the walk still starts from the stored balance. A gift is never netted.
+ */
+function netEscrowLegs(newestFirst: readonly BalanceMove[]): Array<{ delta_c: number; gift: boolean }> {
+    const out = newestFirst.map((m) => ({ delta_c: whole(m?.delta_c), gift: !!m?.gift, escrow: m?.gift ? undefined : m?.escrow }));
+    const open = new Map<string, number[]>(); // per escrow, the places of their holds still open, oldest first
+    for (let i = out.length - 1; i >= 0; i--) {
+        const m = out[i]!;
+        if (typeof m.escrow !== 'string' || m.escrow === '' || m.delta_c === 0) continue;
+        const holds = open.get(m.escrow) ?? [];
+        open.set(m.escrow, holds);
+        if (m.delta_c < 0) { holds.push(i); continue; }
+        while (m.delta_c > 0 && holds.length > 0) {
+            const h = out[holds[holds.length - 1]!]!;
+            const c = Math.min(m.delta_c, -h.delta_c);
+            h.delta_c += c;
+            m.delta_c -= c;
+            if (h.delta_c === 0) holds.pop();
+        }
+    }
+    return out;
+}
 
 /**
  * What gifts of Beans paid off of what they owed, over the moves given (newest first, the last {@link GIFT_DAYS} days of
@@ -219,15 +256,16 @@ export interface BalanceMove { delta_c: number; gift: boolean }
  *
  * Two properties hold for any history (core test 25): a gift added anywhere never raises what they owe now plus this, so
  * nobody can mark a person by sending them Beans; and this is never more than the gifts in the moves, so an odd row
- * cannot invent a debt larger than real gifts. A gift on a balance at or above zero counts for nothing.
+ * cannot invent a debt larger than real gifts. A gift on a balance at or above zero counts for nothing. A hold and its
+ * refund inside the moves net to nothing first ({@link netEscrowLegs}): a cancelled deal is not their own trading.
  */
 export function paidByGifts(balance_c: number, newestFirst: readonly BalanceMove[]): number {
     let bal = whole(balance_c); // the balance after the move in hand
     const owedNow = Math.max(0, -bal);
     let counted = owedNow;
     let own = 0; // Beans in since then that were not gifts
-    for (const m of newestFirst) {
-        const d = whole(m?.delta_c);
+    for (const m of netEscrowLegs(newestFirst ?? [])) {
+        const d = m.delta_c;
         if (d > 0 && !m.gift) own += d;
         bal -= d; // the balance just before this move
         counted = Math.max(counted, Math.max(0, -bal) - own);

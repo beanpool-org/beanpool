@@ -29,7 +29,7 @@
  * Plain reads: nothing here is a Bean, no `accounts` write, no transfer.
  */
 import {
-    creditRisk, riskForVoucher, position, paidByGifts, DISPUTE_DAYS, GIFT_DAYS, creditAllowance, isSyntheticAccount, SYNTHETIC_ACCOUNT_IDS, SYNTHETIC_ACCOUNT_PREFIXES,
+    creditRisk, riskForVoucher, position, paidByGifts, DISPUTE_DAYS, GIFT_DAYS, creditAllowance, isEscrowAccount, isSyntheticAccount, SYNTHETIC_ACCOUNT_IDS, SYNTHETIC_ACCOUNT_PREFIXES,
     type BalanceMove, type CreditRisk, type CreditRiskFacts, type CreditSight,
 } from '@beanpool/core';
 import {
@@ -194,12 +194,20 @@ export function isGiftRow(r: LedgerMoveRow, pk: string): boolean {
 /** {@link isGiftRow} as SQL over a `transactions` row aliased `t` (the page's one statement; a test holds the two to one answer). */
 export const GIFT_ROW_SQL = `t.fee_c = 0 AND t.from_pubkey <> t.to_pubkey AND ${notSynthetic('t.from_pubkey')}`;
 
-/** What one row did to `pk`'s stored balance: to them, what reached them (amount less fee); from them, what left them. */
+/**
+ * What one row did to `pk`'s stored balance: to them, what reached them (amount less fee); from them, what left them. A
+ * row with an escrow account (`escrow_<deal or project>`) on its other side names it, so core's walk nets a refund
+ * against their own hold into that escrow inside the window (the director's call on #3091): a cancelled deal is not
+ * their own trading. The escrow's name is a deal's or a project's, never a person's, and reaches no answer.
+ */
 export function balanceMoveOf(r: LedgerMoveRow, pk: string): BalanceMove {
     const amount = Math.trunc(Number(r.amount_c) || 0);
     const fee = Math.trunc(Number(r.fee_c) || 0);
     const delta_c = (r.to_pubkey === pk ? amount - fee : 0) - (r.from_pubkey === pk ? amount : 0);
-    return { delta_c, gift: isGiftRow(r, pk) };
+    const other = r.to_pubkey === pk ? r.from_pubkey : r.to_pubkey;
+    const move: BalanceMove = { delta_c, gift: isGiftRow(r, pk) };
+    if (other !== pk && isEscrowAccount(other)) move.escrow = other;
+    return move;
 }
 
 /** `pk`'s own ledger rows since `since`, either side, newest first, as moves (the walk's input; test 29 rebuilds from it). */

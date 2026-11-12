@@ -11,7 +11,8 @@
  * 28. The director's case over HTTP: Sam owes 900 of 1,000 with no sale for 90 days: high. A friend sends 900 through
  *     POST /api/ledger/transfer. The owner's, the voucher's and Sam's own answers: balance 0, owed 0, not paused, high,
  *     the same codes with gift 90000; the voucher's `more` and no admins' reason. The gift's row 31 days old: no owed
- *     reason and no gift; 29 days old: still counted.
+ *     reason and no gift; 29 days old: still counted. Sam then takes a 900 Offer and cancels it himself: the hold and
+ *     its refund net to nothing, and every sight still reads high with gift 90000 (the deciding review's case).
  * 29. The walk rebuilds, before each row, the stored balance read at that step, for a member taken through every
  *     writer of 27 and a circulation fee.
  * 30. Rob (line 0, balance 0) is sent 100 and spends it; Pia at +50 is sent 1 Bean: levels and reasons as before.
@@ -33,10 +34,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GIFT_DAYS, SYNTHETIC_ACCOUNT_IDS, SYNTHETIC_ACCOUNT_PREFIXES, riskReasonSentence } from '@beanpool/core';
-import { clearWashTradingCache } from '@beanpool/engine';
+import { clearWashTradingCache, setMemberPhoto } from '@beanpool/engine';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, generateInvite, redeemInvite, broadcast, reconcileLedgerFromDb, getCommonsBalanceExact, transfer, payFromCommons } from './state-engine.js';
+import { initStateEngine, generateInvite, redeemInvite, broadcast, reconcileLedgerFromDb, getCommonsBalanceExact, transfer, payFromCommons, createPost as rawCreatePost } from './state-engine.js';
+import { wrapCreatePost } from './post-test-helper.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { registerMemberInternal } from './engine/members.js';
@@ -47,6 +49,8 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { GIFT_ROW_SQL, balanceMoveOf, balanceMovesSince, creditPerson, giftRowsWalked, giftStatements, giftWalks, isGiftRow, type LedgerMoveRow } from './engine/credit-sight.js';
 import { ledger } from './engine/ledger.js';
 import { localFetch } from './keepalive-test-fetch.js';
+
+const createPost = wrapCreatePost(rawCreatePost);
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 let BASE = '';
@@ -261,6 +265,24 @@ async function main(): Promise<void> {
     db.prepare('UPDATE transactions SET timestamp = ? WHERE id = ?').run(giftRow.timestamp, giftRow.id);
     assert(giftsOf(day29).length === 3 && Object.values(day31).every((p) => codesOf(p).every((c) => !OWED.includes(c)) && giftsOf(p).length === 0),
         `28. the gift's row 29 days back still counts; 31 days back no owed reason and no gift, to every sight (red when GIFT_DAYS moves) (${JSON.stringify(codesOf(day31.owner))})`);
+    // The deciding review's case (#3091): Sam takes a 900 Offer and cancels it himself. The hold and its refund are both
+    // inside the 30 days, so they net to nothing: a cancelled deal is not his own trading and earns back nothing.
+    for (const who of [sam!, zed!]) setMemberPhoto(db, who.pk, 'data:image/png;base64,iVBORw0KGgo='); // the market asks both for a profile photo
+    const zedOffer = createPost('offer', 'general', 'Zed\'s table', 'An oak table', hc(900), 'fixed', zed!.pk)!;
+    const taken = await call(sam!, 'POST', '/api/marketplace/posts/accept', { postId: zedOffer.id, buyerPublicKey: sam!.pk });
+    require_(taken.status === 200 && taken.body?.transaction?.id, `Sam takes Zed's 900 Offer through POST /api/marketplace/posts/accept (${show(taken)})`);
+    const dealId = taken.body.transaction.id as string;
+    require_(storedOf(sam!.pk) === -hc(900), `the hold took 900 from Sam (stored ${storedOf(sam!.pk)})`);
+    const cancelled = await call(sam!, 'POST', '/api/marketplace/transactions/cancel', { transactionId: dealId, cancellerPublicKey: sam!.pk });
+    require_(cancelled.status === 200, `Sam cancels it through POST /api/marketplace/transactions/cancel (${show(cancelled)})`);
+    const legs = count('SELECT COUNT(*) AS n FROM transactions WHERE (from_pubkey = ? AND to_pubkey = ?) OR (from_pubkey = ? AND to_pubkey = ?)', sam!.pk, `escrow_${dealId}`, `escrow_${dealId}`, sam!.pk);
+    const afterCancel = await looks();
+    for (const [sight, p] of Object.entries(afterCancel)) {
+        assert(legs === 2 && p?.balance_c === 0 && p?.risk?.level === 'high' && giftsOf(p).length > 0 && giftsOf(p).every((g) => g === 90000),
+            `28. after Sam takes a 900 Offer and cancels it (${legs} escrow rows), ${sight}: balance 0, still high, gift 90000 (red when a refund earns back what a gift paid) (${JSON.stringify(p?.risk)})`);
+    }
+    assert(JSON.stringify(codesOf(afterCancel.owner)) === JSON.stringify(codesOf(after.owner)) && JSON.stringify(afterCancel.voucher?.risk) === JSON.stringify(after.voucher?.risk),
+        `28. after the cancel the owner reads the same three codes and the voucher the same answer as before it (${JSON.stringify(afterCancel.voucher?.risk)})`);
 
     // ── 31. The hard rule and the counts read the balance as it is ───────────────────────────────────────────────
     console.log('\n— 31. the vouch and the counts —');

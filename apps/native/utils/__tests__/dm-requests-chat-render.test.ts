@@ -682,3 +682,27 @@ describe('a member who reached out while blocked, on the phone (Marty, 28 Oct 20
         expect(sent()).toBe(1);
     });
 });
+
+// Old chat's photos (conversion code, log row OLDCHAT, remove after 12 Dec 2026): the chat screen asks for an old line's photo
+// as old, so it opens as part of its words (db.ts getDecryptedAttachment's oldLine; tested on the frozen 1.2.36 photo in
+// dm-line-binding.test.ts), and a new line's as new, as before.
+describe('old chat on the phone\'s chat screen', () => {
+    it('an old line\'s photo is asked for as old, a new line\'s as new', async () => {
+        const asked: unknown[][] = [];
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm' },
+            getMessages: [
+                { id: 'o1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'image', text: 'the old ladder', oldLine: true, rawTimestamp: '2026-11-05T09:00:00.000Z', timestamp: '' },
+                { id: 'n1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'image', text: 'the new ladder', rawTimestamp: iso(now - 60_000), timestamp: '' },
+            ],
+            syncSingleConversation: true,
+            getDecryptedAttachment: (...args: unknown[]) => { asked.push(args); return Promise.resolve(null); },
+        });
+        await open();
+        expect(host.textContent).toContain('the old ladder');
+        expect(asked).toEqual(expect.arrayContaining([['dm1', 'o1', true], ['dm1', 'n1', false]]));
+        expect(asked).toHaveLength(2);
+        // Neither opened here (the stand-in answers null): each keeps the locked bubble.
+        expect(host.textContent?.match(/Image unavailable/g)).toHaveLength(2);
+    });
+});

@@ -252,7 +252,7 @@ function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bo
     }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
-    // Old chat (OLDCHAT, remove after 12 Dec 2026): the old line's own sealing, as plain values for the effect below.
+    // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): the old line's own sealing, as plain values for the effect.
     const oldCiphertext = old?.words.ciphertext;
     const oldNonce = old?.words.nonce;
     const oldTimestamp = old?.timestamp;
@@ -658,8 +658,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const keys = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex };
         for (const m of shownMessages) {
             if (m.type === 'removed' || !hasChatAbout(m.metadata)) continue;
-            // An old line's card opens as part of its words (core chatAboutOfOldLine; conversion code, log row OLDCHAT, remove after
-            // 12 Dec 2026). Only a line the thread check showed old.
+            // An old line's card opens as part of its words, only on a line the thread check showed old (core chatAboutOfOldLine;
+            // conversion code, log row OLDCHAT, remove after 12 Dec 2026).
             if (dmLineIsOld(lineViews.get(m.id)) && m.nonce) {
                 const old = chatAboutOfOldLine(keys, { conversationId: ctx.conversationId, senderPubHex: m.authorPubkey, messageId: m.id, metadata: m.metadata, timestamp: m.timestamp },
                     { ciphertext: m.ciphertext, nonce: m.nonce });

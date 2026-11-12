@@ -183,8 +183,9 @@ export const DM_OLD_LINES: Record<
         text: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==',
         payload: { ciphertext: 'Nusq7/5x37w4bDDL1B4AABX39k5fbsKnL9hmOkM2R6lUeyBylWwtMQBJ6noEw3wlpnYgJvx9Mn5a6EHfmg==', nonce: 'x25519-xc20p-v2:xGu+UXZMTvUc9au4+KV0zmZ5cZS5yJAm' },
     },
-    // Old chat's photos and cards (Marty, 13 Nov 2026: "if they are there why not view them?"; the same OLDCHAT row). Each
-    // nonce the first 24 bytes of SHA-256("beanpool old-chat vector: nonce <name>"), the name in the line above it.
+    // Old chat's photos and cards (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 13 Nov 2026: "if they are
+    // there why not view them?"). Each nonce the first 24 bytes of SHA-256("beanpool old-chat vector: nonce <name>"), the name
+    // in the line above it.
     /** The photo of benFormat2's message, as an app before 2 October 2026 sealed one (format 2). Nonce: "photo format 2". */
     benPhotoFormat2: {
         from: 'ben', messageId: 'b3000000-0000-4000-8000-0000000000b3', part: 'attachment', format: 2, after: null, metadata: null,

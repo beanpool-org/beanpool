@@ -78,8 +78,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promi
 
 /** Image bubble that lazily fetches + decrypts an encrypted attachment for display.
  *  Tapping calls onOpen(uri) so the parent can show it full-screen.
- *  `oldLine`: a line from before 1.4.0, shown read-only; its photo opens as part of its words (conversion code, log row
- *  OLDCHAT, remove after 12 Dec 2026). */
+ *  `oldLine`: a line from before 1.4.0, shown read-only; its photo opens as part of its words
+ *  (conversion code, log row OLDCHAT, remove after 12 Dec 2026). */
 function ChatImage({ conversationId, messageId, onOpen, oldLine = false }: { conversationId: string; messageId: string; onOpen?: (uri: string) => void; oldLine?: boolean }) {
     const { colors } = useTheme();
     const [uri, setUri] = useState<string | null>(null);

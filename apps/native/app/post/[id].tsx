@@ -2099,8 +2099,10 @@ function PostDetailModal() {
                     </View>
                 )}
 
-                {/* 3. Own Active Posts (Edit / Delete) */}
-                {isOwnPost && post.status === 'active' && (!activeTx || activeTx.status !== 'pending') && (
+                {/* 3. Own Active Posts (Edit / Delete). A listing priced each stays on offer under its deals, so its seller edits
+                    it with deals held, as on the web (the count is theirs, §2.5; the node freezes the price for one and refuses a
+                    delete while a deal is held, each with its own words). */}
+                {isOwnPost && post.status === 'active' && (!activeTx || activeTx.status !== 'pending' || post.price_type === 'each') && (
                     editMode ? (
                         <View style={styles.editSection}>
                             <Text style={styles.editSectionTitle}>{t('✏️ Edit Post')}</Text>

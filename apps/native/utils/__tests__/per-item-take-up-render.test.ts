@@ -327,9 +327,19 @@ describe('both sides of the deal (§2.3)', () => {
     it('the seller: "17 left · 3 held for buyers" in the price box, and the row "Dana · 3 for 900 Beans held · since 11 Nov"', async () => {
         const mine = { ...PANELS, units_left: 17, author_pubkey: ME.publicKey, author_callsign: ME.callsign };
         const deal = { ...HELD_ROW, id: 'tx-d', buyerPublicKey: DANA.pubkey, buyerCallsign: DANA.callsign, sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign };
-        await open(mine, { deals: [deal] });
+        // The phone's copy holds the deal as the seller's latest held one (activeTx), as it does on a real phone.
+        await open(mine, { deals: [deal], activeTx: { ...HELD_TX, id: 'tx-d', buyer_pubkey: DANA.pubkey, seller_pubkey: ME.publicKey } });
         expect(q('price-each-stock')?.textContent).toBe('17 left · 3 held for buyers');
         expect(q('deal-row-tx-d')?.textContent).toContain('Dana · 3 for 900 Beans held · since 11 Nov');
+        // The listing stays on offer under its deals, so its seller can still edit it (the count is theirs, §2.5), as on the web
+        // (red if a held deal hides Edit, as it does for a one-off listing taken off the board).
+        expect(host.textContent).toContain('✏️ Edit Post');
+    });
+
+    it('a one-off listing in a deal keeps today\'s rule: no Edit while its deal is held', async () => {
+        const stool = { ...PANELS, id: 'p-stool', price_type: 'fixed', units_left: null, lot_units: null, lot_price_c: null, author_pubkey: ME.publicKey, author_callsign: ME.callsign };
+        await open(stool, { activeTx: { ...HELD_TX, id: 'tx-s', post_id: 'p-stool', item_option: null, hours: null, buyer_pubkey: DANA.pubkey, seller_pubkey: ME.publicKey } });
+        expect(host.textContent).not.toContain('✏️ Edit Post');
     });
 });
 

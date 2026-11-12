@@ -13,6 +13,7 @@ import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
+import { setLanguage } from '@beanpool/core';
 
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
@@ -100,7 +101,7 @@ beforeEach(() => {
     resetCommunityInfoOnce();
     info = {};
 });
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); setLanguage('en'); });
 
 describe('editing a listing priced for each one (§2.5)', () => {
     it('opens with the count read from the node and the price for all while it is for that count; HOW MANY DO YOU HAVE LEFT? (red if the boxes open empty)', async () => {
@@ -178,6 +179,18 @@ describe('editing a listing priced for each one (§2.5)', () => {
         expect(update.mock.calls[0][2]).toMatchObject({ unitsLeft: 25, unitsLeftWas: 20 });
     });
 
+    it('a count typed on an Arabic number pad is read as 25, not refused (red if the count box takes ASCII digits only)', async () => {
+        stubNode(panels({ lot: undefined }));
+        const update = vi.spyOn(api, 'updateMarketplacePost').mockImplementation(async () => ({ success: true, post: panels({ unitsLeft: 25, lot: undefined }) }) as any);
+        await openEdit();
+        setLanguage('ar');
+        typeInto(count(), '٢٥');
+        await save();
+        await waitFor(() => expect(update).toHaveBeenCalled());
+        expect(update.mock.calls[0][2]).toMatchObject({ unitsLeft: 25, unitsLeftWas: 20 });
+        expect(screen.queryByTestId('per-item-refusal')).toBeNull();
+    });
+
     it('a count changed to 0 is refused with the design\'s words, and nothing is sent (red if 0 is sent)', async () => {
         stubNode(panels());
         const update = vi.spyOn(api, 'updateMarketplacePost').mockResolvedValue({ success: true, post: panels() } as any);
@@ -215,6 +228,62 @@ describe('editing a listing priced for each one (§2.5)', () => {
         await save();
         await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
         expect(update.mock.calls[1][2]).toMatchObject({ unitsLeft: 18, unitsLeftWas: 17 });
+    });
+
+    it('after the 409 the price-for-all box is read again for the count now: it does not keep a figure the node holds for 20, and the save does not send it back (red if the box keeps "5000" and "All 17 for 5,000" shows)', async () => {
+        // 20 left, all 20 for 5,000, 300 each (17 × 300 = 5,100, so the old figure would still read as good for the 17).
+        const lot20 = { units: 20, price_c: 500000 };
+        stubNode(panels({ lot: lot20 }));
+        const update = vi.spyOn(api, 'updateMarketplacePost')
+            .mockRejectedValueOnce(Object.assign(new Error('Someone took some while you were editing.'), { status: 409, code: 'units_changed', unitsLeft: 17 }))
+            .mockImplementation(async () => ({ success: true, post: panels({ unitsLeft: 17, lot: lot20 }) }) as any);
+        await openEdit();
+        expect(lot().value).toBe('5000');
+        typeInto(count(), '19');
+        await save();
+        expect(await screen.findByTestId('per-item-refusal')).toHaveTextContent('There are 17 left now. Check the number and save again.');
+        expect(count().value).toBe('17');
+        // The box the seller did not touch is empty for the 17 left, with the reason; the live line no longer promises a price for all 17.
+        expect(lot().value).toBe('');
+        expect(screen.getByTestId('per-item-lot-other')).toHaveTextContent('Your price for all of them was for 20. There are 17 left, so it is not showing.');
+        expect(screen.queryByText(/All 17 for 5,000/)).toBeNull();
+        await save();
+        await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+        const sent = update.mock.calls[1][2] as Record<string, unknown>;
+        expect(sent).toMatchObject({ priceType: 'each', unitsLeft: 17, unitsLeftWas: 17 });
+        // lot is absent: the stored price for 20 is kept as it is, and nothing says it is on offer for the 17.
+        expect(sent).not.toHaveProperty('lot');
+    });
+
+    it('after the 409 a price the seller typed themselves stays in the box and is sent for the count now', async () => {
+        const lot20 = { units: 20, price_c: 500000 };
+        stubNode(panels({ lot: lot20 }));
+        const update = vi.spyOn(api, 'updateMarketplacePost')
+            .mockRejectedValueOnce(Object.assign(new Error('Someone took some while you were editing.'), { status: 409, code: 'units_changed', unitsLeft: 17 }))
+            .mockImplementation(async () => ({ success: true, post: panels({ unitsLeft: 17, lot: { units: 17, price_c: 480000 } }) }) as any);
+        await openEdit();
+        typeInto(lot(), '4800');
+        await save();
+        expect(await screen.findByTestId('per-item-refusal')).toHaveTextContent('There are 17 left now.');
+        expect(count().value).toBe('17');
+        expect(lot().value).toBe('4800');
+        expect(screen.getByTestId('per-item-hint')).toHaveTextContent('All 17 for 4,800 Beans. One by one they come to 5,100.');
+        await save();
+        await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+        expect(update.mock.calls[1][2]).toMatchObject({ unitsLeft: 17, unitsLeftWas: 17, lot: { price_c: 480000 } });
+    });
+
+    it('a stored price for another number that the lowered price for one makes not-less is cleared, not refused about a box the seller cannot see', async () => {
+        stubNode(panels({ unitsLeft: 17 }));
+        const update = vi.spyOn(api, 'updateMarketplacePost').mockImplementation(async () => ({ success: true, post: panels({ unitsLeft: 17, lot: undefined, price_c: 25000 }) }) as any);
+        await openEdit();
+        expect(lot().value).toBe('');
+        // 20 × 250 = 5,000, and the 5,500 stored for the 20 is no longer less than that.
+        typeInto(screen.getByLabelText('PRICE FOR ONE'), '250');
+        await save();
+        await waitFor(() => expect(update).toHaveBeenCalled());
+        expect(update.mock.calls[0][2]).toMatchObject({ price_c: 25000, unitsLeft: 17, unitsLeftWas: 17, lot: null });
+        expect(screen.queryByTestId('per-item-refusal')).toBeNull();
     });
 
     it('3 held for buyers: "3 are held for buyers now. They are not counted here." (red if the note is missing or counts a deal twice)', async () => {

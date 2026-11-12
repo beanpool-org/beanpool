@@ -9,10 +9,11 @@
  * Pure: no I/O, no Node built-ins (the barrel is bundled for the phone). The boxes are text, read as a member types them
  * (core parseHundredths: the language's decimal mark, at most two decimals, never a float).
  */
+import { lexAmount } from './amount-input.js';
 import { formatHundredths, parseHundredths, type Hundredths } from './hundredths.js';
 import type { UiLang } from './words.js';
 import {
-    ITEM_COUNT_MAX, LOT_UNITS_MIN, itemsAmount, perItemLines, perItemOffered, perItemRefusalText,
+    ITEM_COUNT_MAX, LOT_UNITS_MIN, itemColumnsRefusal, itemsAmount, perItemLines, perItemOffered, perItemRefusalText,
     type ItemLot, type PerItemRefusalOf,
 } from './per-item.js';
 
@@ -52,11 +53,19 @@ export interface PerItemRead {
     lotBad: boolean;
 }
 
-/** A count as typed: digits only, up to 9,999 ("2.5", "-3", "1e3", "" are none). */
-export function readCount(text: string): number | null {
-    const s = text.trim();
-    if (!/^\d{1,4}$/.test(s)) return null;
-    const n = Number(s);
+/**
+ * A count as typed: a whole number, 0 to 9,999 ("2.5", "-3", "+3", "1e3", "" are none). Read in `lang` (the device's language
+ * when absent) exactly as the amount boxes beside it are, by core's lexAmount: the language's own digits (an Arabic, Persian,
+ * Hindi, Bengali, Tamil, Malayalam number pad, or the full-width digits a Japanese, Korean or Chinese keyboard types) read as
+ * 0-9, two number systems in one figure refused, a figure that could mean two never guessed. No decimals are allowed.
+ */
+export function readCount(text: string, lang?: UiLang): number | null {
+    if (/^\s*\+/.test(text)) return null;
+    const lexed = lexAmount(text, lang, 0);
+    if (!lexed.ok || lexed.negative || lexed.fraction !== '') return null;
+    const whole = lexed.whole.replace(/^0+(?=\d)/, '');
+    if (!/^\d{1,4}$/.test(whole)) return null;
+    const n = Number(whole);
     return n <= ITEM_COUNT_MAX ? n : null;
 }
 
@@ -66,7 +75,7 @@ export function readPerItemForm(text: PerItemFormText, lang?: UiLang): PerItemRe
     const lot = text.lot.trim() === '' ? null : parseHundredths(text.lot, lang);
     return {
         price_c: price.ok ? price.value : null,
-        count: readCount(text.count),
+        count: readCount(text.count, lang),
         lot_c: lot && lot.ok && lot.value > 0 ? lot.value : null,
         lotBad: lot !== null && !(lot.ok && lot.value > 0),
     };
@@ -217,9 +226,27 @@ export interface PerItemEditFields {
 }
 
 /**
+ * After the node answers `units_changed` (a take-up landed while the seller edited): the stored count the save is made
+ * against is the count now, the count box shows it, and the price-for-all box is rebuilt for it unless the seller touched it
+ * (§2.5). A box they did not touch showed the stored price because it was for the old count; for the count now it is empty
+ * with the "was for 20" line, else the save would send it back unchanged and the node, which keeps a price sent back as it
+ * is bound to the number it was set for, would keep it for 20 while the live line said "All 17 for…". A box they touched
+ * stays as typed: a new price is bound by the node to the count seen.
+ */
+export function perItemAfterUnitsChanged(
+    storedLot: ItemLot | null, unitsLeft: number, lotText: string, lotTouched: boolean, lang?: UiLang,
+): { stored: { unitsLeft: number; lot: ItemLot | null }; count: string; lot: string } {
+    const start = perItemEditStart({ wasEach: true, unitsLeft, lot: storedLot }, lang);
+    return { stored: { unitsLeft, lot: storedLot }, count: start.count, lot: lotTouched ? lotText : start.lot };
+}
+
+/**
  * The edit's fields, or the first refusal. `touched` is whether the seller changed the price-for-all box since the form
  * opened: an empty box they left alone keeps what is stored, one they emptied clears it (a stored price for another
- * number is never cleared by a title edit, so it is back if the deal that took one is cancelled).
+ * number is never cleared by a title edit, so it is back if the deal that took one is cancelled). One exception, for a
+ * stored price for another number that the price for one now leaves not less than its own number one by one (the node's
+ * `lot_not_less` on the columns it would keep): it is cleared, since it can never be on offer at this price, and the node
+ * must not refuse a box the seller can't see.
  */
 export function perItemEditFields(
     text: PerItemFormText, stored: PerItemStored | null | undefined, lotTouched: boolean, lang?: UiLang,
@@ -230,7 +257,12 @@ export function perItemEditFields(
     const r = readPerItemForm(text, lang);
     const typedLot = text.lot.trim() !== '' && r.price_c !== 0 && r.lot_c !== null;
     const emptied = text.lot.trim() === '' || r.price_c === 0;
-    const lot: PerItemEditFields['lot'] = typedLot ? { price_c: r.lot_c! } : emptied && (lotTouched || r.price_c === 0) && stored?.lot ? null : undefined;
+    // A stored price for all, kept by an empty untouched box, is checked against the price for one now by the node's own
+    // rule (itemColumnsRefusal over the columns the node would keep): refused there, it is cleared here.
+    const staleLot = !!stored?.lot && r.price_c !== null && itemColumnsRefusal(r.price_c, {
+        units_left: r.count!, lot_price_c: stored.lot.price_c, lot_units: stored.lot.units,
+    }) !== null;
+    const lot: PerItemEditFields['lot'] = typedLot ? { price_c: r.lot_c! } : emptied && (lotTouched || r.price_c === 0 || staleLot) && stored?.lot ? null : undefined;
     return {
         ok: true,
         fields: { priceType: 'each', unitsLeft: r.count!, ...(was !== null ? { unitsLeftWas: was } : {}), ...(lot !== undefined ? { lot } : {}) },

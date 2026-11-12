@@ -15,7 +15,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import { readNodeProfile } from '../node-profile';
-import { perItemOffered, priceUnitsOffered } from '@beanpool/core';
+import { perItemAfterUnitsChanged, perItemEditFields, perItemOffered, priceUnitsOffered, readCount } from '@beanpool/core';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
@@ -98,7 +98,36 @@ describe('the edit form (app/post/[id].tsx) reads core\'s rules and the node\'s 
     it('a count that changed under the seller is the node\'s sentence, the box shows what is left, and the save stays open (red if it closes as saved)', () => {
         expect(src).toContain("e?.code === 'units_changed' && typeof e.unitsLeft === 'number'");
         expect(src).toContain("perItemRefusalText({ code: 'units_changed', count: e.unitsLeft })");
-        expect(src).toContain('setEditItemCount(String(e.unitsLeft))');
+        expect(src).toContain('setEditItemCount(after.count)');
+    });
+
+    it('after the 409 the price-for-all box is read again for the count now, through core, unless the seller touched it (red if only the count box moves: the old figure then shows as on offer for the new count and is sent back unchanged)', () => {
+        const at = src.indexOf("e?.code === 'units_changed'");
+        expect(at).toBeGreaterThan(0);
+        const block = src.slice(at, at + 1400);
+        // The one rule, core's: the stored price, the count now, the box as it is, whether it was touched.
+        expect(block).toContain('perItemAfterUnitsChanged(editItemStored?.lot ?? null, e.unitsLeft, editItemLot, editLotTouched)');
+        expect(block).toContain('setEditItemStored(after.stored)');
+        expect(block).toContain('setEditItemLot(after.lot)');
+        // The old handler kept the stored price and moved the count alone.
+        expect(block).not.toContain('setEditItemCount(String(e.unitsLeft))');
+        expect(block).not.toContain('was?.lot');
+    });
+
+    it('the phone\'s box takes what core\'s rule does: the 409 rule is the same function the web calls, and it rebuilds the box as measured in core (the review\'s 20 for 5,000 case)', () => {
+        const lot = { units: 20, price_c: 500000 };
+        // Untouched: empty for the 17 left. Touched: as typed. Back to 20: showing again.
+        expect(perItemAfterUnitsChanged(lot, 17, '5000', false)).toEqual({ stored: { unitsLeft: 17, lot }, count: '17', lot: '' });
+        expect(perItemAfterUnitsChanged(lot, 17, '4800', true).lot).toBe('4800');
+        expect(perItemAfterUnitsChanged(lot, 20, '', false).lot).toBe('5000');
+    });
+
+    it('the count is read in the language\'s own digits on this form too, and a stale price for all is cleared rather than refused (red if the phone reads ASCII only)', () => {
+        expect(readCount('٢٠', 'ar')).toBe(20);
+        expect(readCount('２０', 'zh-Hans')).toBe(20);
+        expect(readCount('२०', 'hi')).toBe(20);
+        const stale = perItemEditFields({ price: '250', count: '17', lot: '' }, { wasEach: true, unitsLeft: 17, lot: { units: 20, price_c: 550000 } }, false);
+        expect(stale).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 17, unitsLeftWas: 17, lot: null } });
     });
 
     it('the held-for-buyers note and the stored price for another number come from core (red if the note counts money)', () => {

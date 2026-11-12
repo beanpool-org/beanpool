@@ -1496,6 +1496,8 @@ describe("the doors write the composer's own draft (app/new-listing.tsx, map.tsx
         for (const field of restore.match(/\bd\.(\w+)/g)!.map((m) => m.slice(2))) expect(Object.keys(d), field).toContain(field);
         expect(map).toContain("const OFFER_DRAFT_KEY = 'beanpool_offer_draft'");
         expect(d).toMatchObject({ postType: 'offer', postTitle: 'Ladder', postCredits: '3', postPriceType: 'daily', postLat: null, postLng: null, anchorUrl: 'https://mullum.example' });
+        // The composer's two boxes for an Offer priced for each one are in the draft, empty: a tool's fee is never priced each.
+        expect(d).toMatchObject({ postItemCount: '', postItemLot: '' });
         expect(d).not.toHaveProperty('lendable');
         expect(composerDraft('offer', { title: 'x' }, null, [], { kind: 'free', beans: 9 }, NOW)).toMatchObject({ postCredits: '0', postPriceType: 'fixed' });
     });

@@ -19,8 +19,8 @@ import {
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
 import {
-    carryTotalToEach, itemsHeldIn, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines, perItemLotForOtherLine,
-    perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
+    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
 } from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
 import { standingOfRow } from '../../utils/standing-row';
@@ -1452,10 +1452,14 @@ function PostDetailModal() {
         } catch (e: any) {
             if (e?.code === 'units_changed' && typeof e.unitsLeft === 'number') {
                 // A take-up landed while the seller edited (§2.5): the count box now shows what is left, the save is made against
-                // it, and the seller is told to check the number and save again. Nothing of this save was written.
+                // it, and the seller is told to check the number and save again. Nothing of this save was written. The price-for-all
+                // box is read again for that count (core): one the seller did not touch showed the stored price because it was for
+                // the old count, and sent back unchanged the node would keep it for that number.
                 const text = perItemRefusalText({ code: 'units_changed', count: e.unitsLeft });
-                setEditItemStored((was) => ({ unitsLeft: e.unitsLeft, lot: was?.lot ?? null }));
-                setEditItemCount(String(e.unitsLeft));
+                const after = perItemAfterUnitsChanged(editItemStored?.lot ?? null, e.unitsLeft, editItemLot, editLotTouched);
+                setEditItemStored(after.stored);
+                setEditItemCount(after.count);
+                setEditItemLot(after.lot);
                 setEditItemRefusal({ field: 'count', text });
                 Alert.alert(t('Error'), text);
             } else {

@@ -5,9 +5,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     EMPTY_PER_ITEM_TEXT, amountAsTyped, carryTotalToEach, itemsHeldIn, perItemCreateFields, perItemEditFields, perItemEditStart, perItemFeeLine,
-    perItemFormRefusal, perItemHeldNote, perItemIsFree, perItemLotForOtherLine, perItemLotHint, priceUnitsOffered, readCount, readPerItemForm,
-    type PerItemFormText, type PerItemStored,
+    perItemAfterUnitsChanged, perItemFormRefusal, perItemHeldNote, perItemIsFree, perItemLotForOtherLine, perItemLotHint, priceUnitsOffered, readCount,
+    readPerItemForm, type PerItemFormText, type PerItemStored,
 } from '../per-item-form';
+import { AMOUNT_DIGITS } from '../amount-input';
+import { parseHundredths } from '../hundredths';
 import { itemColumnsRefusal, perItemLines } from '../per-item';
 import { setLanguage } from '../words';
 
@@ -44,6 +46,33 @@ describe('the boxes are read as typed, never rounded', () => {
         expect(readCount(' 9999 ')).toBe(9999);
         expect(readCount('0')).toBe(0);
         for (const bad of ['', ' ', '2.5', '-3', '1e3', '10000', 'twenty', '3,5', '+3']) expect(readCount(bad)).toBe(null);
+    });
+
+    it('a count is read in the language\'s own digits, as the amount boxes read them (red if readCount takes ASCII 0-9 only: an Arabic, Hindi or Japanese number pad is refused)', () => {
+        // The review's three: Arabic-Indic, Devanagari and full-width, each typed on its own language's number pad.
+        expect(readCount('٢٠', 'ar')).toBe(20);
+        expect(readCount('२०', 'hi')).toBe(20);
+        expect(readCount('２０', 'ja')).toBe(20);
+        // Every language the amount boxes read natively reads the same count: the one list, core AMOUNT_DIGITS.
+        for (const [lang, digits] of Object.entries(AMOUNT_DIGITS)) {
+            const typed = `${digits![2]}${digits![0]}`;
+            expect(readCount(typed, lang as never), `${lang} ${typed}`).toBe(20);
+            expect(parseHundredths(typed, lang as never), `${lang} as an amount`).toEqual({ ok: true, value: 2000 });
+            expect(readCount(`${digits![9]}${digits![9]}${digits![9]}${digits![9]}`, lang as never), lang).toBe(9999);
+            // 10,000, a fraction and a sign are still refused, in the language's own digits too.
+            expect(readCount(`${digits![1]}${digits![0]}${digits![0]}${digits![0]}${digits![0]}`, lang as never), lang).toBe(null);
+            expect(readCount(`${digits![2]}.${digits![5]}`, lang as never), lang).toBe(null);
+            expect(readCount(`-${digits![3]}`, lang as never), lang).toBe(null);
+        }
+        // Not another language's digits, and never two systems in one number.
+        expect(readCount('٢٠', 'en')).toBe(null);
+        expect(readCount('٢٠', 'hi')).toBe(null);
+        expect(readCount('٢0', 'ar')).toBe(null);
+        // The boxes carry the language to every door: the same figures typed in Arabic are a good create.
+        expect(readPerItemForm(text('٣٠٠', '٢٠', '٥٥٠٠'), 'ar')).toEqual({ price_c: c(300), count: 20, lot_c: c(5500), lotBad: false });
+        expect(perItemCreateFields(text('٣٠٠', '٢٠', '٥٥٠٠'), 'ar')).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 20, lot: { price_c: c(5500) } } });
+        expect(perItemFormRefusal(text('٣٠٠', '٢٠', '٥٥٠٠'), null, 'ar')).toBe(null);
+        expect(perItemFormRefusal(text('٣٠٠', '٢٠', '٦٠٠٠'), null, 'ar')).toMatchObject({ field: 'lot', code: 'lot_not_less' });
     });
 
     it('prices are whole hundredths through parseHundredths (red if a float is used)', () => {
@@ -228,6 +257,59 @@ describe('an edit: the count the screen read, the count now, and the price for a
         expect(made.ok && made.fields.lot).toBe(null);
     });
 
+    it('a price for all set for another number that the new price for one makes not-less: the box is empty and untouched, so it is CLEARED, not left for the node to refuse about a box nobody sees (red if lot stays absent)', () => {
+        // Rob's panels: 20 for 5,500 at 300; 3 sold, released; 17 left. He lowers the price to 250 and leaves the empty box alone.
+        const s = stored(17, { units: 20, beans: 5500 });
+        // What the node says if the stale price is kept: 20 × 250 = 5,000, and 5,500 for all is no longer less than that.
+        expect(itemColumnsRefusal(c(250), { units_left: 17, lot_price_c: c(5500), lot_units: 20 })).toMatchObject({ code: 'lot_not_less', count: 20 });
+        const made = perItemEditFields(text('250', '17', ''), s, false);
+        expect(made).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 17, unitsLeftWas: 17, lot: null } });
+        // The columns the node then holds take: no price for all at all.
+        expect(itemColumnsRefusal(c(250), { units_left: 17, lot_price_c: null, lot_units: null })).toBe(null);
+    });
+
+    it('a stored price for another number that is STILL less one by one is kept (lot absent), so a title edit or a price that leaves it good does not clear it', () => {
+        const s = stored(17, { units: 20, beans: 5500 });
+        // 20 × 276 = 5,520 > 5,500: still less.
+        for (const price of ['300', '299', '276']) {
+            const made = perItemEditFields(text(price, '17', ''), s, false);
+            expect(made.ok && 'lot' in made.fields, price).toBe(false);
+        }
+        // 20 × 275 = 5,500: equal is not less, and below that it is more so.
+        for (const price of ['275', '250', '100']) {
+            const made = perItemEditFields(text(price, '17', ''), s, false);
+            expect(made.ok && made.fields.lot, price).toBe(null);
+        }
+    });
+
+    it('whatever an untouched or emptied price-for-all box does, the node takes the columns that result (red if the form lets the node refuse a box nobody sees)', () => {
+        // The node's own rule for an edit's lot (itemColumnsOnEdit): absent keeps the stored price and the number it is for,
+        // null clears it, a figure is bound to the count saved with it. Then itemColumnsRefusal over the columns that result.
+        const columns = (fields: { unitsLeft: number; unitsLeftWas?: number; lot?: { price_c: number } | null }, s: PerItemStored) => {
+            let lot_price_c: number | null = s.lot?.price_c ?? null;
+            let lot_units: number | null = s.lot?.units ?? null;
+            if (fields.lot === null) { lot_price_c = null; lot_units = null; }
+            else if (fields.lot && (fields.unitsLeft !== fields.unitsLeftWas || fields.lot.price_c !== lot_price_c)) { lot_price_c = fields.lot.price_c; lot_units = fields.unitsLeft; }
+            return { units_left: fields.unitsLeft, lot_price_c, lot_units };
+        };
+        let ran = 0;
+        for (const price of ['0', '0.01', '1', '100', '250', '275', '299.99', '300', '1000']) {
+            for (const left of [0, 1, 17, 20, 25]) {
+                for (const lot of [null, { units: 20, beans: 5500 }, { units: 17, beans: 5000 }, { units: 2, beans: 500 }]) {
+                    for (const touched of [false, true]) {
+                        const s = stored(left, lot);
+                        const made = perItemEditFields(text(price, String(left), ''), s, touched);
+                        if (!made.ok) continue;
+                        ran++;
+                        const price_c = Math.round(Number(price) * 100);
+                        expect(itemColumnsRefusal(price_c, columns(made.fields, s)), `${price} / ${left} left / ${JSON.stringify(lot)} / touched ${touched}`).toBe(null);
+                    }
+                }
+            }
+        }
+        expect(ran).toBeGreaterThan(200);
+    });
+
     it('an unchanged 0 (all taken for now) is fine; changed to 0 it is "To stop selling, pause or remove the listing."', () => {
         const held = stored(0, null);
         expect(perItemEditFields(text('300', '0'), held, false).ok).toBe(true);
@@ -241,6 +323,49 @@ describe('an edit: the count the screen read, the count now, and the price for a
         const made = perItemEditFields(text('300', '20', '5500'), { wasEach: false, unitsLeft: null, lot: null }, true);
         expect(made).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 20, lot: { price_c: c(5500) } } });
         expect(perItemEditFields(text('300', '', ''), null, false).ok).toBe(false);
+    });
+});
+
+describe('a take-up landed while the form was open: the 409 moves the count AND the price for all (§2.5, the node\'s units_changed)', () => {
+    // The review's example: all 20 for 5,000 at 300 each; 3 are taken while the seller edits, so 17 are left. 17 × 300 = 5,100,
+    // so the old figure still reads as a good price for all 17 in the live line, though the node holds it for 20.
+    const lot20 = { units: 20, price_c: c(5000) };
+
+    it('the price-for-all box untouched is rebuilt for the count now: empty, with the "was for 20" line (red if it keeps showing 5000 for the 17 left)', () => {
+        const after = perItemAfterUnitsChanged(lot20, 17, '5000', false);
+        expect(after).toEqual({ stored: { unitsLeft: 17, lot: lot20 }, count: '17', lot: '' });
+        expect(perItemLotForOtherLine(lot20, 17)).toContain('was for 20. There are 17 left');
+        // What the seller read before the fix: a box that still said it was on offer for the 17.
+        expect(perItemLotHint(text('300', '17', '5000'))?.text).toBe('All 17 for 5,000 Beans. One by one they come to 5,100.');
+        // Now the box is empty and the live line is the plain one.
+        expect(perItemLotHint(text('300', after.count, after.lot))).toEqual({ kind: 'empty', text: 'Leave this empty to sell them one by one only.' });
+    });
+
+    it('so the save does not send the old price back unchanged for the node to keep bound to 20 (red if lot is { price_c: 500000 } with unitsLeft === unitsLeftWas)', () => {
+        const after = perItemAfterUnitsChanged(lot20, 17, '5000', false);
+        const made = perItemEditFields(text('300', after.count, after.lot), { wasEach: true, ...after.stored }, false);
+        expect(made).toEqual({ ok: true, fields: { priceType: 'each', unitsLeft: 17, unitsLeftWas: 17 } });
+        // The reading that failed: the box left as it was, sent back for the node to keep bound to 20.
+        const stale = perItemEditFields(text('300', '17', '5000'), { wasEach: true, unitsLeft: 17, lot: lot20 }, false);
+        expect(stale).toMatchObject({ ok: true, fields: { unitsLeft: 17, unitsLeftWas: 17, lot: { price_c: c(5000) } } });
+    });
+
+    it('a price the seller touched stays as they typed it: it is for the count now (the node binds a new price to the count seen)', () => {
+        expect(perItemAfterUnitsChanged(lot20, 17, '4800', true)).toEqual({ stored: { unitsLeft: 17, lot: lot20 }, count: '17', lot: '4800' });
+        // Emptied by the seller: stays empty (and the save clears it).
+        expect(perItemAfterUnitsChanged(lot20, 17, '', true).lot).toBe('');
+    });
+
+    it('a price for all that IS for the count now shows again (the count came back to the number it was set for)', () => {
+        expect(perItemAfterUnitsChanged(lot20, 20, '', false)).toEqual({ stored: { unitsLeft: 20, lot: lot20 }, count: '20', lot: '5000' });
+    });
+
+    it('none stored: the count moves, the box stays as it is', () => {
+        expect(perItemAfterUnitsChanged(null, 17, '', false)).toEqual({ stored: { unitsLeft: 17, lot: null }, count: '17', lot: '' });
+    });
+
+    it('typed back in the language\'s own way (ar)', () => {
+        expect(perItemAfterUnitsChanged({ units: 17, price_c: c(5000) }, 17, '', false, 'ar').lot).toBe(amountAsTyped(c(5000), 'ar'));
     });
 });
 

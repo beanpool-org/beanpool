@@ -426,6 +426,8 @@ export interface ReleaseDeal {
     /** What it holds, whole hundredths of a Bean. */
     amount_c?: number | null;
     hours?: number | null;
+    /** A per-item deal's way (DESIGN-per-item-price-fable.md §3, D5): it pays what it holds, never re-rated by a count. */
+    itemOption?: string | null;
 }
 
 /** The listing as Release reads it: how it is priced, and whether it is lent. */
@@ -438,13 +440,15 @@ export interface ReleaseListing {
  * What a payer's Release moves, as the node pays it (apps/server engine/escrow.ts completePostTransaction): a deal
  * struck for a time pays at its own rate (what it holds over the time it was struck for) for the time confirmed; a fixed
  * price, a loan for one fee, or a deal with no time on it pays what it holds. `units` is the time confirmed, undefined
- * when none is asked for; a time that is not above 0 releases nothing (Release is off for it).
+ * when none is asked for; a time that is not above 0 releases nothing (Release is off for it). A deal for a number of
+ * items (a listing priced each, design D5) pays what it holds: its `hours` is how many, never a time to re-rate by.
  */
 export function releaseAmount(deal: ReleaseDeal, units: number | undefined, listing: ReleaseListing): number {
     const held = isHundredths(deal.amount_c) && deal.amount_c > 0 ? deal.amount_c : 0;
     const booked = Number(deal.hours);
     const oneFeeLoan = !!listing.lendable && (listing.priceType || 'fixed') === 'fixed';
-    if (!(Number.isFinite(booked) && booked > 0) || oneFeeLoan || units === undefined) return held;
+    const items = listing.priceType === 'each' || deal.itemOption === 'each' || deal.itemOption === 'lot';
+    if (!(Number.isFinite(booked) && booked > 0) || oneFeeLoan || items || units === undefined) return held;
     if (!(Number.isFinite(units) && units > 0)) return 0;
     // As the node pays it (engine/escrow.ts): what it holds times the time confirmed over the time booked, both in
     // hundredths of a unit, truncated once (the payer keeps a part below a hundredth).

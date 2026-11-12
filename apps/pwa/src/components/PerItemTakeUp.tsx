@@ -26,6 +26,18 @@ const STEP = 'w-12 h-12 shrink-0 rounded-lg border border-nature-300 dark:border
 const CHOICE = 'flex items-start gap-3 py-2 min-h-[48px] w-full text-left cursor-pointer';
 const NOTE = 'block text-[13px] leading-snug text-nature-600 dark:text-nature-300 mt-0.5';
 
+/**
+ * A choice's ring, drawn (the browser's own radio is a solid white disc in dark, which reads as ticked): a grey ring, or the
+ * commit green with its dot when ticked, as the phone draws it. The real radio beside it is kept for the keyboard and screen readers.
+ */
+function Ring({ on }: { on: boolean }) {
+    return (
+        <span aria-hidden="true" className={`mt-0.5 h-5 w-5 shrink-0 rounded-full border-2 flex items-center justify-center peer-focus-visible:ring-2 peer-focus-visible:ring-terra-500 ${on ? 'border-bp-commit-fill' : 'border-nature-500 dark:border-nature-300'}`}>
+            {on && <span className="h-2.5 w-2.5 rounded-full bg-bp-commit-fill" />}
+        </span>
+    );
+}
+
 export function PerItemTakeUp({ listing, box, state, onState, nodeRefusal = null, disabled = false }: PerItemTakeUpProps) {
     const id = useId();
     const each = box.option === 'each';
@@ -34,8 +46,9 @@ export function PerItemTakeUp({ listing, box, state, onState, nodeRefusal = null
     return (
         <div data-testid="each-take-up" role="radiogroup" aria-label={box.title} className="mb-3">
             <label className={CHOICE} data-testid="each-choose">
-                <input type="radio" name={`${id}-way`} className="mt-1 h-5 w-5 shrink-0 accent-bp-commit-fill" checked={each} disabled={off}
+                <input type="radio" name={`${id}-way`} className="peer sr-only" checked={each} disabled={off}
                     onChange={() => onState(itemBoxPick(listing, state, 'each'))} />
+                <Ring on={each} />
                 <span className="min-w-0">
                     <span className="block text-[15px] font-bold text-nature-900 dark:text-white">{box.chooseLabel}</span>
                     <span className={NOTE} data-testid="each-line">{box.eachLine}</span>
@@ -50,8 +63,9 @@ export function PerItemTakeUp({ listing, box, state, onState, nodeRefusal = null
             </div>
             {box.lot && (
                 <label className={`${CHOICE} mt-1`} data-testid="each-all">
-                    <input type="radio" name={`${id}-way`} className="mt-1 h-5 w-5 shrink-0 accent-bp-commit-fill" checked={!each} disabled={off}
+                    <input type="radio" name={`${id}-way`} className="peer sr-only" checked={!each} disabled={off}
                         onChange={() => onState(itemBoxPick(listing, state, 'lot'))} />
+                    <Ring on={!each} />
                     <span className="min-w-0">
                         <span className="block text-[15px] font-bold text-nature-900 dark:text-white">{box.lot.label}</span>
                         {box.lot.saving && <span className={NOTE}>{box.lot.saving}</span>}

@@ -156,7 +156,6 @@ client can appear to miss a route it reaches dynamically. Method mismatches are 
 - /api/local/admin/treasury/:treasury/offer
 - /api/local/admin/treasury/:treasury/operators
 - /api/local/admin/treasury/:treasury/operators/:pubkey
-- /api/local/admin/users/:pubkey/elder
 - /api/local/admin/users/:pubkey/freeze
 - /api/local/admin/users/:pubkey/operator
 - /api/local/admin/users/:pubkey/prune

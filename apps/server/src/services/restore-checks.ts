@@ -462,7 +462,8 @@ function quoteName(name: string): string {
  */
 export const CORE_TABLES: Record<string, readonly string[]> = {
     members: ['public_key', 'callsign'],
-    // The key column only: the money column is the boot's (db/hundredths-step.ts makes `balance_c` on an older shape).
+    // The key column only. Every file the gate opens (1.4.0 or later) has `balance_c` from 1.4.0's schema; no boot step
+    // makes it any more (the 1.4.0 hundredths step, log row B11, is gone).
     accounts: ['public_key'],
     node_config: [],
     node_roles: ['member_pubkey', 'role'],

@@ -196,7 +196,7 @@ describe('a direct chat\'s voice message', () => {
         expect(dmLineSigVerifies(sealed, { conversationId: CONV, senderPubHex: ana.publicKey, recipientPubHex: ben.publicKey, messageId: id, part: 'attachment' })).toBe(false);
     });
 
-    it('is sealed as bytes: the node sees no header and no sound, and it is a third smaller than a photo\'s data URI would be', () => {
+    it('is sealed as bytes: the node sees no header and no sound, and it goes a quarter smaller than the sound as a photo\'s data URI would', () => {
         const id = newDmMessageId();
         const sound = m4a(30_000);
         const sealed = sealDmVoice({ ...VOICE, sound }, ctxOf(ana, ben), { senderPubHex: ana.publicKey, messageId: id });

@@ -9,6 +9,9 @@
  *   it on a profile), `giver` (built only from the balance and the line) or `admins` (owners' and admins' alone). The level
  *   is the worst rule's; the server drops the admins' reasons from a voucher's answer and says `more` where one of them
  *   moved the level ({@link riskForVoucher}). Advice for a person: the server enforces nothing from it.
+ * - {@link paidByGifts} (amendment 2, slice C8): for {@link GIFT_DAYS} days the five rules built from what someone owes read
+ *   what they would owe by their own trading, so a friend's gift of Beans can't wash the word just before a giver looks.
+ *   The row's balance and Spending paused stay the stored balance; a gift can never make a word worse.
  * - The sentences each surface draws: the row's credit line, the balance, the level and each reason, and the one sentence
  *   that tells every member who can see them (§5.3, {@link CREDIT_SIGHT_WORDS}.told).
  *
@@ -41,6 +44,11 @@ export const CANCELLED_MIN = 2;
 export const BRANCH_BELOW_MIN = 2;
 /** How far back a dispute decided against them counts (§4.1): 12 months. */
 export const DISPUTE_DAYS = 365;
+/**
+ * A gift of Beans stops counting toward the word this many days after it arrived (amendment 2 §2). A constant, never the
+ * owner's "60 days" (7 to 3,650: ten years of rows would be walked, amendment 2 F19).
+ */
+export const GIFT_DAYS = 30;
 
 export const CREDIT_SIGHT_WORDS = {
     /** §5.3: drawn on the join screen and "How this community works" on every node with Beans, in the PR that answers a look. */
@@ -148,6 +156,12 @@ export interface CreditRiskFacts {
     balance_c: number;
     line_c: number;
     usable_c: number;
+    /**
+     * What gifts of Beans paid off of what they owed in the last {@link GIFT_DAYS} days, not yet earned back by their own
+     * trading ({@link paidByGifts}; 0 for nearly everyone). The five rules built from what they owe read what they would
+     * owe by their own trading: what they owe now plus this (amendment 2 §2). Never the row's balance, which stays the stored one.
+     */
+    giftPaid_c: number;
     // Admins'.
     frozen: boolean;
     ring: boolean;
@@ -192,25 +206,98 @@ export interface CreditRisk {
 
 const quiet = (f: CreditRiskFacts) => f.lastSaleDays === null || f.lastSaleDays >= f.quietDays;
 
+// ── What a gift of Beans paid (amendment 2 §2, §4) ───────────────────────────────────────────────────────────────
+
+/** One change to a stored balance, from its ledger row: what it added (+) or took (−), and whether it was a gift of Beans. */
+export interface BalanceMove {
+    delta_c: number;
+    gift: boolean;
+    /**
+     * The escrow account on the row's other side (`escrow_<deal or project>`), when it is one: their own Beans into it (a
+     * hold, a top-up, a pledge) or Beans back out of it (a refund, a pledge returned, or a sale's payout from a buyer's
+     * escrow). Absent for every other row. {@link paidByGifts} nets a refund against their own hold into the same escrow.
+     */
+    escrow?: string;
+}
+
+/**
+ * The moves with each escrow's legs netted inside the window (the director's call on #3091, amendment 2 §2 row 3): Beans
+ * back out of an escrow first cancel their own holds into that same escrow made earlier in these moves, the newest hold
+ * first, and both legs drop by what cancelled; what is left of a hold stays at the hold's place. So a deal taken and
+ * cancelled inside the 30 days is not their own trading, and earns back nothing a gift paid. A refund of a hold made
+ * before the window, and a sale's payout from a buyer's escrow (no hold of theirs in it), stay as their own Beans in.
+ * The sum of the moves is unchanged, so the walk still starts from the stored balance. A gift is never netted.
+ */
+function netEscrowLegs(newestFirst: readonly BalanceMove[]): Array<{ delta_c: number; gift: boolean }> {
+    const out = newestFirst.map((m) => ({ delta_c: whole(m?.delta_c), gift: !!m?.gift, escrow: m?.gift ? undefined : m?.escrow }));
+    const open = new Map<string, number[]>(); // per escrow, the places of their holds still open, oldest first
+    for (let i = out.length - 1; i >= 0; i--) {
+        const m = out[i]!;
+        if (typeof m.escrow !== 'string' || m.escrow === '' || m.delta_c === 0) continue;
+        const holds = open.get(m.escrow) ?? [];
+        open.set(m.escrow, holds);
+        if (m.delta_c < 0) { holds.push(i); continue; }
+        while (m.delta_c > 0 && holds.length > 0) {
+            const h = out[holds[holds.length - 1]!]!;
+            const c = Math.min(m.delta_c, -h.delta_c);
+            h.delta_c += c;
+            m.delta_c -= c;
+            if (h.delta_c === 0) holds.pop();
+        }
+    }
+    return out;
+}
+
+/**
+ * What gifts of Beans paid off of what they owed, over the moves given (newest first, the last {@link GIFT_DAYS} days of
+ * their own rows), not yet earned back by their own trading. Walked back from the stored balance: the most they owed at
+ * any moment in those days, less everything that came in since that moment other than gifts, never less than what they
+ * owe now; what gifts paid is that less what they owe now.
+ *
+ * Two properties hold for any history (core test 25): a gift added anywhere never raises what they owe now plus this, so
+ * nobody can mark a person by sending them Beans; and this is never more than the gifts in the moves, so an odd row
+ * cannot invent a debt larger than real gifts. A gift on a balance at or above zero counts for nothing. A hold and its
+ * refund inside the moves net to nothing first ({@link netEscrowLegs}): a cancelled deal is not their own trading.
+ */
+export function paidByGifts(balance_c: number, newestFirst: readonly BalanceMove[]): number {
+    let bal = whole(balance_c); // the balance after the move in hand
+    const owedNow = Math.max(0, -bal);
+    let counted = owedNow;
+    let own = 0; // Beans in since then that were not gifts
+    for (const m of netEscrowLegs(newestFirst ?? [])) {
+        const d = m.delta_c;
+        if (d > 0 && !m.gift) own += d;
+        bal -= d; // the balance just before this move
+        counted = Math.max(counted, Math.max(0, -bal) - own);
+    }
+    return counted - owedNow;
+}
+
 /** Every rule that holds, at its own level (§4.2, amendment §4.2). Pure. */
 export function riskReasons(f: CreditRiskFacts): RiskReason[] {
     const out: RiskReason[] = [];
     const add = (code: RiskCode, level: RiskLevel, mark: ReasonMark, values: Record<string, number> = {}) => out.push({ code, level, mark, values });
-    const p = position(f.balance_c, f.line_c, f.usable_c);
+    // The five rules built from what they owe read what they would owe by their own trading: what they owe now, plus what a
+    // gift of Beans paid in the last GIFT_DAYS days (amendment 2 §2). The row's balance and Spending paused read `now`.
+    const now = position(f.balance_c, f.line_c, f.usable_c);
+    const gift = Math.max(0, whole(f.giftPaid_c));
+    const p = gift > 0 ? position(-(now.owed_c + gift), f.line_c, f.usable_c) : now;
+    /** A rule's figures, and how much a gift paid when one did (its sentence then takes its second form). */
+    const owing = (values: Record<string, number>) => (gift > 0 ? { ...values, gift, giftDays: GIFT_DAYS } : values);
     const ended = f.completed + f.cancelled;
     // High.
     if (f.frozen) add('frozen', 'high', 'admins');
-    if (p.over_c > 0) add('over', 'high', 'giver', { owed: p.owed_c, over: p.over_c });
-    else if (p.owed_c > 0 && p.paused) add('paused', 'high', 'giver', { owed: p.owed_c, usable: Math.max(0, whole(f.usable_c)) });
+    if (p.over_c > 0) add('over', 'high', 'giver', owing({ owed: p.owed_c, over: p.over_c }));
+    else if (p.owed_c > 0 && p.paused) add('paused', 'high', 'giver', owing({ owed: p.owed_c, usable: Math.max(0, whole(f.usable_c)) }));
     if (f.ring) add('ring', 'high', 'admins');
-    if (p.line_c > 0 && p.owed_c * 10 >= p.line_c * ALMOST_ALL_TENTHS && quiet(f)) add('almost_all_quiet', 'high', 'admins', { owed: p.owed_c, line: p.line_c, days: f.quietDays });
+    if (p.line_c > 0 && p.owed_c * 10 >= p.line_c * ALMOST_ALL_TENTHS && quiet(f)) add('almost_all_quiet', 'high', 'admins', owing({ owed: p.owed_c, line: p.line_c, days: f.quietDays }));
     if (f.disputeAgainst) add('dispute', 'high', 'admins');
     const poorCompletion = ended >= COMPLETION_MIN_ENDED && f.completed * 2 < ended;
     if (poorCompletion) add('completion', 'high', 'open');
     if (f.writtenOff_c > 0) add('written_off', 'high', 'admins');
     // Medium.
-    if (p.over_c === 0 && p.line_c > 0 && p.owed_c * 100 > p.line_c * f.debtLinePct) add('over_half', 'medium', 'giver', { owed: p.owed_c, line: p.line_c, pct: f.debtLinePct });
-    if (p.owed_c > 0 && quiet(f)) add('below_zero_quiet', 'medium', 'admins', { owed: p.owed_c, days: f.quietDays });
+    if (p.over_c === 0 && p.line_c > 0 && p.owed_c * 100 > p.line_c * f.debtLinePct) add('over_half', 'medium', 'giver', owing({ owed: p.owed_c, line: p.line_c, pct: f.debtLinePct }));
+    if (p.owed_c > 0 && quiet(f)) add('below_zero_quiet', 'medium', 'admins', owing({ owed: p.owed_c, days: f.quietDays }));
     if (f.branchBelowZero >= BRANCH_BELOW_MIN && f.branchBelowZero * 2 >= f.branchPeople) add('branch_below', 'medium', 'admins', { n: f.branchBelowZero, m: f.branchPeople });
     if (f.insideOnly) add('inside_only', 'medium', 'admins');
     // Fewer than half completed says it already, at high: the cancellations are its reason, not a second one.
@@ -264,23 +351,49 @@ export function riskLevelSentence(level: RiskLevel): string {
 }
 export const RISK_SHAPES: Readonly<Record<RiskLevel, string>> = { not_known: '○', low: '✓', medium: '!', high: '✕' };
 
-/** A reason's one sentence, with its figures. A code this build doesn't know draws nothing (null). */
+/**
+ * A reason's one sentence, with its figures. A code this build doesn't know draws nothing (null). Where a gift of Beans
+ * paid what they owe (`values.gift`, amendment 2 §4), the five rules built from it say what they would owe by their own
+ * trading, then one shared sentence says how much the gift paid: never "They owe" (the row reads the real balance) and
+ * never "Spending paused" (the row's own mark, which may not hold now). No name and no date, ever.
+ */
 export function riskReasonSentence(r: RiskReason): string | null {
     const v = r.values ?? {};
     const days = () => tn(whole(v.days), '{n} day', '{n} days', { n: formatCount(whole(v.days)) });
+    const gift = whole(v.gift) > 0;
+    const giftDays = whole(v.giftDays) > 0 ? whole(v.giftDays) : GIFT_DAYS;
+    /** The second form's last sentence, one for all five: what the gift paid, and in how many days. No name, no date. */
+    const paid = () => tn(giftDays, 'A gift of Beans paid {gift} of it in the last {n} day.', 'A gift of Beans paid {gift} of it in the last {n} days.',
+        { gift: B(v.gift), n: formatCount(giftDays) });
     switch (r.code) {
         case 'frozen': return t('An admin froze their credit line.');
-        case 'over': return t('They owe {owed}, {over} more than their credit line allows.', { owed: B(v.owed), over: B(v.over) });
-        case 'paused': return t('Spending paused: they owe {owed}, more than the {usable} their Offers unlock.', { owed: B(v.owed), usable: B(v.usable) });
+        case 'over': return gift
+            ? t('By their own trading they would owe {owed}, {over} more than their credit line allows. {paid}', { owed: B(v.owed), over: B(v.over), paid: paid() })
+            : t('They owe {owed}, {over} more than their credit line allows.', { owed: B(v.owed), over: B(v.over) });
+        case 'paused': return gift
+            ? t('By their own trading they would owe {owed}, more than the {usable} their Offers unlock. {paid}', { owed: B(v.owed), usable: B(v.usable), paid: paid() })
+            : t('Spending paused: they owe {owed}, more than the {usable} their Offers unlock.', { owed: B(v.owed), usable: B(v.usable) });
         case 'ring': return t('Their trades look like a ring: the same Beans going round a small group.');
-        case 'almost_all_quiet': return t('They owe {owed} of {line}, almost all of it, and have made no sale for {days}.', { owed: B(v.owed), line: B(v.line), days: days() });
+        case 'almost_all_quiet': return gift
+            ? t('By their own trading they would owe {owed} of {line}, almost all of it, and they have made no sale for {days}. {paid}', { owed: B(v.owed), line: B(v.line), days: days(), paid: paid() })
+            : t('They owe {owed} of {line}, almost all of it, and have made no sale for {days}.', { owed: B(v.owed), line: B(v.line), days: days() });
         case 'dispute': return t('An admin decided a dispute against them in the last 12 months.');
         case 'completion': return t('Fewer than half of their trades were completed.');
         case 'written_off': return t('Credit they stood behind was written off.');
-        case 'over_half': return whole(v.pct) === 50
-            ? t('They owe {owed} of {line}: more than half.', { owed: B(v.owed), line: B(v.line) })
-            : t('They owe {owed} of {line}: more than {pct}%.', { owed: B(v.owed), line: B(v.line), pct: formatCount(whole(v.pct)) });
-        case 'below_zero_quiet': return t('Below zero ({owed}) with no sale for {days}.', { owed: B(v.owed), days: days() });
+        case 'over_half': {
+            const half = whole(v.pct) === 50;
+            if (gift) {
+                return half
+                    ? t('By their own trading they would owe {owed} of {line}: more than half. {paid}', { owed: B(v.owed), line: B(v.line), paid: paid() })
+                    : t('By their own trading they would owe {owed} of {line}: more than {pct}%. {paid}', { owed: B(v.owed), line: B(v.line), pct: formatCount(whole(v.pct)), paid: paid() });
+            }
+            return half
+                ? t('They owe {owed} of {line}: more than half.', { owed: B(v.owed), line: B(v.line) })
+                : t('They owe {owed} of {line}: more than {pct}%.', { owed: B(v.owed), line: B(v.line), pct: formatCount(whole(v.pct)) });
+        }
+        case 'below_zero_quiet': return gift
+            ? t('By their own trading they would be below zero ({owed}), with no sale for {days}. {paid}', { owed: B(v.owed), days: days(), paid: paid() })
+            : t('Below zero ({owed}) with no sale for {days}.', { owed: B(v.owed), days: days() });
         case 'branch_below': return t('{n} of the {m} people they stood behind are below zero.', { n: formatCount(whole(v.n)), m: formatCount(whole(v.m)) });
         case 'inside_only': return t('Only trades inside their own circle so far.');
         case 'cancelled': return tn(whole(v.n), '{n} trade cancelled.', '{n} trades cancelled.', { n: formatCount(whole(v.n)) });

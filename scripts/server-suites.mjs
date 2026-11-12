@@ -597,6 +597,8 @@ export const SUITES = [
     'test-credit-give',
     'test-credit-notices',
     'test-credit-budgets',
+    // A gift of Beans can't wash the credit-risk word (slice C8): the walk, each way in, the 30 days, the cost.
+    'test-credit-gift-memory',
     // Tiers are badges only: a badge gives no credit, never your own, logged, the member told; a genesis invite's too.
     'test-tiers-badge-only-http',
     'test-invite-asks',

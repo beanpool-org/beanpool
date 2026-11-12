@@ -14,9 +14,9 @@ import { describe, expect, it } from 'vitest';
 import { knownRuleLine } from '../community-shape-card.js';
 import { formatHundredths } from '../hundredths.js';
 import {
-    ALMOST_ALL_TENTHS, BRANCH_BELOW_MIN, CANCELLED_MIN, COMPLETION_MIN_ENDED, CREDIT_SIGHT_WORDS, DISPUTE_DAYS, LOW_DAYS_HERE, LOW_PARTNERS,
-    LOW_TRADES, RISK_LEVELS, RISK_SHAPES, creditRisk, riskLevelSentence, riskReasonSentence, riskReasons, type CreditRiskFacts, type ReasonMark,
-    type RiskLevel, type RiskReason,
+    ALMOST_ALL_TENTHS, BRANCH_BELOW_MIN, CANCELLED_MIN, COMPLETION_MIN_ENDED, CREDIT_SIGHT_WORDS, DISPUTE_DAYS, GIFT_DAYS, LOW_DAYS_HERE, LOW_PARTNERS,
+    LOW_TRADES, RISK_LEVELS, RISK_SHAPES, creditRisk, paidByGifts, riskForVoucher, riskLevelSentence, riskReasonSentence, riskReasons, type CreditRiskFacts,
+    type ReasonMark, type RiskLevel, type RiskReason,
 } from '../credit-sight.js';
 import { VOUCH_MAX, VOUCH_PRESETS, VOUCHER_BUDGET_MAX } from '../vouch-presets.js';
 
@@ -60,6 +60,9 @@ describe('no page still says what stopped being true', () => {
         [/Your balance stays private to you except in the four cases below/, 'the policy before section 9'],
         [/in a known community, if an admin has confirmed you, the admins can see your balance/i, 'the privacy page before the admins\' list wording'],
         [/private from other members in the same way, with one exception/, 'the privacy page counts one exception where the removal vote, the settling admin and the admins\' list follow it'],
+        // Amendment 2 (C8): a gift no longer clears the word, and one figure (what a gift paid, 30 days) reaches back.
+        [/clears every reason built from what they owe/i, 'the credit-risk page before C8: a gift washed the word'],
+        [/an older balance/i, 'the privacy sentence before C8: the gift-paid figure reaches back 30 days'],
     ];
 
     it('the guide, the operator manual and the website say none of the old sentences', () => {
@@ -85,6 +88,8 @@ describe('no page still says what stopped being true', () => {
             "**Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server.",
             'Your balance stays private to you except in the four cases below.',
             'Your balance is private from other members in the same way, with one exception: the people who give credit (below).',
+            'A gift that brings someone to zero or above clears every reason built from what they owe, the no-sale ones too, until the Beans go back.',
+            '**What no giver sees:** your trades, a history, or an older balance.',
         ]) expect(OLD.some(([re]) => re.test(sentence)), sentence).toBe(true);
     });
 
@@ -190,43 +195,79 @@ describe('Credit risk: what it reads says what core\'s rules say', () => {
         expect(page).toContain(`It needs ${LOW_TRADES} trades with ${LOW_PARTNERS} people at least, and ${LOW_DAYS_HERE} days here.`);
     });
 
-    it('says how it can be gamed, all eight ways, and that the server enforces nothing from it', () => {
-        for (const way of ['Friends trading to look established.', 'Topping up before asking.', 'A new key wipes a bad record.', 'A friendly voucher or a forwarded invite.',
-            'Waiting it out.', 'A figure invites false precision.', 'Spending fast to be topped up.', 'Looking, not giving.']) expect(page, way).toContain(way);
+    it('says how it can be gamed, all eleven ways, and that the server enforces nothing from it', () => {
+        const ways = ['Friends trading to look established.', 'Topping up before asking.', 'A new key wipes a bad record.', 'A friendly voucher or a forwarded invite.',
+            'Waiting it out.', 'A figure invites false precision.', 'Spending fast to be topped up.', 'Looking, not giving.',
+            // Amendment 2 §5, items 9 to 11.
+            'A gift dressed as a sale or a bill.', `Parking the Beans for ${GIFT_DAYS} days.`, 'Paying your people\'s debts before asking.'];
+        for (const way of ways) expect(page, way).toContain(`- ${way}`);
+        const gamed = /## How it can be gamed\n([\s\S]*?)\n## /.exec(page)?.[1] ?? '';
+        expect(gamed.split('\n').filter((l) => l.startsWith('- ')).length).toBe(ways.length);
         expect(page).toContain('Your community\'s server enforces nothing from this word.');
     });
 
     // The gaming list is said to the giver, so each line is held to what the rules do (deciding review of #3088, findings 1-3:
     // the design's own sentences were wrong, and the page copied them).
     const base: CreditRiskFacts = {
-        completed: 10, cancelled: 0, daysHere: 100, balance_c: 0, line_c: 100000, usable_c: 100000, frozen: false, ring: false, disputeAgainst: false,
+        completed: 10, cancelled: 0, daysHere: 100, balance_c: 0, line_c: 100000, usable_c: 100000, giftPaid_c: 0, frozen: false, ring: false, disputeAgainst: false,
         lastSaleDays: 90, confirmed: false, insideOnly: false, outsideTrades: 0, outsidePartners: 0, branchPeople: 0, branchBelowZero: 0, writtenOff_c: 0,
         debtLinePct: 50, quietDays: 60,
     };
     const codesOf = (f: CreditRiskFacts) => riskReasons(f).map((r) => r.code);
 
-    it('topping up: a gift that brings someone to zero or above clears every reason built from what they owe, the no-sale ones too', () => {
-        const owedBased = ['over', 'paused', 'almost_all_quiet', 'over_half', 'below_zero_quiet'];
-        // Owing 900 of 1,000 with 300 unlocked trips paused, almost-all-quiet, below-zero-quiet and over-half; owing 1,100 trips over.
-        const spentPaused: CreditRiskFacts = { ...base, balance_c: -90000, usable_c: 30000 };
-        const spentOver: CreditRiskFacts = { ...base, balance_c: -110000 };
-        const before = new Set([...codesOf(spentPaused), ...codesOf(spentOver)]);
-        for (const code of owedBased) expect(before.has(code as RiskReason['code']), `${code} holds in debt`).toBe(true);
-        expect(creditRisk(spentPaused).level).toBe('high');
-        // A friend's 950 Beans lift the first to +50 and 1,150 lift the second to +50, for the look.
-        for (const gifted of [{ ...spentPaused, balance_c: 5000 }, { ...spentOver, balance_c: 5000 }]) {
-            const after = codesOf(gifted);
-            for (const code of owedBased) expect(after, `${code} after a gift`).not.toContain(code);
-            expect(creditRisk(gifted).level).not.toBe('high');
+    // Test 34 (amendment 2, slice C8) replaces #3088's "a gift … clears every reason": for GIFT_DAYS days the word reads what
+    // they would owe by their own trading, and the page says so in core's own sentences.
+    const OWED_RULES = ['over', 'paused', 'almost_all_quiet', 'over_half', 'below_zero_quiet'];
+    it('34. the five reasons built from what someone owes, in their second form as core gives it, each under its level with who reads it', () => {
+        // Which rules carry a gift is read from core, not from this list: every reason that takes the gift's figure.
+        const carried = new Set<string>();
+        for (const f of [{ ...base, line_c: 0, usable_c: 0, giftPaid_c: 6000 }, { ...base, usable_c: 20000, giftPaid_c: 30000 }, { ...base, giftPaid_c: 95000 }]) {
+            for (const r of riskReasons(f)) if (r.values.gift) carried.add(r.code);
         }
-        // At zero is enough: owing nothing is owing nothing.
-        expect(codesOf({ ...spentPaused, balance_c: 0 })).not.toContain('below_zero_quiet');
-        // What a gift does not clear: the last sale is no input a gift changes, and a balance above zero adds no reason to trust.
-        expect(creditRisk({ ...spentPaused, balance_c: 5000 }).level).toBe('not_known');
-        // The page says so, and no longer says the no-sale reasons hold.
-        expect(page).toContain('A gift that brings someone to zero or above clears every reason built from what they owe, the no-sale ones too, until the Beans go back.');
+        expect([...carried].sort()).toEqual([...OWED_RULES].sort());
+        const gift = /## When a gift of Beans paid the debt\n([\s\S]*?)\n## /.exec(page)?.[1] ?? '';
+        const levels = { high: gift.split('At high:')[1]?.split('At medium:')[0] ?? '', medium: gift.split('At medium:')[1]?.split('\nA gift to someone')[0] ?? '' };
+        const at = (level: 'high' | 'medium') => levels[level];
+        for (const r of rules.filter((x) => OWED_RULES.includes(x.code))) {
+            const sentence = riskReasonSentence({ code: r.code as RiskReason['code'], level: r.level, mark: r.mark, values: { ...EXAMPLES[r.code]!, gift: 90000, giftDays: GIFT_DAYS } })!;
+            expect(sentence, r.code).toMatch(/^By their own trading .* A gift of Beans paid 900 of it in the last 30 days\.$/);
+            const who = r.mark === 'admins' ? 'Owners and admins read this.' : 'Every giver reads this.';
+            expect(at(r.level as 'high' | 'medium'), `${r.code} under ${r.level}`).toContain(`- ${sentence} ${who}`);
+        }
+        expect(gift).toContain(`For ${GIFT_DAYS} days it still reads what they would owe by their own trading, until their own sales have earned it back.`);
+        expect(gift).toContain('the balance on their row is the real one, straight away.');
+        expect(gift).toContain('The reason never says who sent the Beans or when.');
+    });
+
+    it('34. "30 days" is GIFT_DAYS wherever the page says how long a gift counts, and what the page says of a gift is what core does', () => {
+        expect(GIFT_DAYS).toBe(30);
+        expect(page).toContain(`The balance and the credit line: how much of the line someone is using. Every giver sees this. For ${GIFT_DAYS} days it also counts debt that a gift of Beans paid off (see below).`);
+        expect(page).toContain(`A friend can send Beans for an afternoon, and for ${GIFT_DAYS} days a gift does not clear what someone owed either.`);
+        expect(page).toContain(`A gift of Beans goes on counting for ${GIFT_DAYS} days. Your community's list of members who owe more than half reads what they owe now; for those ${GIFT_DAYS} days the word also counts debt a gift paid.`);
+        expect(page).toContain(`The word does not follow the gift: for ${GIFT_DAYS} days it reads what they would owe by their own trading, and says how much a gift paid.`);
+        // Sam owes 900 of 1,000 and has not sold for 90 days: high. A friend sends 900: the row reads 0, the word stays high.
+        const sam: CreditRiskFacts = { ...base, completed: 4, balance_c: -90000 };
+        const washed: CreditRiskFacts = { ...sam, balance_c: 0, giftPaid_c: paidByGifts(0, [{ delta_c: 90000, gift: true }]) };
+        expect(washed.giftPaid_c).toBe(90000);
+        expect(creditRisk(sam).level).toBe('high');
+        expect(creditRisk(washed).level).toBe('high');
+        expect(codesOf(washed)).toEqual(codesOf(sam));
+        expect(riskForVoucher(washed).more).toBe(true);
+        // Their own sale earns it back at once, and a gift to someone who owes nothing is not counted.
+        expect(paidByGifts(0, [{ delta_c: 90000, gift: false }])).toBe(0);
+        expect(paidByGifts(10000, [{ delta_c: 10000, gift: true }])).toBe(0);
+        expect(page).toContain("A gift to someone who owes nothing is not counted, so nobody's word gets worse because they were sent Beans.");
+        // A deal taken and cancelled inside the window earns nothing back (the director's call on #3091): the hold and its
+        // refund net to nothing, so Sam still reads high. A sale paid out of a buyer's escrow still earns it back at once.
+        const tookAndCancelled = paidByGifts(0, [{ delta_c: 90000, gift: false, escrow: 'escrow_d' }, { delta_c: -90000, gift: false, escrow: 'escrow_d' }, { delta_c: 90000, gift: true }]);
+        expect(tookAndCancelled).toBe(90000);
+        expect(creditRisk({ ...sam, balance_c: 0, giftPaid_c: tookAndCancelled }).level).toBe('high');
+        expect(paidByGifts(90000, [{ delta_c: 90000, gift: false, escrow: 'escrow_buyers' }, { delta_c: 90000, gift: true }])).toBe(0);
+        expect(page).toContain(`A deal they take that is then cancelled within the ${GIFT_DAYS} days earns nothing back: the Beans that went into it and came back count as if they had never moved.`);
+        // What a gift does not clear: their last sale (no input a gift changes), and a balance above zero is never a reason to trust.
+        expect(creditRisk({ ...sam, balance_c: 5000, giftPaid_c: 0 }).level).toBe('not_known');
         expect(page).toContain('A gift is not a sale, so their last sale does not move, and a balance above zero is never a reason to trust.');
-        expect(page).not.toMatch(/do not move with a gift/i);
+        expect(page).toContain('A gift that lifts someone to zero does let them be vouched for again: that rule reads the balance as it is.');
     });
 
     it('a new account reads not known yet until an admin confirms it, which reads low, so the page does not say "never low"', () => {

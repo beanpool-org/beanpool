@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressToOpenOnAComputer, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -2124,7 +2124,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
 /**
  * Settings → BeanPool: Help & how it works, Suggest a change (hidden while FEEDBACK_LIVE is false), beanpool.org,
- * Use the phone app (both), Install on this computer (desktop only).
+ * "BeanPool works in any browser: open <address> on any computer or phone" (every member; computer-line), Use the phone app
+ * (both), Install on this computer (desktop only).
  * The rows come from beanPoolSettingsEntries in @beanpool/core, the same list the member app's Settings uses.
  */
 export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null, phoneLater = null, onOpenShape, onRemoveHere }: {
@@ -2142,6 +2143,26 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     const deferredPrompt = useDeferredInstallPrompt();
     const [showPhoneApp, setShowPhoneApp] = useState(false);
     const [showInstallSteps, setShowInstallSteps] = useState(false);
+    // The address this page is served from: BeanPool on a computer is this web app, in any browser, at the community's own
+    // address (the phone's Settings says the matching line, from the address its community uses). Null for no http(s) address.
+    const browserAddress = addressToOpenOnAComputer(window.location.origin);
+    const [addressCopied, setAddressCopied] = useState(false);
+    const copyBrowserAddress = async () => {
+        if (!browserAddress) return;
+        try {
+            await navigator.clipboard.writeText(browserAddress);
+        } catch {
+            // No clipboard for this page (an older browser, an insecure page): the old way, from a field held off screen.
+            const el = document.createElement('textarea');
+            el.value = browserAddress;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        }
+        setAddressCopied(true);
+        setTimeout(() => setAddressCopied(false), 2000);
+    };
 
     const handleDesktopInstall = async () => {
         if (deferredPrompt) {
@@ -2229,6 +2250,30 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                     </span>
                     <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                 </button>
+                {/* BeanPool on a computer is this web app (there is no desktop app): the community's address, in any browser. For every
+                    member, owners too; the phone's Settings says the same line. Text, not a link: the page is already open. */}
+                {browserAddress && (
+                    <div className="w-full min-h-[56px] p-4 flex items-start gap-3" data-testid="settings-use-in-browser">
+                        <span className="text-xl" aria-hidden="true">🌐</span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block text-[15px] font-bold text-nature-900 dark:text-white break-words" data-testid="settings-use-in-browser-line">
+                                <Sentence text={t(USE_ON_COMPUTER_WORDS.webLine)} parts={{ address: <code className="font-mono font-bold text-nature-700 dark:text-nature-300 break-all">{browserAddress}</code> }} />
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => { void copyBrowserAddress(); }}
+                                className={`mt-2 min-h-[44px] py-2 px-4 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
+                                    addressCopied
+                                        ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
+                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
+                                }`}
+                                aria-label={t("Copy this community's link")}
+                            >
+                                {addressCopied ? t('✓ Copied!') : t('📋 Copy')}
+                            </button>
+                        </span>
+                    </div>
+                )}
                 {/* Use the phone app (front doors S4): both phone and computer */}
                 <div>
                     <button

@@ -5,6 +5,13 @@ summary: What changed in the app, in plain words.
 related: home, the-bean, how-it-works, rules, faq, communities
 ---
 
+## BeanPool on a computer
+
+On the phone you get this with an up-to-date app; in a web browser, when your community's server is updated.
+
+- **Open your community's address in a browser.** BeanPool on a computer is the web app, and it's the same account. There is no separate desktop app. See "Using BeanPool in a web browser".
+- **Say it in Settings.** The phone's **Settings** has **Use BeanPool on a computer** with your community's address, **Copy** and **Share**. In the web app, **Settings** → **BeanPool** says **BeanPool works in any browser**, with the address and **Copy**.
+
 ## Credit on the People list
 
 On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated. The first three are for the people who give credit here: the owners, admins and vouchers. Other members see no new switch, and their app never asks.

@@ -2524,7 +2524,7 @@
     "one": "1.5% topluluğa gider. Her biri için {n} fasulye ya da hepsi için {all} fasulye alırsın.",
     "other": "1.5% topluluğa gider. Her biri için {n} fasulye ya da hepsi için {all} fasulye alırsın."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Kaç tane olduğunu yaz: 1 ile 9,999 arasında bir tam sayı.",
+  "Say how many you have: a whole number from 1 to {max}.": "Kaç tane olduğunu yaz: 1 ile {max} arasında bir tam sayı.",
   "A price for all of them needs 2 or more.": "Hepsi için fiyat vermek için 2 veya daha fazla adet gerekir.",
   "Only an Offer can be priced for each one.": "Tanesi için fiyat yalnızca bir Teklife verilebilir.",
   "A price for all of them must be a number of Beans above 0.": "Hepsi için fiyat, 0'dan büyük bir fasulye sayısı olmalı.",

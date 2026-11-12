@@ -39,7 +39,7 @@ The rest of the form is as for any Offer: at least one photo, tags, a place and 
 
 ## What buyers see
 
-On a card, the line reads **300 Beans each · 20 left · or all for 5,500**. On a small card, the price sits at the end of the row as **300 each**, with **20 left · or all for 5,500** under the title, and a tile shows **20 LEFT**. A free one reads **Free** with **20 left** under it. On the post itself, the price box shows the price for one, how many are left, and **or all 20 for 5,500 Beans**.
+On a card, the line reads **300 Beans each · 20 left · or all for 5,500**. On a small card, the price sits at the end of the row as **300 🫘 each**, with **20 left · or all for 5,500 🫘** under the title, and a tile shows **20 LEFT**. A free one reads **Free** with **20 left** under it. On the post itself, the price box shows the price for one, how many are left, and **or all 20 for 5,500 Beans**.
 
 The price for all of them is for exactly that many. It shows only while every one is still there:
 

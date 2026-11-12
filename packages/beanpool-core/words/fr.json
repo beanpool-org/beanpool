@@ -2524,7 +2524,7 @@
     "one": "1.5% va à la communauté. Vous recevez {n} haricot pour chacun, ou {all} haricots pour le tout.",
     "other": "1.5% va à la communauté. Vous recevez {n} haricots pour chacun, ou {all} haricots pour le tout."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Indiquez combien vous en avez : un nombre entier de 1 à 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Indiquez combien vous en avez : un nombre entier de 1 à {max}.",
   "A price for all of them needs 2 or more.": "Un prix pour le tout suppose 2 ou plus.",
   "Only an Offer can be priced for each one.": "Seule une Offre peut avoir un prix par unité.",
   "A price for all of them must be a number of Beans above 0.": "Le prix pour le tout doit être un nombre de haricots supérieur à 0.",

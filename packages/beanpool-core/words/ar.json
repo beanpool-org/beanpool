@@ -2952,7 +2952,7 @@
     "many": "1.5% يذهب إلى المجتمع. تستلم {n} فاصوليا عن كل قطعة، أو {all} فاصوليا عن الكل.",
     "other": "1.5% يذهب إلى المجتمع. تستلم {n} فاصوليا عن كل قطعة، أو {all} فاصوليا عن الكل."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "اذكر كم لديك: عدد صحيح من 1 إلى 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "اذكر كم لديك: عدد صحيح من 1 إلى {max}.",
   "A price for all of them needs 2 or more.": "سعر الكل يتطلب 2 أو أكثر.",
   "Only an Offer can be priced for each one.": "يمكن تسعير العرض فقط لكل قطعة على حدة.",
   "A price for all of them must be a number of Beans above 0.": "يجب أن يكون سعر الكل عدد فاصوليا أكبر من 0.",

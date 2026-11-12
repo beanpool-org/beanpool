@@ -2417,7 +2417,7 @@
   "1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.|1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.": {
     "other": "1.5% 歸社群。每個你將收到 {n} 顆豆子，或全部一起收到 {all} 顆豆子。"
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "請填寫你有幾個：1 到 9,999 之間的整數。",
+  "Say how many you have: a whole number from 1 to {max}.": "請填寫你有幾個：1 到 {max} 之間的整數。",
   "A price for all of them needs 2 or more.": "設定全部一起的價格，至少需要 2 個。",
   "Only an Offer can be priced for each one.": "只有「提供」可以按每個單獨定價。",
   "A price for all of them must be a number of Beans above 0.": "全部一起的價格必須是大於 0 的豆子數。",

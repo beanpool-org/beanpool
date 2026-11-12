@@ -2524,7 +2524,7 @@
     "one": "1.5% کمیونٹی کو جاتا ہے۔ آپ کو ہر ایک پر {n} پھلی، یا سب پر {all} پھلیاں ملتی ہیں۔",
     "other": "1.5% کمیونٹی کو جاتا ہے۔ آپ کو ہر ایک پر {n} پھلیاں، یا سب پر {all} پھلیاں ملتی ہیں۔"
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "بتائیں آپ کے پاس کتنے ہیں: 1 سے 9,999 تک ایک پورا عدد۔",
+  "Say how many you have: a whole number from 1 to {max}.": "بتائیں آپ کے پاس کتنے ہیں: 1 سے {max} تک ایک پورا عدد۔",
   "A price for all of them needs 2 or more.": "سب کی قیمت کے لیے 2 یا زیادہ چاہئیں۔",
   "Only an Offer can be priced for each one.": "صرف پیشکش کی ہی ہر ایک کے حساب سے قیمت رکھی جا سکتی ہے۔",
   "A price for all of them must be a number of Beans above 0.": "سب کی قیمت 0 سے زیادہ پھلیوں کا عدد ہونی چاہیے۔",

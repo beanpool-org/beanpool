@@ -2524,7 +2524,7 @@
     "one": "1.5% gehen an die Community. Du erhältst {n} Bohne pro Stück oder {all} Bohnen für alle zusammen.",
     "other": "1.5% gehen an die Community. Du erhältst {n} Bohnen pro Stück oder {all} Bohnen für alle zusammen."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Gib an, wie viele du hast: eine ganze Zahl von 1 bis 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Gib an, wie viele du hast: eine ganze Zahl von 1 bis {max}.",
   "A price for all of them needs 2 or more.": "Ein Preis für alle setzt 2 oder mehr voraus.",
   "Only an Offer can be priced for each one.": "Nur ein Angebot kann pro Stück bepreist werden.",
   "A price for all of them must be a number of Beans above 0.": "Der Preis für alle muss eine Anzahl Bohnen über 0 sein.",

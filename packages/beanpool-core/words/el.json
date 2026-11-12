@@ -2524,7 +2524,7 @@
     "one": "Το 1.5% πηγαίνει στην κοινότητα. Λαμβάνετε {n} φασόλι για κάθε κομμάτι ή {all} για όλα.",
     "other": "Το 1.5% πηγαίνει στην κοινότητα. Λαμβάνετε {n} φασόλια για κάθε κομμάτι ή {all} για όλα."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Δηλώστε πόσα έχετε: ένας ακέραιος αριθμός από 1 έως 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Δηλώστε πόσα έχετε: ένας ακέραιος αριθμός από 1 έως {max}.",
   "A price for all of them needs 2 or more.": "Η τιμή για όλα απαιτεί 2 ή περισσότερα.",
   "Only an Offer can be priced for each one.": "Μόνο μια Προσφορά μπορεί να έχει τιμή ανά κομμάτι.",
   "A price for all of them must be a number of Beans above 0.": "Η τιμή για όλα πρέπει να είναι αριθμός φασολιών μεγαλύτερος από 0.",

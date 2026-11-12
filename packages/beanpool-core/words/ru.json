@@ -2738,7 +2738,7 @@
     "many": "1.5% идёт сообществу. Вы получаете {n} бобов за штуку или {all} за все.",
     "other": "1.5% идёт сообществу. Вы получаете {n} боба за штуку или {all} за все."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Укажите, сколько у вас есть: целое число от 1 до 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Укажите, сколько у вас есть: целое число от 1 до {max}.",
   "A price for all of them needs 2 or more.": "Для цены за все нужно 2 или больше.",
   "Only an Offer can be priced for each one.": "Цену за штуку можно задать только для Предложения.",
   "A price for all of them must be a number of Beans above 0.": "Цена за все должна быть числом бобов больше 0.",

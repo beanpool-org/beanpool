@@ -2524,7 +2524,7 @@
     "one": "1.5% কমিউনিটিতে যায়। প্রতিটির জন্য আপনি পাবেন {n}টি শিম, বা সবগুলোর জন্য {all}টি শিম।",
     "other": "1.5% কমিউনিটিতে যায়। প্রতিটির জন্য আপনি পাবেন {n}টি শিম, বা সবগুলোর জন্য {all}টি শিম।"
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "কয়টি আছে তা লিখুন: 1 থেকে 9,999-এর মধ্যে একটি পূর্ণসংখ্যা।",
+  "Say how many you have: a whole number from 1 to {max}.": "কয়টি আছে তা লিখুন: 1 থেকে {max}-এর মধ্যে একটি পূর্ণসংখ্যা।",
   "A price for all of them needs 2 or more.": "সবগুলোর দাম দিতে 2 বা তার বেশি লাগে।",
   "Only an Offer can be priced for each one.": "শুধু একটি প্রস্তাবেরই প্রতিটির দাম দেওয়া যায়।",
   "A price for all of them must be a number of Beans above 0.": "সবগুলোর দাম 0-র বেশি একটি শিমের সংখ্যা হতে হবে।",

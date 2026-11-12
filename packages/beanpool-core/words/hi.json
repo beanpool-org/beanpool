@@ -2524,7 +2524,7 @@
     "one": "1.5% समुदाय को जाता है। आपको हर एक पर {n} फली, या सभी पर {all} फलियाँ मिलती हैं।",
     "other": "1.5% समुदाय को जाता है। आपको हर एक पर {n} फलियाँ, या सभी पर {all} फलियाँ मिलती हैं।"
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "बताएँ आपके पास कितने हैं: 1 से 9,999 तक एक पूर्ण संख्या।",
+  "Say how many you have: a whole number from 1 to {max}.": "बताएँ आपके पास कितने हैं: 1 से {max} तक एक पूर्ण संख्या।",
   "A price for all of them needs 2 or more.": "सभी की कीमत के लिए 2 या अधिक चाहिए।",
   "Only an Offer can be priced for each one.": "केवल प्रस्ताव की ही हर एक के हिसाब से कीमत रखी जा सकती है।",
   "A price for all of them must be a number of Beans above 0.": "सभी की कीमत 0 से अधिक फलियों की संख्या होनी चाहिए।",

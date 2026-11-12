@@ -2417,7 +2417,7 @@
   "1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.|1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.": {
     "other": "1.5%はコミュニティへ。1つにつき{n}豆、全部まとめてなら{all}豆を受け取ります。"
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "いくつあるか入力してください：1から9,999までの整数です。",
+  "Say how many you have: a whole number from 1 to {max}.": "いくつあるか入力してください：1から{max}までの整数です。",
   "A price for all of them needs 2 or more.": "全部まとめての価格は、2つ以上のときに設定できます。",
   "Only an Offer can be priced for each one.": "1つずつの価格を設定できるのは「提供」だけです。",
   "A price for all of them must be a number of Beans above 0.": "全部まとめての価格は、0より大きい豆の数にしてください。",

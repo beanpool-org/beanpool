@@ -2524,7 +2524,7 @@
     "one": "1.5% huenda kwa jumuiya. Unapokea maharagwe {n} kwa kila kimoja, au maharagwe {all} kwa zote.",
     "other": "1.5% huenda kwa jumuiya. Unapokea maharagwe {n} kwa kila kimoja, au maharagwe {all} kwa zote."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Sema una ngapi: nambari kamili kutoka 1 hadi 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Sema una ngapi: nambari kamili kutoka 1 hadi {max}.",
   "A price for all of them needs 2 or more.": "Bei ya zote inahitaji 2 au zaidi.",
   "Only an Offer can be priced for each one.": "Ofa pekee ndiyo inaweza kuwekewa bei kwa kila kimoja.",
   "A price for all of them must be a number of Beans above 0.": "Bei ya zote lazima iwe idadi ya maharagwe zaidi ya 0.",

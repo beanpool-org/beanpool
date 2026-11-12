@@ -56,6 +56,8 @@ export const CREDIT_SIGHT_WORDS = {
     /** Under the switch, and atop the profile card (§3.1, §3.4). */
     onlyGivers: word('Only people who can give credit see this. Each look is recorded.'),
     adminsSayMore: word('An owner or admin can say more.'),
+    /** The heading over a member's own reading of what a voucher reads about them, on their Ledger (slice C6). */
+    meTitle: word('What people who give credit see'),
     spendingPaused: word('Spending paused'),
     levelNotKnown: word('Credit risk: not known yet'),
     levelLow: word('Credit risk: low'),
@@ -403,6 +405,73 @@ export function riskReasonSentence(r: RiskReason): string | null {
         case 'few_trades': return tn(whole(v.n), '{n} completed trade so far.', '{n} completed trades so far.', { n: formatCount(whole(v.n)) });
         default: return null;
     }
+}
+
+// ── What a member reads about themselves (amendment 1 §5.4; slice C6) ──────────────────────────────────────────────
+
+/**
+ * The fields of `GET /api/credit/me` that the member's Ledger reads: exactly a voucher's answer about them, from the node's
+ * one builder. Nothing else in the answer is read, so nothing a voucher is not told can be drawn (no parts, no one who
+ * stands behind them, no freeze, no admins' reason: the node does not send them, and this never asks for them).
+ */
+export interface CreditMeAnswer {
+    line_c: number;
+    usable_c: number;
+    liveOffers: number | null;
+    balance_c: number;
+    canGive: boolean;
+    status: 'active' | 'paused';
+    risk: CreditRisk;
+}
+
+/** The lines of "What people who give credit see", in the order both apps draw them. */
+export interface CreditMeCard {
+    title: string;
+    /** The credit sentence a voucher's row reads: "Credit line 1,300 · can use all of it now", "No credit yet · 4 live Offers". */
+    credit: string;
+    /** "1 live Offer", under a credit line; null where there is no line or the count isn't theirs to say. */
+    liveOffers: string | null;
+    /** "Balance −420 · using 420 of 1,300", with its line beside it (never alone), and the same for a screen reader. */
+    balance: string;
+    balanceSpoken: string;
+    /** "Spending paused" when they owe more than their Offers unlock; null otherwise. */
+    paused: string | null;
+    level: RiskLevel;
+    /** ○ ✓ ! ✕: the word's shape, never colour alone. */
+    shape: string;
+    /** "Credit risk: low". */
+    word: string;
+    /** Each reason as {@link riskReasonSentence} says it, in the node's order, then "An owner or admin can say more." where it applies. */
+    reasons: string[];
+    /** The one plain sentence about who can see all this and that each look is recorded (§5.3). */
+    told: string;
+}
+
+/**
+ * What a member's own Ledger draws under "What people who give credit see": the answer a plain voucher gets about them,
+ * word for word (the lines of a voucher's profile card, less "You vouched" which is about the viewer). Built from core's
+ * own sentences alone, so the phone and the web cannot say two things; an app never composes a reason from its figures.
+ */
+export function creditMeCard(me: CreditMeAnswer): CreditMeCard {
+    const p = position(me.balance_c, me.line_c, me.usable_c);
+    const reasons = (me.risk?.reasons ?? []).map((r) => riskReasonSentence(r)).filter((s): s is string => !!s);
+    if (me.risk?.more) reasons.push(t(CREDIT_SIGHT_WORDS.adminsSayMore));
+    const level = me.risk?.level ?? 'not_known';
+    return {
+        title: t(CREDIT_SIGHT_WORDS.meTitle),
+        credit: creditLineSentence({ line_c: me.line_c, usable_c: me.usable_c, liveOffers: me.liveOffers, cantGive: !me.canGive && me.status === 'active' }),
+        liveOffers: me.line_c > 0 && typeof me.liveOffers === 'number'
+            ? tn(me.liveOffers, '{n} live Offer', '{n} live Offers', { n: formatCount(me.liveOffers) })
+            : null,
+        balance: balanceSentence(p),
+        balanceSpoken: balanceSpoken(p),
+        paused: p.paused ? t(CREDIT_SIGHT_WORDS.spendingPaused) : null,
+        level,
+        shape: RISK_SHAPES[level],
+        word: riskLevelSentence(level),
+        reasons,
+        told: t(CREDIT_SIGHT_WORDS.told),
+    };
 }
 
 // ── Vouchers' budgets on the view (amendment §3.5, §3.6; slice C3) ─────────────────────────────────────────────────

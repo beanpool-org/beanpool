@@ -66,8 +66,13 @@ export interface CommunityOwnAddresses {
  * byron.beanpool.org (its info answers `primaryAddress` byron, `addresses` [byron, mullum]; Marty's director, 13 Nov 2026).
  * Display only: it never changes which node an app talks to.
  *
- * `current` is the address the app holds (the phone's community address; the web app's own origin) and `info` what the
- * community last said of its names. The main address is used only when the community publishes one AND it is one of its own
+ * Only a CANDIDATE: the phone (apps/native utils/computer-address.ts) shows it only where Link a device would take a code from it
+ * (its own community, or one it has saved; pair-device-target.ts transferTarget), else its own address, so the row and Link a
+ * device never disagree (the deciding review of round 3). The web app does not use it: its page says the address it is served
+ * from, where the member is signed in and where a Link a device code made on that page matches the phone that signed in there.
+ *
+ * `current` is the address the phone holds (its community address) and `info` what the community last said of its names. The
+ * main address is used only when the community publishes one AND it is one of its own
  * `addresses`, so a host the community did not name is never shown. Otherwise `current`, as the row always said:
  * - no answer, or one that names no main address, or one outside `addresses`;
  * - a plain-http `current` (a home network's): it is the address that works from where the member is, and the main name

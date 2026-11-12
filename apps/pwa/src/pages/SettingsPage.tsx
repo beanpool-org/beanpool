@@ -3,9 +3,8 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, mainAddressToOpen, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToOpenOnAComputer, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
 import { copyChatText } from '../lib/copy-chat-text';
-import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -2145,21 +2144,11 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     const deferredPrompt = useDeferredInstallPrompt();
     const [showPhoneApp, setShowPhoneApp] = useState(false);
     const [showInstallSteps, setShowInstallSteps] = useState(false);
-    // The community's MAIN address: BeanPool on a computer is this web app, in any browser, at the community's own address (the
-    // phone's Settings says the matching line). What the community says of its own names (the page's one shared read of
-    // /api/community/info, as the former-address banner uses it) names its main address when it has one that is one of its
-    // own; else, or while that is on its way or cannot be read, the address this page is served from. Display only: nothing
-    // here changes where the page talks to. Null for no http(s) address.
-    const [communityNames, setCommunityNames] = useState<Parameters<typeof mainAddressToOpen>[1]>(null);
-    useEffect(() => {
-        let cancelled = false;
-        Promise.resolve()
-            .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) setCommunityNames(info); })
-            .catch(() => {});
-        return () => { cancelled = true; };
-    }, []);
-    const browserAddress = mainAddressToOpen(window.location.origin, communityNames);
+    // The address this page is served from: BeanPool on a computer is this web app, in any browser, at the community's own address (the
+    // phone's Settings says the matching line). The member is signed in here, so a Link a device code made on this page matches the
+    // phone that signed in here; the community's other names are the phone's to weigh (apps/native utils/computer-address.ts), not
+    // this page's. Display only. Null for no http(s) address.
+    const browserAddress = addressToOpenOnAComputer(window.location.origin);
     // 'copied' only when the address is on the clipboard; 'failed' when the browser refused (a plain http:// home-network node has no
     // clipboard API, and its older copy command can be refused too): the button then says so, as the phone's row does, never "Copied".
     const [addressCopy, setAddressCopy] = useState<'idle' | 'copied' | 'failed'>('idle');

@@ -9,26 +9,33 @@
  * into the community's Settings page and is for owners, admins and moderators only; an owner sees both rows. This one
  * asks the node nothing and waits for no role, so it never moves or blinks in when the role answers.
  *
- * The address is the community's MAIN one (mainAddressToOpen in core): what the community last said of its own names, which this
- * phone kept (utils/node-profile.ts getCachedNodeProfile; the tab strip asks at each start and switch), when it names a main
- * address that is one of its own; else the one this phone uses for its community (utils/node-post.ts anchorUrl). A Byron member
- * whose phone is still on mullum.beanpool.org is told to open byron.beanpool.org, the community's main name. Display only: which
- * node the phone talks to is never changed. Read again each time Settings comes into view, when the phone switches community
- * and when a fresh answer is kept. The line's words are core's (use-on-computer.ts), shared with the web app's Settings so the
- * two say the same thing. No address (none saved yet, or not an http(s) address): no row, never a line with a blank in it.
+ * The address is the community's MAIN one (mainAddressToOpen in core: what the community last said of its own names, which this
+ * phone kept; utils/node-profile.ts getCachedNodeProfile, the tab strip asks at each start and switch) ONLY when this phone would
+ * take a Link a device code from it: the one this phone uses for its community (utils/node-post.ts anchorUrl) or a community it has
+ * saved, the rule Link a device itself asks (utils/computer-address.ts, which asks pair-device-target.ts transferTarget). Otherwise
+ * the phone's own address, so this row and the row under it never disagree: a Byron member whose phone is still on
+ * mullum.beanpool.org is told mullum until byron is saved on the phone. Display only: which node the phone talks to is never
+ * changed. Read again each time Settings comes into view, when the phone switches community and when a fresh answer is kept. The
+ * line's words are core's (use-on-computer.ts), shared with the web app's Settings so the two say the same thing. No address (none
+ * saved yet, or not an http(s) address): no row, never a line with a blank in it.
  *
  * 320 dp at 1.3x text: the sentence wraps, the address sits under it on its own line WITHOUT "https://" (a plain-http address
- * keeps its "http://") and breaks only after a dot, never inside a name; Copy and Share still give the whole https:// address.
- * The two 48 dp buttons sit side by side or stack, never cut.
+ * keeps its "http://"); Copy and Share still give the whole https:// address. The address is ONE selectable Text (its dotted
+ * parts nested inside it), so a long press picks up the whole address, not a piece of it. Too wide for one line (the platform
+ * reports a second line, onTextLayout), it is drawn as one piece per dotted part in a wrapping row instead, so it breaks only
+ * after a dot and never inside a name (a plain run of text has no break opportunity after a dot). The two 48 dp buttons sit side
+ * by side or stack, never cut.
  */
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { t, USE_ON_COMPUTER_WORDS, addressBreakPoints, addressToShow, mainAddressToOpen } from '@beanpool/core';
+import { t, USE_ON_COMPUTER_WORDS, addressBreakPoints, addressToShow } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getCachedNodeProfile, onNodeProfileStored } from '../utils/node-profile';
+import { getSavedNodes } from '../utils/nodes';
+import { computerAddressForThisPhone } from '../utils/computer-address';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { useCopyMessage } from './chat/useCopyMessage';
 
@@ -46,15 +53,19 @@ export function UseOnComputerRow() {
         icon: { fontSize: 18 },
         column: { flex: 1 },
         text: { fontSize: 15, fontWeight: '600', color: colors.text.body },
-        // The address, one piece per dotted part laid out in a wrapping row: a line breaks between pieces (after a dot) and a
-        // piece never wider than the column (maxWidth), so even then only that one breaks.
+        address: { fontSize: 15, fontWeight: '700', color: colors.text.body },
+        // The fallback for an address too wide for one line: one piece per dotted part in a wrapping row, so a line breaks only between
+        // pieces (after a dot), and a piece never wider than the column (maxWidth), so even then only that one breaks.
         addressWrap: { flexDirection: 'row', flexWrap: 'wrap' },
-        address: { fontSize: 15, fontWeight: '700', color: colors.text.body, maxWidth: '100%' },
+        addressPiece: { fontSize: 15, fontWeight: '700', color: colors.text.body, maxWidth: '100%' },
         buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
         button: { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', borderColor: colors.border.strong, backgroundColor: colors.surface.card },
         buttonText: { fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.text.heading },
     }));
     const [address, setAddress] = useState<string | null>(null);
+    // The address for which the platform had to break the one selectable text (it did not fit one line): that address is then drawn
+    // as pieces that break only after a dot. Keyed by the address, so another community's starts as the one selectable text again.
+    const [brokenFor, setBrokenFor] = useState<string | null>(null);
     // The same hook as a chat message's Copy: the address on the clipboard, "Copied" for a moment, or "Could not copy".
     const { answer, copy } = useCopyMessage(address ?? undefined);
 
@@ -65,10 +76,18 @@ export function UseOnComputerRow() {
             let latest = 0;
             const read = () => {
                 const mine = ++latest;
-                // This phone's address and what its community last said of its own names, both kept on the phone: nothing is asked
-                // of the node here, and no answer (never heard, or storage that won't read) leaves the phone's own address.
+                // This phone's address, what its community last said of its own names, and the communities it has saved, all kept on
+                // the phone: nothing is asked of the node here. The main address is shown only when Link a device would take a code
+                // from it (computerAddressForThisPhone); no answer (never heard, or storage that won't read) leaves the phone's own.
                 getAnchorUrl()
-                    .then(async (url) => mainAddressToOpen(url, url ? await getCachedNodeProfile(url).catch(() => null) : null))
+                    .then(async (url) => {
+                        if (!url) return null;
+                        const [info, saved] = await Promise.all([
+                            getCachedNodeProfile(url).catch(() => null),
+                            getSavedNodes().then((nodes) => nodes.map((n) => n.url)).catch(() => [] as string[]),
+                        ]);
+                        return computerAddressForThisPhone(url, info, saved);
+                    })
                     .then((found) => { if (live && mine === latest) setAddress(found); })
                     .catch(() => { if (live && mine === latest) setAddress(null); });
             };
@@ -83,10 +102,15 @@ export function UseOnComputerRow() {
     if (!address) return null;
 
     const line = t(USE_ON_COMPUTER_WORDS.phoneLine, { address });
-    // The address is one unbreakable word, longer than a 320 dp column at 1.3x text, so it gets its own block under the
-    // lead-in, without "https://", and breaks only after a dot (a piece for each dotted part, laid out in a wrapping row; no
-    // invisible character goes into the address). To a screen reader it is still one line: the whole sentence, https:// and all.
+    // The address is one unbreakable word, possibly longer than a 320 dp column at 1.3x text, so it gets its own block under the
+    // lead-in, without "https://". It is ONE selectable Text holding a nested Text for each dotted part (no invisible character
+    // goes into it), so a long press picks up the whole address. Measured in Chromium (13 Nov; a phone's line breaker is ICU-based too
+    // but was not measured on a device): a run of text, nested spans or not, has NO break opportunity after a dot, so a name too wide
+    // for the line is split at a letter ("...beanpool.o" / "rg"). The platform says so (onTextLayout: more than one line), and that
+    // address is then drawn as pieces in a wrapping row, which break only after a dot (each piece selectable; Copy and Share still
+    // give the whole address). To a screen reader it is still one line: the whole sentence, https:// and all.
     const shown = addressBreakPoints(addressToShow(address));
+    const pieces = brokenFor === address;
 
     return (
         <View style={styles.row} testID="settings-use-on-computer">
@@ -94,9 +118,20 @@ export function UseOnComputerRow() {
             <View style={styles.column}>
                 <View accessible accessibilityLabel={line}>
                     <Text style={styles.text}>{t(USE_ON_COMPUTER_WORDS.phoneLead)}</Text>
-                    <View style={styles.addressWrap} testID="settings-use-on-computer-address">
-                        {shown.map((piece, i) => <Text key={i} style={styles.address} selectable>{piece}</Text>)}
-                    </View>
+                    {pieces ? (
+                        <View style={styles.addressWrap} testID="settings-use-on-computer-address">
+                            {shown.map((piece, i) => <Text key={i} style={styles.addressPiece} selectable>{piece}</Text>)}
+                        </View>
+                    ) : (
+                        <Text
+                            style={styles.address}
+                            selectable
+                            onTextLayout={(e) => { if ((e?.nativeEvent?.lines?.length ?? 0) > 1) setBrokenFor(address); }}
+                            testID="settings-use-on-computer-address"
+                        >
+                            {shown.map((piece, i) => <Text key={i}>{piece}</Text>)}
+                        </Text>
+                    )}
                 </View>
                 <View style={styles.buttons}>
                     <Pressable

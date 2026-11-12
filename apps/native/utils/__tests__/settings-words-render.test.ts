@@ -321,6 +321,7 @@ import { readerFeaturesHeld } from '../reads-own';
 import SettingsScreen from '../../app/(tabs)/settings';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addSavedNode, clearGuestNode, markGuestNode } from '../nodes';
+import { transferTarget } from '../pair-device-target';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const NODE = 'https://mullum.example';
@@ -847,24 +848,62 @@ describe('Settings → "Use BeanPool on a computer: open <address>": every membe
         expect(sent.copied).toEqual(['https://byron.beanpool.org']);
     });
 
-    // Round 3: a phone still on mullum, in a community whose main name is byron (measured: GET /api/community/info on either host
-    // answers primaryAddress byron, addresses [byron, mullum]). The row says the main name; the phone's own address is not changed.
-    describe('the community\'s main address (round 3)', () => {
+    // Rounds 3 and 4: a phone still on mullum, in a community whose main name is byron (measured: GET /api/community/info on either
+    // host answers primaryAddress byron, addresses [byron, mullum]). The row says the main name ONLY when Link a device (the row under
+    // it) would take a code from it: the phone's own community or a saved one. Else the phone's own address. Display only: the
+    // phone's own address is never changed.
+    describe('the community\'s main address, only where Link a device would take its code (rounds 3 and 4)', () => {
         const MULLUM = 'https://mullum.beanpool.org';
+        const BYRON = 'https://byron.beanpool.org';
         const BYRON_NAMES = { primaryAddress: 'byron.beanpool.org', addresses: ['byron.beanpool.org', 'mullum.beanpool.org'] };
         const BYRON_LINE = 'Use BeanPool on a computer: open https://byron.beanpool.org';
+        const MULLUM_LINE = 'Use BeanPool on a computer: open https://mullum.beanpool.org';
+        /** What Link a device (app/pair-device.tsx) asks of the code a computer's page at `address` shows: the same inputs it reads. */
+        const linkADeviceTakesTheCodeAt = (address: string) => {
+            const saved = (JSON.parse(store.map.get('beanpool_saved_nodes') ?? '[]') as Array<{ url: string }>).map((n) => n.url);
+            return transferTarget(address, store.map.get('beanpool_anchor_url') ?? null, saved).kind === 'ok';
+        };
 
-        it('anchor mullum + primary byron: shows byron.beanpool.org (no https://), Copy and Share give the full https://byron.beanpool.org, and the phone stays on mullum', async () => {
+        it('anchor mullum + primary byron, byron not saved: shows mullum (Link a device would refuse byron\'s code), Copy and Share give the full https://mullum.beanpool.org', async () => {
             store.map.set('beanpool_anchor_url', MULLUM);
             keepNames(MULLUM, BYRON_NAMES);
             await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open mullum.beanpool.org');
+            expect(lineRow()!.textContent).not.toContain('https://');
+            expect(byLabel(MULLUM_LINE), 'a screen reader gets the whole line, https:// and all').toBeTruthy();
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual([MULLUM]);
+            await click(shareButton(), 'Share');
+            expect(sent.shared).toEqual([{ message: MULLUM_LINE }]);
+            expect(store.map.get('beanpool_anchor_url'), 'display only: the phone talks to the node it did').toBe(MULLUM);
+            // The row and Link a device agree: the address shown is one Link a device takes a code from; byron's is not.
+            expect(linkADeviceTakesTheCodeAt(MULLUM)).toBe(true);
+            expect(linkADeviceTakesTheCodeAt(BYRON)).toBe(false);
+        });
+
+        it('anchor byron + primary byron: shows byron.beanpool.org (no https://), Copy and Share give the full https://byron.beanpool.org', async () => {
+            store.map.set('beanpool_anchor_url', BYRON);
+            keepNames(BYRON, BYRON_NAMES);
+            await renderIn('en');
             expect(lineShown()).toBe('Use BeanPool on a computer: open byron.beanpool.org');
             expect(lineRow()!.textContent).not.toContain('https://');
-            expect(byLabel(BYRON_LINE), 'a screen reader gets the whole line, https:// and all').toBeTruthy();
+            expect(byLabel(BYRON_LINE)).toBeTruthy();
             await click(copyButton(), 'Copy');
-            expect(sent.copied).toEqual(['https://byron.beanpool.org']);
+            expect(sent.copied).toEqual([BYRON]);
             await click(shareButton(), 'Share');
             expect(sent.shared).toEqual([{ message: BYRON_LINE }]);
+            expect(linkADeviceTakesTheCodeAt(BYRON)).toBe(true);
+        });
+
+        it('anchor mullum + primary byron, byron saved on this phone: shows byron (Link a device takes its code), and the phone stays on mullum', async () => {
+            store.map.set('beanpool_anchor_url', MULLUM);
+            store.map.set('beanpool_saved_nodes', JSON.stringify([{ url: MULLUM }, { url: BYRON }]));
+            keepNames(MULLUM, BYRON_NAMES);
+            await renderIn('en');
+            expect(lineShown()).toBe('Use BeanPool on a computer: open byron.beanpool.org');
+            await click(copyButton(), 'Copy');
+            expect(sent.copied).toEqual([BYRON]);
+            expect(linkADeviceTakesTheCodeAt(BYRON)).toBe(true);
             expect(store.map.get('beanpool_anchor_url'), 'display only: the phone talks to the node it did').toBe(MULLUM);
         });
 
@@ -905,9 +944,10 @@ describe('Settings → "Use BeanPool on a computer: open <address>": every membe
         await renderIn('en');
         const words = Array.from(lineRow()!.querySelectorAll('span')).filter((e) => e.getAttribute('data-font') === '15');
         expect(lineShown()).toBe(SHOWN);
-        // The address on its own line under the lead-in, one piece per dotted part: it can break only after a dot.
-        expect(words.map((e) => e.textContent)).toEqual(['Use BeanPool on a computer: open', 'mullum.', 'example']);
-        expect(lineRow()!.querySelector('[data-testid="settings-use-on-computer-address"]')!.getAttribute('data-wrap')).toBe('wrap');
+        // The address on its own line under the lead-in: ONE text holding a nested piece for each dotted part ("mullum." "example").
+        expect(words.map((e) => e.textContent)).toEqual(['Use BeanPool on a computer: open', 'mullum.example']);
+        const address = lineRow()!.querySelector('[data-testid="settings-use-on-computer-address"]')!;
+        expect(Array.from(address.querySelectorAll('span')).map((e) => e.textContent)).toEqual(['mullum.', 'example']);
         for (const e of words) {
             expect(e.getAttribute('data-lines'), e.textContent!).toBeNull();
             expect(e.getAttribute('data-shrinks'), e.textContent!).toBeNull();

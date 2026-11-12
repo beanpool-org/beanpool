@@ -305,6 +305,23 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         expect(bell().textContent).toBe('1');
     });
 
+    it('a notice marked elsewhere while it was read does not come back as the full view if a later read of the list returns it', async () => {
+        node.notices = [notice('n1'), notice('n2')];
+        await renderHeader();
+        await openSheet();
+        await act(async () => { rows()[0].click(); });
+        await settle();
+        expect(read()).not.toBeNull();
+        await fire({ type: 'push_notices_seen', ids: ['n1'] });
+        expect(read()).toBeNull();
+        // The node's list still has it (a stale read, or a mark that did not take): the row is back, the full view is not.
+        await fire({ type: 'push_notice', id: 'n9', kind: 'chat.message' });
+        await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+        await settle();
+        expect(read()).toBeNull();
+        expect(rows()).toHaveLength(2);
+    });
+
     const xFor = (id: number) => Array.from(document.querySelectorAll('[role="dialog"] button')).filter(b => b.getAttribute('aria-label') === 'Clear this notice')[id] as HTMLElement;
     const clearAllButton = () => Array.from(document.querySelectorAll('[role="dialog"] button')).find(b => b.getAttribute('aria-label') === 'Clear all') as HTMLElement | undefined;
 

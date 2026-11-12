@@ -614,6 +614,8 @@ function NeedsSheet({
     // meanwhile (the node's word), it is no longer in `notices` and the sheet is the list again.
     const [readingId, setReadingId] = useState<string | null>(null);
     const reading = readingId ? notices.find(n => n.id === readingId) ?? null : null;
+    // Gone from the list (marked elsewhere): forget it, so a later read of the list that returns it shows the row, not its full view.
+    useEffect(() => { if (readingId && !reading) setReadingId(null); }, [readingId, reading]);
     // Escape in the full view is Back; on the list it closes the sheet.
     useDialogFocus(dialogRef, () => { if (reading) setReadingId(null); else onClose(); });
     const readTitleRef = useRef<HTMLHeadingElement | null>(null);

@@ -315,6 +315,8 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     const closeSheet = () => { setSheet(false); setReadingId(null); };
     // The notice being read, while the node still has it unseen (marked elsewhere meanwhile, the sheet is the list again).
     const reading = readingId ? notices.find(n => n.id === readingId) ?? null : null;
+    // Gone from the list (marked elsewhere): forget it, so a later read of the list that returns it shows the row, not its full view.
+    useEffect(() => { if (readingId && !reading) setReadingId(null); }, [readingId, reading]);
 
     // "Open" on a notice read in full: to its thing by the push tap's own fixed routes (utils/push-notice-check.ts
     // noticeRoute) first, and then off the bell (and on the node, which tells the member's other apps).

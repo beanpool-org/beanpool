@@ -506,6 +506,22 @@ describe('The bell: what happened, until it is opened', () => {
         expect(within(again).getAllByTestId('bell-notice')).toHaveLength(2);
     });
 
+    it('a notice marked elsewhere while it was read does not come back as the full view if a later read of the list returns it', async () => {
+        const fire = catchBellEvents();
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2')]);
+        render(<HeaderRow onNavigate={vi.fn()} />);
+        await settle();
+        fireEvent.click(within(openSheet()).getAllByTestId('bell-notice')[0]);
+        expect(screen.getByTestId('bell-read')).toBeInTheDocument();
+        fire({ type: 'push_notices_seen', ids: ['n1'] });
+        expect(screen.queryByTestId('bell-read')).toBeNull();
+        // The node's list still has it (a stale read, or a mark that did not take): the row is back, the full view is not.
+        fire({ type: 'push_notice', id: 'n9', kind: 'chat.message' });
+        await act(async () => { await new Promise(r => setTimeout(r, 400)); });
+        expect(screen.queryByTestId('bell-read')).toBeNull();
+        expect(within(screen.getByRole('dialog')).getAllByTestId('bell-notice').map(r => r.dataset.noticeId)).toEqual(['n1', 'n2']);
+    });
+
     it('a notice with nowhere to go has no Open, only Clear; one marked meanwhile takes the full view back to the list', async () => {
         const fire = catchBellEvents();
         vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1', { kind: 'something.newer', title: 'A word from your community', body: 'Read this one here.', data: {} }), notice('n2')]);

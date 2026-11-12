@@ -10,6 +10,10 @@
  *   GET /api/credit/people/:member   the card or sheet for one person; its look recorded (surface `card`) first.
  *   GET /api/credit/looks           ?limit &offset (&actor &day | &member)   owners and admins: who looked at whom. Not logged.
  *   GET /api/credit/me              any member: what givers see about them, the voucher answer; no look recorded.
+ *   POST /api/credit/known-floor    `{ memberPubkey, raiseTo_c }` owners and every admin raise a confirmed member's known
+ *       floor, never their own, never lower (slice C2, engine/credit-give.ts): Settings' writer underneath, the member told
+ *       by the credit notice it makes. → { memberPubkey, was_c, knownFloor_c }. Records no look (it shows no balance). A
+ *       voucher, a moderator or a member 403 `owners_admins_only`; a standby 409 `standby`.
  *
  * Refusals: unsigned 401; a member, a moderator, a visitor or a stranger 403 `not_a_giver` (`looks`: a voucher too,
  * `owners_admins_only`); a standby 409 `standby` for every read that records a look (it records nothing); a look that can't
@@ -20,12 +24,15 @@
 import Router from '@koa/router';
 import { CREDIT_SIGHT_WORDS, word, type CreditSight } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { getMember, isVisitorKey } from '../state-engine.js';
+import { getMember, isVisitorKey, broadcast, dispatchPushNotification } from '../state-engine.js';
 import { getNodeRole, STANDBY_CODE, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
 import { BEANS_OFF_MESSAGE } from '../config/node-profile.js';
 import { NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CreditSightError, creditMe, creditPeople, creditPerson, creditSightOn, giverSight, memberKeyOf } from '../engine/credit-sight.js';
 import { readLooks, recordLooks } from '../engine/credit-looks.js';
+import { CreditGiveError, CREDIT_GIVE_WORDS, raiseKnownFloor } from '../engine/credit-give.js';
+import { tellVoucherNotice } from '../engine/vouchers.js';
+import { KnownFloorError } from '../config/known-floor.js';
 import { SERVER_FAULT_TEXT } from './member-error-text.js';
 import { logger } from '../logger.js';
 import type { RouteDeps } from './types.js';
@@ -163,6 +170,23 @@ export function createCreditSightRoutes(deps: RouteDeps): Router {
         if (!me) return answer(ctx, 404, NOT_LISTED, 'not_listed');
         ctx.status = 200;
         ctx.body = { told: TOLD, me };
+    });
+
+    router.post('/api/credit/known-floor', (ctx) => {
+        const actor = signer(ctx);
+        if (!actor) return;
+        const sight = giverSight(actor);
+        if (sight !== 'owner' && sight !== 'admin') return answer(ctx, 403, CREDIT_GIVE_WORDS.ownersAdminsOnly, 'owners_admins_only');
+        if (refusedOnStandby(ctx)) return;
+        try {
+            // The member's notice is the credit-notices one Settings' writer makes, told once the raise has committed.
+            ctx.body = raiseKnownFloor(actor, (ctx as any).requestBody || {}, (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification }));
+            ctx.status = 200;
+        } catch (e) {
+            if (e instanceof CreditGiveError || e instanceof KnownFloorError) return answer(ctx, e.status, e.message, e.code);
+            if ((e as { code?: unknown })?.code === STANDBY_CODE) return answer(ctx, 409, STANDBY_WRITE_MESSAGE, STANDBY_CODE);
+            throw e;
+        }
     });
 
     return router;

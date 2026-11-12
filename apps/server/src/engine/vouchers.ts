@@ -49,7 +49,9 @@
  * An owner (Marty, 9 Nov) vouches with no budget limit, from OWNER_VOUCH_PRESETS (200 and 500 too, nobody else's), up to
  * 500 for one person; their hold is recorded (OWNER_VOUCH_ACTOR) and never drawn from a budget. A person an owner vouched for
  * may hold 500 in all, and the three-vouchers rule never refuses an owner's vouch. Never from a profile for a member below zero now,
- * read from the stored balance (rule 3). A vouch on an invite lands at the redeem, in its transaction (the joiner is new,
+ * read from the stored balance (rule 3), nor for a member whose credit line or known floor an admin froze (Marty's Q5 of
+ * 12 Nov, DESIGN-credit-list-fable.md §6: a vouch then bought nothing until an unfreeze, or gave back part of a line the
+ * freeze took away), refused with the sentence a credit-line gift to them gets. A vouch on an invite lands at the redeem, in its transaction (the joiner is new,
  * so it is their first, and it is that voucher's one vouch for them); an offline ticket never carries one.
  *
  * ## Ledger rules (memory ledger-transaction-rules)
@@ -130,6 +132,11 @@ const notEnough = (left: number, amount: number) => tr('You have {left} Beans of
 const alreadyVouched = (name: string) => tr('You’ve already vouched for @{name}.', { name });
 const threeVouches = (name: string) => tr('@{name} has three vouches.', { name });
 const belowZero = (name: string) => tr('@{name} is below zero: a credit-line gift or a Decision can help.', { name });
+/**
+ * A member whose credit line can't grow now: ONE sentence for a credit-line gift to a paused or frozen member
+ * (engine/credit-gift.ts) and a vouch for a frozen one (Q5), so the two refusals never drift apart.
+ */
+export const cantBeGivenCredit = (name: string) => tr('@{name} can’t be given part of a credit line right now.', { name });
 const noVouchYet = (name: string) => tr('You haven’t vouched for @{name} yet, so there is no vouch to raise.', { name });
 const raiseNotAbove = (name: string, total: number) => tr('You’ve vouched {total} Beans for @{name} already. Pick a higher total to raise it to.', { name, total: B(total) });
 const overPerson = (name: string, total: number, max: number) => tr('@{name} has {total} Beans of vouches already, and one person’s vouches come to {max} at most.', { name, total: B(total), max: B(max) });
@@ -241,9 +248,10 @@ export function isVoucher(pk: string): boolean {
 /**
  * Their credit line frozen by an admin (members.credit_frozen), or their known floor by an exception
  * (known_floor_exceptions.frozen): nothing more out of their budget while it lasts, no raise of it, and room already given
- * stays given (the design §5.2 "Freezes", which amendment 1 §5.2 keeps for vouchers; §5.6 step 3 for a top-up).
+ * stays given (the design §5.2 "Freezes", which amendment 1 §5.2 keeps for vouchers; §5.6 step 3 for a top-up). Read for
+ * the one vouched for too (Q5, {@link vouchFromProfile}), and for a known floor raised from the apps (engine/credit-give.ts).
  */
-function isFrozen(pk: string): boolean {
+export function isFrozen(pk: string): boolean {
     return !!db.prepare(`SELECT 1 FROM members m WHERE m.public_key = ? AND (COALESCE(m.credit_frozen, 0) = 1
         OR EXISTS (SELECT 1 FROM known_floor_exceptions e WHERE e.member_pubkey = m.public_key AND e.frozen = 1))`).get(pk);
 }
@@ -749,6 +757,9 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
     db.transaction(() => {
         returnLapsedHolds(voucher);
         const { owner } = assertMayVouch(voucher, asked, raise);
+        // Q5: never for a member an admin froze (their whole line, or their known floor), a first vouch or a raise, an
+        // owner's too: after the voucher's own rules, so a key that may vouch nothing learns nothing about the member.
+        if (isFrozen(person)) throw new VoucherError(409, 'not_receiving', cantBeGivenCredit(m.callsign));
         if (belowZeroNow(person)) throw new VoucherError(409, 'below_zero', belowZero(m.callsign));
         const pair = pairOf(voucher, person);
         if (raise) {

@@ -15,7 +15,7 @@ A **voucher** is a member an owner or the credit committee gave a budget to vouc
 
 - **What every giver sees:** your credit line and how much of it you can use now, your live Offers, your balance with its sign and its figure (plus or minus), how much of your line you are using, and your credit risk with the reasons any giver may read. See "Credit risk: what it reads".
 - **What only owners and admins see:** what your line is made of (the known floor, vouches and what you earned), who confirmed you and who vouched for you, a freeze, and the reasons built from those: a ring, a dispute an admin decided, when you last made a sale, and how the people you stood behind are doing.
-- **What no giver sees:** your trades, a history, or an older balance. They see your balance now, nothing before it. It is never in a notification, and it is not kept on their phone: the view lives in memory while the screen is open.
+- **What no giver sees:** your trades or a history. They see your balance now. One figure reaches back: for 30 days the credit-risk word counts debt that a gift of Beans paid off, and says how much, never who sent it or when. It is never in a notification, and it is not kept on their phone: the view lives in memory while the screen is open.
 - **Who sees none of it:** a member who is not a giver, and a moderator. Their apps never ask for it. Nor is it on the global community, or in a community with Beans off.
 - **It ends with the budget.** Your community's server decides at each request. When an owner or the credit committee stops a voucher, they see nothing from the next request on.
 

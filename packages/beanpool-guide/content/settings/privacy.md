@@ -33,7 +33,7 @@ The owners and admins who run your community's server can still see what is stor
 In a community with Beans, the owners, admins and vouchers can see your balance and your credit line, and each look is recorded. This is what the join screen and "How this community works" say.
 
 - **They see:** your credit line and how much you can use now, your balance with its sign and its figure, how much of your line you are using, and your credit risk with the reasons any giver may read. Owners and admins also see what your line is made of, who confirmed you and who vouched for you, a freeze, and the reasons built from those.
-- **They never see:** your trades, a history or an older balance. A notification never carries your balance, and their phone does not keep it.
+- **They never see:** your trades or a history. They see your balance now. One figure reaches back: for 30 days the credit-risk word counts debt that a gift of Beans paid off, and says how much, never who sent it or when. A notification never carries your balance, and their phone does not keep it.
 - **A member who is not a giver, and a moderator, see none of it.** Nor is it on the global community.
 - **Every look is recorded:** who looked, at whom, on which day. Every owner and admin can read the record; a voucher can't, and you are not shown the names. A line is kept 12 months.
 - **You can read what they see about you** on your Ledger, under **What people who give credit see**.

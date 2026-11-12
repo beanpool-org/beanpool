@@ -81,12 +81,15 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
     const [done, setDone] = useState<{ said: string; line: string | null } | null>(null);
     const [floor, setFloor] = useState<number | null>(null);
     // The node's own word on whether this community confirms its members (the dial): neither known line is shown where it doesn't.
-    const [confirms, setConfirms] = useState(false);
+    // A community that confirms carries its known floor in the answer; a Beans node that doesn't still answers (with only
+    // `creditSight`), so "an answer" is not the test: the floor is. The floor is also the amount the Confirm row says it adds.
+    const [knownFloor, setKnownFloor] = useState<number | null>(null);
     useEffect(() => {
         let alive = true;
-        void fetchKnownRule(anchorUrl).then((rule) => { if (alive) setConfirms(rule !== null); });
+        void fetchKnownRule(anchorUrl).then((rule) => { if (alive) setKnownFloor(rule && isHundredths(rule.knownFloor) ? (rule.knownFloor as number) : null); });
         return () => { alive = false; };
     }, [anchorUrl]);
+    const confirms = knownFloor !== null;
 
     // The sheet's own read of the person (a look the node records, once a day for this pair) and of the viewer's budget.
     useEffect(() => {
@@ -181,6 +184,7 @@ export function GiveCreditSheet({ person: shown, sight, anchorUrl, identity, off
 
                         {canConfirm && (
                             <View style={styles.section} testID="give-confirm">
+                                {knownFloor ? <Text style={styles.grey} maxFontSizeMultiplier={1.3} testID="give-confirm-adds">{t('Adds the known floor: {amount} Beans', { amount: formatHundredths(knownFloor) })}</Text> : null}
                                 <Pressable
                                     accessibilityRole="button"
                                     style={styles.secondary}

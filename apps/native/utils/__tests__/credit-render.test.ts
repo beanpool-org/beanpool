@@ -61,8 +61,10 @@ const world = vi.hoisted(() => ({
     log: [] as string[],
     posts: [] as { path: string; body: any }[],
     topUps: [] as any[],
-    /** The community's known-rule answer: null when it doesn't confirm its members. */
+    /** The community's known-rule answer: false = a Beans node that doesn't confirm its members (an answer with no floor in it). */
     known: true,
+    /** How many people a page of the fake node holds (0 = all of them on one page); the cursor is the offset. */
+    pageSize: 0,
 }));
 const forSight = (p: any) => {
     if (world.sight !== 'voucher') return p;
@@ -82,7 +84,10 @@ vi.mock('../node-post', () => ({
             if (world.pageStatus === 403) return reply(403, { error: 'Only the owners, admins and vouchers here can see credit.', code: 'not_a_giver' });
             const filter = /filter=(\w+)/.exec(p)?.[1];
             const list = filter === 'no_credit' ? world.people.filter((x) => x.line_c === 0) : filter === 'has_offers' ? world.people.filter((x) => x.line_c === 0 && x.liveOffers > 0) : world.people;
-            return reply(200, { sight: world.sight, told: 'x', people: list.map(forSight), next: null });
+            const after = /[?&]after=([^&]+)/.exec(p)?.[1];
+            const start = after ? Number(decodeURIComponent(after)) : 0;
+            const size = world.pageSize || list.length;
+            return reply(200, { sight: world.sight, told: 'x', people: list.slice(start, start + size).map(forSight), next: start + size < list.length ? String(start + size) : null });
         }
         const one = /^\/api\/credit\/people\/([0-9a-f]{64})$/.exec(p);
         if (one) {
@@ -123,7 +128,13 @@ vi.mock('../names-list', () => ({
     },
 }));
 vi.mock('../node-admin', () => ({ askNodeRole: async () => world.role }));
-vi.mock('../known-rule', () => ({ fetchKnownRule: async () => (world.known ? { knownFloor: 100000 } : null) }));
+// The node's answer as core's readKnownRule gives it: a community that confirms carries its floor; a Beans node that does
+// not still answers (only `creditSight`), so "an answer" must not be read as "confirms".
+vi.mock('../known-rule', () => ({
+    fetchKnownRule: async () => (world.known
+        ? { knownFloor: 100000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null, creditSight: true }
+        : { debtLineFrom: null, quietDaysFrom: null, creditSight: true }),
+}));
 
 import { CreditList } from '../../components/CreditList';
 import { CreditCard } from '../../components/CreditCard';
@@ -146,7 +157,7 @@ const mount = async (node: any) => { await act(async () => { root.render(node); 
 const list = (extra: Record<string, unknown> = {}) => el(CreditList, { anchorUrl: 'https://n.test', identity: id, query: '', nodeProfile: 'local', onOpenProfile() {}, onRefused: refused, ...extra });
 
 const seed = () => {
-    world.sight = 'owner'; world.pageStatus = 200; world.role = null; world.vouchRefusal = null; world.known = true;
+    world.sight = 'owner'; world.pageStatus = 200; world.role = null; world.vouchRefusal = null; world.known = true; world.pageSize = 0;
     world.log.length = 0; world.posts.length = 0; world.topUps.length = 0; nav.pushed.length = 0; refused.mockClear();
     world.chip = { status: 403, rows: [] };
     world.mine.voucher = true; world.mine.noLimit = false; world.mine.ask = { askedAt: null, lastAskedAt: null, askAgainAt: null, blocked: null };
@@ -292,6 +303,29 @@ describe('Give credit (test 11)', () => {
         expect(text()).toContain('Give @Jane credit');
         expect(text()).not.toContain('Give @Fay credit');
     });
+    it('Next › across a page boundary: the node is asked for the next page and the first person on it who can be given credit opens', async () => {
+        world.pageSize = 2; // page 1: Rob, Fay (Fay cannot be given credit). page 2: Jane, Sam.
+        await mount(list());
+        expect(byId('credit-row-Jane')).toBeNull();
+        await press(byId('credit-row-Rob')!.querySelector('[data-testid="credit-give"]'));
+        await press(byId('invite-vouch-50'));
+        await press(byId('give-vouch-submit'));
+        expect(world.log.filter((l) => l.includes('after=')).length).toBe(0);
+        await press(byId('give-next'));
+        expect(world.log.filter((l) => l.includes('after=2')).length).toBe(1);
+        expect(text()).toContain('Give @Jane credit');
+        expect(text()).not.toContain('Give @Fay credit');
+        expect(byId('credit-row-Sam')).not.toBeNull();
+    });
+    it('Next › at the last person with no page after it is not offered', async () => {
+        world.pageSize = 2;
+        await mount(list({ initialFilter: 'has_offers' }));
+        // has_offers holds Rob alone (line 0 with a live Offer): one page, no next.
+        await press(byId('credit-row-Rob')!.querySelector('[data-testid="credit-give"]'));
+        await press(byId('invite-vouch-50'));
+        await press(byId('give-vouch-submit'));
+        expect(byId('give-next')).toBeNull();
+    });
     it('below zero: the presets are greyed under the node\'s sentence, there is no submit, and no request is sent', async () => {
         await mount(list());
         await press(byId('credit-row-Mel')!.querySelector('[data-testid="credit-give"]'));
@@ -312,6 +346,7 @@ describe('Give credit (test 11)', () => {
     it('Confirm goes to the names list\'s one-step form with the callsign (test 12, phone half); a confirmed member has no Confirm row', async () => {
         await mount(list());
         await press(byId('credit-row-Rob')!.querySelector('[data-testid="credit-give"]'));
+        expect(byId('give-confirm-adds')!.textContent).toBe('Adds the known floor: 1,000 Beans');
         await press(byId('give-confirm')!.querySelector('[data-role="button"]'));
         expect(nav.pushed).toEqual([{ pathname: '/names-list', params: { act: 'add', forMember: ROB, forCallsign: 'Rob' } }]);
         nav.pushed.length = 0;

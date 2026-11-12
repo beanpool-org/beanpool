@@ -1204,18 +1204,7 @@ export default function PeopleScreen() {
 
             {view === 'community' && (
                 <>
-                    <View style={styles.searchWrap}>
-                        <TextInput
-                            accessibilityLabel={t('Search callsign or public key')}
-                            style={styles.searchInput}
-                            placeholder={t('🔍 Search callsign or public key...')}
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholderTextColor={colors.text.muted}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                    </View>
+                    {/* Show credit (slice C4) sits ABOVE the search, as the design draws it (DESIGN-credit-list §3.1). */}
                     {showsCredit && (
                         <View style={styles.creditSwitchRow} testID="credit-switch-row">
                             <Text style={styles.creditSwitchLabel} maxFontSizeMultiplier={1.3}>{t('Show credit')}</Text>
@@ -1228,6 +1217,18 @@ export default function PeopleScreen() {
                             />
                         </View>
                     )}
+                    <View style={styles.searchWrap}>
+                        <TextInput
+                            accessibilityLabel={t('Search callsign or public key')}
+                            style={styles.searchInput}
+                            placeholder={t('🔍 Search callsign or public key...')}
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            placeholderTextColor={colors.text.muted}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                        />
+                    </View>
                     {!membersOnDemand && !(showsCredit && creditOn) && <View style={styles.sortRow}>
                         {SORT_OPTIONS.map(opt => (
                             <Pressable

@@ -21,6 +21,7 @@
  *  10  no node signature: refused, a member's signature too, and every spelling of the path
  *  11  the node's own signer: a request it signs is taken by its own door, its document fetched from its own route
  *  12  at most 8 key fetches at once: the ninth origin is answered busy (503), and nothing waits on it
+ *  13  two requests from one origin while its document is on its way: the second waits for it, one fetch
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-node-signature.ts
  */
@@ -306,6 +307,22 @@ async function main(): Promise<void> {
     release();
     const settled = await Promise.all(slow);
     assert(settled.every(r => r.status === 401 && r.body?.code === 'node_key_unknown'), '12d. the eight that answered nothing are refused, unknown key');
+
+    // ── 13. Two requests from one origin while its document is on its way ─────────────────
+    console.log('\n13. A second request waits for the fetch already on its way');
+    const LATE = server('late.example');
+    let lateRelease: () => void = () => {};
+    const lateGate = new Promise<void>(r => { lateRelease = r; });
+    let lateAsked = 0;
+    docs.set('late.example', async () => { lateAsked++; await lateGate; return docOf(LATE, Date.now() + NODE_KEY_VALIDITY_MS); });
+    const firstLate = serverPost('/api/node/check', { items: [] }, LATE);
+    for (let t = 0; t < 200 && lateAsked === 0; t++) await new Promise(r => setTimeout(r, 25));
+    const secondLate = serverPost('/api/node/check', { items: [] }, LATE);
+    await new Promise(r => setTimeout(r, 100));
+    lateRelease();
+    const [one, two] = await Promise.all([firstLate, secondLate]);
+    assert(one.status === 200 && two.status === 200 && lateAsked === 1,
+        `13a. both are taken, on one fetch: the second waited for the first's answer (got ${one.status}, ${two.status}; fetched ${lateAsked})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -18,6 +18,7 @@
  * Screenshots go to --shots <dir> (not committed).
  *
  *   node apps/native/e2e/market-order-320.mjs --shots <dir>
+ *   node apps/native/e2e/market-order-320.mjs --sets light,dark,night --shots <dir>   # Light, Classic and Dark (colour themes T3)
  *   node apps/native/e2e/market-order-320.mjs --view grid --shots <dir>
  *
  * --view grid (market grid PG1, DESIGN-market-grid-sizes-fable.md §2.1) taps the real "Grid view" button, then runs the cases
@@ -68,6 +69,9 @@ if (VIEW !== 'list' && VIEW !== 'grid' && VIEW !== 'compact') { console.log('--v
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+// --sets light,dark,night: the colour sets to draw (Light, Classic, Dark; default light,dark as before the picker).
+const setsAt = process.argv.indexOf('--sets');
+const SETS = setsAt > 0 ? process.argv[setsAt + 1].split(',') : ['light', 'dark'];
 const fontAt = process.argv.indexOf('--font');
 const FONT = fontAt > 0 ? fs.readFileSync(path.resolve(process.argv[fontAt + 1])) : null;
 // The reader's zone for the grid's cross-zone event (a Byron event, NSW clock): Queensland while NSW is on daylight time, else
@@ -252,13 +256,13 @@ fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { View } from 'react-native';
-import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { COLOUR_SETS } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import MarketScreen from ${JSON.stringify(path.join(NATIVE, 'app/(tabs)/market'))};
 import { nearbyAreaKeyOf } from ${JSON.stringify(path.join(NATIVE, 'utils/nearby-area'))};
 
 const q = new URLSearchParams(location.search);
-const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
-globalThis.__theme = { theme: scheme, colors: scheme === 'dark' ? darkColors : lightColors };
+const scheme = ['light', 'dark', 'night'].includes(q.get('scheme')) ? q.get('scheme') : 'light';
+globalThis.__theme = { theme: scheme === 'light' ? 'light' : 'dark', set: scheme, colors: COLOUR_SETS[scheme] };
 globalThis.__identity = { publicKey: 'my-own-member-key', callsign: 'Kim' };
 
 const MIN = 60 * 1000;
@@ -392,7 +396,7 @@ const port = server.address().port;
 const browser = await chromium.launch();
 let failures = 0;
 const fail = (msg) => { failures++; console.log('  FAIL', msg); };
-for (const scheme of ['light', 'dark']) {
+for (const scheme of SETS) {
     for (const which of VIEW !== 'list' ? ['local', 'global'] : ['local', 'global', 'newsince', 'newsince-day']) {
         const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2, ...(VIEW === 'grid' ? { timezoneId: READER_TZ } : {}) });
         const errors = [];

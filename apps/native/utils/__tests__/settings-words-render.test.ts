@@ -963,11 +963,11 @@ describe('Settings at 320 dp with 1.3× text, in the pseudo-locale', () => {
 
     /**
      * The text column of an Appearance row (components/AppearanceChoice.tsx): 320 - 2 × 20 (the page) - 2 × 14 (the block)
-     * - 2 × 2 (the row's border) - 2 × 12 (its padding) - the dots (14 each, 4 apart, 12 before the words) - the tick (22 + 8).
+     * - 2 × 2 (the row's border) - 2 × 12 (its padding) - the dots (30 wide for every row, 10 before the words) - the tick (18 + 6).
      */
     const appearanceColumn = (radio: Element): number => {
-        const dots = radio.children[0].children.length;
-        return 320 - 40 - 28 - 4 - 24 - (14 * dots + 4 * (dots - 1) + 12) - 30;
+        expect(radio.children[0].children.length).toBeLessThanOrEqual(3);
+        return 320 - 40 - 28 - 4 - 24 - (30 + 10) - 24;
     };
 
     /** A menu row's text column: beside a switch, a chevron, or nothing. */

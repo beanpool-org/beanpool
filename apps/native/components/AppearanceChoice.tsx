@@ -23,12 +23,15 @@ export function AppearanceChoice({ value, onChange }: { value: ThemePreference; 
             borderWidth: 2, borderColor: colors.border.default,
         },
         rowSelected: { borderColor: colors.text.heading, backgroundColor: colors.surface.subtle },
-        dots: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 12 },
+        // The dots overlap, like a stack of avatars, so the words keep the room at 320 dp with 1.3x text; the column is as wide for
+        // every row (three dots: 14 + 8 + 8), so the names line up.
+        dots: { flexDirection: 'row', alignItems: 'center', width: 30, marginRight: 10 },
         dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 1, borderColor: colors.border.strong },
+        dotOverlap: { marginLeft: -6 },
         text: { flex: 1 },
         name: { fontSize: 15, fontWeight: '700', color: colors.text.heading },
         line: { fontSize: 12, marginTop: 1, color: colors.text.secondary },
-        tick: { width: 22, marginLeft: 8, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text.heading },
+        tick: { width: 18, marginLeft: 6, textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.text.heading },
     }));
 
     return (
@@ -52,7 +55,7 @@ export function AppearanceChoice({ value, onChange }: { value: ThemePreference; 
                         onPress={() => onChange(option.value)}
                     >
                         <View style={styles.dots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                            {dots.map((hex, i) => <View key={i} style={[styles.dot, { backgroundColor: hex }]} />)}
+                            {dots.map((hex, i) => <View key={i} style={[styles.dot, i > 0 && styles.dotOverlap, { backgroundColor: hex }]} />)}
                         </View>
                         <View style={styles.text}>
                             <Text style={styles.name}>{t(option.label)}</Text>

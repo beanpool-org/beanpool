@@ -308,11 +308,26 @@ describe('4. the welcome screen in dark', () => {
         expect(out.dark).toBe(true);
     });
 
-    it('a new phone with no choice yet opens light, even when the phone is dark (the default since 20 Sep)', async () => {
-        look.system = 'dark';
-        const out: { dark?: boolean } = {};
+    // Marty and Damo, 12 Nov 2026: Classic is the default on both apps (it was Light on the phone since 20 Sep), and a default is not
+    // written to storage, so a later change of default reaches a phone that never chose.
+    it('a new phone with no choice yet opens Classic, whether the phone is light or dark, and stores no choice', async () => {
+        for (const system of ['light', 'dark'] as const) {
+            store.clear();
+            look.system = system;
+            const out: { dark?: boolean; page?: string } = {};
+            await render(createElement(Probe, { out }));
+            expect(out.dark, system).toBe(true);
+            expect(out.page, system).toBe(onboardingColors('dark').colors.surface.page);
+            expect(store.has(THEME_PREFERENCE_KEY), system).toBe(false);
+        }
+    });
+
+    it('a member who picked Dark (the charcoal and blue look) gets its welcome colours, not Classic\'s', async () => {
+        store.set(THEME_PREFERENCE_KEY, 'night');
+        const out: { dark?: boolean; page?: string } = {};
         await render(createElement(Probe, { out }));
-        expect(out.dark).toBe(false);
-        expect(store.get(THEME_PREFERENCE_KEY)).toBe('light');
+        expect(out.dark).toBe(true);
+        expect(out.page).toBe(onboardingColors('night').colors.surface.page);
+        expect(store.get(THEME_PREFERENCE_KEY)).toBe('night');
     });
 });

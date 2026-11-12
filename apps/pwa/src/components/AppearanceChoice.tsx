@@ -10,8 +10,8 @@ import { THEME_PREFERENCE_OPTIONS, type ThemePreference } from '../lib/useTheme'
  *
  * Keyboard: the group is one tab stop, on the chosen row; the arrow keys, Home and End move to a row and choose it (the
  * way a native radio group does). A screen reader hears the name, then the line as its description, then "selected".
- * Rows are at least 48 px tall, full width, and wrap their words (320 px wide at 1.3x text). The dots and the tick are
- * decoration and are hidden from a screen reader.
+ * Rows are at least 48 px tall, full width, and wrap their words (320 px wide at 1.3x text: the dots overlap, like a stack of
+ * avatars, so the words keep the room, in a column as wide for every row so the names line up). The dots and the tick are decoration and are hidden from a screen reader.
  */
 export function AppearanceChoice({ value, onChange }: { value: ThemePreference; onChange: (next: ThemePreference) => void }) {
     const id = useId();
@@ -55,11 +55,11 @@ export function AppearanceChoice({ value, onChange }: { value: ThemePreference; 
                         // this build does not know is read as Classic before it gets here.)
                         tabIndex={selected ? 0 : -1}
                         onClick={() => onChange(option.value)}
-                        className={`w-full min-h-[48px] flex items-center gap-3 px-3 py-2 rounded-xl border-2 text-left cursor-pointer transition-colors ${selected
+                        className={`w-full min-h-[48px] flex items-center gap-2.5 px-3 py-2 rounded-xl border-2 text-left cursor-pointer transition-colors ${selected
                             ? 'border-nature-900 dark:border-white bg-nature-100 dark:bg-nature-800'
                             : 'border-nature-200 dark:border-nature-800 bg-transparent'}`}
                     >
-                        <span aria-hidden="true" data-testid="appearance-dots" className="flex shrink-0 items-center gap-1">
+                        <span aria-hidden="true" data-testid="appearance-dots" className="flex shrink-0 items-center -space-x-1.5 w-[30px]">
                             {lookSwatchSets(option.value).flatMap(set => {
                                 const dots = brandSwatch(set, 'web');
                                 const own = lookSwatchSets(option.value).length === 1;
@@ -73,7 +73,7 @@ export function AppearanceChoice({ value, onChange }: { value: ThemePreference; 
                             <span id={nameId} className="block text-[14px] leading-tight font-bold text-nature-900 dark:text-white break-words">{t(option.label)}</span>
                             <span id={lineId} className="block text-xs leading-snug text-nature-700 dark:text-nature-300 break-words">{t(option.line)}</span>
                         </span>
-                        <span aria-hidden="true" className="shrink-0 w-5 text-center text-base font-bold text-nature-900 dark:text-white">{selected ? '✓' : ''}</span>
+                        <span aria-hidden="true" className="shrink-0 w-4 text-center text-base font-bold text-nature-900 dark:text-white">{selected ? '✓' : ''}</span>
                     </button>
                 );
             })}

@@ -191,8 +191,8 @@ export interface LedgerMoveRow { from_pubkey: string; to_pubkey: string; amount_
 export function isGiftRow(r: LedgerMoveRow, pk: string): boolean {
     return r.to_pubkey === pk && r.from_pubkey !== pk && Math.trunc(Number(r.fee_c) || 0) === 0 && !isSyntheticAccount(r.from_pubkey);
 }
-/** {@link isGiftRow} as SQL over a `transactions` row aliased `t`. */
-const GIFT_ROW_SQL = `t.fee_c = 0 AND t.from_pubkey <> t.to_pubkey AND ${notSynthetic('t.from_pubkey')}`;
+/** {@link isGiftRow} as SQL over a `transactions` row aliased `t` (the page's one statement; a test holds the two to one answer). */
+export const GIFT_ROW_SQL = `t.fee_c = 0 AND t.from_pubkey <> t.to_pubkey AND ${notSynthetic('t.from_pubkey')}`;
 
 /** What one row did to `pk`'s stored balance: to them, what reached them (amount less fee); from them, what left them. */
 export function balanceMoveOf(r: LedgerMoveRow, pk: string): BalanceMove {

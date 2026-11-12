@@ -44,7 +44,7 @@ import { claimGrantor } from './claim-code.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { grantNodeRole } from './engine/node-roles.js';
-import { balanceMoveOf, balanceMovesSince, creditPerson, giftRowsWalked, giftStatements, giftWalks, type LedgerMoveRow } from './engine/credit-sight.js';
+import { GIFT_ROW_SQL, balanceMoveOf, balanceMovesSince, creditPerson, giftRowsWalked, giftStatements, giftWalks, isGiftRow, type LedgerMoveRow } from './engine/credit-sight.js';
 import { ledger } from './engine/ledger.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
@@ -379,6 +379,20 @@ async function main(): Promise<void> {
     const mismatched = steps.map((s, i) => (rebuilt[i] === s.stored ? null : `${s.label}: stored ${s.stored}, rebuilt ${rebuilt[i]}`)).filter(Boolean);
     assert(feeRows >= 1 && steps.length === ways.length + 2 && JSON.stringify(walkMoves) === JSON.stringify(rows.map((r) => balanceMoveOf(r, tia!.pk))) && mismatched.length === 0,
         `29. through ${steps.length - 1} writers and ${feeRows} circulation fee: the walk's rows rebuild the stored balance at every step (red when a writer changes a stored balance without a row) (${JSON.stringify(mismatched)})`);
+
+    // ── 27 (cont.). One rule decides a gift, in both its forms ───────────────────────────────────────────────────
+    // Tia's rows by their writer: only Send Beans (Fred) and the parting gift (Lea) are gifts; the walk reads them so.
+    const tiaIn = rows.filter((r) => r.to_pubkey === tia!.pk);
+    const giftSenders = [...new Set(tiaIn.filter((r) => isGiftRow(r, tia!.pk)).map((r) => r.from_pubkey))].sort();
+    const notGifts = tiaIn.filter((r) => !isGiftRow(r, tia!.pk));
+    assert(JSON.stringify(giftSenders) === JSON.stringify([fred!.pk, lea!.pk].sort()) && notGifts.length === ways.length - 2
+        && notGifts.every((r) => Number(r.fee_c) > 0 || /^(escrow_|COMMONS_POOL$)/.test(r.from_pubkey)),
+        `27. of the ${tiaIn.length} ways Beans reached Tia, the gifts are Fred's send and Lea's parting gift; the other ${notGifts.length} carry the fee or come from escrow or the Commons (red when the fee rule leaves isGiftRow)`);
+    // The page's statement and isGiftRow give one answer on every row in the ledger, both ways round.
+    const everyRow = db.prepare(`SELECT t.from_pubkey, t.to_pubkey, t.amount_c, t.fee_c, (${GIFT_ROW_SQL}) AS sql_gift FROM transactions t`).all() as Array<LedgerMoveRow & { sql_gift: number }>;
+    const disagree = everyRow.filter((r) => isGiftRow(r, r.to_pubkey) !== (r.sql_gift === 1));
+    assert(everyRow.length >= 20 && everyRow.some((r) => r.sql_gift === 1) && everyRow.some((r) => r.sql_gift === 0 && Number(r.fee_c) > 0) && disagree.length === 0,
+        `27. the page's gift statement and isGiftRow agree on all ${everyRow.length} ledger rows (red when one changes without the other) (${JSON.stringify(disagree.slice(0, 3))})`);
 
     // ── 32. No sender, no date, no row id; the figure only to givers ─────────────────────────────────────────────
     console.log('\n— 32. what the answers never carry —');

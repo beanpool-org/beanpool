@@ -19,6 +19,9 @@
  *   DARK_THEME=light the same screens in light mode (screenshots for a before/after diff; measures nothing)
  *   DARK_THEME=night the same screens in Dark (the charcoal-and-blue look, stored as 'night'); measured exactly as Classic dark is.
  *                    The default is Classic dark. The look is set the way a member sets it: the stored choice, read by theme-boot.js.
+ *   DARK_DEVICE=dark the device itself is set to dark (prefers-color-scheme: dark); the default is a light-mode device. Dark is
+ *                    always dark and Classic is what is stored, so the two are the same on either device (colour themes T5's shots);
+ *                    'system' would follow it. Every screen also lists which doodle and banner pictures the browser fetched.
  *   DARK_BUILD=<dir> serve the web app built from another checkout's apps/pwa (the light diff against origin/main)
  *   DARK_SHOTS=<dir> where screenshots go (default e2e/screenshots/dark-sweep/<theme>)
  * Without DARK_SWEEP it is the regression check: the screens below must measure clean in dark (no text under AA, no light
@@ -44,6 +47,9 @@ const SWEEP = process.env.DARK_SWEEP === '1';
 const THEME = process.env.DARK_THEME === 'light' || process.env.DARK_THEME === 'night' ? process.env.DARK_THEME : 'dark';
 /** Classic dark and Dark are both dark: everything that measures a dark page measures both. */
 const IS_DARK = THEME !== 'light';
+const DEVICE = process.env.DARK_DEVICE === 'dark' ? 'dark' : 'light';
+/** The doodle tiles and header banners a browser may fetch, whatever the look: which of them it did is the "no extra download" proof. */
+const PICTURE = /\/(pattern-(?:light|dark|night)(?:-2x)?\.webp|assets\/(?:neon-vines-banner\.png|vines-banner-night\.jpg))(?:\?|$)/;
 const BUILD_FROM = process.env.DARK_BUILD ? path.resolve(process.env.DARK_BUILD) : PWA_DIR;
 const SHOTS_DIR = process.env.DARK_SHOTS || path.join(PWA_DIR, 'e2e/screenshots/dark-sweep', THEME);
 const VIEW = { width: 320, height: 720 };
@@ -106,7 +112,9 @@ async function startNode(root, profile, members) {
 // ---------- the browser ----------
 
 async function openContext(browser, origin, identity) {
-    const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
+    const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce', colorScheme: DEVICE });
+    context.pictures = new Set();
+    context.on('request', (req) => { const m = PICTURE.exec(new URL(req.url()).pathname); if (m) context.pictures.add(m[1]); });
     await context.addInitScript((mode) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
@@ -489,7 +497,7 @@ async function main() {
             if (!screens.some((s) => s.profile === profile)) continue;
             nodes[profile] = await startNode(root, profile, [{ publicKey: member.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }]);
         }
-        console.log(`The web app as built (${BUILD_FROM === PWA_DIR ? 'this checkout' : BUILD_FROM}); Chromium at 320 px, 1.3x text, ${THEME} mode.`);
+        console.log(`The web app as built (${BUILD_FROM === PWA_DIR ? 'this checkout' : BUILD_FROM}); Chromium at 320 px, 1.3x text, ${THEME} mode, a ${DEVICE}-mode device.`);
         for (const s of screens) {
             const node = nodes[s.profile];
             // One member lands ~20 times: the gateway and sign-in limiters start again for each screen, as for a fresh visit.
@@ -503,6 +511,8 @@ async function main() {
                 await page.evaluate(() => document.fonts?.ready);
                 await wait(400);
                 await page.screenshot({ path: path.join(SHOTS_DIR, `${s.name}.png`) });
+                r.pictures = [...context.pictures].sort();
+                console.log(`    pictures fetched: ${r.pictures.join(', ') || 'none'}`);
                 if (s.name === 'member-settings-appearance' && process.env.DARK_LIST_PASS === '1') await listPass(page);
                 if (IS_DARK) {
                     Object.assign(r, await page.evaluate(measure, IS_DARK));

@@ -692,7 +692,7 @@ describe('old chat: an old line\'s photo and listing card, from the frozen 1.2.3
     };
     const servePhoto = (line: Line, photo: Fixture) => node.photos.set(line.id, { data: photo.payload.ciphertext, nonce: photo.payload.nonce });
     const itemOf = async (id: string) => (await getMessages(VCONV)).find((m: any) => m.id === id) as ChatMessage;
-    /** The photo as the chat screen asks for it (app/chat/[id].tsx ChatImage): with the line's own oldLine. */
+    /** The photo as the chat screen asks for it (components/chat/DmChatImage.tsx ChatImage): with the line's own oldLine. */
     const photoShown = async (id: string) => getDecryptedAttachment(VCONV, id, !!(await itemOf(id))?.oldLine);
     const cached = (id: string) => (fs.existsSync(`${h.cacheDir}/chat-images/${id}.jpg`) ? fs.readFileSync(`${h.cacheDir}/chat-images/${id}.jpg`, 'utf8') : null);
     const base64Of = (dataUri: string) => dataUri.slice(dataUri.indexOf(',') + 1);

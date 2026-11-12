@@ -9,7 +9,7 @@
 import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo, type CSSProperties, type ReactNode } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi, decideMessageRequest,
-    sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
+    sendMessageApi, editMessageApi, toggleMessageReactionApi,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
     deleteMessageApi, removeGroupChatMessage, muteChatApi, type YourChatMute,
@@ -19,6 +19,7 @@ import { requestsWaitingOnGlobal } from '../lib/show-on-global';
 import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, requestPendingRefusal, requestReportNotSentWords, REQUEST_CARDS_SHOWN } from '../lib/dm-requests';
 import { MessageRequestsList, RequestActions, closedPhotoWords, useRequestPreviews } from '../components/MessageRequests';
 import { ChatPhotoViewer } from '../components/ChatPhotoViewer';
+import { ChatImageBubble, ChatPhotoShown } from '../components/ChatImageBubble';
 import { AboutCard, AboutChipBar } from '../components/ChatAbout';
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
@@ -28,7 +29,7 @@ import {
 // Old chat, read-only: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the thread check that marks the lines).
 import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_WORDS } from '@beanpool/core';
 // Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the phone opens them).
-import { openDmOldPhoto, chatAboutOfOldLine } from '@beanpool/core';
+import { chatAboutOfOldLine } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
 import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
@@ -235,53 +236,6 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
 }
 
 /**
- * Lazily fetch + decrypt an encrypted image attachment, then render it. The photo opens only as part of its message:
- * bound to the author and id the node shows the message under, and signed by that author (format 4), so no other line's
- * photo, and no picture the other person sealed in the author's name, can stand in for it. Words that didn't open
- * (`bodyFormat` null, from the thread check) leave the photo locked too.
- *
- * `old` (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a line from before 1.4.0 the thread check showed old
- * (dmLineIsOld). Its photo opens as part of its words (`words`, the line's own ciphertext and nonce, at the node's `timestamp`
- * for it) under the key, sender, conversation id and format they opened in (core openDmOldPhoto), as 1.2.36 opened it; one
- * that doesn't, or isn't a picture, stays "🔒 Image unavailable".
- */
-function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, onOpen, old }:
-    {
-        messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 4 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void;
-        old?: { words: { ciphertext: string; nonce: string }; timestamp: string | null | undefined } | null;
-    }) {
-    const [uri, setUri] = useState<string | null>(null);
-    const [failed, setFailed] = useState(false);
-    // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): the old line's own sealing, as plain values for the effect.
-    const oldCiphertext = old?.words.ciphertext;
-    const oldNonce = old?.words.nonce;
-    const oldTimestamp = old?.timestamp;
-    useEffect(() => {
-        let active = true;
-        (async () => {
-            try {
-                const keys = { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex };
-                // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a line the thread check showed old.
-                if (!bodyFormat && oldCiphertext !== undefined && oldNonce !== undefined) {
-                    const att = await getMessageAttachmentApi(messageId);
-                    const dataUri = openDmOldPhoto({ ciphertext: oldCiphertext, nonce: oldNonce }, { ciphertext: att.data, nonce: att.nonce }, keys,
-                        { conversationId, senderPubHex: authorPubkey, messageId, metadata, timestamp: oldTimestamp });
-                    if (active) setUri(dataUri);
-                    return;
-                }
-                if (!bodyFormat) throw new Error('not verified');
-                const att = await getMessageAttachmentApi(messageId);
-                const dataUri = openDmLine({ ciphertext: att.data, nonce: att.nonce }, keys,
-                    { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }).text;
-                if (active) setUri(dataUri);
-            } catch { if (active) setFailed(true); }
-        })();
-        return () => { active = false; };
-    }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, oldCiphertext, oldNonce, oldTimestamp]);
-    return <ChatPhotoShown uri={uri} failed={failed} onOpen={onOpen} />;
-}
-
-/**
  * A locked group chat's photo (DESIGN-group-chat-photos-fable.md §2.3), opened once per line, signer and epoch by `open`
  * (lib/group-chat-lines.ts getDecryptedGroupAttachment): only after its words opened, under the key and signer that opened
  * them, so no other line's, chat's or sender's picture can stand in for it. Drawn as a DM's photo is.
@@ -303,25 +257,6 @@ function GroupChatImageBubble({ photoKey, open, onOpen }: { photoKey: string; op
     return <ChatPhotoShown uri={uri} failed={failed} onOpen={onOpen} />;
 }
 
-/** A chat photo in its bubble: the picture once opened, "Loading image…" until then, or "🔒 Image unavailable". */
-function ChatPhotoShown({ uri, failed, onOpen }: { uri: string | null; failed: boolean; onOpen?: (uri: string) => void }) {
-    if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.7 }}>{t('🔒 Image unavailable')}</span>;
-    if (!uri) return <span style={{ opacity: 0.6 }}>{t('Loading image…')}</span>;
-    return (
-        <button
-            type="button"
-            aria-label={t('View photo full screen')}
-            onClick={(e) => {
-                e.currentTarget.focus();
-                onOpen?.(uri);
-            }}
-            className="p-0 m-0 border-0 bg-transparent text-left cursor-pointer rounded-xl block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-            style={{ maxWidth: '220px', lineHeight: 0 }}
-        >
-            <img src={uri} alt={t('Photo message')} style={{ maxWidth: '220px', borderRadius: '12px', display: 'block' }} />
-        </button>
-    );
-}
 
 /** A tab flicked back and forth asks global at most this often (the phone's ASK_EVERY_MS, apps/native utils/global-requests.ts). */
 const ASK_GLOBAL_EVERY_MS = 5 * 60 * 1000;

@@ -1,6 +1,6 @@
 /**
  * A photo in a chat bubble, and the full-screen view a tap opens (DESIGN-group-chat-photos-fable.md §2.3): the group chat's,
- * drawn as the DM screen draws its own (app/chat/[id].tsx ChatImage), which can move here unchanged. 220 × 220, cover,
+ * drawn as the DM screen draws its own (components/chat/DmChatImage.tsx ChatImage). 220 × 220, cover,
  * whatever the photo's size, so a run of photos can't blow up a 320 dp layout; never wider than its bubble. Tap opens the
  * same 800 px photo full screen: no bigger copy exists anywhere (memory photos-stay-800px).
  */

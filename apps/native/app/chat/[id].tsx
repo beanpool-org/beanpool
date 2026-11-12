@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { askPhotoSource } from '../../utils/post-photo';
-import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
@@ -15,9 +15,10 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
+import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
 import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
@@ -74,30 +75,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, tooLong: string): Promi
         promise,
         new Promise<T>((_, reject) => setTimeout(() => reject(new Error(tooLong)), ms)),
     ]);
-}
-
-/** Image bubble that lazily fetches + decrypts an encrypted attachment for display.
- *  Tapping calls onOpen(uri) so the parent can show it full-screen.
- *  `oldLine`: a line from before 1.4.0, shown read-only; its photo opens as part of its words
- *  (conversion code, log row OLDCHAT, remove after 12 Dec 2026). */
-function ChatImage({ conversationId, messageId, onOpen, oldLine = false }: { conversationId: string; messageId: string; onOpen?: (uri: string) => void; oldLine?: boolean }) {
-    const { colors } = useTheme();
-    const [uri, setUri] = useState<string | null>(null);
-    const [failed, setFailed] = useState(false);
-    useEffect(() => {
-        let active = true;
-        getDecryptedAttachment(conversationId, messageId, oldLine)
-            .then(u => { if (active) { if (u) { setUri(u); } else { setFailed(true); } } })
-            .catch(() => { if (active) setFailed(true); });
-        return () => { active = false; };
-    }, [conversationId, messageId, oldLine]);
-    if (failed) return <Text style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>{t('🔒 Image unavailable')}</Text>;
-    if (!uri) return <View style={{ width: 220, height: 220, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={colors.text.muted} /></View>;
-    return (
-        <Pressable accessibilityRole="button" accessibilityLabel={t('View photo full screen')} onPress={() => onOpen?.(uri)}>
-            <Image accessibilityLabel={t('Photo message')} source={{ uri }} style={{ width: 220, height: 220, borderRadius: 12 }} resizeMode="cover" />
-        </Pressable>
-    );
 }
 
 /** What the route asks the phone (utils/chat-route.ts tests these wirings). */
@@ -1442,7 +1419,7 @@ function ChatScreen({ id }: { id: string }) {
                     </Text>
                 ) : (
                     // oldLine: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
-                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} oldLine={!!item.oldLine} />
+                    <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} oldLine={!!item.oldLine} keyContext={dmKeyContextOf(keyChange)} />
                 )) : null}
                 status={status}
                 footer={(item.type === 'image' && !item.text) || item.integrityNote ? (

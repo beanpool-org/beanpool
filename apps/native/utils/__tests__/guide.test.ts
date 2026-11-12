@@ -227,7 +227,7 @@ describe('the manual (on the pages)', () => {
         // The credit-risk page (for the people who give credit) says "gift" far more often than the gifts page does, and the
         // gifts page's title and summary say "gift" and "send", not the "give" a member types. The member's page leads either
         // way. The web app calls the same core search, so this is its pin too.
-        for (const q of ['gift', 'gifts', 'give Beans', 'send a gift', 'send gift', 'sending a gift']) {
+        for (const q of ['gift', 'gifts', 'give', 'give Beans', 'send a gift', 'send gift', 'sending a gift']) {
             expect(searchGuide(guide, q)[0].page.slug, q).toBe('gifts');
         }
     });

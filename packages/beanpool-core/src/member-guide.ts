@@ -362,9 +362,9 @@ export function splitBold(text: string): Array<{ text: string; bold: boolean }> 
 // ─── Search ──────────────────────────────────────────────────────────────────
 // Offline, over the text on the phone. Every word typed must appear somewhere on a page (a word may be the start
 // of a longer one: "vot" finds "voting"; a plural finds its singular: "gifts" finds "gift"). Titles weigh most, then
-// summaries, headings, then the body. A page whose title or summary has more of the typed words comes before one that
-// only says them in its body, however often (the credit-risk page says "gift" in most paragraphs; the page named for
-// sending one is "Sending a gift"). Pages that tie on that are ordered by score.
+// summaries, headings, then the body. A page whose title (best) or summary has more of the typed words comes before
+// one that only says them in its body, however often (the credit-risk page says "gift" in most paragraphs; the page
+// named for sending one is "Sending a gift"). Pages that tie on that are ordered by score, then title.
 
 /** Words members may type that the guide deliberately says differently. */
 const SEARCH_SYNONYMS: Record<string, string[]> = {
@@ -432,7 +432,7 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
         const allBlocks = page.englishBlocks ? [...page.blocks, ...page.englishBlocks] : page.blocks;
         const blocks = blockTexts({ blocks: allBlocks as readonly OperatorGuideBlock[] }).map(b => ({ ...b, words: words(b.text) }));
         let score = 0;
-        /** How many of the typed words the page's title or summary has. */
+        /** How well the page's title and summary have the typed words: each word counts 2 if the title has it, else 1 if the summary does. */
         let named = 0;
         let firstHit: { text: string; term: string } | null = null;
         let everyTerm = true;
@@ -453,7 +453,7 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
             }
             if (termScore === 0) { everyTerm = false; break; }
             score += termScore;
-            if (inTitle + inSummary > 0) named++;
+            named += inTitle > 0 ? 2 : inSummary > 0 ? 1 : 0;
         }
         if (!everyTerm) continue;
         results.push({ result: { page, score, snippet: firstHit ? snippetAround(firstHit.text, firstHit.term) : page.summary }, named });

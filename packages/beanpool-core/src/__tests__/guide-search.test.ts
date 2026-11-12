@@ -37,6 +37,16 @@ describe('searchGuide: the page named for what is typed comes first', () => {
         expect(searchGuide(g, 'send a gift')[0].page.slug).toBe('gifts');
     });
 
+    it('a typed word in the title counts for more than one in the summary, even when the other page scores higher', () => {
+        const titled = page('gifts', 'Sending a gift', 'Send beans to someone.', ['A gift cannot be taken back.']);
+        const summarised = page('your-balance', 'Your balance and history', 'How many beans you have, and every trade and gift.',
+            Array.from({ length: 6 }, () => 'Your beans, every gift and every trade.'));
+        const found = searchGuide(guide(summarised, titled), 'give beans');
+        // Both pages have both words in the title or summary; only the title says "gift", and that decides it.
+        expect(found.map(r => r.page.slug)).toEqual(['gifts', 'your-balance']);
+        expect(found[1].score).toBeGreaterThan(found[0].score);
+    });
+
     it('between pages named alike the old order stands: the higher score first', () => {
         const events = page('events', 'Events', 'Meet up.', Array.from({ length: 8 }, () => 'An event on the map. Add an event.'));
         const eventChat = page('event-chat', 'Event chat', 'Talk about it.', ['Chat about an event.']);

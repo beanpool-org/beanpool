@@ -207,7 +207,13 @@ export interface TableHashes {
  * helped" taps, K5): after a take-over from such a copy their members see none waiting and send them again; a page
  * already approved is a post, copied whatever the importer.
  */
-export const TABLE_HASHES_VERSION = 34;
+/**
+ * 35: per-item prices (DESIGN-per-item-price-fable.md §3, slice P0): posts gains units_left, lot_price_c and lot_units, and
+ * marketplace_transactions gains item_option. Raised for the same reason as 8: a standby updated before its main server hashes
+ * both tables over more columns. REPLICA_FORMAT stays, as for the knowledge columns (31): all four are NULL on every row until
+ * a seller prices a listing for each one, which no app offers until every slice is in (config/node-profile.ts `perItem`).
+ */
+export const TABLE_HASHES_VERSION = 35;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

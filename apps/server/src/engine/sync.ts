@@ -1296,6 +1296,19 @@ function postKnowledge(rp: any): [string | null, string | null, string | null, s
     return [text(k.sources), text(k.place), text(k.lang), text(k.checkedAt), text(k.outdatedAt), text(k.outdatedNote), helped];
 }
 
+/**
+ * units_left, lot_price_c, lot_units: an Offer priced for each one (DESIGN-per-item-price-fable.md §3; engine/per-item.ts), plain
+ * assignment, so a count or a price for all cleared on the main server is cleared here. A value the table's CHECKs refuse is
+ * none, never the copy's failure. A main server older than them, or any other post, says nothing: none.
+ */
+function postItems(rp: any): [number | null, number | null, number | null] {
+    const count = (v: unknown, least: number): number | null => (Number.isInteger(v) && (v as number) >= least && (v as number) <= 9999 ? v as number : null);
+    const lot = rp.lot && typeof rp.lot === 'object' ? rp.lot : {};
+    const price = isHundredths(lot.price_c) && lot.price_c > 0 ? lot.price_c as number : null;
+    const units = count(lot.units, 2);
+    return [count(rp.unitsLeft, 0), price !== null && units !== null ? price : null, price !== null && units !== null ? units : null];
+}
+
 function postShownFrom(rp: any): [string | null, string | null, string | null, 1 | null] {
     return [
         typeof rp.shownFromHost === 'string' ? rp.shownFromHost : null,
@@ -2097,8 +2110,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
                                 lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, pinned_until, pinned_at, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions,
-                                knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at, knowledge_outdated_at, knowledge_outdated_note, knowledge_helped)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at, knowledge_outdated_at, knowledge_outdated_note, knowledge_helped,
+                                units_left, lot_price_c, lot_units)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2148,6 +2162,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postFreeTags(rp),
                         ...postShownFrom(rp),
                         ...postKnowledge(rp),
+                        ...postItems(rp),
                     );
                     newPosts++;
                 } else {
@@ -2221,6 +2236,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         knowledge_outdated_at = ?,
                         knowledge_outdated_note = ?,
                         knowledge_helped = ?,
+                        units_left = ?,
+                        lot_price_c = ?,
+                        lot_units = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2263,6 +2281,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postFreeTags(rp),
                         ...postShownFrom(rp),
                         ...postKnowledge(rp),
+                        ...postItems(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );
@@ -2511,8 +2530,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // (the admin Disputes list reads the resolution), the hygiene's last nudge stays nudged, and the row's
                 // stamp is the main server's, which phones' deltas read after a take-over.
                 const writeDeal = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at,
-                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by, standing_id, period_no)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    updated_at, last_reminded_at, dispute_resolution, dispute_resolved_at, dispute_resolved_by, standing_id, period_no, item_option)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     post_id = excluded.post_id,
                                     buyer_pubkey = excluded.buyer_pubkey,
@@ -2528,7 +2547,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     dispute_resolved_at = excluded.dispute_resolved_at,
                                     dispute_resolved_by = excluded.dispute_resolved_by,
                                     standing_id = excluded.standing_id,
-                                    period_no = excluded.period_no`);
+                                    period_no = excluded.period_no,
+                                    item_option = excluded.item_option`);
                 for (const mt of remote.marketplaceTransactions) {
                     const createdAt = mt.createdAt ?? mt.created_at ?? new Date().toISOString();
                     const completedAt = mt.completedAt ?? mt.completed_at ?? null;
@@ -2549,6 +2569,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         mt.disputeResolvedBy ?? null,
                         typeof mt.standingId === 'string' && mt.standingId ? mt.standingId : null,
                         Number.isInteger(mt.periodNo) ? mt.periodNo : null,
+                        // A per-item deal's way of taking it up, as the main server holds it: anything else is none.
+                        mt.itemOption === 'each' || mt.itemOption === 'lot' ? mt.itemOption : null,
                     );
                     if (res.changes > 0) marketplaceTxns++;
                 }

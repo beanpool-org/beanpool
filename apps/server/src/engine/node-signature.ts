@@ -94,6 +94,11 @@ const kept = new Map<string, KeptDocument>();
 const askedAt = new Map<string, number>();
 const fetching = new Map<string, Promise<NodeKeyDocument | null>>();
 
+/** A document that could not be had is written to the log at most this often, with how many since (never one a request). */
+const FAILED_LOG_EVERY_MS = 60_000;
+let failedLoggedAt = -Infinity;
+let failedSince = 0;
+
 type DocumentFetch = (origin: string) => Promise<unknown>;
 
 /** The real fetch: `https://<origin>/api/node/key`, public addresses only, no redirect, small, quick. */
@@ -120,10 +125,12 @@ export function __useNodeKeyFetchForTests(fetch: DocumentFetch | null): void {
     forgetNodeKeys();
 }
 
-/** Forget every origin's document and every ask (tests; and nothing else needs to). */
+/** Forget every origin's document and every ask, and write the next failure to the log (tests; nothing else needs to). */
 export function forgetNodeKeys(): void {
     kept.clear();
     askedAt.clear();
+    failedLoggedAt = -Infinity;
+    failedSince = 0;
 }
 
 /** How many origins' documents are kept (suites). */
@@ -137,10 +144,6 @@ function remember<V>(map: Map<string, V>, key: string, value: V, max: number): v
     while (map.size > max) map.delete(map.keys().next().value!);
 }
 
-/** A document that could not be had is written to the log at most this often, with how many since (never one a request). */
-const FAILED_LOG_EVERY_MS = 60_000;
-let failedLoggedAt = -Infinity;
-let failedSince = 0;
 
 function noteFailedDocument(origin: string, why: string): void {
     failedSince++;

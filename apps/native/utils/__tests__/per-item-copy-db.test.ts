@@ -48,7 +48,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string, body: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { acceptMarketplacePost, applyDelta, getDb, getDealsBetween, getMarketplaceTransactions, getPosts, getPost } from '../db';
+import { acceptMarketplacePost, applyDelta, deletePost, getDb, getDealsBetween, getMarketplaceTransactions, getPosts, getPost } from '../db';
 import { perItemCard } from '@beanpool/core';
 import { DEFAULT_MARKET_FILTERS, feedPostVisible } from '../market-filters';
 
@@ -260,6 +260,44 @@ describe("a per-item deal in the phone's copy (slice P3)", () => {
             expect(sent[0].body).toEqual({ postId: 'p-stool', buyerPublicKey: 'me-pubkey' });
             expect(status('p-stool')).toBe('pending');
             expect(kept('tx-stool').item_option).toBeNull();
+        });
+    });
+
+    /**
+     * P3 follow-up (review of #3093): the phone's seller of an Each listing sees Delete while buyers hold some of the items, and the
+     * node refuses it in its own words. deletePost threw that sentence inside "Offline or anchor node unreachable: ...", so the
+     * member read that they were offline. Only a send that never reached the node says so.
+     */
+    describe('deletePost', () => {
+        const NODE_SAYS = 'This post has a deal in escrow — complete or cancel the deal before deleting it';
+        const answer = (status: number, body: unknown) => {
+            globalThis.fetch = vi.fn(async () => ({ ok: status < 400, status, headers: { get: () => null }, json: async () => body }) as any) as any;
+        };
+
+        const inCopy = (id: string) => sql.prepare('SELECT 1 AS here FROM posts WHERE id = ?').get(id) !== undefined;
+
+        it("the node's refusal comes up as the node wrote it, not as 'Offline or anchor node unreachable' (red if the refusal is wrapped again)", async () => {
+            await applyDelta({ posts: [listing] });
+            answer(400, { error: NODE_SAYS });
+            await expect(deletePost('p-panels')).rejects.toThrow(new Error(NODE_SAYS));
+            expect(inCopy('p-panels')).toBe(true); // nothing was erased from the copy
+        });
+
+        it("a refusal with no words keeps db.ts's own sentence, and is not 'offline' either", async () => {
+            answer(500, {});
+            await expect(deletePost('p-panels')).rejects.toThrow(new Error('Failed to remove post on Node'));
+        });
+
+        it('a send that never reached the node still says it is offline (red if the offline sentence is lost)', async () => {
+            globalThis.fetch = vi.fn(async () => { throw new TypeError('Network request failed'); }) as any;
+            await expect(deletePost('p-panels')).rejects.toThrow(new Error('Offline or anchor node unreachable: Network request failed'));
+        });
+
+        it('a delete the node accepts erases the copy as before', async () => {
+            await applyDelta({ posts: [listing] });
+            answer(200, { success: true });
+            await deletePost('p-panels');
+            expect(inCopy('p-panels')).toBe(false);
         });
     });
 });

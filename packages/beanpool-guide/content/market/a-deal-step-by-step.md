@@ -2,7 +2,7 @@
 slug: a-deal-step-by-step
 title: A deal, step by step
 summary: From asking to getting paid, for an Offer and for a Need, and leaving a review.
-related: my-deals, when-a-deal-goes-wrong, posting, how-it-works, standing-deals
+related: my-deals, when-a-deal-goes-wrong, posting, how-it-works, standing-deals, selling-more-than-one
 ---
 
 ## The idea
@@ -17,6 +17,7 @@ You can ask for, accept or approve up to 100 deals in any 24 hours. A deal you p
 
 - Open the Offer and tap **Accept Offer**.
 - If it is priced by the hour, say how many hours.
+- If it is priced **Each**, a box asks **How many would you like?** Choose a number, or all of them. See "Selling more than one".
 - If it is priced by the week or the month, a **Take this up?** screen opens instead, and the first week or month is paid straight away. See "Standing deals".
 - Tap **Confirm**. Your beans are held straight away, and the seller is told. There is no waiting for the seller to say yes.
 - A chat with the seller opens. Agree when and where.

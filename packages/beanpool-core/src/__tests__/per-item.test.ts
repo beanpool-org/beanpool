@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     EACH, ITEM_COUNT_MAX, NOT_PER_ITEM, isItemCount, isUnitsLeft, itemColumnsRefusal, itemTotal, itemsAmount, lotOffered, lotPriceIn,
-    lotSaving, perItemLine, perItemLines, perItemOffered, perItemRefusalText, sellerReceives, type PerItemListing, type PerItemRefusal,
+    lotSaving, PER_ITEM_REFUSALS, perItemLine, perItemLines, perItemOffered, perItemRefusalText, sellerReceives, type PerItemListing,
 } from '../per-item';
 import { feeOf, formatHundredths } from '../hundredths';
 import { beansPriceWords, copyPriceLine, copyPriceOf, copyPriceText } from '../event-copy';
@@ -137,10 +137,10 @@ describe('the words, in English', () => {
         expect(perItemRefusalText({ code: 'units_changed', count: 17 })).toBe('Someone took some while you were editing. There are 17 left now. Check the number and save again.');
     });
     it('every refusal has its sentence, and the node writes them in English whatever the active language', () => {
-        const codes: PerItemRefusal[] = ['each_offer_only', 'units_refused', 'units_zero', 'units_changed', 'lot_price_refused', 'lot_needs_two', 'lot_not_less'];
         const en = wordsFor('en');
         setLanguage('fr');
-        for (const code of codes) {
+        expect(PER_ITEM_REFUSALS.length).toBe(7);
+        for (const code of PER_ITEM_REFUSALS) {
             const text = perItemRefusalText({ code, count: 20, total_c: c(6000) }, en);
             expect(text.length).toBeGreaterThan(10);
             expect(text).not.toMatch(/[{}]/);

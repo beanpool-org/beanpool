@@ -17,7 +17,7 @@
  * answer has no `perItem` until every slice is in (config/node-profile.ts).
  */
 import {
-    EACH, NOT_PER_ITEM, isItemCount, isPerItem, itemColumnsRefusal, lotPriceIn, perItemRefusalText, word, wordsFor,
+    EACH, NOT_PER_ITEM, PER_ITEM_REFUSALS, isItemCount, isPerItem, itemColumnsRefusal, lotPriceIn, perItemRefusalText, word, wordsFor,
     type ItemColumns, type PerItemRefusalOf,
 } from '@beanpool/core';
 import type { MarketplacePost } from '@beanpool/engine';
@@ -43,10 +43,9 @@ function itemRefusal(r: PerItemRefusalOf): ItemRefusalError {
 /** What a route sends for a per-item refusal: its code, and the count now when it changed under the seller. */
 export function itemRefusalOf(e: unknown): { status: number; code: string; unitsLeft?: number } | null {
     const r = e as Partial<ItemRefusalError> | null;
-    if (!r || typeof r.code !== 'string' || !ITEM_REFUSAL_CODES.has(r.code) || typeof r.status !== 'number') return null;
+    if (!r || typeof r.code !== 'string' || !(PER_ITEM_REFUSALS as readonly string[]).includes(r.code) || typeof r.status !== 'number') return null;
     return { status: r.status, code: r.code, ...(typeof r.unitsLeft === 'number' ? { unitsLeft: r.unitsLeft } : {}) };
 }
-const ITEM_REFUSAL_CODES: ReadonlySet<string> = new Set(['each_offer_only', 'units_refused', 'units_zero', 'units_changed', 'lot_price_refused', 'lot_needs_two', 'lot_not_less']);
 
 /** A lot as sent: `{ price_c }` or none; anything else refused. */
 function lotIn(raw: unknown): number | null {

@@ -95,8 +95,9 @@ export function sellerReceives(amount_c: Hundredths): Hundredths {
     return amount_c - feeOf(amount_c);
 }
 
-/** Why a create or an edit is refused (each has its sentence in {@link perItemRefusalText}); `units_changed` is a 409. */
-export type PerItemRefusal = 'each_offer_only' | 'units_refused' | 'units_zero' | 'units_changed' | 'lot_price_refused' | 'lot_needs_two' | 'lot_not_less';
+/** Why a create or an edit is refused, the code on the wire (each has its sentence in {@link perItemRefusalText}); `units_changed` is a 409. */
+export const PER_ITEM_REFUSALS = Object.freeze(['each_offer_only', 'units_refused', 'units_zero', 'units_changed', 'lot_price_refused', 'lot_needs_two', 'lot_not_less'] as const);
+export type PerItemRefusal = (typeof PER_ITEM_REFUSALS)[number];
 
 export interface PerItemRefusalOf {
     code: PerItemRefusal;

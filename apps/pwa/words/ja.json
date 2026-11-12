@@ -103,7 +103,6 @@
   "A member": "メンバー",
   "A neighbour offered to do this. Approve to hold the Beans safely.": "近隣の仲間がこれを行うことを申し出ました。承認して豆を安全に預けましょう。",
   "A new post": "新しい投稿",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "コモンズの大黒柱です。可能な限り最も深い信用枠と、コミュニティ最高峰の信頼を得ています。",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a collaborator.": "0のプレッジも有効です：実績をプレッジせずに運営を手伝う場合でも、協力者になれます。",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.": "0のプレッジも有効です：実績をプレッジせずに運営を手伝う場合でも、運営者になれます。",
   "A project needs a goal in Beans": "プロジェクトには豆の目標額が必要です",
@@ -117,7 +116,6 @@
   "A spare computer, or a few dollars a month for a rented server. The software is free.": "使っていないパソコン、または月々数ドルのレンタルサーバーです。ソフトウェアは無料です。",
   "A town or area": "町や地域",
   "A trade dispute was resolved": "取引の異議申し立てが解決されました",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "幅広いパートナーを持つ信頼された取引相手です。コミュニティから認知され、信用枠はさらに深まります。",
   "ACCOUNT & IDENTITY": "アカウントとID",
   "ACTIVE\u0004listing status": "公開中",
   "ACTUAL DAYS WORKED": "実働日数",
@@ -632,9 +630,6 @@
   "Creator account linking:": "クリエイターアカウントの連携:",
   "Credit Line": "信用枠",
   "Credit balance gauge": "信用残高ゲージ",
-  "Credit floor can reach -2000 (the maximum)": "信用枠の下限は最大-2000まで到達可能",
-  "Credit floor continues deepening": "信用枠の下限がさらに拡大",
-  "Credit floor deepens with the value you trade": "取引した価値に応じて信用枠の下限が拡大",
   "Credits (B)": "クレジット（豆）",
   "Credits (🫘 Beans)": "対価（🫘 豆）",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "クレジットは相互信用の通貨です。取引すると、クレジットがメンバー間で移動します。全員がゼロからスタートします。お互いさまの関係を促し、価値が地域の中で巡り続けるように設計されています。",
@@ -1164,11 +1159,6 @@
   "Let's Begin! 🚀": "はじめましょう！🚀",
   "Let's look at how this community economy works.": "このコミュニティの経済のしくみを見てみましょう。",
   "Level {level} of {levels}": "レベル {level} / {levels}",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "レベル {level} / {levels} · 信用 {n}"
-  },
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "レベルは信望の証であり、行動を制限するものではありません。誰でも招待できます。直接送金にはプラスの残高と1回の取引完了が必要です。レベルが上がると信用枠が広がり、コミュニティでの信頼が高まります。",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "レベルは信望の証であり、行動を制限するものではありません。直接送金にはプラスの残高と1回の取引完了が必要です。レベルが上がると信用枠が広がり、コミュニティでの信頼が高まります。",
   "Light\u0004appearance": "ライト",
   "Light or dark, or the same as your device": "ライト、ダーク、または端末の設定に合わせる",
   "Link copied.": "リンクをコピーしました。",
@@ -2775,7 +2765,6 @@
   "You've posted {n} new thing on {platform} since your last visit.|You've posted {n} new things on {platform} since your last visit.": {
     "other": "前回の訪問以降、{platform}に{n}件の新しい投稿をしました。"
   },
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "コミュニティと実際の価値を取引しました。取引を重ねるごとに信用枠が深まり、交換した価値が大きいほど枠も広がります。",
   "Your 12 words are always in Settings → Recovery Phrase.": "12個の単語はいつでも「設定 → 復元フレーズ」で確認できます。",
   "Your 12 words are the **only** way to recover your account.": "12個の単語が、アカウントを復元する**唯一**の方法です。",
   "Your 12 words are the way back to this account. Keep them safe.": "12個の単語がこのアカウントを復元する方法です。大切に保管してください。",

@@ -85,14 +85,14 @@ const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; b
       blurb: word("Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line."),
       perks: [{ words: word('Browse & trade the marketplace') }, { words: word('Receive credits') }, { words: INVITE_PERK }, { words: word('Send credits after first trade (needs positive balance)') }] },
     Resident: { color: 'var(--tier-resident)', bg: 'var(--tier-resident-bg)', border: 'var(--tier-resident-border)',
-      blurb: word("You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows."),
-      perks: [{ words: word('Credit floor deepens with the value you trade') }, { words: INVITE_PERK }] },
+      blurb: word("Recognised by the community for the value you bring. A level is recognition only: it gives no credit."),
+      perks: [{ words: word('Recognised as a community Resident') }, { words: INVITE_PERK }] },
     Steward:  { color: 'var(--tier-steward)', bg: 'var(--tier-steward-bg)', border: 'var(--tier-steward-border)',
-      blurb: word("A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still."),
-      perks: [{ words: word('Credit floor continues deepening') }, { words: word('Trusted-trader recognition') }] },
+      blurb: word("A trusted trader with a broad circle of partners, recognised by the community. A level is recognition only: it gives no credit."),
+      perks: [{ words: word('Trusted-trader recognition') }] },
     Elder:    { color: 'var(--tier-elder)', bg: 'var(--tier-elder-bg)', border: 'var(--tier-elder-border)',
-      blurb: word("A pillar of the commons — the deepest possible credit line and the community's highest recognition."),
-      perks: [{ words: word('Credit floor can reach -2000 (the maximum)') }, { words: word('Recognised as a community Elder') }] },
+      blurb: word("A pillar of the commons, with the community's highest recognition. A level is recognition only: it gives no credit."),
+      perks: [{ words: word('Recognised as a community Elder') }] },
 };
 const { CREDIT_MAX_EARNED, TRUST_CURVE_K } = PROTOCOL_CONSTANTS;
 const TIERS = TIER_LEVELS.map(lvl => ({
@@ -456,6 +456,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
     const notEarned = Math.max(0, totalCredit - earned); // grants — fixed, not grown by trading
+    // The credit line the member actually has (the node's floor), shown beside the level: a level, and a badge an owner
+    // or admin gave above all, is recognition only and gives none (Marty, 12 Nov 2026: "tiers badge only").
+    const creditLine = Math.max(0, PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor);
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
@@ -702,7 +705,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>{t('YOUR TRUST LEVEL')}</span>
                                 <div className="text-xl sm:text-2xl font-black leading-tight mt-0.5 break-words" style={{ color: tier.color }}>{t(TIER_WORDS[tier.name])}</div>
-                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(ec / 100, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { n: formatHundredths(ec), level: tierIdx + 1, levels: TIERS.length })}</div>
+                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">{tn(creditLine / 100, 'Level {level} of {levels} · credit line {n} Bean', 'Level {level} of {levels} · credit line {n} Beans', { n: formatHundredths(creditLine), level: tierIdx + 1, levels: TIERS.length })}</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
                                         ? <BoldIn text={tn(creditsToNext / 100, '**{n}** more trust to {emoji} {tier}', '**{n}** more trust to {emoji} {tier}', { n: formatHundredths(creditsToNext), emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })} bold={(n) => <span className="font-black" style={{ color: tier.color }}>{n}</span>} />
@@ -819,8 +822,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <p className="text-[11px] text-nature-400 italic mt-4">{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: formatHundredths(sel.min), left: formatHundredths(selNeeded) })}</p>
                         )}
                         <p className="text-[11px] text-nature-400 italic mt-2">{preview
-                            ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
-                            : t("Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")}</p>
+                            ? t("Levels are merit badges — they don't gate any action and give no credit. Direct sends require a positive balance and one completed trade. Your credit line is what your trades and your community give you.")
+                            : t("Levels are merit badges — they don't gate any action and give no credit. Anyone can invite. Direct sends require a positive balance and one completed trade. Your credit line is what your trades and your community give you.")}</p>
                     </div>
 
                     {/* How to reach next tier */}

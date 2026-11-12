@@ -147,14 +147,14 @@ export default function LedgerScreen() {
                 blurb: word("Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line."),
                 perks: [word('Browse & trade the marketplace'), word('Receive credits'), INVITE_PERK, word('Send credits after first trade (needs positive balance)')] },
             Resident: { tone: colors.trust.resident,
-                blurb: word("You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows."),
-                perks: [word('Credit floor deepens with the value you trade'), INVITE_PERK] },
+                blurb: word("Recognised by the community for the value you bring. A level is recognition only: it gives no credit."),
+                perks: [word('Recognised as a community Resident'), INVITE_PERK] },
             Steward: { tone: colors.trust.steward,
-                blurb: word("A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still."),
-                perks: [word('Credit floor continues deepening'), word('Trusted-trader recognition')] },
+                blurb: word("A trusted trader with a broad circle of partners, recognised by the community. A level is recognition only: it gives no credit."),
+                perks: [word('Trusted-trader recognition')] },
             Elder: { tone: colors.trust.elder,
-                blurb: word("A pillar of the commons — the deepest possible credit line and the community's highest recognition."),
-                perks: [word('Credit floor can reach -2000 (the maximum)'), word('Recognised as a community Elder')] },
+                blurb: word("A pillar of the commons, with the community's highest recognition. A level is recognition only: it gives no credit."),
+                perks: [word('Recognised as a community Elder')] },
         };
         return TIER_LEVELS.map(lvl => {
             const { tone, blurb, perks } = look[lvl.name];
@@ -637,6 +637,9 @@ export default function LedgerScreen() {
     const uniquePartners = ts?.uniquePartners || 0;
 
     const tierIdx = level.index;
+    // The credit line the member actually has (the node's floor), shown beside the level: a level, and a badge an owner
+    // or admin gave above all, is recognition only and gives none (Marty, 12 Nov 2026: "tiers badge only").
+    const creditLine = Math.max(0, PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - (balanceState.floor_c || 0));
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = TIERS[TIERS.length - 1].min;
@@ -693,7 +696,7 @@ export default function LedgerScreen() {
                     <View style={{ flex: 1 }}>
                         <Text style={styles.tierHeroLabel}>{t('YOUR TRUST LEVEL')}</Text>
                         <Text style={[styles.tierHeroName, { color: tier.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t(TIER_WORDS[tier.name])}</Text>
-                        <Text style={styles.heroSub}>{tn(ec / 100, 'Level {level} of {levels} · {n} trust', 'Level {level} of {levels} · {n} trust', { n: formatHundredths(ec), level: tierIdx + 1, levels: TIERS.length })}</Text>
+                        <Text style={styles.heroSub}>{tn(creditLine / 100, 'Level {level} of {levels} · credit line {n} Bean', 'Level {level} of {levels} · credit line {n} Beans', { n: formatHundredths(creditLine), level: tierIdx + 1, levels: TIERS.length })}</Text>
                     </View>
                 </View>
 
@@ -808,8 +811,8 @@ export default function LedgerScreen() {
                     <Text style={styles.detailNote}>{t('Reach {min} trust ({left} to go) from the real value you trade.', { min: formatHundredths(sel.min), left: formatHundredths(selNeeded) })}</Text>
                 )}
                 <Text style={styles.detailNote}>{preview
-                    ? t("Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")
-                    : t("Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.")}</Text>
+                    ? t("Levels are merit badges — they don't gate any action and give no credit. Direct sends require a positive balance and one completed trade. Your credit line is what your trades and your community give you.")
+                    : t("Levels are merit badges — they don't gate any action and give no credit. Anyone can invite. Direct sends require a positive balance and one completed trade. Your credit line is what your trades and your community give you.")}</Text>
             </View>
 
             {/* How to reach the next tier — leads with the highest-leverage lever */}

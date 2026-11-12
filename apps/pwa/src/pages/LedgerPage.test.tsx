@@ -505,7 +505,7 @@ describe('the Levels words: true on global, and Send Beans on both', () => {
         expect(screen.queryByText('Invite Members')).toBeNull();
         expect(document.body.textContent).not.toMatch(/Anyone can invite/);
         expect(document.body.textContent).not.toMatch(/Invite others to join/);
-        expect(document.body.textContent).toMatch(/Levels are merit badges — they don't gate any action\. Direct sends require/);
+        expect(document.body.textContent).toMatch(/Levels are merit badges — they don't gate any action and give no credit\. Direct sends require/);
     });
 
     it('local: the perk and the note keep inviting, and the send says Beans, not Credits', async () => {

@@ -224,8 +224,9 @@ export interface SampleCommunity {
     level: number;
     levels: number;
     /**
-     * The trust behind the level, as a Levels card shows it ("Level 2 of 4 · 200 trust"): the credit that backs the floor
-     * (CREDIT_BASE_FLOOR − floor), all of it earned by trading here, so it sits in level 2's band of TIER_LEVELS.
+     * The trust behind the level, as a Levels card counts it ("+200 trust" in what builds it): the credit that backs the
+     * floor (CREDIT_BASE_FLOOR − floor), all of it earned by trading here, so it sits in level 2's band of TIER_LEVELS. The
+     * card's level line says the credit line itself ("Level 2 of 4 · credit line 200 Beans").
      */
     trust: number;
     /** The value traded that earned it (earnedCreditFromValue(valueTraded) === trust): "What builds your trust". */

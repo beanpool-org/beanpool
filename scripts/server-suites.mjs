@@ -511,6 +511,7 @@ export const SUITES = [
     'test-blocks-on-beans',
     'test-polls',
     'test-poll-week',
+    'test-poll-long',
     'test-poll-voters-members-only',
     'test-poll-vote-origins',
     'test-poll-other',

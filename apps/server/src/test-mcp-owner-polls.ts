@@ -195,7 +195,7 @@ async function main(): Promise<void> {
         const notTicked = await tool('create_poll', poll(), reader);
         assert(notTicked.isError === true && /There is no tool "create_poll"/.test(errorText(notTicked)) && pollCount() === 0, `and is refused if it calls one (${errorText(notTicked).slice(0, 80)})`);
         const cats = structured(await tool('categories', {}));
-        assert(JSON.stringify(cats?.pollDays) === JSON.stringify([3, 7, 14]) && cats?.kinds?.includes('poll'), `categories lists the poll durations and the kind (${JSON.stringify(cats?.pollDays)}, ${JSON.stringify(cats?.kinds)})`);
+        assert(JSON.stringify(cats?.pollDays) === JSON.stringify([3, 7, 14, 30, 90]) && cats?.kinds?.includes('poll'), `categories lists the poll durations (30 and 90 too: it acts as an owner) and the kind (${JSON.stringify(cats?.pollDays)}, ${JSON.stringify(cats?.kinds)})`);
 
         // ── 2. create_poll ───────────────────────────────────────────────────────────────────────────
         section('── 2. create_poll ──');
@@ -226,6 +226,14 @@ async function main(): Promise<void> {
         const seven = await tool('create_poll', poll({ days: 7, open_vote: false }));
         assert(row(structured(seven)?.postId)?.poll_open_vote === 0 && Math.abs(Date.parse(row(structured(seven)?.postId)?.poll_closes_at) - (Date.now() + 7 * DAY)) < 60_000, '7 days, and open_vote: false is anonymous');
         clearBoard();
+        // 30 and 90 days: an owner's (and an admin's) own lengths, so their assistant, which acts as the owner, has them (@beanpool/core poll-length).
+        for (const days of [30, 90]) {
+            const long = await tool('create_poll', poll({ days }));
+            const longRow = row(structured(long)?.postId);
+            assert(!long.isError && Math.abs(Date.parse(longRow?.poll_closes_at) - (Date.now() + days * DAY)) < 60_000 && structured(long)?.closesAt === longRow?.poll_closes_at,
+                `${days} days is ${days} days, for the owner it acts as (${errorText(long) || longRow?.poll_closes_at})`);
+            clearBoard();
+        }
 
         // ── 3. Each refusal of a create ──────────────────────────────────────────────────────────────
         section('── 3. Each refusal of a create ──');
@@ -246,8 +254,10 @@ async function main(): Promise<void> {
             ['an answer of 81 characters', { options: ['Saturday', LONG_ANSWER] }, /at most 80 characters.*answer 2 is 81/],
             ['the same answer twice, in any case', { options: ['Saturday', 'saturday'] }, /each answer must differ/],
             ['no days', { days: undefined }, /days is required/],
-            ['0 days, which the engine reads as 7', { days: 0 }, /days is how long it runs: 3, 7, 14/],
-            ['5 days', { days: 5 }, /days is how long it runs: 3, 7, 14/],
+            ['0 days, which the engine reads as 7', { days: 0 }, /days is how long it runs: 3, 7, 14, 30, 90\./],
+            ['5 days', { days: 5 }, /days is how long it runs: 3, 7, 14, 30, 90\./],
+            ['31 days, between the long lengths', { days: 31 }, /days is how long it runs: 3, 7, 14, 30, 90\./],
+            ['365 days', { days: 365 }, /days is how long it runs: 3, 7, 14, 30, 90\./],
             ['days in words', { days: 'a week' }, /days is required/],
             ['open_vote as text, which the engine would read as anonymous', { open_vote: 'true' }, /open_vote is true or false/],
             ['a description that is not text', { description: 42 }, /description is text/],

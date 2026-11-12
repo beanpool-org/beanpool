@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { POLL_DAYS_DEFAULT, isLongPollDays, pollDaysAllowed, formatHundredths, isSyntheticAccount, cleanPollOtherWords, pollIsSealed, pollOtherOption, POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX, isBeanAmount, isLendablePriceType, POST_ID_TAKEN_CODE, postRulesFor, parseReachPeers, storedFreeTags, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { pollLineReportWaitsSql, takeBackPollLine } from './poll-other.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -27,6 +27,7 @@ import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type Photo
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertFreeTags, assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
 import { ownerAdminLimit } from './owner-admin-limit.js';
+import { isNodeAdmin } from './node-roles.js';
 import { assertPollStartRoom } from './poll-week.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
@@ -721,9 +722,14 @@ export function createPost(
         });
         if (options?.pollOther === true) cleanPollOptions = withPollOther(cleanPollOptions);
 
-        const durationDays = options?.durationDays ? Number(options.durationDays) : 7;
-        if (![3, 7, 14].includes(durationDays)) {
-            throw new Error(word('Poll duration must be 3, 7, or 14 days'));
+        const durationDays = options?.durationDays ? Number(options.durationDays) : POLL_DAYS_DEFAULT;
+        // 3, 7 or 14 days for anyone; 30 or 90 only for an owner or an admin NOW (@beanpool/core poll-length), read as the owners'
+        // limits are (ownerAdminLimit: the keeper acting, else the author). A member who asks for a long one is told so in words.
+        const mayRunLong = isNodeAdmin(options?.createdBy ?? authorPublicKey);
+        if (!pollDaysAllowed(durationDays, mayRunLong)) {
+            throw new Error(isLongPollDays(durationDays)
+                ? word('Polls that run 30 or 90 days are for owners and admins. Choose 3, 7, or 14 days')
+                : mayRunLong ? word('Poll duration must be 3, 7, 14, 30, or 90 days') : word('Poll duration must be 3, 7, or 14 days'));
         }
         pollClosesAt = new Date(now + durationDays * 24 * 60 * 60 * 1000).toISOString();
 

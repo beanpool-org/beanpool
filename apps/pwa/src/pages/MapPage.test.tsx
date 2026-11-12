@@ -2340,6 +2340,117 @@ describe("the poll form when the node says the next poll can't start yet", () =>
     });
 });
 
+// How long a poll may run (Damo's ask, Marty's yes, 12 Nov 2026; @beanpool/core poll-length, the node's half is engine/posts.ts):
+// every member chooses 3, 7 or 14 days, and an owner or an admin also 30 or 90. The form reads the signer's role the way the other
+// owner controls do (myNodeRoleOnce) and offers only what the node would take; the node still checks at Create.
+describe("the poll form's lengths, by the signer's role", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        resetCommunityInfoOnce();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false } } as any);
+        vi.spyOn(api, 'request').mockImplementation((async () => ({})) as any);
+        vi.spyOn(api, 'getPollNextStart').mockResolvedValue(null);
+    });
+    afterEach(() => resetCommunityInfoOnce());
+
+    async function openPoll(role: string | null | undefined) {
+        const asked = vi.spyOn(api, 'myNodeRoleOnce').mockResolvedValue(role);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        return { panel, asked };
+    }
+    /** The lengths on the picker's buttons, in the order they are drawn. */
+    const lengths = (panel: HTMLElement) => within(panel).getAllByRole('button', { name: /^\d+ Days$/ }).map((b) => b.textContent);
+
+    it.each([['no role', null], ['a moderator', 'moderator'], ['a role the node has not said', undefined]] as const)('%s: 3, 7 and 14 days, and no 30 or 90', async (_who, role) => {
+        const { panel } = await openPoll(role);
+        expect(lengths(panel)).toEqual(['3 Days', '7 Days', '14 Days']);
+        expect(within(panel).queryByRole('button', { name: '30 Days' })).toBeNull();
+        expect(within(panel).queryByRole('button', { name: '90 Days' })).toBeNull();
+    });
+
+    it.each([['an admin', 'admin'], ['an owner', 'owner']] as const)('%s: 30 and 90 days after the short ones', async (_who, role) => {
+        const { panel } = await openPoll(role);
+        await waitFor(() => expect(lengths(panel)).toEqual(['3 Days', '7 Days', '14 Days', '30 Days', '90 Days']));
+    });
+
+    it('starts on 7 days for everyone, and an admin who picks 90 sends 90', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ id: 'p' } as any);
+        const { panel } = await openPoll('admin');
+        await waitFor(() => expect(within(panel).getByRole('button', { name: '90 Days' })).toBeTruthy());
+        expect(within(panel).getByRole('button', { name: '7 Days' }).getAttribute('aria-pressed')).toBe('true');
+        expect(within(panel).getByRole('button', { name: '90 Days' }).getAttribute('aria-pressed')).toBe('false');
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'Which month?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'March' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'June' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '90 Days' })); });
+        expect(within(panel).getByRole('button', { name: '90 Days' }).getAttribute('aria-pressed')).toBe('true');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        expect(create.mock.calls[0]![0]).toMatchObject({ type: 'poll', durationDays: 90 });
+    });
+
+    it('a member sends 7 days when they change nothing', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ id: 'p' } as any);
+        const { panel } = await openPoll(null);
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'Which month?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'March' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'June' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        expect(create.mock.calls[0]![0]).toMatchObject({ type: 'poll', durationDays: 7 });
+    });
+
+    it('the node refusing a long poll is shown to the member in the node\'s words', async () => {
+        const said = 'Polls that run 30 or 90 days are for owners and admins. Choose 3, 7, or 14 days';
+        const create = vi.spyOn(api, 'createMarketplacePost').mockRejectedValue(new Error(said));
+        const alerted = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const { panel } = await openPoll(null);
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'Which month?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'March' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'June' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        await waitFor(() => expect(alerted).toHaveBeenCalledWith(said));
+    });
+
+    it('is asked when the Poll choice opens, and not for an Offer', async () => {
+        const { panel, asked } = await openPoll('owner');
+        expect(asked).toHaveBeenCalledTimes(1);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Offer/ })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(within(panel).queryByRole('button', { name: '30 Days' })).toBeNull();
+    });
+
+    it('wraps, so five lengths hold at 320 wide and 130% text; the buttons keep a tap height and may shrink below their words', async () => {
+        const { panel } = await openPoll('owner');
+        await waitFor(() => expect(lengths(panel)).toHaveLength(5));
+        const row = within(panel).getByRole('button', { name: '30 Days' }).parentElement!;
+        expect(row.className).toMatch(/\bflex-wrap\b/);
+        for (const b of within(row).getAllByRole('button')) {
+            expect(b.className).toMatch(/min-h-\[44px\]/);
+            expect(b.className).toMatch(/\bmin-w-0\b/);
+            expect(b.className).toMatch(/basis-\[28%\]/);
+            // `flex-1` also sets a basis (0%); which of the two Tailwind writes last would win, so only `grow` is used beside 28%.
+            expect(b.className).toMatch(/\bgrow\b/);
+            expect(b.className).not.toMatch(/\bflex-1\b/);
+            expect(b.className).toMatch(/dark:bg-nature-800|bg-purple-600/);
+        }
+    });
+});
+
 // The web Map on a node that reads by area (DESIGN-global-sync-by-area §5, S5): the nearest 200 within the Market's
 // distance setting, else within the node's radius of the member's stored area; a local node reads as before.
 describe('MapPage: where the pins are read from (S5)', () => {

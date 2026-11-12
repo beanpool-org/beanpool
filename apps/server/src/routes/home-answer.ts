@@ -73,7 +73,7 @@ import {
     NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
-    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor,
+    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -1229,10 +1229,14 @@ function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['deci
         .filter(p => p.status === 'active' && !!p.pollClosesAt && Date.parse(p.pollClosesAt) > c.now);
     if (!open.length && !polls.length) return undefined;
     // The first open poll, its question as asked: the newest live pinned one when there is one (read by id, so it is the first
-    // whatever its age), else the soonest closing.
+    // whatever its age), else the soonest closing, except that a 30- or 90-day poll the signer has already answered sits below
+    // every poll still waiting for their vote (@beanpool/core decidePollOrder): `userVotedOptionId` is their open vote's choice,
+    // `pollAnswered` a sealed poll's mark that they answered. Both are the signer's own, as getPosts reads them.
     const pinnedPoll = pinnedPosts(c).find(p => p.type === 'poll' && !!bounded(p.pollClosesAt, ID_CHARS));
-    const firstPoll = pinnedPoll ?? polls.filter(p => !!bounded(p.id, ID_CHARS) && !!bounded(p.pollClosesAt, ID_CHARS))
-        .sort((a, b) => Date.parse(a.pollClosesAt!) - Date.parse(b.pollClosesAt!))[0];
+    const firstPoll = pinnedPoll ?? decidePollOrder(
+        polls.filter(p => !!bounded(p.id, ID_CHARS) && !!bounded(p.pollClosesAt, ID_CHARS)),
+        p => !!p.userVotedOptionId || p.pollAnswered === true,
+    )[0];
     return {
         open: open.length, soonestClosesAt: soonestOf(open), polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL,
         items: rowsOf(open), poll: firstPoll ? { id: firstPoll.id, title: clip(firstPoll.title, TITLE_CHARS), closesAt: firstPoll.pollClosesAt!, ...(firstPoll === pinnedPoll ? { pinned: true as const } : {}) } : null,

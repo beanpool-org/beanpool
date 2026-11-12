@@ -3,7 +3,7 @@ import { View, ActivityIndicator, Text, DeviceEventEmitter } from 'react-native'
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
-// Static colours: a sign-in return screen shown for a moment with a spinner, drawn light in both schemes today. Moving it to useTheme() changes Classic dark, which colour themes T2 does not do; it reads no themed role (accent, card, bubble).
+// Static colours: a sign-in return screen shown for a moment with a spinner, drawn light in both schemes today. Moving it to the theme hook changes Classic dark, which colour themes T2 does not do; it reads no themed role (accent, card, bubble).
 import { colors } from '../../constants/colors';
 import { t } from '@beanpool/core';
 

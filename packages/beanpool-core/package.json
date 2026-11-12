@@ -65,6 +65,11 @@
       "import": "./dist/group-line-vectors.js",
       "default": "./dist/group-line-vectors.js"
     },
+    "./voice-vectors": {
+      "types": "./dist/voice-vectors.d.ts",
+      "import": "./dist/voice-vectors.js",
+      "default": "./dist/voice-vectors.js"
+    },
     "./words-check": {
       "types": "./dist/words-check.d.ts",
       "import": "./dist/words-check.js",

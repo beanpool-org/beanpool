@@ -214,15 +214,28 @@ describe('the manual (on the pages)', () => {
     });
 
     it('search: every word must match, short words find longer ones, best match first, offline', () => {
-        // "send" finds "Sending" in the gifts page's title, and both words must match on it. The one word "gift" also finds
-        // the gifts page, but which page leads on one word is not this test's matter: the credit-risk page says "gift" often.
         expect(searchGuide(guide, 'send gift')[0].page.slug).toBe('gifts');
-        expect(searchGuide(guide, 'gift').some(r => r.page.slug === 'gifts')).toBe(true);
+        expect(searchGuide(guide, 'gift')[0].page.slug).toBe('gifts');
         expect(searchGuide(guide, 'vot').some(r => r.page.slug === 'decisions')).toBe(true);
         expect(searchGuide(guide, 'block someone')[0].page.slug).toBe('blocking');
         expect(searchGuide(guide, 'zzqqxx')).toEqual([]);
         expect(searchGuide(guide, ' ')).toEqual([]);
         expect(searchGuide(guide, 'a')).toEqual([]);
+    });
+
+    it('search: a member who wants to give Beans lands on the page about sending a gift, however they put it', () => {
+        // The credit-risk page (for the people who give credit) says "gift" far more often than the gifts page does, and the
+        // gifts page's title and summary say "gift" and "send", not the "give" a member types. The member's page leads either
+        // way. The web app calls the same core search, so this is its pin too.
+        for (const q of ['gift', 'gifts', 'give', 'give Beans', 'send a gift', 'send gift', 'sending a gift']) {
+            expect(searchGuide(guide, q)[0].page.slug, q).toBe('gifts');
+        }
+    });
+
+    it('search: the page named for a word leads, and the credit-risk page still answers its own name', () => {
+        expect(searchGuide(guide, 'credit risk')[0].page.slug).toBe('credit-risk');
+        expect(searchGuide(guide, 'risk')[0].page.slug).toBe('credit-risk');
+        expect(searchGuide(guide, 'gift').some(r => r.page.slug === 'credit-risk')).toBe(true);
     });
 
     it('search: the words members bring from elsewhere find the words the guide uses', () => {

@@ -74,6 +74,7 @@ import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBo
 import { changedElsewhere } from '../../utils/changed-elsewhere';
 import { requestSync } from '../../services/pillar-sync';
 import { signedRequestWords } from '../../components/signed-request-lines';
+import { eventLineWords } from '../../components/event-lines';
 import { openLookDoor } from '../../utils/look-door';
 import { KnowledgeDetail, KnowledgeMissing } from '../../components/learn/KnowledgeDetail';
 import { useKnowledgePage } from '../../components/learn/useKnowledgePage';
@@ -1557,8 +1558,10 @@ function PostDetailModal() {
                 try {
                     await deletePost(post.id);
                     if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
-                } catch (e) {
-                    Alert.alert(t('Error'), t('Failed to delete post'));
+                } catch (e: any) {
+                    // The node's own sentence (a deal in escrow, its words in the member's language), or db.ts's "Offline or anchor node
+                    // unreachable: …" for a send that never got an answer; "Failed to delete post" only when the error says nothing.
+                    Alert.alert(t('Error'), e?.message ? eventLineWords(String(e.message)) : t('Failed to delete post'));
                     setDeleting(false);
                 }
             }},

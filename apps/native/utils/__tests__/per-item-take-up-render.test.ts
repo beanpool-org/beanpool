@@ -16,7 +16,7 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -50,7 +50,8 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: absolute, absoluteFillObject: absolute, flatten: (s: unknown) => flat(s) },
         Alert: {
-            alert: (title: string, body?: string, buttons?: Array<{ text?: string }>) => {
+            alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => unknown }>) => {
+                alerts.buttons = buttons ?? [];
                 alerts.said.push(title);
                 if (body) alerts.said.push(body);
                 for (const b of buttons ?? []) if (b.text) alerts.said.push(b.text);
@@ -139,9 +140,10 @@ const PANELS = {
 };
 const HELD_AT = '2026-11-11T10:00:00.000Z';
 
-const said = { accept: [] as unknown[][], complete: [] as unknown[][], refreshed: [] as unknown[] };
+const said = { accept: [] as unknown[][], complete: [] as unknown[][], refreshed: [] as unknown[], removed: [] as unknown[] };
 function answers(post: Record<string, unknown>, o: {
     accept?: () => Promise<unknown>; activeTx?: Record<string, unknown> | null; deals?: unknown[]; after?: Record<string, unknown>;
+    remove?: () => Promise<unknown>;
 } = {}) {
     let shown = post;
     const database = {
@@ -158,6 +160,7 @@ function answers(post: Record<string, unknown>, o: {
         if (name === 'createConversationApi') return Promise.resolve(null);
         if (name === 'acceptMarketplacePost') { said.accept.push(args); return o.accept ? o.accept() : Promise.resolve({ success: true, transaction: { id: 'tx-new' } }); }
         if (name === 'completeMarketplaceTransaction') { said.complete.push(args); return Promise.resolve({ success: true }); }
+        if (name === 'deletePost') { said.removed.push(args[0]); return o.remove ? o.remove() : Promise.resolve(true); }
         // The node's listing read again after a refusal: the page then shows it as it is now.
         if (name === 'refreshPost') { said.refreshed.push(args[0]); if (o.after) shown = o.after; return Promise.resolve(true); }
         return undefined;
@@ -176,6 +179,8 @@ beforeEach(() => {
     said.accept.length = 0;
     said.complete.length = 0;
     said.refreshed.length = 0;
+    said.removed.length = 0;
+    alerts.buttons = [];
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: LOCAL, checkedAt: new Date().toISOString() } }));
@@ -340,6 +345,53 @@ describe('both sides of the deal (§2.3)', () => {
         const stool = { ...PANELS, id: 'p-stool', price_type: 'fixed', units_left: null, lot_units: null, lot_price_c: null, author_pubkey: ME.publicKey, author_callsign: ME.callsign };
         await open(stool, { activeTx: { ...HELD_TX, id: 'tx-s', post_id: 'p-stool', item_option: null, hours: null, buyer_pubkey: DANA.pubkey, seller_pubkey: ME.publicKey } });
         expect(host.textContent).not.toContain('✏️ Edit Post');
+    });
+});
+
+describe("deleting a listing priced each while buyers hold some (the review of #3093): the node's own sentence", () => {
+    const NODE_SAYS = 'This post has a deal in escrow — complete or cancel the deal before deleting it';
+    const mine = { ...PANELS, units_left: 17, author_pubkey: ME.publicKey, author_callsign: ME.callsign };
+    const heldDeal = { id: 'tx-d', post_id: 'p-panels', status: 'pending', buyer_pubkey: DANA.pubkey, seller_pubkey: ME.publicKey, amount_c: 90000, hours: 3, item_option: 'each', created_at: HELD_AT };
+    /** Delete Post, then the Delete in the "Are you sure" alert; the alert it leaves is what the member reads. */
+    async function deleteIt(o: Parameters<typeof answers>[1], lang: UiLang = 'en') {
+        await open(mine, { activeTx: heldDeal, ...o }, lang);
+        const button = host.querySelector('[data-hint="Permanently deletes this post"], [data-hint="' + pseudoLocalise('Permanently deletes this post') + '"]') as HTMLElement | null;
+        if (!button) throw new Error('no Delete Post button');
+        await act(async () => { button.click(); });
+        const confirm = alerts.buttons.find((b) => b.text === 'Delete' || b.text === pseudoLocalise('Delete'));
+        if (!confirm?.onPress) throw new Error('no Delete in the alert');
+        alerts.said.length = 0;
+        await act(async () => { await confirm.onPress!(); });
+        await settle();
+    }
+
+    it("the node's refusal is the alert's text, as the web shows it (red if handleDelete says 'Failed to delete post' over it)", async () => {
+        await deleteIt({ remove: () => Promise.reject(new Error(NODE_SAYS)) });
+        expect(said.removed).toEqual(['p-panels']);
+        expect(alerts.said).toEqual(['Error', NODE_SAYS]);
+        expect(alerts.said).not.toContain('Failed to delete post');
+    });
+
+    it("the node's words are shown as given, not run through the phone's language (the node writes them in the member's)", async () => {
+        await deleteIt({ remove: () => Promise.reject(new Error(NODE_SAYS)) }, 'xx');
+        expect(alerts.said[1]).toBe(NODE_SAYS);
+    });
+
+    it('a send that never reached the node still says the phone is offline, in the member\'s language', async () => {
+        const offline = new Error('Offline or anchor node unreachable: Network request failed');
+        await deleteIt({ remove: () => Promise.reject(offline) });
+        expect(alerts.said).toEqual(['Error', 'Offline or anchor node unreachable: Network request failed']);
+    });
+
+    it('an error with no message keeps today\'s "Failed to delete post"', async () => {
+        await deleteIt({ remove: () => Promise.reject(new Error('')) });
+        expect(alerts.said).toEqual(['Error', 'Failed to delete post']);
+    });
+
+    it('a delete the node accepts goes back, with no alert', async () => {
+        await deleteIt({});
+        expect(said.removed).toEqual(['p-panels']);
+        expect(alerts.said).toEqual([]);
     });
 });
 

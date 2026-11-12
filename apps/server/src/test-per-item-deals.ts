@@ -23,7 +23,9 @@
  *  10. The paths that don't change: a Total (with the total it showed, and a wrong one), an hourly with its re-rate,
  *      Repeatable, a loan, a standing deal: one case each.
  *  11. The count never blocks a refund: a cancel with the count at 9,999 puts back what fits, and the Beans go back.
- *  12. A standby copy carries the hold's row and the count it moved, together.
+ *  12. An enterprise buying from its own keeper more than are left: told how many are left, and no deferred wage claim is
+ *      recorded for items that aren't there (the stock is asked before the funding check, which records one as it refuses).
+ *  13. A standby copy carries the hold's row and the count it moved, together.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-per-item-deals)
  */
@@ -37,7 +39,7 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
     initStateEngine, transfer, createPost as rawCreatePost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, adminPruneUser,
-    COMMUNITY_DECISION_ACTOR, exportSyncState, importRemoteState, setNodeRole,
+    COMMUNITY_DECISION_ACTOR, exportSyncState, importRemoteState, setNodeRole, createTreasury, acceptPost,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
@@ -547,8 +549,27 @@ async function main(): Promise<void> {
         `the cancel refunds and the count stays at the most it can hold (${brief(nlBack)})`);
     conserved('a cancel at the most');
 
-    // ── 12. A standby copy ──────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n— 12. A standby copy');
+    // ── 12. An enterprise buying from its own keeper ────────────────────────────────────────────────────────────────
+    console.log('\n— 12. An enterprise buying from its own keeper');
+    const kay = makeMember('Kay', 100);   // a keeper of Crate Co, who sells crates
+    const kim = makeMember('Kim', 100);   // another keeper, who signs for Crate Co
+    const { publicKey: crateCo } = createTreasury('Crate Co', 'data:image/png;base64,iVBORw0KGgo=');
+    for (const k of [kay, kim]) {
+        db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'keeper', 'admin')`).run(crateCo, k.pk);
+        db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.pk);
+    }
+    createPost('offer', 'general', 'Crate Co deliveries', 'Deliveries', hc(5), 'fixed', crateCo, undefined, undefined, undefined, true);
+    const crates = await made(kay, { title: 'Hand-built crates', priceType: 'each', price_c: hc(10), unitsLeft: 2 });
+    const claims = () => (db.prepare('SELECT COUNT(*) AS n FROM deferred_wage_claims WHERE enterprise_pubkey = ? AND post_id = ?').get(crateCo, crates) as { n: number }).n;
+    let tooMany = '';
+    try { acceptPost(crates, crateCo, undefined, { authSigner: kim.pk, item: { n: 3, option: 'each', expect_c: hc(30) } }); } catch (e: any) { tooMany = `${e?.code}:${e?.unitsLeft}`; }
+    // Red if the stock is asked after assertHoldFunded: Crate Co has no earned surplus, so that check refuses first and
+    // records a wage claim of 30 Beans, paid later with no further step, for crates that were never there.
+    assert(tooMany === 'units_gone:2' && claims() === 0 && listing(crates).units_left === 2 && dealsOn(crates) === 0,
+        `Crate Co asks for 3 of Kay's 2 crates: told 2 are left, and no wage claim is recorded (${tooMany}, claims ${claims()})`);
+
+    // ── 13. A standby copy ──────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n— 13. A standby copy');
     const copied = await panels('Panels, the standby');
     const held = await take(eli, copied, 4, 'each', hc(1200));
     const heldId = held.body?.transaction?.id as string;

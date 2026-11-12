@@ -43,9 +43,12 @@ export function PerItemFields({ text, onCount, onLot, edit = false, refusal = nu
         wrap: { marginBottom: 6 },
     }), [colors]);
     const free = perItemIsFree(text);
-    const hint = free ? null : perItemLotHint(text);
-    const fee = showFeeLine ? perItemFeeLine(text) : null;
     const bad = (field: PerItemField) => refusal?.field === field;
+    // A refusal on this box says what the live line would (not less than one by one): said once, in red, under the box.
+    // A price for all that was set for another number says so in its place (§2.5) rather than "leave this empty to sell one by one".
+    const staleLine = lotForOtherLine && text.lot.trim() === '' ? lotForOtherLine : null;
+    const hint = free || bad('lot') || staleLine ? null : perItemLotHint(text);
+    const fee = showFeeLine ? perItemFeeLine(text) : null;
     return (
         <View style={s.wrap} testID="per-item-fields">
             <Text style={s.label}>{upperCase(edit ? perItemLines.howManyLeft() : perItemLines.howManyHave())} <Text style={s.star}>*</Text></Text>
@@ -78,7 +81,7 @@ export function PerItemFields({ text, onCount, onLot, edit = false, refusal = nu
                     maxLength={10}
                 />
                 {bad('lot') ? <Text style={s.bad} testID="per-item-refusal">{refusal!.text}</Text> : null}
-                {lotForOtherLine && text.lot.trim() === '' ? <Text style={s.line} testID="per-item-lot-other">{lotForOtherLine}</Text> : null}
+                {staleLine ? <Text style={s.line} testID="per-item-lot-other">{staleLine}</Text> : null}
                 {hint ? <Text style={s.line} testID="per-item-hint">{hint.text}</Text> : null}
             </>) : null}
             {fee ? <Text style={s.line} testID="per-item-fee">{fee}</Text> : null}

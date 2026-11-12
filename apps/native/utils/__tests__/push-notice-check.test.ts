@@ -47,7 +47,7 @@ import {
 import { registerPushTokenWithCommunity } from '../push-registrations';
 import { readPushPins } from '../push-pins';
 import {
-    checkWhileOpen, droppedNoticeCounts, followTap, FORGED_NOTICE_LINE, LOCAL_NOTICE_DATA, noticeRoute,
+    checkWhileOpen, droppedNoticeCounts, followTap, FORGED_NOTICE_LINE, LOCAL_NOTICE_DATA, noticeHasDestination, noticeRoute,
     onNoticeWarning, takeNoticeWarning, UNSIGNED_NOTICE_WORDS, VAULT_NOTICE_WORDS, type IncomingNotice, type NoticeRoute,
 } from '../push-notice-check';
 import {
@@ -618,6 +618,23 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         // Someone asked to join after a listing this member shared (A3): their Shared outside; without details, Settings.
         expect(noticeRoute('community.knock-shared', { screen: 'shared-outside' })).toBe('/shared-outside');
         expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
+    });
+
+    it('noticeHasDestination: the bell offers "Open" only where the notice lands somewhere of its own', () => {
+        // A kind's tab (Chats, Market, People, Settings) or a place the details name is somewhere.
+        expect(noticeHasDestination('chat.message', {})).toBe(true);
+        expect(noticeHasDestination('market.request', null)).toBe(true);
+        expect(noticeHasDestination('community.knock', {})).toBe(true);
+        expect(noticeHasDestination('community.notice', { screen: 'post', postId: POST_ID })).toBe(true);
+        expect(noticeHasDestination(null, { screen: 'settings' })).toBe(true);
+        expect(noticeHasDestination(null, { screen: 'shared-outside' })).toBe(true);
+        // Home is not: a notice with nothing named falls there (a credit notice, a word from the community, a kind this build
+        // does not know, a post by an id out of shape), and opening it would only leave the member on Home with it gone.
+        expect(noticeHasDestination('community.notice', { kind: 'credit_confirmed' })).toBe(false);
+        expect(noticeHasDestination('decision.open', null)).toBe(false);
+        expect(noticeHasDestination(null, {})).toBe(false);
+        expect(noticeHasDestination(null, null)).toBe(false);
+        expect(noticeHasDestination(null, { screen: 'post', postId: 'not-an-id' })).toBe(false);
     });
 
     it("a deal's alert lands on the deal: its txId rides with the post when it is in the node's own shape (deals S4)", () => {

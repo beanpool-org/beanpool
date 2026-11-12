@@ -565,6 +565,16 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }
 
+/**
+ * Whether {@link noticeRoute} lands this notice somewhere of its own (the bell's "Open" is offered only then; Marty, 12 Nov 2026).
+ * A kind's tab (Market, Chats, Settings, People) or a place `details` names is somewhere. Home is not: it is where a notice
+ * with nothing named falls (a credit notice, a word from the community, a kind this build does not know), so opening it
+ * would only leave the member on Home with the notice gone. Such a notice is read in the bell and cleared there.
+ */
+export function noticeHasDestination(kind: PushNoticeKind | null, details: unknown): boolean {
+    return noticeRoute(kind, details) !== TAB_ROUTES.home;
+}
+
 // ── Following a tap ────────────────────────────────────────────────────────────────────────────────────────────
 
 /** How long a community has to say where a tap lands before the app opens the tab for the notice's kind. */

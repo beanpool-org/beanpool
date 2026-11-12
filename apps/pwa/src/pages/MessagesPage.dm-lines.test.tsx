@@ -73,6 +73,9 @@ const NOT_VERIFIED = "🔒 This message couldn't be verified, so it isn't shown.
 const OUT_OF_ORDER = 'Shown out of the order it was written in.';
 const NOT_ENCRYPTED = "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.";
 const FROM_ADMINS = "From your community's admins. Not a private message: the community's server can read it.";
+const OLD_LINES_LABEL = 'Older messages from before 12 November 2026. They were sent before BeanPool signed every message.';
+/** The 1.4.0 deploy (core DM_OLD_LINE_CUTOFF): an old-format line dated here or later is hidden. */
+const CUTOVER = '2026-11-11T19:16:00.000Z';
 
 let minute = 0;
 const uuid = () => crypto.randomUUID();
@@ -196,15 +199,188 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
         expect(screen.getByText('Thanks, see you Saturday').closest('[data-testid="dm-line-unattributed"]')).toBeNull();
     });
 
-    it('a line of an older format, 2 or 3, is never shown: format 4 is the only one read', async () => {
+    // Dated from the 1.4.0 cutover on (old chat, OLDCHAT: a line from before it is shown read-only, below).
+    it('a line of an older format, 2 or 3, dated from the 1.4.0 cutover on, is never shown: format 4 is the only one read', async () => {
         const here = sent(ben, "I'm here");
-        thread.messages = [oldLine(ben, ana, 'see you at 6', 2), oldLine(ben, ana, 'see you at 7', 3), here];
+        thread.messages = [
+            { ...oldLine(ben, ana, 'see you at 6', 2), timestamp: CUTOVER },
+            { ...oldLine(ben, ana, 'see you at 7', 3), timestamp: '2026-11-12T08:00:00.000Z' },
+            here,
+        ];
         await openChat();
         await waitFor(() => expect(screen.getByText("I'm here")).toBeTruthy());
         expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_VERIFIED, NOT_VERIFIED]);
         expect(document.body.textContent).not.toMatch(/see you at [67]/);
+        expect(screen.queryByTestId('dm-old-lines-label')).toBeNull();
         // nothing under the new line
         expect(screen.getByText("I'm here").parentElement!.querySelector('[data-testid="dm-line-note"]')).toBeNull();
+    });
+
+    // Old chat, read-only (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 12 Nov 2026).
+    describe('old chat: a line from before 1.4.0', () => {
+        const dated = (m: ApiMessage, timestamp: string): ApiMessage => ({ ...m, timestamp });
+        /** A format-3 line as a 1.3.x app sealed it, written after `after` (the id of the newest line its sender had). */
+        function format3After(from: typeof ana, to: typeof ana, text: string, after: string): ApiMessage {
+            const id = uuid();
+            const nonce = randomBytes(24);
+            const a = utf8ToBytes(after);
+            const sealed = xchacha20poly1305(pairKey(from, to), nonce, utf8ToBytes(JSON.stringify(['beanpool-dm-line/3', CONV, from.publicKey, id, 'body'])))
+                .encrypt(new Uint8Array([3, a.length, ...a, ...utf8ToBytes(text)]));
+            return row(from, sealed, nonce, id);
+        }
+        const bubbleOf = (text: string) => screen.getByText(text).closest('[id^="msg-"]') as HTMLElement;
+
+        it('format 2 and 3 open as they did, in their authors\' bubbles, under one label above the run', async () => {
+            const here = dated(sent(ben, "I'm here"), '2026-11-12T08:00:00.000Z');
+            thread.messages = [
+                dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z'),
+                dated(oldLine(ana, ben, 'ok, 6 it is', 3), '2026-11-01T09:05:00.000Z'),
+                here,
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('see you at 6')).toBeTruthy());
+            expect(screen.getByText('ok, 6 it is')).toBeTruthy();
+            expect(screen.queryAllByTestId('dm-line-unattributed')).toHaveLength(0);
+            const labels = screen.getAllByTestId('dm-old-lines-label');
+            expect(labels).toHaveLength(1);
+            expect(labels[0].textContent).toBe(OLD_LINES_LABEL);
+            // Above the run: before its first line, and the new line after the run has none above it.
+            expect(labels[0].compareDocumentPosition(screen.getByText('see you at 6')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+            expect(screen.getByText("I'm here").compareDocumentPosition(labels[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+            // Ana's own old line sits in her bubble (right), Ben's in his.
+            expect(bubbleOf('ok, 6 it is').style.alignSelf).toBe('flex-end');
+            expect(bubbleOf('see you at 6').style.alignSelf).toBe('flex-start');
+        });
+
+        it('read-only: no Reply (so no quote), React, Edit or Delete on an old line; Copy stays, and Report on the other person\'s', async () => {
+            const mineNew = dated(sent(ana, 'A new line of mine'), '2026-11-12T08:00:00.000Z');
+            thread.messages = [
+                dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z'),
+                // Ana's own, two minutes old by the node's clock if the clock is wrong: still no Edit (an old line is never edited).
+                dated(oldLine(ana, ben, 'ok, 6 it is', 3), '2026-11-11T19:15:00.000Z'),
+                mineNew,
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('see you at 6')).toBeTruthy());
+            for (const text of ['see you at 6', 'ok, 6 it is']) {
+                const b = bubbleOf(text);
+                for (const name of ['Reply to message', 'React to message', 'Edit message', 'Delete message']) {
+                    expect(within(b).queryByRole('button', { name })).toBeNull();
+                }
+                expect(within(b).getByRole('button', { name: /copy/i })).toBeTruthy();
+            }
+            expect(within(bubbleOf('see you at 6')).getByRole('button', { name: 'Report message' })).toBeTruthy();
+            // A line from after the cutover keeps every action.
+            const fresh = bubbleOf('A new line of mine');
+            expect(within(fresh).getByRole('button', { name: 'Reply to message' })).toBeTruthy();
+            expect(within(fresh).getByRole('button', { name: 'Delete message' })).toBeTruthy();
+            // Nothing in the composer to answer: no "Replying to" on the page.
+            expect(document.body.textContent).not.toMatch(/Replying to/);
+        });
+
+        it('an old-format line dated from the cutover on stays hidden, with no label', async () => {
+            thread.messages = [dated(oldLine(ben, ana, 'see you at 6', 3), CUTOVER), dated(oldLine(ben, ana, 'see you at 7', 2), '2026-11-13T09:00:00.000Z')];
+            await openChat();
+            await waitFor(() => expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_VERIFIED, NOT_VERIFIED]));
+            expect(document.body.textContent).not.toMatch(/see you at [67]/);
+            expect(screen.queryByTestId('dm-old-lines-label')).toBeNull();
+        });
+
+        it('forged time: a format-4 line its named sender didn\'t sign, dated before the cutover, is never old', async () => {
+            const forged = dated(sealedInNameOf(ana, ben, 'I owe Ana 500 Beans'), '2026-10-20T09:00:00.000Z');
+            thread.messages = [forged, dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z')];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('see you at 6')).toBeTruthy());
+            expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_VERIFIED]);
+            expect(document.body.textContent).not.toMatch(/500 Beans/);
+        });
+
+        it('forged time: an old-format line sealed after a line from after the cutover, dated before it, is hidden', async () => {
+            const newer = dated(sent(ana, 'After the cutover'), '2026-11-12T08:00:00.000Z');
+            const forged = dated(format3After(ben, ana, 'Ana agreed to pay 500 Beans', newer.id), '2026-11-02T09:00:00.000Z');
+            thread.messages = [forged, newer];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('After the cutover')).toBeTruthy());
+            expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_VERIFIED]);
+            expect(document.body.textContent).not.toMatch(/500 Beans/);
+            expect(screen.queryByTestId('dm-old-lines-label')).toBeNull();
+        });
+
+        it('a reply from before 1.4.0 quotes the old line it answers, both read-only', async () => {
+            const asked = dated(oldLine(ana, ben, 'Can I borrow the ladder?', 3), '2026-11-01T09:00:00.000Z');
+            // A 1.3.x reply: format 3, bound to what it answers.
+            const id = uuid();
+            const nonce = randomBytes(24);
+            const a = utf8ToBytes(asked.id);
+            const sealed = xchacha20poly1305(pairKey(ben, ana), nonce, utf8ToBytes(JSON.stringify(['beanpool-dm-line/3', CONV, ben.publicKey, id, 'body', asked.id])))
+                .encrypt(new Uint8Array([3, a.length, ...a, ...utf8ToBytes('Yes, take it')]));
+            const reply = { ...row(ben, sealed, nonce, id), metadata: JSON.stringify({ replyToId: asked.id }), timestamp: '2026-11-01T09:01:00.000Z' };
+            thread.messages = [asked, reply];
+            await openChat();
+            const bubble = (await screen.findByText('Yes, take it')).closest('[id^="msg-"]') as HTMLElement;
+            const quote = within(bubble).getByTestId('dm-quote');
+            expect(quote.textContent).toContain('You');
+            expect(quote.textContent).toContain('Can I borrow the ladder?');
+            expect(screen.getAllByTestId('dm-old-lines-label')).toHaveLength(1);
+            expect(within(bubble).queryByRole('button', { name: 'Reply to message' })).toBeNull();
+        });
+
+        // A deleted line, or a row shown as nobody's, is passed over as a notice is, so one run of old chat gets one label
+        // (#3075 review, MessagesPage.tsx:633; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+        /** A line deleted as the node does it (engine/message-tombstone.ts): its row retyped, its words replaced, its time kept. */
+        const deleted = (from: typeof ana, timestamp: string, extra: Record<string, unknown> = {}): ApiMessage => written(from, b64('This message was deleted'), 'plaintext-v1', {
+            type: 'removed', timestamp,
+            metadata: JSON.stringify({ removed: true, removedBy: from.publicKey, removedAt: '2026-11-02T09:00:00.000Z', ...extra }),
+        } as unknown as Partial<ApiMessage>);
+
+        it('a deleted line inside the old chat doesn\'t start a second label: old line, deleted line, old line has one', async () => {
+            thread.messages = [
+                dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z'),
+                deleted(ben, '2026-11-01T09:02:00.000Z'),
+                dated(oldLine(ana, ben, 'ok, 6 it is', 3), '2026-11-01T09:05:00.000Z'),
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('ok, 6 it is')).toBeTruthy());
+            expect(screen.getByText('This message was deleted')).toBeTruthy();
+            const labels = screen.getAllByTestId('dm-old-lines-label');
+            expect(labels).toHaveLength(1);
+            expect(labels[0].compareDocumentPosition(screen.getByText('see you at 6')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+
+        it('a row shown as nobody\'s inside the old chat doesn\'t start a second label either', async () => {
+            thread.messages = [
+                dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z'),
+                dated(written(ben, b64('Send the Beans to Cat instead'), 'plaintext-v1'), '2026-11-01T09:02:00.000Z'),
+                dated(oldLine(ana, ben, 'ok, 6 it is', 3), '2026-11-01T09:05:00.000Z'),
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('ok, 6 it is')).toBeTruthy());
+            expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_ENCRYPTED]);
+            expect(screen.getAllByTestId('dm-old-lines-label')).toHaveLength(1);
+        });
+
+        it('a DM with a deleted account\'s lines keeps one label for each run of old lines', async () => {
+            // Ben deleted his account: every line of his is a tombstone, before the cutover and after it.
+            const gone = (timestamp: string) => deleted(ben, timestamp, { accountDeleted: true });
+            thread.messages = [
+                dated(oldLine(ana, ben, 'Can I borrow the ladder?', 3), '2026-10-20T09:00:00.000Z'),
+                gone('2026-10-20T09:05:00.000Z'),
+                dated(oldLine(ana, ben, 'Thanks, back on Sunday', 3), '2026-10-21T09:00:00.000Z'),
+                gone('2026-10-21T09:05:00.000Z'),
+                gone('2026-10-22T09:00:00.000Z'),
+                dated(oldLine(ana, ben, 'Left it by your gate', 2), '2026-11-01T09:00:00.000Z'),
+                gone('2026-11-01T09:05:00.000Z'),
+                // From 1.4.0 on: Ana's new line ends the old run, and his newer tombstone starts nothing.
+                dated(sent(ana, 'Are you still there?'), '2026-11-12T08:00:00.000Z'),
+                gone('2026-11-12T08:05:00.000Z'),
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('Left it by your gate')).toBeTruthy());
+            expect(screen.getByText('Are you still there?')).toBeTruthy();
+            const labels = screen.getAllByTestId('dm-old-lines-label');
+            expect(labels).toHaveLength(1);
+            expect(labels[0].compareDocumentPosition(screen.getByText('Can I borrow the ladder?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
     });
 
     it('a row in Ben\'s name that isn\'t an encrypted line is never his words: shown in the middle, as nobody\'s', async () => {

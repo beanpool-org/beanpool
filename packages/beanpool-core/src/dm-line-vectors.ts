@@ -125,6 +125,64 @@ export const DM_REFUSED_LINES: DmRefusedLine[] = [
     },
 ];
 
+// ─── Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026) ───────────────────────────────────────────────────
+/**
+ * Lines as the 1.2.36 apps sealed them, frozen (sealed once by `git show v1.2.36:packages/beanpool-core/src/dm-crypto.ts`'s
+ * sealDmLine and encryptDmFormat2, each nonce the first 24 bytes of SHA-256("beanpool old-chat vector: nonce <n>")), with
+ * the time the node dates each: what core's checkDmThread shows read-only under DM_OLD_LINES_WORDS.label, in both apps' tests.
+ * `DM_REFUSED_LINES[0]` (a 1.3.x line with its signature beside it) is old too.
+ */
+export const DM_OLD_LINE_TIMES = {
+    /** Before the cutover (2026-11-11T19:16:00.000Z). */
+    before: '2026-11-05T09:00:00.000Z',
+    /** After it: a line in an old format dated here is hidden as today. */
+    after: '2026-11-11T19:16:00.000Z',
+} as const;
+
+export interface DmOldLineFixture {
+    from: 'ana' | 'ben';
+    messageId: string;
+    part: 'body' | 'attachment';
+    text: string;
+    format: 2 | 3;
+    after: string | null;
+    /** The row's metadata as the node stores it (a reply's replyToId). */
+    metadata: string | null;
+    payload: DmPayload;
+}
+
+export const DM_OLD_LINES: Record<'anaFormat3' | 'benFormat3Reply' | 'benFormat2' | 'benFormat3AfterNew' | 'anaPhotoFormat3', DmOldLineFixture> = {
+    anaFormat3: {
+        from: 'ana', messageId: 'a1000000-0000-4000-8000-0000000000a1', part: 'body', format: 3, after: null, metadata: null,
+        text: 'See you at the market on Saturday',
+        payload: { ciphertext: 'wzwS9jv+4ZzOkmOw2RwQZkwl1yT1Ien0cUDXfqMgAW3KcqK7D6RIJZ5R3tRdHMaQCT7+', nonce: 'x25519-xc20p-v2:6VEJ6xWeV80teKZlbSURivn51V4v1RPG' },
+    },
+    benFormat3Reply: {
+        from: 'ben', messageId: 'b1000000-0000-4000-8000-0000000000b1', part: 'body', format: 3, after: 'a1000000-0000-4000-8000-0000000000a1',
+        metadata: JSON.stringify({ replyToId: 'a1000000-0000-4000-8000-0000000000a1' }),
+        text: 'Saturday works, 9 am',
+        payload: { ciphertext: 'vrEiYuzTSwUAnMEGKE2egQ2a1pN/ohi9I2SicPv0Z0KZwDEd+t0qNpSvDKismLwjZtfMSyUNu7LkGLF4ZxsMpAfxsa3ARfYELko=', nonce: 'x25519-xc20p-v2:c4gH45GZrExuChkLMyCU9BRaBduVWhIR' },
+    },
+    benFormat2: {
+        from: 'ben', messageId: 'b3000000-0000-4000-8000-0000000000b3', part: 'body', format: 2, after: null, metadata: null,
+        text: 'From an older app: hello Ana',
+        payload: { ciphertext: '1sEwoELA5nPBDjUC4L3ud8ZS2mQyPcH3sKKiHb22nGOLeCIaxj5vrM5YJ94=', nonce: 'x25519-xc20p-v2:BR08WHIzdgVdcxUofMjTSNa5DAVxvDoD' },
+    },
+    /** Sealed "after" c4000000-…-c4, which the tests place after the cutover: written after it, so hidden however it is dated. */
+    benFormat3AfterNew: {
+        from: 'ben', messageId: 'b2000000-0000-4000-8000-0000000000b2', part: 'body', format: 3, after: 'c4000000-0000-4000-8000-0000000000c4', metadata: null,
+        text: 'Written after the cutover, dated before it',
+        payload: { ciphertext: 'yrTuRmSlP7OFUSA6rnvVJC3TWByrpzOYJ+uQsPfunXGxx2V9Dg1+3eE5lEFwpB8/1peJjgJlm3HOWNIA6AyLsorUS14mB77BB+o3DEaLdOC25F28IZ85s5+iU6EAAHfV', nonce: 'x25519-xc20p-v2:sGBfHdYM3M5+wsGKQyOHdqeyP8lpNNt7' },
+    },
+    /** The photo of anaFormat3's message (its attachment part). */
+    anaPhotoFormat3: {
+        from: 'ana', messageId: 'a1000000-0000-4000-8000-0000000000a1', part: 'attachment', format: 3, after: null, metadata: null,
+        text: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==',
+        payload: { ciphertext: 'Nusq7/5x37w4bDDL1B4AABX39k5fbsKnL9hmOkM2R6lUeyBylWwtMQBJ6noEw3wlpnYgJvx9Mn5a6EHfmg==', nonce: 'x25519-xc20p-v2:xGu+UXZMTvUc9au4+KV0zmZ5cZS5yJAm' },
+    },
+};
+// ─── end of old chat (OLDCHAT) ───────────────────────────────────────────────────────────────────────────────────────
+
 /** The parts of an app's e2e-crypto module the vectors exercise. */
 export interface DmLineApi {
     sealDmLine(text: string, ctx: DmKeyContext, line: DmLineBinding & { after?: string | null; replyToId?: string | null; at?: string }, nonceForVectors?: Uint8Array): DmPayload;

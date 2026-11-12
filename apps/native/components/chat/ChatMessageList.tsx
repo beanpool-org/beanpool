@@ -25,8 +25,8 @@ import React, { useCallback } from 'react';
 import { FlatList, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
-import { isAtBottom, isDaySeparator, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
-import { ChatDaySeparator, ChatRemovedRunLine } from './ChatBubble';
+import { isAtBottom, isDaySeparator, isOldLinesLabel, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
+import { ChatDaySeparator, ChatOldLinesLabel, ChatRemovedRunLine } from './ChatBubble';
 import { ChatFoldProvider } from './ChatFold';
 import type { ChatStyles } from './styles';
 
@@ -89,6 +89,8 @@ export function ChatMessageList({
     const renderItem = useCallback(({ item }: { item: ChatListItem }) => {
         if (isDaySeparator(item)) return <ChatDaySeparator label={item.label} styles={styles} />;
         if (isRemovedRun(item)) return <ChatRemovedRunLine run={item} styles={styles} />;
+        // The label above DM lines from before 1.4.0: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
+        if (isOldLinesLabel(item)) return <ChatOldLinesLabel label={item.label} />;
         return renderMessage(item);
     }, [renderMessage, styles]);
 

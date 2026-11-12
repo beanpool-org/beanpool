@@ -14,7 +14,7 @@ import type { GroupKeyring } from './group-chat-keys';
 
 /** What the opener needs from the phone: db.ts's doors, passed in so the tests can hand fakes. */
 export interface HomeChatOpenDeps {
-    judgeDm: (conversationId: string, lines: { id: string; author: string; type: string; sealed: NonNullable<HomeChatLine['sealed']> }[]) =>
+    judgeDm: (conversationId: string, lines: { id: string; author: string; type: string; at?: string | null; sealed: NonNullable<HomeChatLine['sealed']> }[]) =>
         Promise<Map<string, { text: string | null; mark: string | null }> | null>;
     keyring: (groupId: string) => Promise<Pick<GroupKeyring, 'groupId' | 'openedKey' | 'signerSeen' | 'successions' | 'seenLocked' | 'memo'>>;
     /** db.ts isKnownDmConversation: this phone knows the id as a DM (its pins, its DM list, a dm row or an encrypted line). */
@@ -32,7 +32,8 @@ const sealedOf = (lines: readonly HomeChatLine[]) => lines.filter((l): l is Home
 async function openDm(pick: HomeChatSettings, lines: readonly HomeChatLine[], deps: HomeChatOpenDeps): Promise<OpenedChat> {
     const out = new Map<string, OpenedChatLine>();
     const sealed = sealedOf(lines);
-    const views = sealed.length ? await deps.judgeDm(pick.conversationId, sealed.map(l => ({ id: l.id, author: l.author, type: l.type, sealed: l.sealed }))).catch(() => null) : null;
+    // With the node's time for each line, so one from before 1.4.0 opens as old, as on the web (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+    const views = sealed.length ? await deps.judgeDm(pick.conversationId, sealed.map(l => ({ id: l.id, author: l.author, type: l.type, at: l.at, sealed: l.sealed }))).catch(() => null) : null;
     for (const l of lines) {
         if (l.type === 'removed' || l.type === 'system' || l.author === 'SYSTEM') continue;
         if (l.sealed) {

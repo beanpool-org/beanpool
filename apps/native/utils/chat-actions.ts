@@ -9,7 +9,7 @@
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
 import { decisionFailureWords, formatDate, isCollapsedRun, isLockedAwayLine, lockedAwayLineText, removedLineRuns, removedRunText, t, word, type ChatAbout, type RemovedLineKind, type WordKey } from '@beanpool/core';
-import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
+import { dmQuoteLabel, dmOldLineRunStarts, DM_OLD_LINES_WORDS, type DmQuoteFrom } from './e2e-crypto';
 import { chatLineWords } from './chat-line-words';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
@@ -103,6 +103,12 @@ export interface ChatMessage {
     unattributed?: boolean;
     /** Who a reply quoting this DM line shows it as from (e2e-crypto dmQuoteFrom); absent: its named author. */
     quoteFrom?: DmQuoteFrom;
+    /**
+     * A DM line from before 1.4.0 opened as it was then (e2e-crypto dmLineIsOld): read-only, under the one label above its
+     * run (buildChatListItems). Never answered, quoted, edited, reacted to or deleted.
+     * conversion code, log row OLDCHAT, remove after 12 Dec 2026
+     */
+    oldLine?: boolean;
 }
 
 /** A quoted message, as a reply's bubble and the "Replying to" box show it. */
@@ -238,7 +244,7 @@ function authorVerbsAllowed(kind: ChatKind): boolean {
 export function canEditMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!isMine(m, viewer) || !viewer.canPost) return false;
-    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
     if (m.type === 'image') return false;
     if (inFlight(m)) return false;
     if (!m.rawTimestamp) return false;
@@ -254,7 +260,7 @@ export function canEditMessage(m: ChatMessage, viewer: ChatViewer): boolean {
 export function isEditClosed(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!isMine(m, viewer) || !viewer.canPost) return false;
-    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
     if (m.type === 'image') return false;
     if (inFlight(m)) return false;
     if (!m.rawTimestamp) return false;
@@ -263,11 +269,14 @@ export function isEditClosed(m: ChatMessage, viewer: ChatViewer): boolean {
     return (viewer.now ?? Date.now()) - sentAt > MESSAGE_EDIT_WINDOW_MS;
 }
 
-/** Delete for everyone: the author, any time, no window — but not a system line, a tombstone or an in-flight send. */
+/**
+ * Delete for everyone: the author, any time, no window — but not a system line, a tombstone, an in-flight send or a line
+ * from before 1.4.0 (read-only, as the web shows it; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+ */
 export function canDeleteMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!isMine(m, viewer) || !viewer.canPost) return false;
-    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
     return !inFlight(m);
 }
 
@@ -283,19 +292,19 @@ export function canRemoveMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     return true;
 }
 
-/** React: whoever may post in the chat, on anything that is still a message. Not enterprise or event threads. */
+/** React: whoever may post in the chat, on anything that is still a message. Not enterprise or event threads, nor an old line. */
 export function canReactToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!viewer.canPost) return false;
-    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
     return !inFlight(m);
 }
 
-/** Reply: quoting needs a message id the node will recognise, so a failed send cannot be quoted. */
+/** Reply: quoting needs a message id the node will recognise, so a failed send cannot be quoted; nor can an old line. */
 export function canReplyToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
     if (!viewer.canPost) return false;
-    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (isSystemLine(m) || isTombstone(m) || m.oldLine) return false;
     return m.sendState !== 'failed';
 }
 
@@ -369,10 +378,24 @@ export interface ChatRemovedRun {
     timestamp: string;
 }
 
-export type ChatListItem = ChatMessage | ChatDaySeparator | ChatRemovedRun;
+/**
+ * The one label above a run of DM lines from before 1.4.0 (core DM_OLD_LINES_WORDS.label), keyed by the run's first line
+ * (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+ */
+export interface ChatOldLinesLabel {
+    id: string;
+    type: 'old-lines-label';
+    label: string;
+}
+
+export type ChatListItem = ChatMessage | ChatDaySeparator | ChatRemovedRun | ChatOldLinesLabel;
 
 export function isDaySeparator(item: ChatListItem): item is ChatDaySeparator {
     return (item as ChatDaySeparator).type === 'day-separator';
+}
+
+export function isOldLinesLabel(item: ChatListItem): item is ChatOldLinesLabel {
+    return (item as ChatOldLinesLabel).type === 'old-lines-label';
 }
 
 export function isRemovedRun(item: ChatListItem): item is ChatRemovedRun {
@@ -405,11 +428,16 @@ export function chatListIndexOf(items: readonly ChatListItem[], id: string): num
  *
  * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give. In a group
  * chat (`kind`), two or more removed lines in a row of one kind are drawn as one (ChatRemovedRun); a day pill breaks a run.
+ * Above each run of DM lines from before 1.4.0 (`oldLine`) goes one label, above the run's first day pill (core
+ * dmOldLineRunStarts, as the web draws it; a system line, a deleted line and a row shown as nobody's neither start a run nor
+ * end one, so one run of old chat gets one label; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
 export function buildChatListItems(messages: ChatMessage[], now: Date = new Date(), kind?: ChatKind): ChatListItem[] {
     const items: ChatListItem[] = [];
     let lastDay: string | null = null;
-    for (const m of messages) {
+    const oldRunStarts = dmOldLineRunStarts(messages.map((m) => (isSystemLine(m) || isTombstone(m) || m.unattributed ? null : !!m.oldLine)));
+    for (const [i, m] of messages.entries()) {
+        if (oldRunStarts[i]) items.push({ id: `old-lines-${m.id}`, type: 'old-lines-label', label: t(DM_OLD_LINES_WORDS.label) });
         const d = m.rawTimestamp ? new Date(m.rawTimestamp) : null;
         if (d && !isNaN(d.getTime())) {
             const dayKey = d.toDateString();
@@ -420,7 +448,7 @@ export function buildChatListItems(messages: ChatMessage[], now: Date = new Date
         }
         items.push(m);
     }
-    const runs = removedLineRuns(items, (item) => (isDaySeparator(item) || isRemovedRun(item) ? null : removedLineKind(item, kind)));
+    const runs = removedLineRuns(items, (item) => (isDaySeparator(item) || isRemovedRun(item) || isOldLinesLabel(item) ? null : removedLineKind(item, kind)));
     const drawn: ChatListItem[] = [];
     for (const run of runs) {
         if (!isCollapsedRun(run)) { drawn.push(...run.lines); continue; }

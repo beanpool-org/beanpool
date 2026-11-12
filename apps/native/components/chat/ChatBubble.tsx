@@ -16,6 +16,7 @@ import type { ChatMessage, ChatKind, ChatRemovedRun } from '../../utils/chat-act
 import { isTombstone, messageTime, tombstoneWords, reactionSummary, removedRunLineText } from '../../utils/chat-actions';
 import { chatLineWords } from '../../utils/chat-line-words';
 import { CHAT_FOLD_LINES, splitTextWithLinks, t, tn } from '@beanpool/core';
+import { useTheme } from '../../app/ThemeContext';
 import { useChatFold } from './ChatFold';
 import type { ChatStyles } from './styles';
 
@@ -200,14 +201,16 @@ export function ChatRemovedRunLine({ run, styles }: { run: ChatRemovedRun; style
 }
 
 /**
- * The one label above a run of DM lines from before 1.4.0, in the middle of the chat as the day pill is, its words free
- * to wrap at 320dp with 1.3× text (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+ * The one label above a run of DM lines from before 1.4.0, in the middle of the chat as the day pill is, in the day pill's
+ * colours, its words free to wrap at 320dp with 1.3× text. Its colours are the theme's own tokens, inline, so the contrast
+ * check (e2e/button-contrast.check.ts) reads and measures them (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
-export function ChatOldLinesLabel({ label, styles }: { label: string; styles: ChatStyles }) {
+export function ChatOldLinesLabel({ label }: { label: string }) {
+    const { colors } = useTheme();
     return (
-        <View testID="dm-old-lines-label" accessibilityRole="text" style={styles.daySeparatorRow}>
-            <View style={[styles.daySeparatorPill, { maxWidth: '90%', paddingVertical: 6 }]}>
-                <Text style={[styles.daySeparatorText, { textAlign: 'center', fontSize: 12 }]}>{label}</Text>
+        <View testID="dm-old-lines-label" accessibilityRole="text" style={{ alignItems: 'center', marginVertical: 4 }}>
+            <View style={{ backgroundColor: colors.chat.daySeparatorBg, maxWidth: '90%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                <Text style={{ color: colors.text.secondary, fontSize: 12, fontWeight: '600', textAlign: 'center' }}>{label}</Text>
             </View>
         </View>
     );

@@ -380,6 +380,40 @@ describe('the rows an inverted list draws', () => {
         expect(two.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o3', 'old-lines-o1']);
         expect(buildChatListItems([a, b, c], now).some(isOldLinesLabel)).toBe(false);
     });
+
+    // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a deleted line, or a row shown as nobody's, is
+    // passed over as a notice is, so one run of old chat gets one label (#3075 review, chat-actions.ts:437).
+    it('passes over a deleted line and a row shown as nobody\'s inside the old chat: one label for the run', () => {
+        const old = (id: string, at: string, over: Partial<ChatMessage> = {}) => msg({ id, rawTimestamp: at, oldLine: true, ...over });
+        const deleted = msg({ id: 'd', type: 'removed', metadata: { removed: true, removedBy: ME }, rawTimestamp: '2026-09-22T09:30:00Z' });
+        const once = buildChatListItems([old('o1', '2026-09-22T09:00:00Z'), deleted, old('o2', '2026-09-22T10:00:00Z')], now);
+        expect(once.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o1']);
+        const nobodys = msg({ id: 'u', senderId: THEM, unattributed: true, rawTimestamp: '2026-09-22T09:40:00Z' });
+        const hidden = buildChatListItems([old('o1', '2026-09-22T09:00:00Z'), nobodys, old('o2', '2026-09-22T10:00:00Z')], now);
+        expect(hidden.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o1']);
+        // A row passed over before the first old line doesn't take the label: it stays on the first old line.
+        const first = buildChatListItems([deleted, old('o2', '2026-09-22T10:00:00Z')], now);
+        expect(first.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o2']);
+        // A new line still ends the run, also after a deleted one.
+        const ended = buildChatListItems([old('o1', '2026-09-22T09:00:00Z'), deleted, b, old('o3', '2026-09-22T11:00:00Z')], now);
+        expect(ended.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o3', 'old-lines-o1']);
+    });
+
+    it('a DM with a deleted account\'s lines keeps one label for each run of old lines', () => {
+        const gone = (id: string, at: string) => msg({
+            id, senderId: THEM, type: 'removed', rawTimestamp: at,
+            metadata: { removed: true, removedBy: THEM, accountDeleted: true },
+        });
+        const mine = (id: string, at: string, over: Partial<ChatMessage> = {}) => msg({ id, rawTimestamp: at, ...over });
+        const items = buildChatListItems([
+            mine('o1', '2026-09-20T09:00:00Z', { oldLine: true }), gone('g1', '2026-09-20T09:05:00Z'),
+            mine('o2', '2026-09-20T09:10:00Z', { oldLine: true }), gone('g2', '2026-09-21T09:00:00Z'), gone('g3', '2026-09-21T09:05:00Z'),
+            mine('o3', '2026-09-21T09:10:00Z', { oldLine: true }), gone('g4', '2026-09-22T09:00:00Z'),
+            // From 1.4.0 on: a new line ends the old run; the deleted account's newer lines start nothing.
+            mine('n1', '2026-09-23T09:00:00Z'), gone('g5', '2026-09-23T09:05:00Z'), mine('n2', '2026-09-23T09:10:00Z'),
+        ], now);
+        expect(items.filter(isOldLinesLabel).map(i => i.id)).toEqual(['old-lines-o1']);
+    });
 });
 
 describe('a line from before 1.4.0 (old chat, OLDCHAT): read-only', () => {

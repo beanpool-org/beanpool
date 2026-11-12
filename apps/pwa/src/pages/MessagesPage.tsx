@@ -127,6 +127,20 @@ function nodeSaidNo(err: unknown): boolean {
     return !!nodeRefusal(err) || !!requestPendingRefusal(err) || (typeof status === 'number' && status >= 400 && status < 500);
 }
 
+/**
+ * A deleted line, by the rule the thread draws one by (`isTombstone` below; the phone's chat-actions.ts isTombstone): the
+ * old-chat label's runs pass over it (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+ */
+function isDeletedRow(m: { type?: string; metadata?: string }): boolean {
+    if (m.type === 'removed') return true;
+    try {
+        const meta: unknown = m.metadata ? JSON.parse(m.metadata) : null;
+        return !!meta && typeof meta === 'object' && (meta as { removed?: unknown }).removed === true;
+    } catch {
+        return false;
+    }
+}
+
 /** The one time under a bubble: core's time of day in the member's language ("9:05", as the phone's), empty for an unreadable stamp. */
 function messageTime(iso: string): string {
     const d = new Date(iso);
@@ -623,14 +637,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }, [shownMessages, lineViews, activeConv, identity, isDmThread]);
     // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a DM line from before 1.4.0 the thread check opened (core
     // dmLineIsOld) is read-only, never answered, quoted, edited or reacted to; one label goes above each run of them, in the
-    // order the thread is drawn (core dmOldLineRunStarts), as the phone's list does.
+    // order the thread is drawn (core dmOldLineRunStarts), as the phone's list does. A node notice (it has no view), a deleted
+    // line and a row shown as nobody's neither start a run nor end one, so one run of old chat gets one label.
     const isOldLine = (m: ApiMessage | null | undefined): boolean => !!m && dmLineIsOld(lineViews?.get(m.id));
     const oldLineLabelAbove = useMemo(() => {
         const above = new Set<string>();
         if (!lineViews) return above;
         const starts = dmOldLineRunStarts(searchedMessages.map((m) => {
             const v = lineViews.get(m.id);
-            return v ? dmLineIsOld(v) : null;
+            return v && !isDeletedRow(m) && !dmLineIsUnattributed(v) ? dmLineIsOld(v) : null;
         }));
         searchedMessages.forEach((m, i) => { if (starts[i]) above.add(m.id); });
         return above;

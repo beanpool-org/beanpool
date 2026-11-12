@@ -429,12 +429,13 @@ export function chatListIndexOf(items: readonly ChatListItem[], id: string): num
  * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give. In a group
  * chat (`kind`), two or more removed lines in a row of one kind are drawn as one (ChatRemovedRun); a day pill breaks a run.
  * Above each run of DM lines from before 1.4.0 (`oldLine`) goes one label, above the run's first day pill (core
- * dmOldLineRunStarts, as the web draws it; a system line neither starts a run nor ends one; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+ * dmOldLineRunStarts, as the web draws it; a system line, a deleted line and a row shown as nobody's neither start a run nor
+ * end one, so one run of old chat gets one label; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
  */
 export function buildChatListItems(messages: ChatMessage[], now: Date = new Date(), kind?: ChatKind): ChatListItem[] {
     const items: ChatListItem[] = [];
     let lastDay: string | null = null;
-    const oldRunStarts = dmOldLineRunStarts(messages.map((m) => (isSystemLine(m) ? null : !!m.oldLine)));
+    const oldRunStarts = dmOldLineRunStarts(messages.map((m) => (isSystemLine(m) || isTombstone(m) || m.unattributed ? null : !!m.oldLine)));
     for (const [i, m] of messages.entries()) {
         if (oldRunStarts[i]) items.push({ id: `old-lines-${m.id}`, type: 'old-lines-label', label: t(DM_OLD_LINES_WORDS.label) });
         const d = m.rawTimestamp ? new Date(m.rawTimestamp) : null;

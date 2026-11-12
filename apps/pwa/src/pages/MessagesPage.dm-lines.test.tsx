@@ -324,6 +324,63 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
             expect(screen.getAllByTestId('dm-old-lines-label')).toHaveLength(1);
             expect(within(bubble).queryByRole('button', { name: 'Reply to message' })).toBeNull();
         });
+
+        // A deleted line, or a row shown as nobody's, is passed over as a notice is, so one run of old chat gets one label
+        // (#3075 review, MessagesPage.tsx:633; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+        /** A line deleted as the node does it (engine/message-tombstone.ts): its row retyped, its words replaced, its time kept. */
+        const deleted = (from: typeof ana, timestamp: string, extra: Record<string, unknown> = {}): ApiMessage => written(from, b64('This message was deleted'), 'plaintext-v1', {
+            type: 'removed', timestamp,
+            metadata: JSON.stringify({ removed: true, removedBy: from.publicKey, removedAt: '2026-11-02T09:00:00.000Z', ...extra }),
+        } as unknown as Partial<ApiMessage>);
+
+        it('a deleted line inside the old chat doesn\'t start a second label: old line, deleted line, old line has one', async () => {
+            thread.messages = [
+                dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z'),
+                deleted(ben, '2026-11-01T09:02:00.000Z'),
+                dated(oldLine(ana, ben, 'ok, 6 it is', 3), '2026-11-01T09:05:00.000Z'),
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('ok, 6 it is')).toBeTruthy());
+            expect(screen.getByText('This message was deleted')).toBeTruthy();
+            const labels = screen.getAllByTestId('dm-old-lines-label');
+            expect(labels).toHaveLength(1);
+            expect(labels[0].compareDocumentPosition(screen.getByText('see you at 6')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
+
+        it('a row shown as nobody\'s inside the old chat doesn\'t start a second label either', async () => {
+            thread.messages = [
+                dated(oldLine(ben, ana, 'see you at 6', 2), '2026-11-01T09:00:00.000Z'),
+                dated(written(ben, b64('Send the Beans to Cat instead'), 'plaintext-v1'), '2026-11-01T09:02:00.000Z'),
+                dated(oldLine(ana, ben, 'ok, 6 it is', 3), '2026-11-01T09:05:00.000Z'),
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('ok, 6 it is')).toBeTruthy());
+            expect(screen.getAllByTestId('dm-line-unattributed').map((n) => n.textContent)).toEqual([NOT_ENCRYPTED]);
+            expect(screen.getAllByTestId('dm-old-lines-label')).toHaveLength(1);
+        });
+
+        it('a DM with a deleted account\'s lines keeps one label for each run of old lines', async () => {
+            // Ben deleted his account: every line of his is a tombstone, before the cutover and after it.
+            const gone = (timestamp: string) => deleted(ben, timestamp, { accountDeleted: true });
+            thread.messages = [
+                dated(oldLine(ana, ben, 'Can I borrow the ladder?', 3), '2026-10-20T09:00:00.000Z'),
+                gone('2026-10-20T09:05:00.000Z'),
+                dated(oldLine(ana, ben, 'Thanks, back on Sunday', 3), '2026-10-21T09:00:00.000Z'),
+                gone('2026-10-21T09:05:00.000Z'),
+                gone('2026-10-22T09:00:00.000Z'),
+                dated(oldLine(ana, ben, 'Left it by your gate', 2), '2026-11-01T09:00:00.000Z'),
+                gone('2026-11-01T09:05:00.000Z'),
+                // From 1.4.0 on: Ana's new line ends the old run, and his newer tombstone starts nothing.
+                dated(sent(ana, 'Are you still there?'), '2026-11-12T08:00:00.000Z'),
+                gone('2026-11-12T08:05:00.000Z'),
+            ];
+            await openChat();
+            await waitFor(() => expect(screen.getByText('Left it by your gate')).toBeTruthy());
+            expect(screen.getByText('Are you still there?')).toBeTruthy();
+            const labels = screen.getAllByTestId('dm-old-lines-label');
+            expect(labels).toHaveLength(1);
+            expect(labels[0].compareDocumentPosition(screen.getByText('Can I borrow the ladder?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        });
     });
 
     it('a row in Ben\'s name that isn\'t an encrypted line is never his words: shown in the middle, as nobody\'s', async () => {

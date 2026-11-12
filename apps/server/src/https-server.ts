@@ -157,6 +157,8 @@ import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
 import { createWebPushRoutes } from './routes/web-push.js';
+import { createNodeKeyRoutes } from './routes/node-key.js';
+import { isNodeSignedPath, pruneNodeRequestNonces, requireNodeSignature } from './engine/node-signature.js';
 import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createKnowledgeRoutes } from './routes/knowledge.js';
 import { createNoticeRoutes } from './routes/notices.js';
@@ -385,6 +387,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/global/demand',            // global node (Lounge L2): how many are waiting around a point, a fixed tile, nothing below 3
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
     '/api/web-push/key',             // web push (W1): the node's public web push key, which a browser subscribes with (routes/web-push.ts)
+    '/api/node/key',                 // the server's key document, which another community's server checks this one's requests with (routes/node-key.ts)
     '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
 ]);
 /**
@@ -1196,7 +1199,10 @@ function isSignatureBypassed(p: string): boolean {
         p === '/api/invite/redeem' ||
         p === '/api/invite/redeem-offline' ||
         // A leave statement carries the leaving key's own signature (routes/community.ts); it is presented unsigned.
-        p.startsWith('/api/push-tokens/leave/');
+        p.startsWith('/api/push-tokens/leave/') ||
+        // Another community's server's requests, which the node signature door checks instead (engine/node-signature.ts),
+        // matched as it matches them: every spelling it protects, and nothing else.
+        isNodeSignedPath(p);
 }
 
 /**
@@ -1579,6 +1585,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         pruneAuthAttempts(now);
         pruneChatLines(now);
         requestNonces.prune(now);
+        pruneNodeRequestNonces(now);
     }, 60 * 1000);
     if (rateLimitCleaner.unref) rateLimitCleaner.unref();
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
@@ -1945,6 +1952,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         shopPhoto: shopPhotoKeyMatches,
     };
     app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
+    // Another community's server, on the few paths only a server may call (engine/node-signature.ts NODE_SIGNED_PATHS): its
+    // node signature over the exact body, its destination, its key and its nonce, before anything acts on it. The member
+    // middleware never sees those paths (isSignatureBypassed).
+    app.use(requireNodeSignature);
     app.use(requireSignature);
     app.use(copyOnlyFromOtherSites);
 
@@ -2062,6 +2073,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         createShopRoutes(deps),
         createBillRoutes(deps),
         createAppleReturnRoutes(),
+        // This server's key, and the check another community's server can make of its signed requests (routes/node-key.ts).
+        createNodeKeyRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
         createNamesListRoutes(deps),
@@ -2250,6 +2263,8 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],
     [/^\/api\/join\/knocks\//, 4 * 1024],
+    // Another community's server's check (routes/node-key.ts): at most 16 relay items; the mailbox's own limits come with it (X2).
+    [/^\/api\/node\/check\/?$/, 256 * 1024],
     // A browser's push subscription (routes/web-push.ts): an endpoint of at most 1,000 characters and two short keys.
     [/^\/api\/web-push$/, 4 * 1024],
     // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).

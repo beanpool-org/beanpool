@@ -88,6 +88,8 @@ export * from './shops.js';
 export * from './onboarding-funnel.js';
 export * from './live-updates.js';
 export * from './request-signing.js';
+export * from './node-request-signing.js';
+export * from './relay-envelope.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';
 export * from './claim-proof.js';

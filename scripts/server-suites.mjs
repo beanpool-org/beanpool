@@ -655,6 +655,7 @@ export const SUITES = [
     'test-group-history-after-rekey',
     'test-dm-line-relay',
     'test-federation-hardening',
+    'test-node-signature',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',

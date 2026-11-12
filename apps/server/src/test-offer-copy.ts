@@ -173,6 +173,15 @@ async function main() {
     assert(loan.status === 200 && stored(loan.body?.post?.id)?.shown_price === '300 daily', 'a lendable Offer counts as an Offer: its price and unit, and no lending here');
     const free = await postCopy(robin, 'Free lemons', { shownPrice: { price_c: 0, per: 'fixed' } });
     assert(free.status === 200 && (await byId(free.body?.post?.id, sam))?.shownPrice === '0 fixed', 'a free listing says so: a price of nothing is a price');
+    // A price for each one (DESIGN-per-item-price-fable.md §6): the copy says the price for one only. A count and a price for all
+    // sent with it never land (red if event-copy.ts NEVER_ON_A_COPY loses them, or `each` leaves POST_PRICE_TYPES).
+    // Its own words and no tag, so it joins no search the checks below read.
+    const panels = await postCopy(robin, 'Solar panels', { description: 'Second-hand', freeTags: [], category: 'tools',
+        shownPrice: { price_c: 30000, per: 'each' }, priceType: 'each', unitsLeft: 20, lot: { price_c: 550000 } });
+    const panelsRow = stored(panels.body?.post?.id);
+    assert(panels.status === 200 && panelsRow?.shown_price === '30000 each' && panelsRow?.price_type === 'fixed' && panelsRow?.price_c === 0
+        && panelsRow?.units_left === null && panelsRow?.lot_price_c === null && panelsRow?.lot_units === null && !('unitsLeft' in (panels.body?.post ?? {})),
+        `a per-item Offer's copy keeps its price for one as words, and no count or price for all (${panels.status} ${JSON.stringify(panelsRow?.shown_price)})`);
     // An app from before whole hundredths sends `{ beans }`, and a figure finer than a hundredth is no price: both refused, never read.
     for (const [what, price] of [['none', undefined], ['words', { price_c: 'twenty', per: 'fixed' }], ['below nothing', { price_c: -100, per: 'fixed' }], ['past the most', { price_c: 200_000_000, per: 'fixed' }], ['an unknown unit', { price_c: 100, per: 'fortnightly' }], ['free text', 'Ring me on 0400 000 000'],
         ['the old figure in Beans', { beans: 20, per: 'fixed' }], ['a part of a hundredth', { price_c: 20.5, per: 'fixed' }]] as const) {

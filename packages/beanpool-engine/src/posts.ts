@@ -117,6 +117,13 @@ export interface MarketplacePost {
     lendTerms?: string;
     /** What it would cost to replace, in the lender's own words and currency. Shown, never parsed: settled between the two. */
     replacementValue?: string;
+    /**
+     * An Offer priced for each one (`priceType` 'each'; DESIGN-per-item-price-fable.md §3, @beanpool/core per-item.ts): how
+     * many can be taken up now, and its price for all of them as stored, for the number it was set for (on offer only while
+     * that many are left, core lotOffered). Only on such a listing, so every other post reads byte for byte as before.
+     */
+    unitsLeft?: number;
+    lot?: { units: number; price_c: number };
     /** While it is out: when it is due back (the hand-over plus the loan's days, @beanpool/core lendBackAroundOf). Never a name. */
     lendBackAround?: string;
     /**
@@ -920,6 +927,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         repeatable: Boolean(row.repeatable),
         cashAlsoNeeded: Boolean(row.cash_also_needed),
         ...lendFieldsOf(db, row),
+        ...itemFieldsOf(row),
         ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
         ...(typeof row.featured_at === 'string' && row.featured_at ? { featuredAt: row.featured_at } : {}),
         ...(typeof row.pinned_until === 'string' && row.pinned_until ? { pinnedUntil: row.pinned_until } : {}),
@@ -992,6 +1000,18 @@ export function lendFieldsOf(db: Db, row: any): Pick<MarketplacePost, 'lendable'
         ...(typeof row.lend_terms === 'string' && row.lend_terms ? { lendTerms: row.lend_terms } : {}),
         ...(typeof row.replacement_value === 'string' && row.replacement_value ? { replacementValue: row.replacement_value } : {}),
         ...(backAround ? { lendBackAround: backAround } : {}),
+    };
+}
+
+/**
+ * An Offer priced for each one: its count and its price for all, from its row (posts.units_left, lot_price_c, lot_units);
+ * nothing for any other post. The standby's copy (sync.ts postOfRow) and a member's read alike.
+ */
+export function itemFieldsOf(row: any): Pick<MarketplacePost, 'unitsLeft' | 'lot'> {
+    if (row.price_type !== 'each' || !Number.isInteger(row.units_left)) return {};
+    return {
+        unitsLeft: row.units_left,
+        ...(Number.isInteger(row.lot_units) && Number.isInteger(row.lot_price_c) ? { lot: { units: row.lot_units, price_c: row.lot_price_c } } : {}),
     };
 }
 
@@ -2785,6 +2805,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',
+    // How many are left and the price for all of them, as its price is: what the listing offers, not who took any.
+    unitsLeft: 'keep', lot: 'keep',
     // The shop it is in: a visitor sees a shop's card, its kind and its counts, and never its name or owner
     // (DESIGN-shops-and-tools-fable.md §4, §9.4; apps/server routes/shops.ts). So the id links the listings its owner
     // put in the one front window, as the shop card does, and no others: their listings outside it stay apart.

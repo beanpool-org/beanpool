@@ -111,8 +111,11 @@ function rounded(v: unknown): number | undefined {
     return typeof v === 'number' && Number.isFinite(v) ? roundToArea(v) : undefined;
 }
 
-/** The fields of a listing a copy never carries: what would make it a deal, or send it past this board. */
-const NEVER_ON_A_COPY = ['repeatable', 'cashAlsoNeeded', 'lendable', 'lendMaxDays', 'lendTerms', 'replacementValue', 'shopId', 'reach', 'reachPeers', 'targetGroupId', 'targetPubkey', 'assignedTo'] as const;
+/**
+ * The fields of a listing a copy never carries: what would make it a deal, or send it past this board. A count and a price for
+ * all of them too (DESIGN-per-item-price-fable.md §6): they change by the hour at home, so a copy says the price for one only.
+ */
+const NEVER_ON_A_COPY = ['repeatable', 'cashAlsoNeeded', 'lendable', 'lendMaxDays', 'lendTerms', 'replacementValue', 'shopId', 'reach', 'reachPeers', 'targetGroupId', 'targetPubkey', 'assignedTo', 'unitsLeft', 'unitsLeftWas', 'lot'] as const;
 
 /**
  * A create body as a copy may have it; the request's own for anything else. An event: the times and the rounded pin, and

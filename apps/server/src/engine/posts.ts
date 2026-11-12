@@ -26,6 +26,7 @@ import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertFreeTags, assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
+import { itemColumnsOnCreate, itemColumnsOnEdit, writeItemCount } from './per-item.js';
 import { ownerAdminLimit } from './owner-admin-limit.js';
 import { assertPollStartRoom } from './poll-week.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
@@ -553,6 +554,9 @@ export function createPost(
         lendMaxDays?: unknown;
         lendTerms?: unknown;
         replacementValue?: unknown;
+        /** An Offer priced for each one: how many, and a price for all of them, as sent (engine/per-item.ts). */
+        unitsLeft?: unknown;
+        lot?: unknown;
         /** The shop to put it in, as sent: its author's own (engine/shops.ts assertShopForPost). */
         shopId?: unknown;
         /** Its tags: ids from the library in core, at most 5 (post-fields.ts assertPostTags). */
@@ -674,6 +678,9 @@ export function createPost(
     // Before a poll's or an event's fields are forced: a poll or an event asked to be lent is refused, not quietly made one.
     const lend = lendColumnsOnCreate(type, priceType, options);
     if (lend.lendable === 1) repeatable = true;
+    // A price for each one (engine/per-item.ts): its count and price for all, or none. The count takes Repeatable's place.
+    const items = itemColumnsOnCreate(type, priceType, price_c, options);
+    if (items.units_left !== null) repeatable = false;
 
     let cleanPollOptions: PollOption[] | null = null;
     let pollClosesAt: string | null = null;
@@ -871,8 +878,9 @@ export function createPost(
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
             lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags, free_tags, shown_from_host, shown_from_post_id, shown_price, shown_takes_questions,
-            knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            knowledge_sources, knowledge_place, knowledge_lang, knowledge_checked_at,
+            units_left, lot_price_c, lot_units
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, price_c, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -902,6 +910,7 @@ export function createPost(
             options?.knowledge?.place ?? null,
             options?.knowledge?.lang ?? null,
             options?.knowledge?.checkedAt ?? null,
+            items.units_left, items.lot_price_c, items.lot_units,
         );
 
         if (photoColumns.length > 0) {
@@ -1515,6 +1524,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     assertPriceNotFrozen(id, existingPost, updates);
     const lendCells = lendColumnsOnEdit(id, existingPost, updates as Record<string, any>);
+    // A price for each one (engine/per-item.ts): the price for all as it will be, and the count's guarded write, or null.
+    const itemCells = itemColumnsOnEdit(existingPost, updates as Record<string, any>);
     // Its shop (the edit's "Put this in your shop" toggle, engine/shops.ts): put in, held to the create's rules; taken out
     // (null); or, unnamed, left as it is.
     const nextShop = shopOnEdit(existingPost, (updates as { shopId?: unknown }).shopId);
@@ -1585,6 +1596,12 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (lendCells) {
         fields.push('lendable = ?', 'lend_max_days = ?', 'lend_terms = ?', 'replacement_value = ?');
         values.push(lendCells.lendable, lendCells.lend_max_days, lendCells.lend_terms, lendCells.replacement_value);
+    }
+    // The count is never written blind (writeItemCount, in the transaction below); leaving Each clears it with the other two.
+    if (itemCells) {
+        fields.push('lot_price_c = ?', 'lot_units = ?');
+        values.push(itemCells.cols.lot_price_c, itemCells.cols.lot_units);
+        if (itemCells.cols.units_left === null) fields.push('units_left = NULL');
     }
     // Out of its shop, or into another, it is featured in none (engine/shops.ts featureOffer): the stamp goes with the shop.
     if (nextShop !== undefined) { fields.push('shop_id = ?', 'featured_at = NULL'); values.push(nextShop); }
@@ -1672,6 +1689,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let openedLine: EventThreadMessage | null = null;
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
+        if (itemCells?.count) writeItemCount(id, itemCells.count);
         // Out of a shop that is closed for now: its reopen no longer puts this one back up.
         if (nextShop !== undefined && existingPost.shopId && nextShop !== existingPost.shopId) forgetPausedPost(existingPost.shopId, id);
         if (occurrenceMove) moveOccurrence(id, occurrenceMove.from, occurrenceMove.to);

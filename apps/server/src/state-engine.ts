@@ -5763,6 +5763,9 @@ export function createPost(
         lendMaxDays?: unknown;
         lendTerms?: unknown;
         replacementValue?: unknown;
+        /** An Offer priced for each one: how many, and a price for all of them (engine/per-item.ts itemColumnsOnCreate). */
+        unitsLeft?: unknown;
+        lot?: unknown;
         /** The shop to put it in (engine/shops.ts assertShopForPost). */
         shopId?: unknown;
         /** Its tags: ids from the library in core (engine/post-fields.ts assertPostTags). */

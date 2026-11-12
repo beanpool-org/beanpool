@@ -36,6 +36,7 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import { copyBody, copyUpdates, copyOfRequest, readOfCopy, EVENT_COPY_CODE } from '../engine/event-copy.js';
+import { ITEM_DEALS_NOT_YET_CODE, itemRefusalOf } from '../engine/per-item.js';
 import { directoryStamp } from '../engine/directory-cache.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
@@ -807,7 +808,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
     const requestBody = copyBody((ctx as any).requestBody || {});
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, price_c, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom } = requestBody;
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags, freeTags, shownFrom, unitsLeft, lot } = requestBody;
     // The price is whole hundredths, `price_c` (money-body.ts): a body with the old `credits` is an app from before them.
     if ((ctx as any).requestBody && 'credits' in (ctx as any).requestBody) {
         ctx.status = 400;
@@ -898,6 +899,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
                 reach, reachPeers, pollOptions, durationDays, pollOpenVote, pollOther, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts,
                 // A lendable Offer and its terms, raw: the engine checks each (engine/post-fields.ts assertLendFields).
                 lendable, lendMaxDays, lendTerms, replacementValue,
+                // A price for each one: how many, and a price for all, raw: the engine holds them to the rules (engine/per-item.ts).
+                unitsLeft, lot,
                 // The shop to put it in, raw: the engine checks it is the author's own (engine/shops.ts assertShopForPost).
                 shopId,
                 // Its tags, raw: the engine holds them to the library (engine/post-fields.ts assertPostTags). An app that
@@ -922,6 +925,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
         if (respondShopRefusal(ctx, e)) return;
+        if (respondItemRefusal(ctx, e, word('Failed to create post'))) return;
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, word('Failed to create post')), ...(e?.code === POST_ID_TAKEN_CODE ? { code: POST_ID_TAKEN_CODE } : {}) };
     }
@@ -1070,6 +1074,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         if (respondShopRefusal(ctx, e)) return;
+        if (respondItemRefusal(ctx, e, word('Failed to update post'))) return;
         // A convenor whose account is suspended, editing their group's event, or a keeper of a closed enterprise
         // (engine/posts.ts updatePost): 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE || e?.code === ENTERPRISE_CLOSED_CODE ? 403 : 400;
@@ -1516,9 +1521,27 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
 // ===================== MARKETPLACE TRANSACTIONS =====================
 
 function respondCopyNoDeal(ctx: any, err: any): boolean {
+    if (err?.code === ITEM_DEALS_NOT_YET_CODE) {
+        // A listing priced for each one, before slice P1 takes it up (engine/per-item.ts): 409 and its code.
+        ctx.status = 409;
+        ctx.body = { error: memberErrorText(err, word('Failed to accept post')), code: ITEM_DEALS_NOT_YET_CODE };
+        return true;
+    }
     if (err?.code !== LISTING_COPY_CODE) return false;
     ctx.status = 409;
     ctx.body = { error: err.message, code: LISTING_COPY_CODE };
+    return true;
+}
+
+/**
+ * A create or an edit of a listing priced for each one refused (engine/per-item.ts): 400, or 409 `units_changed` with how many
+ * are left now, and the refusal's code, so an app can say which field and refresh the count.
+ */
+function respondItemRefusal(ctx: any, err: any, fallback: string): boolean {
+    const r = itemRefusalOf(err);
+    if (!r) return false;
+    ctx.status = r.status;
+    ctx.body = { error: memberErrorText(err, fallback), code: r.code, ...(r.unitsLeft !== undefined ? { unitsLeft: r.unitsLeft } : {}) };
     return true;
 }
 

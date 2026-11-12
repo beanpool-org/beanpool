@@ -16,6 +16,7 @@
  *  8e. standing_deals: the phases paid, short, ended; 1.2.37's table (REAL Beans, old phases) dropped whole by the
  *      hundredths step and made again, its rows not carried.
  *  accounts.balance_c NOT NULL, fresh or upgraded (a 1.2.36 file's REAL balance dropped unread by the hundredths step).
+ *  8f. Per-item prices: the four columns and their CHECKs, the same fresh or upgraded, nothing filled in (PERITEM-S1..S4).
  * (Sections 2-4, 6 and 8-8d upgraded shapes from before 1.2.36, and the members' photos section moved photos a
  * pre-1.2.28 file held; the 1.4.0 gate refuses those files, and they went with their steps.)
  *
@@ -325,6 +326,69 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
         d.close();
         const again = bootInto(dir, {}, loudBoot);
         assert(again.ok && !/Old money was dropped/.test(again.output), 'booting it again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+
+    // ── 8f. Per-item prices: four empty columns, each with its CHECK, fresh or upgraded (PERITEM-S1..S4) ──────────────────
+    // DESIGN-per-item-price-fable.md §9 "Schema": the shape compare alone does not see a CHECK, so a write each CHECK must
+    // refuse is made on both files, and the column's text is the same on both. Red if a schema step's ALTER drops its CHECK
+    // (or schema.sql's), or a step fills anything in.
+    {
+        console.log('\n— 8f. Per-item columns: the same four, with the same CHECKs, fresh or upgraded —');
+        const dir = release1236('per-item-1.2.36', (d) => {
+            d.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES ('old-post', 'offer', 'tools', 'Panels', '', ?)`).run('aa'.repeat(32));
+            // 1.2.36's deal holds its price in REAL `credits` (the hundredths step drops the column, keeps the row).
+            d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES ('old-deal', 'old-post', ?, ?, 0, 'completed')`).run('bb'.repeat(32), 'aa'.repeat(32));
+        });
+        const boot = bootInto(dir);
+        assert(boot.ok, `a 1.2.36 file boots with the four schema steps (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
+        const up = new Database(path.join(dir, 'state.db'));
+        up.pragma('foreign_keys = OFF');
+        const writable = new Database(path.join(freshDir, 'state.db'));
+        writable.pragma('foreign_keys = OFF');
+        writable.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES ('old-post', 'offer', 'tools', 'Panels', '', ?)`).run('aa'.repeat(32));
+        writable.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES ('old-deal', 'old-post', ?, ?, 'completed')`).run('bb'.repeat(32), 'aa'.repeat(32));
+        /** A column's definition as the file holds it (an ALTER's is appended to the table's SQL), up to its comma at depth 0. */
+        const definition = (d: Database.Database, table: string, column: string): string => {
+            const sql = (d.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) as { sql: string }).sql;
+            const at = sql.search(new RegExp(`(^|[\\s,(])${column} `));
+            if (at < 0) return '';
+            let depth = 0;
+            let i = at + (sql[at] === column[0] ? 0 : 1);
+            const start = i;
+            for (; i < sql.length; i++) {
+                if (sql[i] === '(') depth++;
+                else if (sql[i] === ')') { if (depth === 0) break; depth--; }
+                else if ((sql[i] === ',' || sql[i] === '\n') && depth === 0) break;
+            }
+            return sql.slice(start, i).trim();
+        };
+        const refuses = (d: Database.Database, sql: string) => { try { d.prepare(sql).run(); return false; } catch (e: any) { return /CHECK constraint failed/.test(e?.message ?? ''); } };
+        const takes = (d: Database.Database, sql: string) => { try { d.prepare(sql).run(); return true; } catch { return false; } };
+        for (const [name, d] of [['fresh', writable], ['upgraded', up]] as const) {
+            const defs = [['posts', 'units_left'], ['posts', 'lot_price_c'], ['posts', 'lot_units'], ['marketplace_transactions', 'item_option']]
+                .map(([t, c]) => definition(d, t, c));
+            assert(defs.every((def) => /CHECK \(/.test(def)), `${name}: each of the four is there with its CHECK (${defs.join(' | ')})`);
+            if (name === 'upgraded') {
+                const freshDefs = [['posts', 'units_left'], ['posts', 'lot_price_c'], ['posts', 'lot_units'], ['marketplace_transactions', 'item_option']]
+                    .map(([t, c]) => definition(writable, t, c));
+                assert(JSON.stringify(defs) === JSON.stringify(freshDefs), 'upgraded: each column reads exactly as a fresh install\'s, its CHECK included');
+                const old = up.prepare("SELECT units_left, lot_price_c, lot_units FROM posts WHERE id = 'old-post'").get() as Record<string, unknown>;
+                const oldDeal = up.prepare("SELECT item_option FROM marketplace_transactions WHERE id = 'old-deal'").get() as Record<string, unknown>;
+                assert(old.units_left === null && old.lot_price_c === null && old.lot_units === null && oldDeal.item_option === null,
+                    'upgraded: the listing and the deal that were there hold nothing new: no conversion, nothing filled in');
+            }
+            assert(refuses(d, "UPDATE posts SET units_left = -1 WHERE id = 'old-post'") && refuses(d, "UPDATE posts SET units_left = 10000 WHERE id = 'old-post'")
+                && refuses(d, "UPDATE posts SET lot_price_c = 0 WHERE id = 'old-post'") && refuses(d, "UPDATE posts SET lot_units = 1 WHERE id = 'old-post'")
+                && refuses(d, "UPDATE marketplace_transactions SET item_option = 'x' WHERE id = 'old-deal'"),
+                `${name}: a count of -1 or 10,000, a price for all of 0, one for 1, and item_option 'x' are refused`);
+            assert(takes(d, "UPDATE posts SET units_left = 0, lot_price_c = 550000, lot_units = 20 WHERE id = 'old-post'")
+                && takes(d, "UPDATE marketplace_transactions SET item_option = 'lot' WHERE id = 'old-deal'"),
+                `${name}: and 0 left, a price for all for 20, and 'lot' are taken`);
+        }
+        up.close();
+        writable.close();
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
         fs.rmSync(dir, { recursive: true, force: true });
     }
 

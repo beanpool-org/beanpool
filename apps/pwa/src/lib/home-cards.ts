@@ -142,6 +142,8 @@ export interface HomeMarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean; shownFrom?: ShownFromLine; shownPrice?: string;
+    /** An Offer priced for each one (core per-item.ts): only on such a row, so every other row and an older node's read as they did. */
+    priceType?: string; unitsLeft?: number; lot?: { units: number; price_c: number } | null;
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
     pinned?: boolean;
 }

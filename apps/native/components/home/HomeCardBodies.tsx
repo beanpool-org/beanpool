@@ -17,7 +17,7 @@ import {
     askedFacts, communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, freePriceWords, inviteAskNoticeHere, isHundredths, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, freePriceWords, inviteAskNoticeHere, isHundredths, perItemLine, perItemOf, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -405,7 +405,10 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
     const type = p.type === 'need' ? colors.market.need : colors.market.offer;
     const word = p.type === 'need' ? t('NEED') : t('OFFER');
     // A listing priced at 0 reads Free, as on the Market's card (core listing-price.ts); a price never sent draws nothing.
-    const price = showsBeans && isHundredths(p.price_c) ? (freePriceWords(p.price_c, p.type) ?? beansAmount(p.price_c)) : null;
+    // An Offer priced for each one says so in words, with how many are left and the price for all of them while it is on offer (core
+    // per-item.ts perItemLine, DESIGN-per-item-price-fable.md §2.1): "300 Beans each · 20 left · or all for 5,500", "Free · 20 left".
+    const each = showsBeans && !eventCopyOf(p) ? perItemOf(p) : null;
+    const price = each ? perItemLine(each) : showsBeans && isHundredths(p.price_c) ? (freePriceWords(p.price_c, p.type) ?? beansAmount(p.price_c)) : null;
     const far = formatDistance(p.distanceKm);
     const copy = eventCopyOf(p);
     const facts = [copy ? copyPriceLine(copy) : price, far].filter(Boolean).join(' · ');

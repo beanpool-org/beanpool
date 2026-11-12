@@ -708,6 +708,26 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         }
     });
 
+    it('an Offer priced for each one (slice P2): "300 Beans each" with its count and the price for all under it; 19 left drops the price for all', async () => {
+        const panels = { id: 'p20', type: 'offer' as const, title: 'Solar panels', category: 'tools', price_c: 30000, priceType: 'each', unitsLeft: 20, lot: { units: 20, price_c: 550000 }, photoUrl: null };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            market: { items: [panels, { ...panels, id: 'p21', title: 'Panels, one gone', unitsLeft: 19 }, { id: 'p22', type: 'offer', title: 'Cargo bike', category: 'tools', price_c: 150000, photoUrl: null }, { ...panels, id: 'p23', title: 'Free offcuts', price_c: 0, lot: null }], total14d: 4, more: false },
+        })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        const rows = within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item');
+        expect(rows[0].getAttribute('aria-label')).toBe('Offer, Solar panels, 300 Beans each · 20 left · or all for 5,500');
+        expect(within(rows[0]).getByTestId('home-each-line')).toHaveTextContent('20 left · or all for 5,500');
+        expect(rows[0]).toHaveTextContent('300 Beans each');
+        expect(rows[1].getAttribute('aria-label')).toBe('Offer, Panels, one gone, 300 Beans each · 19 left');
+        expect(within(rows[1]).getByTestId('home-each-line')).toHaveTextContent(/^19 left$/);
+        expect(rows[3].getAttribute('aria-label')).toBe('Offer, Free offcuts, Free · 20 left');
+        expect(within(rows[3]).getByTestId('home-each-line')).toHaveTextContent(/^20 left$/);
+        // Any other listing reads as it did: no extra line.
+        expect(rows[2].getAttribute('aria-label')).toBe('Offer, Cargo bike, 1,500 Beans');
+        expect(within(rows[2]).queryByTestId('home-each-line')).toBeNull();
+    });
+
     it('a fractional Market price to the cent: "1,234.50 Beans" grouped in English, "1234,50" in pt and es (formatHundredths: two decimals whenever there are cents)', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             market: { items: [

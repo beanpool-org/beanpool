@@ -35,6 +35,7 @@ import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { askForPostPhoto } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
+import { BeansText } from '../../components/BeansText';
 import { AuthorCard } from '../../components/AuthorCard';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { ChatPhotoViewer } from '../../components/chat/ChatPhoto';
@@ -57,7 +58,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, upperCase, standingFieldsFor, standingRoomOf, standingUnitForListing, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine, freePriceWords, freePriceLabel, perItemCard, upperCase, standingFieldsFor, standingRoomOf, standingUnitForListing, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
 import { dealAmountOrNull, priceAsTyped } from '../../utils/listing-money';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
@@ -1114,6 +1115,13 @@ function PostDetailModal() {
     // `price_c`: whole hundredths of a Bean, or null when the phone holds no figure for it ("—", never Free).
     const freeWords = freePriceWords(post.price_c, post.type, 'box');
     const freeLabel = freePriceLabel(post.price_c, post.type);
+    // An Offer priced for each one: the price box's three lines (core per-item.ts); null for any other listing.
+    const eachBox = isOffer ? perItemCard(post) : null;
+    const eachPrice = eachBox?.price ? (
+        <Text style={styles.priceValue} accessibilityLabel={eachBox.label} testID="price-each">
+            <BeansText text={eachBox.price} size={MARKET_CARD_TYPE.page.pagePrice.size} />
+        </Text>
+    ) : null;
     const priceLabel = freeLabel ? upperCase(freeLabel) : isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
     // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
@@ -1788,12 +1796,16 @@ function PostDetailModal() {
                     <View style={[shell.pageBox, styles.termsBox]} testID="price-terms">
                         <Text style={[shell.boxLabel, styles.termsLabel]}>{priceLabel}</Text>
                         <View style={styles.priceRow}>
-                            {freeWords ? <Text style={styles.priceValue} testID="price-free">{freeWords}</Text> : <>
+                            {freeWords ? <Text style={styles.priceValue} testID="price-free">{freeWords}</Text> : eachPrice ?? <>
                             <CurrencyDisplay amount={formatHundredths(post.price_c)} style={styles.priceValue} asView={true} />
                             {/* The unit, a space after the amount: " / Hr". */}
                             <Text style={styles.priceUnit}>{priceUnitWords(post.price_type) ? ` ${priceUnitWords(post.price_type)}` : ''}</Text>
                             </>}
                         </View>
+                        {/* An Offer priced for each one (DESIGN-per-item-price-fable.md §2.2): how many are left, then the price for all of
+                            them while it is on offer, each its own line. */}
+                        {!!eachBox && <Text style={styles.termsNote} testID="price-each-stock">{eachBox.stock}</Text>}
+                        {!!eachBox?.boxLot && <Text style={styles.termsNote} testID="price-each-lot">{eachBox.boxLot}</Text>}
                     </View>
                 )}
 

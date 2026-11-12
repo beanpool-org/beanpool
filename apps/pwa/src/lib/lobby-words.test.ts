@@ -20,6 +20,14 @@ describe('the lobby\'s terms, distance and notes', () => {
         expect(visitorPriceText(post({ price_c: 100, priceType: 'hourly' }), true)).toBe('1 Beans an hour');
         expect(visitorPriceText(post({ price_c: 0 }), true)).toBe('Free');
         expect(visitorPriceText(post({}), false)).toBe('Free, a swap, or ask');
+        // An Offer priced for each one says its price, how many are left and the price for all of them (core per-item.ts, slice P2).
+        const panels = { price_c: 30000, priceType: 'each', unitsLeft: 20, lot: { units: 20, price_c: 550000 } } as unknown as Partial<MarketplacePost>;
+        expect(visitorPriceText(post(panels), true)).toBe('300 Beans each · 20 left · or all for 5,500');
+        expect(visitorPriceText(post({ ...panels, unitsLeft: 19 }), true)).toBe('300 Beans each · 19 left');
+        expect(visitorPriceText(post({ ...panels, unitsLeft: 0 }), true)).toBe('300 Beans each · All taken for now');
+        expect(visitorPriceText(post({ ...panels, price_c: 0, lot: null }), true)).toBe('Free · 20 left');
+        // Where Beans are off there is no figure and no count.
+        expect(visitorPriceText(post(panels), false)).toBe('Free, a swap, or ask');
         expect(visitorDistanceText(10.6)).toBe('about 11 km');
         expect(visitorDistanceText(0.2)).toBe('about 1 km');
         expect(visitorKmText(10.6)).toBe('11 km');

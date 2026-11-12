@@ -10,7 +10,7 @@
  * The words and the small rules here; what decides whether the lobby is shown is lib/visitor-lobby-gate.ts.
  */
 
-import { askHost, FREE_PRICE_WORDS, t, tn, word, formatHundredths } from '@beanpool/core';
+import { askHost, FREE_PRICE_WORDS, perItemLine, perItemOf, t, tn, word, formatHundredths } from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
 
 /** Under the first card of the lobby's list, once (not per card). The lobby's fixed lines are word() keys (VISITOR_WORDS). */
@@ -49,8 +49,12 @@ export function beansOn(info: CommunityInfo | null | undefined): boolean {
 }
 
 /** A listing's terms on a visitor's card: no Beans figure where there are no Beans. */
-export function visitorPriceText(post: Pick<MarketplacePost, 'price_c' | 'priceType'>, beans: boolean): string {
+export function visitorPriceText(post: Pick<MarketplacePost, 'price_c' | 'priceType'> & Partial<Pick<MarketplacePost, 'unitsLeft' | 'lot' | 'status'>>, beans: boolean): string {
     if (!beans) return t(VISITOR_WORDS.noBeansTerms);
+    // An Offer priced for each one says its price, how many are left and the price for all of them, as the card does
+    // (core perItemLine, DESIGN-per-item-price-fable.md §2.1; the node sends a visitor the count as it sends the price).
+    const item = perItemOf(post);
+    if (item) return perItemLine(item) ?? t(FREE_PRICE_WORDS.short);
     if (!post.price_c) return t(FREE_PRICE_WORDS.short);
     // One English form for both ("1 Beans"), as the lobby always wrote it: the other languages get theirs. The figure is
     // whole hundredths, written as every figure is (formatHundredths); the plural form is read from its Beans.

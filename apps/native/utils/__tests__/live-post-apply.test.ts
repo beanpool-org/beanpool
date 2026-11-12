@@ -345,6 +345,9 @@ describe('every column the node sends survives the write, on a sync and on a pus
         shown_from: null, // a member's copy on the global community says where it is from (below)
         pinned_until: null, // a pin (design pinning §4): none on a listing that was never pinned
         pinned_at: null,
+        units_left: null, // a price for each one (per-item prices, slice P2): the count, and the price for all of them with its number;
+        lot_price_c: null, // all three NULL on a listing priced any other way
+        lot_units: null,
     };
     const directNeed = (extra: Record<string, unknown> = {}) => offer({
         id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,

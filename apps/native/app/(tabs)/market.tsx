@@ -23,6 +23,7 @@ import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
 import { ListingCopyLine } from '../../components/ListingCopyLine';
 import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
 import { ListingPrice } from '../../components/ListingPrice';
+import { ListingEachLine } from '../../components/ListingEachLine';
 import { ActivityWaterfall } from '../../components/ActivityWaterfall';
 import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
@@ -69,6 +70,8 @@ import { MarketLearnLine } from '../../components/learn/MarketLearnLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, type WordKey } from '@beanpool/core';
+// A price for each one: the card's pieces (slice P2).
+import { perItemCard } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 import { isPostPinned, anyLivePin, marketPins } from '../../utils/pins';
 
@@ -1752,6 +1755,10 @@ export default function MarketScreen() {
         const priceLabel = priceUnit(item.price_type);
         // A member's copy on the global community: where it is from and its price there, in words, where its author would be.
         const copy = eventCopyOf(item);
+        // An Offer priced for each one (core per-item.ts, DESIGN-per-item-price-fable.md §2.1): "300 🫘 each" where the price stands and
+        // how many are left (and the price for all of them while it is on offer) in its own phrases. Where the price is not shown (a
+        // copy, Beans off, the Pulse) there is no count either; any other listing is drawn as it always was.
+        const eachCard = !isPulse && showsBeans && !copy ? perItemCard(item) : null;
 
         const catEmoji = categoryEmoji(item.category);
         const catLabel = categoryLabel(item.category);
@@ -1823,7 +1830,7 @@ export default function MarketScreen() {
                         )}
                         {!isPulse && showsBeans && !copy && (
                             <View style={[shell.gridBadge, shell.gridPriceEnd]}>
-                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.gridPriceText} />
+                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.gridPriceText} listing={item} showAll />
                             </View>
                         )}
                         </View>
@@ -1866,6 +1873,8 @@ export default function MarketScreen() {
                                     ) : null}
                                     {groupScopeBadgeText ? (
                                         <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" /></View>
+                                    ) : eachCard ? (
+                                        <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role={eachCard.stockOut ? 'warn' : 'quiet'} label={eachCard.chip} testID="card-stock-chip" /></View>
                                     ) : !!item.repeatable && !isOwn && item.status !== 'pending' ? (
                                         <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} /></View>
                                     ) : null}
@@ -1908,6 +1917,7 @@ export default function MarketScreen() {
                                 {copy ? copyPriceLine(copy) : byLine(cardAuthor, elderCard, isOwn)}
                             </Text>
                             {distanceLine(item)}
+                            {eachCard && <Text style={styles.compactAuthor} numberOfLines={1} testID="card-stock">{eachCard.stock}</Text>}
                             {groupScopeBadgeText && (
                                 <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
                                     <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
@@ -1918,7 +1928,7 @@ export default function MarketScreen() {
                         </View>
                         <View style={shell.compactEnd}>
                             {!isPulse && showsBeans && !copy && (
-                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.compactPrice} />
+                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={shell.compactPrice} listing={item} showAll />
                             )}
                             {/* The one chip (10/800, 6 x 2, corners 6): OFFER / NEED in their pairs, PULSE the warning one. */}
                             <CardChip
@@ -1971,13 +1981,14 @@ export default function MarketScreen() {
                                 {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" wrap />}
                             </View>
                             {!isPulse && showsBeans && !copy && (
-                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={[styles.price, { fontSize: 16 }]} />
+                                <ListingPrice price_c={item.price_c} type={item.type} unit={priceLabel || ''} style={[styles.price, { fontSize: 16 }]} listing={item} />
                             )}
                         </View>
 
                         <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text.body, marginBottom: 4 }} numberOfLines={1}>
                             {item.title}
                         </Text>
+                        {eachCard && <View style={{ marginBottom: 4 }}><ListingEachLine listing={item} /></View>}
 
                         {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
                         {distanceLine(item)}

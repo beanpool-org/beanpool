@@ -66,6 +66,9 @@ import {
     type ListFilter,
 } from '../lib/live-posts';
 import { dealAmountFor, eventCopyOf, aboutOfPost, chatAboutDrafts, feeOf, formatHundredths, isHundredths, parseHundredths } from '@beanpool/core';
+// A price for each one: the price box's lines (slice P2; its own lines so a parallel slice's edits to the import above do not meet these).
+import { perItemCard } from '@beanpool/core';
+import { BeansText } from '../components/BeansText';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
@@ -2174,15 +2177,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     {freePriceLabel(selectedPost.price_c, selectedPost.type) ?? (selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay'))}
                                 </p>
                                 <div className={`flex flex-row flex-wrap items-center gap-x-1 min-w-0 ${PAGE_TYPE.price} text-nature-950 dark:text-white`}>
-                                    {freePriceWords(selectedPost.price_c, selectedPost.type, 'box') ?? (<>
+                                    {freePriceWords(selectedPost.price_c, selectedPost.type, 'box') ?? (perItemCard(selectedPost) ? <BeansText text={perItemCard(selectedPost)!.price!} px={20} /> : (<>
                                         <span>{formatHundredths(selectedPost.price_c)}</span>
                                         <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
                                             <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                                             {priceUnit(selectedPost.priceType)}
                                         </span>
-                                    </>)}
+                                    </>))}
                                 </div>
-                                {selectedPost.price_c > 0 && (
+                                {/* An Offer priced for each one (DESIGN-per-item-price-fable.md §2.2): how many are left, then the price
+                                    for all of them while it is on offer. The hours it comes to is for a price of a person's time, so an item
+                                    price does not carry it. */}
+                                {perItemCard(selectedPost) && (
+                                    <>
+                                        <p data-testid="listing-each-stock" className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>{perItemCard(selectedPost)!.stock}</p>
+                                        {perItemCard(selectedPost)!.boxLot && (
+                                            <p data-testid="listing-each-lot" className={`m-0 mt-0.5 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>{perItemCard(selectedPost)!.boxLot}</p>
+                                        )}
+                                    </>
+                                )}
+                                {selectedPost.price_c > 0 && !perItemCard(selectedPost) && (
                                     <p className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
                                         {t('≈ {n} hrs', { n: formatNumber(selectedPost.price_c / 4000, 1) })}
                                     </p>

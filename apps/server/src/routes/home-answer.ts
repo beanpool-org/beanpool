@@ -274,6 +274,8 @@ export interface MarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; price_c?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy of a listing (engine/event-copy.ts): where it is from, and its price there, in words. */
     shownCopy?: true; shownFrom?: ShownFrom; shownPrice?: string;
+    /** An Offer priced for each one (core per-item.ts): its unit, how many can be taken now and its price for all of them. Only on such a row. */
+    priceType?: 'each'; unitsLeft?: number; lot?: { units: number; price_c: number };
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): only on a pinned row, so an unpinned row and an older node's read as they did. */
     pinned?: true;
 }
@@ -1079,6 +1081,16 @@ function copyFieldsOf(p: MarketplacePost): Pick<MarketItem, 'shownCopy' | 'shown
     return p.shownCopy ? { shownCopy: true, ...(p.shownFrom ? { shownFrom: p.shownFrom } : {}), ...(p.shownPrice ? { shownPrice: p.shownPrice } : {}) } : {};
 }
 
+/**
+ * What a Home row says of an Offer priced for each one (core per-item.ts): its unit, how many can be taken now and its price for all
+ * of them, so the card can say "300 Beans each" and "20 left · or all for 5,500". Only where Beans are on (a count belongs with the
+ * price) and only on such a listing: every other row, and an older node's, reads as it did.
+ */
+function eachFieldsOf(c: Ctx, p: MarketplacePost): Pick<MarketItem, 'priceType' | 'unitsLeft' | 'lot'> {
+    if (!c.switches.beans || p.priceType !== 'each' || typeof p.unitsLeft !== 'number') return {};
+    return { priceType: 'each', unitsLeft: p.unitsLeft, ...(p.lot ? { lot: { units: p.lot.units, price_c: p.lot.price_c } } : {}) };
+}
+
 function marketCard(c: Ctx): HomeCards['market'] | undefined {
     built('market');
     // Nearest first where the listings come that way (the global profile's "Near you") and there is a point; newest
@@ -1107,6 +1119,7 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
             ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
             ...(c.point ? { distanceKm: p.distanceKm ?? null } : {}),
             ...copyFieldsOf(p),
+            ...eachFieldsOf(c, p),
             ...(pinnedIds.has(p.id) ? { pinned: true as const } : {}),
         }));
     // The empty state (§6.1): on a node that asks for example cards, fewer than a handful of real listings in view.
@@ -1182,6 +1195,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
         ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
         ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
         ...copyFieldsOf(p),
+        ...eachFieldsOf(c, p),
     }));
     return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items, more: pool.length > SEARCH_ITEMS };
 }

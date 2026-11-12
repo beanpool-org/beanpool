@@ -1660,9 +1660,9 @@ export interface MarketplacePost {
     description: string;
     price_c: number;
     priceType: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
-    /** Priced for each one only (DESIGN-per-item-price-fable.md §3): how many can be taken up now, and the price for all of them as stored. */
+    /** Priced for each one only (DESIGN-per-item-price-fable.md §3): how many can be taken up now, and the price for all of them as stored (core per-item.ts, where lot is `ItemLot | null`). */
     unitsLeft?: number;
-    lot?: { units: number; price_c: number };
+    lot?: { units: number; price_c: number } | null;
     authorPublicKey: string;
     authorCallsign: string;
     createdAt: string;

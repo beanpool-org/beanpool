@@ -33,6 +33,13 @@ const ENVELOPE: RelayEnvelope = {
     payloadHash: '1fb360f835b12359f9237d07f9be7a4413145d8541341a16ba74da14361f64ef',
     sig: 'EDMl9sjMuX9vTP3gSgL+owZm6qPPeZ4vrfa4Fvk8Wr6o7Fm6tsjGdtC0OGl0VhPGY9f0K+YNPHTrjRiZNsEdCw==',
 };
+/** Ana, her community's server now published on port 8443, writes Ben another line, frozen: her home names its port. */
+const PORT_ENVELOPE: RelayEnvelope = {
+    v: 1, kind: 'dm-line', itemId: '3c9a6b1e-2f3d-4e5a-8b7c-6d5e4f3a2b10', senderKey: ANA_KEY, senderHome: 'a.example:8443',
+    recipient: BEN_KEY, recipientHome: 'b.example', at: 1763020800000,
+    payloadHash: '1fb360f835b12359f9237d07f9be7a4413145d8541341a16ba74da14361f64ef',
+    sig: '5GShmqaHqRZ6WH37bXMb7elyStknLBLqdy7Wd5PQdkvJ6X8iCcqvKBRQB3/Nv5F33h1iLvGzC4kYyHEs161WCA==',
+};
 /** Ana and Ben's conversation, frozen. */
 const CONVERSATION = 'ddd3ee08-0d30-4589-89c6-6769a723b882';
 
@@ -63,10 +70,23 @@ describe('the envelope, frozen', () => {
         expect(relayEnvelopeVerifies(ENVELOPE)).toBe(true);
     });
 
+    it('from a home on port 8443: Ana\'s signature over the same array, the home with its port', async () => {
+        const digest = sha256(utf8ToBytes(JSON.stringify([
+            'beanpool-relay-envelope/1', 'dm-line', ANA_KEY, 'a.example:8443', BEN_KEY, 'b.example', '3c9a6b1e-2f3d-4e5a-8b7c-6d5e4f3a2b10',
+            '1763020800000', PORT_ENVELOPE.payloadHash,
+        ])));
+        const sig = new Uint8Array(Buffer.from(PORT_ENVELOPE.sig, 'base64'));
+        expect(ed25519.verify(sig, digest, hexToBytes(ANA_KEY), { zip215: false })).toBe(true);
+        expect(await signRelayEnvelope(fieldsOf(PORT_ENVELOPE), signer(ANA))).toEqual(PORT_ENVELOPE);
+        expect(readRelayEnvelope(JSON.parse(JSON.stringify(PORT_ENVELOPE)))).toEqual(PORT_ENVELOPE);
+        expect(relayEnvelopeVerifies(PORT_ENVELOPE)).toBe(true);
+    });
+
     it('a change to any one value breaks the signature', () => {
         const changes: Partial<RelayEnvelope>[] = [
             { kind: 'dm-blob' }, { itemId: '0c9a6b1e-2f3d-4e5a-8b7c-6d5e4f3a2b11' }, { senderKey: BEN_KEY }, { senderHome: 'c.example' },
-            { recipient: ANA_KEY }, { recipientHome: 'c.example' }, { at: 1763020800001 },
+            { senderHome: 'a.example:8443' }, { recipient: ANA_KEY }, { recipientHome: 'c.example' }, { recipientHome: 'b.example:8443' },
+            { at: 1763020800001 },
             { payloadHash: relayPayloadHash(`${PAYLOAD}x`) },
         ];
         for (const change of changes) expect(relayEnvelopeVerifies({ ...ENVELOPE, ...change })).toBe(false);
@@ -97,6 +117,7 @@ describe('the envelope, frozen', () => {
     it('each value has one spelling', () => {
         for (const change of [
             { senderHome: 'A.example' }, { senderHome: 'a.example:443' }, { recipientHome: 'https://b.example' },
+            { senderHome: 'a.example:08443' }, { recipientHome: 'b.example:0' }, { recipientHome: 'b.example:443' },
             { senderKey: ANA_KEY.toUpperCase() }, { itemId: 'short' }, { at: -1 }, { at: 1.5 }, { at: '1763020800000' },
             { payloadHash: ENVELOPE.payloadHash.toUpperCase() }, { v: 2 }, { sig: ENVELOPE.sig.replace(/==$/, '') },
         ]) {
@@ -127,6 +148,19 @@ describe('the home rule: an envelope naming a home other than the server that si
     it('a home spelled another way is another home', () => {
         expect(relayEnvelopeFromItsHome(ENVELOPE, 'A.example')).toBe(false);
         expect(relayEnvelopeFromItsHome(ENVELOPE, 'a.example.')).toBe(false);
+        expect(relayEnvelopeFromItsHome(ENVELOPE, 'a.example:443')).toBe(false);
+    });
+
+    it('a home on another port is another home, both ways', () => {
+        const fromPort = { envelope: PORT_ENVELOPE, payload: PAYLOAD };
+        expect(checkRelayItem(fromPort, { signedBy: 'a.example:8443', isHere: atB })).toEqual({ ok: true, item: fromPort });
+        // Naming a.example:8443, carried by the server at a.example (port 443): dropped.
+        expect(checkRelayItem(fromPort, { signedBy: 'a.example', isHere: atB })).toEqual({ ok: false, reason: 'wrong-home' });
+        // Naming a.example (port 443), carried by the server at a.example:8443: dropped.
+        expect(checkRelayItem(item, { signedBy: 'a.example:8443', isHere: atB })).toEqual({ ok: false, reason: 'wrong-home' });
+        // For b.example:8443, at the server at b.example (port 443): not for here.
+        expect(checkRelayItem(fromPort, { signedBy: 'a.example:8443', isHere: (h) => h === 'b.example:8443' }))
+            .toEqual({ ok: false, reason: 'not-for-here' });
     });
 
     it('an item for another server, a changed payload, or no item at all is dropped too', () => {
@@ -163,7 +197,7 @@ describe('the conversation across communities is named from the two keys alone',
             ...fieldsOf(ENVELOPE), senderKey: BEN_KEY, senderHome: 'b.example', recipient: ANA_KEY, recipientHome: 'ana-garden.org',
             itemId: '2c9a6b1e-2f3d-4e5a-8b7c-6d5e4f3a2b10',
         }, signer(BEN));
-        for (const env of [before, moved, reply]) {
+        for (const env of [before, moved, reply, PORT_ENVELOPE]) {
             expect(relayEnvelopeVerifies(env)).toBe(true);
             expect(relayConversationId(env.senderKey, env.recipient)).toBe(CONVERSATION);
         }

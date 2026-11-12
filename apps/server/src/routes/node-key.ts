@@ -7,8 +7,9 @@
  *   POST /api/node/check  a server's signed  { items: RelayItem[] (at most NODE_CHECK_ITEMS_MAX) }
  *                         request only      → { origin, key, items: [{ itemId, ok, reason? }] }
  *
- * `/api/node/key` is what another server fetches, over TLS from this server's name, to check a request this one signed
- * (engine/node-signature.ts). The same answer for everyone, made at most once an hour (engine/node-key.ts).
+ * `/api/node/key` is what another server fetches, over TLS from this server's home (its name, and its port when that is not
+ * 443: engine/node-key.ts ownNodeHome), to check a request this one signed (engine/node-signature.ts). The same answer for
+ * everyone, made at most once an hour (engine/node-key.ts).
  *
  * `/api/node/check` stores nothing. It answers what this server made of a server's signed request (the origin and key it
  * verified, by the real door: engine/node-signature.ts) and of each relay item in it, by the rules every item will meet

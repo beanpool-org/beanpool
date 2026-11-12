@@ -12,12 +12,15 @@
  * made. A server with no node key yet has no document, and signs nothing: no hard gate, it simply can't speak for itself
  * to another community until it has one.
  *
- * A request this server signs names its own primary address (engine/own-addresses.ts primaryAddress) as its origin, the
- * host the other server fetches this document from. A server that knows none of its names signs nothing.
+ * A request this server signs names its own home as its origin (ownNodeHome): its primary address (engine/own-addresses.ts
+ * primaryAddress) as `host[:port]` (@beanpool/core nodeHomeOf), with its public address's port when that is not 443. That
+ * is the home the other server fetches this document from, on that port. A server that knows none of its names signs
+ * nothing, and takes no other server's request (isOwnNodeHome).
  */
 import crypto from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { NODE_KEY_VALIDITY_MS, buildNodeRequestHeaders, signNodeKeyDocument, type NodeKeyDocument } from '@beanpool/core';
+import { NODE_KEY_VALIDITY_MS, audienceOf, buildNodeRequestHeaders, nodeHomeOf, signNodeKeyDocument, type NodeKeyDocument } from '@beanpool/core';
+import { PUBLIC_URL_RULES, resolvePublicNodeUrl } from '../state-engine.js';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
 import { audienceStanding, knowsItsNames, primaryAddress } from './own-addresses.js';
 
@@ -61,20 +64,47 @@ export async function ownNodeKeyDocument(now = Date.now()): Promise<NodeKeyDocum
 }
 
 /**
- * Whether `host` is one of this server's own names, for a request another server signed (engine/node-signature.ts, the
- * destination) or an item it carries (routes/node-key.ts, the recipient's home). Never on a server that knows none of its
- * names: it can't tell a request meant for it from one that wasn't, and a loopback or home-network host is every such
- * server's (own-addresses.ts item 5), so a request signed for one would be good at all of them.
+ * The home this server answers as at `host`, one of its own names: its public address (resolvePublicNodeUrl, own-addresses.ts
+ * item 1) with that address's port, when the public address is `host` on a port other than 443; `host` itself (port 443)
+ * for every other name.
  */
-export function isOwnNodeHome(host: string): boolean {
-    return knowsItsNames() && audienceStanding(host) === 'own';
+function homeOfOwnName(host: string): string {
+    const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community);
+    const published = url ? nodeHomeOf(url) : null;
+    return published && audienceOf(published) === host ? published : host;
+}
+
+/**
+ * This server's home: how other servers name it, the origin of every request it signs, where they fetch its key document.
+ * Its primary address (own-addresses.ts primaryAddress) as `host[:port]`: a server published at coop.example.org:8443 is
+ * the home coop.example.org:8443, one at byron.beanpool.org (port 443) the home byron.beanpool.org. Null while it knows
+ * none of its names.
+ */
+export function ownNodeHome(): string | null {
+    const primary = primaryAddress();
+    return primary ? homeOfOwnName(primary) : null;
+}
+
+/**
+ * Whether `home` is one of this server's own homes, for a request another server signed (engine/node-signature.ts, the
+ * destination) or an item it carries (routes/node-key.ts, the recipient's home): one of its names (own-addresses.ts) on
+ * the port it answers there (homeOfOwnName). A home on another port is another server's: a server published at
+ * coop.example.org:8443 is not the home coop.example.org, whatever answers on 443 there. Never on a server that knows none
+ * of its names: it can't tell a request meant for it from one that wasn't, and a loopback or home-network host is every
+ * such server's (own-addresses.ts item 5), so a request signed for one would be good at all of them.
+ */
+export function isOwnNodeHome(home: string): boolean {
+    if (!knowsItsNames()) return false;
+    const host = audienceOf(home);
+    if (!host || audienceStanding(host) !== 'own') return false;
+    return homeOfOwnName(host) === home;
 }
 
 /** The X-BeanPool-Node header for a request this server sends to `url`. Throws when it has no key or knows none of its names. */
 export async function ownNodeRequestHeaders(input: { method: string; url: string; body: string; timestamp?: number; nonce?: string }): Promise<Record<string, string>> {
     const s = nodeSigner();
     if (!s) throw new Error('This server has no node key yet (data/libp2p_key), so it cannot sign a request to another community.');
-    const origin = primaryAddress();
+    const origin = ownNodeHome();
     if (!origin) throw new Error('This server knows none of its own names, so it cannot sign a request to another community.');
     return buildNodeRequestHeaders({ ...input, origin, keyHex: s.keyHex, sign: s.sign });
 }

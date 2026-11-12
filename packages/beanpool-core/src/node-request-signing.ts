@@ -8,13 +8,21 @@
  * **The key document**, `GET /api/node/key` on every server: its own Ed25519 key (the node key, data/libp2p_key, which
  * already signs its push notices), until when that key may be trusted (`validUntil`, never more than NODE_KEY_VALIDITY_MS
  * ahead), and the keys it signed with before, each with until when a request signed by it may still be accepted. Signed by
- * the key it names, so it proves the server holds that key. Another server fetches it over TLS from the host a request
- * names as its origin: that host's certificate is what ties the key to the name (trust on first use). Nothing of ours is
- * asked, and any domain or public address with a certificate will do.
+ * the key it names, so it proves the server holds that key. Another server fetches it over TLS from the home a request
+ * names as its origin, on that home's port ({@link nodeKeyUrl}: `https://<host>[:<port>]/api/node/key`): that host's
+ * certificate is what ties the key to the home (trust on first use). Nothing of ours is asked, and any domain or public
+ * address with a certificate will do, on any port.
+ *
+ * **A server's home** is how other servers name it: its public address as `host[:port]` ({@link nodeHomeOf}), the host
+ * lower case with no scheme, path or trailing dot, and the port written only when it is not 443. So most homes are the bare
+ * host, `byron.beanpool.org` and `byron.beanpool.org:443` are one home, and a server published at `coop.example.org:8443`
+ * is the home `coop.example.org:8443`, another home than `coop.example.org`'s. A request's origin and destination, where
+ * its key document is fetched, and an envelope's sender and recipient homes (relay-envelope.ts) are all homes, in this one
+ * spelling.
  *
  * **The request signature**, header X-BeanPool-Node:
  *
- *   v=1, origin=<host>, destination=<host>, key=<64 hex>, ts=<ms>, nonce=<32 hex>, sig=<base64>
+ *   v=1, origin=<home>, destination=<home>, key=<64 hex>, ts=<ms>, nonce=<32 hex>, sig=<base64>
  *
  * over the bytes
  *
@@ -22,11 +30,11 @@
  *                hex(SHA-256(BODY)) )
  *
  * the member format-2 shape (request-signing.ts) under its own tag, so no member signature can be taken for a server's and
- * no server's for a member's. ORIGIN is the sending server's own name, DESTINATION the host it connected to, both in the one
- * form {@link audienceOf} writes (lower case, no scheme, port, path or trailing dot). PATH is the path alone, as the
- * receiver's router sees it. The receiving server takes a request only when DESTINATION is one of its own names, the time
- * is within NODE_REQUEST_SKEW_MS of its clock, the key is ORIGIN's (its key document names it, current or previous, still
- * valid), the signature checks out, and the nonce was never spent (apps/server engine/node-signature.ts).
+ * no server's for a member's. ORIGIN is the sending server's own home, DESTINATION the home it connected to (the URL's host
+ * and port). PATH is the path alone, as the receiver's router sees it. The receiving server takes a request only when
+ * DESTINATION is one of its own homes, the time is within NODE_REQUEST_SKEW_MS of its clock, the key is ORIGIN's (its key
+ * document names it, current or previous, still valid), the signature checks out, and the nonce was never spent
+ * (apps/server engine/node-signature.ts).
  *
  * One spelling for everything: a key, a nonce and a time are each one exact form, and a signature is canonical base64 of 64
  * bytes. Every check is strict RFC 8032 (`zip215: false`): one signature for one key and message.
@@ -63,9 +71,52 @@ const SIG_B64 = /^[A-Za-z0-9+/]{86}==$/;
 
 // ─── Spellings ──────────────────────────────────────────────────────────────────────────────
 
-/** Whether `host` is a server name in the one form signed: exactly what {@link audienceOf} makes of it. */
-export function isNodeHost(host: unknown): host is string {
-    return typeof host === 'string' && host.length > 0 && host.length <= 253 && audienceOf(host) === host;
+/** The port a home is on when it names none: HTTPS's. */
+const HTTPS_PORT = 443;
+
+/**
+ * A server's home in its one spelling: the host as {@link audienceOf} writes it, then `:port` when the server is reached on
+ * any port but 443, in decimal with no leading zero. The port is the one written, else the scheme's (80 for http and ws, 443
+ * for https and wss); a bare `host[:port]` with no scheme is HTTPS's. So `byron.beanpool.org`, `byron.beanpool.org:443`
+ * and `https://Byron.beanpool.org./x` are all the home `byron.beanpool.org`, and `https://coop.example.org:8443/x` is
+ * `coop.example.org:8443`. Null for anything with no such host, a host longer than 253 characters, or a port outside
+ * 1 to 65535. The one normaliser for every home: a request's origin and destination, where a key document is fetched, an
+ * envelope's sender and recipient homes.
+ */
+export function nodeHomeOf(input: string): string | null {
+    const host = audienceOf(input);
+    if (!host || host.length > 253) return null;
+    // audienceOf has read the URL and accepted it: here only its port is read, by the same steps.
+    let s = String(input ?? '').trim();
+    let port = HTTPS_PORT;
+    const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(s);
+    if (scheme) {
+        if (/^(http|ws)$/i.test(scheme[1])) port = 80;
+        s = s.slice(scheme[0].length);
+    } else if (s.startsWith('//')) {
+        s = s.slice(2);
+    }
+    const end = s.search(/[/?#\\]/);
+    let authority = end === -1 ? s : s.slice(0, end);
+    authority = authority.slice(authority.lastIndexOf('@') + 1);
+    const afterHost = authority.startsWith('[') ? authority.slice(authority.indexOf(']') + 1) : authority;
+    const written = /:(\d+)$/.exec(afterHost);
+    if (written) {
+        port = Number(written[1]);
+        if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) return null;
+    }
+    return port === HTTPS_PORT ? host : `${host}:${port}`;
+}
+
+/** Whether `home` is a server's home in its one spelling: exactly what {@link nodeHomeOf} makes of it. */
+export function isNodeHost(home: unknown): home is string {
+    return typeof home === 'string' && home.length > 0 && nodeHomeOf(home) === home;
+}
+
+/** Where `home`'s key document is fetched: `https://<home>/api/node/key`, on the home's own port. Throws for a home not in its one spelling. */
+export function nodeKeyUrl(home: string): string {
+    if (!isNodeHost(home)) throw new Error(`${JSON.stringify(home)} is not a server's home (a host, or host:port for a port other than 443)`);
+    return `https://${home}${NODE_KEY_PATH}`;
 }
 
 /** A path as a router sees it: from the first `/`, no query, no fragment, no line break, no backslash. */
@@ -186,11 +237,11 @@ export function nodeRequestSignatureVerifies(h: NodeRequestHeader, request: { me
 
 export interface NodeRequestInput {
     method: string;
-    /** The full URL the request goes to: the destination is its host, the path its path. */
+    /** The full URL the request goes to: the destination is its home ({@link nodeHomeOf}: host, and port when not 443), the path its path. */
     url: string;
     /** Exactly the body sent ('' for none). */
     body: string | Uint8Array;
-    /** The sending server's own name, as it is reached (its primary address). */
+    /** The sending server's own home, as it is reached (its public address as `host[:port]`), in its one spelling. */
     origin: string;
     /** The sending server's key, raw Ed25519, lower-case hex: the one its key document names. */
     keyHex: string;
@@ -203,9 +254,9 @@ export interface NodeRequestInput {
 
 /** The X-BeanPool-Node header for a request a server sends. Throws, having signed nothing, on anything it can't carry. */
 export async function buildNodeRequestHeaders(input: NodeRequestInput): Promise<Record<string, string>> {
-    const destination = audienceOf(input.url);
-    if (!destination) throw new Error(`Cannot sign a server request for ${JSON.stringify(input.url)}: it names no host`);
-    if (!isNodeHost(input.origin)) throw new Error(`Cannot sign a server request from ${JSON.stringify(input.origin)}: not a bare host name`);
+    const destination = nodeHomeOf(input.url);
+    if (!destination) throw new Error(`Cannot sign a server request for ${JSON.stringify(input.url)}: it names no host, or no port there can be`);
+    if (!isNodeHost(input.origin)) throw new Error(`Cannot sign a server request from ${JSON.stringify(input.origin)}: not a home in its one spelling (host, or host:port)`);
     if (!KEY_HEX.test(input.keyHex)) throw new Error('Cannot sign a server request: the key is not 64 lower-case hex characters');
     const method = input.method.toUpperCase();
     const path = signedPathOf(input.url);

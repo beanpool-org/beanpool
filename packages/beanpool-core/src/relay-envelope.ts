@@ -2,7 +2,8 @@
  * What crosses between two communities' servers, item by item, and who vouches for it (messages across communities, slice
  * X1: scratch/fable-design/DESIGN-cross-chat-voice-fable.md §3.2).
  *
- * Every item has a kind, an id, a sender (a member's key and their home: the host of the community they belong to), a
+ * Every item has a kind, an id, a sender (a member's key and their home: the server of the community they belong to, as
+ * other servers name it, `host[:port]` with the port only when it is not 443: node-request-signing.ts nodeHomeOf), a
  * recipient (a member's key, or a group at the community that hosts it) with the recipient's home, and a payload no server
  * can read. Two signatures stand on it:
  *
@@ -17,7 +18,8 @@
  *
  * **The home rule.** A receiving server drops an item whose envelope names a sender home other than the server that signed
  * the request ({@link checkRelayItem}, `wrong-home`). So no third server can pass itself off as someone's home and collect
- * the replies: it can carry only items whose senders name it as their home, and their signatures say so.
+ * the replies: it can carry only items whose senders name it as their home, and their signatures say so. A home on another
+ * port is another home: `coop.example.org:8443` is not `coop.example.org`.
  *
  * **The conversation** between two people in different communities is named from their two keys alone
  * ({@link relayConversationId}): a community may change its address (`<name>.beanpool.org` to a domain of its own) and the
@@ -67,10 +69,10 @@ export interface RelayEnvelopeFields {
     itemId: string;
     /** The writer's member key, raw Ed25519, lower-case hex. */
     senderKey: string;
-    /** The host of the writer's community, as {@link isNodeHost} spells one. */
+    /** The home of the writer's community's server, as {@link isNodeHost} spells one: its host, and its port when not 443. */
     senderHome: string;
     recipient: string;
-    /** The host of the recipient's community, or of the group's. */
+    /** The home of the recipient's community's server, or of the group's, spelled the same way. */
     recipientHome: string;
     /** When the sender signed it, milliseconds by their clock. */
     at: number;
@@ -107,9 +109,9 @@ function fieldsProblem(f: RelayEnvelopeFields): string | null {
     if (!isRelayItemKind(f.kind)) return 'an unknown kind';
     if (typeof f.itemId !== 'string' || !ITEM_ID.test(f.itemId)) return 'an item id is 8 to 64 letters, digits, - or _';
     if (typeof f.senderKey !== 'string' || !KEY_HEX.test(f.senderKey)) return 'the sender key is not 64 lower-case hex characters';
-    if (!isNodeHost(f.senderHome)) return 'the sender home is not a bare host name';
+    if (!isNodeHost(f.senderHome)) return 'the sender home is not a home in its one spelling (host, or host:port)';
     if (!isRelayRecipient(f.recipient)) return 'the recipient is not a member key or group:<id>';
-    if (!isNodeHost(f.recipientHome)) return 'the recipient home is not a bare host name';
+    if (!isNodeHost(f.recipientHome)) return 'the recipient home is not a home in its one spelling (host, or host:port)';
     if (!Number.isSafeInteger(f.at) || f.at < 0) return 'the time is not milliseconds';
     if (typeof f.payloadHash !== 'string' || !HASH_HEX.test(f.payloadHash)) return 'the payload hash is not 64 lower-case hex characters';
     return null;

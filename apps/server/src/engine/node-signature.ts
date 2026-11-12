@@ -7,12 +7,14 @@
  * first, so nothing that fails early costs a fetch or a signature check):
  *   1. the header is one (400 bad_node_signature);
  *   2. its time is within NODE_REQUEST_SKEW_MS of this server's clock, either way (401 stale);
- *   3. its destination is one of this server's own names (engine/own-addresses.ts audienceStanding 'own'): one signed for
- *      another server is 421 wrong_destination, so a request one server received can't be replayed at another. A server
- *      that knows none of its names takes no server request at all: it can't tell one meant for it from one that wasn't;
+ *   3. its destination is one of this server's own homes (engine/node-key.ts isOwnNodeHome: one of its names, on the port
+ *      it answers there): one signed for another server, or for this host on another port, is 421 wrong_destination, so a
+ *      request one server received can't be replayed at another. A server that knows none of its names takes no server
+ *      request at all (421 too): it can't tell one meant for it from one that wasn't;
  *   4. its nonce was not spent (403 replay);
- *   5. its key is its origin's: the key document of the origin, fetched over TLS from `https://<origin>/api/node/key`,
- *      names it, as the current key while the document is valid or as a previous key while that key's own time lasts.
+ *   5. its key is its origin's: the key document of the origin, fetched over TLS from the origin's home on its own port
+ *      (@beanpool/core nodeKeyUrl: `https://<host>[:<port>]/api/node/key`), names it, as the current key while the
+ *      document is valid or as a previous key while that key's own time lasts.
  *      Past either, 401 node_key_expired; a key the document doesn't name, or an origin whose document can't be had, 401
  *      node_key_unknown;
  *   6. the signature is that key's over the request as it arrived, the body's exact bytes included (403 bad_signature);
@@ -38,7 +40,7 @@
  */
 import type Koa from 'koa';
 import {
-    NODE_KEY_PATH, NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, NODE_REQUEST_SKEW_MS, nodeKeyStanding, nodeRequestSignatureVerifies,
+    NODE_KEY_VALIDITY_MS, NODE_REQUEST_HEADER, NODE_REQUEST_SKEW_MS, nodeKeyStanding, nodeKeyUrl, nodeRequestSignatureVerifies,
     parseNodeRequestHeader, readNodeKeyDocument, type NodeKeyDocument,
 } from '@beanpool/core';
 import { NonceStore } from './member-signature.js';
@@ -101,11 +103,12 @@ const FAILED_LOG_EVERY_MS = 60_000;
 let failedLoggedAt = -Infinity;
 let failedSince = 0;
 
-type DocumentFetch = (origin: string) => Promise<unknown>;
+/** Fetches the key document at `url`, the origin's nodeKeyUrl. */
+type DocumentFetch = (url: string) => Promise<unknown>;
 
-/** The real fetch: `https://<origin>/api/node/key`, public addresses only, no redirect, small, quick. */
-async function fetchOverTls(origin: string): Promise<unknown> {
-    const res = await ssrfSafeFetch(`https://${origin}${NODE_KEY_PATH}`, {
+/** The real fetch: `https://<host>[:<port>]/api/node/key`, public addresses only, no redirect, small, quick. */
+async function fetchOverTls(url: string): Promise<unknown> {
+    const res = await ssrfSafeFetch(url, {
         timeoutMs: NODE_KEY_FETCH_TIMEOUT_MS, maxBytes: NODE_KEY_DOCUMENT_MAX_BYTES, maxRedirects: 0,
         allowedContentTypes: ['application/json'], headers: { Accept: 'application/json' },
     });
@@ -117,7 +120,8 @@ let fetchDocument: DocumentFetch = fetchOverTls;
 
 /**
  * Tests: fetch origins' documents with `fetch` instead of over TLS from the origin (a suite's servers are on this machine,
- * which the real fetch refuses), and forget every document kept so far; null puts the real fetch back. Double-locked as the
+ * which the real fetch refuses), and forget every document kept so far; null puts the real fetch back. `fetch` is handed
+ * the URL the real fetch would ask (nodeKeyUrl of the origin, its port included). Double-locked as the
  * SSRF fetcher's own hook is: it refuses to run unless the process sets BEANPOOL_SSRF_TEST_HOOK=1, which nothing in
  * production does.
  */
@@ -163,7 +167,7 @@ function askFor(origin: string, now: number): Promise<NodeKeyDocument | null> | 
     remember(askedAt, origin, now, ORIGINS_REMEMBERED);
     const ask = (async () => {
         try {
-            const doc = readNodeKeyDocument(await fetchDocument(origin));
+            const doc = readNodeKeyDocument(await fetchDocument(nodeKeyUrl(origin)));
             if (!doc) {
                 noteFailedDocument(origin, 'not a signed key document');
                 return null;
@@ -215,7 +219,7 @@ export async function originKeyStanding(origin: string, keyHex: string, now = Da
 // ─── Verifying ──────────────────────────────────────────────────────────────────────────────
 
 export interface NodeOrigin {
-    /** The sending server's name, as it signed it. */
+    /** The sending server's home, as it signed it: its host, and its port when not 443. */
     origin: string;
     /** The key it signed with: its current key, or a previous one still within its time. */
     key: string;

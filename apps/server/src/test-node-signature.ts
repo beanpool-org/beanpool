@@ -25,6 +25,10 @@
  *  14  a node that knows none of its names takes no server request: signed for localhost, 127.0.0.1, 192.168.1.10, 10.0.0.5
  *      or mybox.local, each is refused (421), and no item for one is for here; named again, its own name is taken
  *  15  512 + 1 origins' documents: the one in use is kept, the least recently used goes
+ *  16  a home on a port other than 443 is host:port everywhere: the node published at b.example:8443 signs as it, its key
+ *      is fetched on 8443; a peer at a.example:8443 likewise; its key is not a.example's (443); a request for b.example
+ *      (443) is another home's (421); an envelope naming a.example:8443 carried by a.example is dropped, and the reverse;
+ *      published on 443 again, the home is the bare host
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-node-signature.ts
  */
@@ -90,11 +94,11 @@ async function main(): Promise<void> {
     const B_KEY = Buffer.from(nodeKey.publicKey.raw).toString('hex');
 
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine } = await import('./state-engine.js');
+    const { initStateEngine, updateNodeConfig } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { __useNodeKeyFetchForTests, NODE_KEY_FETCHES_AT_ONCE } = await import('./engine/node-signature.js');
-    const { isOwnNodeHome, ownNodeRequestHeaders } = await import('./engine/node-key.js');
+    const { isOwnNodeHome, ownNodeHome, ownNodeRequestHeaders } = await import('./engine/node-key.js');
 
     await initTls();
     initStateEngine();
@@ -108,22 +112,26 @@ async function main(): Promise<void> {
     const ROTATED = server('rotated.example');
     const ROTATED_BEFORE = server('rotated.example');
     const now = Date.now();
+    /** Each server's key document, by the URL the node must fetch it from: `https://<home>/api/node/key`, written here by hand. */
+    const keyAt = (home: string) => `https://${home}/api/node/key`;
     const docs = new Map<string, () => Promise<unknown>>();
     const docOf = async (s: Server, validUntil: number, previousKeys: NodeKeyDocument['previousKeys'] = []) =>
         signNodeKeyDocument({ key: s.key, validUntil, previousKeys }, signerOf(s.seed));
     const docA = await docOf(A, now + NODE_KEY_VALIDITY_MS, [{ key: A_BEFORE.key, validUntil: now + 60 * 60_000 }]);
-    docs.set('a.example', async () => docA);
-    docs.set('c.example', async () => docOf(C, now + NODE_KEY_VALIDITY_MS));
-    docs.set('expired.example', async () => docOf(EXPIRED, now - 1_000));
-    docs.set('rotated.example', async () => docOf(ROTATED, now + NODE_KEY_VALIDITY_MS, [{ key: ROTATED_BEFORE.key, validUntil: now - 1_000 }]));
-    docs.set('b.example', async () => (await fetch(`${BASE}/api/node/key`)).json());
+    docs.set(keyAt('a.example'), async () => docA);
+    docs.set(keyAt('c.example'), async () => docOf(C, now + NODE_KEY_VALIDITY_MS));
+    docs.set(keyAt('expired.example'), async () => docOf(EXPIRED, now - 1_000));
+    docs.set(keyAt('rotated.example'), async () => docOf(ROTATED, now + NODE_KEY_VALIDITY_MS, [{ key: ROTATED_BEFORE.key, validUntil: now - 1_000 }]));
+    docs.set(keyAt('b.example'), async () => (await fetch(`${BASE}/api/node/key`)).json());
+    /** Every URL the node asked for a key document, in order. */
     const asked: string[] = [];
-    __useNodeKeyFetchForTests(async (origin) => {
-        asked.push(origin);
-        const doc = docs.get(origin);
+    const fetchByUrl = async (url: string) => {
+        asked.push(url);
+        const doc = docs.get(url);
         if (!doc) throw new Error('no such server');
         return doc();
-    });
+    };
+    __useNodeKeyFetchForTests(fetchByUrl);
 
     const counts = () => db.prepare('SELECT (SELECT COUNT(*) FROM members) AS members, (SELECT COUNT(*) FROM messages) AS messages').get() as { members: number; messages: number };
     const before = counts();
@@ -150,9 +158,9 @@ async function main(): Promise<void> {
     const good = await serverPost('/api/node/check', { items: [] }, A);
     assert(good.status === 200 && good.body?.origin === 'a.example' && good.body?.key === A.key && Array.isArray(good.body?.items),
         `2a. a.example's signed request is taken, with its origin and key (got ${good.status} ${JSON.stringify(good.body)})`);
-    assert(asked.filter(o => o === 'a.example').length === 1, '2b. a.example\'s key document was fetched once');
+    assert(asked.filter(u => u === keyAt('a.example')).length === 1, '2b. a.example\'s key document was fetched once');
     const second = await serverPost('/api/node/check', { items: [] }, A);
-    assert(second.status === 200 && asked.filter(o => o === 'a.example').length === 1, '2c. the next request uses the document kept: no second fetch');
+    assert(second.status === 200 && asked.filter(u => u === keyAt('a.example')).length === 1, '2c. the next request uses the document kept: no second fetch');
     const previous = await serverPost('/api/node/check', { items: [] }, A, { signWith: A_BEFORE.seed, keyHex: A_BEFORE.key });
     assert(previous.status === 200 && previous.body?.key === A_BEFORE.key,
         `2d. signed by a.example's previous key, still within its time: taken (got ${previous.status})`);
@@ -195,9 +203,9 @@ async function main(): Promise<void> {
     const unknownKey = await serverPost('/api/node/check', { items: [] }, stranger);
     assert(unknownKey.status === 401 && unknownKey.body?.code === 'node_key_unknown',
         `6a. a key a.example's document doesn't name is refused (got ${unknownKey.status} ${unknownKey.body?.code})`);
-    const askedA = asked.filter(o => o === 'a.example').length;
+    const askedA = asked.filter(u => u === keyAt('a.example')).length;
     await serverPost('/api/node/check', { items: [] }, stranger);
-    assert(asked.filter(o => o === 'a.example').length === askedA, '6b. asked about again within the minute: a.example is not fetched again');
+    assert(asked.filter(u => u === keyAt('a.example')).length === askedA, '6b. asked about again within the minute: a.example is not fetched again');
     const nowhere = await serverPost('/api/node/check', { items: [] }, server('nowhere.example'));
     assert(nowhere.status === 401 && nowhere.body?.code === 'node_key_unknown', `6c. an origin with no key document is refused (got ${nowhere.status})`);
     __useNodeKeyFetchForTests(null);
@@ -205,12 +213,7 @@ async function main(): Promise<void> {
     const refusedLine = db.prepare(`SELECT message FROM system_logs WHERE message LIKE '%from 127.0.0.1 (%' ORDER BY id DESC LIMIT 1`).get() as { message: string } | undefined;
     assert(privateOrigin.status === 401 && privateOrigin.body?.code === 'node_key_unknown' && /127\.0\.0\.1 is blocked/.test(refusedLine?.message ?? ''),
         `6d. with the real fetch, an origin at a private address is refused: the SSRF guard blocks its document's fetch (got ${privateOrigin.status}; log: ${refusedLine?.message ?? 'none'})`);
-    __useNodeKeyFetchForTests(async (origin) => {
-        asked.push(origin);
-        const doc = docs.get(origin);
-        if (!doc) throw new Error('no such server');
-        return doc();
-    });
+    __useNodeKeyFetchForTests(fetchByUrl);
 
     // ── 7. Changed body, other path ───────────────────────────────────────────────────────
     console.log('\n7. Changed body');
@@ -287,7 +290,7 @@ async function main(): Promise<void> {
     console.log('\n11. The node\'s own signer');
     const ownBody = JSON.stringify({ items: [] });
     const ownHeaders = await ownNodeRequestHeaders({ method: 'POST', url: 'https://b.example/api/node/check', body: ownBody });
-    assert(ownHeaders[NODE_REQUEST_HEADER].includes('origin=b.example') && ownHeaders[NODE_REQUEST_HEADER].includes(`key=${B_KEY}`),
+    assert(ownHeaders[NODE_REQUEST_HEADER].includes('origin=b.example, destination=b.example,') && ownHeaders[NODE_REQUEST_HEADER].includes(`key=${B_KEY}`),
         '11a. it signs as its primary address, with its node key');
     const own = await send('/api/node/check', ownHeaders, ownBody);
     assert(own.status === 200 && own.body?.origin === 'b.example' && own.body?.key === B_KEY,
@@ -298,7 +301,7 @@ async function main(): Promise<void> {
     let release: () => void = () => {};
     const gate = new Promise<void>(r => { release = r; });
     let waiting = 0;
-    for (let i = 0; i <= NODE_KEY_FETCHES_AT_ONCE; i++) docs.set(`slow${i}.example`, async () => { waiting++; await gate; return null; });
+    for (let i = 0; i <= NODE_KEY_FETCHES_AT_ONCE; i++) docs.set(keyAt(`slow${i}.example`), async () => { waiting++; await gate; return null; });
     const slow = Array.from({ length: NODE_KEY_FETCHES_AT_ONCE }, (_, i) => serverPost('/api/node/check', { items: [] }, server(`slow${i}.example`)));
     for (let t = 0; t < 200 && waiting < NODE_KEY_FETCHES_AT_ONCE; t++) await new Promise(r => setTimeout(r, 25));
     assert(waiting === NODE_KEY_FETCHES_AT_ONCE, `12a. ${NODE_KEY_FETCHES_AT_ONCE} origins' documents are being fetched (${waiting})`);
@@ -317,7 +320,7 @@ async function main(): Promise<void> {
     let lateRelease: () => void = () => {};
     const lateGate = new Promise<void>(r => { lateRelease = r; });
     let lateAsked = 0;
-    docs.set('late.example', async () => { lateAsked++; await lateGate; return docOf(LATE, Date.now() + NODE_KEY_VALIDITY_MS); });
+    docs.set(keyAt('late.example'), async () => { lateAsked++; await lateGate; return docOf(LATE, Date.now() + NODE_KEY_VALIDITY_MS); });
     const firstLate = serverPost('/api/node/check', { items: [] }, LATE);
     for (let t = 0; t < 200 && lateAsked === 0; t++) await new Promise(r => setTimeout(r, 25));
     const secondLate = serverPost('/api/node/check', { items: [] }, LATE);
@@ -355,24 +358,70 @@ async function main(): Promise<void> {
     const peerDoc = await docOf(PEER, Date.now() + NODE_KEY_VALIDITY_MS);
     const fillerDoc = await docOf(FILLER, Date.now() + NODE_KEY_VALIDITY_MS);
     const fetchesOf = new Map<string, number>();
-    __useNodeKeyFetchForTests(async (origin) => {
-        fetchesOf.set(origin, (fetchesOf.get(origin) ?? 0) + 1);
-        return origin === 'peer.example' ? peerDoc : fillerDoc;
+    __useNodeKeyFetchForTests(async (url) => {
+        fetchesOf.set(url, (fetchesOf.get(url) ?? 0) + 1);
+        return url === keyAt('peer.example') ? peerDoc : fillerDoc;
     });
     const t0 = Date.now();
     const peerFirst = await originKeyStanding('peer.example', PEER.key, t0);
     for (let i = 1; i < NODE_KEYS_KEPT; i++) await originKeyStanding(`filler${i}.example`, FILLER.key, t0);
     const keptFull = nodeKeysKept();
     const peerInUse = await originKeyStanding('peer.example', PEER.key, t0);
-    assert(peerFirst === 'current' && keptFull === NODE_KEYS_KEPT && peerInUse === 'current' && fetchesOf.get('peer.example') === 1,
-        `15a. peer.example fetched, then ${NODE_KEYS_KEPT - 1} other origins (${keptFull} kept), then peer.example used again from its kept document (fetched ${fetchesOf.get('peer.example')} time)`);
+    assert(peerFirst === 'current' && keptFull === NODE_KEYS_KEPT && peerInUse === 'current' && fetchesOf.get(keyAt('peer.example')) === 1,
+        `15a. peer.example fetched, then ${NODE_KEYS_KEPT - 1} other origins (${keptFull} kept), then peer.example used again from its kept document (fetched ${fetchesOf.get(keyAt('peer.example'))} time)`);
     await originKeyStanding(`filler${NODE_KEYS_KEPT}.example`, FILLER.key, t0);
     const peerAfter = await originKeyStanding('peer.example', PEER.key, t0);
-    assert(peerAfter === 'current' && fetchesOf.get('peer.example') === 1 && nodeKeysKept() === NODE_KEYS_KEPT,
-        `15b. one more origin past ${NODE_KEYS_KEPT}: peer.example, used since, is still kept, not fetched again (got ${peerAfter}; fetched ${fetchesOf.get('peer.example')} time(s); ${nodeKeysKept()} kept)`);
+    assert(peerAfter === 'current' && fetchesOf.get(keyAt('peer.example')) === 1 && nodeKeysKept() === NODE_KEYS_KEPT,
+        `15b. one more origin past ${NODE_KEYS_KEPT}: peer.example, used since, is still kept, not fetched again (got ${peerAfter}; fetched ${fetchesOf.get(keyAt('peer.example'))} time(s); ${nodeKeysKept()} kept)`);
     const firstFiller = await originKeyStanding('filler1.example', FILLER.key, t0);
-    assert(firstFiller === 'unknown' && fetchesOf.get('filler1.example') === 1,
-        `15c. the least recently used, filler1.example, went instead: asked about again within the minute, it is unknown and not fetched (got ${firstFiller}; fetched ${fetchesOf.get('filler1.example')} time(s))`);
+    assert(firstFiller === 'unknown' && fetchesOf.get(keyAt('filler1.example')) === 1,
+        `15c. the least recently used, filler1.example, went instead: asked about again within the minute, it is unknown and not fetched (got ${firstFiller}; fetched ${fetchesOf.get(keyAt('filler1.example'))} time(s))`);
+
+    // ── 16. A home on a port other than 443 ───────────────────────────────────────────────
+    console.log('\n16. A home on another port than 443 is host:port, everywhere');
+    __useNodeKeyFetchForTests(fetchByUrl);
+    updateNodeConfig({ publicAddress: { mode: 'own', hostname: 'b.example:8443', status: 'live' } });
+    forgetOwnAddresses();
+    docs.set(keyAt('b.example:8443'), async () => (await fetch(`${BASE}/api/node/key`)).json());
+    const portBody = JSON.stringify({ items: [] });
+    const portHeaders = await ownNodeRequestHeaders({ method: 'POST', url: 'https://b.example:8443/api/node/check', body: portBody });
+    assert(ownNodeHome() === 'b.example:8443' && portHeaders[NODE_REQUEST_HEADER].includes('origin=b.example:8443, destination=b.example:8443,'),
+        `16a. published at b.example:8443, the node signs as b.example:8443, for b.example:8443 (${portHeaders[NODE_REQUEST_HEADER].slice(0, 58)}…)`);
+    const askedBefore = asked.length;
+    const portOwn = await send('/api/node/check', portHeaders, portBody);
+    assert(portOwn.status === 200 && portOwn.body?.origin === 'b.example:8443' && portOwn.body?.key === B_KEY
+        && asked.slice(askedBefore).join(' ') === 'https://b.example:8443/api/node/key',
+        `16b. its key is fetched on port 8443 (asked: ${asked.slice(askedBefore).join(', ')}), and its request taken (got ${portOwn.status} ${JSON.stringify(portOwn.body)})`);
+    const P = server('a.example:8443');
+    docs.set(keyAt('a.example:8443'), async () => docOf(P, Date.now() + NODE_KEY_VALIDITY_MS));
+    const fromPort = await serverPost('/api/node/check', { items: [] }, P, { destination: 'b.example:8443' });
+    assert(fromPort.status === 200 && fromPort.body?.origin === 'a.example:8443' && asked.includes('https://a.example:8443/api/node/key'),
+        `16c. a peer at a.example:8443: its key fetched on 8443, its request taken (got ${fromPort.status} ${JSON.stringify(fromPort.body)})`);
+    const portKeyAs443 = await serverPost('/api/node/check', { items: [] }, { ...P, name: 'a.example' }, { destination: 'b.example:8443' });
+    assert(portKeyAs443.status === 401 && portKeyAs443.body?.code === 'node_key_unknown',
+        `16d. the same key naming a.example (port 443) as its origin: a.example's document doesn't name it, refused (got ${portKeyAs443.status} ${portKeyAs443.body?.code})`);
+    const for443 = await serverPost('/api/node/check', { items: [] }, P, { destination: 'b.example' });
+    assert(for443.status === 421 && for443.body?.code === 'wrong_destination',
+        `16e. signed for b.example (port 443), at the node published at b.example:8443: another home, refused 421 (got ${for443.status} ${for443.body?.code})`);
+    const fromPortLine = await item(ana, 'a.example:8443', { recipientHome: 'b.example:8443' });
+    const from443Line = await item(ana, 'a.example', { recipientHome: 'b.example:8443' });
+    const for443Line = await item(ana, 'a.example:8443', { recipientHome: 'b.example' });
+    const viaPort = await serverPost('/api/node/check', { items: [fromPortLine, from443Line, for443Line] }, P, { destination: 'b.example:8443' });
+    const viaPortVerdicts = (viaPort.body?.items ?? []) as Array<{ ok: boolean; reason?: string }>;
+    assert(viaPort.status === 200 && viaPortVerdicts[0]?.ok === true,
+        `16f. an envelope naming a.example:8443, carried by a.example:8443, for b.example:8443: taken (got ${viaPort.status} ${JSON.stringify(viaPortVerdicts[0])})`);
+    assert(viaPortVerdicts[1]?.ok === false && viaPortVerdicts[1]?.reason === 'wrong-home',
+        `16g. an envelope naming a.example (port 443), carried by a.example:8443: dropped, wrong-home (got ${JSON.stringify(viaPortVerdicts[1])})`);
+    assert(viaPortVerdicts[2]?.ok === false && viaPortVerdicts[2]?.reason === 'not-for-here',
+        `16h. one for b.example (port 443), at the node published at b.example:8443: not for here (got ${JSON.stringify(viaPortVerdicts[2])})`);
+    const via443 = await serverPost('/api/node/check', { items: [fromPortLine] }, A, { destination: 'b.example:8443' });
+    assert(via443.status === 200 && via443.body?.items?.[0]?.ok === false && via443.body?.items?.[0]?.reason === 'wrong-home',
+        `16i. an envelope naming a.example:8443, carried by a.example (port 443): dropped, wrong-home (got ${via443.status} ${JSON.stringify(via443.body?.items?.[0])})`);
+    updateNodeConfig({ publicAddress: null });
+    forgetOwnAddresses();
+    const back = await serverPost('/api/node/check', { items: [] }, A);
+    assert(ownNodeHome() === 'b.example' && back.status === 200,
+        `16j. published on port 443 again: the home is the bare host b.example, and a request for it is taken (got ${ownNodeHome()}, ${back.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

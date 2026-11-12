@@ -20,12 +20,17 @@
  *   line itself, from its parts as the line reads them ({@link creditedKeys}), never a stand-in such as "confirmed".
  * - Only people are listed: never an account core calls synthetic (SYSTEM, genesis, the Commons, escrow, project, bridge),
  *   an enterprise or a visitor; nobody else gets a row, a button or a look.
+ * - A gift of Beans can't wash the word (amendment 2, slice C8): for the people on a page sent a gift in the last core
+ *   GIFT_DAYS days (one statement a page, {@link pageContext}), their own ledger rows of those days are walked back from
+ *   the stored balance ({@link giftPaidOf}) and core's paidByGifts says what the gift paid; the five rules built from what
+ *   they owe read it. The figure travels only inside a reason's `values`: no sender, no date, no row id. The row's
+ *   balance and Spending paused stay the stored balance.
  *
  * Plain reads: nothing here is a Bean, no `accounts` write, no transfer.
  */
 import {
-    creditRisk, riskForVoucher, position, DISPUTE_DAYS, creditAllowance, isSyntheticAccount, SYNTHETIC_ACCOUNT_IDS, SYNTHETIC_ACCOUNT_PREFIXES,
-    type CreditRisk, type CreditRiskFacts, type CreditSight,
+    creditRisk, riskForVoucher, position, paidByGifts, DISPUTE_DAYS, GIFT_DAYS, creditAllowance, isSyntheticAccount, SYNTHETIC_ACCOUNT_IDS, SYNTHETIC_ACCOUNT_PREFIXES,
+    type BalanceMove, type CreditRisk, type CreditRiskFacts, type CreditSight,
 } from '@beanpool/core';
 import {
     creditCap, earnedCreditOf, getMember, isVisitorKey, LIVE_OFFER_WHERE, liveOfferCount as liveOffersOf, memberUsableKnownGrant, roomHeldOf,
@@ -64,18 +69,27 @@ export function linesComputed(): number { return computed; }
 let orderChecked = 0;
 /** How many people's line parts this process read to put a page in order ({@link creditedKeys}; the cost test reads it). */
 export function orderChecks(): number { return orderChecked; }
+let giftPages = 0, walked = 0, walkedRows = 0;
+/** How many pages asked which of their people were sent a gift (one statement each; the cost test reads it). */
+export function giftStatements(): number { return giftPages; }
+/** How many people's own rows were walked for what a gift paid ({@link giftPaidOf}; the cost test reads it). */
+export function giftWalks(): number { return walked; }
+/** How many ledger rows those walks handed to core (the cost test: only the last GIFT_DAYS days' rows). */
+export function giftRowsWalked(): number { return walkedRows; }
 
 // ── Who is listed ────────────────────────────────────────────────────────────────────────────────────────────────
 
 const sqlText = (v: string) => `'${v.replace(/'/g, "''")}'`;
 /**
  * Not a person: core's own list of accounts that are not people (isSyntheticAccount: the seeded SYSTEM row, genesis, the
- * Commons, escrow, project and bridge accounts), as SQL over the row's key, so the list and {@link buildPerson} agree.
+ * Commons, escrow, project and bridge accounts), as SQL over a key column, so the list, {@link buildPerson} and
+ * {@link isGiftRow} agree.
  */
-const NOT_SYNTHETIC = [
-    `m.public_key NOT IN (${SYNTHETIC_ACCOUNT_IDS.map(sqlText).join(', ')})`,
-    ...SYNTHETIC_ACCOUNT_PREFIXES.map((prefix) => `substr(m.public_key, 1, ${prefix.length}) <> ${sqlText(prefix)}`),
+const notSynthetic = (column: string) => [
+    `${column} NOT IN (${SYNTHETIC_ACCOUNT_IDS.map(sqlText).join(', ')})`,
+    ...SYNTHETIC_ACCOUNT_PREFIXES.map((prefix) => `substr(${column}, 1, ${prefix.length}) <> ${sqlText(prefix)}`),
 ].join(' AND ');
+const NOT_SYNTHETIC = notSynthetic('m.public_key');
 /**
  * Listed: a person's own row, never an enterprise (a treasury), a visitor, an account that is not a person or a removed
  * account. A paused member is listed, greyed. Nobody else is ever built, so nobody else gets a row, a button or a look.
@@ -156,6 +170,56 @@ interface PageContext {
      * row then carries their budget in one line (slice C3, amendment §3.5). Never for a plain admin, a voucher or a member.
      */
     committee: boolean;
+    /** The start of the gift window (now − core GIFT_DAYS), as the ledger's rows spell a moment. */
+    giftSince: string;
+    /** The page's people who were sent a gift of Beans since then ({@link GIFT_ROW_SQL}): on most pages nobody. */
+    gifted: Set<string>;
+}
+
+// ── What a gift of Beans paid (amendment 2 §4, slice C8) ─────────────────────────────────────────────────────────
+
+/** One ledger row as the walk reads it: who paid, who was paid, what left the payer and the fee the Commons took. */
+export interface LedgerMoveRow { from_pubkey: string; to_pubkey: string; amount_c: number; fee_c: number }
+
+/**
+ * A gift of Beans, the one rule (amendment 2 §2, F17): Beans that reached `pk` fee-free straight from another account that
+ * is a member's or an enterprise's own, never one core calls synthetic. So Send Beans and a leaving member's parting gift
+ * are gifts; a sale (from the deal's escrow), a refund of their own hold (from escrow), a standing deal's period, a paid bill
+ * and a wage (payer to payee with the 1.5% fee), a grant from the Commons or a Decision (from COMMONS_POOL, or with the fee)
+ * and a pledge coming back (from the project's escrow) are not. {@link GIFT_ROW_SQL} is the same rule as SQL.
+ */
+export function isGiftRow(r: LedgerMoveRow, pk: string): boolean {
+    return r.to_pubkey === pk && r.from_pubkey !== pk && Math.trunc(Number(r.fee_c) || 0) === 0 && !isSyntheticAccount(r.from_pubkey);
+}
+/** {@link isGiftRow} as SQL over a `transactions` row aliased `t`. */
+const GIFT_ROW_SQL = `t.fee_c = 0 AND t.from_pubkey <> t.to_pubkey AND ${notSynthetic('t.from_pubkey')}`;
+
+/** What one row did to `pk`'s stored balance: to them, what reached them (amount less fee); from them, what left them. */
+export function balanceMoveOf(r: LedgerMoveRow, pk: string): BalanceMove {
+    const amount = Math.trunc(Number(r.amount_c) || 0);
+    const fee = Math.trunc(Number(r.fee_c) || 0);
+    const delta_c = (r.to_pubkey === pk ? amount - fee : 0) - (r.from_pubkey === pk ? amount : 0);
+    return { delta_c, gift: isGiftRow(r, pk) };
+}
+
+/** `pk`'s own ledger rows since `since`, either side, newest first, as moves (the walk's input; test 29 rebuilds from it). */
+export function balanceMovesSince(pk: string, since: string): BalanceMove[] {
+    const rows = many<LedgerMoveRow>(`SELECT from_pubkey, to_pubkey, amount_c, fee_c FROM transactions
+        WHERE (from_pubkey = @pk OR to_pubkey = @pk) AND timestamp >= @since ORDER BY timestamp DESC, rowid DESC`, { pk, since });
+    return rows.map((r) => balanceMoveOf(r, pk));
+}
+
+/**
+ * What a gift of Beans paid off of what `pk` owed in the last GIFT_DAYS days, not yet earned back by their own trading:
+ * 0 unless the page's one statement found a gift to them; else their rows of those days walked back from the stored
+ * balance (core paidByGifts). A plain read: never getBalance or the ledger, nothing written.
+ */
+export function giftPaidOf(pk: string, balance_c: number, ctx: PageContext): number {
+    if (!ctx.gifted.has(pk)) return 0;
+    walked++;
+    const moves = balanceMovesSince(pk, ctx.giftSince);
+    walkedRows += moves.length;
+    return paidByGifts(balance_c, moves);
 }
 
 function pageContext(viewer: string | null, subjects: readonly string[], now = Date.now(), sight: CreditSight | null = null): PageContext {
@@ -170,7 +234,16 @@ function pageContext(viewer: string | null, subjects: readonly string[], now = D
         for (const r of rows) balances.set(r.public_key, Math.trunc(Number(r.balance_c) || 0));
     }
     const committee = !!viewer && (sight === 'owner' || sight === 'admin') && isOnCreditCommittee(viewer);
-    return { viewer, debtLinePct, quietDays, ring, balances, cap: creditCap(db), now, committee };
+    // Which of the page's people were sent a gift of Beans in the last GIFT_DAYS days: one statement for the page.
+    const giftSince = new Date(now - GIFT_DAYS * DAY_MS).toISOString();
+    const gifted = new Set<string>();
+    if (subjects.length > 0) {
+        giftPages++;
+        const rows = db.prepare(`SELECT DISTINCT t.to_pubkey AS pk FROM transactions t
+            WHERE t.to_pubkey IN (${subjects.map(() => '?').join(', ')}) AND t.timestamp >= ? AND ${GIFT_ROW_SQL}`).all(...subjects, giftSince) as { pk: string }[];
+        for (const r of rows) gifted.add(r.pk);
+    }
+    return { viewer, debtLinePct, quietDays, ring, balances, cap: creditCap(db), now, committee, giftSince, gifted };
 }
 
 const one = <T>(sql: string, ...p: unknown[]) => db.prepare(sql).get(...p) as T;
@@ -213,7 +286,7 @@ function riskFacts(pk: string, joinedAt: string | null, line_c: number, usable_c
     return {
         completed, cancelled: trades.cancelled ?? 0,
         daysHere: Number.isFinite(joined) ? Math.max(0, Math.floor((ctx.now - joined) / DAY_MS)) : 0,
-        balance_c, line_c, usable_c,
+        balance_c, line_c, usable_c, giftPaid_c: giftPaidOf(pk, balance_c, ctx),
         frozen, ring: ctx.ring.has(pk), disputeAgainst: dispute,
         lastSaleDays: lastSale && Number.isFinite(Date.parse(lastSale)) ? Math.floor((ctx.now - Date.parse(lastSale)) / DAY_MS) : null,
         confirmed: confirmationOf(pk).confirmed,

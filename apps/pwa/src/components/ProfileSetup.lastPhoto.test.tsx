@@ -151,9 +151,19 @@ describe('the web wizard offers the last photo as a tickbox that starts off', ()
 describe('the tickbox at 320 px wide with the text at 130 %, in light and in dark', () => {
     // The classes are what jsdom can read; the palette is the app's own (tailwind.config.js). Chromium measures the same
     // class strings in e2e/dark-class-check.mjs (test-all's pwa_dark_classes).
-    const natureShades = async () => {
-        const { default: config } = await import(/* @vite-ignore */ pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href);
-        return (resolveConfig(config).theme.colors as any).nature as Record<string, string>;
+    // tailwind.config.js names each `nature` step by its channel variable (rgb(var(--bp-n-800) / <alpha-value>)) and each look
+    // writes those channels (webSetVariableMap), so a step is read through the set it is drawn in: a plain class in Light, a
+    // dark: class in Classic (`dark`) and in Dark (`night`).
+    const natureShades = async (set: 'light' | 'dark' | 'night') => {
+        const { default: config, webSetVariableMap } = await import(/* @vite-ignore */ pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href);
+        const vars = webSetVariableMap(set) as Record<string, string>;
+        const steps = (resolveConfig(config).theme.colors as any).nature as Record<string, string>;
+        return Object.fromEntries(Object.entries(steps).map(([step, value]) => {
+            const ref = /^rgb\(var\((--bp-n-\d+)\) \/ <alpha-value>\)$/.exec(value);
+            const ch = ref ? vars[ref[1]]?.split(' ').map(Number) : undefined;
+            if (!ch || ch.length !== 3 || ch.some(c => !Number.isInteger(c))) throw new Error(`nature-${step} in ${set} is not a ramp channel: ${value}`);
+            return [step, `#${ch.map(c => c.toString(16).padStart(2, '0')).join('')}`];
+        })) as Record<string, string>;
     };
     const lum = (hex: string) => {
         const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
@@ -181,8 +191,11 @@ describe('the tickbox at 320 px wide with the text at 130 %, in light and in dar
         expect(classes(offer()!)).toEqual(expect.arrayContaining(['accent-nature-900', 'dark:accent-white']));
 
         // The words read in both (4.5:1): from the palette the classes name.
-        const nature = await natureShades();
-        expect(ratio(nature['800'], nature['50'])).toBeGreaterThanOrEqual(4.5);
-        expect(ratio(nature['100'], nature['800'])).toBeGreaterThanOrEqual(4.5);
+        const light = await natureShades('light');
+        expect(ratio(light['800'], light['50'])).toBeGreaterThanOrEqual(4.5);
+        for (const set of ['dark', 'night'] as const) {
+            const dark = await natureShades(set);
+            expect(ratio(dark['100'], dark['800']), `the words in ${set}`).toBeGreaterThanOrEqual(4.5);
+        }
     });
 });

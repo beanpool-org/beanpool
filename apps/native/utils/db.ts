@@ -42,6 +42,8 @@ import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, wai
 import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
 import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
+// Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the web opens them).
+import { chatAboutOfOldLine, openDmOldLineWords, openDmOldPhoto } from '@beanpool/core';
 import { standingJsonOf, standingOfRow } from './standing-row';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -7018,7 +7020,12 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // The listing this line is about, opened from its own sealed part (core chat-about.ts); null for every other line.
             about: view && view.format != null && dmCtx
                 ? chatAboutOfLine({ myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.peerEdPubHex }, { conversationId, senderPubHex: row.author_pubkey, messageId: row.id, metadata: row.metadata })
-                : null,
+                // An old line's card, opened as part of its words (core chatAboutOfOldLine; conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+                : view && dmLineIsOld(view) && dmCtx && row.type !== 'removed'
+                    ? chatAboutOfOldLine({ myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.peerEdPubHex },
+                        { conversationId, senderPubHex: row.author_pubkey, messageId: row.id, metadata: row.metadata, timestamp: row.timestamp },
+                        { ciphertext: row.ciphertext, nonce: row.nonce }, dmCtx.formerPeers)
+                    : null,
             // 'sending' | 'failed' | undefined — optimistic-send delivery state
             sendState,
             outgoing,
@@ -7348,8 +7355,11 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
  * Fetch + decrypt an image attachment for a DM message. Returns a data URI ready
  * for <Image>, or null if it can't be loaded/decrypted. The blob is fetched lazily
  * (only when an image bubble is rendered).
+ *
+ * `oldLine` (conversion code, log row OLDCHAT, remove after 12 Dec 2026): the line is one getMessages showed old (from
+ * before 1.4.0, read-only): its photo opens as part of its words, as 1.2.36 opened it (oldLinePhoto below).
  */
-export async function getDecryptedAttachment(conversationId: string, messageId: string): Promise<string | null> {
+export async function getDecryptedAttachment(conversationId: string, messageId: string, oldLine = false): Promise<string | null> {
     try {
         // 1. The words first, always: the photo is part of its message, never on its own. They are opened bound to the
         //    author and id this phone holds the message under, in the conversation it is shown in (a local row, cheap).
@@ -7360,12 +7370,14 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         if (!dmCtx) return null;
         const database = await getDb();
         const msgRow = await database.getFirstAsync<any>(
-            'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
+            'SELECT ciphertext, nonce, author_pubkey, metadata, timestamp FROM messages WHERE id = ?', [messageId]
         );
         if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return null;
         // Under the pinned key, or a key pinned before it (pick 3): a photo from before "Continue with the new key" still
         // opens, under the same key and sender as its words.
         const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
+        // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a line from before 1.4.0 the thread showed old.
+        if (oldLine) return await oldLinePhoto(dmCtx, msgRow, ref);
         const words = openDmPartWithFormer({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' });
 
         // 2. Local cache next. Lives in the filesystem (survives a DB wipe-and-fetch), so an
@@ -7393,6 +7405,35 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     } catch {
         return null;
     }
+}
+
+/**
+ * Old chat's photo (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 13 Nov 2026: "if they are there why
+ * not view them?"): the photo of a line getMessages showed old, in getDecryptedAttachment's order. Its words first, opened as
+ * an old line under the pinned key or a former one (core openDmOldLineWords), so a cached copy never shows under words that
+ * don't; then the cache; then the node's copy, opened under the key, sender, conversation id and format its words opened in,
+ * and only a picture (core openDmOldPhoto). Anything else, or no file on the node, is null: the bubble stays locked.
+ */
+async function oldLinePhoto(
+    dmCtx: PinnedDmKeyContext,
+    msgRow: { ciphertext: string; nonce: string; timestamp: string | null },
+    ref: { conversationId: string; senderPubHex: string; messageId: string; metadata: unknown },
+): Promise<string | null> {
+    const words = { ciphertext: msgRow.ciphertext, nonce: msgRow.nonce };
+    const keys = { myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.peerEdPubHex };
+    const line = { ...ref, timestamp: msgRow.timestamp };
+    openDmOldLineWords(words, keys, line, dmCtx.formerPeers);
+    const cachePath = `${CHAT_IMAGE_CACHE_DIR}${ref.messageId}.jpg`;
+    const cached = await FileSystem.getInfoAsync(cachePath);
+    if (cached.exists) return cachePath;
+    const res = await signedGet(`/api/messages/${ref.messageId}/attachment`);
+    if (!res.ok) return null;
+    const { data, nonce } = await res.json();
+    const m = openDmOldPhoto(words, { ciphertext: data, nonce }, keys, line, dmCtx.formerPeers).match(/^data:image\/\w+;base64,(.*)$/);
+    if (!m) return null;
+    try { await FileSystem.makeDirectoryAsync(CHAT_IMAGE_CACHE_DIR, { intermediates: true }); } catch {}
+    await FileSystem.writeAsStringAsync(cachePath, m[1], { encoding: FileSystem.EncodingType.Base64 });
+    return cachePath;
 }
 
 /** A group photo line's photo for GroupChatView: opened on this phone, kept in the group's folder (groupPhotoCache). */

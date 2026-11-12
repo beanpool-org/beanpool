@@ -20,7 +20,8 @@
  * The chip before sending lives in memory, per conversation (chatAboutDrafts): it survives typing and a change of screen,
  * never an app restart.
  */
-import { openDmLine, sealDmLine, type DmKeyContext, type DmKeys, type DmPayload } from './dm-crypto.js';
+// openDmOldLinePart: old chat's card (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+import { openDmLine, openDmOldLinePart, sealDmLine, type DmKeyContext, type DmKeys, type DmPayload } from './dm-crypto.js';
 import { beansPriceWords } from './event-copy.js';
 import { t, word } from './words.js';
 
@@ -257,3 +258,24 @@ function makeDrafts() {
 }
 
 export const chatAboutDrafts = makeDrafts();
+
+// ─── Old chat's card (conversion code, log row OLDCHAT, remove after 12 Dec 2026) ─────────────────────────────────────────
+/**
+ * The listing a line from before 1.4.0 is about, or null: what chatAboutOfLine is for a line in format 4. The apps sealed a
+ * card in format 3 from #3007 to #3040 (9 to 10 November 2026). It opens only as part of the line's words (`words`, the
+ * line's own ciphertext and nonce), under the key, sender, conversation id and format they opened in (dm-crypto.ts
+ * openDmOldLinePart); a format-2 line has none. `line.timestamp` is the node's time for the line. Never throws: the line
+ * shows without its card. Only for a line its thread check showed old (dmLineIsOld).
+ */
+export function chatAboutOfOldLine(
+    keys: DmKeys | null, line: ChatAboutLine & { timestamp: string | null | undefined }, words: DmPayload, formerPeers: readonly string[] = [],
+): ChatAbout | null {
+    if (!keys || !hasChatAbout(line.metadata)) return null;
+    const raw = metaObject(line.metadata)[DM_ABOUT_KEY];
+    try {
+        return parseChatAbout(openDmOldLinePart(words, { ciphertext: raw.ciphertext, nonce: raw.nonce }, keys, line, 'about', formerPeers).text);
+    } catch {
+        return null;
+    }
+}
+// ─── end of old chat's card (OLDCHAT) ────────────────────────────────────────────────────────────────────────────────

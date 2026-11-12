@@ -6,7 +6,12 @@ import {
     checkDmThread, dmLineIsOld, dmLineIsUnattributed, dmLineHasOldShape, dmLineSentBeforeCutover, dmLineShownText, dmOldLineRunStarts,
     dmQuoteFrom, openDmLine, openDmOldLine, sealDmLine, isDmLineForm,
     DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, DM_OLD_LINE_CUTOFF, DM_OLD_LINES_WORDS, type DmThreadLine, type DmKeys,
+    openDmOldLinePart, openDmOldPhoto, DmLineNotVerifiedError, dmPublicKeyOf, type DmPayload,
 } from '../dm-crypto.js';
+import { chatAboutOfLine, chatAboutOfOldLine } from '../chat-about.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { DM_OLD_LINES, DM_OLD_LINE_TIMES, DM_REFUSED_LINES, DM_VECTOR_CONVERSATION as CONV, DM_VECTOR_PEOPLE as P } from '../dm-line-vectors.js';
 import { t } from '../words.js';
 
@@ -196,5 +201,106 @@ describe('the label and its runs', () => {
         expect(dmOldLineRunStarts([true, true, false, true])).toEqual([true, false, false, true]);
         expect(dmOldLineRunStarts([null, true, null, true, false])).toEqual([false, true, false, false, false]);
         expect(dmOldLineRunStarts([false, false])).toEqual([false, false]);
+    });
+});
+
+// Old chat's photos and listing cards (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 13 Nov 2026: "if they
+// are there why not view them?"): an old line's photo and card open as part of its words, as 1.2.36 opened a photo, or not at all.
+describe('an old line\'s photo and listing card open as part of its words (the 1.2.36 and format-3 sealers, frozen)', () => {
+    const L = DM_OLD_LINES;
+    const words = (f: Fixture): DmPayload => f.payload;
+    const lineOf = (f: Fixture, timestamp: string | null = BEFORE, over: Record<string, unknown> = {}) => ({
+        conversationId: CONV, senderPubHex: P[f.from].publicKey, messageId: f.messageId, metadata: f.metadata, timestamp, ...over,
+    });
+    const catSeed = sha256(utf8ToBytes('beanpool old-chat test: Cat'));
+    const cat = { seedHex: bytesToHex(catSeed), publicKey: bytesToHex(ed25519.getPublicKey(catSeed)) };
+
+    it('a frozen 1.2.36 photo (format 3) opens for both people, in either key spelling, under a line shown old', () => {
+        const photoLine = row(L.anaFormat3, BEFORE, { type: 'image' });
+        for (const keys of [anaKeys, benKeys, { myEdPrivHex: P.ana.pkcs8Hex, peerEdPubHex: P.ben.publicKey }, { myEdPrivHex: P.ben.seedHex, peerEdPubHex: P.ana.publicKey }]) {
+            expect(dmLineIsOld(checkDmThread([photoLine], keys, CONV).get(photoLine.id))).toBe(true);
+            expect(openDmOldPhoto(words(L.anaFormat3), L.anaPhotoFormat3.payload, keys, lineOf(L.anaFormat3))).toBe(L.anaPhotoFormat3.text);
+        }
+    });
+
+    it('a frozen format-2 photo (an app before 2 October 2026) opens under its format-2 words', () => {
+        for (const keys of [anaKeys, benKeys]) {
+            expect(openDmOldPhoto(words(L.benFormat2), L.benPhotoFormat2.payload, keys, lineOf(L.benFormat2))).toBe(L.benPhotoFormat2.text);
+        }
+    });
+
+    it('a stranger\'s key opens neither the words nor the photo', () => {
+        for (const keys of [{ myEdPrivHex: cat.seedHex, peerEdPubHex: P.ana.publicKey }, { myEdPrivHex: cat.seedHex, peerEdPubHex: P.ben.publicKey }]) {
+            expect(() => openDmOldPhoto(words(L.anaFormat3), L.anaPhotoFormat3.payload, keys, lineOf(L.anaFormat3))).toThrow(DmLineNotVerifiedError);
+            expect(() => openDmOldPhoto(words(L.benFormat2), L.benPhotoFormat2.payload, keys, lineOf(L.benFormat2))).toThrow(DmLineNotVerifiedError);
+            // Named as the stranger's own line, still nothing: the key isn't theirs with either of the two.
+            expect(() => openDmOldPhoto(words(L.anaFormat3), L.anaPhotoFormat3.payload, keys, lineOf(L.anaFormat3, BEFORE, { senderPubHex: cat.publicKey }))).toThrow(DmLineNotVerifiedError);
+        }
+    });
+
+    it('the time decides as for the words: dated from the cutover on, or with no time, the photo stays locked', () => {
+        for (const ts of [AFTER, '2026-11-12T08:00:00.000Z', null, 'yesterday']) {
+            expect(() => openDmOldPhoto(words(L.anaFormat3), L.anaPhotoFormat3.payload, anaKeys, lineOf(L.anaFormat3, ts))).toThrow(DmLineNotVerifiedError);
+        }
+    });
+
+    it('no other line\'s photo stands in: another message\'s, another format\'s, the words\' own bytes, or a format-4 sealing', () => {
+        // Format 3 binds the message id: Ana's photo under Ben's reply does not open.
+        expect(() => openDmOldPhoto(words(L.benFormat3Reply), L.anaPhotoFormat3.payload, anaKeys, lineOf(L.benFormat3Reply))).toThrow(DmLineNotVerifiedError);
+        // A photo opens only in its words' format: a format-2 photo under format-3 words, and a format-3 photo under format-2 words.
+        expect(() => openDmOldPhoto(words(L.anaFormat3), L.benPhotoFormat2.payload, anaKeys, lineOf(L.anaFormat3))).toThrow(DmLineNotVerifiedError);
+        expect(() => openDmOldPhoto(words(L.benFormat2), L.anaPhotoFormat3.payload, anaKeys, lineOf(L.benFormat2))).toThrow(DmLineNotVerifiedError);
+        // The words' own sealing served as their photo: one sealing is one part.
+        expect(() => openDmOldLinePart(words(L.benFormat2), L.benFormat2.payload, anaKeys, lineOf(L.benFormat2), 'attachment')).toThrow(DmLineNotVerifiedError);
+        // A photo in format 4's form (sealed and signed today) is no old line's photo; nor do format-4 words open an old photo.
+        const fresh = sealDmLine('data:image/jpeg;base64,QUFBQQ==', { ...anaKeys, conversationId: CONV }, { senderPubHex: P.ana.publicKey, messageId: L.anaFormat3.messageId, part: 'attachment' });
+        expect(() => openDmOldPhoto(words(L.anaFormat3), fresh, benKeys, lineOf(L.anaFormat3))).toThrow(DmLineNotVerifiedError);
+        const freshWords = sealDmLine('hello', { ...anaKeys, conversationId: CONV }, { senderPubHex: P.ana.publicKey, messageId: L.anaFormat3.messageId });
+        expect(() => openDmOldPhoto(freshWords, L.anaPhotoFormat3.payload, benKeys, lineOf(L.anaFormat3))).toThrow(DmLineNotVerifiedError);
+        // Named as the other person's, the words don't open, so neither does the photo.
+        expect(() => openDmOldPhoto(words(L.anaFormat3), L.anaPhotoFormat3.payload, benKeys, lineOf(L.anaFormat3, BEFORE, { senderPubHex: P.ben.publicKey }))).toThrow(DmLineNotVerifiedError);
+    });
+
+    it('format 2\'s own hole: other format-2 words served as the photo open, but are no picture, so the photo stays locked', () => {
+        expect(openDmOldLinePart(words(L.benFormat2), L.benNotPhotoFormat2.payload, anaKeys, lineOf(L.benFormat2), 'attachment').text).toBe(L.benNotPhotoFormat2.text);
+        expect(() => openDmOldPhoto(words(L.benFormat2), L.benNotPhotoFormat2.payload, anaKeys, lineOf(L.benFormat2))).toThrow(DmLineNotVerifiedError);
+    });
+
+    it('under a key pinned before the current one (Continue with the new key), as its words open', () => {
+        const newBenSeed = sha256(utf8ToBytes('beanpool old-chat test: Ben again'));
+        const newBen = bytesToHex(ed25519.getPublicKey(newBenSeed));
+        const afterRekey: DmKeys = { myEdPrivHex: P.ana.seedHex, peerEdPubHex: newBen };
+        // The row may name Ben's former key, or his new one (a re-key moves the old lines' author): both open under the former.
+        for (const sender of [P.ben.publicKey, newBen]) {
+            const line = lineOf(L.benFormat2, BEFORE, { senderPubHex: sender });
+            expect(() => openDmOldPhoto(words(L.benFormat2), L.benPhotoFormat2.payload, afterRekey, line)).toThrow(DmLineNotVerifiedError);
+            expect(openDmOldPhoto(words(L.benFormat2), L.benPhotoFormat2.payload, afterRekey, line, [P.ben.publicKey])).toBe(L.benPhotoFormat2.text);
+        }
+        // Ana's own old photo, from her side, under Ben's former key.
+        expect(openDmOldPhoto(words(L.anaFormat3), L.anaPhotoFormat3.payload, afterRekey, lineOf(L.anaFormat3), [P.ben.publicKey])).toBe(L.anaPhotoFormat3.text);
+        expect(dmPublicKeyOf(afterRekey.myEdPrivHex)).toBe(P.ana.publicKey);
+    });
+
+    it('the listing card of a format-3 line opens, for both people; the format-4 reader still finds none', () => {
+        const metadata = JSON.stringify({ about: L.anaAboutFormat3.payload });
+        const line = { ...lineOf(L.anaFormat3), metadata };
+        for (const keys of [anaKeys, benKeys]) {
+            expect(chatAboutOfOldLine(keys, line, words(L.anaFormat3))).toEqual({ postId: 'old-eggs-1', title: 'Fresh eggs', kind: 'offer' });
+            expect(chatAboutOfLine(keys, line)).toBeNull();
+        }
+    });
+
+    it('a card stays shut where the words decide against it: another message, a format-2 line, after the cutover, a stranger', () => {
+        const about = JSON.stringify({ about: L.anaAboutFormat3.payload });
+        // Under Ben's reply (another message id, and the reply's metadata kept) it does not open.
+        const reply = { ...lineOf(L.benFormat3Reply), metadata: JSON.stringify({ replyToId: L.anaFormat3.messageId, about: L.anaAboutFormat3.payload }) };
+        expect(chatAboutOfOldLine(anaKeys, reply, words(L.benFormat3Reply))).toBeNull();
+        // Format 2 never sealed a listing.
+        expect(chatAboutOfOldLine(anaKeys, { ...lineOf(L.benFormat2), metadata: about }, words(L.benFormat2))).toBeNull();
+        expect(chatAboutOfOldLine(anaKeys, { ...lineOf(L.anaFormat3, AFTER), metadata: about }, words(L.anaFormat3))).toBeNull();
+        expect(chatAboutOfOldLine({ myEdPrivHex: cat.seedHex, peerEdPubHex: P.ana.publicKey }, { ...lineOf(L.anaFormat3), metadata: about }, words(L.anaFormat3))).toBeNull();
+        expect(chatAboutOfOldLine(null, { ...lineOf(L.anaFormat3), metadata: about }, words(L.anaFormat3))).toBeNull();
+        // No card in the metadata: none.
+        expect(chatAboutOfOldLine(anaKeys, lineOf(L.anaFormat3), words(L.anaFormat3))).toBeNull();
     });
 });

@@ -27,6 +27,8 @@ import {
 } from '../lib/e2e-crypto';
 // Old chat, read-only: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the thread check that marks the lines).
 import { dmLineIsOld, dmOldLineRunStarts, DM_OLD_LINES_WORDS } from '@beanpool/core';
+// Old chat's photos and cards: conversion code, log row OLDCHAT, remove after 12 Dec 2026 (core, as the phone opens them).
+import { openDmOldPhoto, chatAboutOfOldLine } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, lineMetadata, payloadForChat, isDmNotLocked, DmNotLockedError, dmNotLockedLine, isNodeReadableChat, type DmLineSeal, type LockedLine } from '../lib/dm-lock';
 import { chatAboutDrafts, chatAboutOfLine, hasChatAbout, metadataWithAbout, sealChatAbout, type ChatAbout, formatHundredths, isHundredths } from '@beanpool/core';
@@ -237,24 +239,45 @@ function formatSystemMessage(msg: any, myPubkey: string, userTransactions: any[]
  * bound to the author and id the node shows the message under, and signed by that author (format 4), so no other line's
  * photo, and no picture the other person sealed in the author's name, can stand in for it. Words that didn't open
  * (`bodyFormat` null, from the thread check) leave the photo locked too.
+ *
+ * `old` (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a line from before 1.4.0 the thread check showed old
+ * (dmLineIsOld). Its photo opens as part of its words (`words`, the line's own ciphertext and nonce, at the node's `timestamp`
+ * for it) under the key, sender, conversation id and format they opened in (core openDmOldPhoto), as 1.2.36 opened it; one
+ * that doesn't, or isn't a picture, stays "🔒 Image unavailable".
  */
-function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, onOpen }:
-    { messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 4 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void }) {
+function ChatImageBubble({ messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, onOpen, old }:
+    {
+        messageId: string; conversationId: string; authorPubkey: string; metadata?: string | null; bodyFormat: 4 | null; peerPubHex: string; myPrivHex: string; onOpen?: (uri: string) => void;
+        old?: { words: { ciphertext: string; nonce: string }; timestamp: string | null | undefined } | null;
+    }) {
     const [uri, setUri] = useState<string | null>(null);
     const [failed, setFailed] = useState(false);
+    // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): the old line's own sealing, as plain values for the effect.
+    const oldCiphertext = old?.words.ciphertext;
+    const oldNonce = old?.words.nonce;
+    const oldTimestamp = old?.timestamp;
     useEffect(() => {
         let active = true;
         (async () => {
             try {
+                const keys = { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex };
+                // Old chat (conversion code, log row OLDCHAT, remove after 12 Dec 2026): a line the thread check showed old.
+                if (!bodyFormat && oldCiphertext !== undefined && oldNonce !== undefined) {
+                    const att = await getMessageAttachmentApi(messageId);
+                    const dataUri = openDmOldPhoto({ ciphertext: oldCiphertext, nonce: oldNonce }, { ciphertext: att.data, nonce: att.nonce }, keys,
+                        { conversationId, senderPubHex: authorPubkey, messageId, metadata, timestamp: oldTimestamp });
+                    if (active) setUri(dataUri);
+                    return;
+                }
                 if (!bodyFormat) throw new Error('not verified');
                 const att = await getMessageAttachmentApi(messageId);
-                const dataUri = openDmLine({ ciphertext: att.data, nonce: att.nonce }, { myEdPrivHex: myPrivHex, peerEdPubHex: peerPubHex },
+                const dataUri = openDmLine({ ciphertext: att.data, nonce: att.nonce }, keys,
                     { conversationId, senderPubHex: authorPubkey, messageId, part: 'attachment', metadata }).text;
                 if (active) setUri(dataUri);
             } catch { if (active) setFailed(true); }
         })();
         return () => { active = false; };
-    }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex]);
+    }, [messageId, conversationId, authorPubkey, metadata, bodyFormat, peerPubHex, myPrivHex, oldCiphertext, oldNonce, oldTimestamp]);
     return <ChatPhotoShown uri={uri} failed={failed} onOpen={onOpen} />;
 }
 
@@ -634,7 +657,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         if (!ctx) return found;
         const keys = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex };
         for (const m of shownMessages) {
-            if (m.type === 'removed' || lineViews.get(m.id)?.format == null || !hasChatAbout(m.metadata)) continue;
+            if (m.type === 'removed' || !hasChatAbout(m.metadata)) continue;
+            // An old line's card opens as part of its words, only on a line the thread check showed old (core chatAboutOfOldLine;
+            // conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+            if (dmLineIsOld(lineViews.get(m.id)) && m.nonce) {
+                const old = chatAboutOfOldLine(keys, { conversationId: ctx.conversationId, senderPubHex: m.authorPubkey, messageId: m.id, metadata: m.metadata, timestamp: m.timestamp },
+                    { ciphertext: m.ciphertext, nonce: m.nonce });
+                if (old) found.set(m.id, old);
+                continue;
+            }
+            if (lineViews.get(m.id)?.format == null) continue;
             const about = chatAboutOfLine(keys, { conversationId: ctx.conversationId, senderPubHex: m.authorPubkey, messageId: m.id, metadata: m.metadata });
             if (about) found.set(m.id, about);
         }
@@ -2950,6 +2982,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         peerPubHex={ctx.peerEdPubHex}
                                                         myPrivHex={ctx.myEdPrivHex}
                                                         onOpen={setViewerUri}
+                                                        // An old line's photo opens as part of its words (conversion code, log row OLDCHAT, remove after 12 Dec 2026).
+                                                        old={isOldLine(msg) && msg.nonce ? { words: { ciphertext: msg.ciphertext, nonce: msg.nonce }, timestamp: msg.timestamp } : null}
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>

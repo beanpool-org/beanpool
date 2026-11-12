@@ -829,7 +829,7 @@ export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
 //
 // Shown: a sealed line that opens, in its named author's bubble (with the mark a moved or reordered line had before), under
 // DM_OLD_LINES_WORDS.label once above its run (dmOldLineRunStarts); neither app answers, quotes, edits or reacts to one
-// (dmLineIsOld). A photo stays locked.
+// (dmLineIsOld). Its photo and its listing card open as part of it (openDmOldLinePart, below).
 //
 // NOT shown: a readable row (plaintext-v1, 00000) stays the hidden line it is today, whatever its time. The node holds no
 // key, but it can write a readable row in anyone's name dated whenever it likes, so nothing can show one is old: shown, a
@@ -911,7 +911,10 @@ export interface OpenedDmOldLine {
     moved: boolean;
 }
 
-function openOldWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: string, cache?: KeyCache): OpenedDmOldLine {
+function openOldWith(
+    payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex: string, cache?: KeyCache,
+    only?: { format: 2 | 3; conversationId: string },
+): OpenedDmOldLine {
     // Only the two of them share this key; a line the node names as anyone else's is no line of theirs.
     if (line.senderPubHex !== myPubHex && line.senderPubHex !== keys.peerEdPubHex) throw new DmLineNotVerifiedError();
     const nonce = nonceBytes(payload.nonce);
@@ -924,7 +927,10 @@ function openOldWith(payload: DmPayload, keys: DmKeys, line: DmLineRef, myPubHex
         // A reply id no app writes: no format-3 line was sealed to it. Format 2 sealed words and photos, never a listing.
         if (format === 3 && replyToId === undefined) continue;
         if (format === 2 && part === 'about') continue;
+        // A photo or a card opens only in the format its words opened in (openDmOldLinePart), as 1.2.36 opened a photo.
+        if (only && format !== only.format) continue;
         for (const conversationId of ids) {
+            if (only && conversationId !== only.conversationId) continue;
             let key: Uint8Array;
             try { key = keyFor(keys, conversationId, cache); } catch { throw new DmLineNotVerifiedError(); }
             const aad = format === 3
@@ -975,5 +981,96 @@ function openOldLineOfThread(
         } catch { /* the next former key */ }
     }
     return null;
+}
+
+// Old chat's photos and listing cards (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 13 Nov 2026: "if they
+// are there why not view them?"). An old line's photo, and the listing it is about, open as 1.2.36 opened a photo: only as
+// part of the line's words, under the same key, sender, conversation id and format the words opened in. The words decide;
+// the part never opens on its own. Format 3 bound each part to its message id and part name, so no other line's photo or
+// card stands in. Format 2 bound only the conversation: a format-2 line's photo is any format-2 sealing of that conversation
+// the node chooses to serve (1.2.36's own hole, as with format 2's words; the run's label says no old line was signed), and
+// only a picture is shown (DM_OLD_PHOTO_URI), so words served in a photo's place stay locked. Format 2 never sealed a listing.
+
+/** An old line's words, opened, with the key and the sender they opened under (checkDmThread's order: pinned, then former). */
+interface OpenedDmOldWords {
+    opened: OpenedDmOldLine;
+    keys: DmKeys;
+    senderPubHex: string;
+}
+
+function openDmOldWords(words: DmPayload, keys: DmKeys, line: DmOldPartLine, myPubHex: string, formerPeers: readonly string[]): OpenedDmOldWords {
+    const ref = { conversationId: line.conversationId, messageId: line.messageId, part: 'body' as const, metadata: line.metadata };
+    try {
+        return { opened: openOldWith(words, keys, { ...ref, senderPubHex: line.senderPubHex }, myPubHex), keys, senderPubHex: line.senderPubHex };
+    } catch { /* a former key */ }
+    const mine = line.senderPubHex === myPubHex;
+    for (const peer of formerPeers) {
+        if (!peer || peer === keys.peerEdPubHex) continue;
+        if (!mine && line.senderPubHex !== keys.peerEdPubHex && line.senderPubHex !== peer) continue;
+        const former: DmKeys = { myEdPrivHex: keys.myEdPrivHex, peerEdPubHex: peer };
+        const senderPubHex = mine ? myPubHex : peer;
+        try {
+            return { opened: openOldWith(words, former, { ...ref, senderPubHex }, myPubHex), keys: former, senderPubHex };
+        } catch { /* the next former key */ }
+    }
+    throw new DmLineNotVerifiedError();
+}
+
+/** The old line a photo or a card belongs to: as the node stores it, with the node's time for it. */
+export interface DmOldPartLine {
+    /** The conversation the line is stored in. */
+    conversationId: string;
+    /** Its author, as the row names them. */
+    senderPubHex: string;
+    messageId: string;
+    /** Its metadata as stored (older conversation ids, a reply's answered id). */
+    metadata?: unknown;
+    /** The node's time for the line. */
+    timestamp: string | null | undefined;
+}
+
+/**
+ * An old line's words, opened as checkDmThread opens them: under `keys`, then each of `formerPeers`. Only with the old shape at
+ * the line's time (dmLineHasOldShape). Throws DmLineNotVerifiedError when none opens. For a reader that must know the words
+ * open before it shows anything of the line (the phone's photo cache, kept by message id: utils/db.ts getDecryptedAttachment).
+ */
+export function openDmOldLineWords(words: DmPayload, keys: DmKeys, line: DmOldPartLine, formerPeers: readonly string[] = []): OpenedDmOldLine {
+    if (!dmLineHasOldShape({ ...words, timestamp: line.timestamp })) throw new DmLineNotVerifiedError();
+    return openDmOldWords(words, keys, line, dmPublicKeyOf(keys.myEdPrivHex), formerPeers).opened;
+}
+
+/**
+ * One more part of a line from before 1.4.0, its photo ('attachment') or the listing it is about ('about'), opened only as
+ * part of its words (`words`, the line's own ciphertext and nonce): the words open as an old line first (under `keys`, then
+ * each of `formerPeers` as checkDmThread tries them), then the part under the same key, sender, conversation id and format,
+ * a sealing other than the words' own. Both must have the old shape at the line's time (dmLineHasOldShape). Throws
+ * DmLineNotVerifiedError otherwise. A caller opens one only for a line its thread check showed old (dmLineIsOld).
+ */
+export function openDmOldLinePart(
+    words: DmPayload, partPayload: DmPayload, keys: DmKeys, line: DmOldPartLine, part: 'attachment' | 'about', formerPeers: readonly string[] = [],
+): OpenedDmOldLine {
+    if (!dmLineHasOldShape({ ...words, timestamp: line.timestamp }) || !dmLineHasOldShape({ ...partPayload, timestamp: line.timestamp })) {
+        throw new DmLineNotVerifiedError();
+    }
+    // One sealing is one part: the words' own bytes never stand in for their photo or card.
+    if (bytesToHex(nonceBytes(words.nonce)) === bytesToHex(nonceBytes(partPayload.nonce))) throw new DmLineNotVerifiedError();
+    const myPubHex = dmPublicKeyOf(keys.myEdPrivHex);
+    const w = openDmOldWords(words, keys, line, myPubHex, formerPeers);
+    return openOldWith(partPayload, w.keys,
+        { conversationId: line.conversationId, senderPubHex: w.senderPubHex, messageId: line.messageId, part, metadata: line.metadata },
+        myPubHex, undefined, { format: w.opened.format, conversationId: w.opened.conversationId });
+}
+
+/** A photo as the old apps sealed one: a data URI of an image, in base64. Anything else is no photo, and stays locked. */
+const DM_OLD_PHOTO_URI = /^data:image\/\w+;base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * An old line's photo (openDmOldLinePart's 'attachment'), as the data URI an image is drawn from. Throws
+ * DmLineNotVerifiedError when it doesn't open, or what opens isn't a picture: the bubble then stays "🔒 Image unavailable".
+ */
+export function openDmOldPhoto(words: DmPayload, photo: DmPayload, keys: DmKeys, line: DmOldPartLine, formerPeers: readonly string[] = []): string {
+    const { text } = openDmOldLinePart(words, photo, keys, line, 'attachment', formerPeers);
+    if (!DM_OLD_PHOTO_URI.test(text)) throw new DmLineNotVerifiedError();
+    return text;
 }
 // ─── end of old chat (OLDCHAT) ───────────────────────────────────────────────────────────────────────────────────────

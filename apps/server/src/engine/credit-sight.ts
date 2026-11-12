@@ -16,15 +16,20 @@
  *   little high until the member's fee is next booked; at or below 200, and below zero, it is exact (amendment §6).
  * - The line from getMemberTrustProfile and usableFloor (neither reads a balance), the Offers from liveOfferCount.
  * - A page is at most PAGE_SIZE people, each worked out once ({@link linesComputed} counts them for the cost test): the
- *   order and the filters are SQL over the members table, before any line is worked out.
+ *   order and the filters are SQL over the members table, before any whole line is worked out. "No credit yet" is the
+ *   line itself, from its parts as the line reads them ({@link creditedKeys}), never a stand-in such as "confirmed".
+ * - Only people are listed: never an account core calls synthetic (SYSTEM, genesis, the Commons, escrow, project, bridge),
+ *   an enterprise or a visitor; nobody else gets a row, a button or a look.
  *
  * Plain reads: nothing here is a Bean, no `accounts` write, no transfer.
  */
 import {
-    creditRisk, riskForVoucher, position, DISPUTE_DAYS,
+    creditRisk, riskForVoucher, position, DISPUTE_DAYS, creditAllowance, isSyntheticAccount, SYNTHETIC_ACCOUNT_IDS, SYNTHETIC_ACCOUNT_PREFIXES,
     type CreditRisk, type CreditRiskFacts, type CreditSight,
 } from '@beanpool/core';
-import { creditCap, getMember, isVisitorKey, LIVE_OFFER_WHERE, liveOfferCount as liveOffersOf } from '@beanpool/engine';
+import {
+    creditCap, earnedCreditOf, getMember, isVisitorKey, LIVE_OFFER_WHERE, liveOfferCount as liveOffersOf, memberUsableKnownGrant, roomHeldOf,
+} from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin } from './node-roles.js';
@@ -56,26 +61,70 @@ export function giverSight(viewer: string | null | undefined): CreditSight | nul
 let computed = 0;
 /** How many people's lines this process worked out (the cost test reads it before and after a page). */
 export function linesComputed(): number { return computed; }
+let orderChecked = 0;
+/** How many people's line parts this process read to put a page in order ({@link creditedKeys}; the cost test reads it). */
+export function orderChecks(): number { return orderChecked; }
 
 // ── Who is listed ────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Listed: a member's own row, never an enterprise, a visitor or a removed account. A paused member is listed, greyed. */
-const LISTED = "m.is_visitor = 0 AND COALESCE(m.is_treasury, 0) = 0 AND m.status IN ('active', 'suspended', 'disabled')";
+const sqlText = (v: string) => `'${v.replace(/'/g, "''")}'`;
+/**
+ * Not a person: core's own list of accounts that are not people (isSyntheticAccount: the seeded SYSTEM row, genesis, the
+ * Commons, escrow, project and bridge accounts), as SQL over the row's key, so the list and {@link buildPerson} agree.
+ */
+const NOT_SYNTHETIC = [
+    `m.public_key NOT IN (${SYNTHETIC_ACCOUNT_IDS.map(sqlText).join(', ')})`,
+    ...SYNTHETIC_ACCOUNT_PREFIXES.map((prefix) => `substr(m.public_key, 1, ${prefix.length}) <> ${sqlText(prefix)}`),
+].join(' AND ');
+/**
+ * Listed: a person's own row, never an enterprise (a treasury), a visitor, an account that is not a person or a removed
+ * account. A paused member is listed, greyed. Nobody else is ever built, so nobody else gets a row, a button or a look.
+ */
+const LISTED = `m.is_visitor = 0 AND COALESCE(m.is_treasury, 0) = 0 AND m.status IN ('active', 'suspended', 'disabled') AND ${NOT_SYNTHETIC}`;
 /** A live confirmation (the names list's, a second admin's agreement where one was needed). */
 const LIVE_CONFIRMATION = `EXISTS (SELECT 1 FROM confirmations c WHERE c.member_pubkey = m.public_key AND c.revoked_at IS NULL
     AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL))`;
-/**
- * No credit yet, narrowed in SQL before any line is worked out (design §6 "Cost"): no live confirmation, no room received,
- * no completed trade, no granted credit, no freeze. Each row is then worked out exactly; the sentence reads the exact line.
- */
-const NO_CREDIT_SQL = `NOT ${LIVE_CONFIRMATION}
-    AND NOT EXISTS (SELECT 1 FROM room_gifts g WHERE g.to_pubkey = m.public_key)
-    AND NOT EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.status = 'completed' AND (t.buyer_pubkey = m.public_key OR t.seller_pubkey = m.public_key))
-    AND COALESCE(m.earned_credit_c, 0) = 0 AND COALESCE(m.credit_frozen, 0) = 0`;
+/** Frozen as {@link buildPerson} reads it (the whole line, or the known floor): the row says "frozen", never "No credit yet". */
+const FROZEN_SQL = `(COALESCE(m.credit_frozen, 0) = 1
+    OR EXISTS (SELECT 1 FROM known_floor_exceptions x WHERE x.member_pubkey = m.public_key AND x.frozen = 1))`;
 /** A live Offer of their own: the engine's own rule (posts.ts LIVE_OFFER_WHERE), on the row's key. */
 const HAS_LIVE_OFFER = `EXISTS (SELECT 1 FROM posts WHERE ${LIVE_OFFER_WHERE.replace('author_pubkey = ?', 'author_pubkey = m.public_key')})`;
-/** The order every filter shares: no credit yet with a live Offer, no credit yet, then the rest; by callsign within each. */
-const GROUP_SQL = `CASE WHEN ${NO_CREDIT_SQL} THEN (CASE WHEN ${HAS_LIVE_OFFER} THEN 0 ELSE 1 END) ELSE 2 END`;
+/**
+ * The order every filter shares: no credit yet with a live Offer, no credit yet, then the rest; by callsign within each.
+ * No credit yet is the row's own sentence: not frozen, and a line of 0 (not in `@credited`, {@link creditedKeys}).
+ */
+const GROUP_SQL = `CASE WHEN NOT ${FROZEN_SQL} AND m.public_key NOT IN (SELECT value FROM json_each(@credited))
+    THEN (CASE WHEN ${HAS_LIVE_OFFER} THEN 0 ELSE 1 END) ELSE 2 END`;
+
+/**
+ * Everyone listed and not frozen whose line is above 0 now: the order's "has credit". Each part is read by the function the
+ * line itself reads (engine getMemberTrustProfile), and the line by core's creditAllowance, so the order and the row's
+ * sentence never disagree: the known grant with the confirmation dial as it is (memberUsableKnownGrant: 0 with the dial
+ * off, whoever is confirmed), the room they hold (roomHeldOf: received less passed on), what they earned (earnedCreditOf)
+ * and what was granted (members.earned_credit_c, the granted lane's own column).
+ *
+ * Cost (design §6): SQL first keeps only the people one of whose parts can be above 0 at all (a live confirmation, room
+ * received, a completed trade, granted credit); someone with none of them has a line of 0 and is never read here. Of
+ * the rest, earned (the dearest part) is worked out only when no cheaper part already gives a line.
+ */
+function creditedKeys(): string[] {
+    const cap = creditCap(db);
+    const rows = many<{ pk: string; granted: number; confirmed: number; room: number; traded: number }>(`SELECT * FROM (SELECT m.public_key AS pk,
+        COALESCE(m.earned_credit_c, 0) AS granted, ${LIVE_CONFIRMATION} AS confirmed,
+        EXISTS (SELECT 1 FROM room_gifts g WHERE g.to_pubkey = m.public_key) AS room,
+        EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.status = 'completed' AND (t.buyer_pubkey = m.public_key OR t.seller_pubkey = m.public_key)) AS traded
+        FROM members m WHERE ${LISTED} AND NOT ${FROZEN_SQL}) WHERE granted > 0 OR confirmed OR room OR traded`);
+    const out: string[] = [];
+    for (const r of rows) {
+        orderChecked++;
+        const granted = Math.max(0, Number(r.granted) || 0);
+        const knownGrant = r.confirmed ? memberUsableKnownGrant(db, r.pk) : 0;
+        const roomHeld = r.room ? roomHeldOf(db, r.pk) : 0;
+        const earned = r.traded && granted + knownGrant + roomHeld === 0 ? earnedCreditOf(db, r.pk).earnedCredit : 0;
+        if (creditAllowance({ earned, granted, knownGrant, roomHeld, cap }) > 0) out.push(r.pk);
+    }
+    return out;
+}
 
 export const CREDIT_FILTERS = ['all', 'no_credit', 'has_offers', 'mine'] as const;
 export type CreditFilter = typeof CREDIT_FILTERS[number];
@@ -209,7 +258,7 @@ const callsignOf = (pk: string | null | undefined): string => (pk ? getMember(db
 function buildPerson(pk: string, sight: CreditSight, ctx: PageContext, withYouVouched: boolean): CreditPersonVoucher | CreditPersonFull | null {
     const m = one<{ public_key: string; callsign: string; status: string; joined_at: string | null; credit_frozen: number | null } | undefined>(
         `SELECT m.public_key, m.callsign, m.status, m.joined_at, m.credit_frozen FROM members m WHERE m.public_key = ? AND ${LISTED}`, pk);
-    if (!m || isVisitorKey(db, pk)) return null;
+    if (!m || isVisitorKey(db, pk) || isSyntheticAccount(pk)) return null;
     computed++;
     const trust = getMemberTrustProfile(pk);
     const line_c = Math.max(0, -trust.floor);
@@ -267,7 +316,7 @@ export function creditPeople(viewer: string, sight: CreditSight, opts: { filter?
     if (opts.after !== undefined && opts.after !== '' && !after) throw new CreditSightError(400, 'bad_cursor', 'after is the `next` of an earlier page.');
     const q = typeof opts.q === 'string' ? opts.q.trim().slice(0, 64) : '';
     const where: string[] = [LISTED];
-    const params: Record<string, unknown> = { viewer, limit: PAGE_SIZE + 1 };
+    const params: Record<string, unknown> = { viewer, limit: PAGE_SIZE + 1, credited: JSON.stringify(creditedKeys()) };
     if (filter === 'no_credit') where.push('grp IN (0, 1)');
     if (filter === 'has_offers') where.push('grp = 0');
     if (filter === 'mine') where.push(`(m.invited_by = @viewer OR EXISTS (SELECT 1 FROM room_gifts v WHERE v.kind = 'vouch' AND v.from_pubkey = @viewer AND v.to_pubkey = m.public_key))`);

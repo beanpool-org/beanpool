@@ -13,7 +13,9 @@
  *     level high, the one giver reason with its figures, `more`; no parts, nobody who stands behind, no freeze, no admins'
  *     reason. The owner's answer has them all. A frozen member: the voucher reads only "can't give".
  *  6. Rob: no credit, 4 live Offers, first under All, in No credit yet and Has Offers; Balance 0. An owner vouches 500:
- *     line 500, usable 500. With no Offer, the same vouch is asleep: usable 0.
+ *     line 500, usable 500. With no Offer, the same vouch is asleep: usable 0. SYSTEM and the Commons are on no page and no
+ *     card, and nobody looks at them. With the dial off, Cat (confirmed, 1 Offer, no line) is in No credit yet and Has
+ *     Offers and sorts with Rob's kind; her known floor frozen keeps her out; Wes (only a wash pair) earned 0: No credit yet.
  *  7. Looks: a page writes one `list` line per person (actor, subject, sight, day) before the body; the same page again
  *     that day none; the card one `card` line a day; with the insert failing the read answers 500 and no body; a line
  *     366 days old goes on the tidy and by the manifest's age rule; a re-key moves both columns; `me` writes none.
@@ -47,7 +49,7 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { setNodeRole } from './config/node-role.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
-import { linesComputed } from './engine/credit-sight.js';
+import { creditPerson, linesComputed, orderChecks } from './engine/credit-sight.js';
 import { pruneOldLooks } from './engine/credit-looks.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { moveMemberKeyRows } from './engine/key-move.js';
@@ -174,6 +176,11 @@ async function main(): Promise<void> {
     deal(mel, ria, hc(20), 10, { status: 'cancelled', resolution: 'refund_to_buyer' });
     storedBalance(ria, -90000);
     db.prepare('UPDATE members SET credit_frozen = 1, earned_credit_c = ? WHERE public_key = ?').run(hc(500), fay.pk);
+    // Cat: confirmed, 1 live Offer, nothing else; with the dial on that is the known floor (test 6 switches it off).
+    const cat = newId('Cat');
+    enter(cat);
+    confirm(cat, owen);
+    offers(cat, 1);
     clearWashTradingCache(db);
 
     // ── 3. The sight matrix ──────────────────────────────────────────────────────────────────────────────────────
@@ -259,6 +266,47 @@ async function main(): Promise<void> {
         `6. after 500: Rob's line 500, usable 500; Ned's 500 asleep, usable 0 (red when the sentence reads the limit as usable) (${JSON.stringify({ rob: robAfter?.usable_c, ned: nedAfter?.usable_c })})`);
     const hasOffersAfter = await call(owen, 'GET', '/api/credit/people?filter=has_offers');
     assert(!hasOffersAfter.body?.people?.some((p: any) => p.memberPubkey === rob.pk), `6. Rob, given credit, leaves Has Offers (${show(hasOffersAfter)})`);
+
+    // Not a person (review of 075d19af, finding 1): the seeded SYSTEM row, and any other account core calls synthetic, is
+    // never listed, never given a button, never looked at.
+    require_(count("SELECT COUNT(*) AS n FROM members WHERE public_key = 'SYSTEM'") === 1, 'the seeded SYSTEM row is in members');
+    db.prepare("INSERT OR IGNORE INTO members (public_key, callsign, invited_by, invite_code) VALUES ('COMMONS_POOL', 'Commons', 'genesis', 'genesis')").run();
+    const synthetic = (keys: string[]) => keys.filter((k) => !/^[0-9a-f]{64}$/.test(k));
+    const allPages = await Promise.all(['', '?filter=no_credit', '?filter=has_offers', '?q=o'].map((q) => call(owen, 'GET', `/api/credit/people${q}`)));
+    const valAll = await call(val, 'GET', '/api/credit/people?filter=no_credit');
+    const listedKeys = [...allPages, valAll].flatMap((r) => (r.body?.people ?? []).map((p: any) => p.memberPubkey as string));
+    assert(allPages.every((r) => r.status === 200) && listedKeys.length > 0 && synthetic(listedKeys).length === 0
+        && creditPerson(owen.pk, 'owner', 'SYSTEM') === null && creditPerson(val.pk, 'voucher', 'SYSTEM') === null && creditPerson(owen.pk, 'owner', 'COMMONS_POOL') === null,
+        `6. SYSTEM and the Commons: on no page and no card, to an owner or a voucher (red when LISTED keeps a non-person) (${JSON.stringify(synthetic(listedKeys))})`);
+    assert(count("SELECT COUNT(*) AS n FROM credit_look_log WHERE subject_pubkey IN ('SYSTEM', 'COMMONS_POOL', 'genesis')") === 0,
+        '6. no look line is written about an account that is not a person');
+
+    // The dial off (finding 2): a confirmed member has no known grant, so no line; with a live Offer they are No credit yet,
+    // in Has Offers, and first under All with Rob's kind, as the row's own sentence says.
+    const groupOf = async (q: string): Promise<string[]> => (await call(owen, 'GET', `/api/credit/people${q}`)).body?.people?.map((p: any) => p.memberPubkey as string) ?? [];
+    const catOn = (await call(owen, 'GET', `/api/credit/people/${cat.pk}`)).body?.person;
+    const noCreditOn = await groupOf('?filter=no_credit');
+    assert(catOn?.line_c > 0 && catOn?.parts?.known_c > 0 && !noCreditOn.includes(cat.pk),
+        `6. dial on: Cat, confirmed, holds the known floor (${catOn?.line_c}) and is not in No credit yet`);
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('confirmation', 'off') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
+    const catOff = (await call(owen, 'GET', `/api/credit/people/${cat.pk}`)).body?.person;
+    const [allOff, noCreditOff, hasOffersOff] = [await groupOf(''), await groupOf('?filter=no_credit'), await groupOf('?filter=has_offers')];
+    const noOfferNoCredit = allOff.findIndex((k) => k === mel.pk);
+    db.prepare("DELETE FROM node_config WHERE key = 'confirmation'").run();
+    // The known floor frozen (dial on): no line, and the row reads "frozen", so Cat is not No credit yet either.
+    db.prepare("INSERT INTO known_floor_exceptions (member_pubkey, frozen, set_by) VALUES (?, 1, ?)").run(cat.pk, owen.pk);
+    const catFrozen = (await call(owen, 'GET', `/api/credit/people/${cat.pk}`)).body?.person;
+    const noCreditFrozen = await groupOf('?filter=no_credit');
+    db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(cat.pk);
+    assert(catFrozen?.line_c === 0 && catFrozen?.frozen?.known === true && !noCreditFrozen.includes(cat.pk),
+        `6. Cat's known floor frozen: line 0, the row says frozen, and she is not in No credit yet (red when the order forgets a known-floor freeze)`);
+    // Earned, read as the line reads it: Wes's only completed trades are the wash pair with Ria, so he earned nothing.
+    const wesCard = (await call(owen, 'GET', `/api/credit/people/${wes.pk}`)).body?.person;
+    assert(wesCard?.line_c === 0 && wesCard?.parts?.earned_c === 0 && noCreditOn.includes(wes.pk),
+        `6. Wes, whose only trades are a wash pair, earned 0 and is in No credit yet (red when a completed trade stands in for earned credit) (${JSON.stringify(wesCard?.parts)})`);
+    assert(catOff?.line_c === 0 && catOff?.liveOffers === 1 && noCreditOff.includes(cat.pk) && hasOffersOff.includes(cat.pk)
+        && allOff.indexOf(cat.pk) >= 0 && noOfferNoCredit > allOff.indexOf(cat.pk),
+        `6. dial off: Cat, confirmed, line 0 with 1 live Offer, is in No credit yet and Has Offers, and under All before Mel, who has no credit and no Offer (red when the order reads a confirmation, not the line) (${JSON.stringify({ line: catOff?.line_c, all: allOff.indexOf(cat.pk), mel: noOfferNoCredit, has: hasOffersOff.length })})`);
 
     // ── 7. The log of looks ──────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 7. the looks —');
@@ -362,17 +410,42 @@ async function main(): Promise<void> {
         }
     })();
     const lines0 = linesComputed();
+    const order0 = orderChecks();
     const t0 = performance.now();
     const big = await call(owen, 'GET', '/api/credit/people?filter=no_credit');
     const ms = performance.now() - t0;
     const computedNow = linesComputed() - lines0;
+    const orderNow = orderChecks() - order0;
+    const withASource = count(`SELECT COUNT(*) AS n FROM members m WHERE COALESCE(m.earned_credit_c, 0) > 0
+        OR EXISTS (SELECT 1 FROM confirmations c WHERE c.member_pubkey = m.public_key AND c.revoked_at IS NULL)
+        OR EXISTS (SELECT 1 FROM room_gifts g WHERE g.to_pubkey = m.public_key)
+        OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.status = 'completed' AND (t.buyer_pubkey = m.public_key OR t.seller_pubkey = m.public_key))`);
     const lineBytes = Buffer.byteLength(JSON.stringify(db.prepare('SELECT * FROM credit_look_log WHERE actor_pubkey = ? LIMIT 1').get(owen.pk)));
     assert(big.status === 200 && big.body?.people?.length === 30 && computedNow <= 300 && computedNow === 30 && typeof big.body?.next === 'string',
-        `16. 1,011 members: the first page of No credit yet worked out ${computedNow} lines (at most 300), in ${ms.toFixed(0)} ms; one look line ~${lineBytes} bytes (red when the filter computes every member)`);
+        `16. ${count("SELECT COUNT(*) AS n FROM members")} members: the first page of No credit yet worked out ${computedNow} lines (at most 300), in ${ms.toFixed(0)} ms; one look line ~${lineBytes} bytes (red when the filter computes every member)`);
+    assert(orderNow > 0 && orderNow <= withASource,
+        `16. the order read the line's parts of ${orderNow} people, only those with a confirmation, room, a completed trade or granted credit (${withASource}); none of the 1,000 without (red when the order reads every member's parts)`);
     const second = await call(owen, 'GET', `/api/credit/people?filter=no_credit&after=${encodeURIComponent(big.body?.next ?? '')}`);
     const firstKeys = new Set((big.body?.people ?? []).map((p: any) => p.memberPubkey));
     assert(second.status === 200 && second.body?.people?.length === 30 && second.body.people.every((p: any) => !firstKeys.has(p.memberPubkey)),
         `16. the next page follows on, no person twice (${show(second)})`);
+    // The same 1,000 after every one of them has traded once (500 pairs, 10 Beans): the order reads each trader's earned
+    // part, the page still works out only its own 30 lines. Timed, for the PR (no time bound: the Mac is shared).
+    const fixtures = db.prepare("SELECT public_key FROM members WHERE invite_code = 'fixture' ORDER BY callsign").all() as { public_key: string }[];
+    const tradePost = offers(owen, 1)[0]!;
+    const insertTrade = db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, status, created_at, completed_at)
+        VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)`);
+    db.transaction(() => {
+        for (let i = 0; i + 1 < fixtures.length; i += 2) insertTrade.run(crypto.randomBytes(8).toString('hex'), tradePost, fixtures[i]!.public_key, fixtures[i + 1]!.public_key, hc(10), iso(DAY), iso(DAY));
+    })();
+    db.prepare('UPDATE posts SET active = 0, status = ? WHERE id = ?').run('completed', tradePost);
+    clearWashTradingCache(db);
+    const [tl0, to0, tt0] = [linesComputed(), orderChecks(), performance.now()];
+    const traded = await call(owen, 'GET', '/api/credit/people?filter=no_credit');
+    const [tms, tLines, tOrder] = [performance.now() - tt0, linesComputed() - tl0, orderChecks() - to0];
+    const tradedLines = (traded.body?.people ?? []).map((p: any) => p.line_c as number);
+    assert(traded.status === 200 && tLines <= 30 && tOrder >= fixtures.length && tradedLines.length > 0 && tradedLines.every((l: number) => l === 0),
+        `16. after 1,000 trades: the first page of No credit yet worked out ${tLines} lines and read the parts of ${tOrder} people, in ${tms.toFixed(0)} ms; all ${tradedLines.length} on it have a line of 0 (red when the order and the line disagree)`);
     const bad = await call(owen, 'GET', '/api/credit/people?filter=everyone');
     assert(bad.status === 400 && bad.body?.code === 'bad_filter', `a filter that isn't one is refused (${show(bad)})`);
 

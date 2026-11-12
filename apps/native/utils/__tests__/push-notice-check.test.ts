@@ -47,7 +47,7 @@ import {
 import { registerPushTokenWithCommunity } from '../push-registrations';
 import { readPushPins } from '../push-pins';
 import {
-    checkWhileOpen, droppedNoticeCounts, followTap, FORGED_NOTICE_LINE, LOCAL_NOTICE_DATA, noticeRoute,
+    checkWhileOpen, droppedNoticeCounts, followTap, FORGED_NOTICE_LINE, LOCAL_NOTICE_DATA, noticeHasDestination, noticeRoute,
     onNoticeWarning, takeNoticeWarning, UNSIGNED_NOTICE_WORDS, VAULT_NOTICE_WORDS, type IncomingNotice, type NoticeRoute,
 } from '../push-notice-check';
 import {
@@ -618,6 +618,19 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         // Someone asked to join after a listing this member shared (A3): their Shared outside; without details, Settings.
         expect(noticeRoute('community.knock-shared', { screen: 'shared-outside' })).toBe('/shared-outside');
         expect(noticeRoute('community.knock-shared', null)).toBe('/(tabs)/settings');
+    });
+
+    it('noticeHasDestination: the bell offers "Open" only where the notice lands somewhere of its own', () => {
+        // A kind this build knows has its tab (Home's own line for a vote); the details can name a more exact place.
+        expect(noticeHasDestination('chat.message', {})).toBe(true);
+        expect(noticeHasDestination('decision.open', null)).toBe(true);
+        expect(noticeHasDestination(null, { screen: 'post', postId: POST_ID })).toBe(true);
+        expect(noticeHasDestination(null, { screen: 'settings' })).toBe(true);
+        expect(noticeHasDestination(null, { screen: 'shared-outside' })).toBe(true);
+        // A kind it does not know, naming nothing (or a post by an id out of shape), falls to Home: nowhere in particular.
+        expect(noticeHasDestination(null, {})).toBe(false);
+        expect(noticeHasDestination(null, null)).toBe(false);
+        expect(noticeHasDestination(null, { screen: 'post', postId: 'not-an-id' })).toBe(false);
     });
 
     it("a deal's alert lands on the deal: its txId rides with the post when it is in the node's own shape (deals S4)", () => {

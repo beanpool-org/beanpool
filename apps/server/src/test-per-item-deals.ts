@@ -24,7 +24,9 @@
  *      Repeatable, a loan, a standing deal: one case each.
  *  11. The count never blocks a refund: a cancel with the count at 9,999 puts back what fits, and the Beans go back.
  *  12. An enterprise buying from its own keeper more than are left: told how many are left, and no deferred wage claim is
- *      recorded for items that aren't there (the stock is asked before the funding check, which records one as it refuses).
+ *      recorded for items that aren't there (the stock is asked before the funding check, which records one as it refuses);
+ *      one it can't pay for yet: refused, and no claim either (nothing waits unfunded against the count), so none is paid
+ *      later; and a claim from before the listing was priced for each one pays without closing it.
  *  13. A standby copy carries the hold's row and the count it moved, together.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-per-item-deals)
@@ -39,7 +41,7 @@ import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
     initStateEngine, transfer, createPost as rawCreatePost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, adminPruneUser,
-    COMMUNITY_DECISION_ACTOR, exportSyncState, importRemoteState, setNodeRole, createTreasury, acceptPost,
+    COMMUNITY_DECISION_ACTOR, exportSyncState, importRemoteState, setNodeRole, createTreasury, acceptPost, processDeferredWageClaims,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
@@ -572,6 +574,44 @@ async function main(): Promise<void> {
     // records a wage claim of 30 Beans, paid later with no further step, for crates that were never there.
     assert(tooMany === 'units_gone:2' && claims() === 0 && listing(crates).units_left === 2 && dealsOn(crates) === 0,
         `Crate Co asks for 3 of Kay's 2 crates: told 2 are left, and no wage claim is recorded (${tooMany}, claims ${claims()})`);
+    // One crate, which Crate Co can't pay its own keeper for yet (no profit: Rules 5 and 6): refused, nothing held, and no
+    // wage claim recorded either, so nothing waits unfunded against the count (design §4.5). Red if a take-up of a listing
+    // priced for each one records a claim: that claim is paid later with no further step (state-engine.ts
+    // processDeferredWageClaims), paying Kay for a crate the count never gave up, which another buyer can still take and pay
+    // for, and closing the listing as sold out with both crates still on it (the next check). The engine is called as
+    // above: an enterprise's own key is never kept, so no request can be signed as it.
+    const crateCoStart = bal(crateCo);
+    let unfunded: any = null;
+    try { acceptPost(crates, crateCo, undefined, { authSigner: kim.pk, item: { n: 1, option: 'each', expect_c: hc(10) } }); } catch (e: any) { unfunded = e; }
+    assert(unfunded?.status === 403 && /keepers can only be paid from profit/.test(String(unfunded?.message)) && claims() === 0
+        && bal(crateCo) === crateCoStart && listing(crates).units_left === 2 && dealsOn(crates) === 0,
+        `Crate Co asks for 1 crate it can't pay Kay for yet: refused, and no wage claim is recorded (${unfunded?.status} ${unfunded?.message}, claims ${claims()})`);
+    // Crate Co then has the Beans and the profit, and its waiting claims are paid: nothing is paid for a crate nobody took,
+    // and the listing is still up with both crates.
+    transfer('genesis', crateCo, hc(50), 'Crate Co trades', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus_c = ? WHERE public_key = ?').run(hc(50), crateCo);
+    const kayBefore = bal(kay.pk);
+    processDeferredWageClaims(crateCo);
+    assert(bal(kay.pk) === kayBefore && listing(crates).status === 'active' && listing(crates).units_left === 2,
+        `once Crate Co can pay, Kay is paid nothing for crates nobody took, and the listing stays up with 2 (${JSON.stringify(listing(crates))})`);
+    conserved('Crate Co\'s waiting claims are paid');
+    // A claim from before: a one-off stool Crate Co couldn't pay Kay for, then Kay sells stools one by one on that listing.
+    // The claim is paid when Crate Co can, and the listing stays up with its count. Red if the claim's payout closes a
+    // listing priced for each one: sold out with 5 still on it, closed by something its count never said.
+    const stools = await made(kay, { title: 'Stools', priceType: 'fixed', price_c: hc(80) });
+    const stoolClaims = () => (db.prepare("SELECT COUNT(*) AS n FROM deferred_wage_claims WHERE post_id = ? AND status = 'pending'").get(stools) as { n: number }).n;
+    let oneOff: any = null;
+    try { acceptPost(stools, crateCo, undefined, { authSigner: kim.pk }); } catch (e: any) { oneOff = e; }
+    const intoEach = await edit(kay, stools, { priceType: 'each', price_c: hc(20), unitsLeft: 5 });
+    assert(oneOff?.status === 403 && stoolClaims() === 1 && intoEach.status === 200 && listing(stools).price_type === 'each' && listing(stools).units_left === 5,
+        `a one-off stool Crate Co can't pay for leaves Kay a claim, as before, and Kay then sells stools for each one (${oneOff?.status}, ${brief(intoEach)})`);
+    transfer('genesis', crateCo, hc(100), 'Crate Co trades again', 'direct', true);
+    db.prepare('UPDATE members SET earned_surplus_c = ? WHERE public_key = ?').run(hc(150), crateCo);
+    const kayThen = bal(kay.pk);
+    processDeferredWageClaims(crateCo);
+    assert(bal(kay.pk) === kayThen + hc(80) - feeOf(hc(80)) && stoolClaims() === 0 && listing(stools).status === 'active' && listing(stools).units_left === 5,
+        `the claim pays Kay for the stool (80, less the 1.5%) when Crate Co can, and the stools stay up with 5 (Kay +${bal(kay.pk) - kayThen}, ${JSON.stringify(listing(stools))})`);
+    conserved('a claim from before is paid');
 
     // ── 13. A standby copy ──────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 13. A standby copy');

@@ -5947,8 +5947,10 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         }
                     }
                     if (claim.post_id) {
-                        // Not a repeatable or a lendable one: it stays on the board (engine/escrow.ts).
-                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND lendable = 0 AND status != 'completed'")
+                        // Not a repeatable or a lendable one: it stays on the board (engine/escrow.ts). Nor one priced for
+                        // each one: only its count says it is sold out (engine/per-item.ts settleItemDeal). Its take-up never
+                        // records a claim (escrow.ts offerHoldChecks), so a claim here is from before its seller priced it so.
+                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND lendable = 0 AND COALESCE(price_type, '') != 'each' AND status != 'completed'")
                             .run(claim.post_id).changes > 0;
                     }
                     return true;

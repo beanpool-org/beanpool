@@ -1126,7 +1126,10 @@ export function offerHoldChecks(
         assertHoldFunded(cb, parties, finalCredits, {
             payerName: buyerMember?.callsign || 'This enterprise',
             insufficient: word('Insufficient balance to accept this offer'),
-            claim: opts.scheduled ? null : { postId: post.id },
+            // A listing priced for each one is refused with no claim (DESIGN-per-item-price-fable.md §4.5: nothing waits
+            // unfunded against its count). A claim is paid later with no further step (state-engine.ts
+            // processDeferredWageClaims), for items the count never gave up: another buyer could take and pay for them too.
+            claim: opts.scheduled || isPerItem(post) ? null : { postId: post.id },
         });
     }
     return { ...parties, amount_c: finalCredits, buyerCallsign: buyerMember?.callsign };

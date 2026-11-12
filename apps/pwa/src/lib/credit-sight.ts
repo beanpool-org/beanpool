@@ -224,6 +224,14 @@ export function getCreditPerson(memberPubkey: string): Promise<CreditCardAnswer>
     return request<CreditCardAnswer>('GET', `/api/credit/people/${encodeURIComponent(memberPubkey)}`);
 }
 
+/**
+ * What givers see about the signer (slice C6, the member's own Ledger): `GET /api/credit/me`, a voucher's answer about them
+ * from the node's one builder. Any member may ask; no look is recorded (it is their own). A node with Beans off answers 404.
+ */
+export function getCreditMe(): Promise<{ told: string; me: CreditPerson }> {
+    return request<{ told: string; me: CreditPerson }>('GET', '/api/credit/me');
+}
+
 /** The committee's chip. 403 `committee_only` is an answer: there is no chip. It records no look. */
 export function getVouchersChip(): Promise<VouchersChipAnswer> {
     return request<VouchersChipAnswer>('GET', '/api/credit/people?filter=vouchers');

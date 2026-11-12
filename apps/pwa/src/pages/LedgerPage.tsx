@@ -25,6 +25,7 @@ import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
+import { CreditSeenByGivers } from '../components/CreditSeenByGivers';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerCreditLine, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
@@ -877,6 +878,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     <span className="text-[10px] font-medium text-nature-400 dark:text-nature-400 text-center italic block">
                         {t("💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.")}
                     </span>
+
+                    {/* What a voucher reads about you, from the node, with the one sentence about who can see it (slice C6). */}
+                    {/* Once their own balance has been read, so it is read once at open and again only when the balance moves. */}
+                    {viewerIsMember && !preview && readsBeans && ownBalanceInfo && <CreditSeenByGivers memberKey={myKey} reread={balance} />}
                 </div>
             ) : (
                 <div className="flex flex-col gap-4 mt-4 animate-in fade-in duration-300" data-testid="ledger-wallet">

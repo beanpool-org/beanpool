@@ -1,7 +1,8 @@
 /**
  * The web's credit surfaces on their own, for e2e/credit-list-shots.mjs (DESIGN-credit-list-fable.md test 14; credit on the
  * People list C5): `?view=list` People → Community with Show credit on (the real CreditPeoplePanel), `vouchers` the committee's
- * Vouchers chip, `card` a profile's credit card, `looks` the log of looks in Settings, `ask` Ask for more in its states. The
+ * Vouchers chip, `card` a profile's credit card, `looks` the log of looks in Settings, `ask` Ask for more in its states, `seen` the
+ * member's own "What people who give credit see" (slice C6). The
  * account is a test's (a fixed seed, never a member's) and nothing here talks to a node: the driver answers /api.
  */
 import { createRoot } from 'react-dom/client';
@@ -10,6 +11,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { toEd25519Pkcs8 } from '@beanpool/core';
 import { CreditPeoplePanel } from '../src/components/CreditPeoplePanel';
 import { CreditCard } from '../src/components/CreditCard';
+import { CreditSeenByGivers } from '../src/components/CreditSeenByGivers';
 import { CreditLooksSection } from '../src/components/CreditLooksSection';
 import { AskForMore } from '../src/components/AskForMore';
 import { importIdentity, type BeanPoolIdentity } from '../src/lib/identity';
@@ -32,6 +34,8 @@ function Harness() {
             {view === 'vouchers' && <CreditPeoplePanel query="" blocked={new Set()} start={{ chip: 'vouchers', nonce: 1 }} />}
             {view === 'card' && <CreditCard memberPubkey={CARD_OF} myVouching={role === 'voucher' ? ({ voucher: true } as never) : null} />}
             {view === 'looks' && <CreditLooksSection />}
+            {/* The member's own Ledger card (slice C6): the driver answers GET /api/credit/me for the member in `?who=`. */}
+            {view === 'seen' && <CreditSeenByGivers memberKey={me.publicKey} reread={0} />}
             {view === 'ask' && (
                 <div className="space-y-4">
                     <AskForMore ask={{ askedAt: null, lastAskedAt: null, askAgainAt: null, blocked: null }} />

@@ -137,7 +137,7 @@ const STORED: Record<Scenario['value'], { t: string; holds: string; drift: 'null
 
 /**
  * A node whose `accounts` balance column takes NULL (a table from before NOT NULL): the only place a NULL can be stored.
- * Since whole hundredths no boot makes one (schema.sql and db/hundredths-step.ts both add `balance_c INTEGER NOT NULL`), so
+ * Since whole hundredths no boot makes one (schema.sql, since 1.4.0, declares `balance_c INTEGER NOT NULL`), so
  * the table is rewritten by hand, its balance_c nullable; the boot keeps it as it finds it.
  */
 function makeBalanceNullable(sdb: Database.Database): void {

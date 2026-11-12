@@ -7,18 +7,18 @@
  * no-opped against the old shape, the index failed with "no such column", `db.exec` aborted, and the node
  * would not start. Every suite that starts from an EMPTY data dir passed, because the table is created complete there.
  *
- * Since 1.4.0 the oldest file a node opens is one last started on 1.2.36 (db/schema-gate.ts; test-schema-gate.ts boots
- * __fixtures__/schema-v1.2.36.sql to a fresh install's exact shape). The upgrades checked here are the steps born since
- * (db.ts, CUT2), on a 1.2.36 or 1.2.37 file:
+ * The oldest file a node opens is one a kept node last started on 1.4.0 (db/schema-gate.ts; test-schema-gate.ts boots
+ * __fixtures__/schema-v1.4.0.sql, stamped as 1.4.0 stamped it, to a fresh install's exact shape). The upgrades checked
+ * here are the steps born since (db.ts, before the schema.sql exec), on that file (kept-node-test-fixture.ts):
  *
  *  1. A fresh install, for the shape everything else is compared against.
  *  5. No late-added column may be referenced by schema.sql (static), and every column added before the exec is declared.
- *  8e. standing_deals: the phases paid, short, ended; 1.2.37's table (REAL Beans, old phases) dropped whole by the
- *      hundredths step and made again, its rows not carried.
- *  accounts.balance_c NOT NULL, fresh or upgraded (a 1.2.36 file's REAL balance dropped unread by the hundredths step).
+ *  accounts.balance_c NOT NULL, fresh or upgraded, and a 1.4.0 file's balances kept as they are.
  *  8f. Per-item prices: the four columns and their CHECKs, the same fresh or upgraded, nothing filled in (PERITEM-S1..S4).
  * (Sections 2-4, 6 and 8-8d upgraded shapes from before 1.2.36, and the members' photos section moved photos a
- * pre-1.2.28 file held; the 1.4.0 gate refuses those files, and they went with their steps.)
+ * pre-1.2.28 file held; the 1.4.0 gate refused those files, and they went with their steps. Section 8e, 1.2.37's
+ * standing_deals dropped whole by the hundredths step, and the 1.2.36 balance it dropped unread, went with those steps
+ * (log rows CUT2, B10, B11) once every kept node had started 1.4.0: the gate refuses a 1.2.36 or 1.2.37 file now.)
  *
  * The three suites test-schema-upgrade-fresh-shape.ts, test-schema-upgrade-triggers-visitors.ts and
  * test-schema-upgrade-markers-watermarks.ts were one until it took 4m00s-4m56s on CI against the runner's 300 s per
@@ -33,59 +33,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    assert, bootInto, columns, indexes, tmp, lateAddedColumns, schemaObjects, SCHEMA_PATH, DB_TS_PATH, runSchemaSuite,
+    assert, bootInto, columns, tmp, lateAddedColumns, schemaObjects, SCHEMA_PATH, DB_TS_PATH, runSchemaSuite,
 } from './schema-upgrade-test-harness.js';
+import { KEPT_NODE_RELEASE, makeKeptNodeDatabase } from './kept-node-test-fixture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_1_2_36 = fs.readFileSync(path.join(__dirname, '__fixtures__', 'schema-v1.2.36.sql'), 'utf8');
 
 /**
- * A data dir holding a file a kept node last started on 1.2.36 (user_version 4, the 1.2.36 schema), WAL as every node's
- * is; `more` runs on it before it is closed (1.2.37's tables, rows).
+ * A data dir holding a file a kept node last started on 1.4.0 (v1.4.0's schema, stamped as 1.4.0 stamped it), WAL as every
+ * node's is; `more` runs on it before it is closed (rows).
  */
-function release1236(name: string, more?: (d: Database.Database) => void): string {
+function release140(name: string, more?: (d: Database.Database) => void): string {
     const dir = tmp(name);
     const d = new Database(path.join(dir, 'state.db'));
     d.pragma('journal_mode = WAL');
     d.pragma('foreign_keys = OFF');
-    d.exec(FIXTURE_1_2_36);
+    makeKeptNodeDatabase(d);
     more?.(d);
-    d.pragma('user_version = 4');
     d.close();
     return dir;
 }
-
-/** standing_deals as 1.2.37 made it (git show 2aa6a01a:apps/server/src/db/schema.sql): REAL Beans, the old phases. */
-const STANDING_DEALS_1_2_37 = `CREATE TABLE IF NOT EXISTS standing_deals (
-    id TEXT PRIMARY KEY,
-    post_id TEXT NOT NULL REFERENCES posts(id),
-    payer_pubkey TEXT NOT NULL,
-    payee_pubkey TEXT NOT NULL,
-    beans_per_period REAL NOT NULL,
-    period_unit TEXT NOT NULL CHECK (period_unit IN ('week', 'month')),
-    starts_at TEXT NOT NULL,
-    max_periods INTEGER,
-    phase TEXT NOT NULL CHECK (phase IN ('held', 'due', 'short', 'held_back', 'ended')),
-    periods_done INTEGER NOT NULL DEFAULT 0,
-    current_tx_id TEXT REFERENCES marketplace_transactions(id),
-    next_due_at TEXT NOT NULL,
-    short_since TEXT,
-    held_back_reason TEXT,
-    stopped_by TEXT,
-    stopped_at TEXT,
-    ended_at TEXT,
-    ended_reason TEXT,
-    auth_signer TEXT NOT NULL,
-    auth_signature TEXT NOT NULL,
-    auth_payload TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-CREATE INDEX IF NOT EXISTS idx_standing_deals_due ON standing_deals(phase, next_due_at);
-CREATE INDEX IF NOT EXISTS idx_standing_deals_payer ON standing_deals(payer_pubkey, phase);
-CREATE INDEX IF NOT EXISTS idx_standing_deals_payee ON standing_deals(payee_pubkey, phase);
-CREATE INDEX IF NOT EXISTS idx_standing_deals_post ON standing_deals(post_id, phase);
-CREATE INDEX IF NOT EXISTS idx_standing_deals_updated_at ON standing_deals(updated_at);`;
 
 runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Schema upgrade checks (fresh shape) PASSED.', async () => {
     // ── 1. A fresh install, for the shape everything else is compared against ────────────────────
@@ -227,105 +194,37 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
               + '\n     rely on that. Move the ALTERs above the exec so the rule stays one rule.'
             : 'and no schema.sql TRIGGER does either, so the rule holds without relying on SQLite tolerance');
 
-    // ── 8e. standing_deals: each period paid at its start (DESIGN-standing-deals-upfront, Marty 10 Nov 2026) ───────────
-    // The phase CHECK became ('paid', 'short', 'ended') and held_back_reason went. Every node that ran 1.2.37 holds the old
-    // shape, its money REAL Beans in `beans_per_period`: since whole hundredths (Marty, 10 Nov 2026: "wipe and redo by
-    // hand") standing_deals is a money record table to the hundredths step (db/hundredths-step.ts), dropped whole, its rows
-    // with it (an ended one and a live one in an old phase alike: none read, mapped or ended), and schema.sql makes it again
-    // in the new shape. The node boots either way, and says by count what it dropped. The fixture is a 1.2.36 file holding
-    // 1.2.37's table, as a node that ran 1.2.37 holds it.
-    console.log("\n--- 8e. Legacy standing_deals with the held/due/held_back phases ---");
-    {
-        const at = '2026-11-09T15:30:00.000Z';
-        const sd = (d: Database.Database, id: string, phase: string, ended: boolean) =>
-            d.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period, period_unit, starts_at, max_periods, phase,
-                           periods_done, current_tx_id, next_due_at, short_since, held_back_reason, stopped_by, stopped_at, ended_at, ended_reason,
-                           auth_signer, auth_signature, auth_payload, created_at, updated_at)
-                       VALUES (?, 'post-1', ?, ?, 50, 'month', ?, NULL, ?, 1, 'tx-1', '2026-12-09T15:30:00.000Z', NULL, NULL, ?, ?, ?, ?, ?, 'sig', 'text', ?, ?)`)
-                .run(id, 'aa'.repeat(32), 'bb'.repeat(32), at, phase, ended ? 'aa'.repeat(32) : null, ended ? at : null, ended ? at : null,
-                    ended ? 'cancelled' : null, 'aa'.repeat(32), at, at);
-        const tableSql = (d: Database.Database) => (d.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'standing_deals'").get() as any).sql as string;
-        const triggers = (d: Database.Database) => (d.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'standing_deals' ORDER BY name").all() as any[]).map((r) => r.name).join(',');
-
-        const dir = release1236('legacy-standing-deals', (d) => {
-            d.exec(STANDING_DEALS_1_2_37);
-            sd(d, 'sd-ended', 'ended', true);
-            sd(d, 'sd-held', 'held', false);
-        });
-        {
-            const d = new Database(path.join(dir, 'state.db'), { readonly: true });
-            assert(tableSql(d).includes("'held_back'") && columns(d, 'standing_deals').includes('beans_per_period'),
-                "the fixture is 1.2.37's table: the old phase CHECK, its money REAL Beans in beans_per_period");
-            d.close();
-        }
-        const result = bootInto(dir);
-        assert(result.ok && /Old money was dropped, not converted: rows removed: [^;]*\bstanding_deals 2\b/.test(result.output),
-            `the node from 1.2.37 boots, and its log says the step dropped standing_deals' 2 rows (${result.output.split('\n').filter((l) => /hundredths|Old money/.test(l)).join(' | ')})`);
-        if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
-        const after = new Database(path.join(dir, 'state.db'));
-        after.pragma('foreign_keys = OFF');
-        assert(tableSql(after).includes("CHECK (phase IN ('paid', 'short', 'ended'))") && !tableSql(after).includes("'held_back'"), 'its phase CHECK is the new one');
-        assert(JSON.stringify(columns(after, 'standing_deals')) === JSON.stringify(columns(freshDb, 'standing_deals')),
-            `ending with exactly a fresh install's columns: beans_per_period_c, held_back_reason gone (got ${columns(after, 'standing_deals').join(',')})`);
-        const left = (after.prepare('SELECT COUNT(*) AS n FROM standing_deals').get() as { n: number }).n;
-        assert(left === 0, `no row carried across: the ended one and the live one in an old phase both dropped, none read or mapped (${left} left)`);
-        assert(JSON.stringify(indexes(after, 'standing_deals')) === JSON.stringify(indexes(freshDb, 'standing_deals')), 'its indexes are a fresh install\'s');
-        assert(triggers(after) === triggers(freshDb) && triggers(after).length > 0, `and so are its triggers (${triggers(after)})`);
-        // The new shape has no held_back_reason, and its money is whole hundredths (5000 is 50 Beans).
-        const sdNew = (id: string, phase: string) => after.prepare(`INSERT INTO standing_deals (id, post_id, payer_pubkey, payee_pubkey, beans_per_period_c,
-                period_unit, starts_at, phase, periods_done, next_due_at, auth_signer, auth_signature, auth_payload)
-            VALUES (?, 'post-1', ?, ?, 5000, 'month', ?, ?, 1, '2026-12-09T15:30:00.000Z', ?, 'sig', 'text')`).run(id, 'aa'.repeat(32), 'bb'.repeat(32), at, phase, 'aa'.repeat(32));
-        let paid = true;
-        try { sdNew('sd-new', 'paid'); } catch (e: any) { paid = false; console.error(e?.message); }
-        let held = true;
-        try { sdNew('sd-old', 'held'); } catch (e: any) { held = !/CHECK constraint failed/.test(e?.message || ''); }
-        assert(paid && !held, "the new table takes phase 'paid' and its CHECK refuses 'held'");
-        after.close();
-        const again = bootInto(dir);
-        assert(again.ok && !/Old money was dropped/.test(again.output), 'a second boot runs no step again');
-        fs.rmSync(dir, { recursive: true, force: true });
-    }
-
     // ── accounts.balance_c NOT NULL (review FABLE-sec-input F1, 2026-10-01; whole hundredths since 1.4.0) ────────────────
     // better-sqlite3 binds NaN as NULL, so a nullable column took a NaN balance without a word. A fresh install declares
-    // accounts.balance_c NOT NULL. A 1.2.36 file holds REAL Beans in `balance`: the hundredths step (db/hundredths-step.ts;
-    // Marty, 10 Nov 2026: "wipe and redo by hand") drops that column unread (nothing is read, scaled or guessed) and adds
-    // balance_c NOT NULL at 0. Every row is kept, stamps and epochs too, and the boot log counts the figures it dropped.
+    // accounts.balance_c NOT NULL, and so does a 1.4.0 file (whole hundredths came with 1.4.0). Booting one keeps every row
+    // as it is, its balance to the hundredth, stamps and epochs too: no step touches money any more (the hundredths step,
+    // log row B11, went once every kept node had started 1.4.0).
     {
-        console.log('\n— accounts.balance_c is NOT NULL, fresh or upgraded; an old balance is dropped unread —');
+        console.log('\n— accounts.balance_c is NOT NULL, fresh or upgraded; a 1.4.0 balance is kept as it is —');
         const balanceNotNull = (d: Database.Database) =>
             ((d.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance_c'`).get() as any)?.nn ?? 0) === 1;
         const oldBalance = (d: Database.Database) => !!d.prepare(`SELECT 1 FROM pragma_table_info('accounts') WHERE name = 'balance'`).get();
         assert(balanceNotNull(freshDb) && !oldBalance(freshDb), 'a fresh install declares accounts.balance_c NOT NULL, and has no old balance column');
 
-        // console.error is where a step speaks; the boot script sends it to stdout, which bootInto returns.
-        const loudBoot = `
-            console.error = (...a) => console.log(...a);
-            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
-            initSchema();
-            console.log('BOOT_OK');
-        `;
         const at = '2026-09-30T00:00:00.000Z';
-        const dir = release1236('accounts-1.2.36', (d) => {
-            const ins = d.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, ?, ?, 7)`);
-            for (const [pk, b] of [['acct_a', 12.5], ['acct_b', -3], ['acct_c', 0]] as const) ins.run(pk, b, at);
+        const dir = release140('accounts-1.4.0', (d) => {
+            const ins = d.prepare(`INSERT INTO accounts (public_key, balance_c, last_updated_at, last_demurrage_epoch) VALUES (?, ?, ?, 7)`);
+            for (const [pk, b] of [['acct_a', 1250], ['acct_b', -300], ['acct_c', 0]] as const) ins.run(pk, b, at);
         });
-        const boot = bootInto(dir, {}, loudBoot);
+        const boot = bootInto(dir);
         const d = new Database(path.join(dir, 'state.db'));
         assert(boot.ok && balanceNotNull(d) && !oldBalance(d),
-            `a 1.2.36 file whose accounts hold REAL Beans boots and ends up with balance_c NOT NULL, its old balance gone (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
+            `a ${KEPT_NODE_RELEASE} file boots with balance_c NOT NULL (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
         const rows = d.prepare(`SELECT public_key, balance_c, typeof(balance_c) AS t, last_updated_at, last_demurrage_epoch FROM accounts WHERE public_key LIKE 'acct_%' ORDER BY public_key`).all() as any[];
         assert(JSON.stringify(rows.map((r) => [r.public_key, r.balance_c, r.t, r.last_updated_at, r.last_demurrage_epoch])) === JSON.stringify([
-            ['acct_a', 0, 'integer', at, 7], ['acct_b', 0, 'integer', at, 7], ['acct_c', 0, 'integer', at, 7]]),
-        `every row it held is kept, stamps and epochs too, each balance 0: the old figure dropped, never scaled (${JSON.stringify(rows)})`);
-        assert(/figures set to 0 or none: [^;]*\baccounts\.balance 2\b/.test(boot.output),
-            `and the boot log counts the 2 figures it dropped, the 0 not among them (${boot.output.split('\n').filter((l) => /Old money was dropped/.test(l)).join(' | ')})`);
+            ['acct_a', 1250, 'integer', at, 7], ['acct_b', -300, 'integer', at, 7], ['acct_c', 0, 'integer', at, 7]]),
+        `every row it held is kept as it was, balance, stamp and epoch (${JSON.stringify(rows)})`);
+        assert(!/Old money was dropped/.test(boot.output), 'and nothing at the boot speaks of dropping money');
         let refusedNull = false;
         try { d.prepare(`INSERT INTO accounts (public_key, balance_c) VALUES ('acct_nan', ?)`).run(NaN); } catch { refusedNull = true; }
         assert(refusedNull, 'the upgraded table refuses a NaN balance (bound as NULL)');
         d.close();
-        const again = bootInto(dir, {}, loudBoot);
-        assert(again.ok && !/Old money was dropped/.test(again.output), 'booting it again is a no-op');
+        assert(bootInto(dir).ok, 'booting it again is a no-op');
         fs.rmSync(dir, { recursive: true, force: true });
     }
 
@@ -335,13 +234,20 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
     // (or schema.sql's), or a step fills anything in.
     {
         console.log('\n— 8f. Per-item columns: the same four, with the same CHECKs, fresh or upgraded —');
-        const dir = release1236('per-item-1.2.36', (d) => {
+        const dir = release140('per-item-1.4.0', (d) => {
             d.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES ('old-post', 'offer', 'tools', 'Panels', '', ?)`).run('aa'.repeat(32));
-            // 1.2.36's deal holds its price in REAL `credits` (the hundredths step drops the column, keeps the row).
-            d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES ('old-deal', 'old-post', ?, ?, 0, 'completed')`).run('bb'.repeat(32), 'aa'.repeat(32));
+            d.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, status) VALUES ('old-deal', 'old-post', ?, ?, 'completed')`).run('bb'.repeat(32), 'aa'.repeat(32));
         });
+        {
+            // Per-item prices were born after 1.4.0, so the four steps really run on this file (they are not a no-op here).
+            const before = new Database(path.join(dir, 'state.db'), { readonly: true });
+            const had = [...columns(before, 'posts'), ...columns(before, 'marketplace_transactions')]
+                .filter((c) => ['units_left', 'lot_price_c', 'lot_units', 'item_option'].includes(c));
+            before.close();
+            assert(had.length === 0, `setup: the ${KEPT_NODE_RELEASE} file has none of the four columns (${had.join(', ') || 'none'})`);
+        }
         const boot = bootInto(dir);
-        assert(boot.ok, `a 1.2.36 file boots with the four schema steps (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
+        assert(boot.ok, `a ${KEPT_NODE_RELEASE} file boots with the four schema steps (${boot.ok ? 'booted' : boot.output.split('\n').slice(-5).join(' | ')})`);
         const up = new Database(path.join(dir, 'state.db'));
         up.pragma('foreign_keys = OFF');
         const writable = new Database(path.join(freshDir, 'state.db'));

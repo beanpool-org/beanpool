@@ -14,7 +14,7 @@
  *     in words, no file moved, the database still open. M2: none of those bodies holds a path; the log has the error.
  *  4. H2, a database without the core tables: checkRestoreDatabase refuses an empty database, a dummy table, members(x INT),
  *     a members view, and accounts without their key column, in words; accounts without a money column are not refused
- *     for it (the boot's hundredths step makes balance_c and drops old money); a real backup's database passes; a point this server took
+ *     for it (the check reads key columns only); a real backup's database passes; a point this server took
  *     passes against a live database that has no schema (ownPoint), which the plain check refuses over triggers.
  *     Through the route on a fresh server: the empty, dummy and members(x INT) files sealed by a pinned key → 400 "is not a
  *     BeanPool database", nothing changed; a real backup then restores 200. (Before: 200 for all three.)
@@ -60,6 +60,8 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { localFetch } from './keepalive-test-fetch.js';
+// Reads no db.ts (a file and the gate's stamp writer only), so the child scenarios' own data dirs are untouched by it.
+import { makeKeptNodeDatabase } from './kept-node-test-fixture.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 
@@ -556,10 +558,9 @@ async function main(): Promise<void> {
         d.close();
         return f;
     };
-    // A database a kept node holds at the cutover (__fixtures__/schema-v1.2.36.sql at user_version 4: what the 1.4.0 gate
-    // opens), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that release's
-    // recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after.
-    const KEPT_SCHEMA = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'schema-v1.2.36.sql'), 'utf8');
+    // A database a kept node last started on 1.4.0 (kept-node-test-fixture.ts: v1.4.0's schema.sql, stamped as 1.4.0 stamped
+    // it; the oldest the gate opens), its founder and one member. A node that started on v1.2.15 … v1.2.18 still carries that
+    // release's recovery_requests and its touch trigger: no boot ever removed them. `extra` is run on it after.
     const OLD_RECOVERY_REQUESTS = [
         OLD_SCHEMA.match(/CREATE TABLE IF NOT EXISTS recovery_requests \([\s\S]*?\n\);/)?.[0] ?? '',
         OLD_SCHEMA.match(/CREATE TRIGGER IF NOT EXISTS recovery_requests_touch_updated_at[\s\S]*?END;/)?.[0] ?? '',
@@ -568,17 +569,16 @@ async function main(): Promise<void> {
     const keptNodeDb = (extra: string[] = []) => {
         const f = path.join(fs.mkdtempSync(path.join(work, 'kept-')), 'state.db');
         const d = new Database(f);
-        d.exec(KEPT_SCHEMA);
+        makeKeptNodeDatabase(d);
         for (const s of OLD_RECOVERY_REQUESTS) d.exec(s);
         const at = new Date().toISOString();
         d.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES ('genesis', 'Genesis', ?)`).run(at);
         for (const [pk, callsign] of [['f0'.repeat(32), 'OldFounder'], ['cd'.repeat(32), 'OldMember']]) {
             d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by) VALUES (?, ?, ?, ?)`)
                 .run(pk, callsign, at, callsign === 'OldFounder' ? 'genesis' : 'f0'.repeat(32));
-            d.prepare(`INSERT INTO accounts (public_key, balance) VALUES (?, 0)`).run(pk);
+            d.prepare(`INSERT INTO accounts (public_key, balance_c) VALUES (?, 0)`).run(pk);
         }
         for (const s of extra) d.exec(s);
-        d.pragma('user_version = 4');
         d.close();
         return f;
     };
@@ -669,9 +669,9 @@ async function main(): Promise<void> {
             };
             const words = (why: string) => `This backup's state.db is not a BeanPool database (${why}). Nothing was changed.`;
             const viewDb = made('view.db', ['CREATE TABLE m (public_key TEXT, callsign TEXT)', 'CREATE VIEW members AS SELECT * FROM m']);
-            // Whole hundredths (restore-checks.ts CORE_TABLES): an accounts table needs its key column; its money column is the
-            // boot's to make (db/hundredths-step.ts makes balance_c on an older shape and drops old money), so a backup without
-            // one is not refused for it. Under float Beans a missing `balance` column was refused here.
+            // Whole hundredths (restore-checks.ts CORE_TABLES): an accounts table needs its key column, and the check reads key
+            // columns only, so a backup without a money column is not refused for it (every file the gate opens has balance_c:
+            // 1.4.0 made it). Under float Beans a missing `balance` column was refused here.
             const noAccountKey = made('no-account-key.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (balance_c INTEGER)',
                 'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)']);
             // Stamped, so the gate opens it (db/schema-gate.ts): what is checked here is the core tables alone.
@@ -682,7 +682,7 @@ async function main(): Promise<void> {
             const oddConfig = made('odd-config.db', ['CREATE TABLE members (public_key TEXT, callsign TEXT)', 'CREATE TABLE accounts (public_key TEXT)',
                 'CREATE TABLE node_roles (member_pubkey TEXT, role TEXT)', 'CREATE TABLE node_config (key TEXT)', 'PRAGMA user_version = 5']);
             const odd = check(oddConfig);
-            assert(!odd.ok && (odd as any).status === 400 && /^This backup's state\.db was last started by a BeanPool older than 1\.2\.36\./.test((odd as any).error ?? ''),
+            assert(!odd.ok && (odd as any).status === 400 && /^This backup's state\.db was last started by a BeanPool older than 1\.4\.0\./.test((odd as any).error ?? ''),
                 `4. user_version 5 with a node_config no release made: refused 400 in the gate's words, not a 500 (${JSON.stringify(odd).slice(0, 200)})`);
             for (const [label, f, why] of [
                 ['an empty database', emptyDb, 'no members table'], ['a dummy table', dummyDb, 'no members table'],
@@ -694,7 +694,7 @@ async function main(): Promise<void> {
             }
             const noMoney = check(noMoneyColumn);
             assert(noMoney.ok === true && noMoney.untouched === true,
-                `4. accounts without a money column: not refused for it, the boot makes balance_c (${JSON.stringify(noMoney)})`);
+                `4. accounts without a money column: not refused for it, the check reads key columns only (${JSON.stringify(noMoney)})`);
             const real = check(realCopy);
             assert(real.ok === true, `4. a real backup's database passes (${JSON.stringify(real)})`);
             // conversion-s0: node_roles came with 2026-09-14's schema, and nothing at boot makes an owner from older data.
@@ -759,7 +759,7 @@ async function main(): Promise<void> {
         }
 
         // ── 8. N1: the backups the live nodes made ──
-        console.log('\n── 8. N1: a backup of a kept node that started on v1.2.15 … v1.2.18 restores; a trigger this version does not know, a backup with no node_roles, and one from before 1.2.36, are refused ──');
+        console.log('\n── 8. N1: a backup of a kept node that started on v1.2.15 … v1.2.18 restores; a trigger this version does not know, a backup with no node_roles, and one from before 1.4.0, are refused ──');
         {
             const RETIRED = 'recovery_requests_touch_updated_at';
             const triggersIn = (f: string): string[] => {
@@ -796,10 +796,10 @@ async function main(): Promise<void> {
                 `CREATE TRIGGER old_thing_touch AFTER UPDATE ON old_thing BEGIN UPDATE old_thing SET at = 'now' WHERE rowid = NEW.rowid; END`]));
             assert(gone.ok === true && !(gone as any).left.includes('old_thing_touch'),
                 `8. a trigger on a table this version does not have passes, dropped from the file (${JSON.stringify(gone).slice(0, 300)})`);
-            // A backup last started before 1.2.36, node_roles and all: the gate would refuse it at the next start
+            // A backup last started before 1.4.0, node_roles and all: the gate would refuse it at the next start
             // (db/schema-gate.ts), so the restore refuses it first, in the gate's words, and the file is left as it was.
-            const OLDER = "This backup's state.db was last started by a BeanPool older than 1.2.36. BeanPool 1.4.0 opens databases from 1.2.36 on. "
-                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.36, then start this version again. Nothing was changed.';
+            const OLDER = "This backup's state.db was last started by a BeanPool older than 1.4.0. This version opens databases from 1.4.0 on. "
+                + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.4.0, then start this version again. Nothing was changed.';
             const older = oldReleaseDb(UPDATED);
             const olderBytes = fs.readFileSync(older).toString('base64');
             const tooOld = direct(older);

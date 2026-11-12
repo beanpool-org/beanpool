@@ -179,7 +179,8 @@ async function child(): Promise<void> {
         },
         /**
          * Whether members still has the grandfathered enterprise credit floor's column (E29). It is gone with whole
-         * hundredths (db/hundredths-step.ts drops it, with nothing in its place), so no enterprise keeps a legacy floor.
+         * hundredths (1.4.0's schema has none; the 1.4.0 step that dropped it, log row B11, is gone too), so no enterprise
+         * keeps a legacy floor.
          */
         'has-legacy-floor': async () => {
             const { db } = await import('./db/db.js');
@@ -277,7 +278,7 @@ async function child(): Promise<void> {
             const consistency = checkWholeCopy(payload, a.leftOut);
             return { hashes: !!payload?.tableHashes, consistency, lastWhole: readCopyRecord().lastWhole };
         },
-        /** Whether this database's members.goal_amount_c has the fresh schema's CHECK (db/hundredths-step.ts adds it with it). */
+        /** Whether this database's members.goal_amount_c has the fresh schema's CHECK (schema.sql declares it with it). */
         'goal-rule': async () => {
             const { db } = await import('./db/db.js');
             const sql = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'members'`).get() as { sql: string }).sql;

@@ -159,7 +159,7 @@ Your community's server has owners and admins. They look after it.
 
 ## Polls
 
-- Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.
+- Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days. An owner or admin can also run one for 30 or 90 days.
 - You can have one open Poll at a time. You can start one Poll for the whole community a week, counted from when you started your last, even if you closed or took it down. A Poll for one of your groups does not count towards that week. Your community can have 5 open Polls at once.
 - A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.
 - A member whose credit is frozen can still answer a Poll. You can change your answer until the Poll closes. The person who started it can close it early.

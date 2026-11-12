@@ -31,6 +31,8 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityM
 vi.mock('../db', () => ({
     // The poll form asks when this member may start their next poll (poll-once-a-week): null = now.
     getPollNextStart: async () => null,
+    // The poll form asks the signer's role for its 30 and 90 day lengths (poll-length-render.test.ts): a member here.
+    isOwnerOrAdminHere: async () => false,
     votePoll: vi.fn(), closePoll: vi.fn(), isOwnerHere: vi.fn(), createPost: vi.fn(),
     getPollOtherAnswers: vi.fn(), reportPollOtherAnswer: vi.fn(), removePollOtherAnswer: vi.fn(),
 }));

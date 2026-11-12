@@ -64,6 +64,8 @@ const node = vi.hoisted(() => ({ next: null as number | null, asked: 0 }));
 vi.mock('../db', () => ({
     createPost: vi.fn(async () => ({})),
     getPollNextStart: async () => { node.asked++; return node.next; },
+    // The length picker's role read (poll-length-render.test.ts holds it): a member here, so the form is the one this test is about.
+    isOwnerOrAdminHere: async () => false,
 }));
 vi.mock('../../utils/keyboard-alert', () => ({ Alert: { alert: vi.fn() } }));
 vi.mock('../keyboard-alert', () => ({ Alert: { alert: vi.fn() } }));

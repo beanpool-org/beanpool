@@ -127,7 +127,7 @@ describe("a local community's card on its welcome page", () => {
  */
 describe("the community's rule on its card's page", () => {
     const RULE = { known: true, knownFloor: 10000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
-    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const SENTENCE = "The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
 
     it('rule on: the card, then the sentence on the same page, and nothing to tick', async () => {
         stubNode(CARD, RULE);
@@ -146,6 +146,6 @@ describe("the community's rule on its card's page", () => {
         await waitFor(() => expect(asked).toContain('/api/community/known-rule'));
         await act(async () => {});
         expect(screen.queryByTestId('join-rule')).toBeNull();
-        expect(document.body.textContent).not.toContain('The admins can see');
+        expect(document.body.textContent).not.toContain('The admins also keep a list');
     });
 });

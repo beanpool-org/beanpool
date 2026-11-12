@@ -1,0 +1,859 @@
+{
+  "brandColours": {
+    "light": {
+      "cta": {
+        "fill": "#b85236",
+        "hover": "#a3472e",
+        "on": "#ffffff"
+      },
+      "commit": {
+        "fill": "#047857",
+        "hover": "#065f46",
+        "on": "#ffffff"
+      },
+      "event": {
+        "fill": "#6d28d9",
+        "hover": "#5b21b6",
+        "on": "#ffffff"
+      },
+      "action": {
+        "fill": "#c2410c",
+        "hover": "#9a3412",
+        "on": "#ffffff"
+      },
+      "danger": {
+        "fill": "#b91c1c",
+        "hover": "#991b1b",
+        "on": "#ffffff"
+      },
+      "info": {
+        "fill": "#2563eb",
+        "hover": "#1d4ed8",
+        "on": "#ffffff"
+      },
+      "neutral": {
+        "fill": "#555555",
+        "hover": "#333333",
+        "on": "#ffffff"
+      },
+      "gold": {
+        "fill": "#f59e0b",
+        "hover": "#fbbf24",
+        "on": "#1d231d"
+      },
+      "accent": {
+        "fill": "#647664",
+        "hover": "#526052",
+        "on": "#ffffff"
+      },
+      "sage": {
+        "fill": "#647664",
+        "hover": "#526052",
+        "on": "#ffffff"
+      },
+      "chip": {
+        "ok": {
+          "tint": "#d1fae5",
+          "ink": "#065f46"
+        },
+        "need": {
+          "tint": "#ffedd5",
+          "ink": "#9a3412"
+        },
+        "warn": {
+          "tint": "#fef3c7",
+          "ink": "#92400e"
+        },
+        "danger": {
+          "tint": "#fee2e2",
+          "ink": "#b91c1c"
+        },
+        "accent": {
+          "tint": "#eef1ee",
+          "ink": "#5b6b5b",
+          "border": "#dce3dc"
+        },
+        "poll": {
+          "tint": "#fae8ff",
+          "ink": "#86198f"
+        },
+        "quiet": {
+          "tint": "#eef1ee",
+          "ink": "#526052"
+        },
+        "info": {
+          "tint": "#dbeafe",
+          "ink": "#1e40af"
+        },
+        "learn": {
+          "tint": "#ccfbf1",
+          "ink": "#115e59"
+        }
+      },
+      "deal": {
+        "held": {
+          "tint": "#d1fae5",
+          "ink": "#065f46",
+          "border": "#10b981"
+        },
+        "released": {
+          "tint": "#a7f3d0",
+          "ink": "#065f46",
+          "border": "#059669"
+        },
+        "cancelled": {
+          "tint": "#fee2e2",
+          "ink": "#991b1b",
+          "border": "#ef4444"
+        }
+      },
+      "tile": {
+        "food": {
+          "tint": "#ffedd5",
+          "ink": "#9a3412"
+        },
+        "services": {
+          "tint": "#dbeafe",
+          "ink": "#1e40af"
+        },
+        "labour": {
+          "tint": "#fef3c7",
+          "ink": "#92400e"
+        },
+        "tools": {
+          "tint": "#e7e5e4",
+          "ink": "#292524"
+        },
+        "goods": {
+          "tint": "#ebe6df",
+          "ink": "#5b5046"
+        },
+        "garden": {
+          "tint": "#ecfccb",
+          "ink": "#3f6212"
+        },
+        "housing": {
+          "tint": "#fcedea",
+          "ink": "#863b28"
+        },
+        "transport": {
+          "tint": "#cffafe",
+          "ink": "#155e75"
+        },
+        "education": {
+          "tint": "#e0e7ff",
+          "ink": "#3730a3"
+        },
+        "arts": {
+          "tint": "#fce7f3",
+          "ink": "#9d174d"
+        },
+        "health": {
+          "tint": "#ccfbf1",
+          "ink": "#115e59"
+        },
+        "care": {
+          "tint": "#ffe4e6",
+          "ink": "#9f1239"
+        },
+        "animals": {
+          "tint": "#d1fae5",
+          "ink": "#065f46"
+        },
+        "tech": {
+          "tint": "#e0f2fe",
+          "ink": "#075985"
+        },
+        "energy": {
+          "tint": "#fef9c3",
+          "ink": "#854d0e"
+        },
+        "mindset": {
+          "tint": "#fae8ff",
+          "ink": "#86198f"
+        },
+        "general": {
+          "tint": "#eef1ee",
+          "ink": "#434e43"
+        },
+        "event": {
+          "tint": "#ede9fe",
+          "ink": "#5b21b6"
+        },
+        "pulse": {
+          "tint": "#fef3c7",
+          "ink": "#92400e"
+        }
+      },
+      "card": {
+        "sage": {
+          "tint": "#eef1ee",
+          "ink": "#5b6b5b"
+        },
+        "sky": {
+          "tint": "#e0f2fe",
+          "ink": "#075985"
+        },
+        "blue": {
+          "tint": "#dbeafe",
+          "ink": "#1e40af"
+        },
+        "indigo": {
+          "tint": "#e0e7ff",
+          "ink": "#3730a3"
+        },
+        "violet": {
+          "tint": "#ede9fe",
+          "ink": "#5b21b6"
+        },
+        "plum": {
+          "tint": "#fae8ff",
+          "ink": "#86198f"
+        },
+        "pink": {
+          "tint": "#fce7f3",
+          "ink": "#9d174d"
+        },
+        "rose": {
+          "tint": "#ffe4e6",
+          "ink": "#9f1239"
+        },
+        "clay": {
+          "tint": "#fcedea",
+          "ink": "#863b28"
+        },
+        "orange": {
+          "tint": "#ffedd5",
+          "ink": "#9a3412"
+        },
+        "yellow": {
+          "tint": "#fef9c3",
+          "ink": "#854d0e"
+        },
+        "lime": {
+          "tint": "#ecfccb",
+          "ink": "#3f6212"
+        },
+        "green": {
+          "tint": "#d1fae5",
+          "ink": "#065f46"
+        },
+        "teal": {
+          "tint": "#ccfbf1",
+          "ink": "#115e59"
+        },
+        "sand": {
+          "tint": "#ebe6df",
+          "ink": "#5b5046"
+        },
+        "amber": {
+          "tint": "#fef3c7",
+          "ink": "#92400e"
+        }
+      },
+      "ink": {
+        "brand": "#047857",
+        "success": "#047857",
+        "danger": "#b91c1c",
+        "warning": "#92400e",
+        "accent": "#5b6b5b",
+        "terra": "#a3472e",
+        "event": "#5b21b6",
+        "learn": "#115e59",
+        "info": "#2563eb"
+      },
+      "map": {
+        "ring": "#92400e"
+      }
+    },
+    "dark": {
+      "cta": {
+        "fill": "#b85236",
+        "hover": "#a3472e",
+        "on": "#ffffff"
+      },
+      "commit": {
+        "fill": "#047857",
+        "hover": "#065f46",
+        "on": "#ffffff"
+      },
+      "event": {
+        "fill": "#6d28d9",
+        "hover": "#5b21b6",
+        "on": "#ffffff"
+      },
+      "action": {
+        "fill": "#c2410c",
+        "hover": "#9a3412",
+        "on": "#ffffff"
+      },
+      "danger": {
+        "fill": "#b91c1c",
+        "hover": "#991b1b",
+        "on": "#ffffff"
+      },
+      "info": {
+        "fill": "#2563eb",
+        "hover": "#1d4ed8",
+        "on": "#ffffff"
+      },
+      "neutral": {
+        "fill": "#555555",
+        "hover": "#333333",
+        "on": "#ffffff"
+      },
+      "gold": {
+        "fill": "#f59e0b",
+        "hover": "#fbbf24",
+        "on": "#1d231d"
+      },
+      "accent": {
+        "fill": "#c0ccc0",
+        "hover": "#dce3dc",
+        "on": "#1d231d"
+      },
+      "sage": {
+        "fill": "#647664",
+        "hover": "#526052",
+        "on": "#ffffff"
+      },
+      "chip": {
+        "ok": {
+          "tint": "#022c22",
+          "ink": "#6ee7b7"
+        },
+        "need": {
+          "tint": "#7c2d12",
+          "ink": "#fdba74"
+        },
+        "warn": {
+          "tint": "#451a03",
+          "ink": "#fcd34d"
+        },
+        "danger": {
+          "tint": "#450a0a",
+          "ink": "#fca5a5"
+        },
+        "accent": {
+          "tint": "#384038",
+          "ink": "#c0ccc0",
+          "border": "#434e43"
+        },
+        "poll": {
+          "tint": "#4a044e",
+          "ink": "#f0abfc"
+        },
+        "quiet": {
+          "tint": "#434e43",
+          "ink": "#c0ccc0"
+        },
+        "info": {
+          "tint": "#172554",
+          "ink": "#93c5fd"
+        },
+        "learn": {
+          "tint": "#042f2e",
+          "ink": "#5eead4"
+        }
+      },
+      "deal": {
+        "held": {
+          "tint": "#022c22",
+          "ink": "#6ee7b7",
+          "border": "#34d399"
+        },
+        "released": {
+          "tint": "#064e3b",
+          "ink": "#6ee7b7",
+          "border": "#10b981"
+        },
+        "cancelled": {
+          "tint": "#450a0a",
+          "ink": "#fca5a5",
+          "border": "#f87171"
+        }
+      },
+      "tile": {
+        "food": {
+          "tint": "#431407",
+          "ink": "#fdba74"
+        },
+        "services": {
+          "tint": "#172554",
+          "ink": "#93c5fd"
+        },
+        "labour": {
+          "tint": "#451a03",
+          "ink": "#fcd34d"
+        },
+        "tools": {
+          "tint": "#292524",
+          "ink": "#d6d3d1"
+        },
+        "goods": {
+          "tint": "#5b5046",
+          "ink": "#ebe6df"
+        },
+        "garden": {
+          "tint": "#1a2e05",
+          "ink": "#bef264"
+        },
+        "housing": {
+          "tint": "#3c180e",
+          "ink": "#f0bcab"
+        },
+        "transport": {
+          "tint": "#083344",
+          "ink": "#67e8f9"
+        },
+        "education": {
+          "tint": "#1e1b4b",
+          "ink": "#a5b4fc"
+        },
+        "arts": {
+          "tint": "#500724",
+          "ink": "#f9a8d4"
+        },
+        "health": {
+          "tint": "#042f2e",
+          "ink": "#5eead4"
+        },
+        "care": {
+          "tint": "#4c0519",
+          "ink": "#fda4af"
+        },
+        "animals": {
+          "tint": "#022c22",
+          "ink": "#6ee7b7"
+        },
+        "tech": {
+          "tint": "#082f49",
+          "ink": "#7dd3fc"
+        },
+        "energy": {
+          "tint": "#422006",
+          "ink": "#fde047"
+        },
+        "mindset": {
+          "tint": "#4a044e",
+          "ink": "#f0abfc"
+        },
+        "general": {
+          "tint": "#384038",
+          "ink": "#c0ccc0"
+        },
+        "event": {
+          "tint": "#2e1065",
+          "ink": "#c4b5fd"
+        },
+        "pulse": {
+          "tint": "#451a03",
+          "ink": "#fcd34d"
+        }
+      },
+      "card": {
+        "sage": {
+          "tint": "#384038",
+          "ink": "#c0ccc0"
+        },
+        "sky": {
+          "tint": "#082f49",
+          "ink": "#7dd3fc"
+        },
+        "blue": {
+          "tint": "#172554",
+          "ink": "#93c5fd"
+        },
+        "indigo": {
+          "tint": "#1e1b4b",
+          "ink": "#a5b4fc"
+        },
+        "violet": {
+          "tint": "#2e1065",
+          "ink": "#c4b5fd"
+        },
+        "plum": {
+          "tint": "#4a044e",
+          "ink": "#f0abfc"
+        },
+        "pink": {
+          "tint": "#500724",
+          "ink": "#f9a8d4"
+        },
+        "rose": {
+          "tint": "#4c0519",
+          "ink": "#fda4af"
+        },
+        "clay": {
+          "tint": "#3c180e",
+          "ink": "#f0bcab"
+        },
+        "orange": {
+          "tint": "#431407",
+          "ink": "#fdba74"
+        },
+        "yellow": {
+          "tint": "#422006",
+          "ink": "#fde047"
+        },
+        "lime": {
+          "tint": "#1a2e05",
+          "ink": "#bef264"
+        },
+        "green": {
+          "tint": "#022c22",
+          "ink": "#6ee7b7"
+        },
+        "teal": {
+          "tint": "#042f2e",
+          "ink": "#5eead4"
+        },
+        "sand": {
+          "tint": "#5b5046",
+          "ink": "#ebe6df"
+        },
+        "amber": {
+          "tint": "#451a03",
+          "ink": "#fcd34d"
+        }
+      },
+      "ink": {
+        "brand": "#34d399",
+        "success": "#34d399",
+        "danger": "#fca5a5",
+        "warning": "#fbbf24",
+        "accent": "#c0ccc0",
+        "terra": "#e5967f",
+        "event": "#c4b5fd",
+        "learn": "#5eead4",
+        "info": "#93c5fd"
+      },
+      "map": {
+        "ring": "#d4a24e"
+      }
+    }
+  },
+  "brandCssVariableMap": {
+    "light": {
+      "--bp-cta-fill": "#b85236",
+      "--bp-cta-hover": "#a3472e",
+      "--bp-cta-on": "#ffffff",
+      "--bp-commit-fill": "#047857",
+      "--bp-commit-hover": "#065f46",
+      "--bp-commit-on": "#ffffff",
+      "--bp-event-fill": "#6d28d9",
+      "--bp-event-hover": "#5b21b6",
+      "--bp-event-on": "#ffffff",
+      "--bp-action-fill": "#c2410c",
+      "--bp-action-hover": "#9a3412",
+      "--bp-action-on": "#ffffff",
+      "--bp-danger-fill": "#b91c1c",
+      "--bp-danger-hover": "#991b1b",
+      "--bp-danger-on": "#ffffff",
+      "--bp-info-fill": "#2563eb",
+      "--bp-info-hover": "#1d4ed8",
+      "--bp-info-on": "#ffffff",
+      "--bp-neutral-fill": "#555555",
+      "--bp-neutral-hover": "#333333",
+      "--bp-neutral-on": "#ffffff",
+      "--bp-gold-fill": "#f59e0b",
+      "--bp-gold-hover": "#fbbf24",
+      "--bp-gold-on": "#1d231d",
+      "--bp-accent-fill": "#647664",
+      "--bp-accent-hover": "#526052",
+      "--bp-accent-on": "#ffffff",
+      "--bp-sage-fill": "#647664",
+      "--bp-sage-hover": "#526052",
+      "--bp-sage-on": "#ffffff",
+      "--bp-chip-ok-tint": "#d1fae5",
+      "--bp-chip-ok-ink": "#065f46",
+      "--bp-chip-need-tint": "#ffedd5",
+      "--bp-chip-need-ink": "#9a3412",
+      "--bp-chip-warn-tint": "#fef3c7",
+      "--bp-chip-warn-ink": "#92400e",
+      "--bp-chip-danger-tint": "#fee2e2",
+      "--bp-chip-danger-ink": "#b91c1c",
+      "--bp-chip-accent-tint": "#eef1ee",
+      "--bp-chip-accent-ink": "#5b6b5b",
+      "--bp-chip-accent-border": "#dce3dc",
+      "--bp-chip-poll-tint": "#fae8ff",
+      "--bp-chip-poll-ink": "#86198f",
+      "--bp-chip-quiet-tint": "#eef1ee",
+      "--bp-chip-quiet-ink": "#526052",
+      "--bp-chip-info-tint": "#dbeafe",
+      "--bp-chip-info-ink": "#1e40af",
+      "--bp-chip-learn-tint": "#ccfbf1",
+      "--bp-chip-learn-ink": "#115e59",
+      "--bp-deal-held-tint": "#d1fae5",
+      "--bp-deal-held-ink": "#065f46",
+      "--bp-deal-held-border": "#10b981",
+      "--bp-deal-released-tint": "#a7f3d0",
+      "--bp-deal-released-ink": "#065f46",
+      "--bp-deal-released-border": "#059669",
+      "--bp-deal-cancelled-tint": "#fee2e2",
+      "--bp-deal-cancelled-ink": "#991b1b",
+      "--bp-deal-cancelled-border": "#ef4444",
+      "--bp-tile-food-tint": "#ffedd5",
+      "--bp-tile-food-ink": "#9a3412",
+      "--bp-tile-services-tint": "#dbeafe",
+      "--bp-tile-services-ink": "#1e40af",
+      "--bp-tile-labour-tint": "#fef3c7",
+      "--bp-tile-labour-ink": "#92400e",
+      "--bp-tile-tools-tint": "#e7e5e4",
+      "--bp-tile-tools-ink": "#292524",
+      "--bp-tile-goods-tint": "#ebe6df",
+      "--bp-tile-goods-ink": "#5b5046",
+      "--bp-tile-garden-tint": "#ecfccb",
+      "--bp-tile-garden-ink": "#3f6212",
+      "--bp-tile-housing-tint": "#fcedea",
+      "--bp-tile-housing-ink": "#863b28",
+      "--bp-tile-transport-tint": "#cffafe",
+      "--bp-tile-transport-ink": "#155e75",
+      "--bp-tile-education-tint": "#e0e7ff",
+      "--bp-tile-education-ink": "#3730a3",
+      "--bp-tile-arts-tint": "#fce7f3",
+      "--bp-tile-arts-ink": "#9d174d",
+      "--bp-tile-health-tint": "#ccfbf1",
+      "--bp-tile-health-ink": "#115e59",
+      "--bp-tile-care-tint": "#ffe4e6",
+      "--bp-tile-care-ink": "#9f1239",
+      "--bp-tile-animals-tint": "#d1fae5",
+      "--bp-tile-animals-ink": "#065f46",
+      "--bp-tile-tech-tint": "#e0f2fe",
+      "--bp-tile-tech-ink": "#075985",
+      "--bp-tile-energy-tint": "#fef9c3",
+      "--bp-tile-energy-ink": "#854d0e",
+      "--bp-tile-mindset-tint": "#fae8ff",
+      "--bp-tile-mindset-ink": "#86198f",
+      "--bp-tile-general-tint": "#eef1ee",
+      "--bp-tile-general-ink": "#434e43",
+      "--bp-tile-event-tint": "#ede9fe",
+      "--bp-tile-event-ink": "#5b21b6",
+      "--bp-tile-pulse-tint": "#fef3c7",
+      "--bp-tile-pulse-ink": "#92400e",
+      "--bp-card-sage-tint": "#eef1ee",
+      "--bp-card-sage-ink": "#5b6b5b",
+      "--bp-card-sky-tint": "#e0f2fe",
+      "--bp-card-sky-ink": "#075985",
+      "--bp-card-blue-tint": "#dbeafe",
+      "--bp-card-blue-ink": "#1e40af",
+      "--bp-card-indigo-tint": "#e0e7ff",
+      "--bp-card-indigo-ink": "#3730a3",
+      "--bp-card-violet-tint": "#ede9fe",
+      "--bp-card-violet-ink": "#5b21b6",
+      "--bp-card-plum-tint": "#fae8ff",
+      "--bp-card-plum-ink": "#86198f",
+      "--bp-card-pink-tint": "#fce7f3",
+      "--bp-card-pink-ink": "#9d174d",
+      "--bp-card-rose-tint": "#ffe4e6",
+      "--bp-card-rose-ink": "#9f1239",
+      "--bp-card-clay-tint": "#fcedea",
+      "--bp-card-clay-ink": "#863b28",
+      "--bp-card-orange-tint": "#ffedd5",
+      "--bp-card-orange-ink": "#9a3412",
+      "--bp-card-yellow-tint": "#fef9c3",
+      "--bp-card-yellow-ink": "#854d0e",
+      "--bp-card-lime-tint": "#ecfccb",
+      "--bp-card-lime-ink": "#3f6212",
+      "--bp-card-green-tint": "#d1fae5",
+      "--bp-card-green-ink": "#065f46",
+      "--bp-card-teal-tint": "#ccfbf1",
+      "--bp-card-teal-ink": "#115e59",
+      "--bp-card-sand-tint": "#ebe6df",
+      "--bp-card-sand-ink": "#5b5046",
+      "--bp-card-amber-tint": "#fef3c7",
+      "--bp-card-amber-ink": "#92400e",
+      "--bp-ink-brand": "#047857",
+      "--bp-ink-success": "#047857",
+      "--bp-ink-danger": "#b91c1c",
+      "--bp-ink-warning": "#92400e",
+      "--bp-ink-accent": "#5b6b5b",
+      "--bp-ink-terra": "#a3472e",
+      "--bp-ink-event": "#5b21b6",
+      "--bp-ink-learn": "#115e59",
+      "--bp-ink-info": "#2563eb",
+      "--bp-map-ring": "#92400e",
+      "--bp-deal-held-wash": "rgba(209, 250, 229, 0.4)",
+      "--bp-deal-released-wash": "rgba(167, 243, 208, 0.4)",
+      "--bp-deal-cancelled-wash": "rgba(254, 226, 226, 0.4)"
+    },
+    "dark": {
+      "--bp-cta-fill": "#b85236",
+      "--bp-cta-hover": "#a3472e",
+      "--bp-cta-on": "#ffffff",
+      "--bp-commit-fill": "#047857",
+      "--bp-commit-hover": "#065f46",
+      "--bp-commit-on": "#ffffff",
+      "--bp-event-fill": "#6d28d9",
+      "--bp-event-hover": "#5b21b6",
+      "--bp-event-on": "#ffffff",
+      "--bp-action-fill": "#c2410c",
+      "--bp-action-hover": "#9a3412",
+      "--bp-action-on": "#ffffff",
+      "--bp-danger-fill": "#b91c1c",
+      "--bp-danger-hover": "#991b1b",
+      "--bp-danger-on": "#ffffff",
+      "--bp-info-fill": "#2563eb",
+      "--bp-info-hover": "#1d4ed8",
+      "--bp-info-on": "#ffffff",
+      "--bp-neutral-fill": "#555555",
+      "--bp-neutral-hover": "#333333",
+      "--bp-neutral-on": "#ffffff",
+      "--bp-gold-fill": "#f59e0b",
+      "--bp-gold-hover": "#fbbf24",
+      "--bp-gold-on": "#1d231d",
+      "--bp-accent-fill": "#c0ccc0",
+      "--bp-accent-hover": "#dce3dc",
+      "--bp-accent-on": "#1d231d",
+      "--bp-sage-fill": "#647664",
+      "--bp-sage-hover": "#526052",
+      "--bp-sage-on": "#ffffff",
+      "--bp-chip-ok-tint": "#022c22",
+      "--bp-chip-ok-ink": "#6ee7b7",
+      "--bp-chip-need-tint": "#7c2d12",
+      "--bp-chip-need-ink": "#fdba74",
+      "--bp-chip-warn-tint": "#451a03",
+      "--bp-chip-warn-ink": "#fcd34d",
+      "--bp-chip-danger-tint": "#450a0a",
+      "--bp-chip-danger-ink": "#fca5a5",
+      "--bp-chip-accent-tint": "#384038",
+      "--bp-chip-accent-ink": "#c0ccc0",
+      "--bp-chip-accent-border": "#434e43",
+      "--bp-chip-poll-tint": "#4a044e",
+      "--bp-chip-poll-ink": "#f0abfc",
+      "--bp-chip-quiet-tint": "#434e43",
+      "--bp-chip-quiet-ink": "#c0ccc0",
+      "--bp-chip-info-tint": "#172554",
+      "--bp-chip-info-ink": "#93c5fd",
+      "--bp-chip-learn-tint": "#042f2e",
+      "--bp-chip-learn-ink": "#5eead4",
+      "--bp-deal-held-tint": "#022c22",
+      "--bp-deal-held-ink": "#6ee7b7",
+      "--bp-deal-held-border": "#34d399",
+      "--bp-deal-released-tint": "#064e3b",
+      "--bp-deal-released-ink": "#6ee7b7",
+      "--bp-deal-released-border": "#10b981",
+      "--bp-deal-cancelled-tint": "#450a0a",
+      "--bp-deal-cancelled-ink": "#fca5a5",
+      "--bp-deal-cancelled-border": "#f87171",
+      "--bp-tile-food-tint": "#431407",
+      "--bp-tile-food-ink": "#fdba74",
+      "--bp-tile-services-tint": "#172554",
+      "--bp-tile-services-ink": "#93c5fd",
+      "--bp-tile-labour-tint": "#451a03",
+      "--bp-tile-labour-ink": "#fcd34d",
+      "--bp-tile-tools-tint": "#292524",
+      "--bp-tile-tools-ink": "#d6d3d1",
+      "--bp-tile-goods-tint": "#5b5046",
+      "--bp-tile-goods-ink": "#ebe6df",
+      "--bp-tile-garden-tint": "#1a2e05",
+      "--bp-tile-garden-ink": "#bef264",
+      "--bp-tile-housing-tint": "#3c180e",
+      "--bp-tile-housing-ink": "#f0bcab",
+      "--bp-tile-transport-tint": "#083344",
+      "--bp-tile-transport-ink": "#67e8f9",
+      "--bp-tile-education-tint": "#1e1b4b",
+      "--bp-tile-education-ink": "#a5b4fc",
+      "--bp-tile-arts-tint": "#500724",
+      "--bp-tile-arts-ink": "#f9a8d4",
+      "--bp-tile-health-tint": "#042f2e",
+      "--bp-tile-health-ink": "#5eead4",
+      "--bp-tile-care-tint": "#4c0519",
+      "--bp-tile-care-ink": "#fda4af",
+      "--bp-tile-animals-tint": "#022c22",
+      "--bp-tile-animals-ink": "#6ee7b7",
+      "--bp-tile-tech-tint": "#082f49",
+      "--bp-tile-tech-ink": "#7dd3fc",
+      "--bp-tile-energy-tint": "#422006",
+      "--bp-tile-energy-ink": "#fde047",
+      "--bp-tile-mindset-tint": "#4a044e",
+      "--bp-tile-mindset-ink": "#f0abfc",
+      "--bp-tile-general-tint": "#384038",
+      "--bp-tile-general-ink": "#c0ccc0",
+      "--bp-tile-event-tint": "#2e1065",
+      "--bp-tile-event-ink": "#c4b5fd",
+      "--bp-tile-pulse-tint": "#451a03",
+      "--bp-tile-pulse-ink": "#fcd34d",
+      "--bp-card-sage-tint": "#384038",
+      "--bp-card-sage-ink": "#c0ccc0",
+      "--bp-card-sky-tint": "#082f49",
+      "--bp-card-sky-ink": "#7dd3fc",
+      "--bp-card-blue-tint": "#172554",
+      "--bp-card-blue-ink": "#93c5fd",
+      "--bp-card-indigo-tint": "#1e1b4b",
+      "--bp-card-indigo-ink": "#a5b4fc",
+      "--bp-card-violet-tint": "#2e1065",
+      "--bp-card-violet-ink": "#c4b5fd",
+      "--bp-card-plum-tint": "#4a044e",
+      "--bp-card-plum-ink": "#f0abfc",
+      "--bp-card-pink-tint": "#500724",
+      "--bp-card-pink-ink": "#f9a8d4",
+      "--bp-card-rose-tint": "#4c0519",
+      "--bp-card-rose-ink": "#fda4af",
+      "--bp-card-clay-tint": "#3c180e",
+      "--bp-card-clay-ink": "#f0bcab",
+      "--bp-card-orange-tint": "#431407",
+      "--bp-card-orange-ink": "#fdba74",
+      "--bp-card-yellow-tint": "#422006",
+      "--bp-card-yellow-ink": "#fde047",
+      "--bp-card-lime-tint": "#1a2e05",
+      "--bp-card-lime-ink": "#bef264",
+      "--bp-card-green-tint": "#022c22",
+      "--bp-card-green-ink": "#6ee7b7",
+      "--bp-card-teal-tint": "#042f2e",
+      "--bp-card-teal-ink": "#5eead4",
+      "--bp-card-sand-tint": "#5b5046",
+      "--bp-card-sand-ink": "#ebe6df",
+      "--bp-card-amber-tint": "#451a03",
+      "--bp-card-amber-ink": "#fcd34d",
+      "--bp-ink-brand": "#34d399",
+      "--bp-ink-success": "#34d399",
+      "--bp-ink-danger": "#fca5a5",
+      "--bp-ink-warning": "#fbbf24",
+      "--bp-ink-accent": "#c0ccc0",
+      "--bp-ink-terra": "#e5967f",
+      "--bp-ink-event": "#c4b5fd",
+      "--bp-ink-learn": "#5eead4",
+      "--bp-ink-info": "#93c5fd",
+      "--bp-map-ring": "#d4a24e",
+      "--bp-deal-held-wash": "rgba(2, 44, 34, 0.4)",
+      "--bp-deal-released-wash": "rgba(6, 78, 59, 0.4)",
+      "--bp-deal-cancelled-wash": "rgba(69, 10, 10, 0.4)"
+    }
+  },
+  "INK_GROUNDS": {
+    "light": [
+      "#ffffff",
+      "#faf9f6",
+      "#f1efea",
+      "#f1f1e4",
+      "#f6f4f0",
+      "#fbfaf8"
+    ],
+    "dark": [
+      "#0a0a0a",
+      "#222822",
+      "#262626",
+      "#141a1a",
+      "#1d231d",
+      "#2a322a",
+      "#384038",
+      "#0b110b",
+      "#151e16",
+      "#2b422c"
+    ]
+  },
+  "WEB_INK_GROUNDS": {
+    "light": [
+      "#ffffff",
+      "#f6f4f0",
+      "#fbfaf8"
+    ],
+    "dark": [
+      "#1d231d",
+      "#2a322a",
+      "#384038"
+    ]
+  },
+  "brandCssVariables": "/* Generated from @beanpool/core brand-colours.ts. Change a value there, never here or in a screen. */\n:root {\n  --bp-cta-fill: #b85236;\n  --bp-cta-hover: #a3472e;\n  --bp-cta-on: #ffffff;\n  --bp-commit-fill: #047857;\n  --bp-commit-hover: #065f46;\n  --bp-commit-on: #ffffff;\n  --bp-event-fill: #6d28d9;\n  --bp-event-hover: #5b21b6;\n  --bp-event-on: #ffffff;\n  --bp-action-fill: #c2410c;\n  --bp-action-hover: #9a3412;\n  --bp-action-on: #ffffff;\n  --bp-danger-fill: #b91c1c;\n  --bp-danger-hover: #991b1b;\n  --bp-danger-on: #ffffff;\n  --bp-info-fill: #2563eb;\n  --bp-info-hover: #1d4ed8;\n  --bp-info-on: #ffffff;\n  --bp-neutral-fill: #555555;\n  --bp-neutral-hover: #333333;\n  --bp-neutral-on: #ffffff;\n  --bp-gold-fill: #f59e0b;\n  --bp-gold-hover: #fbbf24;\n  --bp-gold-on: #1d231d;\n  --bp-accent-fill: #647664;\n  --bp-accent-hover: #526052;\n  --bp-accent-on: #ffffff;\n  --bp-sage-fill: #647664;\n  --bp-sage-hover: #526052;\n  --bp-sage-on: #ffffff;\n  --bp-chip-ok-tint: #d1fae5;\n  --bp-chip-ok-ink: #065f46;\n  --bp-chip-need-tint: #ffedd5;\n  --bp-chip-need-ink: #9a3412;\n  --bp-chip-warn-tint: #fef3c7;\n  --bp-chip-warn-ink: #92400e;\n  --bp-chip-danger-tint: #fee2e2;\n  --bp-chip-danger-ink: #b91c1c;\n  --bp-chip-accent-tint: #eef1ee;\n  --bp-chip-accent-ink: #5b6b5b;\n  --bp-chip-accent-border: #dce3dc;\n  --bp-chip-poll-tint: #fae8ff;\n  --bp-chip-poll-ink: #86198f;\n  --bp-chip-quiet-tint: #eef1ee;\n  --bp-chip-quiet-ink: #526052;\n  --bp-chip-info-tint: #dbeafe;\n  --bp-chip-info-ink: #1e40af;\n  --bp-chip-learn-tint: #ccfbf1;\n  --bp-chip-learn-ink: #115e59;\n  --bp-deal-held-tint: #d1fae5;\n  --bp-deal-held-ink: #065f46;\n  --bp-deal-held-border: #10b981;\n  --bp-deal-released-tint: #a7f3d0;\n  --bp-deal-released-ink: #065f46;\n  --bp-deal-released-border: #059669;\n  --bp-deal-cancelled-tint: #fee2e2;\n  --bp-deal-cancelled-ink: #991b1b;\n  --bp-deal-cancelled-border: #ef4444;\n  --bp-tile-food-tint: #ffedd5;\n  --bp-tile-food-ink: #9a3412;\n  --bp-tile-services-tint: #dbeafe;\n  --bp-tile-services-ink: #1e40af;\n  --bp-tile-labour-tint: #fef3c7;\n  --bp-tile-labour-ink: #92400e;\n  --bp-tile-tools-tint: #e7e5e4;\n  --bp-tile-tools-ink: #292524;\n  --bp-tile-goods-tint: #ebe6df;\n  --bp-tile-goods-ink: #5b5046;\n  --bp-tile-garden-tint: #ecfccb;\n  --bp-tile-garden-ink: #3f6212;\n  --bp-tile-housing-tint: #fcedea;\n  --bp-tile-housing-ink: #863b28;\n  --bp-tile-transport-tint: #cffafe;\n  --bp-tile-transport-ink: #155e75;\n  --bp-tile-education-tint: #e0e7ff;\n  --bp-tile-education-ink: #3730a3;\n  --bp-tile-arts-tint: #fce7f3;\n  --bp-tile-arts-ink: #9d174d;\n  --bp-tile-health-tint: #ccfbf1;\n  --bp-tile-health-ink: #115e59;\n  --bp-tile-care-tint: #ffe4e6;\n  --bp-tile-care-ink: #9f1239;\n  --bp-tile-animals-tint: #d1fae5;\n  --bp-tile-animals-ink: #065f46;\n  --bp-tile-tech-tint: #e0f2fe;\n  --bp-tile-tech-ink: #075985;\n  --bp-tile-energy-tint: #fef9c3;\n  --bp-tile-energy-ink: #854d0e;\n  --bp-tile-mindset-tint: #fae8ff;\n  --bp-tile-mindset-ink: #86198f;\n  --bp-tile-general-tint: #eef1ee;\n  --bp-tile-general-ink: #434e43;\n  --bp-tile-event-tint: #ede9fe;\n  --bp-tile-event-ink: #5b21b6;\n  --bp-tile-pulse-tint: #fef3c7;\n  --bp-tile-pulse-ink: #92400e;\n  --bp-card-sage-tint: #eef1ee;\n  --bp-card-sage-ink: #5b6b5b;\n  --bp-card-sky-tint: #e0f2fe;\n  --bp-card-sky-ink: #075985;\n  --bp-card-blue-tint: #dbeafe;\n  --bp-card-blue-ink: #1e40af;\n  --bp-card-indigo-tint: #e0e7ff;\n  --bp-card-indigo-ink: #3730a3;\n  --bp-card-violet-tint: #ede9fe;\n  --bp-card-violet-ink: #5b21b6;\n  --bp-card-plum-tint: #fae8ff;\n  --bp-card-plum-ink: #86198f;\n  --bp-card-pink-tint: #fce7f3;\n  --bp-card-pink-ink: #9d174d;\n  --bp-card-rose-tint: #ffe4e6;\n  --bp-card-rose-ink: #9f1239;\n  --bp-card-clay-tint: #fcedea;\n  --bp-card-clay-ink: #863b28;\n  --bp-card-orange-tint: #ffedd5;\n  --bp-card-orange-ink: #9a3412;\n  --bp-card-yellow-tint: #fef9c3;\n  --bp-card-yellow-ink: #854d0e;\n  --bp-card-lime-tint: #ecfccb;\n  --bp-card-lime-ink: #3f6212;\n  --bp-card-green-tint: #d1fae5;\n  --bp-card-green-ink: #065f46;\n  --bp-card-teal-tint: #ccfbf1;\n  --bp-card-teal-ink: #115e59;\n  --bp-card-sand-tint: #ebe6df;\n  --bp-card-sand-ink: #5b5046;\n  --bp-card-amber-tint: #fef3c7;\n  --bp-card-amber-ink: #92400e;\n  --bp-ink-brand: #047857;\n  --bp-ink-success: #047857;\n  --bp-ink-danger: #b91c1c;\n  --bp-ink-warning: #92400e;\n  --bp-ink-accent: #5b6b5b;\n  --bp-ink-terra: #a3472e;\n  --bp-ink-event: #5b21b6;\n  --bp-ink-learn: #115e59;\n  --bp-ink-info: #2563eb;\n  --bp-map-ring: #92400e;\n  --bp-deal-held-wash: rgba(209, 250, 229, 0.4);\n  --bp-deal-released-wash: rgba(167, 243, 208, 0.4);\n  --bp-deal-cancelled-wash: rgba(254, 226, 226, 0.4);\n}\n:root.dark {\n  --bp-cta-fill: #b85236;\n  --bp-cta-hover: #a3472e;\n  --bp-cta-on: #ffffff;\n  --bp-commit-fill: #047857;\n  --bp-commit-hover: #065f46;\n  --bp-commit-on: #ffffff;\n  --bp-event-fill: #6d28d9;\n  --bp-event-hover: #5b21b6;\n  --bp-event-on: #ffffff;\n  --bp-action-fill: #c2410c;\n  --bp-action-hover: #9a3412;\n  --bp-action-on: #ffffff;\n  --bp-danger-fill: #b91c1c;\n  --bp-danger-hover: #991b1b;\n  --bp-danger-on: #ffffff;\n  --bp-info-fill: #2563eb;\n  --bp-info-hover: #1d4ed8;\n  --bp-info-on: #ffffff;\n  --bp-neutral-fill: #555555;\n  --bp-neutral-hover: #333333;\n  --bp-neutral-on: #ffffff;\n  --bp-gold-fill: #f59e0b;\n  --bp-gold-hover: #fbbf24;\n  --bp-gold-on: #1d231d;\n  --bp-accent-fill: #c0ccc0;\n  --bp-accent-hover: #dce3dc;\n  --bp-accent-on: #1d231d;\n  --bp-sage-fill: #647664;\n  --bp-sage-hover: #526052;\n  --bp-sage-on: #ffffff;\n  --bp-chip-ok-tint: #022c22;\n  --bp-chip-ok-ink: #6ee7b7;\n  --bp-chip-need-tint: #7c2d12;\n  --bp-chip-need-ink: #fdba74;\n  --bp-chip-warn-tint: #451a03;\n  --bp-chip-warn-ink: #fcd34d;\n  --bp-chip-danger-tint: #450a0a;\n  --bp-chip-danger-ink: #fca5a5;\n  --bp-chip-accent-tint: #384038;\n  --bp-chip-accent-ink: #c0ccc0;\n  --bp-chip-accent-border: #434e43;\n  --bp-chip-poll-tint: #4a044e;\n  --bp-chip-poll-ink: #f0abfc;\n  --bp-chip-quiet-tint: #434e43;\n  --bp-chip-quiet-ink: #c0ccc0;\n  --bp-chip-info-tint: #172554;\n  --bp-chip-info-ink: #93c5fd;\n  --bp-chip-learn-tint: #042f2e;\n  --bp-chip-learn-ink: #5eead4;\n  --bp-deal-held-tint: #022c22;\n  --bp-deal-held-ink: #6ee7b7;\n  --bp-deal-held-border: #34d399;\n  --bp-deal-released-tint: #064e3b;\n  --bp-deal-released-ink: #6ee7b7;\n  --bp-deal-released-border: #10b981;\n  --bp-deal-cancelled-tint: #450a0a;\n  --bp-deal-cancelled-ink: #fca5a5;\n  --bp-deal-cancelled-border: #f87171;\n  --bp-tile-food-tint: #431407;\n  --bp-tile-food-ink: #fdba74;\n  --bp-tile-services-tint: #172554;\n  --bp-tile-services-ink: #93c5fd;\n  --bp-tile-labour-tint: #451a03;\n  --bp-tile-labour-ink: #fcd34d;\n  --bp-tile-tools-tint: #292524;\n  --bp-tile-tools-ink: #d6d3d1;\n  --bp-tile-goods-tint: #5b5046;\n  --bp-tile-goods-ink: #ebe6df;\n  --bp-tile-garden-tint: #1a2e05;\n  --bp-tile-garden-ink: #bef264;\n  --bp-tile-housing-tint: #3c180e;\n  --bp-tile-housing-ink: #f0bcab;\n  --bp-tile-transport-tint: #083344;\n  --bp-tile-transport-ink: #67e8f9;\n  --bp-tile-education-tint: #1e1b4b;\n  --bp-tile-education-ink: #a5b4fc;\n  --bp-tile-arts-tint: #500724;\n  --bp-tile-arts-ink: #f9a8d4;\n  --bp-tile-health-tint: #042f2e;\n  --bp-tile-health-ink: #5eead4;\n  --bp-tile-care-tint: #4c0519;\n  --bp-tile-care-ink: #fda4af;\n  --bp-tile-animals-tint: #022c22;\n  --bp-tile-animals-ink: #6ee7b7;\n  --bp-tile-tech-tint: #082f49;\n  --bp-tile-tech-ink: #7dd3fc;\n  --bp-tile-energy-tint: #422006;\n  --bp-tile-energy-ink: #fde047;\n  --bp-tile-mindset-tint: #4a044e;\n  --bp-tile-mindset-ink: #f0abfc;\n  --bp-tile-general-tint: #384038;\n  --bp-tile-general-ink: #c0ccc0;\n  --bp-tile-event-tint: #2e1065;\n  --bp-tile-event-ink: #c4b5fd;\n  --bp-tile-pulse-tint: #451a03;\n  --bp-tile-pulse-ink: #fcd34d;\n  --bp-card-sage-tint: #384038;\n  --bp-card-sage-ink: #c0ccc0;\n  --bp-card-sky-tint: #082f49;\n  --bp-card-sky-ink: #7dd3fc;\n  --bp-card-blue-tint: #172554;\n  --bp-card-blue-ink: #93c5fd;\n  --bp-card-indigo-tint: #1e1b4b;\n  --bp-card-indigo-ink: #a5b4fc;\n  --bp-card-violet-tint: #2e1065;\n  --bp-card-violet-ink: #c4b5fd;\n  --bp-card-plum-tint: #4a044e;\n  --bp-card-plum-ink: #f0abfc;\n  --bp-card-pink-tint: #500724;\n  --bp-card-pink-ink: #f9a8d4;\n  --bp-card-rose-tint: #4c0519;\n  --bp-card-rose-ink: #fda4af;\n  --bp-card-clay-tint: #3c180e;\n  --bp-card-clay-ink: #f0bcab;\n  --bp-card-orange-tint: #431407;\n  --bp-card-orange-ink: #fdba74;\n  --bp-card-yellow-tint: #422006;\n  --bp-card-yellow-ink: #fde047;\n  --bp-card-lime-tint: #1a2e05;\n  --bp-card-lime-ink: #bef264;\n  --bp-card-green-tint: #022c22;\n  --bp-card-green-ink: #6ee7b7;\n  --bp-card-teal-tint: #042f2e;\n  --bp-card-teal-ink: #5eead4;\n  --bp-card-sand-tint: #5b5046;\n  --bp-card-sand-ink: #ebe6df;\n  --bp-card-amber-tint: #451a03;\n  --bp-card-amber-ink: #fcd34d;\n  --bp-ink-brand: #34d399;\n  --bp-ink-success: #34d399;\n  --bp-ink-danger: #fca5a5;\n  --bp-ink-warning: #fbbf24;\n  --bp-ink-accent: #c0ccc0;\n  --bp-ink-terra: #e5967f;\n  --bp-ink-event: #c4b5fd;\n  --bp-ink-learn: #5eead4;\n  --bp-ink-info: #93c5fd;\n  --bp-map-ring: #d4a24e;\n  --bp-deal-held-wash: rgba(2, 44, 34, 0.4);\n  --bp-deal-released-wash: rgba(6, 78, 59, 0.4);\n  --bp-deal-cancelled-wash: rgba(69, 10, 10, 0.4);\n}\n"
+}

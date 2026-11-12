@@ -74,7 +74,7 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 const prof = vi.hoisted(() => ({ value: null as any }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => prof.value }));
 vi.mock('../identity', () => ({ updateCallsign: vi.fn(async () => null) }));
-vi.mock('../db', () => ({ getPollNextStart: async () => null, createPost: vi.fn(async () => undefined), getMemberProfile: vi.fn(async () => ({ avatar_url: '/api/avatar/aaa?size=thumb' })), updateMemberProfile: vi.fn(async () => undefined) }));
+vi.mock('../db', () => ({ getPollNextStart: async () => null, isOwnerOrAdminHere: async () => false, createPost: vi.fn(async () => undefined), getMemberProfile: vi.fn(async () => ({ avatar_url: '/api/avatar/aaa?size=thumb' })), updateMemberProfile: vi.fn(async () => undefined) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: vi.fn(async () => null) }));
 vi.mock('../callsign-suggest', () => ({ checkCallsignAvailable: vi.fn(async () => 'available'), suggestCallsigns: vi.fn(async () => []) }));
 // The signature is the request-binding suite's business: here it records what was signed, so a test can see that the

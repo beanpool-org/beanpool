@@ -2258,6 +2258,27 @@ CREATE TABLE IF NOT EXISTS known_floor_log (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Every look a giver took at one member's credit (DESIGN-credit-list-amend-fable.md §5.2; engine/credit-looks.ts): who
+-- looked, whose credit, on which surface (`list`: a page of the People list with Show credit on; `card`: the opened card or
+-- sheet), what the looker was then (`owner`, `admin`, `voucher`), the UTC day, and the first look's exact time. One line per
+-- looker, person, surface and day: the key itself, so a repeat that day writes nothing. No balance, no figure. `surface`
+-- and `sight` are plain text with no CHECK list: a fixed list would make the next value conversion code. Every owner and
+-- admin reads it; each server drops a line 12 months old (the manifest's age rule, with no tombstone). No default calls a
+-- connection function, so an older image boots on this file.
+CREATE TABLE IF NOT EXISTS credit_look_log (
+    actor_pubkey   TEXT NOT NULL,
+    subject_pubkey TEXT NOT NULL,
+    surface        TEXT NOT NULL,
+    day            TEXT NOT NULL,
+    sight          TEXT NOT NULL,
+    at             TEXT NOT NULL,
+    -- The replication watermark (a plain table): db.ts stamps every write.
+    updated_at     TEXT,
+    PRIMARY KEY (actor_pubkey, subject_pubkey, surface, day)
+);
+CREATE INDEX IF NOT EXISTS idx_credit_look_log_subject ON credit_look_log (subject_pubkey, day);
+CREATE INDEX IF NOT EXISTS idx_credit_look_log_at ON credit_look_log (at);
+
 -- Vouchers (DESIGN-invites-and-names-list-amend2-fable.md §2, §3; engine/vouchers.ts): who vouches now, since when and by
 -- whose hand. A member is one by role (an owner or admin, `source` 'role') or because an owner or credit-committee admin
 -- made them one from their confirmed names-list entry ('entry', `entry_id`). One row per member: made one again after a

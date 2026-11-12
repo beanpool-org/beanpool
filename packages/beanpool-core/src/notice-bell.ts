@@ -4,7 +4,8 @@
  * with what needs the member now (the open things, at the top) and what happened, newest first, with the real words.
  *
  * The list is the member's own server's (GET /api/notices/push?unseen=1): every push notice it kept for them, a phone or
- * not. A row leaves when it is tapped (it opens its thing), when its ✕ is pressed (it opens nothing), when "Clear all" is
+ * not. A tap on a row reads it in full and marks nothing (Marty, 12 Nov 2026); a row leaves when "Open" in that view goes to
+ * its thing (it opens it, then marks it), when "Clear" there or its ✕ is pressed (it opens nothing), when "Clear all" is
  * pressed (every row, one request: POST /api/notices/push/seen { all: true }), or when its thing is opened (a chat read:
  * the server marks it); opening the sheet marks nothing (its last line: "Older notices are gone after 7 days."). Marty,
  * 10 Nov 2026, on old rows still red days later: "Need a clear individual and all" (this replaced the 9 Nov rule that had
@@ -41,6 +42,15 @@ export function bellBadge(unseen: number): string {
 /** The words of the bell's two clear controls, one place for both apps: a visible "Clear all", and the ✕ on a row. */
 export function bellClearWords(): { all: string; one: string } {
     return { all: t('Clear all'), one: t('Clear this notice') };
+}
+
+/**
+ * The words of a notice read in full (Marty, 12 Nov 2026: a tap used to open the notice's page and take it off the bell, and the
+ * row cut its words, so a long one was never readable): "Open" goes to its thing and then marks it, "Clear" marks it (the row's
+ * ✕, by the same name), "Back" returns to the list and leaves it as it was. One place for both apps.
+ */
+export function bellReadWords(): { open: string; clear: string; back: string } {
+    return { open: t('Open'), clear: t('Clear'), back: t('Back') };
 }
 
 /** The bell's name for a screen reader, with what it holds. */

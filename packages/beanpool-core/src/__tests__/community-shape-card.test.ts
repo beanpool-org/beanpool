@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+/** The told sentence (credit sight C1): on every node with Beans, after the Beans line. */
+const TOLD = 'People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded.';
 import {
     communityShapeLines,
     communityShapeSummary,
@@ -53,6 +55,7 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             expect(communityShapeLines(f)).toEqual([
                 '**Joining:** any member can invite someone; people can ask to join',
                 '**Beans:** on — trades, credit and the Commons',
+                TOLD,
                 '**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose',
             ]);
         });
@@ -67,6 +70,7 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             expect(communityShapeLines(f)).toEqual([
                 '**Joining:** any member can invite someone; nobody can ask to join',
                 '**Beans:** on — trades, credit and the Commons',
+                TOLD,
                 '**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose',
             ]);
         });
@@ -81,6 +85,7 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             expect(communityShapeLines(f)).toEqual([
                 '**Joining:** only the admins invite people; people can ask to join',
                 '**Beans:** on — trades, credit and the Commons',
+                TOLD,
                 '**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose',
             ]);
         });
@@ -95,6 +100,7 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             expect(communityShapeLines(f)).toEqual([
                 '**Joining:** only the admins invite people',
                 '**Beans:** on — trades, credit and the Commons',
+                TOLD,
                 '**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose',
             ]);
         });
@@ -110,6 +116,7 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             expect(communityShapeLines(f)).toEqual([
                 '**Joining:** paused — no new members for now',
                 '**Beans:** on — trades, credit and the Commons',
+                TOLD,
                 '**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose',
             ]);
         });

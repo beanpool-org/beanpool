@@ -11,8 +11,9 @@
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=600
 
-
-
+# The home page's phone pictures ("A look inside"): a week in the browser's cache. They are shared by all 25 languages.
+/assets/screenshots/*
+  Cache-Control: public, max-age=604800
 
 # The project's own Cloudflare address serves the same pages as beanpool.org; search engines must list beanpool.org only.
 https://beanpool-org.pages.dev/*

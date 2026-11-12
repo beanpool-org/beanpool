@@ -358,6 +358,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('money_requests', 'payer_pubkey');
     move('known_floor_log', 'actor_pubkey');
     move('known_floor_log', 'member_pubkey');
+    // Who looked at whose credit (engine/credit-looks.ts): both keys, so the owners and admins still read a re-keyed member's
+    // looks, and the looks they took. The new key of a re-key is no member before it, so no line already names it.
+    move('credit_look_log', 'actor_pubkey');
+    move('credit_look_log', 'subject_pubkey');
     // A member's badge (engine/badges.ts) and the badges an owner or admin gave: recognition follows the person.
     move('member_badges', 'member_pubkey');
     move('member_badges', 'set_by');

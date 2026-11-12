@@ -164,7 +164,8 @@ describe('readNodeProfile', () => {
 describe('the floor and the rule\'s two lines, from a member\'s read to "How this community works" (review of #2746)', () => {
     // What GET /api/community/me says to a member of a known community (apps/server config/features-for.ts).
     const WIRE = { beans: true, escrow: true, door: 'members', knownFloor: 1000, debtLinePct: 50, quietDays: 60 };
-    const RULE = /^The admins can see a confirmed member's balance/;
+    // Beans on: who sees each balance, then the admins' list, in one line (credit sight C1, core knownRuleLine).
+    const RULE = /^People who give credit here \(the owners, admins and vouchers\).* The admins also keep a list of confirmed members/;
 
     it('the reader\'s answer keeps the three numbers', () => {
         expect(readNodeProfile({ features: WIRE })?.features).toMatchObject({ knownFloor: 1000, debtLinePct: 50, quietDays: 60 });

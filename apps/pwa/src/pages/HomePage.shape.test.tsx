@@ -121,7 +121,7 @@ describe('HomePage community shape line and modal (S5)', () => {
         render(<HomePage identity={ME} onNavigate={() => {}} onSeeWords={() => {}} />);
         fireEvent.click(await screen.findByTestId('home-community-shape-summary'));
         expect(screen.getByTestId('community-shape-modal').textContent)
-            .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.");
+            .toContain("(the known floor)People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded. The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.");
     });
 
     it('says who decides a removal, from beside the features a member\'s Home says (removal jury J3)', async () => {

@@ -72,7 +72,7 @@ describe('the join step', () => {
         await fillIn();
         const box = await screen.findByTestId('join-rule');
         expect(within(box).getByText(/can owe up to 1,000 Beans \(the known floor\)/)).toBeInTheDocument();
-        expect(within(box).getByText("The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.")).toBeInTheDocument();
+        expect(within(box).getByText("The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.")).toBeInTheDocument();
         expect(within(box).queryByRole('checkbox')).toBeNull();
     });
 

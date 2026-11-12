@@ -14,8 +14,9 @@
  *      when sent back as it is, cleared by null, refused when the price for one drops under it, and a new one refused 409
  *      `units_changed` when the count moved under the screen; out of Each clears all three. The count is never frozen by an
  *      open deal; the unit is, and a weekly listing with a live standing deal can't be edited into Each.
- *   4. No deal yet: a request and a one-step accept on a per-item Offer are refused 409 `each_not_yet`, nothing is held, the
- *      count stays; a Total Offer is still taken up as before.
+ *   4. The deal doors as an older app knocks (slice P1 opened them; test-per-item-deals.ts walks them): a one-step accept in
+ *      an app's old shape (a number of hours, no way, no total) is refused 409 `price_changed`, and a request 409
+ *      `each_accept_only`; nothing is held, the count stays; a Total Offer is still taken up as before.
  *   5. The features answer offers no Each yet (no `perItem`).
  *   6. A standby copy carries the three columns and the deal's item_option, by plain assignment.
  *   7. The CHECKs hold on this fresh file (test-schema-upgrade-fresh-shape.ts holds them on an upgraded one).
@@ -36,9 +37,9 @@ import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { LEND_PRICE_TYPE_REFUSED, PRICE_FROZEN_ERROR } from './engine/posts.js';
-import { ITEM_DEALS_NOT_YET, ITEM_DEALS_NOT_YET_CODE, writeItemCount } from './engine/per-item.js';
+import { writeItemCount } from './engine/per-item.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { perItemRefusalText, wordsFor } from '@beanpool/core';
+import { itemTakeUpRefusalText, perItemRefusalText, wordsFor } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -269,18 +270,19 @@ async function main(): Promise<void> {
     assert(afterStanding.status === 200 && row(veg).price_type === 'each' && row(veg).units_left === 5 && row(veg).repeatable === 0,
         `once that standing deal has ended, the edit into Each is made (${brief(afterStanding)})`);
 
-    // ── 4. No deal yet ──────────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n— 4. No deal yet');
+    // ── 4. The deal doors as an older app knocks ────────────────────────────────────────────────────────────────────
+    console.log('\n— 4. The deal doors as an older app knocks');
     const before = bal(dana.pk);
-    for (const [door, path, body] of [
-        ['a one-step accept', '/api/marketplace/posts/accept', { postId: panels, buyerPublicKey: dana.pk, hours: 3 }],
-        ['an accept for all', '/api/marketplace/posts/accept', { postId: panels, buyerPublicKey: dana.pk, hours: 20, itemOption: 'lot', expect_c: hc(5500) }],
-        ['a request', '/api/marketplace/posts/request', { postId: panels, buyerPublicKey: dana.pk, hours: 3 }],
+    for (const [door, path, body, code] of [
+        ['a one-step accept in the old shape (hours, no way, no total)', '/api/marketplace/posts/accept', { postId: panels, buyerPublicKey: dana.pk, hours: 3 }, 'price_changed'],
+        ['an accept for all with no total', '/api/marketplace/posts/accept', { postId: panels, buyerPublicKey: dana.pk, hours: 20, itemOption: 'lot' }, 'price_changed'],
+        ['a request', '/api/marketplace/posts/request', { postId: panels, buyerPublicKey: dana.pk, hours: 3 }, 'each_accept_only'],
     ] as const) {
         const r = await call('POST', path, dana, body);
-        // Red if acceptPost or requestPost loses assertNoItemDealYet: the hourly path would hold 900 and leave the count at 20.
-        assert(r.status === 409 && r.body?.code === ITEM_DEALS_NOT_YET_CODE && r.body?.error === ITEM_DEALS_NOT_YET && dealsOn(panels) === 0
-            && bal(dana.pk) === before && row(panels).units_left === 20 && row(panels).status === 'active', `${door} on a per-item Offer: refused, nothing held (${brief(r)})`);
+        // Red if acceptPost takes an old-shape body down the hourly path (it would hold 900 and leave the count at 20), or
+        // requestPost lets a request wait unfunded against the count.
+        assert(r.status === 409 && r.body?.code === code && r.body?.error === itemTakeUpRefusalText({ code }, EN) && dealsOn(panels) === 0
+            && bal(dana.pk) === before && row(panels).units_left === 20 && row(panels).status === 'active', `${door} on a per-item Offer: refused ${code}, nothing held (${brief(r)})`);
     }
     const firewood = (db.prepare("SELECT id FROM posts WHERE title = 'Firewood'").get() as { id: string }).id;
     const took = await call('POST', '/api/marketplace/posts/accept', dana, { postId: firewood, buyerPublicKey: dana.pk });

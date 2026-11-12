@@ -734,7 +734,7 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
  * opens there links at that community and names it, as does the notice once linked, never "the global community".
  */
 describe("a known community's rule on Join BeanPool (Marty, 2 Nov: a sentence, nothing to tick)", () => {
-    const HALF = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const HALF = "The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
     // The node's known floor is whole hundredths of a Bean (GET /api/community/known-rule, M1): 100000 is 1,000 Beans.
     const KNOWN = { known: true, knownFloor: 100000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null };
     afterEach(() => vi.unstubAllGlobals());
@@ -772,7 +772,8 @@ describe("a known community's rule on Join BeanPool (Marty, 2 Nov: a sentence, n
     it('in the pseudo-locale, every word through t(), and it holds at 320 dp with 1.3× text', async () => {
         await atTheJoinStep('xx', node({ ...KNOWN, debtLinePct: 30, quietDays: 90 }));
         // Read whole: a bold word is drawn in its own Text, its bracket in the sentence's.
-        expect(box()?.textContent).toContain(pseudoLocalise('Each look is logged.').slice(1, -1));
+        // The rule line's own words, mapped as the pseudo-locale maps them (its padding left off: the line is longer).
+        expect(box()?.textContent).toContain(pseudoLocalise('keep a list of confirmed members').slice(1, -1).split('\u200b')[0]);
         expect(outsideBrackets(box()!.textContent!)).toBe('');
         buttonsFit('Join BeanPool, the rule');
         rowsWrap('Join BeanPool, the rule');

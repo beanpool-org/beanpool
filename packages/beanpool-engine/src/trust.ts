@@ -932,6 +932,29 @@ export function vouchesFor(db: Db, publicKey: string): Array<{ voucher: string; 
 }
 
 /**
+ * A person's EARNED credit, the one formula getMemberTrustProfile reads (Trust Model v2 / F3): a saturating function of
+ * qualified trade VALUE (only completed marketplace trades, per counterparty, wash pairs and clusters out), scaled 0.5–1.0×
+ * by their star rating; granted credit is not in it. `value`, `reviewCount` and `avgRating` are what the profile returns
+ * beside it. Exported so a reader that needs only whether this part is above 0 (the People list's "No credit yet", apps/server
+ * engine/credit-sight.ts) works it out exactly as the line does, never by a second rule.
+ */
+export function earnedCreditOf(db: Db, publicKey: string, wash?: WashAnalysis): { value: number; reviewCount: number; avgRating: number; earnedCredit: number } {
+    const value = qualifiedTradeValue(db, publicKey, wash);
+    const rawEarned = earnedCreditFromValue(value);
+
+    // Star rating scales EARNED value only (0.5–1.0×); granted credit passes through intact.
+    const ratingsRow = prepared(db, `
+        SELECT AVG(stars) as avg, COUNT(*) as cnt
+        FROM ratings
+        WHERE target_pubkey = ?
+    `).get(publicKey) as any;
+    const reviewCount = ratingsRow?.cnt || 0;
+    const avgRating = ratingsRow?.avg || 5.0;
+    const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
+    return { value, reviewCount, avgRating, earnedCredit: Math.max(0, Math.floor(rawEarned * multiplier)) };
+}
+
+/**
  * Returns the full trust profile for a member: stats, floor, ceiling, and tier.
  * Incorporates any pre-seeded earned_credit from admin genesis invites.
  * `extraKnownPledged`: a known pledge of this member's not yet written, counted as if it were (a keeper request's check
@@ -1013,19 +1036,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // per-counterparty (A2-26 diversity), crediting both buyer and seller. Direct "send credits"
     // are gifts, not trades, and build no trust. Earning a deep floor requires real, diverse,
     // completed trade — not gifts or 1-bean pings across sock accounts.
-    const value = qualifiedTradeValue(db, publicKey, wash);
-    const rawEarned = earnedCreditFromValue(value);
-
-    // Star rating scales EARNED value only (0.5–1.0×); granted credit passes through intact.
-    const ratingsRow = prepared(db, `
-        SELECT AVG(stars) as avg, COUNT(*) as cnt
-        FROM ratings
-        WHERE target_pubkey = ?
-    `).get(publicKey) as any;
-    const reviewCount = ratingsRow?.cnt || 0;
-    const avgRating = ratingsRow?.avg || 5.0;
-    const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
-    const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
+    const { value, reviewCount, avgRating, earnedCredit } = earnedCreditOf(db, publicKey, wash);
 
     // Activation gate — a member has NO credit line at all (floor stays at 0; no overdraft) until a
     // completed real trade (earnedCredit > 0) opens it (Trust Model v3, docs/trust-model-shipped.md §1),

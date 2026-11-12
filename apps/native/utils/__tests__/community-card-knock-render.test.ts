@@ -683,7 +683,7 @@ describe('the card with no account on the phone (shared-listing door A2)', () =>
  */
 describe("the community's rule on its card", () => {
     const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
-    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const SENTENCE = "The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
 
     it("rule on: the join screen's sentence, in the community's numbers, and nothing to tick", async () => {
         scene.rule = RULE;
@@ -696,7 +696,7 @@ describe("the community's rule on its card", () => {
     it('rule on, its own numbers: 30% and 21 days', async () => {
         scene.rule = { ...RULE, debtLinePct: 30, quietDays: 21 };
         await open();
-        expect(byTestId('community-card-rule')?.textContent).toBe("The admins can see a confirmed member's balance if they owe more than 30% of their credit line, or are in debit and haven't made a sale for 21 days. Each look is logged.");
+        expect(byTestId('community-card-rule')?.textContent).toBe("The admins also keep a list of confirmed members who owe more than 30% of their credit line, or are in debit and haven't made a sale for 21 days.");
     });
 
     it('rule on, for a phone with no account too: the card is the same door', async () => {

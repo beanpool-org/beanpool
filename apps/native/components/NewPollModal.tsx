@@ -33,9 +33,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
-import { createPost, getPollNextStart } from '../utils/db';
+import { createPost, getPollNextStart, isOwnerOrAdminHere } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
-import { placelessListingNote, pollOtherLines, pollWeekNotice, t, tn } from '@beanpool/core';
+import { placelessListingNote, POLL_DAYS_DEFAULT, pollDayChoices, pollOtherLines, pollWeekNotice, t, tn, type PollDays } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 import { signedRequestWords } from './signed-request-lines';
@@ -65,7 +65,10 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
         { id: '1', text: '' },
         { id: '2', text: '' },
     ]);
-    const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
+    const [durationDays, setDurationDays] = useState<PollDays>(POLL_DAYS_DEFAULT);
+    // 30 and 90 days are an owner's and an admin's (@beanpool/core poll-length). Asked each time the form opens; a role the node could not
+    // say offers 3, 7 and 14, which every member may use. The node checks at Create, so this only decides what is offered.
+    const [longRuns, setLongRuns] = useState(false);
     const [openVote, setOpenVote] = useState(false);
     // A typed Other, off unless the maker asks, and offered only where the node says it can (@beanpool/core poll-other).
     const [offerOther, setOfferOther] = useState(false);
@@ -85,6 +88,16 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
         getPollNextStart().then((at) => { if (!cancelled) setWaitUntil(at); });
         return () => { cancelled = true; };
     }, [visible, identity?.publicKey]);
+
+    useEffect(() => {
+        if (!visible || !identity?.publicKey) { setLongRuns(false); return; }
+        let cancelled = false;
+        isOwnerOrAdminHere().then((yes) => { if (!cancelled) setLongRuns(yes); }, () => {});
+        return () => { cancelled = true; };
+    }, [visible, identity?.publicKey]);
+    const dayChoices = pollDayChoices(longRuns);
+    // A length the form no longer offers (the role was lost between two openings) falls back to the default instead of being sent.
+    const days: PollDays = dayChoices.includes(durationDays) ? durationDays : POLL_DAYS_DEFAULT;
 
     const handleAddOption = () => {
         if (options.length < 4) {
@@ -150,7 +163,7 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
                 author_pubkey: identity.publicKey,
                 created_at: new Date().toISOString(),
                 poll_options: JSON.stringify(cleanOptionsObj),
-                durationDays,
+                durationDays: days,
                 pollOpenVote: openVote,
                 ...(offerOther && nodeHasOther ? { pollOther: true } : {}),
             });
@@ -159,7 +172,7 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
             setQuestion('');
             setDescription('');
             setOptions([{ id: '1', text: '' }, { id: '2', text: '' }]);
-            setDurationDays(7);
+            setDurationDays(POLL_DAYS_DEFAULT);
             setOpenVote(false);
             setOfferOther(false);
 
@@ -326,26 +339,26 @@ export function NewPollModal({ visible, onClose, onSuccess, onShow }: NewPollMod
                         {/* Duration Selector */}
                         <Text style={[styles.label, { marginTop: 18 }]}>{t('DURATION')}</Text>
                         <View style={styles.durationRow}>
-                            {([3, 7, 14] as const).map(days => (
+                            {dayChoices.map(choice => (
                                 <Pressable
-                                    key={days}
-                                    onPress={() => setDurationDays(days)}
+                                    key={choice}
+                                    onPress={() => setDurationDays(choice)}
                                     style={[
                                         styles.durationBtn,
-                                        durationDays === days && styles.durationBtnActive,
+                                        days === choice && styles.durationBtnActive,
                                     ]}
                                     accessibilityRole="button"
-                                    accessibilityState={{ selected: durationDays === days }}
-                                    // English writes one form for both, as it always has (3, 7 or 14).
-                                    accessibilityLabel={durationDays === days ? tn(days, '{n} Days duration, selected', '{n} Days duration, selected') : tn(days, '{n} Days duration', '{n} Days duration')}
+                                    accessibilityState={{ selected: days === choice }}
+                                    // English writes one form for both, as it always has (3, 7, 14, 30 or 90).
+                                    accessibilityLabel={days === choice ? tn(choice, '{n} Days duration, selected', '{n} Days duration, selected') : tn(choice, '{n} Days duration', '{n} Days duration')}
                                 >
                                     <Text
                                         style={[
                                             styles.durationBtnText,
-                                            durationDays === days && styles.durationBtnTextActive,
+                                            days === choice && styles.durationBtnTextActive,
                                         ]}
                                     >
-                                        {tn(days, '{n} Days', '{n} Days')}
+                                        {tn(choice, '{n} Days', '{n} Days')}
                                     </Text>
                                 </Pressable>
                             ))}
@@ -592,13 +605,17 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.feedback.danger.fg,
             fontWeight: '800',
         },
+        // Wraps: an owner or an admin has five lengths, three then two at 320 dp and 130% text; a member's three share one row as before.
         durationRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             gap: 10,
         },
         durationBtn: {
-            flex: 1,
+            flexGrow: 1,
+            flexBasis: '28%',
             paddingVertical: 10,
+            paddingHorizontal: 4,
             borderRadius: 10,
             borderWidth: 1,
             borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db',

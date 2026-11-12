@@ -41,7 +41,7 @@ import { grantNodeRole } from './engine/node-roles.js';
 import { setNodeRole } from './config/node-role.js';
 import { setSwitchOverride } from './config/node-profile.js';
 import { keepNotice, NOTICE_LIMITS } from './engine/kept-notices.js';
-import { askNoticeBody, VOUCHER_WORDS } from './engine/vouchers.js';
+import { askForMore, askNoticeBody, VoucherError, VOUCHER_WORDS } from './engine/vouchers.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
@@ -313,10 +313,27 @@ async function main(): Promise<void> {
     assert(wilAsk.res.status === 200 && wilAsk.kept.length === 3 && wilAsk.kept.every((k) => k.body.startsWith(`@${longName} asks`)),
         `20. a voucher with a 32-character callsign: every copy kept (${show(wilAsk.res)})`);
 
+    // The refusal's sentence, built from the dates the response itself carries with the same call the server makes for a day
+    // (engine/vouchers.ts dayOf: en-GB, short month, UTC). The month's spelling is the platform's ("Sept" under current ICU,
+    // "Sep" before it), so no check here matches on its letters: the suite reads the same in any month it runs.
+    const dayWord = (iso: unknown) => new Date(String(iso)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const askedSentence = (b: { askedAt?: unknown; askAgainAt?: unknown } | undefined) => `You asked on ${dayWord(b?.askedAt)}. You can ask again on ${dayWord(b?.askAgainAt)}.`;
     const again = await added(() => call(jane, 'POST', '/api/vouchers/ask', {}));
-    assert(again.res.status === 409 && again.res.body?.code === 'asked_this_week' && /^You asked on \d{1,2} [A-Z][a-z]{2}\. You can ask again on \d{1,2} [A-Z][a-z]{2}\.$/.test(again.res.body?.error ?? '')
+    assert(again.res.status === 409 && again.res.body?.code === 'asked_this_week' && again.res.body?.error === askedSentence(again.res.body)
         && again.res.body?.askedAt === asked.res.body.askedAt && again.kept.length === 0 && again.rows.length === 0 && logLines('budget_asked', jane).length === 1,
-        `20. a second ask inside 7 days: 409 with its sentence, nothing written (red when the weekly rule is removed) (${show(again.res)})`);
+        `20. a second ask inside 7 days: 409 with its sentence, nothing written (red when the weekly rule is removed or the sentence names the wrong days) (${show(again.res)})`);
+
+    // The same sentence for an ask in September, the month the old check could not read, whatever day the suite runs: the engine is
+    // given the moment (askForMore's `at`), 28 Sept 2020 at 23:30 UTC, a day that is already the 29th in Byron, so a sentence
+    // that forgot to say UTC is red too. The year is long past, so the ask is lapsed for every chip read below.
+    const sept = Date.UTC(2020, 8, 28, 23, 30);
+    const septAsk = askForMore(val.pk, sept);
+    let septRefusal: VoucherError | null = null;
+    try { askForMore(val.pk, sept + 60_000); } catch (e) { if (e instanceof VoucherError) septRefusal = e; }
+    assert(septAsk.askedAt === '2020-09-28T23:30:00.000Z' && septAsk.askAgainAt === '2020-10-05T23:30:00.000Z'
+        && septRefusal?.status === 409 && septRefusal.code === 'asked_this_week' && septRefusal.extra?.askedAt === septAsk.askedAt && septRefusal.extra?.askAgainAt === septAsk.askAgainAt
+        && septRefusal.message === askedSentence(septRefusal.extra) && /^You asked on 28 Sept?\. You can ask again on 5 Oct\.$/.test(septRefusal.message),
+        `20. an ask in September: 409 whose sentence is built from its own dates and says the 28th and the 5th, "Sep" or "Sept" (red when the sentence names the wrong days or forgets UTC) (${septRefusal?.message})`);
     const ownerAsk = await call(owen, 'POST', '/api/vouchers/ask', {});
     const memberAsk = await call(mel, 'POST', '/api/vouchers/ask', {});
     const frozenAsk = await call(fay, 'POST', '/api/vouchers/ask', {});

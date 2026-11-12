@@ -6,6 +6,8 @@
  *   computer's browser into the community's Settings page. The key stays on the phone.
  * - "Link a device" (Settings → pair-device; Marty, 16 Oct, renamed from "Use your account on another device") copies the
  *   member's own account to a browser.
+ * - "Use BeanPool on a computer: open <address>" (components/UseOnComputerRow.tsx, computer-line, 13 Nov) is for every member:
+ *   the web app is BeanPool on a computer. It is not the community's Settings and asks the node nothing.
  *
  * Each row's accessibilityLabel is its visible label (WCAG 2.5.3). The screens cannot be rendered here (see
  * vitest.config.ts): the words are read from their source.
@@ -49,6 +51,16 @@ describe("Settings' computer rows", () => {
         expect(src).toContain("<Text style={styles.headerTitle}>{t('Link a device')}</Text>");
         const style = src.slice(src.indexOf('headerTitle: {'), src.indexOf('},', src.indexOf('headerTitle: {')));
         expect(style).toContain('flexShrink: 1');
+    });
+
+    it('the plain one: in Settings for every member, above Link a device, outside the owners\' block, and it asks no role', () => {
+        const settings = read('app/(tabs)/settings.tsx');
+        expect(settings).toContain('<UseOnComputerRow styles={styles} />');
+        expect(settings.indexOf('<UseOnComputerRow')).toBeLessThan(settings.indexOf("router.push('/pair-device')"));
+        expect(read('components/NodeAdminEntry.tsx')).not.toContain('UseOnComputerRow');
+        const row = read('components/UseOnComputerRow.tsx');
+        expect(row).not.toMatch(/node-admin|NodeAdminEntry|canManageNode|fetchMyNodeRole/);
+        expect(row).toContain('USE_ON_COMPUTER_WORDS.phoneLine');
     });
 
     it('neither old name is left on a row', () => {

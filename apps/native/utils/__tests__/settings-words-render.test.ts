@@ -29,6 +29,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
+// What the share sheet was given and what the clipboard was told to hold ("Use BeanPool on a computer"'s Share and Copy).
+const sent = vi.hoisted(() => ({ shared: [] as unknown[], copied: [] as string[] }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', switch: 'switch', checkbox: 'checkbox' };
@@ -75,7 +77,7 @@ vi.mock('react-native', () => {
                 for (const b of buttons ?? []) { if (b.text) alerts.said.push(b.text); alerts.buttons.push(b); }
             },
         },
-        Share: { share: async () => ({}) },
+        Share: { share: async (content: unknown) => { sent.shared.push(content); return {}; } },
         Linking: { openURL: async () => {}, openSettings: async () => {} },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
@@ -109,7 +111,7 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {}, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1, WHEN_UNLOCKED: 2, AFTER_FIRST_UNLOCK: 3 }));
-vi.mock('expo-clipboard', () => ({ setStringAsync: async () => true }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: async (text: string) => { sent.copied.push(text); return true; } }));
 vi.mock('expo-web-browser', () => ({ openBrowserAsync: async () => ({}), openAuthSessionAsync: async () => ({ type: 'cancel' }), maybeCompleteAuthSession: () => ({}) }));
 vi.mock('react-native-qrcode-svg', () => ({ default: () => createElement('div', { 'data-qr': 'true' }) }));
 vi.mock('react-native-safe-area-context', () => ({
@@ -339,6 +341,8 @@ beforeEach(() => {
     params.now = {};
     alerts.said.length = 0;
     alerts.buttons.length = 0;
+    sent.shared.length = 0;
+    sent.copied.length = 0;
     visits.n = 0;
     visits.pushed.length = 0;
     visits.visiting = false;
@@ -748,6 +752,116 @@ describe('Notification Preferences: "When a neighbour asks for something I\'m in
         expect(askedSwitch()).toBeNull();
         expect(host.textContent).not.toContain(SWITCH);
         expect(node.prefsSaved).toEqual([]);
+    });
+});
+
+describe('Settings → "Use BeanPool on a computer: open <address>": every member, with this community\'s address (computer-line)', () => {
+    const LINE = `Use BeanPool on a computer: open ${NODE}`;
+    const lineRow = () => host.querySelector('[data-testid="settings-use-on-computer"]') as HTMLElement | null;
+    /** The line as drawn: the lead-in, then the address on the line under it (separate blocks, so a space is put between). */
+    const lineShown = () => Array.from(lineRow()?.querySelectorAll('span') ?? []).filter((e) => e.getAttribute('data-font') === '15').map((e) => e.textContent).join(' ');
+    const copyButton = () => host.querySelector('[data-testid="settings-use-on-computer-copy"]') as HTMLElement | null;
+    const shareButton = () => host.querySelector('[data-testid="settings-use-on-computer-share"]') as HTMLElement | null;
+    /** The rows under a section's header, as the phone draws them: the header, then its group. */
+    const groupUnder = (header: string) => Array.from(host.querySelectorAll('span')).find((e) => e.textContent === header)?.nextElementSibling ?? null;
+    const holdTheAnswer = () => {
+        let release = () => {};
+        node.hold = new Promise<void>((resolve) => { release = resolve; });
+        return release;
+    };
+
+    it('a member with no role sees the line with this community\'s address, and not the owners\' row', async () => {
+        await renderIn('en');
+        expect(lineRow(), 'the row').toBeTruthy();
+        expect(lineShown()).toBe(LINE);
+        expect(host.textContent).not.toContain('Manage this community from a computer');
+        expect(host.textContent).not.toContain('Moderate this community from a computer');
+    });
+
+    it('it sits in Account & identity, right above Link a device, where a member looks for a computer', async () => {
+        await renderIn('en');
+        const group = groupUnder('ACCOUNT & IDENTITY');
+        expect(group, 'the group').toBeTruthy();
+        expect(group!.contains(lineRow())).toBe(true);
+        expect(lineRow()!.nextElementSibling?.getAttribute('aria-label')).toBe('Link a device');
+    });
+
+    it('it does not wait for the node: shown while the role is still being asked', async () => {
+        const release = holdTheAnswer();
+        await renderIn('en');
+        expect(lineShown()).toBe(LINE);
+        release();
+        await settle();
+        expect(lineShown()).toBe(LINE);
+    });
+
+    it('an owner sees both rows: Manage this community from a computer in the admin group, and this line outside it', async () => {
+        node.role = 'owner';
+        await renderIn('en');
+        const manage = byLabel('Manage this community from a computer');
+        expect(manage, 'the owners\' row').toBeTruthy();
+        expect(groupUnder('COMMUNITY ADMIN')!.contains(manage!)).toBe(true);
+        expect(lineShown()).toBe(LINE);
+        expect(groupUnder('COMMUNITY ADMIN')!.contains(lineRow())).toBe(false);
+        expect(groupUnder('ACCOUNT & IDENTITY')!.contains(lineRow())).toBe(true);
+    });
+
+    it.each([['admin', 'Manage this community from a computer'], ['moderator', 'Moderate this community from a computer']] as const)('%s: keeps %s and sees the line too', async (role, label) => {
+        node.role = role;
+        await renderIn('en');
+        expect(byLabel(label)).toBeTruthy();
+        expect(lineShown()).toBe(LINE);
+    });
+
+    it('Copy puts this community\'s address on the clipboard, and says Copied', async () => {
+        await renderIn('en');
+        expect(copyButton()!.textContent).toBe('Copy');
+        await click(copyButton(), 'Copy');
+        expect(sent.copied).toEqual([NODE]);
+        expect(copyButton()!.textContent).toBe('Copied');
+    });
+
+    it('Share hands the share sheet the same line', async () => {
+        await renderIn('en');
+        await click(shareButton(), 'Share');
+        expect(sent.shared).toEqual([{ message: LINE }]);
+    });
+
+    it('the address is the one the phone uses now: another community\'s, with a path or a slash on it, is shown as an origin', async () => {
+        store.map.set('beanpool_anchor_url', 'https://byron.beanpool.org/');
+        await renderIn('en');
+        expect(lineShown()).toBe('Use BeanPool on a computer: open https://byron.beanpool.org');
+        await click(copyButton(), 'Copy');
+        expect(sent.copied).toEqual(['https://byron.beanpool.org']);
+    });
+
+    it('a phone with no community address has no row: never a line with a blank in it', async () => {
+        store.map.delete('beanpool_anchor_url');
+        await renderIn('en');
+        expect(lineRow()).toBeNull();
+        expect(host.textContent).not.toContain('Use BeanPool on a computer');
+    });
+
+    it('at 320 dp and 1.3x text: the sentence and the address wrap (no line count, no shrinking), read as one line, the buttons are 48 dp and wrap beside them', async () => {
+        await renderIn('en');
+        const words = Array.from(lineRow()!.querySelectorAll('span')).filter((e) => e.getAttribute('data-font') === '15');
+        expect(lineShown()).toBe(LINE);
+        expect(words.map((e) => e.textContent)).toContain(NODE);
+        for (const e of words) {
+            expect(e.getAttribute('data-lines'), e.textContent!).toBeNull();
+            expect(e.getAttribute('data-shrinks'), e.textContent!).toBeNull();
+        }
+        expect(byLabel(LINE), 'a screen reader gets the whole line at once').toBeTruthy();
+        for (const b of [copyButton()!, shareButton()!]) expect(Number(b.getAttribute('data-min-height'))).toBeGreaterThanOrEqual(48);
+        expect(copyButton()!.parentElement!.getAttribute('data-wrap')).toBe('wrap');
+    });
+
+    it('in the pseudo-locale every word of it came through t(), the address as written', async () => {
+        await renderIn('xx');
+        expect(lineShown()).toBe(`${pseudoLocalise('Use BeanPool on a computer: open')} ${NODE}`);
+        expect(copyButton()!.textContent).toBe(pseudoLocalise('Copy'));
+        expect(shareButton()!.textContent).toBe(pseudoLocalise('Share'));
+        expect(bypassing()).toEqual([]);
     });
 });
 

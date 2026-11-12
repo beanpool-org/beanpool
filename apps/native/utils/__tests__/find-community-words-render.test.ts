@@ -224,7 +224,7 @@ describe('the listing promise under a community\'s name (mothership A3)', () => 
  */
 describe("the community's rule on Find a community's yes", () => {
     const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
-    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const SENTENCE = "The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days.";
     const ruleAnswer = { body: null as Record<string, unknown> | null, asked: [] as string[] };
     const realFetch = globalThis.fetch;
     beforeEach(async () => {

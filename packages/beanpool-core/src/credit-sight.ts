@@ -15,7 +15,8 @@
  * Every figure is whole hundredths of a Bean (`*_c`), as the ledger holds it; nothing here rounds a hundredth away.
  */
 import { formatCount, t, tn, word } from './words.js';
-import { formatHundredths } from './hundredths.js';
+import { formatHundredths, beans } from './hundredths.js';
+import { VOUCH_MAX, VOUCH_PRESETS, VOUCHER_BUDGET_MAX, isBudgetLevel } from './vouch-presets.js';
 
 /** Who reads: an owner or admin whose role acts reads everything here; a live voucher the open and giver parts. */
 export type CreditSight = 'owner' | 'admin' | 'voucher';
@@ -289,4 +290,36 @@ export function riskReasonSentence(r: RiskReason): string | null {
         case 'few_trades': return tn(whole(v.n), '{n} completed trade so far.', '{n} completed trades so far.', { n: formatCount(whole(v.n)) });
         default: return null;
     }
+}
+
+// ── Vouchers' budgets on the view (amendment §3.5, §3.6; slice C3) ─────────────────────────────────────────────────
+
+/**
+ * Running low: under VOUCH_MAX left (100 Beans), the most one voucher's vouches for one person come to, so under it they
+ * can no longer give anyone a full vouch (amendment §3.5). What is LEFT, never the level: a 2,000 budget with 99 left is low.
+ * An owner vouches with no limit and is never flagged (the server never asks this for one).
+ */
+export function runningLow(left_c: number): boolean {
+    return whole(left_c) < VOUCH_MAX;
+}
+
+/** Nothing left to vouch with: under the smallest vouch preset (25 Beans) left. */
+export function nothingLeft(left_c: number): boolean {
+    return whole(left_c) < Math.min(...VOUCH_PRESETS);
+}
+
+/** The levels a top-up offers past the last level set: 500 · 1,000 · 1,500 · 2,000 (amendment §3.5). */
+export const TOP_UP_LEVELS: readonly number[] = [beans(500), beans(1000), beans(1500), beans(2000)];
+
+/**
+ * The one level "Top up to {level}" offers (amendment §3.5), the node's offer in the row, never worked out in an app: the
+ * level this voucher was last set to (`lastLevel_c`: the newest grant, top-up or lower for them; the community's setting
+ * when there is none) when they have less than that in hand; otherwise the next of {@link TOP_UP_LEVELS} above what they
+ * have in hand; null at the ceiling (2,000 in hand: "At the most a voucher can hold."). `inHand_c` is left and held together.
+ */
+export function topUpTarget(inHand_c: number, lastLevel_c: number): number | null {
+    const inHand = Math.max(0, whole(inHand_c));
+    if (inHand >= VOUCHER_BUDGET_MAX) return null;
+    if (isBudgetLevel(lastLevel_c) && inHand < lastLevel_c) return lastLevel_c;
+    return TOP_UP_LEVELS.find((l) => l > inHand) ?? null;
 }

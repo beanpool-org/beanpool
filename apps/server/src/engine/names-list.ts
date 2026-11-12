@@ -73,6 +73,7 @@ import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
 import { recordDepartedDebt, openDebtOfEntry, debtRecord, startWorkOff, workOffGoesLive, endWorkOff } from './names-debts.js';
 import { vouchingAfterRevoke, landAwaitingInviteVoucher, endInviteVoucherPromise, type InviteVoucherOutcome, type TellVoucher, type VoucherNotice } from './vouchers.js';
+import { confirmationNotice, revocationNotice } from './credit-notices.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -460,7 +461,12 @@ function assertConfirmable(pubkey: string): void {
     }
 }
 
-export function confirmMember(actor: string, body: { memberPubkey?: unknown; entryId?: unknown }, workOff?: { debtId: string }): { id: string; status: ConfirmationStatus } {
+/**
+ * An admin confirms a member against an entry. Where no second admin is needed it takes effect now, and the member is told
+ * (engine/credit-notices.ts: who confirmed them and the credit it gives, or the work-off) by `tell` once it has committed;
+ * the first half of a two-admin confirmation tells nobody (it gives nothing yet).
+ */
+export function confirmMember(actor: string, body: { memberPubkey?: unknown; entryId?: unknown }, workOff?: { debtId: string }, tell?: TellVoucher): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const member = typeof body.memberPubkey === 'string' ? body.memberPubkey.toLowerCase() : '';
     if (!/^[0-9a-f]{64}$/.test(member)) throw new NamesListError(400, 'bad_member', "'memberPubkey' is a member's key, 64 hexadecimal characters.");
@@ -484,26 +490,28 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
     // can still confirm each of them (one confirms the other; nobody else could second it).
     const needsSecond = twoAdminsToConfirm() && admins.filter((a) => a.pubkey !== member).length >= 2 ? 1 : 0;
     const id = crypto.randomBytes(16).toString('hex');
-    db.transaction(() => {
+    const notice = db.transaction((): VoucherNotice | undefined => {
         db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, ?)')
             .run(id, member, entry.id, actor, needsSecond);
         log(actor, 'confirm', entry.id, member);
         // Working the debt off (design §4.2 (b)): a known floor of 0, and every Bean above 0 they receive goes to the
         // Commons until the debt is cleared (state-engine.ts sweepRepayment).
         if (workOff) startWorkOff(actor, workOff.debtId, member, id, !needsSecond);
+        return needsSecond ? undefined : confirmationNotice(member, actor, !!workOff);
     })();
+    if (notice) tell?.(notice);
     return { id, status: needsSecond ? 'awaiting_second' : 'confirmed' };
 }
 
 /** Confirms a member against the entry of an open debt to work it off (POST /api/names/debts/:id/work-off). */
-export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberPubkey?: unknown }): { id: string; status: ConfirmationStatus } {
+export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberPubkey?: unknown }, tell?: TellVoucher): { id: string; status: ConfirmationStatus } {
     const debt = typeof debtId === 'string' ? debtRecord(debtId) : undefined;
     if (!debt) throw new NamesListError(404, 'no_debt', 'There is no such debt record.');
     if (debt.status !== 'open') throw new NamesListError(409, 'not_open', `That debt is ${debt.status} already.`);
     if (debt.repaying_pubkey) throw new NamesListError(409, 'repaying', word('Someone is working that debt off already.'));
     // Only while something is left: payments made for the debt count toward it as they are paid (engine/names-debts.ts).
     if (!(debt.amount_c - debt.repaid_c > 0)) throw new NamesListError(409, 'nothing_left', word('Nothing is left to repay on that debt.'));
-    return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id });
+    return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id }, tell);
 }
 
 // ── Invites bound to an entry (community modes slice 3, design §4.1 ways 1–3) ─────────────────────────────────────
@@ -633,7 +641,8 @@ function waitingOutcomeNow(c: Pick<ConfirmationRow, 'needs_second' | 'seconded_a
 /**
  * A second admin confirms. A voucher budget the member's invite promised, waiting for this (amend3 §2), lands in the same
  * transaction (engine/vouchers.ts landAwaitingInviteVoucher, the maker's committee standing read now; never a refusal), and
- * its notice is told by `tell` once it has committed.
+ * its notice is told by `tell` once it has committed, with the member's own: the confirmation has taken effect
+ * (engine/credit-notices.ts, the work-off's words where it confirms them to work off a debt).
  */
 export function secondConfirmation(actor: string, id: unknown, tell?: TellVoucher): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
@@ -644,21 +653,29 @@ export function secondConfirmation(actor: string, id: unknown, tell?: TellVouche
     if (row.member_pubkey === actor) throw new NamesListError(403, 'self_confirm', word('Another admin confirms you.'));
     const entry = entryRow(row.entry_id);
     if (!entry || !holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', word('You can’t open that entry, so you can’t confirm anyone against it.'));
-    const notice = db.transaction((): VoucherNotice | undefined => {
+    const notices = db.transaction((): (VoucherNotice | undefined)[] => {
         db.prepare("UPDATE confirmations SET seconded_by = ?, seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(actor, row.id);
         log(actor, 'second', row.entry_id, row.member_pubkey);
         workOffGoesLive(actor, row.member_pubkey, row.id);
-        return landAwaitingInviteVoucher(row.member_pubkey, row.entry_id);
+        const voucher = landAwaitingInviteVoucher(row.member_pubkey, row.entry_id);
+        const workingOff = !!db.prepare("SELECT 1 FROM names_debts WHERE work_off_confirmation_id = ? AND repaying_pubkey = ? AND status = 'open'").get(row.id, row.member_pubkey);
+        return [confirmationNotice(row.member_pubkey, row.confirmed_by, workingOff), voucher];
     })();
-    if (notice) tell?.(notice);
+    for (const n of notices) if (n) tell?.(n);
     return { id: row.id, status: 'confirmed' };
 }
 
-export function revokeConfirmation(actor: string, id: unknown): { id: string; status: ConfirmationStatus } {
+/**
+ * An admin revokes a confirmation. One that had taken effect tells the member (engine/credit-notices.ts: it gives them no
+ * credit now, and nothing spent is taken back) by `tell` once it has committed; one still waiting for a second admin gave
+ * them nothing, and tells nobody.
+ */
+export function revokeConfirmation(actor: string, id: unknown, tell?: TellVoucher): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const row = confirmationRow(id);
     if (row.revoked_at) throw new NamesListError(409, 'revoked', word('That confirmation was revoked already.'));
-    db.transaction(() => {
+    const wasLive = confirmationStatus(row) === 'confirmed';
+    const notice = db.transaction((): VoucherNotice | undefined => {
         db.prepare("UPDATE confirmations SET revoked_by = ?, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'admin' WHERE id = ?")
             .run(actor, row.id);
         log(actor, 'revoke', row.entry_id, row.member_pubkey);
@@ -668,7 +685,9 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
         vouchingAfterRevoke(row.member_pubkey, actor);
         // A voucher budget an invite promised them, still waiting for a second admin, is not made.
         endInviteVoucherPromise(row.member_pubkey, actor);
+        return wasLive ? revocationNotice(row.member_pubkey, actor) : undefined;
     })();
+    if (notice) tell?.(notice);
     return { id: row.id, status: 'revoked' };
 }
 

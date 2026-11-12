@@ -8,7 +8,7 @@ import { freeTagsOf, parseReachPeers, pollOtherOption } from '@beanpool/core';
 type Db = Database.Database;
 
 import { rowToMember, type Member } from './members.js';
-import { seriesFieldsOf, type MarketplacePost } from './posts.js';
+import { itemFieldsOf, seriesFieldsOf, type MarketplacePost } from './posts.js';
 import type { Rating } from './social.js';
 import type { Message } from './messaging.js';
 
@@ -209,6 +209,8 @@ export interface SyncMarketplaceTransaction {
     /** The standing deal this deal is a period of, and which period (schema.sql standing_deals). */
     standingId?: string | null;
     periodNo?: number | null;
+    /** A deal on an Offer priced for each one: 'each' (a number of them, in `hours`) or 'lot' (all of them). */
+    itemOption?: string | null;
     ratedByBuyer?: boolean;
     ratedBySeller?: boolean;
 }
@@ -1101,6 +1103,9 @@ function postOfRow(row: any): MarketplacePost {
             ...(row.lend_terms != null ? { lendTerms: row.lend_terms } : {}),
             ...(row.replacement_value != null ? { replacementValue: row.replacement_value } : {}),
         } : {}),
+        // An Offer priced for each one: its count and price for all, as the main server holds them (apps/server engine/sync.ts
+        // postItems). None said is none.
+        ...itemFieldsOf(row),
         // The shop it is in, as the main server holds it (apps/server engine/sync.ts postShop): none said is none.
         ...(row.shop_id != null ? { shopId: row.shop_id } : {}),
         // When it was featured in its shop, as the main server holds it (apps/server engine/sync.ts postFeatured).
@@ -1241,6 +1246,7 @@ function marketplaceTransactionOfRow(row: any, ratingTxKeys: ReadonlySet<string>
         disputeResolvedBy: row.dispute_resolved_by ?? null,
         standingId: row.standing_id ?? null,
         periodNo: row.period_no ?? null,
+        itemOption: row.item_option ?? null,
         ratedByBuyer: ratingTxKeys.has(`${row.id}|${row.buyer_pubkey}`),
         ratedBySeller: ratingTxKeys.has(`${row.id}|${row.seller_pubkey}`),
     };

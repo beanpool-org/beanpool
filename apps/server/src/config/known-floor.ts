@@ -20,6 +20,8 @@ import { getProfileSwitches } from './node-profile.js';
 import { getMember } from '../state-engine.js';
 import { clearEnterpriseFloorCache } from '@beanpool/engine';
 import { workOffHoldsFloor } from '../engine/names-debts.js';
+import { exceptionNotice, knownGrantNow } from '../engine/credit-notices.js';
+import type { TellVoucher, VoucherNotice } from '../engine/vouchers.js';
 
 export class KnownFloorError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -197,8 +199,11 @@ export function knownFloorForMember(pk: string, viewerKey: string | null = null)
  * A change that changes nothing (the same amount again, a freeze of a frozen line, the default where it already is) writes
  * nothing and logs nothing, and answers with the line as it is (#1631 review r4179579785: the panel read "from 250 Beans to
  * 250 Beans"). A live work-off's 0 is not the admin's own 0: setting 0 over it takes it over (workOffHoldsFloor).
+ * A change that writes tells the member, a confirmed one with the dial on (engine/credit-notices.ts: the new figure, who
+ * changed it, and for a lowering or a freeze that nothing spent is taken back), by `tell` once it has committed; a change
+ * that writes nothing tells nothing.
  */
-export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount_c?: unknown; frozen?: unknown; clear?: unknown }) {
+export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount_c?: unknown; frozen?: unknown; clear?: unknown }, tell?: TellVoucher) {
     const pk = body.memberPubkey;
     if (typeof pk !== 'string' || !pk) throw new KnownFloorError(400, 'bad_member', 'memberPubkey is required.');
     const m = getMember(pk);
@@ -208,11 +213,14 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
     const describe = (r: { amount_c: number | null; frozen: number | boolean } | undefined) =>
         !r ? 'default' : (r.frozen ? 'frozen' : String(r.amount_c));
     const line = () => ({ memberPubkey: pk, confirmed: isConfirmed(db, pk), exception: knownFloorExceptions().find(e => e.memberPubkey === pk) ?? null });
+    let notice: VoucherNotice | undefined;
     if (body.clear === true) {
         if (!old) return line();
-        db.transaction(() => {
+        notice = db.transaction(() => {
+            const before = knownGrantNow(pk);
             db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
             log(actor, 'exception_cleared', pk, describe(old), 'default');
+            return exceptionNotice(pk, actor, 'cleared', before);
         })();
     } else {
         if (body.frozen !== undefined && typeof body.frozen !== 'boolean') throw new KnownFloorError(400, 'bad_frozen', 'frozen must be true or false.');
@@ -230,7 +238,8 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
         }
         // An unfreeze is always a change (the line was frozen); a freeze keeps the amount, so only the flag is compared.
         if (old && !unfreeze && (frozen ? old.frozen === 1 : old.frozen === 0 && old.amount_c === amount) && !workOffHoldsFloor(pk)) return line();
-        db.transaction(() => {
+        notice = db.transaction(() => {
+            const before = knownGrantNow(pk);
             if (unfreeze && amount === null) {
                 db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
             } else {
@@ -243,8 +252,10 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
             // A raise above the community's known floor is its own line, so every admin sees it (design §7.3).
             const action = frozen ? 'exception_frozen' : unfreeze ? 'exception_unfrozen' : amount! > knownFloor(db) ? 'exception_raised' : 'exception_lowered';
             log(actor, action, pk, describe(old), frozen ? 'frozen' : amount === null ? 'default' : String(amount));
+            return exceptionNotice(pk, actor, frozen ? 'frozen' : unfreeze ? 'unfrozen' : 'amount', before);
         })();
     }
     clearEnterpriseFloorCache(db);
+    if (notice) tell?.(notice);
     return line();
 }

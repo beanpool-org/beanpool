@@ -400,6 +400,15 @@ CREATE TABLE IF NOT EXISTS posts (
     knowledge_outdated_at TEXT,
     knowledge_outdated_note TEXT,
     knowledge_helped INTEGER NOT NULL DEFAULT 0,
+    -- An Offer priced for each one (price_type 'each'; scratch/fable-design/DESIGN-per-item-price-fable.md §3; @beanpool/core
+    -- per-item.ts): how many can be taken up now (what the seller has, less what open deals hold), and a price for all of
+    -- them, whole hundredths, for exactly `lot_units` of them. NULL on every other row. The engine holds the rest on every
+    -- create and edit (apps/server engine/per-item.ts): set on 'each' only, the two lot columns together, the price for all
+    -- less than that many one by one. No trigger, index or default here calls a connection function, so an older image
+    -- boots on this file; db.ts adds the three to a file made before them (PERITEM-S1..S3), with these same CHECKs.
+    units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999)),
+    lot_price_c INTEGER CHECK (lot_price_c IS NULL OR lot_price_c > 0),
+    lot_units INTEGER CHECK (lot_units IS NULL OR lot_units >= 2),
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
@@ -597,7 +606,11 @@ CREATE TABLE IF NOT EXISTS marketplace_transactions (
     -- A period of a standing deal (standing_deals below; DESIGN-standing-deals-fable.md §2.1): which one, and its number
     -- from 1. NULL on a one-off deal.
     standing_id TEXT REFERENCES standing_deals(id),
-    period_no INTEGER
+    period_no INTEGER,
+    -- A deal on an Offer priced for each one (DESIGN-per-item-price-fable.md §3): 'each', a number of them (`hours` holds how
+    -- many, a whole number), or 'lot', all of them for the price for all. NULL on every other deal. db.ts adds it to a file
+    -- made before it (PERITEM-S4), with this same CHECK.
+    item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))
 );
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at);

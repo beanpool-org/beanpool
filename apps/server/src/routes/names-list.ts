@@ -164,7 +164,8 @@ async function asMember(ctx: any, fn: (actor: string, body: Record<string, unkno
 export function createNamesListRoutes(_deps: RouteDeps): Router {
     const router = new Router();
     // Each change to a voucher's budget tells the voucher (§10.2), once the change has committed: making one, setting a budget,
-    // stopping one, and a voucher an invite promised landing at the second admin's confirmation (amend3 §2).
+    // stopping one, and a voucher an invite promised landing at the second admin's confirmation (amend3 §2). A confirmation's
+    // credit notices to the member go the same way (engine/credit-notices.ts).
     const tell: TellVoucher = (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification });
 
     router.get('/api/names/state', (ctx) => asAdmin(ctx, (actor) => namesState(actor)));
@@ -190,7 +191,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
 
     // Debts and a second chance (engine/names-debts.ts): every entry's debt history, and paying one back.
     router.get('/api/names/debts', (ctx) => asAdmin(ctx, () => ({ debts: listDebts() })));
-    router.post('/api/names/debts/:id/work-off', (ctx) => asAdmin(ctx, (actor, body) => confirmToWorkOff(actor, ctx.params.id, body), 201));
+    router.post('/api/names/debts/:id/work-off', (ctx) => asAdmin(ctx, (actor, body) => confirmToWorkOff(actor, ctx.params.id, body, tell), 201));
     router.post('/api/names/debts/:id/settle', (ctx) => asAdmin(ctx, (actor, body) => settleByPayment(actor, ctx.params.id, body)));
 
     // An invite bound to an entry (community modes slice 3): redeeming it confirms the joiner against the entry, by the
@@ -218,9 +219,10 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     router.delete('/api/names/entries/:id/invite', (ctx) => asAdmin(ctx, (actor) => revokeEntryInvite(actor, ctx.params.id)));
     router.get('/api/names/invites', (ctx) => asAdmin(ctx, () => ({ invites: readBoundInvites() })));
 
-    router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
+    // A confirmation that takes effect, and a revocation of one that had, tell the member (engine/credit-notices.ts).
+    router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body, undefined, tell), 201));
     router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id, tell)));
-    router.post('/api/names/confirmations/:id/revoke', (ctx) => asAdmin(ctx, (actor) => revokeConfirmation(actor, ctx.params.id)));
+    router.post('/api/names/confirmations/:id/revoke', (ctx) => asAdmin(ctx, (actor) => revokeConfirmation(actor, ctx.params.id, tell)));
 
     router.get('/api/names/log', (ctx) => asAdmin(ctx, () => {
         const limit = wholeQuery(ctx.query.limit, DEFAULT_LOG_LIMIT, MAX_LOG_LIMIT);

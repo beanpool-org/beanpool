@@ -13,6 +13,7 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import { isDealQuantity, DEAL_QUANTITY_ERROR, dealAmountFor, quantityHundredths } from './post-fields.js';
 import { hasBlocked } from './member-blocks.js';
+import { assertNoItemDealYet } from './per-item.js';
 import { checkStandingStart, firstPeriodOf, insertStandingDeal, type CheckedStandingStart, type StandingStart } from './standing-deals.js';
 import type { KeptNoticePushOptions } from './kept-notices.js';
 import crypto from 'node:crypto';
@@ -369,6 +370,8 @@ export function requestPost(
         throw Object.assign(new Error(word('Post not found')), { code: POST_GONE_CODE });
     }
     assertNoDealOnCopy(post.shown_from_host);
+    // A listing priced for each one is taken up in one step, and not before slice P1 (engine/per-item.ts).
+    assertNoItemDealYet(post);
     // A lendable Offer that is out says so, to anyone who may see it: the second borrower is told to ask again later.
     if (post.lendable === 1 && post.status === 'pending') throw loanOut();
     if (post.status !== 'active') throw Object.assign(new Error(word('Post is not active')), { code: POST_GONE_CODE });
@@ -1144,6 +1147,8 @@ export function acceptPost(
         if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
         throw Object.assign(new Error(word('Post not found or not active')), { code: POST_GONE_CODE });
     }
+    // A listing priced for each one: its count moves with the Beans from slice P1 on (engine/per-item.ts); until then, no deal.
+    assertNoItemDealYet(post);
 
     // A standing deal (DESIGN-standing-deals-upfront-fable; Marty, 10 Nov 2026): a listing priced per week or per month,
     // taken up with the payer's signed authorisation. What they signed must be this listing, its author and its price per

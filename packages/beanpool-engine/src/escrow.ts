@@ -40,6 +40,11 @@ export interface MarketplaceTransaction {
      */
     standingId?: string;
     periodNo?: number;
+    /**
+     * A deal on an Offer priced for each one (DESIGN-per-item-price-fable.md §3): 'each', a number of them (`hours` holds how
+     * many), or 'lot', all of them for the price for all. Only on such a deal, so every other reads byte for byte as before.
+     */
+    itemOption?: 'each' | 'lot';
     standingPhase?: 'paid' | 'short' | 'ended';
     /** The Beans per period, whole hundredths of a Bean. */
     standingBeans_c?: number;
@@ -65,6 +70,11 @@ export interface MarketplaceTransaction {
     standingAsksLeft?: number;
     // No disputeResolvedBy: this is the parties' view of their trade, and the admin who ruled is named in
     // words on the ruling itself. The signer stays on the row for the admin dispute views.
+}
+
+/** A per-item deal's way of taking it up, from its row; nothing for any other deal. */
+function itemOptionOf(r: any): Pick<MarketplaceTransaction, 'itemOption'> {
+    return r.item_option === 'each' || r.item_option === 'lot' ? { itemOption: r.item_option } : {};
 }
 
 /** A row's standing-deal fields (the reads join its standing deal only where this row is its current period). */
@@ -182,6 +192,7 @@ export function getMarketplaceTransaction(db: Db, transactionId: string): Market
         postAuthorPublicKey: r.postAuthorPublicKey ?? undefined,
         postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
         postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+        ...itemOptionOf(r),
         ...standingFields(r),
     };
 }
@@ -255,6 +266,7 @@ export function getMarketplaceTransactions(db: Db, publicKey: string, filter?: {
             postAuthorPublicKey: r.postAuthorPublicKey ?? undefined,
             postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
             postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+            ...itemOptionOf(r),
         ...standingFields(r),
         };
     });

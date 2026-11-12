@@ -435,6 +435,53 @@
         </div>
     </section>
 
+    <!-- A look inside: five screens of the phone app, each in light and dark (the picture follows the visitor's setting). The pictures are shared by all 25 languages: website-build.mjs points the copies' assets/ paths at ../assets/ (src and srcset). -->
+    <section id="see-it">
+        <div class="container">
+            <div class="section-header">
+                <h2>A look inside</h2>
+                <p>The same app on phone and web. This is the phone.</p>
+            </div>
+            <div class="see-it-grid">
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-home-dark-360.webp 1x, assets/screenshots/phone-home-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-home-light-360.webp" srcset="assets/screenshots/phone-home-light-360.webp 1x, assets/screenshots/phone-home-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="BeanPool's Home screen on a phone, in an invented community called Riverbend: a card for what needs you (a deal is waiting: Sourdough loaves), a balance of 42 Beans, a poll about the monthly market and a seed swap coming up at Riverbend Hall.">
+                    </picture>
+                    <figcaption>Your community, on one screen</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-market-dark-360.webp 1x, assets/screenshots/phone-market-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-market-light-360.webp" srcset="assets/screenshots/phone-market-light-360.webp 1x, assets/screenshots/phone-market-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="The Market on a phone, newest first: offers with photos and prices in Beans, such as duck eggs for 6 Beans and a bike fix for 30, and a seed swap event at Riverbend Hall with 12 going.">
+                    </picture>
+                    <figcaption>Offer what you can, ask freely</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-listing-dark-360.webp 1x, assets/screenshots/phone-listing-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-listing-light-360.webp" srcset="assets/screenshots/phone-listing-light-360.webp 1x, assets/screenshots/phone-listing-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="One listing on a phone: Duck eggs for 6 Beans, with an Accept Offer button, a photo of the eggs and buttons to message the seller, Kofi, or share the listing.">
+                    </picture>
+                    <figcaption>Agree a price in Beans</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-deal-dark-360.webp 1x, assets/screenshots/phone-deal-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-deal-light-360.webp" srcset="assets/screenshots/phone-deal-light-360.webp 1x, assets/screenshots/phone-deal-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="An end-to-end encrypted chat with Amara on a phone: a deal for Sourdough loaves with 12 Beans held in trust and Release and Cancel buttons, and three short messages that arrange a pick-up on Saturday.">
+                    </picture>
+                    <figcaption>Beans held until it's done</figcaption>
+                </figure>
+                <figure class="see-it-shot glass-panel">
+                    <picture>
+                        <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/phone-ledger-dark-360.webp 1x, assets/screenshots/phone-ledger-dark-720.webp 2x">
+                        <img src="assets/screenshots/phone-ledger-light-360.webp" srcset="assets/screenshots/phone-ledger-light-360.webp 1x, assets/screenshots/phone-ledger-light-720.webp 2x" width="360" height="640" loading="lazy" decoding="async" alt="The Ledger on a phone: a balance of 42 Beans, a Send Beans button and recent transactions, including 12 Beans held in trust for sourdough loaves and 20 Beans paid in for lawn mowing.">
+                    </picture>
+                    <figcaption>Every trade in your own Ledger</figcaption>
+                </figure>
+            </div>
+        </div>
+    </section>
+
     <!-- What you can do: one card per part of the app, in the app's own words -->
     <section id="features">
         <div class="container">
@@ -599,11 +646,16 @@
             <div class="section-header">
                 <h2>Your Account and Your Safety</h2>
             </div>
-            <div class="features-grid">
+            <div class="features-grid features-grid-four">
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🔑</div>
                     <h3>Your key stays on your phone</h3>
                     <p>On the phone app your key is held in the phone's secure storage, and you can add App Lock, which asks for your phone's own screen lock. In the web app it is held in that browser's own storage. Your 12 words are the backup that depends on nobody.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>Your contacts go where you go <span class="soon-pill">Coming soon</span></h3>
+                    <p>Your BeanPool account is your key and your 12 words, not a phone number, so no app can take it from you. Soon your contacts will be the same: one tap brings in the people from your phone, sealed so only your 12 words open them. Change phones, change numbers, join another community, and your contacts come with you. Anyone not on BeanPool yet gets an invite from you.</p>
                 </div>
                 <div class="feature-card glass-panel">
                     <div class="feature-icon">🚩</div>

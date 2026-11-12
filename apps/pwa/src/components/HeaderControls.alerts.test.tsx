@@ -390,6 +390,25 @@ describe('The bell: what happened, until it is opened', () => {
         expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
     });
 
+    it("a credit notice (the node's engine/credit-notices.ts: community.notice, data kind credit_*) is a row with its own words", async () => {
+        const words = {
+            credit_confirmed: '@Ada confirmed you on the names list. You can now spend up to 1,000 Beans. Your credit opens when you post an Offer.',
+            credit_known_floor: '@Olive lowered your known floor to 300 Beans. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+            credit_confirmation_revoked: '@Ben revoked your confirmation on the names list, so it gives you no credit now. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+        };
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue(Object.entries(words).map(([kind, body], i) =>
+            notice(`c${i}`, { kind: 'community.notice', title: 'Your credit here', body, data: { kind, by: 'c'.repeat(64), amount: 30000, noticeId: `k${i}` } })));
+        render(<HeaderRow />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('3');
+        const rows = within(openSheet()).getAllByTestId('bell-notice');
+        expect(rows.map(r => r.dataset.noticeId)).toEqual(['c0', 'c1', 'c2']);
+        Object.values(words).forEach((body, i) => {
+            expect(rows[i]).toHaveTextContent('Your credit here');
+            expect(rows[i]).toHaveTextContent(body);
+        });
+    });
+
     it('a row tap opens its thing and marks it, and only it', async () => {
         const onNavigate = vi.fn();
         vi.spyOn(api, 'getBellNotices').mockResolvedValue([notice('n1'), notice('n2', { data: { screen: 'post', postId: 'p-jam', txId: 'tx-9' }, kind: 'market.request' })]);

@@ -1873,7 +1873,9 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
                 open_vote: { type: 'boolean', description: "a poll's ballot, until its first vote: false, anonymous; true, every member sees who chose what" },
                 category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
                 beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
-                price_type: { type: 'string', enum: [...POST_PRICE_TYPES], description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },
+                // Not `each` (a price for each one, with a count): the assistant can't send a count, so it does not make one (§7 of
+                // DESIGN-per-item-price-fable.md leaves that for later).
+                price_type: { type: 'string', enum: POST_PRICE_TYPES.filter((p) => p !== 'each'), description: "an Offer's or a Need's: how the price is counted; a lent Offer's is fixed, daily or weekly" },
                 lat: { type: 'number', description: 'the new latitude, with lng, rounded to about 100 m as the apps do; not on an online event' },
                 lng: { type: 'number', description: 'the new longitude, with lat, rounded the same' },
                 use_my_area: { type: 'boolean', description: "an Offer's or a Need's as you: true puts it at your own area, in place of lat and lng" },

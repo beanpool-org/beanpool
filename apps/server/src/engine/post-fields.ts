@@ -46,8 +46,11 @@ export const POST_HOURS_MAX = 10_000;
  * (#1445 review, BLOCKING 2).
  */
 export const POST_HOURS_MIN = 0.01;
-/** How a price is counted: once, or per unit. The set the apps offer (native treasury-post, PWA) and escrow handles. */
-export const POST_PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'] as const;
+/**
+ * How a price is counted: once, or per unit. The set the apps offer (native treasury-post, PWA) and escrow handles, and
+ * `each`, the price for one of several (@beanpool/core per-item.ts; engine/per-item.ts holds its count and price for all).
+ */
+export const POST_PRICE_TYPES = ['fixed', 'hourly', 'daily', 'weekly', 'monthly', 'each'] as const;
 
 /** The fields this checks, as a create or an edit carries them. An edit names only what it changes. */
 export interface PostFieldsIn {

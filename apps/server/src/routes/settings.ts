@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'url';
 import {
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
-    getNodeRole, getMemberStats, isNodeMember, type NodeConfig,
+    getNodeRole, getMemberStats, isNodeMember, broadcast, dispatchPushNotification, type NodeConfig,
 } from '../state-engine.js';
 import { isPrivatePreview } from '../config/private-preview.js';
 import { placeAs, placeShownTo, type PlaceShown } from '../config/community-place.js';
@@ -36,7 +36,7 @@ import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js'
 import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS, word, VOUCH_PRESETS, VOUCH_MAX, VOUCHER_BUDGET_MAX } from '@beanpool/core';
-import { myVouching, readVoucherCard, VoucherError } from '../engine/vouchers.js';
+import { myVouching, readVoucherCard, VoucherError, tellVoucherNotice } from '../engine/vouchers.js';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 import { cleanLabel, AREA_NAME_MAX } from '../config/clean-label.js';
 import { cardLanguage, serveCommunityCard } from './community-card.js';
@@ -441,7 +441,8 @@ router.post('/api/local/admin/known-floor/exception', async (ctx) => {
         return;
     }
     try {
-        ctx.body = setKnownFloorException(actor, (ctx as any).requestBody || {});
+        // A change that writes tells the member (a confirmed one, with the dial on: engine/credit-notices.ts).
+        ctx.body = setKnownFloorException(actor, (ctx as any).requestBody || {}, (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification }));
     } catch (e) { knownFloorRefusal(ctx, e); }
 });
 

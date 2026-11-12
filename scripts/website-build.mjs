@@ -17,7 +17,7 @@
  * - Legal pages banner mechanism ("This is a translation to help you read it. The English version, dated <date>, is the one that applies.")
  *   with no legal translations shipped in this slice.
  * - Relative link rewrites: links to translated pages remain in <lang>/, links to untranslated pages (like legal) link to English.
- * - Asset path rewrites: relative paths (style.css, bean.png, fonts/, main.js) adjust for <lang>/ subdirectories.
+ * - Asset path rewrites: relative paths (style.css, bean.png, fonts/, main.js, assets/ in src and in every srcset candidate) adjust for <lang>/ subdirectories.
  * - The Android download (beanpool.org/android): version, address, size and digest from apps/website-src/android-apk.json.
  * - The sign-in return pages (apps/website/auth/*.html and apps/pwa/public/auth/facebook.html): generated from
  *   apps/website-src/auth/bounce.html, packages/beanpool-core/src/auth-bounce-words.ts and core's catalogs; each page picks its
@@ -748,6 +748,8 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
     out = out.replace(/\bhref="fonts\//g, 'href="../fonts/');
     out = out.replace(/\bsrc="main\.js(\?v=[^"]*)?"/g, 'src="../main.js$1"');
     out = out.replace(/\bsrc="assets\//g, 'src="../assets/');
+    // srcset="assets/a.webp 1x, assets/b.webp 2x" (on <img> and on <picture>'s <source>): every candidate in the list moves, not only the first
+    out = out.replace(/\bsrcset="([^"]*)"/g, (match, list) => `srcset="${list.replace(/(^\s*|,\s*)assets\//g, '$1../assets/')}"`);
     out = out.replace(/\bhref="(?:(?:\.\.\/)+)?guide\/([^"#?]+)(#[^"]*)?"/g, (match, slug, anchor) => {
         const langGuideFile = path.join(WEBSITE_DIR, 'guide', lang, slug);
         const hashPart = anchor || '';

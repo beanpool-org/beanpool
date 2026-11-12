@@ -403,7 +403,14 @@ export interface NodeFeatures {
     /** Present, and true, only where bills are on (`bills`, engine/bills.ts): the apps offer "Send a bill" and list Your
      *  deals → Bills. Absent (the global community, a server from before it): no bills, as before. */
     bills?: true;
+    /** Present, and true, only once this build takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6;
+     *  engine/per-item.ts): the create and edit forms offer the unit Each only where it is (@beanpool/core perItemOffered).
+     *  Absent until every slice (P1 deals, P2 cards, P3 the take-up box, P4 the forms) is merged: PER_ITEM_BUILT. */
+    perItem?: true;
 }
+
+/** Every per-item slice is merged (DESIGN-per-item-price-fable.md §8): the last of them sets this, and the forms offer Each. */
+const PER_ITEM_BUILT = false;
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
 const OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
@@ -667,6 +674,8 @@ export function getNodeFeatures(): NodeFeatures {
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
         ...(s.knowledge ? { knowledge: true as const } : {}),
         ...(s.bills ? { bills: true as const } : {}),
+        // A capability of the build, as pins are: off on every node until the per-item slices are all in.
+        ...(PER_ITEM_BUILT ? { perItem: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
     // post go outside: the preview shows visitors nothing.

@@ -548,6 +548,18 @@ export function initSchema() {
         try { db.prepare(`ALTER TABLE posts ADD COLUMN ${column}`).run(); } catch { }
     }
 
+    // Born with per-item prices (DESIGN-per-item-price-fable.md §3, §6; Marty's Q5, 12 Nov 2026): four empty columns, each with
+    // schema.sql's own CHECK, NULL on every row that is there. Nothing is read, filled in or rewritten: a listing becomes
+    // per-item only by its seller's own edit. On a fresh install each finds its column and does nothing.
+    // CONVERSION CODE (schema step), log row PERITEM-S1, remove in the release after the one that ships per-item.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999))`).run(); } catch { }
+    // CONVERSION CODE (schema step), log row PERITEM-S2, remove in the release after the one that ships per-item.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN lot_price_c INTEGER CHECK (lot_price_c IS NULL OR lot_price_c > 0)`).run(); } catch { }
+    // CONVERSION CODE (schema step), log row PERITEM-S3, remove in the release after the one that ships per-item.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN lot_units INTEGER CHECK (lot_units IS NULL OR lot_units >= 2)`).run(); } catch { }
+    // CONVERSION CODE (schema step), log row PERITEM-S4, remove in the release after the one that ships per-item.
+    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN item_option TEXT CHECK (item_option IS NULL OR item_option IN ('each', 'lot'))`).run(); } catch { }
+
     // An older conversion pass not yet removed: it finds nothing to do on a file the gate opens (every kept node ran it;
     // MEASURE-conversion-code.md M2), and goes in its own removal with the seal's half (the split-off N1b lists it). Push
     // tokens stored in the clear go aside for the boot to lock or drop (services/push-token-seal.ts, A25).

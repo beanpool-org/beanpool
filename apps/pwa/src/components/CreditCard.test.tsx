@@ -14,6 +14,13 @@ const NODE = vi.hoisted(() => ({
     looks: { groups: [] as unknown[], looks: [] as unknown[] },
     calls: [] as { method: string; path: string; body?: unknown }[],
     ask: vi.fn(),
+    /** The node's /api/community/info (visitor-lobby-gate's shared read). */
+    info: { profile: 'local', features: { beans: true } } as { profile?: string; features?: Record<string, unknown> },
+}));
+
+vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/visitor-lobby-gate')>()),
+    communityInfoOnce: vi.fn(async () => NODE.info),
 }));
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -59,6 +66,7 @@ const VOUCHER = { voucher: true, presets: [2500, 5000, 7500, 10000], vouchMax: 1
 
 beforeEach(() => {
     NODE.role = 'owner'; NODE.vouching = { ...VOUCHER, voucher: false }; NODE.card = FULL; NODE.sight = 'owner'; NODE.calls = []; NODE.looks = { groups: [], looks: [] }; NODE.ask.mockReset();
+    NODE.info = { profile: 'local', features: { beans: true } };
     localStorage.clear();
 });
 afterEach(() => cleanup());
@@ -107,6 +115,19 @@ describe('the profile card (§3.4)', () => {
         await act();
         expect(container.textContent).toBe('');
         expect(NODE.calls.filter((c) => c.path.startsWith('/api/credit'))).toEqual([]);
+    });
+
+    // The same root as the deciding review's findings 2 and 3: on a Beans-off node every credit route answers 404 `beans_off`.
+    it.each([
+        ['a community with Beans off', { profile: 'local', features: { beans: false } }],
+        ['the global node', { profile: 'global', features: {} }],
+    ])('%s: an owner opening a profile gets no card, and nothing is asked of the node', async (_where, info) => {
+        NODE.info = info;
+        const { container } = render(<CreditCard memberPubkey={SAM} myVouching={VOUCHER as never} />);
+        await act();
+        expect(container.textContent).toBe('');
+        expect(NODE.calls).toEqual([]);
+        // Red when the card asks the node's role and a credit route on a node where credit can't exist.
     });
 
     it('the node saying nobody is listed (an enterprise, a visitor) draws nothing', async () => {
@@ -188,6 +209,20 @@ describe('the log of looks in Settings and Inspect (§5.2)', () => {
         await act();
         expect(container.textContent).toBe('');
         expect(NODE.calls.some((c) => c.path.startsWith('/api/credit/looks'))).toBe(false);
+    });
+
+    // Deciding review finding 3: "Who looked at credit" opened on a Beans-off node to the node's beans-off sentence.
+    it.each([
+        ['a community with Beans off', { profile: 'local', features: { beans: false } }],
+        ['the global node', { profile: 'global', features: { beans: false } }],
+    ])('%s: an owner’s Settings has no "Who looked at credit", and nothing is asked of the node', async (_where, info) => {
+        NODE.info = info;
+        const { container } = render(<CreditLooksSection />);
+        await act();
+        expect(container.textContent).toBe('');
+        expect(screen.queryByTestId('credit-looks-toggle')).toBeNull();
+        expect(NODE.calls).toEqual([]);
+        // Red when the section is drawn from the role alone.
     });
 
     it('opening it, then closing, forgets the names', async () => {

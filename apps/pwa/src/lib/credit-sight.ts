@@ -8,9 +8,10 @@
  * The sentences are core's (creditLineSentence, balanceSentence, riskReasonSentence): an app never composes a reason from
  * its figures (amendment 2 §8), so the web and the phone cannot say two things about one person.
  */
-import { request, getMyVouching, type MyVouching } from './api';
+import { request, getMyVouching, type CommunityInfo, type MyVouching } from './api';
 import { readInviteRole, type InviteRole } from './node-invites';
-import { formatDate, word } from '@beanpool/core';
+import { communityInfoOnce } from './visitor-lobby-gate';
+import { formatDate, isBusyError, word } from '@beanpool/core';
 import type { CreditRisk, CreditSight } from '@beanpool/core';
 
 // ── What the node sends ──────────────────────────────────────────────────────────────────────────────────────────
@@ -115,6 +116,7 @@ export const CREDIT_LIST_WORDS = {
     belowZero: word('@{name} is below zero: a credit-line gift or a Decision can help.'),
     cantBeGiven: word('@{name} can’t be given part of a credit line right now.'),
     next: word('Next ›'),
+    vouchedTheMost: word('You’ve vouched the most you can for @{name}.'),
     vouched: word('Vouched {amount} Beans for @{name}.'),
     raisedVouch: word('Raised vouch for @{name} to {total} Beans.'),
     lineNow: word('Their credit line is now {line}.'),
@@ -178,6 +180,21 @@ export function dayWords(iso: string | null | undefined): string {
 
 // ── Reads and writes (all signed with the member's own key by `request`) ────────────────────────────────────────────────
 
+/**
+ * Whether credit lives on this node at all: a community that trades in Beans, and never the global node (the phone's
+ * `creditPossible` in people.tsx: `!isGlobalNode && beansOn(...)`). On a Beans-off node every credit route answers 404
+ * `beans_off`, so nothing there offers credit, draws a credit card or the log of looks, or asks the node who gives credit.
+ * Info that could not be read says nothing about Beans (the phone reads an unknown profile the same way).
+ */
+export function creditOnNode(info: Pick<CommunityInfo, 'profile' | 'features'> | null | undefined): boolean {
+    return info?.features?.beans !== false && info?.profile !== 'global';
+}
+
+/** `creditOnNode` for this node's info, read once per page load and shared (visitor-lobby-gate). A read that fails is not Beans off: the node's own answers about the member then decide. */
+export function nodeTakesCredit(): Promise<boolean> {
+    return Promise.resolve().then(() => communityInfoOnce()).then((info) => creditOnNode(info), () => true);
+}
+
 export interface GiverFacts { role: InviteRole; voucher: boolean; myVouching: MyVouching | null }
 
 /**
@@ -240,11 +257,14 @@ export function notAGiver(e: unknown): boolean {
 }
 
 /**
- * The node's own words for a refusal it made, else ours. Only an error with a `status` came from the node (api.ts refusalError,
- * and the busy answer's 429); a request that got no answer at all throws the browser's own message ("Failed to fetch"), which a
- * member never reads.
+ * The node's own words for a refusal it made, else ours. A `status` alone doesn't prove the node said it: api.ts refusalError
+ * gives one to every answer that isn't ok, and marks `unsaid` the answer that carried no JSON (a proxy's 502, 503 or 504 page
+ * in front of a node that is down), whose message is only "Bad Gateway" or "Request failed: 502". That, and a request that got
+ * no answer at all (the browser's own "Failed to fetch"), read as the caller's sentence. A busy network's 429 reads as core's
+ * busy sentence, in the member's language, as everywhere else in both apps.
  */
 export function refusalText(e: unknown, fallback: string): string {
-    const err = e as { status?: unknown; message?: unknown } | null;
-    return typeof err?.status === 'number' && typeof err.message === 'string' && err.message.length > 0 ? err.message : fallback;
+    if (isBusyError(e) && typeof e.message === 'string' && e.message.length > 0) return e.message;
+    const err = e as { status?: unknown; message?: unknown; unsaid?: unknown } | null;
+    return typeof err?.status === 'number' && err.unsaid !== true && typeof err.message === 'string' && err.message.length > 0 ? err.message : fallback;
 }

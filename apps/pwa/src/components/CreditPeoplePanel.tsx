@@ -5,6 +5,7 @@
  * Has Offers · My people, and for owners and the credit committee Vouchers (each voucher's budget, running low, Top up).
  *
  * What this never does:
+ *   - offer credit where it can't be: on a Beans-off node (the global node among them) it draws nothing and asks nothing.
  *   - guess a role. The node's own answers decide (readGiver), and its first list read is the last word: a 403 `not_a_giver`
  *     (a stopped budget, a changed role) takes the switch away at once.
  *   - ask for credit before the switch is on. A plain member's page makes no request to /api/credit/*: the switch is drawn
@@ -22,7 +23,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { setVoucherBudget, type MyVouching } from '../lib/api';
 import { fetchKnownRule } from '../lib/known-rule';
 import {
-    CREDIT_LIST_WORDS as W, dayWords, getCreditPeople, getVouchersChip, isOwnerOrAdmin, mayGive, notAGiver, readGiver, refusalText,
+    CREDIT_LIST_WORDS as W, dayWords, getCreditPeople, getVouchersChip, isOwnerOrAdmin, mayGive, nodeTakesCredit, notAGiver, readGiver, refusalText,
     type CreditFilter, type CreditPage, type CreditPerson, type GiverFacts, type VoucherBudgetLine, type VoucherChipRow,
 } from '../lib/credit-sight';
 import { AskForMore } from './AskForMore';
@@ -108,10 +109,15 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
     const [focusBy, setFocusBy] = useState<string | undefined>(undefined);
     const seq = useRef(0);
 
-    // Who may give credit: the node's own answers, read each time the pane opens. Neither read records a look.
+    // Who may give credit: the node's own answers, read each time the pane opens. Neither read records a look. Only where
+    // credit lives (lib/credit-sight creditOnNode: Beans on, never the global node, as the phone's creditPossible): on a
+    // Beans-off node every credit route answers 404 `beans_off`, so nothing is drawn and nothing is asked.
     useEffect(() => {
         let alive = true;
-        readGiver().then((g) => { if (alive) { setGiver(g); setVouching(g.myVouching); } }).catch(() => { if (alive) setGiver(null); });
+        nodeTakesCredit()
+            .then((here) => (here ? readGiver() : null))
+            .then((g) => { if (alive) { setGiver(g); setVouching(g?.myVouching ?? null); } })
+            .catch(() => { if (alive) setGiver(null); });
         return () => { alive = false; };
     }, []);
 
@@ -397,13 +403,17 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
             )}
 
             {sheetPerson && (
+                // Keyed by the person: Next starts the next one clean (no preset, result, refusal or raise amount carried over;
+                // a vouch can't be taken back). A give keeps the key, so the person read again updates the same sheet.
                 <GiveCreditSheet
+                    key={sheetPerson.memberPubkey}
                     person={sheetPerson}
                     myVouching={vouching}
                     knownFloor_c={knownFloor}
                     full={full}
                     onClose={() => setSheet(null)}
                     onChanged={(fresh) => setPeople((all) => all.map((p) => (p.memberPubkey === fresh.memberPubkey ? fresh : p)))}
+                    onVouching={setVouching}
                     onNext={nextOf(sheetPerson.memberPubkey) ? () => setSheet(nextOf(sheetPerson.memberPubkey) ?? null) : undefined}
                 />
             )}

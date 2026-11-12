@@ -11,6 +11,7 @@ import { PeoplePage } from './PeoplePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import * as membersOnDemand from '../lib/members-on-demand';
+import * as gate from '../lib/visitor-lobby-gate';
 
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../lib/blocklist', () => ({ getBlockedUsers: vi.fn(() => []), onBlocklistUpdated: vi.fn(() => () => {}) }));
@@ -45,6 +46,7 @@ beforeEach(() => {
     vi.spyOn(api as never as { getAddedYou: () => Promise<unknown> }, 'getAddedYou').mockResolvedValue({ addedYou: [], more: 0 });
     vi.spyOn(membersOnDemand, 'getMembersWhole').mockResolvedValue([BOB] as never);
     vi.spyOn(membersOnDemand, 'useMembersOnDemand').mockReturnValue(false);
+    vi.spyOn(gate, 'communityInfoOnce').mockResolvedValue({ profile: 'local', features: { beans: true } } as never);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -58,6 +60,19 @@ describe('People → Community: Show credit', () => {
         expect(container.textContent ?? '').not.toMatch(/Credit line|Credit risk|Balance|Show credit/);
         expect(calls.filter((c) => c.includes('/api/credit'))).toEqual([]);
         // Red when the switch is drawn from a local role guess, or credit is asked for before anyone is known to give it.
+    });
+
+    it('a Beans-off node (the global node among them): a voucher’s pane is today’s, with no switch and no request to a credit route', async () => {
+        node('voucher');
+        vi.spyOn(gate, 'communityInfoOnce').mockResolvedValue({ profile: 'global', features: { beans: false } } as never);
+        render(<PeoplePage identity={identity} initialView="community" creditStart={{ chip: 'no_credit', nonce: 3 }} />);
+        await screen.findByText('Bob');
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByTestId('credit-switch')).toBeNull();
+        expect(screen.queryByTestId('credit-list')).toBeNull();
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+        expect(calls.filter((c) => c.includes('/api/credit') || c.includes('/api/node-admin/me'))).toEqual([]);
+        // Red when the switch is offered from the role alone: there every credit route answers 404 `beans_off`.
     });
 
     it('a voucher sees the switch, off; arriving by a door with a chip switches it on and the credit list replaces the plain list', async () => {

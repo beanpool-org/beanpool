@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react';
 import { t, tn } from '@beanpool/core';
 import { request } from '../lib/api';
 import { readInviteRole } from '../lib/node-invites';
-import { CREDIT_LIST_WORDS as W, dayWords, getCreditLooks, isOwnerOrAdmin, refusalText, type LookGroup, type LookLine } from '../lib/credit-sight';
+import { CREDIT_LIST_WORDS as W, dayWords, getCreditLooks, isOwnerOrAdmin, nodeTakesCredit, refusalText, type LookGroup, type LookLine } from '../lib/credit-sight';
 
 const PAGE = 20;
 
@@ -32,8 +32,11 @@ export function CreditLooksSection() {
 
     useEffect(() => {
         let alive = true;
-        request<{ role?: unknown }>('GET', '/api/node-admin/me')
-            .then((b) => { if (alive) setMay(isOwnerOrAdmin(readInviteRole(b?.role))); })
+        // Only where credit lives (creditOnNode: Beans on, never the global node): on a Beans-off node the log's route answers
+        // 404 `beans_off`, so the section is not drawn and the role is not asked. There, the node's role answer decides.
+        nodeTakesCredit()
+            .then((here) => (here ? request<{ role?: unknown }>('GET', '/api/node-admin/me').then((b) => isOwnerOrAdmin(readInviteRole(b?.role))) : false))
+            .then((m) => { if (alive) setMay(m); })
             .catch(() => { if (alive) setMay(false); });
         return () => { alive = false; };
     }, []);

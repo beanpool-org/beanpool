@@ -14,7 +14,9 @@ const NODE = vi.hoisted(() => ({
     chip: null as null | unknown[],
     calls: [] as { method: string; path: string; body?: unknown }[],
     floor: 100000 as number | null,
-    listError: false,
+    listError: false as boolean | Error,
+    /** The node's /api/community/info (visitor-lobby-gate's shared read); null when it can't be read. */
+    info: { profile: 'local', features: { beans: true } } as null | { profile?: string; features?: Record<string, unknown> },
 }));
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -31,6 +33,7 @@ vi.mock('../lib/api', async (importOriginal) => {
                 if (NODE.chip) return { sight: NODE.role, filter: 'vouchers', vouchers: NODE.chip, next: null };
                 throw Object.assign(new Error('Only an owner or an admin on the credit committee makes vouchers and sets their budgets.'), { status: 403, code: 'committee_only' });
             }
+            if (path.startsWith('/api/credit/people?') && NODE.listError instanceof Error) throw NODE.listError;
             if (path.startsWith('/api/credit/people?') && NODE.listError) throw Object.assign(new Error('Only the owners, admins and vouchers here can see credit.'), { status: 403, code: 'not_a_giver' });
             if (path.startsWith('/api/credit/people?')) return { sight: NODE.role === 'voucher' ? 'voucher' : NODE.role, told: 'x', people: NODE.people, next: null };
             if (path.startsWith('/api/credit/people/')) return { sight: NODE.role === 'voucher' ? 'voucher' : NODE.role, told: 'x', person: NODE.cards[path.split('/').pop()!] };
@@ -42,10 +45,15 @@ vi.mock('../lib/api', async (importOriginal) => {
         setVoucherBudget: vi.fn(async () => ({ level: 100000, left: 100000, changed: true })),
     };
 });
+vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/visitor-lobby-gate')>()),
+    communityInfoOnce: vi.fn(async () => { if (NODE.info === null) throw new TypeError('Failed to fetch'); return NODE.info; }),
+}));
 vi.mock('../lib/known-rule', () => ({ fetchKnownRule: vi.fn(async () => (NODE.floor === null ? null : { knownFloor: NODE.floor, debtLineFrom: null, quietDaysFrom: null })) }));
 
 import * as api from '../lib/api';
 import { CreditPeoplePanel } from './CreditPeoplePanel';
+import { refusalText } from '../lib/credit-sight';
 
 const K = (c: string) => c.repeat(64);
 const ROB = K('1'), JANE = K('2'), SAM = K('3'), VAL = K('4');
@@ -66,8 +74,10 @@ const OWNER_VOUCHING = { voucher: true, noLimit: true, presets: [2500, 5000, 750
 
 beforeEach(() => {
     NODE.role = 'voucher'; NODE.vouching = VOUCHER; NODE.people = [person(), jane()]; NODE.cards = {}; NODE.chip = null; NODE.calls = []; NODE.floor = 100000; NODE.listError = false;
+    NODE.info = { profile: 'local', features: { beans: true } };
     localStorage.clear(); sessionStorage.clear();
     vi.mocked(api.vouchForMember).mockClear();
+    vi.mocked(api.getMyVouching).mockClear();
     vi.mocked(api.setVoucherBudget).mockClear();
 });
 afterEach(() => cleanup());
@@ -120,6 +130,30 @@ describe('who gets the switch (tests 3 and 10: the node decides, never a local g
         fireEvent.click(await screen.findByTestId('credit-switch'));
         await waitFor(() => expect(screen.queryByTestId('credit-switch')).toBeNull());
         // Red when a stopped budget keeps its switch because the app remembers a role.
+    });
+
+    // Deciding review finding 2: on a Beans-off node every credit route answers 404 `beans_off` (the phone's creditPossible).
+    it.each([
+        ['a community with Beans off', { profile: 'local', features: { beans: false } }],
+        ['the global node', { profile: 'global', features: { beans: false } }],
+        ['the global node, even one that says nothing of Beans', { profile: 'global', features: {} }],
+    ])('%s: an owner gets no switch, even from the bell, and nothing is asked of the node, not even who gives credit', async (_where, info) => {
+        NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING; NODE.info = info;
+        const showing = vi.fn();
+        const { container } = await draw({ start: { chip: 'vouchers', nonce: 1 }, onShowing: showing });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(screen.queryByTestId('credit-switch')).toBeNull();
+        expect(container.textContent).toBe('');
+        expect(NODE.calls).toEqual([]);
+        expect(api.getMyVouching).not.toHaveBeenCalled();
+        expect(showing).not.toHaveBeenCalledWith(true);
+        // Red when the switch is drawn from the role alone (it turns on to the node's "Beans are switched off" sentence).
+    });
+
+    it('a node whose info can’t be read is not taken for Beans off: the node’s own answers about the member decide, as on the phone', async () => {
+        NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING; NODE.info = null;
+        await draw();
+        expect(await screen.findByTestId('credit-switch')).toBeInTheDocument();
     });
 });
 
@@ -311,6 +345,100 @@ describe('the give flow (tests 11 and 12)', () => {
         expect(screen.queryByTestId('give-next')).toBeNull();
     });
 
+    // Deciding review finding 1 (Major): a vouch can't be taken back, and each person is a look of their own.
+    it('Next after a preset picked for Rob: Sam’s sheet has nothing picked, and one tap sends nothing for Sam', async () => {
+        NODE.people = [person(), person({ memberPubkey: SAM, callsign: 'Sam' })];
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getAllByTestId('credit-give')[0]!);
+        fireEvent.click(within(await screen.findByTestId('give-credit-sheet')).getByTestId('invite-vouch-100'));
+        expect(screen.getByTestId('give-vouch-submit')).toHaveTextContent('Vouch 100 for @Rob');
+        fireEvent.click(screen.getByTestId('give-next'));
+        const sam = await screen.findByRole('dialog', { name: 'Give @Sam credit' });
+        const submit = within(sam).getByTestId('give-vouch-submit');
+        expect(submit).toBeDisabled();
+        expect(submit).not.toHaveTextContent(/Vouch 100/);
+        fireEvent.click(submit);
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(api.vouchForMember).not.toHaveBeenCalled();
+        // Red when the sheet is not keyed by the person: Rob's pick stays armed on Sam ({ vouchAmount: 10000 } for Sam).
+    });
+
+    it('Next after a give to Rob: Sam’s sheet says nothing of Rob, and starts from the budget the node now reports', async () => {
+        NODE.people = [person(), person({ memberPubkey: SAM, callsign: 'Sam' })];
+        NODE.cards[ROB] = person({ line_c: 10000, usable_c: 10000, youVouched_c: 10000 });
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getAllByTestId('credit-give')[0]!);
+        const rob = await screen.findByTestId('give-credit-sheet');
+        fireEvent.click(within(rob).getByTestId('invite-vouch-100'));
+        NODE.vouching = { ...VOUCHER, budget: { ...VOUCHER.budget, left: 5000, vouched: 95000, peopleVouched: 10 } };
+        fireEvent.click(within(rob).getByTestId('give-vouch-submit'));
+        expect(await within(rob).findByTestId('give-done')).toHaveTextContent('Vouched 100 Beans for @Rob.');
+        fireEvent.click(screen.getByTestId('give-next'));
+        const sam = await screen.findByRole('dialog', { name: 'Give @Sam credit' });
+        expect(within(sam).queryByTestId('give-done')).toBeNull();
+        expect(sam.textContent).not.toContain('@Rob');
+        // The budget the node reported after the give, on the panel and on Sam's sheet: 75 and 100 are more than the 50 left.
+        await waitFor(() => expect(screen.getByTestId('credit-my-budget')).toHaveTextContent('Your budget: 50 of 1,000 left'));
+        expect(within(sam).getByTestId('invite-vouch-100')).toBeDisabled();
+        expect(within(sam).getByTestId('invite-vouch-50')).not.toBeDisabled();
+        // Red when Rob's result stays under Sam's title, or the next sheet starts from the budget read before the give.
+    });
+
+    it('Next after a refusal for Rob: Sam’s sheet shows no refusal', async () => {
+        vi.mocked(api.vouchForMember).mockRejectedValueOnce(Object.assign(new Error('You have 50 Beans of budget left, so you can’t vouch 100.'), { status: 409, code: 'not_enough' }));
+        NODE.people = [person(), person({ memberPubkey: SAM, callsign: 'Sam' })];
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getAllByTestId('credit-give')[0]!);
+        const rob = await screen.findByTestId('give-credit-sheet');
+        fireEvent.click(within(rob).getByTestId('invite-vouch-100'));
+        fireEvent.click(within(rob).getByTestId('give-vouch-submit'));
+        await within(rob).findByTestId('give-refusal');
+        fireEvent.click(screen.getByTestId('give-next'));
+        const sam = await screen.findByRole('dialog', { name: 'Give @Sam credit' });
+        expect(within(sam).queryByTestId('give-refusal')).toBeNull();
+        expect(within(sam).queryByTestId('ask-for-more')).toBeNull();
+    });
+
+    it('Next after an owner moved Rob’s known floor to 2,000: Sam’s raise starts from Sam’s own floor (1,100), not 2,000', async () => {
+        NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING;
+        const confirmedAt = (pk: string, callsign: string) => ({ ...person({ memberPubkey: pk, callsign, line_c: 100000, usable_c: 100000, risk: LOW }), parts: { known_c: 100000, room_c: 0, earned_c: 0, granted_c: 0, cap_c: 300000 }, standsBehind: { confirmedBy: { memberPubkey: K('9'), callsign: 'marty', at: '2026-11-01T00:00:00Z' }, vouchedBy: [] }, frozen: { credit: false, known: false } });
+        NODE.people = [confirmedAt(ROB, 'Rob'), confirmedAt(SAM, 'Sam')];
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getAllByTestId('credit-give')[0]!);
+        const rob = await screen.findByTestId('give-credit-sheet');
+        for (let i = 0; i < 9; i++) fireEvent.click(within(rob).getByRole('button', { name: 'Raise the amount' }));
+        expect(within(rob).getByTestId('give-raise-amount')).toHaveTextContent('2,000');
+        fireEvent.click(screen.getByTestId('give-next'));
+        const sam = await screen.findByRole('dialog', { name: 'Give @Sam credit' });
+        expect(within(sam).getByTestId('give-raise-amount')).toHaveTextContent('1,100');
+        expect(within(sam).getByTestId('give-raise-submit')).toHaveTextContent('Raise to 1,100');
+    });
+
+    // Deciding review finding 5: the phone leaves the Vouch box out at the most; the web says why in one plain sentence.
+    it('at the most one voucher can vouch for this person: no heading over nothing, one plain sentence, and nothing to send', async () => {
+        const { GiveCreditSheet } = await import('./GiveCreditSheet');
+        render(<GiveCreditSheet person={person({ youVouched_c: 10000, line_c: 10000, usable_c: 10000 }) as never} myVouching={VOUCHER as never} knownFloor_c={100000} full={false} onClose={() => {}} onChanged={() => {}} />);
+        expect(screen.queryByText('Raise vouch for @Rob')).toBeNull();
+        expect(screen.queryByTestId('give-vouch')).toBeNull();
+        expect(screen.queryByTestId('give-vouch-submit')).toBeNull();
+        expect(screen.getByTestId('give-vouch-at-most')).toHaveTextContent('You’ve vouched the most you can for @Rob.');
+        cleanup();
+        // An owner's most is 500: at 100 they are offered the raise, with its heading over the choices; at 500, the sentence.
+        render(<GiveCreditSheet person={person({ youVouched_c: 10000, line_c: 10000, usable_c: 10000 }) as never} myVouching={OWNER_VOUCHING as never} knownFloor_c={100000} full onClose={() => {}} onChanged={() => {}} />);
+        expect(screen.queryByTestId('give-vouch-at-most')).toBeNull();
+        expect(within(screen.getByTestId('give-vouch')).getByRole('heading')).toHaveTextContent('Raise vouch for @Rob');
+        expect(screen.getByTestId('invite-vouch-200')).toBeInTheDocument();
+        cleanup();
+        render(<GiveCreditSheet person={person({ youVouched_c: 50000, line_c: 50000, usable_c: 50000 }) as never} myVouching={OWNER_VOUCHING as never} knownFloor_c={100000} full onClose={() => {}} onChanged={() => {}} />);
+        expect(screen.queryByTestId('give-vouch')).toBeNull();
+        expect(screen.getByTestId('give-vouch-at-most')).toHaveTextContent('You’ve vouched the most you can for @Rob.');
+        // Red when the box draws its heading at the most with nothing under it.
+    });
+
     it('Confirm (owner): the web says it is done in the app and imports no names-list key code; a voucher is offered neither known line', async () => {
         NODE.role = 'owner'; NODE.vouching = OWNER_VOUCHING;
         NODE.people = [{ ...person(), parts: { known_c: 0, room_c: 0, earned_c: 0, granted_c: 0, cap_c: 200000 }, standsBehind: { confirmedBy: null, vouchedBy: [] }, frozen: { credit: false, known: false } }];
@@ -474,6 +602,47 @@ describe("vouchers' budgets (amendment §3.5; tests 18 and 19)", () => {
         const box = await screen.findByTestId('credit-my-budget');
         expect(box).toHaveTextContent('Your budget: 150 of 1,000 left');
         expect(within(box).getByTestId('ask-for-more')).toBeInTheDocument();
+    });
+});
+
+// Deciding review finding 4: an answer the node never sent (a proxy's page, api.ts marks it `unsaid`) is never shown as it came.
+describe('a proxy’s error page never reaches the member', () => {
+    const proxyPage = (status: number, statusText: string) => Object.assign(new Error(statusText || `Request failed: ${status}`), { status, unsaid: true });
+
+    it('refusalText: the node’s own sentence; a proxy’s "Bad Gateway" or "Request failed: 502" reads as ours; a busy network as core’s busy words', async () => {
+        const nodeSaid = Object.assign(new Error('You have looked at 300 people this hour. Try again after 14:05.'), { status: 429, code: 'look_limit' });
+        expect(refusalText(nodeSaid, 'ours')).toBe('You have looked at 300 people this hour. Try again after 14:05.');
+        expect(refusalText(proxyPage(502, 'Bad Gateway'), 'ours')).toBe('ours');
+        expect(refusalText(proxyPage(502, ''), 'ours')).toBe('ours');
+        expect(refusalText(proxyPage(504, 'Gateway Timeout'), 'ours')).toBe('ours');
+        expect(refusalText(new TypeError('Failed to fetch'), 'ours')).toBe('ours');
+        const { busyError } = await import('@beanpool/core');
+        const busy = Object.assign(busyError(null), { unsaid: true });
+        expect(refusalText(busy, 'ours')).toBe(busy.message);
+        expect(busy.message).not.toMatch(/Too Many Requests/);
+        // Red when having a status is taken to mean the node said it.
+    });
+
+    it('the list behind a proxy’s 502 page reads "Credit lines could not be read just now. Try again in a moment."', async () => {
+        NODE.listError = Object.assign(new Error('Bad Gateway'), { status: 502, unsaid: true });
+        await draw();
+        fireEvent.click(await screen.findByTestId('credit-switch'));
+        const failed = await screen.findByTestId('credit-failed');
+        expect(failed).toHaveTextContent('Credit lines could not be read just now. Try again in a moment.');
+        expect(failed.textContent).not.toMatch(/Bad Gateway|502/);
+    });
+
+    it('a give behind a proxy’s 502 page says the app’s own sentence, never "Request failed: 502"', async () => {
+        vi.mocked(api.vouchForMember).mockRejectedValueOnce(proxyPage(502, ''));
+        await draw();
+        await turnOn();
+        fireEvent.click(screen.getAllByTestId('credit-give')[0]!);
+        const sheet = await screen.findByTestId('give-credit-sheet');
+        fireEvent.click(within(sheet).getByTestId('invite-vouch-100'));
+        fireEvent.click(within(sheet).getByTestId('give-vouch-submit'));
+        const said = await within(sheet).findByTestId('give-refusal');
+        expect(said).toHaveTextContent('Could not vouch.');
+        expect(said.textContent).not.toMatch(/Request failed|502/);
     });
 });
 

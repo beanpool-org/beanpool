@@ -883,7 +883,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <NewAccountCard />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
-                        {/* Owners and admins only: who looked at credit (the log of looks; the node answers who may read it). */}
+                        {/* Owners and admins only, and only where credit lives (Beans on, never the global node; the section
+                            checks both itself, lib/credit-sight creditOnNode): who looked at credit, the log of looks. */}
                         <CreditLooksSection />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}
                         <OwnerWordsCheck identity={identity} startOpen={openOwnerWordsCheck} hasWords={hasWords} />

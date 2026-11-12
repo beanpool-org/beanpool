@@ -60,6 +60,7 @@ vi.mock('qrcode.react', () => ({ QRCodeSVG: vi.fn(() => null) }));
 
 import { InvitePage } from './InvitePage';
 import { generateInvite, buildOfflineInviteCode, getMyVouching, getVouchersBlock } from '../lib/api';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
 
@@ -223,5 +224,31 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
         await waitFor(() => expect(screen.getByText(/Invite Someone/)).toBeInTheDocument());
         expect(screen.queryByTestId('vouchers-block')).not.toBeInTheDocument();
+    });
+
+    // Credit on the People list C5: the Invites door to the credit list, only where credit lives (the deciding review's Beans-off finding).
+    it('a voucher on a Beans node: "Give credit to people already here ›" opens Community with Show credit on at No credit yet', async () => {
+        const go = vi.fn();
+        render(<InvitePage identity={IDENTITY} onNavigate={go} />);
+        fireEvent.click(await screen.findByTestId('invite-give-credit-door'));
+        expect(go).toHaveBeenCalledWith('people-credit', 'no_credit');
+    });
+
+    it.each([
+        ['a community with Beans off', { profile: 'local', features: { invites: true, beans: false } }],
+        ['the global node', { profile: 'global', features: { invites: true } }],
+    ])('%s: no door to the credit list (it would open a pane with no credit in it)', async (_where, features) => {
+        const usual = vi.mocked(communityInfoOnce).getMockImplementation()!;
+        vi.mocked(communityInfoOnce).mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, ...features } as never);
+        try {
+            render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
+            await waitFor(() => expect(screen.getByTestId('invite-vouch')).toBeInTheDocument());
+            await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+            await new Promise((r) => setTimeout(r, 0));
+            expect(screen.queryByTestId('invite-give-credit-door')).toBeNull();
+        } finally {
+            vi.mocked(communityInfoOnce).mockImplementation(usual);
+        }
+        // Red when the door is drawn from the voucher answer alone (GET /api/vouchers/me does not look at Beans).
     });
 });

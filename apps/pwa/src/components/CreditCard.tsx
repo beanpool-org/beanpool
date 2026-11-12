@@ -22,7 +22,7 @@ import { CREDIT_SIGHT_WORDS, formatCount, formatHundredths, t, tn } from '@beanp
 import { request } from '../lib/api';
 import { readInviteRole } from '../lib/node-invites';
 import {
-    CREDIT_LIST_WORDS as W, dayWords, getCreditLooks, getCreditPerson, isOwnerOrAdmin, type CreditPerson, type LookLine,
+    CREDIT_LIST_WORDS as W, dayWords, getCreditLooks, getCreditPerson, isOwnerOrAdmin, nodeTakesCredit, type CreditPerson, type LookLine,
 } from '../lib/credit-sight';
 import type { MyVouching } from '../lib/api';
 import { BalanceLine, RiskReasons, RiskWord, creditSentenceOf } from './CreditLines';
@@ -44,6 +44,8 @@ export function CreditCard({ memberPubkey, myVouching }: CreditCardProps) {
         setLooks([]);
         (async () => {
             try {
+                // Only where credit lives (creditOnNode: Beans on, never the global node); elsewhere nothing is asked.
+                if (!(await nodeTakesCredit()) || !alive) return;
                 // Who may see it is the node's word: a voucher's own budget is already read, the role is asked of the node once.
                 const owner = await request<{ role?: unknown }>('GET', '/api/node-admin/me').then((b) => isOwnerOrAdmin(readInviteRole(b?.role))).catch(() => false);
                 if (!owner && myVouching?.voucher !== true) return;

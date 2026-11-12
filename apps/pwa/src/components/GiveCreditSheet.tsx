@@ -37,13 +37,15 @@ export interface GiveCreditSheetProps {
     onClose: () => void;
     /** The person read again from the node after a give; the list's row follows it. */
     onChanged: (fresh: CreditPerson) => void;
+    /** The giver's budget read again from the node after a vouch: the list's budget line and the next person's sheet start from it. */
+    onVouching?: (fresh: MyVouching) => void;
     /** Opens the next person in the list's order, or undefined at the end. */
     onNext?: () => void;
 }
 
 const STEP_C = beans(100);
 
-export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClose, onChanged, onNext }: GiveCreditSheetProps) {
+export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClose, onChanged, onVouching, onNext }: GiveCreditSheetProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose);
     const titleId = useId();
@@ -91,7 +93,8 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
                 said: isRaise ? t(W.raisedVouch, { name, total: formatHundredths(res.total) }) : t(W.vouched, { amount: formatHundredths(preset), name }),
                 line: lineAfter(fresh),
             });
-            void getMyVouching().then(setVouching).catch(() => {});
+            // The budget read again, handed up so the list's budget line and the next person's sheet start from it.
+            void getMyVouching().then((v) => { if (v) { setVouching(v); onVouching?.(v); } }).catch(() => {});
         } catch (e) {
             // The node's sentence, shown as it is; nothing is changed in the list.
             setPreset(null);
@@ -158,33 +161,37 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
                     )}
                 </div>
 
-                {/* Vouch for @Rob */}
-                {vouching?.voucher && (
+                {/* Vouch for @Rob. At the most one voucher's vouches for one person come to, nothing is left to pick: the phone
+                    leaves the box out, and the web says why in one plain sentence (no heading over nothing). */}
+                {vouching?.voucher && atMax && (
+                    <div className={box} data-testid="give-vouch-at-most">
+                        <p className={sentence}>{t(W.vouchedTheMost, { name })}</p>
+                    </div>
+                )}
+                {vouching?.voucher && !atMax && (
                     <div className={box} data-testid="give-vouch">
                         <h3 className={heading}>{isRaise ? raiseVouchFor(name) : vouchFor(name)}</h3>
                         {(belowZero || !person.canGive) && (
                             <p className={`${sentence} mb-2`} data-testid="give-blocked">{belowZero ? t(W.belowZero, { name }) : t(W.cantBeGiven, { name })}</p>
                         )}
-                        {!atMax && (
-                            // Below zero or unable to be given part of a line: the presets stay in view, greyed and inert (design §3.3), and no request can be sent.
-                            <div inert={belowZero || !person.canGive} className={belowZero || !person.canGive ? 'opacity-40' : undefined} data-testid="give-presets">
-                                <VouchPresetChoice
-                                    value={preset}
-                                    onChange={setPreset}
-                                    budgetLeft={vouching.budget?.left ?? 0}
-                                    budgetTotal={vouching.budget?.level ?? 0}
-                                    noLimit={noLimit}
-                                    raiseFrom={isRaise ? prior : undefined}
-                                />
-                                <button type="button" disabled={busy || !preset || !mayVouch} onClick={vouch} className={btn} data-testid="give-vouch-submit">
-                                    {busy
-                                        ? t(W.saving)
-                                        : preset
-                                            ? t('Vouch {amount} for @{name}', { amount: formatHundredths(preset), name })
-                                            : (isRaise ? raiseVouchFor(name) : vouchFor(name))}
-                                </button>
-                            </div>
-                        )}
+                        {/* Below zero or unable to be given part of a line: the presets stay in view, greyed and inert (design §3.3), and no request can be sent. */}
+                        <div inert={belowZero || !person.canGive} className={belowZero || !person.canGive ? 'opacity-40' : undefined} data-testid="give-presets">
+                            <VouchPresetChoice
+                                value={preset}
+                                onChange={setPreset}
+                                budgetLeft={vouching.budget?.left ?? 0}
+                                budgetTotal={vouching.budget?.level ?? 0}
+                                noLimit={noLimit}
+                                raiseFrom={isRaise ? prior : undefined}
+                            />
+                            <button type="button" disabled={busy || !preset || !mayVouch} onClick={vouch} className={btn} data-testid="give-vouch-submit">
+                                {busy
+                                    ? t(W.saving)
+                                    : preset
+                                        ? t('Vouch {amount} for @{name}', { amount: formatHundredths(preset), name })
+                                        : (isRaise ? raiseVouchFor(name) : vouchFor(name))}
+                            </button>
+                        </div>
                         {refusal?.code === 'not_enough' && <div className="mt-3"><AskForMore ask={vouching.ask ?? null} /></div>}
                     </div>
                 )}

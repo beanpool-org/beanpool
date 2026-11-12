@@ -2,7 +2,7 @@
 slug: posting
 title: Posting an Offer or a Need
 summary: Put up something you'll give or do for others, or something you are looking for.
-related: a-deal-step-by-step, my-deals, standing-deals, map-pins, credit-line
+related: a-deal-step-by-step, my-deals, standing-deals, selling-more-than-one, map-pins, credit-line
 ---
 
 ## Offer first
@@ -24,7 +24,7 @@ In a community with Beans you need a name and a profile photo. Where there are n
 - **Description:** what, when, where, anything people should know.
 - **Photos:** at least one, up to five. Tap **Camera**, **Gallery** (which opens on **Albums**), or **Browse files** (to choose from any folder on the device). Every Offer and Need needs at least one photo.
 - **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
-- **Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away. A listing priced at 0 reads **Free** wherever its price is shown, with no Beans sign, and a Need at 0 reads **Free help wanted** on its own page. A post priced above 0 **/ Wk** or **/ Mo** makes a standing deal when someone takes it up: each week or month is paid when it starts. A free post, or a thing you lend with a weekly fee, does not. See "Standing deals".
+- **Price:** a number of beans. Tap the unit button to choose **Total**, **/ Hr**, **/ Dy**, **/ Wk** or **/ Mo**. Tap **FREE** to give it away. A listing priced at 0 reads **Free** wherever its price is shown, with no Beans sign, and a Need at 0 reads **Free help wanted** on its own page. A post priced above 0 **/ Wk** or **/ Mo** makes a standing deal when someone takes it up: each week or month is paid when it starts. A free post, or a thing you lend with a weekly fee, does not. See "Standing deals". On an Offer of several of the same thing, choose **Each**: you set a price for one, say how many you have, and can add a price for all of them. See "Selling more than one".
 - Tap **Post Offer** or **Post Need**.
 
 Until everything needed is filled in, the button tells you what is missing, like **Add a photo** or **Set a price**.
@@ -77,7 +77,7 @@ Tags help people find your post. They are optional, and they are public with you
 
 ## Extra choices
 
-- **Repeatable:** the post stays up after each deal, and several people can take it at once. Good for a weekly lift or bread every Saturday.
+- **Repeatable:** the post stays up after each deal, and several people can take it at once. Good for a weekly lift or bread every Saturday. An Offer priced **Each** does not have it: its count of how many are left takes its place.
 - **Cash also needed:** tick this if you also need some cash, for fuel or materials. The app never handles cash; you sort that out between you.
 - **Where does this travel?** Only if your community trades with other communities: keep the post here, or share it further.
 
@@ -97,7 +97,7 @@ Open your post. If no deal is under way on it:
 
 If you keep an enterprise, you can change its Offers and Needs the same way, or pause and resume an Offer (**Edit Post**, **Pause Offer**, **Activate Offer**). It stays the enterprise's. See "Projects and enterprises".
 
-While someone is asking for your post, you can still change its words and photos, but not its price: the app says so. While beans are held on a post, you cannot edit it at all. The exception is a Repeatable post (it can have several deals at once): you can still change its words and photos, but not its price. To change the price, decline or cancel that deal first.
+While someone is asking for your post, you can still change its words and photos, but not its price: the app says so. While beans are held on a post, you cannot edit it at all. The exception is a Repeatable post (it can have several deals at once): you can still change its words and photos, but not its price. To change the price, decline or cancel that deal first. An Offer priced **Each** is the same, and you can also change how many are left and its price for all of them. See "Selling more than one".
 
 In a local community, posts do not expire. Delete them when they are done.
 

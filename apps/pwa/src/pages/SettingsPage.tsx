@@ -3,12 +3,13 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressToOpenOnAComputer, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, addressBreakPoints, addressToShow, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, mainAddressToOpen, shapeFeaturesOf, showInviterSwitchWords, t, tn, USE_ON_COMPUTER_WORDS } from '@beanpool/core';
 import { copyChatText } from '../lib/copy-chat-text';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
 import { clearHomeCache } from '../lib/home-cache';
@@ -2144,9 +2145,21 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     const deferredPrompt = useDeferredInstallPrompt();
     const [showPhoneApp, setShowPhoneApp] = useState(false);
     const [showInstallSteps, setShowInstallSteps] = useState(false);
-    // The address this page is served from: BeanPool on a computer is this web app, in any browser, at the community's own
-    // address (the phone's Settings says the matching line, from the address its community uses). Null for no http(s) address.
-    const browserAddress = addressToOpenOnAComputer(window.location.origin);
+    // The community's MAIN address: BeanPool on a computer is this web app, in any browser, at the community's own address (the
+    // phone's Settings says the matching line). What the community says of its own names (the page's one shared read of
+    // /api/community/info, as the former-address banner uses it) names its main address when it has one that is one of its
+    // own; else, or while that is on its way or cannot be read, the address this page is served from. Display only: nothing
+    // here changes where the page talks to. Null for no http(s) address.
+    const [communityNames, setCommunityNames] = useState<Parameters<typeof mainAddressToOpen>[1]>(null);
+    useEffect(() => {
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => communityInfoOnce())
+            .then((info) => { if (!cancelled) setCommunityNames(info); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+    const browserAddress = mainAddressToOpen(window.location.origin, communityNames);
     // 'copied' only when the address is on the clipboard; 'failed' when the browser refused (a plain http:// home-network node has no
     // clipboard API, and its older copy command can be refused too): the button then says so, as the phone's row does, never "Copied".
     const [addressCopy, setAddressCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -2254,7 +2267,14 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         <span className="text-xl" aria-hidden="true">🌐</span>
                         <span className="flex-1 min-w-0">
                             <span className="block text-[15px] font-bold text-nature-900 dark:text-white break-words" data-testid="settings-use-in-browser-line">
-                                <Sentence text={t(USE_ON_COMPUTER_WORDS.webLine)} parts={{ address: <code className="font-mono font-bold text-nature-700 dark:text-nature-300 break-all">{browserAddress}</code> }} />
+                                {/* The address on its own line, without https:// (Copy still copies the whole address), and breaking only
+                                    after a dot (a <wbr> between the dotted parts; no invisible character goes into the text): a name
+                                    never splits mid-word unless one part alone is wider than the screen. */}
+                                <Sentence text={t(USE_ON_COMPUTER_WORDS.webLine)} parts={{ address: (
+                                    <code className="block font-mono font-bold text-nature-700 dark:text-nature-300 [overflow-wrap:anywhere]" data-testid="settings-use-in-browser-address">
+                                        {addressBreakPoints(addressToShow(browserAddress)).map((piece, i) => <Fragment key={i}>{i > 0 && <wbr />}{piece}</Fragment>)}
+                                    </code>
+                                ) }} />
                             </span>
                             <button
                                 type="button"

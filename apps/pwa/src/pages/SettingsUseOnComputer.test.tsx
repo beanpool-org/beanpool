@@ -54,7 +54,9 @@ describe('Settings → "BeanPool works in any browser: open <address> on any com
         expect(within(row).getByTestId('settings-use-in-browser-line').textContent).toBe(LINE);
         // The address is text, not a link: a dead link on the page you are already on helps no one.
         expect(row.querySelector('a')).toBeNull();
+        // A plain-http page (this test's, http://localhost) keeps its "http://": only https:// is left off (SettingsUseOnComputer.main.test.tsx).
         expect(within(row).getByText(ORIGIN).tagName).toBe('CODE');
+        expect(within(row).getByTestId('settings-use-in-browser-address').textContent).toBe(ORIGIN);
     });
 
     it('it sits with the phone app and install rows, before "Use the phone app"', async () => {
@@ -141,10 +143,13 @@ describe('Settings → "BeanPool works in any browser: open <address> on any com
         expect(manage.closest('div.overflow-hidden')!.contains(row)).toBe(false);
     });
 
-    it('wraps rather than runs off a 320 px screen: the address breaks anywhere and the words wrap', async () => {
+    it('wraps rather than runs off a 320 px screen: the address is on its own line and breaks after a dot (or, for one part wider than the screen, anywhere), and the words wrap', async () => {
         openSettings();
         const row = await lineBlock();
-        expect(within(row).getByText(ORIGIN).className).toContain('break-all');
+        const address = within(row).getByTestId('settings-use-in-browser-address');
+        expect(address.className).toMatch(/\bblock\b/);
+        expect(address.className).toContain('[overflow-wrap:anywhere]');
+        expect(address.className).not.toContain('break-all');
         expect(row.className).not.toMatch(/\bw-\[\d+px\]|\bwhitespace-nowrap\b/);
         expect(within(row).getByTestId('settings-use-in-browser-line').className).toContain('break-words');
     });

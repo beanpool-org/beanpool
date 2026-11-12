@@ -46,7 +46,13 @@ vi.mock('../../app/ThemeContext', () => ({
     useTheme: () => ({ theme: look.theme, colors: look.colors }),
     useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ theme: look.theme, colors: look.colors, patternEnabled: false }),
 }));
-vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://mullum.example/' }));
+// The fixture of the director's round-3 look: the phone is on mullum, the community's main name is byron (measured: GET
+// /api/community/info on either host answers primaryAddress byron.beanpool.org, addresses [byron, mullum]). The phone keeps that answer.
+vi.mock('../node-post', () => ({ anchorUrl: async () => 'https://mullum.beanpool.org/' }));
+const kept = vi.hoisted(() => ({ map: new Map<string, string>() }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async (k: string) => kept.map.get(k) ?? null), setItem: vi.fn(async (k: string, v: string) => { kept.map.set(k, v); }) },
+}));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn(async () => true) }));
 
 import { UseOnComputerRow } from '../../components/UseOnComputerRow';
@@ -66,16 +72,26 @@ async function render(set: (typeof BRAND_SETS)[number]): Promise<HTMLElement> {
 const byId = (host: HTMLElement, id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement;
 const styleOf = (node: Element) => JSON.parse(node.getAttribute('data-style') ?? '{}');
 
-beforeEach(() => { document.body.innerHTML = ''; });
+beforeEach(() => {
+    document.body.innerHTML = '';
+    kept.map.clear();
+    kept.map.set('beanpool_node_profiles', JSON.stringify({
+        'https://mullum.beanpool.org': {
+            profile: 'local', features: { beans: true }, checkedAt: new Date().toISOString(),
+            primaryAddress: 'byron.beanpool.org', addresses: ['byron.beanpool.org', 'mullum.beanpool.org'],
+        },
+    }));
+});
 
 describe.each(LOOKS)('the row in %s (%s)', (_name, set) => {
     it('says the line with the address, in ink that reads on the card: the words, the address and both buttons', async () => {
         const host = await render(set);
         const c = COLOUR_SETS[set];
         const texts = Array.from(byId(host, 'settings-use-on-computer').querySelectorAll('span'));
-        expect(texts.map((e) => e.textContent)).toEqual(['💻', 'Use BeanPool on a computer: open', 'https://mullum.example', 'Copy', 'Share']);
+        // The community's MAIN name, not the phone's own (mullum), without its https://, a piece to each dotted part.
+        expect(texts.map((e) => e.textContent)).toEqual(['💻', 'Use BeanPool on a computer: open', 'byron.', 'beanpool.', 'org', 'Copy', 'Share']);
         // The sentence and the address, on the card (Settings' menu group): body ink.
-        for (const e of texts.slice(1, 3)) {
+        for (const e of texts.slice(1, 5)) {
             expect(styleOf(e).color, e.textContent!).toBe(c.text.body);
             expect(contrastRatio(styleOf(e).color, c.surface.card), e.textContent!).toBeGreaterThanOrEqual(4.5);
         }
@@ -98,7 +114,17 @@ describe.each(LOOKS)('the row in %s (%s)', (_name, set) => {
             expect(style.width, node.outerHTML.slice(0, 80)).toBeUndefined();
             expect(node.getAttribute('data-lines')).toBeNull();
         }
-        expect((Array.from(row.querySelectorAll('span')).find((e) => e.textContent === 'https://mullum.example') as HTMLElement).getAttribute('data-selectable')).toBe('true');
+        // The address is its own block under the lead-in, in a wrapping row of pieces (it breaks after a dot, never inside a name),
+        // each no wider than the column, and no "https://" in it.
+        const address = byId(host, 'settings-use-on-computer-address');
+        expect(address.parentElement).toBe(row.children[1].firstElementChild);
+        expect(styleOf(address).flexWrap).toBe('wrap');
+        expect(address.textContent).toBe('byron.beanpool.org');
+        for (const piece of Array.from(address.querySelectorAll('span'))) {
+            expect(piece.getAttribute('data-selectable'), piece.textContent!).toBe('true');
+            expect(styleOf(piece).maxWidth, piece.textContent!).toBe('100%');
+        }
+        expect(row.textContent).not.toContain('https://');
         for (const id of ['settings-use-on-computer-copy', 'settings-use-on-computer-share']) {
             expect(byId(host, id).getAttribute('data-role')).toBe('button');
             expect(styleOf(byId(host, id)).minHeight).toBeGreaterThanOrEqual(48);

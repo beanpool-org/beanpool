@@ -326,7 +326,7 @@ derived from them (`brandInkGrounds(set)`, `brandWebInkGrounds(set)`), and the m
   12 Nov 2026: light `#c1c4b3` at **1.56:1**, Classic dark `#303a37` at **1.50:1** (the "lift" of #998; the 1x tile
   measures 1.45 and 1.42).
 - **Dark's doodle is charcoal, not olive** (Marty and Damo, 12 Nov; slice T5 re-draws the tile). Its ground `#17191c`
-  and line `#343841` take the hue of Dark's greys (216 and 221 degrees) at Classic dark's lightness: the ground 0.01 %
+  and line `#343841` take the hue of Dark's greys (216 and 222 degrees) at Classic dark's lightness: the ground 0.01 %
   darker, the line 0.11 % lighter, so the line stands **1.50:1** off its ground as Classic's does (1.500 against
   1.498), and the phone card lifts **1.16** off it (Classic 1.17; the bar is 1.15). A tile baked by moving each pixel's
   hue and keeping its lightness lands on these.

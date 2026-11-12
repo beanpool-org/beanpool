@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     BRAND_COLOURS,
@@ -337,6 +337,26 @@ describe('CSS for the web app and the manager', () => {
         expect(phoneOnly.map((l) => l.path)).toEqual(['bubble.tint', 'bubble.ink']);
         expect(Object.keys(bp).length).toBe(brandColourLeaves().length - phoneOnly.length);
         expect(Object.keys(bp).filter((n) => n.startsWith('bubble'))).toEqual([]);
+    });
+
+    it('the web app and the manager never name a phone-only role (no variable is written, so the class would draw nothing)', () => {
+        const sources: string[] = [];
+        const walk = (dir: string) => {
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+                const full = join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.(tsx?|jsx?|css)$/.test(entry.name)) sources.push(readFileSync(full, 'utf8'));
+            }
+        };
+        for (const app of ['apps/pwa/src', 'apps/manager/src']) walk(resolve(ROOT, app));
+        // A leaf's own name (`bp-bubble-tint`: bg-bp-bubble-tint, var(--bp-bubble-tint)), not the prefix: the web's own
+        // bubble is the plain class `bp-bubble-mine`, which is not a colour role.
+        const naming = (path: string) => sources.filter((text) => text.includes(`bp-${path.split('.').join('-')}`)).length;
+        const phoneOnly = brandColourLeaves().filter(({ path }) => PHONE_ONLY_ROLES.includes(path.split('.')[0]));
+        expect(phoneOnly.length).toBeGreaterThan(0);
+        for (const { path } of phoneOnly) expect(naming(path), path).toBe(0);
+        // Can fail: the web does name cta.fill.
+        expect(naming('cta.fill')).toBeGreaterThan(0);
     });
 
     it("brandCssVariableMap('night') is Dark's: the accent family in blue and grey, every other role Classic dark's", () => {

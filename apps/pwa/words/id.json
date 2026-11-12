@@ -103,7 +103,6 @@
   "A member": "Seorang anggota",
   "A neighbour offered to do this. Approve to hold the Beans safely.": "Seorang tetangga menawarkan untuk melakukan ini. Setujui untuk menahan kacang dengan aman.",
   "A new post": "Kiriman baru",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "Pilar sarana bersama — jalur kredit terdalam yang dimungkinkan dan pengakuan tertinggi komunitas.",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a collaborator.": "Komitmen 0 valid: seseorang yang membantu menjalankannya tanpa menjaminkan reputasi tetap bisa menjadi kolaborator.",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.": "Komitmen 0 valid: seseorang yang membantu menjalankannya tanpa menjaminkan reputasi tetap bisa menjadi pengurus.",
   "A project needs a goal in Beans": "Sebuah proyek memerlukan target dalam kacang",
@@ -117,7 +116,6 @@
   "A spare computer, or a few dollars a month for a rented server. The software is free.": "Komputer cadangan, atau beberapa dolar sebulan untuk server sewa. Perangkat lunaknya gratis.",
   "A town or area": "Kota atau area",
   "A trade dispute was resolved": "Sengketa transaksi telah terselesaikan",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "Mitra dagang terpercaya dengan lingkaran rekan yang luas. Komunitas mengakui Anda, dan jalur kredit Anda bertambah dalam lagi.",
   "ACCOUNT & IDENTITY": "AKUN & IDENTITAS",
   "ACTIVE\u0004listing status": "AKTIF",
   "ACTUAL DAYS WORKED": "HARI KERJA SEBENARNYA",
@@ -632,9 +630,6 @@
   "Creator account linking:": "Penautan akun kreator:",
   "Credit Line": "Batas Kredit",
   "Credit balance gauge": "Pengukur saldo kredit",
-  "Credit floor can reach -2000 (the maximum)": "Batas kredit dapat mencapai -2000 (maksimum)",
-  "Credit floor continues deepening": "Batas kredit terus bertambah dalam",
-  "Credit floor deepens with the value you trade": "Batas kredit bertambah dalam seiring nilai transaksi Anda",
   "Credits (B)": "Kredit (kacang)",
   "Credits (🫘 Beans)": "Kredit (🫘 Kacang)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Kredit adalah mata uang kredit bersama. Saat kamu bertransaksi, kredit berpindah antaranggota. Setiap anggota mulai dari nol. Sistem ini dirancang untuk mendorong timbal balik dan menjaga nilai tetap beredar di lingkungan sendiri.",
@@ -1164,11 +1159,6 @@
   "Let's Begin! 🚀": "Ayo Mulai! 🚀",
   "Let's look at how this community economy works.": "Mari lihat bagaimana ekonomi komunitas ini bekerja.",
   "Level {level} of {levels}": "Level {level} dari {levels}",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "Level {level} dari {levels} · {n} kepercayaan"
-  },
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Level adalah lencana penghargaan — tidak membatasi tindakan apa pun. Siapa saja bisa mengundang. Pengiriman langsung memerlukan saldo positif dan satu transaksi selesai. Level lebih tinggi berarti batas kredit lebih besar dan pengakuan komunitas.",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Level adalah lencana penghargaan — tidak membatasi tindakan apa pun. Pengiriman langsung memerlukan saldo positif dan satu transaksi selesai. Level lebih tinggi berarti batas kredit lebih besar dan pengakuan komunitas.",
   "Light\u0004appearance": "Terang",
   "Light or dark, or the same as your device": "Terang atau gelap, atau sama seperti perangkatmu",
   "Link copied.": "Tautan disalin.",
@@ -2775,7 +2765,6 @@
   "You've posted {n} new thing on {platform} since your last visit.|You've posted {n} new things on {platform} since your last visit.": {
     "other": "Kamu telah memposting {n} hal baru di {platform} sejak kunjungan terakhirmu."
   },
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "Anda telah bertransaksi dengan nilai nyata bersama komunitas. Jalur kredit Anda bertambah dalam di setiap transaksi — makin banyak nilai yang Anda tukarkan, makin besar batasnya.",
   "Your 12 words are always in Settings → Recovery Phrase.": "12 katamu selalu ada di Pengaturan → Frasa Pemulihan.",
   "Your 12 words are the **only** way to recover your account.": "12 katamu adalah **satu-satunya** cara untuk memulihkan akunmu.",
   "Your 12 words are the way back to this account. Keep them safe.": "12 katamu adalah cara untuk kembali ke akun ini. Jaga keamanannya.",

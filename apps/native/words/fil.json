@@ -334,8 +334,6 @@
   "ADD POST": "MAGDAGDAG NG POST",
   "The amount is a number of Beans above 0, to the cent.": "Ang halaga ay bilang ng munggo na higit sa 0, hanggang sa sentimo.",
   "Send Beans": "Magpadala ng Munggo",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Ang mga antas ay mga badge ng merito — hindi humaharang sa anumang aksyon. Ang direktang pagpapadala ay nangangailangan ng positibong balanse at isang natapos na palitan. Ang mas mataas na antas ay nangangahulugan ng mas malaking credit line at pagkilala sa komunidad.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Ang mga antas ay mga badge ng merito — hindi humaharang sa anumang aksyon. Kahit sino ay maaaring mag-imbita. Ang direktang pagpapadala ay nangangailangan ng positibong balanse at isang natapos na palitan. Ang mas mataas na antas ay nangangahulugan ng mas malaking credit line at pagkilala sa komunidad.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "Walang napupunta sa Komun habang may hawak kang {free} munggo o mas mababa.",
   "✨ Generate Ticket": "✨ Gumawa ng Ticket",
   "✨ Generate Offline Ticket": "✨ Gumawa ng Offline Ticket",
@@ -3184,13 +3182,7 @@
   "Browse & trade the marketplace": "Mag-browse at makipagkalakalan sa pamilihan",
   "Receive credits": "Tumanggap ng kredito",
   "Send credits after first trade (needs positive balance)": "Magpadala ng kredito pagkatapos ng unang kalakalan (kailangan ng positibong balanse)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "Nakipagkalakalan ka ng tunay na halaga sa komunidad. Lumalalim ang iyong credit line sa bawat kalakalan — habang mas maraming halaga ang ipinagpapalit mo, lalo itong lumalalim.",
-  "Credit floor deepens with the value you trade": "Lumalalim ang credit floor batay sa halagang kinakalakal mo",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "Isang pinagkakatiwalaang mangangalakal na may malawak na lupon ng mga kapareha. Kinikilala ka ng komunidad, at lalo pang lumalalim ang iyong credit line.",
-  "Credit floor continues deepening": "Patuloy na lumalalim ang credit floor",
   "Trusted-trader recognition": "Pagkilala bilang pinagkakatiwalaang mangangalakal",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "Isang haligi ng komun — ang pinakamalalim na posibleng credit line at ang pinakamataas na pagkilala ng komunidad.",
-  "Credit floor can reach -2000 (the maximum)": "Maaaring umabot ang credit floor sa -2000 (ang pinakamataas)",
   "Recognised as a community Elder": "Kinikilala bilang Pinuno ng komunidad",
   "Export failed": "Bigo ang pag-export",
   "Export my transactions": "I-export ang aking mga transaksyon",
@@ -3205,10 +3197,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "Maaari ka lamang magpadala ng munggo na kasalukuyan mong hawak — kailangan ng positibong balanse para sa direktang pagpapadala.",
   "How trust works": "Paano gumagana ang tiwala",
   "YOUR TRUST LEVEL": "IYONG ANTAS NG TIWALA",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "Antas {level} ng {levels} · {n} tiwala",
-    "other": "Antas {level} ng {levels} · {n} tiwala"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "**{n}** pang tiwala patungo sa {emoji} {tier}",
     "other": "**{n}** pang tiwala patungo sa {emoji} {tier}"
@@ -3439,7 +3427,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "Ang mga bagong miyembro ay nagpapakita ng **🔑 Founding** badge hanggang sa kanilang unang kalakalan.",
   "Tiers & Perks": "Mga Antas at Pribilehiyo",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "Ang mga antas ay **mga milestone ng pagkilala** — minamarkahan ng mga ito kung gaano na lumago ang iyong tiwala. Ang tanging gantimpala na lumalalim kasama ng mga ito ay ang iyong **credit floor** (kung gaano kababa sa zero ka maaaring gumastos). Tuloy-tuloy na gumagalaw ang iyong floor kasabay ng halagang iyong kinakalakal; ang mga antas ay mga palatandaan lamang sa daan.",
   "🔑 Founding Status (before 1st trade)": "🔑 Katayuang Founding (bago ang 1st trade)",
   "A starting state that lasts until you complete your **very first trade**": "Isang panimulang estado na tatagal hanggang sa makumpleto mo ang iyong **pinakaunang kalakalan**",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "Ipinapakita bilang **🔑 FOUNDING** upang malaman ng mga miyembro na tulungan kang magsimula",

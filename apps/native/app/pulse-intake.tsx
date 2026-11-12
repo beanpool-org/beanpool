@@ -48,7 +48,7 @@ import {
     isWebUrl,
     t,
 } from '@beanpool/core';
-import { lightColors } from '../constants/colors';
+import type { AppColors } from '../constants/colors';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
@@ -595,7 +595,7 @@ export default function PulseIntakeScreen() {
     );
 }
 
-export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; theme: string }) =>
+export const makeStyles = ({ colors, theme }: { colors: AppColors; theme: string }) =>
     StyleSheet.create({
         safeArea: {
             flex: 1,

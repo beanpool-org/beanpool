@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, isHundredths, formatHundredths, beans, HUNDREDTHS_PER_BEAN, hundredthsAsDecimalText, halves, shareOf, getTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer, BillView, ItemTakeUpIn } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, standingLines, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
@@ -5950,8 +5950,10 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         }
                     }
                     if (claim.post_id) {
-                        // Not a repeatable or a lendable one: it stays on the board (engine/escrow.ts).
-                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND lendable = 0 AND status != 'completed'")
+                        // Not a repeatable or a lendable one: it stays on the board (engine/escrow.ts). Nor one priced for
+                        // each one: only its count says it is sold out (engine/per-item.ts settleItemDeal). Its take-up never
+                        // records a claim (escrow.ts offerHoldChecks), so a claim here is from before its seller priced it so.
+                        listingDone = db.prepare("UPDATE posts SET status = 'completed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND repeatable = 0 AND lendable = 0 AND COALESCE(price_type, '') != 'each' AND status != 'completed'")
                             .run(claim.post_id).changes > 0;
                     }
                     return true;
@@ -6849,7 +6851,7 @@ export function cancelPostRequest(transactionId: string, requesterPublicKey: str
     return cancelPostRequestEngine(getEscrowCb(), transactionId, requesterPublicKey);
 }
 
-export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart }): MarketplaceTransaction {
+export function acceptPost(postId: string, buyerPublicKey: string, hours?: number, opts?: { authSigner?: string; standing?: StandingStart; item?: ItemTakeUpIn }): MarketplaceTransaction {
     assertLedgerWritable();
     return acceptPostEngine(getEscrowCb(), postId, buyerPublicKey, hours, opts);
 }
@@ -8686,22 +8688,6 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolea
 }
 
 /**
- * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
- * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
- * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
- * mints/moves no beans. This is a floor grant only; tiers gate nothing. Idempotent.
- */
-export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
-    if (!getMember(publicKey)) throw new Error('Member not found');
-    const granted = grantedCreditForTier(tier);
-    // profile_updated_at too: the member directory carries the badge (earnedCredit), and a phone's delta read carries only
-    // the rows whose profile_updated_at moved (engine getMemberDirectoryRows).
-    db.prepare("UPDATE members SET earned_credit_c=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
-    broadcast({ type: 'profile_updated', publicKey });
-    return { ok: true };
-}
-
-/**
  * Grant or revoke the treasury operator capability. Admin-only.
  * Toggling can_operate mints no beans and changes no floors. Idempotent.
  */
@@ -9143,6 +9129,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
         // The node role went with setUserStatusRow above, told once; the one a suspension held aside goes here.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // A badge an admin gave them (engine/badges.ts), with a tombstone so a standby drops it too.
+        deletePlainRows('member_badges', 'member_pubkey = ?', publicKey);
         // Their groups' chats are locked to a roster they are no longer in: the next line waits for a rotation (§2.3).
         markGroupEpochsStaleFor(publicKey);
         // Their phones, with a tombstone each, so a standby drops them too (a plain table, design G4).
@@ -9357,6 +9345,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
         // with a tombstone each, so a standby drops them too.
         deletePlainRows('push_tokens', 'public_key = ?', publicKey);
+        deletePlainRows('member_badges', 'member_pubkey = ?', publicKey);
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);

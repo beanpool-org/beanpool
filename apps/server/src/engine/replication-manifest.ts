@@ -494,6 +494,8 @@ export const TABLES: Record<string, TableEntry> = {
     // Every look a giver took at a member's credit (engine/credit-looks.ts, DESIGN-credit-list-amend-fable.md §5.2): copied
     // as the other logs are, so a take-over keeps who looked at whom; a line 12 months old goes on each server, no tombstone.
     credit_look_log: plain('actor_pubkey subject_pubkey surface day sight at updated_at', { agedOut: { column: 'at', days: CREDIT_LOOK_KEPT_DAYS } }),
+    // A member's tier badge (engine/badges.ts): recognition only, no credit. A take-over shows every member the same badge.
+    member_badges: plain('member_pubkey tier set_by set_at updated_at'),
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),

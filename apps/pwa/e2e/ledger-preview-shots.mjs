@@ -245,7 +245,7 @@ async function globalMember(browser, root, dark) {
         await wait(1_500);
         const text = await page.getByTestId('ledger-preview').innerText();
         check(/an example member/.test(text) && /\+85B/.test(text), 'Ledger: Example Valley\'s example member, +85B');
-        check(/Level 2 of 4 · 200 trust/.test(text), 'Levels: Level 2 of 4 · 200 trust');
+        check(/Level 2 of 4 · credit line 200 Beans/.test(text), 'Levels: Level 2 of 4 · credit line 200 Beans');
         check(!/Rua/.test(text), 'the reader\'s own name never shows');
         check(await page.getByTestId('levels-shelf').locator('button').count() === 4, 'Levels: the four tiles');
         await noSideScroll(page, 'Ledger preview, Levels');

@@ -1,9 +1,11 @@
+import type { BrandSet } from '@beanpool/core';
+
 /**
  * The reviewed exceptions to the phone's button-contrast check (utils/button-contrast.ts, run as `native_dark_contrast`
  * by scripts/test-all.sh).
  *
  * The check fails when a piece of words sits on a background the same screen sets, and the two reach less than 4.5:1
- * (3:1 for words of 24px, or 18.66px and bold) in light or in dark. An entry here excuses ONE such pair, in one file:
+ * (3:1 for words of 24px, or 18.66px and bold) in any colour set (light, Classic dark, Dark). An entry here excuses ONE such pair, in one file:
  * the words' colour written at `wordsLine` over the background written at `backgroundLine`. Every element that draws
  * that one pair is excused (the report's "also drawn at" lines); the same two colours written anywhere else in the file
  * are another pair, and still fail until they have their own entry. It starts empty and is meant to stay that way: a pair
@@ -16,7 +18,7 @@
  *   wordsLine       the line that expression is written on: the number in the report's `words ... (file:LINE)`
  *   background      the nearest background's expression exactly as written, e.g. `colors.text.heading`
  *   backgroundLine  the line that expression is written on: the number in the report's `background ... (file:LINE)`
- *   theme           'light' | 'dark' to excuse one theme only; leave out for both
+ *   theme           one colour set only ('light', 'dark' = Classic, 'night' = Dark); leave out for every set
  *   reason          why the pair is not a defect (at least 30 characters): what else makes the words readable, or why
  *                   the element is never drawn that way. A bare "false positive" is refused.
  *
@@ -30,7 +32,7 @@ export interface ContrastException {
     wordsLine: number;
     background: string;
     backgroundLine: number;
-    theme?: 'light' | 'dark';
+    theme?: BrandSet;
     reason: string;
 }
 

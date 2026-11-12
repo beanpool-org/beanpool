@@ -318,7 +318,8 @@ export const ALL_MODALS = [
     { name: 'member-offboard-settles', screen: { tab: 'people', sub: 'directory' }, overrides: IN_A_REMOVALS_GRACE,
         steps: [IN_GRACE_STEP, { in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Offboard$/ }], shows: ['[data-testid="offboard-settles-removal"]'] },
     { name: 'member-prune-branch', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Prune Branch$/ }] },
-    { name: 'member-tier', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', title: 'Click to upgrade or edit member standing tier' }] },
+    // The badge button (MembersModule.tsx), by its title: renamed on purpose with tiers badge only (12 Nov 2026).
+    { name: 'member-tier', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', title: 'Give or take back a badge (recognition only: no credit)' }] },
     { name: 'create-treasury', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /Create Treasury/ }] },
     { name: 'treasury-offer', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /\+ Post Offer/ }] },
     { name: 'invite-print-sheet', screen: { tab: 'people', sub: 'invites' }, steps: [{ in: 'main', button: /^Generate \d+ Pass/ }, { in: 'main', button: /View Printable Sheet/ }] },

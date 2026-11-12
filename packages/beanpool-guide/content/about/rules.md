@@ -154,7 +154,7 @@ Your community's server has owners and admins. They look after it.
 - An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.
 - An admin cannot remove a member without the community's vote. Where too few members can vote, an owner may decide it (see "A small community"). Where the people who run the server have switched community votes off, the admins remove members themselves.
 - Owners and credit-committee admins can make a confirmed member a voucher on the names list. Only an owner makes an admin a voucher, and only an owner stops an admin's budget.
-- Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
+- Owners and admins can give a member a trust badge, but never themselves. A badge is recognition only: it gives no credit. The member is told who gave it, and every owner and admin can see it in the log.
 - Admins sort out stuck trades, but never one they are part of.
 
 ## Polls

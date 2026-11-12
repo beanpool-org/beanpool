@@ -333,7 +333,7 @@ async function main(): Promise<void> {
             if (finish) built(`${buyer.name} confirms: the Beans are released`, await S_(buyer, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: buyer.pk }));
             return tx.id as string;
         };
-        built('the admin makes Gwen an Elder (a credit line to buy with)', await A(`/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
+        built('Gwen is given a 1,400-Bean line to buy with (a tier gives none)', await main.send('grant-line', { pk: gwen.pk, amount_c: 140000 }));
         const sourdough = await offer(gwen, 'Sourdough', 400); // a buyer lists an offer first (the offer covenant)
         const honey = await offer(ann, 'Honey', 300, { photos: [TINY_PNG, TINY_PNG, TINY_PNG] });
         await offer(ann, 'Jam', 200);

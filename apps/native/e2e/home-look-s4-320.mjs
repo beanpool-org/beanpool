@@ -17,6 +17,7 @@ import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { brandGrounds } from '@beanpool/core';
 import { chromium } from 'playwright';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -129,7 +130,8 @@ const result = await build({
 });
 const bundle = result.outputFiles[0].text;
 
-const GROUND = /const PATTERN_GROUND = \{ light: '(#[0-9a-f]{6})', dark: '(#[0-9a-f]{6})' \}/.exec(fs.readFileSync(path.join(NATIVE, 'app/ThemeContext.tsx'), 'utf8'));
+// The doodle's ground per scheme, from the library (constants/colors.ts doodleGround reads it there since colour themes T2).
+const GROUND = [null, brandGrounds('light').doodle.ground, brandGrounds('dark').doodle.ground];
 const html = (scheme) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=${WIDTH}">
 <script>window.process = window.process || { env: {} }; window.global = window;</script>
 <style>html,body,#root{margin:0;height:100%} body{font-family:sans-serif;

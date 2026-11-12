@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { formatReport, scanTree, topSkips } from '../utils/button-contrast';
 
 /**
- * Every button and label the phone draws, light and dark (scripts/test-all.sh, `native_dark_contrast`).
+ * Every button and label the phone draws, in every colour set: light, Classic dark and Dark (`night`), core's BRAND_SETS
+ * (scripts/test-all.sh, `native_dark_contrast`).
  *
  * Reads apps/native/app, apps/native/components and apps/native/tools, finds each piece of words with the background its own screen sets
  * behind it, and fails below 4.5:1 (3:1 for 24px, or 18.66px bold, words), naming file:line and both colours. The method,
@@ -28,13 +29,22 @@ const MIN_PAIRS_MEASURED = 4300; // unchanged 5 Nov 2026: 7,041 measured (3,515 
 const MAX_UNREAD_STYLES = 1528; // 1,468 measured 6 Nov 2026 on feat/vouchers-names-list-phone once the scanner follows StyleSheet.create(namesListStyleSpec(colors)) into utils/names-list-style.ts (names-list.tsx is read now: 7,413 pairs, was 7,229), + the same ~60 margin; was 1,908 on main (1,848 measured)
 const MAX_UNREAD_TABLE_FILES = 45; // 5 Nov: 43 on main + A4's ArrangeGhost (#2895: Home's homeStyles table, its colours inline and read; the ghost is aria-hidden) + O2's StarterOffersSheet (#2894: the shared sheet-parts table, as AddCardSheet and CardSettingsSheet); was 43 on main f9fbbfd8 (31 Oct)
 
-describe('the phone\'s buttons and labels reach 4.5:1 in light and in dark', () => {
+describe('the phone\'s buttons and labels reach 4.5:1 in every colour set', () => {
     const report = scanTree(ROOT);
-    const measured = report.stats.checked.light + report.stats.checked.dark;
+    const per = report.stats.checked;
+    // The floor was set on Classic's two sets; Dark adds as many again as Classic dark (below), not counted towards it.
+    const measured = (per.light ?? 0) + (per.dark ?? 0);
 
     it('is reading the screens (not passing because it sees nothing)', () => {
         console.log(`${formatReport({ ...report, findings: [] })}\nmost common unresolved:\n  ${topSkips(report).join('\n  ')}`);
         expect(measured, 'the scanner measured far fewer pairs than it did on main: utils/button-contrast.ts no longer reads the screens').toBeGreaterThanOrEqual(MIN_PAIRS_MEASURED);
+    });
+
+    it('measures Dark (night) on every pair it measures in Classic dark', () => {
+        // A dark set folds every `theme === 'dark'` the way Classic dark does, so it reaches the same pairs: fewer means the
+        // set is not being measured, or is being folded as light.
+        expect(Object.keys(per)).toEqual(['light', 'dark', 'night']);
+        expect(per.night, `Dark measured ${per.night} pairs, Classic dark ${per.dark}`).toBe(per.dark);
     });
 
     it('is not losing screens into shapes it cannot read', () => {

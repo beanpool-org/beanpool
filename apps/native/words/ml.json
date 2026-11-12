@@ -334,8 +334,6 @@
   "ADD POST": "പോസ്റ്റ് ചേർക്കുക",
   "The amount is a number of Beans above 0, to the cent.": "തുക 0-ന് മുകളിലുള്ള പയറുകളുടെ എണ്ണമാണ്, പൈസ വരെ കൃത്യതയുണ്ട്.",
   "Send Beans": "പയർ അയയ്ക്കുക",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "ലെവലുകൾ യോഗ്യതാ ബാഡ്ജുകളാണ് — അവ ഒരു പ്രവർത്തനത്തെയും തടയുന്നില്ല. നേരിട്ടുള്ള കൈമാറ്റങ്ങൾക്ക് പോസിറ്റീവ് ബാലൻസും ഒരു പൂർത്തിയായ ഇടപാടും ആവശ്യമാണ്. ഉയർന്ന ലെവലുകൾ കൂടുതൽ ക്രെഡിറ്റും കമ്മ്യൂണിറ്റി അംഗീകാരവും നൽകുന്നു.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "ലെവലുകൾ യോഗ്യതാ ബാഡ്ജുകളാണ് — അവ ഒരു പ്രവർത്തനത്തെയും തടയുന്നില്ല. ആർക്കും ക്ഷണിക്കാം. നേരിട്ടുള്ള കൈമാറ്റങ്ങൾക്ക് പോസിറ്റീവ് ബാലൻസും ഒരു പൂർത്തിയായ ഇടപാടും ആവശ്യമാണ്. ഉയർന്ന ലെവലുകൾ കൂടുതൽ ക്രെഡിറ്റും കമ്മ്യൂണിറ്റി അംഗീകാരവും നൽകുന്നു.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "നിങ്ങൾ {free} അല്ലെങ്കിൽ അതിൽ താഴെ പയർ കൈവശം വെച്ചിരിക്കുന്നിടത്തോളം പൊതു ഫണ്ടിലേക്ക് ഒന്നും പോകില്ല.",
   "✨ Generate Ticket": "✨ ടിക്കറ്റ് സൃഷ്‌ടിക്കുക",
   "✨ Generate Offline Ticket": "✨ ഓഫ്‌ലൈൻ ടിക്കറ്റ് സൃഷ്‌ടിക്കുക",
@@ -3184,13 +3182,7 @@
   "Browse & trade the marketplace": "മാർക്കറ്റ്പ്ലേസ് ബ്രൗസ് ചെയ്യുക, വ്യാപാരം നടത്തുക",
   "Receive credits": "ക്രെഡിറ്റുകൾ സ്വീകരിക്കുക",
   "Send credits after first trade (needs positive balance)": "ആദ്യ വ്യാപാരത്തിന് ശേഷം ക്രെഡിറ്റുകൾ അയയ്ക്കുക (പോസിറ്റീവ് ബാലൻസ് ആവശ്യമാണ്)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "നിങ്ങൾ കമ്മ്യൂണിറ്റിയുമായി യഥാർത്ഥ മൂല്യം കൈമാറി. ഓരോ വ്യാപാരത്തിലും നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ വർദ്ധിക്കുന്നു — നിങ്ങൾ കൂടുതൽ മൂല്യം കൈമാറുന്തോറും ഇത് കൂടുതൽ വളരുന്നു.",
-  "Credit floor deepens with the value you trade": "നിങ്ങൾ വ്യാപാരം ചെയ്യുന്ന മൂല്യത്തിനനുസരിച്ച് ക്രെഡിറ്റ് പരിധി വർദ്ധിക്കുന്നു",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "നിരവധി പങ്കാളികളുള്ള വിശ്വസ്തനായ ഒരു വ്യാപാരി. കമ്മ്യൂണിറ്റി നിങ്ങളെ അംഗീകരിക്കുന്നു, നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ ഇനിയും വർദ്ധിക്കുന്നു.",
-  "Credit floor continues deepening": "ക്രെഡിറ്റ് പരിധി തുടർന്നും വർദ്ധിക്കുന്നു",
   "Trusted-trader recognition": "വിശ്വസ്ത വ്യാപാരി എന്ന അംഗീകാരം",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "പൊതു കൂട്ടായ്മയുടെ ഒരു തൂൺ — ഏറ്റവും ഉയർന്ന ക്രെഡിറ്റ് ലൈനും കമ്മ്യൂണിറ്റിയുടെ ഏറ്റവും വലിയ അംഗീകാരവും.",
-  "Credit floor can reach -2000 (the maximum)": "ക്രെഡിറ്റ് പരിധി -2000 വരെ എത്താം (പരമാവധി)",
   "Recognised as a community Elder": "കമ്മ്യൂണിറ്റിയിലെ മുതിർന്നയാളായി അംഗീകരിക്കപ്പെട്ടു",
   "Export failed": "എക്‌സ്‌പോർട്ട് പരാജയപ്പെട്ടു",
   "Export my transactions": "എന്റെ ഇടപാടുകൾ എക്‌സ്‌പോർട്ട് ചെയ്യുക",
@@ -3205,10 +3197,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "നിലവിൽ കൈവശമുള്ള പയർ മാത്രമേ നിങ്ങൾക്ക് അയയ്ക്കാൻ കഴിയൂ — നേരിട്ടുള്ള അയയ്ക്കലിന് പോസിറ്റീവ് ബാലൻസ് ആവശ്യമാണ്.",
   "How trust works": "വിശ്വാസം എങ്ങനെ പ്രവർത്തിക്കുന്നു",
   "YOUR TRUST LEVEL": "നിങ്ങളുടെ വിശ്വാസ നിലവാരം",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "{levels}-ൽ ലെവൽ {level} · {n} വിശ്വാസം",
-    "other": "{levels}-ൽ ലെവൽ {level} · {n} വിശ്വാസം"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-ലേക്ക് ഇനി **{n}** വിശ്വാസം കൂടി",
     "other": "{emoji} {tier}-ലേക്ക് ഇനി **{n}** വിശ്വാസം കൂടി"
@@ -3438,7 +3426,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "പുതിയ അംഗങ്ങൾക്ക് അവരുടെ ആദ്യ വ്യാപാരം വരെ **🔑 ഫൗണ്ടിംഗ്** ബാഡ്ജ് കാണിക്കുന്നു.",
   "Tiers & Perks": "ടയറുകളും ആനുകൂല്യങ്ങളും",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "ടയറുകൾ **അംഗീകാരത്തിന്റെ നാഴികക്കല്ലുകളാണ്** — നിങ്ങളുടെ വിശ്വാസം എത്രത്തോളം വളർന്നു എന്ന് അവ അടയാളപ്പെടുത്തുന്നു. അവയോടൊപ്പം വർദ്ധിക്കുന്ന ഒരേയൊരു പ്രതിഫലം നിങ്ങളുടെ **ക്രെഡിറ്റ് പരിധിയാണ്** (പൂജ്യത്തിന് താഴെ എത്രത്തോളം ചെലവഴിക്കാം). നിങ്ങൾ വ്യാപാരം ചെയ്യുന്ന മൂല്യത്തിനനുസരിച്ച് നിങ്ങളുടെ പരിധി ക്രമേണ വികസിക്കുന്നു; ടയറുകൾ വഴികാട്ടികൾ മാത്രമാണ്.",
   "🔑 Founding Status (before 1st trade)": "🔑 ഫൗണ്ടിംഗ് നില (ആദ്യ വ്യാപാരത്തിന് മുമ്പ്)",
   "A starting state that lasts until you complete your **very first trade**": "നിങ്ങളുടെ **ഏറ്റവും ആദ്യത്തെ വ്യാപാരം** പൂർത്തിയാക്കുന്നതുവരെ നിലനിൽക്കുന്ന ഒരു പ്രാരംഭ നില",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "നിങ്ങളെ ആരംഭിക്കാൻ സഹായിക്കണമെന്ന് അംഗങ്ങൾക്ക് അറിയാൻ **🔑 ഫൗണ്ടിംഗ്** എന്ന് കാണിക്കുന്നു",

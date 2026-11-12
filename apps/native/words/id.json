@@ -331,8 +331,6 @@
   "ADD POST": "TAMBAH POSTINGAN",
   "The amount is a number of Beans above 0, to the cent.": "Jumlahnya adalah angka kacang di atas 0, hingga sen.",
   "Send Beans": "Kirim Kacang",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Level adalah lencana penghargaan — tidak membatasi tindakan apa pun. Pengiriman langsung memerlukan saldo positif dan satu transaksi selesai. Level lebih tinggi berarti batas kredit lebih besar dan pengakuan komunitas.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Level adalah lencana penghargaan — tidak membatasi tindakan apa pun. Siapa saja bisa mengundang. Pengiriman langsung memerlukan saldo positif dan satu transaksi selesai. Level lebih tinggi berarti batas kredit lebih besar dan pengakuan komunitas.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "Tidak ada yang disalurkan ke Sarana Bersama selama Anda memiliki {free} kacang atau kurang.",
   "✨ Generate Ticket": "✨ Buat Tiket",
   "✨ Generate Offline Ticket": "✨ Buat Tiket Offline",
@@ -3055,13 +3053,7 @@
   "Browse & trade the marketplace": "Telusuri & bertransaksi di pasar",
   "Receive credits": "Terima kredit",
   "Send credits after first trade (needs positive balance)": "Kirim kredit setelah transaksi pertama (perlu saldo positif)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "Anda telah bertransaksi dengan nilai nyata bersama komunitas. Jalur kredit Anda bertambah dalam di setiap transaksi — makin banyak nilai yang Anda tukarkan, makin besar batasnya.",
-  "Credit floor deepens with the value you trade": "Batas kredit bertambah dalam seiring nilai transaksi Anda",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "Mitra dagang terpercaya dengan lingkaran rekan yang luas. Komunitas mengakui Anda, dan jalur kredit Anda bertambah dalam lagi.",
-  "Credit floor continues deepening": "Batas kredit terus bertambah dalam",
   "Trusted-trader recognition": "Pengakuan mitra dagang terpercaya",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "Pilar sarana bersama — jalur kredit terdalam yang dimungkinkan dan pengakuan tertinggi komunitas.",
-  "Credit floor can reach -2000 (the maximum)": "Batas kredit dapat mencapai -2000 (maksimum)",
   "Recognised as a community Elder": "Diakui sebagai Tetua komunitas",
   "Export failed": "Ekspor gagal",
   "Export my transactions": "Ekspor transaksi saya",
@@ -3076,9 +3068,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "Anda hanya dapat mengirim kacang yang saat ini Anda miliki — pengiriman langsung memerlukan saldo positif.",
   "How trust works": "Cara kerja kepercayaan",
   "YOUR TRUST LEVEL": "TINGKAT KEPERCAYAAN ANDA",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "Level {level} dari {levels} · {n} kepercayaan"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "**{n}** kepercayaan lagi menuju {emoji} {tier}"
   },
@@ -3300,7 +3289,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "Anggota baru menampilkan lencana **🔑 Founding** hingga transaksi pertama mereka.",
   "Tiers & Perks": "Level & Manfaat",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "Level adalah **tonggak pengakuan** — level menandai seberapa jauh kepercayaan Anda telah tumbuh. Satu-satunya manfaat yang bertambah bersama level adalah **batas kredit** Anda (seberapa jauh di bawah nol Anda dapat berbelanja). Batas Anda bergeser terus menerus seiring nilai transaksi Anda; tingkatan hanyalah penunjuk jalan di sepanjang perjalanan.",
   "🔑 Founding Status (before 1st trade)": "🔑 Status Founding (sebelum transaksi ke-1)",
   "A starting state that lasts until you complete your **very first trade**": "Kondisi awal yang berlangsung hingga Anda menyelesaikan **transaksi paling pertama** Anda",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "Ditampilkan sebagai **🔑 FOUNDING** agar anggota lain tahu untuk membantu Anda memulai",

@@ -542,7 +542,7 @@ async function main(): Promise<void> {
             built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: await invite(), publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
-        for (const who of [gwen, cy, nia]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
+        for (const who of [gwen, cy, nia]) built(`${who.name} is given a 1,400-Bean line (a tier gives none)`, await main.send('grant-line', { pk: who.pk, amount_c: 140000 }));
         // A price in whole hundredths of a Bean (the wire's `price_c`): 400 is 4 Beans.
         const offer = async (who: Id, title: string, price_c: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk,

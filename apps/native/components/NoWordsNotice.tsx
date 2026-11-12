@@ -9,6 +9,7 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+// Static colours: the default of the `colors` prop. Settings passes its set; node-mismatch.tsx passes none, so it draws light there in dark today. Passing that screen's colours changes Classic dark, which colour themes T2 does not do: left for a slice that looks at it in dark.
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 import { NO_WORDS_WAY_BACK } from '../utils/no-words-copy';
 import { noWordsBeforeWipeWords, welcomeLineWords } from './welcome/welcome-lines';

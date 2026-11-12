@@ -22,6 +22,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, AppState, type AppStateStatus } from 'react-native';
+// Static colours: the banner is a fixed pale-red box in both schemes (palette red steps); its two danger values are the light set's on purpose, and danger has no per-set value in the library, so no colour set changes them.
 import { palette, lightColors } from '../constants/colors';
 import { signedRequest } from '../utils/db';
 import { withJitter } from '../utils/jitter';

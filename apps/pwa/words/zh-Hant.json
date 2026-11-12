@@ -103,7 +103,6 @@
   "A member": "一位成員",
   "A neighbour offered to do this. Approve to hold the Beans safely.": "一位鄰居提出願意協助。請核准以安全託管豆子。",
   "A new post": "一則新貼文",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "公共基金的支柱 — 擁有最大可能的信用額度以及社群的最高認可。",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a collaborator.": "認捐 0 亦屬有效：未認捐信譽但協助運作的人仍可成為協作者。",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.": "認捐 0 亦屬有效：未認捐信譽但協助運作的人仍可成為管理人。",
   "A project needs a goal in Beans": "專案需要設定豆子目標金額",
@@ -117,7 +116,6 @@
   "A spare computer, or a few dollars a month for a rented server. The software is free.": "一台閒置電腦，或每月幾美元租用伺服器。軟體完全免費。",
   "A town or area": "城鎮或區域",
   "A trade dispute was resolved": "一項交易爭議已獲得解決",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "擁有廣泛夥伴圈的受信任交易者。社群認可你，你的信用額度進一步加深。",
   "ACCOUNT & IDENTITY": "帳號與身分",
   "ACTIVE\u0004listing status": "有效",
   "ACTUAL DAYS WORKED": "實際工作天數",
@@ -632,9 +630,6 @@
   "Creator account linking:": "創作者帳號連結：",
   "Credit Line": "信用額度",
   "Credit balance gauge": "信用餘額量表",
-  "Credit floor can reach -2000 (the maximum)": "信用底線可達 -2000（上限）",
-  "Credit floor continues deepening": "信用底線持續加深",
-  "Credit floor deepens with the value you trade": "信用底線隨著你交易的價值而加深",
   "Credits (B)": "信用額度（豆子）",
   "Credits (🫘 Beans)": "點數 (🫘 豆子)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "信用點是一種互助信用貨幣。交易時，信用點會在成員之間轉移。每位成員都從零開始。這套系統旨在鼓勵互惠，讓價值在在地流動。",
@@ -1164,11 +1159,6 @@
   "Let's Begin! 🚀": "開始吧！🚀",
   "Let's look at how this community economy works.": "來看看這個社區的經濟是怎麼運作的。",
   "Level {level} of {levels}": "第 {level}/{levels} 級",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "第 {level}/{levels} 級 · {n} 信任分"
-  },
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "等級是榮譽徽章——並不會限制任何操作。任何人都可以邀請新朋友。直接轉帳需要帳戶餘額為正且已完成過一筆交易。更高的等級意味著更高的信用額度與社群肯定。",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "等級是榮譽徽章——並不會限制任何操作。直接轉帳需要帳戶餘額為正且已完成過一筆交易。更高的等級意味著更高的信用額度與社群肯定。",
   "Light\u0004appearance": "淺色",
   "Light or dark, or the same as your device": "淺色或深色，或跟隨你的裝置設定",
   "Link copied.": "連結已複製。",
@@ -2775,7 +2765,6 @@
   "You've posted {n} new thing on {platform} since your last visit.|You've posted {n} new things on {platform} since your last visit.": {
     "other": "自上次造訪以來，你已在 {platform} 上發布了 {n} 則新內容。"
   },
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "你已與社群交換了實質價值。你的信用額度隨著每筆交易而加深 — 交換的價值越多，額度就越深。",
   "Your 12 words are always in Settings → Recovery Phrase.": "你的 12 個詞一直在「設定 → 復原詞組」中。",
   "Your 12 words are the **only** way to recover your account.": "你的 12 個助記詞是復原帳號的**唯一**途徑。",
   "Your 12 words are the way back to this account. Keep them safe.": "你的 12 個助記詞是找回此帳號的途徑。請妥善保存。",

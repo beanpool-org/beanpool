@@ -103,7 +103,6 @@
   "A member": "Một thành viên",
   "A neighbour offered to do this. Approve to hold the Beans safely.": "Một người hàng xóm đã đề nghị làm việc này. Hãy duyệt để giữ đậu an toàn.",
   "A new post": "Bài đăng mới",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "Một trụ cột của cộng đồng — hạn mức tín dụng sâu nhất có thể và sự ghi nhận cao nhất từ cộng đồng.",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a collaborator.": "Mức cam kết bằng 0 vẫn hợp lệ: người giúp điều hành mà không cam kết uy tín vẫn có thể làm cộng tác viên.",
   "A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.": "Mức cam kết bằng 0 vẫn hợp lệ: người giúp điều hành mà không cam kết uy tín vẫn có thể làm người quản lý.",
   "A project needs a goal in Beans": "Dự án cần có mục tiêu bằng đậu",
@@ -117,7 +116,6 @@
   "A spare computer, or a few dollars a month for a rented server. The software is free.": "Một chiếc máy tính dư, hoặc vài đô la mỗi tháng cho máy chủ thuê. Phần mềm là hoàn toàn miễn phí.",
   "A town or area": "Thị trấn hoặc khu vực",
   "A trade dispute was resolved": "Một tranh chấp giao dịch đã được giải quyết",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "Một người giao dịch đáng tin cậy với mạng lưới đối tác rộng mở. Cộng đồng ghi nhận bạn, và hạn mức tín dụng tiếp tục được mở rộng.",
   "ACCOUNT & IDENTITY": "TÀI KHOẢN & DANH TÍNH",
   "ACTIVE\u0004listing status": "ĐANG HOẠT ĐỘNG",
   "ACTUAL DAYS WORKED": "SỐ NGÀY ĐÃ LÀM THỰC TẾ",
@@ -632,9 +630,6 @@
   "Creator account linking:": "Liên kết tài khoản người sáng tạo:",
   "Credit Line": "Hạn mức tín dụng",
   "Credit balance gauge": "Thước đo số dư tín dụng",
-  "Credit floor can reach -2000 (the maximum)": "Mức sàn tín dụng có thể đạt tới -2000 (tối đa)",
-  "Credit floor continues deepening": "Mức sàn tín dụng tiếp tục được mở rộng",
-  "Credit floor deepens with the value you trade": "Mức sàn tín dụng tăng theo giá trị bạn giao dịch",
   "Credits (B)": "Tín dụng (Đậu)",
   "Credits (🫘 Beans)": "Tín dụng (🫘 Đậu)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Tín dụng là một loại tiền tệ tín dụng tương hỗ. Khi bạn giao dịch, tín dụng được chuyển giữa các thành viên. Ai cũng bắt đầu từ số không. Hệ thống được thiết kế để khuyến khích có đi có lại và giữ giá trị lưu thông tại địa phương.",
@@ -1164,11 +1159,6 @@
   "Let's Begin! 🚀": "Bắt đầu thôi! 🚀",
   "Let's look at how this community economy works.": "Hãy xem nền kinh tế của cộng đồng này vận hành thế nào.",
   "Level {level} of {levels}": "Cấp {level}/{levels}",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "Cấp {level}/{levels} · {n} điểm tin cậy"
-  },
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Cấp độ là huy hiệu ghi nhận — không giới hạn hành động nào. Ai cũng có thể mời. Gửi trực tiếp cần số dư dương và một giao dịch hoàn tất. Cấp cao hơn mang lại hạn mức tín dụng sâu hơn và sự công nhận từ cộng đồng.",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Cấp độ là huy hiệu ghi nhận — không giới hạn hành động nào. Gửi trực tiếp cần số dư dương và một giao dịch hoàn tất. Cấp cao hơn mang lại hạn mức tín dụng sâu hơn và sự công nhận từ cộng đồng.",
   "Light\u0004appearance": "Sáng",
   "Light or dark, or the same as your device": "Sáng hoặc tối, hoặc giống với thiết bị của bạn",
   "Link copied.": "Đã sao chép liên kết.",
@@ -2775,7 +2765,6 @@
   "You've posted {n} new thing on {platform} since your last visit.|You've posted {n} new things on {platform} since your last visit.": {
     "other": "Bạn đã đăng {n} nội dung mới trên {platform} kể từ lần truy cập trước."
   },
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "Bạn đã trao đổi giá trị thực tế với cộng đồng. Hạn mức tín dụng của bạn tăng lên sau mỗi giao dịch — bạn càng trao đổi nhiều giá trị, hạn mức càng lớn.",
   "Your 12 words are always in Settings → Recovery Phrase.": "12 từ của bạn luôn có trong Cài đặt → Cụm từ khôi phục.",
   "Your 12 words are the **only** way to recover your account.": "12 từ của bạn là cách **duy nhất** để khôi phục tài khoản.",
   "Your 12 words are the way back to this account. Keep them safe.": "12 từ của bạn là cách để quay lại tài khoản này. Hãy giữ chúng an toàn.",

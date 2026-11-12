@@ -18,6 +18,7 @@ import { avatarUri } from '../utils/image-processing';
 import { anchorUrl, getCachedAnchorUrl } from '../utils/node-post';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { resolveBundledAvatar } from '../utils/bundled-avatars';
+// Static colours: the avatar's placeholder ground (surface.subtle, not a themed role), the same light grey in both schemes today. It is drawn in the protected GlobalHeader, so moving it to the theme hook would repaint that header unseen; it stays until Marty looks.
 import { colors, palette } from '../constants/colors';
 import { t, bundledAvatarForPubkey } from '@beanpool/core';
 

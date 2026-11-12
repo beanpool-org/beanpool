@@ -7,7 +7,7 @@
  * profile's (getMemberTrustProfile), with the answer's tier the one that credit gives:
  *
  *   1. an admin with no trades: 0
- *   2. a member granted Steward by the tier badge: 600 (floor -600); an Elder: 1,400
+ *   2. a member granted 600 Beans of credit: 600 (floor -600); 1,400: 1,400 (a tier badge gives none: engine/badges.ts)
  *   3. the whole line frozen (the manager's "Freeze"): still 600 / 1,400 with floor 0, and back to the line unfrozen
  *   4. the known floor (dial on, confirmed, one live offer) on top of a granted Resident: 200, the grant, never the known
  *      floor (Marty, 21 Oct: "Badge counts what they did only"), with floor -1,200; an admin's exception lowers the known
@@ -144,9 +144,9 @@ async function main(): Promise<void> {
     const fay = makeMember('Fay');
     const eli = makeMember('Eli');
     const kim = makeMember('Kim');
-    const setTier = async (who: Id, tier: string) => {
-        const r = await call('POST', null, `/api/local/admin/users/${who.pk}/tier`, { tier }, owner);
-        assert(r.status === 200, `the owner gives ${who.name} the ${tier} badge (${show(r)})`);
+    // Granted credit, set by hand in the granted lane (members.earned_credit_c): a tier badge gives none (engine/badges.ts).
+    const grantLine = (who: Id, beansGranted: number) => {
+        db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(beansGranted), who.pk);
     };
     const freeze = async (who: Id, on: boolean) => {
         const r = await call('POST', null, `/api/local/admin/users/${who.pk}/freeze`, { freeze: on }, owner);
@@ -157,12 +157,12 @@ async function main(): Promise<void> {
     console.log('── 1. an admin, no trades ──');
     await ownRead(ada, 'Ada (admin, no trades)', 0, 0);
 
-    // ── 2. granted by the tier badge ───────────────────────────────────────────────────────────
+    // ── 2. granted credit ──────────────────────────────────────────────────────────────────────
     console.log('── 2. granted ──');
-    await setTier(sid, 'Steward');
+    grantLine(sid, 600);
     await ownRead(sid, 'Sid (granted Steward)', 600, -600);
-    await setTier(fay, 'Steward');
-    await setTier(eli, 'Elder');
+    grantLine(fay, 600);
+    grantLine(eli, 1400);
     await ownRead(eli, 'Eli (granted Elder)', 1400, -1400);
 
     // ── 3. the whole line frozen ───────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     const on = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
     assert(on.status === 200 && on.body?.shape?.settings?.knownFloor?.value?.on === true, `the owner turns the known floor on (${show(on)})`);
     createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', hc(40), 'fixed', kim.pk);
-    await setTier(kim, 'Resident');
+    grantLine(kim, 200);
     confirm(kim, ada);
     // Marty, 21 Oct ("Badge counts what they did only"): the known floor is the admins' confirmation, which stays private,
     // so it deepens Kim's line but never her trust figure. Before, tierCredit was the whole line: 1,200, then 500, then 500.

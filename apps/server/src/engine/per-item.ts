@@ -1,7 +1,7 @@
 /**
- * A price for each one: the node's half of slice P0 (scratch/fable-design/DESIGN-per-item-price-fable.md §3, §4.6; the rules and
- * every sentence are @beanpool/core per-item.ts). An Offer priced `each` holds three columns (schema.sql posts.units_left,
- * lot_price_c, lot_units), set here on every create and edit and nowhere else in P0:
+ * A price for each one: the node's half of slices P0 and P1 (scratch/fable-design/DESIGN-per-item-price-fable.md §3, §4; the
+ * rules and every sentence are @beanpool/core per-item.ts). An Offer priced `each` holds three columns (schema.sql
+ * posts.units_left, lot_price_c, lot_units), set here on every create and edit, and the count moved by its deals:
  *
  *  - `each` is an Offer's, never lent (engine/posts.ts lendColumnsOnCreate refuses the unit for a loan first), never
  *    Repeatable (the count takes its place, D4: set to 0 here), never a copy (engine/event-copy.ts copyBody makes a copy's
@@ -14,13 +14,15 @@
  *    a new one with the count unchanged needs `unitsLeftWas` to be the count now, as a changed count does.
  *  - A listing with a live standing deal is never edited into Each (Each is never weekly or monthly).
  *
- * The deals (take-up with a number or all, the count held with the Beans, the five ends) are slice P1's. Until then no deal
- * starts on a listing priced for each one ({@link assertNoItemDealYet}), and the forms don't offer Each: the node's features
- * answer has no `perItem` until every slice is in (config/node-profile.ts).
+ * The deals (P1): a take-up for a number of them or all of them holds exactly their Beans and lowers the count in the same
+ * transaction ({@link reserveUnits}, the authority); the five places a deal ends settle the count through one function
+ * ({@link settleItemDeal}); a request is refused ({@link assertNotAskedForItems}). The forms don't offer Each until every
+ * slice is in: the node's features answer has no `perItem` until then (config/node-profile.ts).
  */
 import {
-    EACH, NOT_PER_ITEM, PER_ITEM_REFUSALS, isItemCount, isPerItem, itemColumnsRefusal, lotPriceIn, perItemRefusalText, word, wordsFor,
-    type ItemColumns, type PerItemRefusalOf,
+    EACH, ITEM_COUNT_MAX, ITEM_TAKE_UP_REFUSALS, NOT_PER_ITEM, PER_ITEM_REFUSALS, isItemCount, isPerItem, itemColumnsRefusal, itemStockRefusal,
+    itemTakeUpOf, itemTakeUpRefusalText, lotPriceIn, perItemRefusalText, wordsFor,
+    type ItemColumns, type ItemTakeUp, type ItemTakeUpIn, type ItemTakeUpRefusalOf, type PerItemListing, type PerItemRefusalOf,
 } from '@beanpool/core';
 import type { MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -140,13 +142,124 @@ export function writeItemCount(id: string, count: NonNullable<ItemEdit['count']>
     throw itemRefusal({ code: 'units_changed', count: now ?? 0 });
 }
 
-/** P0's answer at every door a deal starts by: slice P1 replaces it with the take-up of a number, or all of them. */
-export const ITEM_DEALS_NOT_YET = word("This listing can't be taken up yet.");
-export const ITEM_DEALS_NOT_YET_CODE = 'each_not_yet';
+// ── The deals (slice P1: design §4.1-§4.5, §5) ──────────────────────────────────────────────────────────────────
 
-/** No deal starts on a listing priced for each one until P1: its count would not move with the Beans (design §4). */
-export function assertNoItemDealYet(post: { priceType?: unknown; price_type?: unknown }): void {
-    if (isPerItem({ priceType: post.priceType ?? post.price_type })) {
-        throw Object.assign(new Error(ITEM_DEALS_NOT_YET), { status: 409, statusCode: 409, code: ITEM_DEALS_NOT_YET_CODE });
+/** A take-up, request or release refused (core ITEM_TAKE_UP_REFUSALS), as the routes answer it: status, code, count now. */
+export interface ItemTakeUpError extends Error {
+    status: number;
+    statusCode: number;
+    code: ItemTakeUpRefusalOf['code'];
+    unitsLeft?: number;
+}
+
+/** The refusal, its sentence in English (translated on the way out); `count_refused` and `deal_count_fixed` are a 400. */
+export function itemTakeUpRefusal(r: ItemTakeUpRefusalOf): ItemTakeUpError {
+    const status = r.code === 'count_refused' || r.code === 'deal_count_fixed' ? 400 : 409;
+    return Object.assign(new Error(itemTakeUpRefusalText(r, en)), {
+        status, statusCode: status, code: r.code, ...(r.code === 'units_gone' ? { unitsLeft: r.count ?? 0 } : {}),
+    });
+}
+
+/** What a route sends for a take-up refusal: its code, and how many are left now when that is why. */
+export function itemTakeUpRefusalOf(e: unknown): { status: number; code: string; unitsLeft?: number } | null {
+    const r = e as Partial<ItemTakeUpError> | null;
+    if (!r || typeof r.code !== 'string' || !(ITEM_TAKE_UP_REFUSALS as readonly string[]).includes(r.code) || typeof r.status !== 'number') return null;
+    return { status: r.status, code: r.code, ...(typeof r.unitsLeft === 'number' ? { unitsLeft: r.unitsLeft } : {}) };
+}
+
+/** A listing priced for each one as core reads it, from its post (camelCase, getPosts) or its raw row. */
+function listingOf(p: any): PerItemListing {
+    if (!p) return { priceType: null, price_c: 0 };
+    if ('price_type' in p) {
+        return {
+            priceType: p.price_type, price_c: p.price_c, unitsLeft: p.units_left,
+            lot: Number.isInteger(p.lot_units) && Number.isInteger(p.lot_price_c) ? { units: p.lot_units, price_c: p.lot_price_c } : null,
+        };
     }
+    return { priceType: p.priceType, price_c: p.price_c, unitsLeft: p.unitsLeft, lot: p.lot ?? null };
+}
+
+/**
+ * The take-up of a listing priced for each one (acceptPost's price, design §4.1): how many, which way, and the Beans that go
+ * into trust, from the listing as stored and the total the buyer's screen showed; refused before anything is held.
+ */
+export function itemTakeUpFor(post: MarketplacePost, take: ItemTakeUpIn | undefined): ItemTakeUp {
+    const r = itemTakeUpOf(listingOf(post), take ?? {});
+    if (!r.ok) throw itemTakeUpRefusal(r.refusal);
+    return r.take;
+}
+
+/** Still there, as the listing was read: asked once before the hold, a plain refusal with no rollback (reserveUnits decides). */
+export function assertItemStock(post: MarketplacePost, take: ItemTakeUp): void {
+    const refused = itemStockRefusal(listingOf(post), take);
+    if (refused) throw itemTakeUpRefusal(refused);
+}
+
+/**
+ * The count's half of a take-up, INSIDE the hold's conservingTransaction (design §4.2): one UPDATE that must change exactly the
+ * listing's one row, still active, still priced for each one at the price the amount was worked out from, with that many
+ * still left; for all of them, still exactly the number and the price for all the buyer saw, and none left after. Nothing
+ * between the checks and this write yields (the node runs one request at a time), but this WHERE is the authority all the
+ * same, so a future change that yields can't oversell: no row changed throws (`units_gone` with what is left, `lot_gone`, or
+ * `price_changed`), and the throw unwinds the hold and the ledger with it. Never takes the listing off the board.
+ */
+export function reserveUnits(postId: string, price_c: number, take: ItemTakeUp, at: string): void {
+    const res = take.option === 'lot'
+        ? db.prepare(`UPDATE posts SET units_left = 0, updated_at = ?
+                      WHERE id = ? AND status = 'active' AND active = 1 AND price_type = 'each' AND units_left = ? AND lot_units = ? AND lot_price_c = ?`)
+            .run(at, postId, take.n, take.n, take.amount_c)
+        : db.prepare(`UPDATE posts SET units_left = units_left - ?, updated_at = ?
+                      WHERE id = ? AND status = 'active' AND active = 1 AND price_type = 'each' AND price_c = ? AND units_left >= ?`)
+            .run(take.n, at, postId, price_c, take.n);
+    if (res.changes === 1) return;
+    const now = db.prepare('SELECT price_type, price_c, units_left, lot_units, lot_price_c FROM posts WHERE id = ?').get(postId);
+    throw itemTakeUpRefusal(itemStockRefusal(listingOf(now), take) ?? { code: 'price_changed' });
+}
+
+/** A deal row as settleItemDeal reads it: its own figures, never the listing's price. */
+export interface ItemDealRow {
+    id: string;
+    post_id: string;
+    hours: unknown;
+    item_option: unknown;
+}
+
+/** Whether a deal row is a per-item one (item_option set): those end through {@link settleItemDeal}, every other as before. */
+export function isItemDeal(row: { item_option?: unknown } | null | undefined): row is ItemDealRow {
+    return row?.item_option === 'each' || row?.item_option === 'lot';
+}
+
+/**
+ * A per-item deal ended (design §4.3, D1, D3): the one copy, called for a row with item_option from the five places a deal ends
+ * (engine/escrow.ts: the release, the cancel, and the three rulings), INSIDE that step's conservingTransaction, so the count
+ * and the Beans move together or not at all. It reads the row's own count (`hours`), never the listing's live price.
+ *
+ *  - returned (a cancel, the refund ruling): the count the deal held goes back. The status is not touched: a paused listing
+ *    stays paused, a removed one removed. Never past 9,999 (the seller may have raised the count while the deal was held),
+ *    so the refund itself can never be refused by the count's CHECK.
+ *  - sold (a release, the release and split rulings): nothing goes back; once none are left and no other deal on it is held,
+ *    the listing closes, completed ("Sold out"), as a one-off listing does when it sells. A removed listing stays removed.
+ *
+ * A count is not money: nothing here reads or writes a balance.
+ */
+export function settleItemDeal(row: ItemDealRow, outcome: 'returned' | 'sold', at: string): void {
+    if (outcome === 'returned') {
+        const n = Number(row.hours);
+        if (!isItemCount(n)) return;
+        db.prepare(`UPDATE posts SET units_left = MIN(units_left + ?, ${ITEM_COUNT_MAX}), updated_at = ? WHERE id = ? AND price_type = 'each' AND units_left IS NOT NULL`)
+            .run(n, at, row.post_id);
+        return;
+    }
+    db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ?
+                WHERE id = ? AND price_type = 'each' AND units_left = 0 AND status IN ('active', 'paused')
+                  AND NOT EXISTS (SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' AND id != ?)`)
+        .run(at, at, row.post_id, row.post_id, row.id);
+}
+
+/**
+ * The doors that ask before they hold (requestPost, approvePostRequest) never open on a listing priced for each one (design
+ * §4.5): it is taken up in one step, so nothing ever waits unfunded against its count. 409 `each_accept_only`.
+ */
+export function assertNotAskedForItems(post: { priceType?: unknown; price_type?: unknown }): void {
+    if (isPerItem({ priceType: post.priceType ?? post.price_type })) throw itemTakeUpRefusal({ code: 'each_accept_only' });
 }

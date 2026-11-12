@@ -15,7 +15,8 @@ import * as path from 'node:path';
 const root = path.join(__dirname, '..', '..');
 const welcome = fs.readFileSync(path.join(root, 'app/welcome.tsx'), 'utf8');
 const footer = fs.readFileSync(path.join(root, 'components/welcome/StepFooter.tsx'), 'utf8');
-const theme = fs.readFileSync(path.join(root, 'app/ThemeContext.tsx'), 'utf8');
+// The pattern-on tree moved from app/ThemeContext.tsx to utils/drawn-colours.ts with the theme sets (#3085): the same rule, read where it lives.
+const theme = fs.readFileSync(path.join(root, 'utils/drawn-colours.ts'), 'utf8');
 
 /** The source of one step: from its `if (mode === '<mode>'` to the next step's. */
 function step(mode: string): string {
@@ -69,7 +70,7 @@ describe('the join steps\' main button is in a footer that stays on screen', () 
     // 'transparent', and the step's words scrolled visibly behind and beside Next (a tablet in landscape showed the code
     // field through it). surface.chrome is the token for bars that content slides under: the pattern's ground when it is on.
     it('the footer is opaque with the pattern on: never on the token the pattern turns transparent', () => {
-        expect(theme).toMatch(/surface: \{ \.\.\.base\.surface, page: 'transparent', chrome: ground \}/);
+        expect(theme).toMatch(/surface: \{ \.\.\.base\.surface, page: 'transparent', chrome: doodleGround\(set\) \}/);
         expect(footer).not.toMatch(/colors\.surface\.page/);
     });
 });

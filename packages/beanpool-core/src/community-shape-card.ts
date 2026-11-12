@@ -6,6 +6,7 @@
 import { formatCount, formatDate, t, tn, word } from './words.js';
 import { formatHundredths } from './hundredths.js';
 import { removalDeciderLine } from './jury-card.js';
+import { CREDIT_SIGHT_WORDS } from './credit-sight.js';
 
 export interface CommunityShapeFeatures {
     beans?: boolean;
@@ -91,12 +92,14 @@ export const COMMUNITY_SHAPE_CARD_WORDS = {
     beansOnLine: word('**Beans:** on — trades, credit and the Commons'),
     beansOffLine: word('**Beans:** off — no prices, no credit here'),
     knownFloorLine: word('**Confirmed members** can owe up to {amount} Beans (the known floor)'),
-    // The rule (DESIGN-balance-rule-fable.md §2). "Half" when the line is 50, as the design's Q-D; {days} is "60 days" in
-    // the language's own plural, so each line is one sentence to translate however long the gap. {days} is since the last
-    // sale, never how long the debit has lasted: nothing records when a debit began (openExceptions), so a member who
-    // has bought and not sold is listed from their first Bean of debit, and no wording may promise them a wait.
-    ruleLineHalf: word("The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for {days}. Each look is logged."),
-    ruleLinePct: word("The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or are in debit and haven't made a sale for {days}. Each look is logged."),
+    // The rule (DESIGN-balance-rule-fable.md §2), reworded beside the sentence that every giver sees each balance
+    // (DESIGN-credit-list-amend-fable.md §5.3, F7): the list itself, its two settings and the 14-day wait are untouched.
+    // "Half" when the line is 50, as the design's Q-D; {days} is "60 days" in the language's own plural, so each line is
+    // one sentence to translate however long the gap. {days} is since the last sale, never how long the debit has lasted:
+    // nothing records when a debit began (openExceptions), so a member who has bought and not sold is listed from their
+    // first Bean of debit, and no wording may promise them a wait.
+    listLineHalf: word("The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for {days}."),
+    listLinePct: word("The admins also keep a list of confirmed members who owe more than {pct}% of their credit line, or are in debit and haven't made a sale for {days}."),
     debtLineFrom: word('The line of {pct}% applies from {date}.'),
     quietDaysFrom: word('The line of {days} applies from {date}.'),
     dmRequestsOnLine: word('**Messages:** a first message from someone new waits until you accept it'),
@@ -134,24 +137,43 @@ function daysWords(n: number): string {
 }
 
 /**
- * The rule in the community's own numbers, on the join screen and "How this community works"; null from a node that
- * doesn't state both lines, which draws no rule line (DESIGN-balance-rule-fable.md §2, §5).
+ * The sentence that tells every member who sees their balance and credit line (DESIGN-credit-list-amend-fable.md §5.3), or
+ * null: drawn on the join screen and "How this community works" on a node with Beans that says so (`beans: true` in its
+ * features, `creditSight: true` in its known-rule answer). Never on global, where Beans are off.
  */
-export function knownRuleLine(lines: KnownRuleLines | null | undefined): string | null {
+export function creditSightLine(on: boolean | null | undefined): string | null {
+    return on === true ? t(CREDIT_SIGHT_WORDS.told) : null;
+}
+
+/**
+ * The rule in the community's own numbers, on the join screen, "How this community works" and the doors into a known
+ * community; null from a node that doesn't state both lines, which draws no rule line (DESIGN-balance-rule-fable.md §2,
+ * §5). It reads "The admins also keep a list…", so where the node says givers see balances (`creditSight`) the sentence
+ * that says so comes first, in the same line, and a door that draws this line alone draws both.
+ */
+export function knownRuleLine(lines: (KnownRuleLines & { creditSight?: boolean }) | null | undefined): string | null {
     const pct = lines?.debtLinePct;
     const quiet = lines?.quietDays;
     if (typeof pct !== 'number' || typeof quiet !== 'number') return null;
     const days = daysWords(quiet);
-    return pct === 50
-        ? t(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf, { days })
-        : t(COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct, { pct: formatCount(pct), days });
+    const list = pct === 50
+        ? t(COMMUNITY_SHAPE_CARD_WORDS.listLineHalf, { days })
+        : t(COMMUNITY_SHAPE_CARD_WORDS.listLinePct, { pct: formatCount(pct), days });
+    const told = creditSightLine(lines?.creditSight);
+    return told ? `${told} ${list}` : list;
 }
 
-/** The join screen's lines: the floor, then the rule that comes with it. Both or neither: a floor alone isn't the rule. */
-export function joinRuleLines(rule: KnownRuleLines & { knownFloor?: number } | null | undefined): string[] {
+/**
+ * The join screen's lines: in a known community the floor, then the rule that comes with it (both or neither: a floor
+ * alone isn't the rule); on any other node that says givers see balances, that sentence alone.
+ */
+export function joinRuleLines(rule: KnownRuleLines & { knownFloor?: number; creditSight?: boolean } | null | undefined): string[] {
     const line = knownRuleLine(rule);
-    if (!line || typeof rule?.knownFloor !== 'number') return [];
-    return [t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatHundredths(rule.knownFloor) }), line];
+    if (line && typeof rule?.knownFloor === 'number') {
+        return [t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatHundredths(rule.knownFloor) }), line];
+    }
+    const told = creditSightLine(rule?.creditSight);
+    return told ? [told] : [];
 }
 
 /** "The line of 30% applies from 16 November.", one per line waiting out its notice (design §4). */
@@ -217,11 +239,17 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
         lines.push(t('**Beans:** on — trades, credit and the Commons'));
     }
 
+    // 3b. Who sees each member's balance and credit line (DESIGN-credit-list-amend-fable.md §5.3): every node with Beans on.
+    // In a known community the rule line below carries it, first, so it is said once.
+    const givers = features?.beans === true;
+    const known = typeof features?.knownFloor === 'number' ? knownRuleLine({ ...features, creditSight: givers }) : null;
+    const told = known ? null : creditSightLine(givers);
+    if (told) lines.push(told);
+
     // 4. Known floor (only drawn when present, i.e. dial and beans are on)
     if (typeof features?.knownFloor === 'number') {
         lines.push(t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatHundredths(features.knownFloor) }));
-        const rule = knownRuleLine(features);
-        if (rule) lines.push(rule, ...waitingLineSentences(waiting));
+        if (known) lines.push(known, ...waitingLineSentences(waiting));
     }
 
     // 5. Messages / dmRequests

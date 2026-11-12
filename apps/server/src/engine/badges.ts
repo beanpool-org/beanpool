@@ -16,6 +16,7 @@ import { db, deletePlainRows } from '../db/db.js';
 import { writeKnownFloorLog } from '../config/known-floor.js';
 import { keepNotice } from './kept-notices.js';
 import type { TellVoucher, VoucherNotice } from './vouchers.js';
+import { broadcast } from '../state-engine.js';
 
 // A sentence with values in it, in English as a template literal wrote it, marked for the words layer (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -68,8 +69,8 @@ function writeBadge(actor: string, member: string, tier: TierName): VoucherNotic
 
 /**
  * An owner's or admin's badge for a member: `tier` 'Resident', 'Steward' or 'Elder' gives it, 'Newcomer' takes the badge
- * back. Only for an active member (never an enterprise: its tier is its line's), and never the actor's own. The member is
- * told by `tell` once it has committed. Returns the member's badge now.
+ * back. Only for an active member (never an enterprise: its tier is its line's), and never the actor's own. Once it has
+ * committed every app is told the member changed (profile_updated) and the member by `tell`. Returns the member's badge now.
  */
 export function setMemberBadge(actor: string, member: string, tier: unknown, tell?: TellVoucher): { memberPubkey: string; badge: TierName; changed: boolean } {
     if (typeof tier !== 'string' || !TIERS.includes(tier as TierName)) throw new BadgeError(400, 'bad_tier', BADGE_WORDS.badTier);
@@ -77,8 +78,12 @@ export function setMemberBadge(actor: string, member: string, tier: unknown, tel
     if (!m || (m.status ?? 'active') !== 'active' || m.isTreasury) throw new BadgeError(404, 'not_member', BADGE_WORDS.notMember);
     if (actor === member) throw new BadgeError(403, 'own_badge', BADGE_WORDS.ownBadge);
     const notice = db.transaction(() => writeBadge(actor, member, tier as TierName))();
-    if (notice && tell) {
-        try { tell(notice); } catch (e) { console.warn('[Badges] A notice failed:', (e as Error)?.message || e); }
+    if (notice) {
+        // Every member's app re-reads them: the tier their cards and profile show has changed.
+        broadcast({ type: 'profile_updated', publicKey: member });
+        if (tell) {
+            try { tell(notice); } catch (e) { console.warn('[Badges] A notice failed:', (e as Error)?.message || e); }
+        }
     }
     return { memberPubkey: member, badge: shown(memberBadge(db, member)), changed: !!notice };
 }

@@ -429,6 +429,14 @@ export const adminCredentialCommands: Record<string, (args: any) => Promise<unkn
         const { ownerPhoneSessionHeaders } = await import('./admin-auth-test-harness.js');
         return ownerPhoneSessionHeaders(a.owner ?? await firstOwner());
     },
+    // A credit line to buy with { pk, amount_c }, set by hand in the granted lane (members.earned_credit_c) as an admin's
+    // Elder once set it: a tier is a badge only now and gives no credit (engine/badges.ts), so a suite that needs a buyer
+    // with a line sets it here. Answered as a route's answer, so `built` takes it.
+    'grant-line': async (a: { pk: string; amount_c: number }) => {
+        const { db } = await import('./db/db.js');
+        const r = db.prepare('UPDATE members SET earned_credit_c = ?, profile_updated_at = ? WHERE public_key = ?').run(a.amount_c, new Date().toISOString(), a.pk);
+        return r.changes === 1 ? { status: 200, body: { success: true } } : { status: 404, body: { error: 'no such member' } };
+    },
 };
 
 async function firstOwner(): Promise<string | undefined> {

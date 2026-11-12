@@ -461,7 +461,7 @@ async function main(): Promise<void> {
             built(`${buyer.name} confirms: the Beans are released`, await S_(buyer, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: buyer.pk }));
             return tx.id as string;
         };
-        for (const who of [gwen, cy, fay]) built(`the admin makes ${who.name} an Elder (granted credit)`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
+        for (const who of [gwen, cy, fay]) built(`${who.name} is given a 1,400-Bean line (granted credit; a tier gives none)`, await main.send('grant-line', { pk: who.pk, amount_c: 140000 }));
         await offer(gwen, 'Sourdough', 400); // a buyer lists an offer first (the offer covenant)
         await offer(cy, 'Bike repair', 600);
         await deal(gwen, ann, (await offer(ann, 'Honey', 800)).id); // Ann has Beans to buy with
@@ -486,8 +486,8 @@ async function main(): Promise<void> {
         const seed = built('Eve starts a project with a goal and a deadline', await S_(eve, '/api/treasury', {
             name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount_c: 10000, deadlineAt: deadline,
         }));
-        built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
-        built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
+        built('Eve is given a 200-Bean line (granted credit, as a Resident badge once gave)', await main.send('grant-line', { pk: eve.pk, amount_c: 20000 }));
+        built('and Lou one', await main.send('grant-line', { pk: lou.pk, amount_c: 20000 }));
         built('the admin freezes Fay\'s credit (an Elder: her floor goes to 0)', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
         built('Hal goes on holiday', await S_(hal, '/api/members/holiday', { enabled: true }));
         const annBefore = ((await main.send('rows')) as Rows).members.find((r) => r.public_key === ann.pk)?.updated_at;
@@ -528,7 +528,7 @@ async function main(): Promise<void> {
 
         // ── 3. Changes between two pulls, then a delta ──
         console.log('\n— 3. between two pulls: a badge taken back, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
-        built("the admin takes Lou's badge back, which the first copy copied", await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Newcomer' }));
+        built("Lou's line is taken back, which the first copy copied", await main.send('grant-line', { pk: lou.pk, amount_c: 0 }));
         built('the admin unbinds Dee from Probe Co', await api(m, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${dee.pk}`, { admin: await main.send('owner-session') }));
         built('Kip releases 1 of his 2 Beans of backing', await S_(kip, `/api/treasury/${probe.publicKey}/release`, { amount_c: 100 }));
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));

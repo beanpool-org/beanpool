@@ -1841,10 +1841,7 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     try {
         const result = setMemberBadge(actor, ctx.params.pubkey, body.tier, (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification }));
-        if (result.changed) {
-            broadcast({ type: 'profile_updated', publicKey: ctx.params.pubkey });
-            logger.info('ADMIN', `Badge ${result.badge} for ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
-        }
+        if (result.changed) logger.info('ADMIN', `Badge ${result.badge} for ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
         ctx.body = { success: true, tier: result.badge, changed: result.changed };
     } catch (e) {
         if (!(e instanceof BadgeError)) throw e;

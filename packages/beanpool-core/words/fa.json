@@ -2524,7 +2524,7 @@
     "one": "1.5% به جامعه می‌رسد. شما برای هر کدام {n} لوبیا یا برای همه {all} لوبیا دریافت می‌کنید.",
     "other": "1.5% به جامعه می‌رسد. شما برای هر کدام {n} لوبیا یا برای همه {all} لوبیا دریافت می‌کنید."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "بگویید چند تا دارید: یک عدد صحیح از 1 تا 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "بگویید چند تا دارید: یک عدد صحیح از 1 تا {max}.",
   "A price for all of them needs 2 or more.": "قیمت همه، 2 تا یا بیشتر لازم دارد.",
   "Only an Offer can be priced for each one.": "فقط یک پیشنهاد را می‌شود برای هر کدام قیمت‌گذاری کرد.",
   "A price for all of them must be a number of Beans above 0.": "قیمت همه باید تعداد لوبیایی بیشتر از 0 باشد.",

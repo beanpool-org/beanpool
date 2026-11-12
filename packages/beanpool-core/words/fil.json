@@ -2524,7 +2524,7 @@
     "one": "1.5% ay mapupunta sa komunidad. Makakatanggap ka ng {n} munggo para sa bawat isa, o {all} munggo para sa lahat.",
     "other": "1.5% ay mapupunta sa komunidad. Makakatanggap ka ng {n} munggo para sa bawat isa, o {all} munggo para sa lahat."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Sabihin kung ilan ang mayroon ka: buong bilang mula 1 hanggang 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Sabihin kung ilan ang mayroon ka: buong bilang mula 1 hanggang {max}.",
   "A price for all of them needs 2 or more.": "Kailangan ng 2 o higit pa para sa presyo ng lahat.",
   "Only an Offer can be priced for each one.": "Alok lang ang puwedeng lagyan ng presyo bawat isa.",
   "A price for all of them must be a number of Beans above 0.": "Ang presyo para sa lahat ay dapat bilang ng munggo na higit sa 0.",

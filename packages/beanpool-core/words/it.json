@@ -2524,7 +2524,7 @@
     "one": "L'1.5% va alla comunità. Ricevi {n} fagiolo per ciascuno, o {all} fagioli per tutti.",
     "other": "L'1.5% va alla comunità. Ricevi {n} fagioli per ciascuno, o {all} fagioli per tutti."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Indica quanti ne hai: un numero intero da 1 a 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Indica quanti ne hai: un numero intero da 1 a {max}.",
   "A price for all of them needs 2 or more.": "Un prezzo per tutti richiede 2 o più.",
   "Only an Offer can be priced for each one.": "Solo un'Offerta può avere un prezzo per ciascuno.",
   "A price for all of them must be a number of Beans above 0.": "Il prezzo per tutti deve essere un numero di fagioli maggiore di 0.",

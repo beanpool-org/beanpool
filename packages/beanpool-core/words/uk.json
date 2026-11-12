@@ -2738,7 +2738,7 @@
     "many": "1.5% іде спільноті. Ви отримуєте {n} бобів за штуку або {all} за всі.",
     "other": "1.5% іде спільноті. Ви отримуєте {n} боба за штуку або {all} за всі."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Вкажіть, скільки у вас є: ціле число від 1 до 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Вкажіть, скільки у вас є: ціле число від 1 до {max}.",
   "A price for all of them needs 2 or more.": "Для ціни за всі потрібно 2 або більше.",
   "Only an Offer can be priced for each one.": "Ціну за штуку можна задати лише для Пропозиції.",
   "A price for all of them must be a number of Beans above 0.": "Ціна за всі має бути числом бобів понад 0.",

@@ -2417,7 +2417,7 @@
   "1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.|1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.": {
     "other": "1.5%는 커뮤니티로 가요. 개당 {n} 콩, 전부 함께라면 {all} 콩을 받아요."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "몇 개 있는지 알려 주세요. 1에서 9,999 사이의 정수예요.",
+  "Say how many you have: a whole number from 1 to {max}.": "몇 개 있는지 알려 주세요. 1에서 {max} 사이의 정수예요.",
   "A price for all of them needs 2 or more.": "전부 묶음 가격은 2개 이상일 때 정할 수 있어요.",
   "Only an Offer can be priced for each one.": "개별 가격은 '제공' 글에만 정할 수 있어요.",
   "A price for all of them must be a number of Beans above 0.": "전부 묶음 가격은 0보다 큰 콩 수여야 해요.",

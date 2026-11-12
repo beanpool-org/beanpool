@@ -11,7 +11,7 @@
  *
  * Pure: no I/O, no Node built-ins (the barrel is bundled for the phone).
  */
-import { t, tn, upperCase, word, wordn, type Words } from './words.js';
+import { formatCount, t, tn, upperCase, word, wordn, type Words } from './words.js';
 import { dealAmountFor, feeOf, formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
 import { FREE_PRICE_WORDS } from './listing-price.js';
 
@@ -192,7 +192,8 @@ export const PER_ITEM_WORDS = {
     feeLine: wordn('1.5% goes to the community. You receive {n} Beans for each one.', '1.5% goes to the community. You receive {n} Beans for each one.'),
     feeLineLot: wordn('1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.',
         '1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.'),
-    unitsRefused: word('Say how many you have: a whole number from 1 to 9,999.'),
+    // {max} is written by perItemRefusalText with formatCount, so 9,999 never reads as a decimal in the languages that write 1,5.
+    unitsRefused: word('Say how many you have: a whole number from 1 to {max}.'),
     lotNeedsTwo: word('A price for all of them needs 2 or more.'),
     offerOnly: word('Only an Offer can be priced for each one.'),
     lotPriceRefused: word('A price for all of them must be a number of Beans above 0.'),
@@ -378,7 +379,7 @@ export function perItemRefusalText(r: PerItemRefusalOf, w?: Pick<Words, 't' | 't
     const words = w ?? { t, tn };
     switch (r.code) {
         case 'each_offer_only': return words.t(W.offerOnly);
-        case 'units_refused': return words.t(W.unitsRefused);
+        case 'units_refused': return words.t(W.unitsRefused, { max: formatCount(ITEM_COUNT_MAX, w?.lang) });
         case 'units_zero': return words.t(W.unitsZero);
         case 'units_changed': return words.tn(r.count ?? 0, W.unitsChanged.one, W.unitsChanged.other);
         case 'lot_price_refused': return words.t(W.lotPriceRefused);

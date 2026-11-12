@@ -2524,7 +2524,7 @@
     "one": "1.5% vai para a comunidade. Você recebe {n} feijão por cada um, ou {all} feijões por todos.",
     "other": "1.5% vai para a comunidade. Você recebe {n} feijões por cada um, ou {all} feijões por todos."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Diga quantos você tem: um número inteiro de 1 a 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Diga quantos você tem: um número inteiro de 1 a {max}.",
   "A price for all of them needs 2 or more.": "Um preço por todos precisa de 2 ou mais.",
   "Only an Offer can be priced for each one.": "Só uma Oferta pode ter preço por unidade.",
   "A price for all of them must be a number of Beans above 0.": "O preço por todos deve ser um número de feijões maior que 0.",

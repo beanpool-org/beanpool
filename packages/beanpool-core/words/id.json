@@ -2417,7 +2417,7 @@
   "1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.|1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.": {
     "other": "1.5% untuk komunitas. Kamu menerima {n} kacang untuk tiap buah, atau {all} kacang untuk semuanya."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Sebutkan berapa yang kamu punya: bilangan bulat dari 1 sampai 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Sebutkan berapa yang kamu punya: bilangan bulat dari 1 sampai {max}.",
   "A price for all of them needs 2 or more.": "Harga untuk semuanya membutuhkan 2 atau lebih.",
   "Only an Offer can be priced for each one.": "Hanya Penawaran yang bisa diberi harga per buah.",
   "A price for all of them must be a number of Beans above 0.": "Harga untuk semuanya harus berupa jumlah kacang di atas 0.",

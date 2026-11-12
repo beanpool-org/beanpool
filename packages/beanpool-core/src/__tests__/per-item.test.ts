@@ -13,7 +13,8 @@ import {
 } from '../per-item';
 import { feeOf, formatHundredths } from '../hundredths';
 import { beansPriceWords, copyPriceLine, copyPriceOf, copyPriceText } from '../event-copy';
-import { setLanguage, wordsFor, type Catalog } from '../words';
+import { decimalMarkOf } from '../amount-input';
+import { LANGS, formatCount, setLanguage, wordsFor, type Catalog } from '../words';
 
 const c = (beans: number) => Math.round(beans * 100);
 const panels = (unitsLeft: number, lot: { units: number; beans: number } | null = { units: 20, beans: 5500 }): PerItemListing =>
@@ -265,6 +266,42 @@ describe('every sentence, in en/ru/fr/pt/es, with one and with many (§9 Core)',
                     else if (line.length > 0) expect(text, `${name}(${n})`).toMatch(new RegExp(`(^|\\D)${n}(\\D|$)`));
                 }
             }
+        });
+    }
+});
+
+describe('the largest count is a figure written by code, in every language (review of #3097: "9,999" read as 9.999 in 11 languages)', () => {
+    // The limit's sentence says "1 to {max}". The English groups thousands; every other language writes the digits alone
+    // (formatCount), as amounts and counts are written everywhere else, so no comma or point can read as a decimal mark.
+    const refusalIn = (lang: (typeof LANGS)[number]) => perItemRefusalText({ code: 'units_refused' }, wordsFor(lang, lang === 'en' ? [] : catalogOf(lang)));
+    const english = refusalIn('en');
+    it('the English still reads "from 1 to 9,999." (red if the figure is not grouped for English)', () => {
+        expect(english).toBe('Say how many you have: a whole number from 1 to 9,999.');
+        expect(ITEM_COUNT_MAX).toBe(9999);
+    });
+    it('the sentence has no placeholder left, in the node\'s English or in the active language', () => {
+        expect(perItemRefusalText({ code: 'units_refused' }, wordsFor('en'))).toBe(english);
+        for (const lang of ['en', 'de', 'fr', 'ru'] as const) {
+            setLanguage(lang, lang === 'en' ? [] : catalogOf(lang));
+            expect(perItemRefusalText({ code: 'units_refused' }), lang).not.toMatch(/[{}]/);
+        }
+    });
+    it('every language\'s catalog translates it: none still holds the sentence with 9,999 written in (red if a key was missed)', () => {
+        for (const lang of LANGS.filter((l) => l !== 'en')) {
+            const catalog = catalogOf(lang)[0] as Record<string, unknown> | undefined;
+            expect(catalog, lang).toBeDefined();
+            expect(Object.keys(catalog!), lang).not.toContain('Say how many you have: a whole number from 1 to 9,999.');
+            expect(refusalIn(lang), lang).not.toBe(english);
+        }
+    });
+    for (const lang of LANGS) {
+        it(`${lang}: the limit is written ${lang === 'en' ? '9,999' : '9999'}${lang !== 'en' && decimalMarkOf(lang) === ',' ? ' (a language with a decimal comma: nothing can read as 9.999)' : ''}`, () => {
+            const text = refusalIn(lang);
+            expect(text, lang).not.toMatch(/[{}]/);
+            expect(formatCount(ITEM_COUNT_MAX, lang), lang).toBe(lang === 'en' ? '9,999' : '9999');
+            expect(text, lang).toContain(formatCount(ITEM_COUNT_MAX, lang));
+            // No thousands mark between the nines, whichever mark a language or the English uses (. , or Arabic's U+066B / U+066C).
+            if (lang !== 'en') expect(text, lang).not.toMatch(/9[.,٫٬]999/);
         });
     }
 });

@@ -2417,7 +2417,7 @@
   "1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.|1.5% goes to the community. You receive {n} Beans for each one, or {all} Beans for all of them.": {
     "other": "1.5% dành cho cộng đồng. Bạn nhận {n} đậu cho mỗi cái, hoặc {all} đậu cho tất cả."
   },
-  "Say how many you have: a whole number from 1 to 9,999.": "Cho biết bạn có bao nhiêu: một số nguyên từ 1 đến 9,999.",
+  "Say how many you have: a whole number from 1 to {max}.": "Cho biết bạn có bao nhiêu: một số nguyên từ 1 đến {max}.",
   "A price for all of them needs 2 or more.": "Giá cho tất cả cần từ 2 cái trở lên.",
   "Only an Offer can be priced for each one.": "Chỉ Chia sẻ mới có thể tính giá theo từng cái.",
   "A price for all of them must be a number of Beans above 0.": "Giá cho tất cả phải là số đậu lớn hơn 0.",

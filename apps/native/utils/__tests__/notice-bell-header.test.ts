@@ -172,7 +172,30 @@ describe('the bell (components/NeedsYouIcons.tsx)', () => {
         expect(bell().textContent).toBe('2');
     });
 
-    const LONG_BODY = 'An AI assistant connected to your community today and took two posts down. '.repeat(12).trim();
+    it("a credit notice (the node's engine/credit-notices.ts: community.notice, data kind credit_*) is a row with its own words", async () => {
+        const words: Record<string, string> = {
+            credit_confirmed: '@Ada confirmed you on the names list. You can now spend up to 1,000 Beans. Your credit opens when you post an Offer.',
+            credit_known_floor: '@Olive lowered your known floor to 300 Beans. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+            credit_confirmation_revoked: '@Ben revoked your confirmation on the names list, so it gives you no credit now. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+        };
+        node.notices = Object.entries(words).map(([kind, body], i) =>
+            notice(`c${i}`, { kind: 'community.notice', title: 'Your credit here', body, data: { kind, by: 'c'.repeat(64), amount: 30000, noticeId: `k${i}` } }));
+        await renderHeader();
+        expect(bell().textContent).toBe('3');
+        await openSheet();
+        const labels = Array.from(document.querySelectorAll('[role="dialog"] button'))
+            .map(b => b.getAttribute('aria-label') ?? '').filter(l => l.startsWith('Your credit here. '));
+        expect(labels).toEqual(Object.values(words).map(body => `Your credit here. ${body}`));
+        // Read in full, each is whole; a notice that names nowhere to go (it lands only on Home) has no Open, only Clear.
+        const first = Array.from(document.querySelectorAll('[role="dialog"] button')).find(b => b.getAttribute('aria-label') === labels[0]) as HTMLElement;
+        await act(async () => { first.click(); });
+        await settle();
+        expect(read()!.querySelector('[data-testid="bell-read-body"]')!.textContent).toBe(words.credit_confirmed);
+        expect(inRead('Open')).toBeUndefined();
+        expect(inRead('Clear this notice')).toBeDefined();
+    });
+
+    const LONG_BODY ='An AI assistant connected to your community today and took two posts down. '.repeat(12).trim();
     const LONG_TITLE = '🤖 An assistant took posts down, and it has more to say than a row can show';
     const longNotice = () => notice('n3', { kind: 'market.request', title: LONG_TITLE, body: LONG_BODY, data: { screen: 'post', postId: POST } });
     const read = () => document.querySelector('[data-testid="bell-read"]') as HTMLElement | null;

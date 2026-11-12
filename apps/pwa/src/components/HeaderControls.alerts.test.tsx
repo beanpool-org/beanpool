@@ -390,6 +390,31 @@ describe('The bell: what happened, until it is opened', () => {
         expect(screen.getByTestId('bell-count')).toHaveTextContent('2');
     });
 
+    it("a credit notice (the node's engine/credit-notices.ts: community.notice, data kind credit_*) is a row with its own words", async () => {
+        const words = {
+            credit_confirmed: '@Ada confirmed you on the names list. You can now spend up to 1,000 Beans. Your credit opens when you post an Offer.',
+            credit_known_floor: '@Olive lowered your known floor to 300 Beans. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+            credit_confirmation_revoked: '@Ben revoked your confirmation on the names list, so it gives you no credit now. Beans you already spent are not taken back. If you owe more than your credit now allows, your spending pauses until you are back within it.',
+        };
+        vi.spyOn(api, 'getBellNotices').mockResolvedValue(Object.entries(words).map(([kind, body], i) =>
+            notice(`c${i}`, { kind: 'community.notice', title: 'Your credit here', body, data: { kind, by: 'c'.repeat(64), amount: 30000, noticeId: `k${i}` } })));
+        render(<HeaderRow onNavigate={vi.fn()} />);
+        await settle();
+        expect(screen.getByTestId('bell-count')).toHaveTextContent('3');
+        const rows = within(openSheet()).getAllByTestId('bell-notice');
+        expect(rows.map(r => r.dataset.noticeId)).toEqual(['c0', 'c1', 'c2']);
+        Object.values(words).forEach((body, i) => {
+            expect(rows[i]).toHaveTextContent('Your credit here');
+            expect(rows[i]).toHaveTextContent(body);
+        });
+        // Read in full, each is whole; one that names nowhere to go (it lands only on Home) has no Open, only Clear.
+        fireEvent.click(rows[0]);
+        const full = screen.getByTestId('bell-read');
+        expect(within(full).getByTestId('bell-read-body').textContent).toBe(words.credit_confirmed);
+        expect(within(full).queryByRole('button', { name: 'Open' })).toBeNull();
+        expect(within(full).getByRole('button', { name: 'Clear this notice' })).toBeInTheDocument();
+    });
+
     // Marty, 12 Nov 2026: "when I click on a bell notification that has more to view I don't see the full message and it goes to
     // a page in BP and then the notification is gone." A tap reads it; Open goes there and then marks it; Clear marks it.
     const LONG_TITLE = '🤖 An assistant took posts down, and it has more to say than a row can show';
@@ -675,12 +700,16 @@ describe('goToNoticeTarget: where a row lands, as the phone\'s push tap', () => 
     });
 
     it('"Open" is offered only where the notice has somewhere of its own to go (parity with the phone)', () => {
-        // A kind this build knows has its tab; a screen the details name is a place.
+        // A kind's tab or a screen the details name is a place.
         expect(noticeHasDestination('chat.message', {})).toBe(true);
-        expect(noticeHasDestination('decision.open', {})).toBe(true);
-        expect(noticeHasDestination('not.a.kind', { screen: 'post', postId: 'p1' })).toBe(true);
+        expect(noticeHasDestination('market.request', {})).toBe(true);
+        expect(noticeHasDestination('community.knock', {})).toBe(true);
+        expect(noticeHasDestination('community.notice', { screen: 'post', postId: 'p1' })).toBe(true);
         expect(noticeHasDestination('not.a.kind', { screen: 'settings' })).toBe(true);
-        // A kind it does not know, naming nothing (or naming a post with no id), falls to Home: nowhere in particular.
+        // Home is not: a notice with nothing named falls there (a credit notice, a vote line, a kind this build does not know,
+        // a post with no id), and opening it would only leave the member on Home with it gone.
+        expect(noticeHasDestination('community.notice', { kind: 'credit_confirmed' })).toBe(false);
+        expect(noticeHasDestination('decision.open', {})).toBe(false);
         expect(noticeHasDestination('not.a.kind', {})).toBe(false);
         expect(noticeHasDestination('not.a.kind', { screen: 'post' })).toBe(false);
     });

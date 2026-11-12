@@ -91,13 +91,13 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
 }
 
 /**
- * Whether {@link goToNoticeTarget} lands this notice somewhere of its own (the bell's "Open" is offered only then): parity with
- * the phone's noticeHasDestination (apps/native utils/push-notice-check.ts). A kind this build knows has its tab, and the
- * notice's details can name a more exact place; a kind it does not know, naming nothing, falls to Home, which is nowhere in
- * particular: the notice is read where it is and cleared.
+ * Whether {@link goToNoticeTarget} lands this notice somewhere of its own (the bell's "Open" is offered only then; Marty, 12 Nov
+ * 2026): parity with the phone's noticeHasDestination (apps/native utils/push-notice-check.ts). A kind's tab or a place the
+ * details name is somewhere. Home is not: it is where a notice with nothing named falls (a credit notice, a word from the
+ * community, a kind this build does not know), so opening it would only leave the member on Home with the notice gone. Such a
+ * notice is read in the bell and cleared there.
  */
 export function noticeHasDestination(kind: string, data: Record<string, unknown>): boolean {
-    if (isPushNoticeKind(kind)) return true;
     let landed: string | undefined;
     goToNoticeTarget(kind, data, tab => { landed = tab; });
     return landed !== undefined && landed !== 'home';

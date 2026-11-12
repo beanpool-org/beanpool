@@ -1260,6 +1260,15 @@ a.logo { min-height: 44px; }
 /* A card across the whole grid, under its set: the detail one card of the set leads to (the safety section's key copy) */
 .feature-wide { grid-column: 1 / -1; }
 .feature-wide p { max-width: 75ch; }
+/* The home page's safety section holds four cards above its wide one (the translated copies still hold three). Measured, the
+   auto-fit puts them 3 + 1 at 1024, 1280 and 1366 px, so the fourth sat alone on a row: those widths sit 2 x 2. It already
+   makes 2 + 2 at 1000 px and under, and four in a row from about 1370 px (a window with a scrollbar a little later, so the
+   rule runs on to 1399 px, where 2 x 2 leaves no card alone either). The phone's one column (768 px and under) is its own
+   rule. Only a grid that carries this class changes: a translated copy keeps its three-card layout until its page gets the
+   fourth card and this class. */
+@media (min-width: 769px) and (max-width: 1399px) {
+    .features-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .feature-highlight .feature-content {
     flex: 1;
 }
@@ -1972,7 +1981,8 @@ footer {
 .hero-cta-header p { font-size: 0.92rem; line-height: 1.5; }
 .hero-actions-grid .btn { height: auto; min-height: 48px; }
 
-.new-pill {
+.new-pill,
+.soon-pill {
     display: inline-block;
     vertical-align: middle;
     margin-left: 0.35rem;
@@ -1983,8 +1993,21 @@ footer {
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+}
+.new-pill {
     color: var(--on-accent);
     background: var(--accent-success);
+}
+/* "Coming soon" on a card for something that is not built yet: the New pill's shape, but an outline in the muted words'
+   colour (--text-muted is 4.8:1 or better on every panel), so it never reads as a feature you can use today. It stays whole
+   on one line, and wraps under its title as a unit on a narrow screen, where a wide left margin would indent it from the title's
+   words (the space before it already separates the two). */
+.soon-pill {
+    white-space: nowrap;
+    margin-left: 0.15rem;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--text-muted);
 }
 .section-more { text-align: center; margin-top: 1.25rem; font-weight: 600; }
 .section-more a { display: inline-flex; align-items: center; min-height: 48px; }

@@ -621,13 +621,17 @@ describe('no string from a push, nor a forged target from an answer, reaches the
     });
 
     it('noticeHasDestination: the bell offers "Open" only where the notice lands somewhere of its own', () => {
-        // A kind this build knows has its tab (Home's own line for a vote); the details can name a more exact place.
+        // A kind's tab (Chats, Market, People, Settings) or a place the details name is somewhere.
         expect(noticeHasDestination('chat.message', {})).toBe(true);
-        expect(noticeHasDestination('decision.open', null)).toBe(true);
-        expect(noticeHasDestination(null, { screen: 'post', postId: POST_ID })).toBe(true);
+        expect(noticeHasDestination('market.request', null)).toBe(true);
+        expect(noticeHasDestination('community.knock', {})).toBe(true);
+        expect(noticeHasDestination('community.notice', { screen: 'post', postId: POST_ID })).toBe(true);
         expect(noticeHasDestination(null, { screen: 'settings' })).toBe(true);
         expect(noticeHasDestination(null, { screen: 'shared-outside' })).toBe(true);
-        // A kind it does not know, naming nothing (or a post by an id out of shape), falls to Home: nowhere in particular.
+        // Home is not: a notice with nothing named falls there (a credit notice, a word from the community, a kind this build
+        // does not know, a post by an id out of shape), and opening it would only leave the member on Home with it gone.
+        expect(noticeHasDestination('community.notice', { kind: 'credit_confirmed' })).toBe(false);
+        expect(noticeHasDestination('decision.open', null)).toBe(false);
         expect(noticeHasDestination(null, {})).toBe(false);
         expect(noticeHasDestination(null, null)).toBe(false);
         expect(noticeHasDestination(null, { screen: 'post', postId: 'not-an-id' })).toBe(false);

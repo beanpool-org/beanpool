@@ -566,12 +566,12 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
 }
 
 /**
- * Whether {@link noticeRoute} lands this notice somewhere of its own (the bell's "Open" is offered only then). A kind this build
- * knows has its tab (Home's own line for a vote or an invitation), and `details` can name a more exact place; a kind it does
- * not know, naming nothing, falls to Home, which is nowhere in particular: the notice is read where it is and cleared.
+ * Whether {@link noticeRoute} lands this notice somewhere of its own (the bell's "Open" is offered only then; Marty, 12 Nov 2026).
+ * A kind's tab (Market, Chats, Settings, People) or a place `details` names is somewhere. Home is not: it is where a notice
+ * with nothing named falls (a credit notice, a word from the community, a kind this build does not know), so opening it
+ * would only leave the member on Home with the notice gone. Such a notice is read in the bell and cleared there.
  */
 export function noticeHasDestination(kind: PushNoticeKind | null, details: unknown): boolean {
-    if (kind && isPushNoticeKind(kind)) return true;
     return noticeRoute(kind, details) !== TAB_ROUTES.home;
 }
 

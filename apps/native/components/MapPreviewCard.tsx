@@ -116,7 +116,7 @@ function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {
                 </View>
                 <Text style={[shell.loud, styles.title]} numberOfLines={1}>{post.title}</Text>
                 {/* An Offer priced for each one: how many are left, and the price for all of them while it is on offer. Nothing for any other. */}
-                {showsBeans && !copy && <View style={styles.eachLine}><ListingEachLine listing={post} style={shell.distance} /></View>}
+                {showsBeans && !copy && <View style={styles.eachLine}><ListingEachLine listing={post} /></View>}
                 {copy ? (
                     <View testID="map-preview-copy-line"><ListingCopyLine copy={copy} /></View>
                 ) : (

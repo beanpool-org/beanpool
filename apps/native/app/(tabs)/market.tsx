@@ -1988,7 +1988,7 @@ export default function MarketScreen() {
                         <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text.body, marginBottom: 4 }} numberOfLines={1}>
                             {item.title}
                         </Text>
-                        {eachCard && <View style={{ marginBottom: 4 }}><ListingEachLine listing={item} style={shell.distance} /></View>}
+                        {eachCard && <View style={{ marginBottom: 4 }}><ListingEachLine listing={item} /></View>}
 
                         {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
                         {distanceLine(item)}

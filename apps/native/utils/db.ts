@@ -4612,8 +4612,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 const associatedPostId = tx.postId ?? tx.post_id;
                 if (associatedPostId) {
                     if (incomingStatus === 'completed') {
-                        const postRow = await txn.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE id = ?', [associatedPostId]);
-                        if (postRow && postRow.repeatable !== 1) {
+                        const postRow = await txn.getFirstAsync<{ repeatable: number; price_type: string | null }>('SELECT repeatable, price_type FROM posts WHERE id = ?', [associatedPostId]);
+                        if (postRow && postRow.price_type === 'each') {
+                            // A listing priced for each one is never a one-off: one deal taking some of the units leaves the rest on
+                            // offer. The node closes it itself when the count reaches 0 (settleItemDeal) and moves updated_at then,
+                            // so the next delta brings the `completed` status; closing it here would say "Sold out" with units left.
+                        } else if (postRow && postRow.repeatable !== 1) {
                             await txn.runAsync("UPDATE posts SET status = 'completed', active = 0 WHERE id = ?", [associatedPostId]);
                         } else if (postRow && postRow.repeatable === 1) {
                             await txn.runAsync("UPDATE posts SET status = 'active', accepted_by = NULL, pending_transaction_id = NULL WHERE id = ?", [associatedPostId]);

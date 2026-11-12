@@ -50,6 +50,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import { applyDelta, getDb, getPosts, getPost } from '../db';
 import { perItemCard } from '@beanpool/core';
+import { DEFAULT_MARKET_FILTERS, feedPostVisible } from '../market-filters';
 
 /**
  * Per-item prices, slice P2 (DESIGN-per-item-price-fable.md §3): the phone's copy of a listing keeps its count and the price for all
@@ -111,5 +112,43 @@ describe('a listing priced for each one in the phone\'s copy', () => {
         for (const id of ['p-fixed', 'p-old', 'p-stray']) expect(stored(id), id).toMatchObject({ units_left: null, lot_price_c: null, lot_units: null });
         const rows = await getPosts();
         for (const id of ['p-fixed', 'p-old', 'p-stray']) expect(perItemCard(rows.find((p: any) => p.id === id)), id).toBeNull();
+    });
+
+    /**
+     * The sync's deal heal closes a one-off listing when its deal completes. An Each listing is never a one-off: the node closes it
+     * itself (settleItemDeal) when the count reaches 0, and it does not send the post again while units are left, so a heal here
+     * would leave the phone saying "Sold out" until the page is opened (review of #3090, design D3).
+     */
+    describe('a deal released on it', () => {
+        const dealOn = (postId: string, over: Record<string, unknown> = {}) => ({
+            id: 'tx-1', postId, buyerPublicKey: 'buyer-key', sellerPublicKey: 'rob-key', amount_c: 30000, status: 'completed', ...over,
+        });
+        const row = (id: string) => sql.prepare('SELECT status, active, units_left FROM posts WHERE id = ?').get(id) as any;
+        const inFeed = async (id: string) => feedPostVisible((await getPosts()).find((p: any) => p.id === id), DEFAULT_MARKET_FILTERS, { blockedUsers: [], favCategories: [] });
+
+        it('19 left on the node, one deal released: the row stays active, the card says 19 left, and it stays in the Market feed (red if the heal closes it)', async () => {
+            await applyDelta({ posts: [node({ unitsLeft: 19 })] });
+            await applyDelta({ marketplaceTransactions: [dealOn('p-panels')] });
+            expect(row('p-panels')).toMatchObject({ status: 'active', active: 1, units_left: 19 });
+            const card = perItemCard((await getPosts()).find((p: any) => p.id === 'p-panels'));
+            expect(card?.line).toBe('19 left');
+            expect(card?.line).not.toMatch(/sold out/i);
+            expect(await inFeed('p-panels')).toBe(true);
+        });
+
+        it('a real sold-out (the node sends count 0 and completed) still closes it', async () => {
+            await applyDelta({ posts: [node({ unitsLeft: 1, lot: null })] });
+            await applyDelta({ marketplaceTransactions: [dealOn('p-panels')] });
+            expect(row('p-panels').status).toBe('active');
+            await applyDelta({ posts: [node({ unitsLeft: 0, lot: null, status: 'completed', active: 0, updatedAt: new Date().toISOString() })] });
+            expect(row('p-panels')).toMatchObject({ status: 'completed', units_left: 0 });
+            expect(await inFeed('p-panels')).toBe(false);
+        });
+
+        it('a one-off listing is still closed by its released deal (the heal is unchanged for it)', async () => {
+            await applyDelta({ posts: [node({ id: 'p-fixed', priceType: 'fixed', unitsLeft: undefined, lot: undefined, price_c: 4000 })] });
+            await applyDelta({ marketplaceTransactions: [dealOn('p-fixed', { id: 'tx-2' })] });
+            expect(row('p-fixed')).toMatchObject({ status: 'completed', active: 0 });
+        });
     });
 });

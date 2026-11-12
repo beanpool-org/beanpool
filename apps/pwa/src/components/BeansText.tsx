@@ -1,5 +1,5 @@
 /**
- * A line of card words with the Beans picture where the words write the Beans sign (🫘): "300 🫘 each" is drawn
+ * A line of card words with the Beans picture where the words carry the bean emoji (🫘): "300 🫘 each" is drawn
  * "300 [bean] each", as every price on a card is, because an old phone has no glyph for the emoji and a card never shows
  * an empty box. The picture is hidden from a screen reader, so put the whole line in words on the element round it
  * (`aria-label`). A line without the sign is drawn as it is. Used by the cards of a listing priced for each one

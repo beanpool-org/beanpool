@@ -203,8 +203,18 @@ const click = async (el: Element | null) => { expect(el).toBeTruthy(); await act
 /** The words in an element, each leaf text box on its own (boxes stack, so their text is not run together on screen). */
 const words = (el: Element | null | undefined) => {
     if (!el) return '';
-    const leaves = Array.from(el.querySelectorAll('span')).filter((s) => !s.querySelector('span'));
-    return (leaves.length ? leaves : [el]).map((s) => (s.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
+    // Every piece of text under the element, in order. A Text may hold words AND another Text (the price with the price for all on a
+    // second line of it), so the edge of a span is a space, and the Beans picture (an img) is nothing.
+    const out: string[] = [];
+    const walk = (n: Node) => {
+        if (n.nodeType === 3) { out.push(n.textContent ?? ''); return; }
+        const span = n instanceof Element && n.tagName === 'SPAN';
+        if (span) out.push(' ');
+        n.childNodes.forEach(walk);
+        if (span) out.push(' ');
+    };
+    el.childNodes.forEach(walk);
+    return out.join('').replace(/\s+/g, ' ').trim();
 };
 /** The card (its open button) of this listing. */
 const cardOf = (id: string) => host.querySelector(`[data-testid="market-card-${id}"]`) as HTMLElement;

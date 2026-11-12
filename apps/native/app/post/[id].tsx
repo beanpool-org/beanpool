@@ -1101,7 +1101,11 @@ function PostDetailModal() {
     const freeLabel = freePriceLabel(post.price_c, post.type);
     // An Offer priced for each one: the price box's three lines (core per-item.ts); null for any other listing.
     const eachBox = isOffer ? perItemCard(post) : null;
-    const eachPrice = eachBox?.price ? <BeansText text={eachBox.price} style={styles.priceValue} accessibilityLabel={eachBox.label} testID="price-each" /> : null;
+    const eachPrice = eachBox?.price ? (
+        <Text style={styles.priceValue} accessibilityLabel={eachBox.label} testID="price-each">
+            <BeansText text={eachBox.price} size={MARKET_CARD_TYPE.page.pagePrice.size} />
+        </Text>
+    ) : null;
     const priceLabel = freeLabel ? upperCase(freeLabel) : isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
     // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and

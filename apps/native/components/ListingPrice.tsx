@@ -31,27 +31,24 @@ interface Props {
  */
 export function ListingPrice({ price_c, type, unit = '', style, listing, showAll = false }: Props) {
     const free = freePriceWords(price_c, type, 'short');
-    if (free) {
-        return (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={style} numberOfLines={1} testID="listing-price-free">{free}</Text>
-            </View>
-        );
-    }
-    const each = listing === undefined ? null : perItemCard(listing);
-    if (each?.price) {
-        // Never cut with an ellipsis: a price that does not fit on a line wraps, whole phrases staying whole.
+    const each = free || listing === undefined ? null : perItemCard(listing);
+    if (free || each?.price) {
+        // One Text carries the caller's style (the style box's own, which the contrast check reads at the call). Free is one line;
+        // a price for each one is never cut with an ellipsis (a price that does not fit on a line wraps, whole phrases staying
+        // whole) and puts the price for all on a second line of the same Text, a nested Text with no colour of its own so it keeps
+        // the caller's.
         const fontSize = StyleSheet.flatten(style)?.fontSize ?? 14;
+        const allSize = Math.max(10, Math.round(fontSize * 0.8));
         return (
-            <View style={{ alignItems: 'flex-end', flexShrink: 1 }} testID="listing-price-each">
-                <BeansText text={each.price} style={[style, { textAlign: 'right' }]} accessibilityLabel={each.label} />
-                {showAll && !!each.allShort && (
-                    <BeansText
-                        text={each.allShort}
-                        testID="listing-price-all"
-                        style={[style, { fontSize: Math.max(10, Math.round(fontSize * 0.8)), fontWeight: '500', textAlign: 'right' }]}
-                    />
-                )}
+            <View style={each ? { alignItems: 'flex-end', flexShrink: 1 } : { flexDirection: 'row', alignItems: 'center' }} testID={each ? 'listing-price-each' : undefined}>
+                <Text style={[style, { textAlign: 'right' }]} numberOfLines={each ? undefined : 1} accessibilityLabel={each?.label} testID={each ? undefined : 'listing-price-free'}>
+                    {each ? <BeansText text={each.price!} size={fontSize} /> : free}
+                    {!!each && showAll && !!each.allShort && (
+                        <Text style={{ fontSize: allSize, fontWeight: '500' }} testID="listing-price-all">
+                            {'\n'}<BeansText text={each.allShort} size={allSize} />
+                        </Text>
+                    )}
+                </Text>
             </View>
         );
     }

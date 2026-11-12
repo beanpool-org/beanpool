@@ -7,6 +7,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { SAVE_SEARCH_BUTTON, saveSearchLabel, t } from '@beanpool/core';
+// Static colours: only the default of the `colors` prop. Every caller passes its screen's set (measured 12 Nov 2026, colour themes T2), so a colour set reaches it through the prop.
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 
 /** The button's words: core's word() key, shown here through t(). */

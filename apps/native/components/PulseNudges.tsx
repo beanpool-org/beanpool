@@ -27,7 +27,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { platformMeta, platformName, isWebUrl, t, tn, type ChannelPlatform } from '@beanpool/core';
-import { lightColors } from '../constants/colors';
+import type { AppColors } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
@@ -354,7 +354,7 @@ export function PulseNudges({ channels, onNudgeDismissed }: Props) {
     );
 }
 
-export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; theme: string }) =>
+export const makeStyles = ({ colors, theme }: { colors: AppColors; theme: string }) =>
     StyleSheet.create({
         container: {
             width: '100%',

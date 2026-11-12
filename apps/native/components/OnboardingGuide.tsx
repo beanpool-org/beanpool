@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { t } from '@beanpool/core';
+// Static colours: the profile-setup guide's module-level styles, drawn light in both schemes today; it reads no themed role (accent, card, bubble). Moving it to useOnboardingColors() changes Classic dark, which colour themes T2 does not do.
 import { colors, palette } from '../constants/colors';
 import { NO_BEANS_GUIDE_CARD } from '../utils/beans-off';
 import { Sentence } from './Sentence';

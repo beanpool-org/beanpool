@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, AppState, type AppStateStatus } from 'react-native';
 import { getLastSyncTime } from '../services/pillar-sync';
+// Static colours: no screen imports this component (12 Nov 2026); it is drawn nowhere.
 import { colors } from '../constants/colors';
 import { withJitter } from '../utils/jitter';
 import { t, tn } from '@beanpool/core';

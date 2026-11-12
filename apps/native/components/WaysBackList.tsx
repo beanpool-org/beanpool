@@ -15,6 +15,7 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { formatDate, t, tn, word } from '@beanpool/core';
+// Static colours: only the default of the `colors` prop. Every caller passes its screen's set (measured 12 Nov 2026, colour themes T2), so a colour set reaches it through the prop.
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import {

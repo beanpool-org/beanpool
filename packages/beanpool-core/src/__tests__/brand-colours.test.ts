@@ -659,8 +659,11 @@ describe("Dark's doodle and banner: charcoal, not olive (Marty and Damo, 12 Nov 
     const dark = brandGrounds('night');
 
     it("Classic's doodle and banner are as the apps draw them today", () => {
-        const phone = readFileSync(resolve(ROOT, 'apps/native/app/ThemeContext.tsx'), 'utf8');
-        expect(phone).toContain(`PATTERN_GROUND = { light: '${brandGrounds('light').doodle.ground}', dark: '${classic.doodle.ground}' }`);
+        // The phone reads its doodle ground from here since slice T2 (constants/colors.ts doodleGround(set)); main's own copy
+        // was ThemeContext.tsx's PATTERN_GROUND = { light: '#f1f1e4', dark: '#141a1a' }.
+        expect([brandGrounds('light').doodle.ground, classic.doodle.ground]).toEqual(['#f1f1e4', '#141a1a']);
+        expect(readFileSync(resolve(ROOT, 'apps/native/constants/colors.ts'), 'utf8')).toContain('brandGrounds(set).doodle.ground');
+        expect(readFileSync(resolve(ROOT, 'apps/native/app/ThemeContext.tsx'), 'utf8')).not.toMatch(/PATTERN_GROUND|#f1f1e4|#141a1a/);
         const css = readFileSync(WEB_CSS, 'utf8');
         const declared = (name: string) => [...css.matchAll(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`, 'g'))].map((m) => m[1].toLowerCase());
         expect(declared('pattern-bg')).toEqual([brandGrounds('light').doodle.ground, classic.doodle.ground]);

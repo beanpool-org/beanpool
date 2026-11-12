@@ -159,7 +159,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        {richWords(t('Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.'), bold)}
+                        {richWords(t('Tiers are **recognition milestones** — they mark how far your trust has grown, or a badge your community gave you. A tier gives no credit: your **credit floor** (how far below zero you can spend) slides with the value you trade and what your community gives you; the tiers are just the signposts along the way.'), bold)}
                     </Text>
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.brand.primary }]}>

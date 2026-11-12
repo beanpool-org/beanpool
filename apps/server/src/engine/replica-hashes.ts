@@ -220,7 +220,13 @@ export interface TableHashes {
  * who looked at whose credit: after a take-over from such a copy the owners and admins read no looks from before it; no
  * balance or Bean is in it.
  */
-export const TABLE_HASHES_VERSION = 36;
+/**
+ * 37: tier badges (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only"): a new plain table, member_badges. Raised for the
+ * same reason as 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's
+ * import writes only the tables its own database has. What an older importer drops is the badges (recognition, no credit):
+ * after a take-over from such a copy a badged member shows the tier their own record reads until an admin gives it again.
+ */
+export const TABLE_HASHES_VERSION = 37;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

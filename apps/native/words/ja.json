@@ -330,8 +330,6 @@
   "ADD POST": "投稿を作成",
   "The amount is a number of Beans above 0, to the cent.": "金額は0より大きい豆の数（セント単位まで）です。",
   "Send Beans": "豆を送る",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "レベルは信望の証であり、行動を制限するものではありません。直接送金にはプラスの残高と1回の取引完了が必要です。レベルが上がると信用枠が広がり、コミュニティでの信頼が高まります。",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "レベルは信望の証であり、行動を制限するものではありません。誰でも招待できます。直接送金にはプラスの残高と1回の取引完了が必要です。レベルが上がると信用枠が広がり、コミュニティでの信頼が高まります。",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "保有する豆が{free}個以下の間は、コモンズへの配分はありません。",
   "✨ Generate Ticket": "✨ チケットを作成",
   "✨ Generate Offline Ticket": "✨ オフラインチケットを作成",
@@ -3053,13 +3051,7 @@
   "Browse & trade the marketplace": "マーケットの閲覧と取引",
   "Receive credits": "クレジットを受け取る",
   "Send credits after first trade (needs positive balance)": "初回取引完了後にクレジットを送る（プラスの残高が必要）",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "コミュニティと実際の価値を取引しました。取引を重ねるごとに信用枠が深まり、交換した価値が大きいほど枠も広がります。",
-  "Credit floor deepens with the value you trade": "取引した価値に応じて信用枠の下限が拡大",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "幅広いパートナーを持つ信頼された取引相手です。コミュニティから認知され、信用枠はさらに深まります。",
-  "Credit floor continues deepening": "信用枠の下限がさらに拡大",
   "Trusted-trader recognition": "信頼された取引相手としての認知",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "コモンズの大黒柱です。可能な限り最も深い信用枠と、コミュニティ最高峰の信頼を得ています。",
-  "Credit floor can reach -2000 (the maximum)": "信用枠の下限は最大-2000まで到達可能",
   "Recognised as a community Elder": "コミュニティの長老として認知",
   "Export failed": "エクスポートに失敗しました",
   "Export my transactions": "取引履歴をエクスポート",
@@ -3074,9 +3066,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "現在保有している豆のみ送ることができます。直接送金にはプラスの残高が必要です。",
   "How trust works": "信用の仕組み",
   "YOUR TRUST LEVEL": "あなたの信用レベル",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "other": "レベル {level} / {levels} · 信用 {n}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "{emoji} {tier}まであと信用**{n}**"
   },
@@ -3299,7 +3288,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "新しいメンバーは最初の取引まで**🔑 Founding**バッジが表示されます。",
   "Tiers & Perks": "ランクと特典",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "ランクは**認知のマイルストーン**であり、信用がどれだけ育ったかを示します。ランクとともに拡大する唯一の特典は**信用枠の下限**（ゼロ未満で使える額）です。下限は取引額に応じて継続的に変動し、ランクはその道のりの道標にすぎません。",
   "🔑 Founding Status (before 1st trade)": "🔑 Founding状態（初回取引前）",
   "A starting state that lasts until you complete your **very first trade**": "**最初の取引**を完了するまで続く初期状態",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "他のメンバーがスタートを支援できるように**🔑 FOUNDING**と表示されます",

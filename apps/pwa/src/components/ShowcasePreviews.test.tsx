@@ -290,7 +290,7 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
     const tier = TIER_LEVELS[S.level - 1];
     const next = TIER_LEVELS[S.level];
 
-    it('Levels: the example member with their tier chip and balance, the credit bar, level 2 of 4 with the sample\'s trust, the four tiles', () => {
+    it('Levels: the example member with their tier chip and balance, the credit bar, level 2 of 4 with the sample\'s credit line, the four tiles', () => {
         render(<LedgerPage identity={MEMBER} preview />);
         expect(screen.getByTestId('sample-header')).toHaveTextContent(`${S.name} · ${S.member}`);
         expect(screen.getByRole('heading', { name: S.member })).toBeInTheDocument();
@@ -300,7 +300,7 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
         expect(screen.getByText('sweet spot')).toBeInTheDocument();
         expect(screen.getByText('fee-free')).toBeInTheDocument();
         // The sample's figures are whole Beans; the screen writes them from hundredths (formatHundredths), as a node's.
-        expect(screen.getByText(`Level ${S.level} of ${S.levels} · ${formatHundredths(S.trust * 100)} trust`)).toBeInTheDocument();
+        expect(screen.getByText(`Level ${S.level} of ${S.levels} · credit line ${formatHundredths(-S.floor * 100)} Beans`)).toBeInTheDocument();
         expect(document.body.textContent).toContain(`${formatHundredths(next.minCredit - S.trust * 100)} more trust to ${next.emoji} ${next.name}`);
         const tiles = within(screen.getByTestId('levels-shelf')).getAllByRole('button');
         expect(tiles.map(b => b.textContent)).toEqual(TIER_LEVELS.map((l, i) =>

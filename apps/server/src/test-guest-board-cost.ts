@@ -90,7 +90,8 @@ async function main() {
     insertMember.run(reader.pubKeyHex, 'BoardReader', iso(-90 * 86_400_000), photo());
     insertAccount.run(reader.pubKeyHex);
     // Standing: badges, a credit freeze, ratings.
-    for (let i = 0; i < 50; i += 5) se.adminSetTier(authors[i].pubKeyHex, i % 10 === 0 ? 'Resident' : 'Steward');
+    const { setMemberBadge } = await import('./engine/badges.js');
+    for (let i = 0; i < 50; i += 5) setMemberBadge(reader.pubKeyHex, authors[i].pubKeyHex, i % 10 === 0 ? 'Resident' : 'Steward');
     db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(authors[3].pubKeyHex);
 
     const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, created_at, updated_at,
@@ -223,7 +224,7 @@ async function main() {
         `a member still reads each author's standing and keyed face (Author10: ${badged?.authorEnergyCycled}, ${badged?.authorAvatarUrl?.slice(0, 40)}…)`);
     const plain = memberPosts.find(p => p.authorPublicKey === authors[11].pubKeyHex);
     const before11 = plain?.authorEnergyCycled;
-    se.adminSetTier(authors[11].pubKeyHex, 'Steward');
+    setMemberBadge(reader.pubKeyHex, authors[11].pubKeyHex, 'Steward');
     const after11 = (JSON.parse((await memberRead(reader)).text) as any[]).find(p => p.authorPublicKey === authors[11].pubKeyHex)?.authorEnergyCycled;
     assert(typeof before11 === 'number' && typeof after11 === 'number' && after11 > before11,
         `and a statement compiled once reads what is there now: a new badge shows at the next read (${before11} → ${after11})`);

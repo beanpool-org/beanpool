@@ -335,8 +335,6 @@
   "ADD POST": "ثبت پست",
   "The amount is a number of Beans above 0, to the cent.": "مقدار، عددی از لوبیا بزرگ‌تر از ۰ است، تا دو رقم اعشار.",
   "Send Beans": "ارسال لوبیا",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "سطوح نشان‌های شایستگی هستند — مانع اقدامی نمی‌شوند. ارسال مستقیم نیازمند موجودی مثبت و یک معامله کامل است. سطوح بالاتر به معنای سقف اعتبار بیشتر و اعتبار اجتماعی است.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "سطوح نشان‌های شایستگی هستند — مانع اقدامی نمی‌شوند. هر کسی می‌تواند دعوت کند. ارسال مستقیم نیازمند موجودی مثبت و یک معامله کامل است. سطوح بالاتر به معنای سقف اعتبار بیشتر و اعتبار اجتماعی است.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "مادامی که {free} لوبیا یا کمتر دارید، چیزی به مشاع نمی‌رود.",
   "✨ Generate Ticket": "✨ ساخت بلیت",
   "✨ Generate Offline Ticket": "✨ ساخت بلیت آفلاین",
@@ -3186,13 +3184,7 @@
   "Browse & trade the marketplace": "جستجو و معامله در بازار",
   "Receive credits": "دریافت اعتبار",
   "Send credits after first trade (needs positive balance)": "ارسال اعتبار پس از اولین معامله (نیازمند موجودی مثبت)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "شما ارزش واقعی با جامعه مبادله کرده‌اید. خط اعتباری شما با هر معامله عمیق‌تر می‌شود — هر چه ارزش بیشتری مبادله کنید، رشد بیشتری خواهد داشت.",
-  "Credit floor deepens with the value you trade": "کف اعتبار با ارزش معامله شما عمیق‌تر می‌شود",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "یک معامله‌گر معتمد با دایره گسترده‌ای از شرکا. جامعه شما را به رسمیت می‌شناسد و خط اعتباری‌تان باز هم عمیق‌تر می‌شود.",
-  "Credit floor continues deepening": "کف اعتبار همچنان عمیق‌تر می‌شود",
   "Trusted-trader recognition": "به رسمیت شناخته شدن به عنوان معامله‌گر معتمد",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "ستونی از مشاع — عمیق‌ترین خط اعتباری ممکن و بالاترین مرتبه شناخت از سوی جامعه.",
-  "Credit floor can reach -2000 (the maximum)": "کف اعتبار می‌تواند به -۲۰۰۰ برسد (حداکثر)",
   "Recognised as a community Elder": "به رسمیت شناخته شده به عنوان ریش‌سفید جامعه",
   "Export failed": "خروجی ناموفق بود",
   "Export my transactions": "خروجی تراکنش‌های من",
@@ -3207,10 +3199,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "تنها می‌توانید لوبیایی را که اکنون در دست دارید ارسال کنید — ارسال مستقیم نیازمند موجودی مثبت است.",
   "How trust works": "اعتماد چگونه کار می‌کند",
   "YOUR TRUST LEVEL": "سطح اعتماد شما",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "سطح {level} از {levels} · {n} اعتماد",
-    "other": "سطح {level} از {levels} · {n} اعتماد"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "**{n}** اعتماد دیگر تا {emoji} {tier}",
     "other": "**{n}** اعتماد دیگر تا {emoji} {tier}"
@@ -3441,7 +3429,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** ← 🏠 **{resident}** ← 🏛️ **{steward}** ← ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "اعضای جدید تا پیش از اولین معامله نشان **🔑 بنیان‌گذار** دارند.",
   "Tiers & Perks": "سطوح و مزایا",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "سطوح صرفاً **نشانه‌های قدردانی** هستند — نشان می‌دهند اعتمادتان چقدر رشد کرده است. پاداشی که با آن‌ها گسترش می‌یابد **کف اعتبار** شماست (میزان خرج زیر صفر). کف اعتبار شما پیوسته با ارزش معاملات حرکت می‌کند و سطوح فقط راهنمای مسیرند.",
   "🔑 Founding Status (before 1st trade)": "🔑 وضعیت بنیان‌گذار (پیش از نخستین معامله)",
   "A starting state that lasts until you complete your **very first trade**": "وضعیت اولیه‌ای که تا تکمیل **اولین معامله شما** ادامه دارد",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "به عنوان **🔑 بنیان‌گذار** نشان داده می‌شود تا دیگران بدانند باید در آغاز راه کمکتان کنند",

@@ -43,7 +43,7 @@ import { getMember, isVisitorKey, getBalance, getMemberTrustProfile } from '../s
 import { creditCap } from '@beanpool/engine';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { assertBeansOn, getProfileSwitches } from '../config/node-profile.js';
-import { memberGiftSetting, type VoucherNotice } from './vouchers.js';
+import { memberGiftSetting, cantBeGivenCredit, type VoucherNotice } from './vouchers.js';
 import { keepNotice } from './kept-notices.js';
 
 const { t: tr } = wordsFor('en');
@@ -75,7 +75,8 @@ const B = (c: number) => formatHundredths(c, 'en');
 const overSetting = (max: number) => tr('You can give up to {max} Beans of your credit line at once here.', { max: B(max) });
 const notEnoughRoom = (room: number, amount: number) => tr('You hold {room} Beans of credit line someone gave you, so you can’t give {amount}.', { room: B(room), amount: B(amount) });
 const inUse = (free: number) => tr('You’re using part of your credit line, so you can give {free} Beans of it at most now.', { free: B(free) });
-const notReceiving = (name: string) => tr('@{name} can’t be given part of a credit line right now.', { name });
+// A paused or frozen recipient: the sentence a vouch for a frozen member gets too (engine/vouchers.ts, Q5).
+const notReceiving = cantBeGivenCredit;
 const overCap = (name: string, cap: number) => tr('This gift would take @{name}’s credit line past the most this community allows ({cap} Beans), so it can’t be given.', { name, cap: B(cap) });
 const backToRoot = (name: string) => tr('The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.', { name });
 const partBackToRoot = (name: string, most: number) => tr('Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.', { name, most: B(most) });

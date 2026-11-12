@@ -69,7 +69,7 @@ Your community's admins can freeze a member's credit line: all of it, or, in a k
 
 While your credit line is frozen, a voucher can't vouch for you, and the app tells them so.
 
-Your level doesn't change, on your profile and on your listings alike: it counts what you have done (your trades and any trust an admin granted you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins.
+Your level doesn't change, on your profile and on your listings alike: it counts what you have done (your trades, or a badge an owner or admin gave you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins.
 
 ## Giving part of your credit line
 

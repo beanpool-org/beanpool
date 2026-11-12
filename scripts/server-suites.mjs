@@ -594,7 +594,10 @@ export const SUITES = [
     'test-vouchers',
     'test-credit-gift',
     'test-credit-sight',
+    'test-credit-give',
     'test-credit-notices',
+    // Tiers are badges only: a badge gives no credit, never your own, logged, the member told; a genesis invite's too.
+    'test-tiers-badge-only-http',
     'test-invite-asks',
     'test-knowledge-publish',
     'test-knowledge-reads',
@@ -605,6 +608,7 @@ export const SUITES = [
     'test-escrow-disputes',
     'test-lendable-offers',
     'test-per-item-listings',
+    'test-per-item-deals',
     'test-process-handlers',
     'test-shutdown-recovery',
     'test-clean-stop',

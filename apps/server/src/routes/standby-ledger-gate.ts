@@ -77,6 +77,10 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/groups\/[^/]+\/succession\/(propose|[^/]+\/vote)\/?$/,
     // An admin's emergency suspension and its lift (a Decision, and the role it holds aside), and a replacement phone's code.
     /^\/api\/local\/admin\/users\/[^/]+\/(suspend|status)\/?$/,
+    // A member's badge given or taken back (engine/badges.ts), and a member's known floor (config/known-floor.ts): each is a
+    // row, a line in the log every owner and admin reads, and a notice to the member, all the main server's alone.
+    /^\/api\/local\/admin\/users\/[^/]+\/tier\/?$/,
+    /^\/api\/local\/admin\/known-floor\/exception\/?$/,
     // A vote on removing a member: its case hidden as false, the member's reply taken down, or an owner deciding it when too
     // few can vote (decisions-engine.ts). No Beans move, so not with the halt above. Refused here, before its fresh proof
     // is asked: a code must not be spent on a server that can't write the decision.

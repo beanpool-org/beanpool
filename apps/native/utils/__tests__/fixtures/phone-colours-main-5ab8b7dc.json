@@ -1,0 +1,645 @@
+{
+  "lightColors": {
+    "text": {
+      "heading": "#1c1d1a",
+      "body": "#2d2f2a",
+      "secondary": "#55574f",
+      "muted": "#686a63",
+      "inverse": "#ffffff",
+      "link": "#4f46e5",
+      "onBrand": "#ffffff",
+      "onAccent": "#ffffff",
+      "onDanger": "#ffffff",
+      "onGold": "#1d231d"
+    },
+    "surface": {
+      "app": "#faf9f6",
+      "page": "#faf9f6",
+      "chrome": "#faf9f6",
+      "card": "#ffffff",
+      "subtle": "#f1efea"
+    },
+    "border": {
+      "default": "#ebebe6",
+      "strong": "#dfdfd9"
+    },
+    "brand": {
+      "primary": "#047857",
+      "fill": "#047857",
+      "dark": "#065f46",
+      "tint": "#ecfdf5",
+      "fillPressed": "#065f46",
+      "onDark": "#34d399"
+    },
+    "accent": {
+      "primary": "#5b6b5b",
+      "fill": "#647664",
+      "tint": "#eef1ee",
+      "border": "#dce3dc"
+    },
+    "market": {
+      "offer": {
+        "fg": "#065f46",
+        "bg": "#d1fae5"
+      },
+      "need": {
+        "fg": "#9a3412",
+        "bg": "#ffedd5"
+      },
+      "poll": {
+        "fg": "#86198f",
+        "bg": "#fae8ff"
+      },
+      "author": "#4b5563"
+    },
+    "chip": {
+      "quiet": {
+        "fg": "#526052",
+        "bg": "#eef1ee"
+      },
+      "info": {
+        "fg": "#1e40af",
+        "bg": "#dbeafe"
+      },
+      "learn": {
+        "fg": "#115e59",
+        "bg": "#ccfbf1"
+      }
+    },
+    "tile": {
+      "food": {
+        "tint": "#ffedd5",
+        "ink": "#9a3412"
+      },
+      "services": {
+        "tint": "#dbeafe",
+        "ink": "#1e40af"
+      },
+      "labour": {
+        "tint": "#fef3c7",
+        "ink": "#92400e"
+      },
+      "tools": {
+        "tint": "#e7e5e4",
+        "ink": "#292524"
+      },
+      "goods": {
+        "tint": "#ebe6df",
+        "ink": "#5b5046"
+      },
+      "garden": {
+        "tint": "#ecfccb",
+        "ink": "#3f6212"
+      },
+      "housing": {
+        "tint": "#fcedea",
+        "ink": "#863b28"
+      },
+      "transport": {
+        "tint": "#cffafe",
+        "ink": "#155e75"
+      },
+      "education": {
+        "tint": "#e0e7ff",
+        "ink": "#3730a3"
+      },
+      "arts": {
+        "tint": "#fce7f3",
+        "ink": "#9d174d"
+      },
+      "health": {
+        "tint": "#ccfbf1",
+        "ink": "#115e59"
+      },
+      "care": {
+        "tint": "#ffe4e6",
+        "ink": "#9f1239"
+      },
+      "animals": {
+        "tint": "#d1fae5",
+        "ink": "#065f46"
+      },
+      "tech": {
+        "tint": "#e0f2fe",
+        "ink": "#075985"
+      },
+      "energy": {
+        "tint": "#fef9c3",
+        "ink": "#854d0e"
+      },
+      "mindset": {
+        "tint": "#fae8ff",
+        "ink": "#86198f"
+      },
+      "general": {
+        "tint": "#eef1ee",
+        "ink": "#434e43"
+      },
+      "event": {
+        "tint": "#ede9fe",
+        "ink": "#5b21b6"
+      },
+      "pulse": {
+        "tint": "#fef3c7",
+        "ink": "#92400e"
+      }
+    },
+    "card": {
+      "sage": {
+        "tint": "#eef1ee",
+        "ink": "#5b6b5b"
+      },
+      "sky": {
+        "tint": "#e0f2fe",
+        "ink": "#075985"
+      },
+      "blue": {
+        "tint": "#dbeafe",
+        "ink": "#1e40af"
+      },
+      "indigo": {
+        "tint": "#e0e7ff",
+        "ink": "#3730a3"
+      },
+      "violet": {
+        "tint": "#ede9fe",
+        "ink": "#5b21b6"
+      },
+      "plum": {
+        "tint": "#fae8ff",
+        "ink": "#86198f"
+      },
+      "pink": {
+        "tint": "#fce7f3",
+        "ink": "#9d174d"
+      },
+      "rose": {
+        "tint": "#ffe4e6",
+        "ink": "#9f1239"
+      },
+      "clay": {
+        "tint": "#fcedea",
+        "ink": "#863b28"
+      },
+      "orange": {
+        "tint": "#ffedd5",
+        "ink": "#9a3412"
+      },
+      "yellow": {
+        "tint": "#fef9c3",
+        "ink": "#854d0e"
+      },
+      "lime": {
+        "tint": "#ecfccb",
+        "ink": "#3f6212"
+      },
+      "green": {
+        "tint": "#d1fae5",
+        "ink": "#065f46"
+      },
+      "teal": {
+        "tint": "#ccfbf1",
+        "ink": "#115e59"
+      },
+      "sand": {
+        "tint": "#ebe6df",
+        "ink": "#5b5046"
+      },
+      "amber": {
+        "tint": "#fef3c7",
+        "ink": "#92400e"
+      }
+    },
+    "trust": {
+      "newcomer": {
+        "fg": "#4b5563",
+        "bg": "#f3f4f6",
+        "border": "#d1d5db"
+      },
+      "parent": {
+        "fg": "#b45309",
+        "bg": "#fffbeb",
+        "border": "#fde68a"
+      },
+      "resident": {
+        "fg": "#b45309",
+        "bg": "#fffbeb",
+        "border": "#fde68a"
+      },
+      "steward": {
+        "fg": "#b45309",
+        "bg": "#fef3c7",
+        "border": "#fcd34d"
+      },
+      "elder": {
+        "fg": "#92400e",
+        "bg": "#fde68a",
+        "border": "#f59e0b"
+      },
+      "star": "#a16207",
+      "founding": {
+        "fg": "#166534",
+        "bg": "rgba(34, 197, 94, 0.12)",
+        "border": "rgba(34, 197, 94, 0.35)"
+      }
+    },
+    "feedback": {
+      "danger": {
+        "fg": "#b91c1c",
+        "bg": "#fef2f2",
+        "border": "#fecaca",
+        "solid": "#b91c1c",
+        "disabled": "rgba(239, 68, 68, 0.4)"
+      },
+      "warning": {
+        "fg": "#92400e",
+        "bg": "#fffbeb",
+        "border": "#fde68a",
+        "solid": "#f59e0b"
+      },
+      "success": {
+        "fg": "#047857",
+        "bg": "#ecfdf5",
+        "border": "#a7f3d0",
+        "solid": "#047857"
+      },
+      "info": {
+        "fg": "#2563eb",
+        "bg": "#eff6ff",
+        "border": "#3b82f6",
+        "solid": "#2563eb"
+      }
+    },
+    "event": {
+      "ink": "#5b21b6",
+      "fill": "#6d28d9",
+      "pressed": "#5b21b6",
+      "on": "#ffffff"
+    },
+    "action": {
+      "fab": "#c2410c",
+      "cta": "#b85236"
+    },
+    "overlay": {
+      "scrim": "rgba(30,41,59,0.85)",
+      "scrimEdge": "rgba(255,255,255,0.15)",
+      "lightFill": "rgba(255,255,255,0.2)",
+      "imageViewerBg": "rgba(0,0,0,0.92)",
+      "imageViewerCloseBg": "rgba(0,0,0,0.5)",
+      "hero": "rgba(0, 0, 0, 0.3)"
+    },
+    "chat": {
+      "tickUnread": "rgba(30, 41, 30, 0.45)",
+      "messageTimeMe": "rgba(30, 41, 30, 0.55)",
+      "daySeparatorBg": "#ebebe6",
+      "quoteMeBg": "rgba(0, 0, 0, 0.05)",
+      "quoteOtherBg": "rgba(0, 0, 0, 0.04)",
+      "quoteTextMe": "#1e291e",
+      "messageMeBg": "#d8f2e1",
+      "messageOtherBg": "#ffffff",
+      "messageTextMe": "#1e291e",
+      "messageTextOther": "#1f2937"
+    },
+    "onboarding": {
+      "transferBg": "rgba(37, 99, 235, 0.08)",
+      "transferBorder": "rgba(37, 99, 235, 0.4)",
+      "recoverBg": "rgba(245, 158, 11, 0.08)",
+      "recoverBorder": "rgba(245, 158, 11, 0.4)",
+      "socialRecoverBg": "rgba(16, 185, 129, 0.08)",
+      "socialRecoverBorder": "rgba(16, 185, 129, 0.4)",
+      "trinityActiveBg": "rgba(37, 99, 235, 0.08)",
+      "highlightBg": "rgba(34, 197, 94, 0.08)",
+      "highlightBorder": "rgba(34, 197, 94, 0.2)"
+    },
+    "profile": {
+      "roleProviderBg": "rgba(16, 185, 129, 0.12)",
+      "roleReceiverBg": "rgba(99, 102, 241, 0.12)"
+    },
+    "chatSystem": {
+      "defaultBg": "rgba(243, 244, 246, 0.8)",
+      "defaultBorder": "rgba(229, 231, 235, 1)",
+      "fundedBg": "rgba(209, 250, 229, 0.7)",
+      "releasedBg": "rgba(167, 243, 208, 0.7)",
+      "cancelledBg": "rgba(254, 226, 226, 0.7)"
+    }
+  },
+  "darkColors": {
+    "text": {
+      "heading": "#ffffff",
+      "body": "#f3f4f6",
+      "secondary": "#9ca3af",
+      "muted": "#898f99",
+      "inverse": "#ffffff",
+      "link": "#60a5fa",
+      "onBrand": "#ffffff",
+      "onAccent": "#1d231d",
+      "onDanger": "#ffffff",
+      "onGold": "#1d231d"
+    },
+    "surface": {
+      "app": "#0a0a0a",
+      "page": "#0a0a0a",
+      "chrome": "#0a0a0a",
+      "card": "#222822",
+      "subtle": "#262626"
+    },
+    "border": {
+      "default": "#333333",
+      "strong": "#404040"
+    },
+    "brand": {
+      "primary": "#34d399",
+      "fill": "#047857",
+      "dark": "#059669",
+      "tint": "#022c22",
+      "fillPressed": "#065f46",
+      "onDark": "#34d399"
+    },
+    "accent": {
+      "primary": "#c0ccc0",
+      "fill": "#c0ccc0",
+      "tint": "#384038",
+      "border": "#434e43"
+    },
+    "market": {
+      "offer": {
+        "fg": "#6ee7b7",
+        "bg": "#022c22"
+      },
+      "need": {
+        "fg": "#fdba74",
+        "bg": "#7c2d12"
+      },
+      "poll": {
+        "fg": "#f0abfc",
+        "bg": "#4a044e"
+      },
+      "author": "#d1d5db"
+    },
+    "chip": {
+      "quiet": {
+        "fg": "#c0ccc0",
+        "bg": "#434e43"
+      },
+      "info": {
+        "fg": "#93c5fd",
+        "bg": "#172554"
+      },
+      "learn": {
+        "fg": "#5eead4",
+        "bg": "#042f2e"
+      }
+    },
+    "tile": {
+      "food": {
+        "tint": "#431407",
+        "ink": "#fdba74"
+      },
+      "services": {
+        "tint": "#172554",
+        "ink": "#93c5fd"
+      },
+      "labour": {
+        "tint": "#451a03",
+        "ink": "#fcd34d"
+      },
+      "tools": {
+        "tint": "#292524",
+        "ink": "#d6d3d1"
+      },
+      "goods": {
+        "tint": "#5b5046",
+        "ink": "#ebe6df"
+      },
+      "garden": {
+        "tint": "#1a2e05",
+        "ink": "#bef264"
+      },
+      "housing": {
+        "tint": "#3c180e",
+        "ink": "#f0bcab"
+      },
+      "transport": {
+        "tint": "#083344",
+        "ink": "#67e8f9"
+      },
+      "education": {
+        "tint": "#1e1b4b",
+        "ink": "#a5b4fc"
+      },
+      "arts": {
+        "tint": "#500724",
+        "ink": "#f9a8d4"
+      },
+      "health": {
+        "tint": "#042f2e",
+        "ink": "#5eead4"
+      },
+      "care": {
+        "tint": "#4c0519",
+        "ink": "#fda4af"
+      },
+      "animals": {
+        "tint": "#022c22",
+        "ink": "#6ee7b7"
+      },
+      "tech": {
+        "tint": "#082f49",
+        "ink": "#7dd3fc"
+      },
+      "energy": {
+        "tint": "#422006",
+        "ink": "#fde047"
+      },
+      "mindset": {
+        "tint": "#4a044e",
+        "ink": "#f0abfc"
+      },
+      "general": {
+        "tint": "#384038",
+        "ink": "#c0ccc0"
+      },
+      "event": {
+        "tint": "#2e1065",
+        "ink": "#c4b5fd"
+      },
+      "pulse": {
+        "tint": "#451a03",
+        "ink": "#fcd34d"
+      }
+    },
+    "card": {
+      "sage": {
+        "tint": "#384038",
+        "ink": "#c0ccc0"
+      },
+      "sky": {
+        "tint": "#082f49",
+        "ink": "#7dd3fc"
+      },
+      "blue": {
+        "tint": "#172554",
+        "ink": "#93c5fd"
+      },
+      "indigo": {
+        "tint": "#1e1b4b",
+        "ink": "#a5b4fc"
+      },
+      "violet": {
+        "tint": "#2e1065",
+        "ink": "#c4b5fd"
+      },
+      "plum": {
+        "tint": "#4a044e",
+        "ink": "#f0abfc"
+      },
+      "pink": {
+        "tint": "#500724",
+        "ink": "#f9a8d4"
+      },
+      "rose": {
+        "tint": "#4c0519",
+        "ink": "#fda4af"
+      },
+      "clay": {
+        "tint": "#3c180e",
+        "ink": "#f0bcab"
+      },
+      "orange": {
+        "tint": "#431407",
+        "ink": "#fdba74"
+      },
+      "yellow": {
+        "tint": "#422006",
+        "ink": "#fde047"
+      },
+      "lime": {
+        "tint": "#1a2e05",
+        "ink": "#bef264"
+      },
+      "green": {
+        "tint": "#022c22",
+        "ink": "#6ee7b7"
+      },
+      "teal": {
+        "tint": "#042f2e",
+        "ink": "#5eead4"
+      },
+      "sand": {
+        "tint": "#5b5046",
+        "ink": "#ebe6df"
+      },
+      "amber": {
+        "tint": "#451a03",
+        "ink": "#fcd34d"
+      }
+    },
+    "trust": {
+      "newcomer": {
+        "fg": "#9ca3af",
+        "bg": "#262626",
+        "border": "#404040"
+      },
+      "resident": {
+        "fg": "#fbbf24",
+        "bg": "#451a03",
+        "border": "#78350f"
+      },
+      "steward": {
+        "fg": "#fcd34d",
+        "bg": "#451a03",
+        "border": "#92400e"
+      },
+      "elder": {
+        "fg": "#fde68a",
+        "bg": "#78350f",
+        "border": "#d97706"
+      },
+      "star": "#fbbf24",
+      "founding": {
+        "fg": "#22c55e",
+        "bg": "rgba(34, 197, 94, 0.12)",
+        "border": "rgba(34, 197, 94, 0.35)"
+      }
+    },
+    "feedback": {
+      "danger": {
+        "fg": "#fca5a5",
+        "bg": "#450a0a",
+        "border": "#991b1b",
+        "solid": "#b91c1c",
+        "disabled": "rgba(239, 68, 68, 0.3)"
+      },
+      "warning": {
+        "fg": "#fbbf24",
+        "bg": "#451a03",
+        "border": "#78350f",
+        "solid": "#f59e0b"
+      },
+      "success": {
+        "fg": "#34d399",
+        "bg": "#022c22",
+        "border": "#065f46",
+        "solid": "#047857"
+      },
+      "info": {
+        "fg": "#60a5fa",
+        "bg": "#1e1b4b",
+        "border": "#2563eb",
+        "solid": "#2563eb"
+      }
+    },
+    "event": {
+      "ink": "#c4b5fd",
+      "fill": "#6d28d9",
+      "pressed": "#5b21b6",
+      "on": "#ffffff"
+    },
+    "action": {
+      "fab": "#c2410c",
+      "cta": "#b85236"
+    },
+    "overlay": {
+      "scrim": "rgba(10,10,10,0.85)",
+      "scrimEdge": "rgba(255,255,255,0.1)",
+      "lightFill": "rgba(255,255,255,0.1)",
+      "imageViewerBg": "rgba(0,0,0,0.95)",
+      "imageViewerCloseBg": "rgba(0,0,0,0.6)",
+      "hero": "rgba(0, 0, 0, 0.5)"
+    },
+    "chat": {
+      "tickUnread": "rgba(255,255,255,0.45)",
+      "messageTimeMe": "rgba(255, 255, 255, 0.55)",
+      "daySeparatorBg": "rgba(38, 38, 38, 0.85)",
+      "quoteMeBg": "rgba(255, 255, 255, 0.06)",
+      "quoteOtherBg": "rgba(255, 255, 255, 0.04)",
+      "quoteTextMe": "#e6f4ea",
+      "messageMeBg": "#1e2923",
+      "messageOtherBg": "#262626",
+      "messageTextMe": "#e6f4ea",
+      "messageTextOther": "#f3f4f6"
+    },
+    "onboarding": {
+      "transferBg": "rgba(59, 130, 246, 0.08)",
+      "transferBorder": "rgba(59, 130, 246, 0.3)",
+      "recoverBg": "rgba(245, 158, 11, 0.08)",
+      "recoverBorder": "rgba(245, 158, 11, 0.3)",
+      "socialRecoverBg": "rgba(16, 185, 129, 0.08)",
+      "socialRecoverBorder": "rgba(16, 185, 129, 0.3)",
+      "trinityActiveBg": "rgba(59, 130, 246, 0.08)",
+      "highlightBg": "rgba(34, 197, 94, 0.08)",
+      "highlightBorder": "rgba(34, 197, 94, 0.2)"
+    },
+    "profile": {
+      "roleProviderBg": "rgba(16, 185, 129, 0.08)",
+      "roleReceiverBg": "rgba(99, 102, 241, 0.08)"
+    },
+    "chatSystem": {
+      "defaultBg": "rgba(38, 38, 38, 0.8)",
+      "defaultBorder": "rgba(64, 64, 64, 1)",
+      "fundedBg": "rgba(2, 44, 34, 0.7)",
+      "releasedBg": "rgba(6, 78, 59, 0.7)",
+      "cancelledBg": "rgba(69, 10, 10, 0.7)"
+    }
+  }
+}

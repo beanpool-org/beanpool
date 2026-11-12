@@ -8,9 +8,14 @@
  *      (text.body, surface.card, market.offer, trust.steward …). Import
  *      from here; never hardcode hex in a component.
  *
- * Two sets, light and dark (the old Classic / Earth / Slate choice is gone).
+ * One tree per colour set of the library (core's BRAND_SETS: `light` = Light, `dark` = Classic, `night` = what members
+ * call Dark), built by two functions, one per scheme: lightTree() for the light set, darkTree() for every dark one. A set
+ * changes only what the library gives it (the sage accent family, the card, the own chat bubble), never a local value
+ * here, so `night` is `dark` with the library's themed leaves swapped in. lightColors and darkColors are the light and
+ * Classic trees, exactly as before (utils/__tests__/colour-sets.test.ts holds them to a snapshot of main).
  * Brand and status roles — the brand green, buttons, danger, gold, the FAB,
- * the accent — come from @beanpool/core's brand-colours.ts, the one library
+ * the accent — and the phone's grounds (page, card, sunken row, the own chat
+ * bubble) come from @beanpool/core's brand-colours.ts, the one library
  * the phone, the web app and the manager share (docs/brand-colours.md).
  * CHANGE THOSE THERE, NEVER HERE OR IN A SCREEN.
  *
@@ -29,10 +34,7 @@
  *   gray     → text, surfaces, metadata      (the calm majority)
  */
 
-import { brandColours, rgbaOf } from '@beanpool/core';
-
-const brandLight = brandColours('light');
-const brandDark = brandColours('dark');
+import { BRAND_SETS, brandColours, brandGrounds, brandScheme, rgbaOf, type BrandSet } from '@beanpool/core';
 
 // ── 1. Primitive palette ──────────────────────────────────────────
 export const palette = {
@@ -181,7 +183,14 @@ export const palette = {
 } as const;
 
 // ── 2. Semantic tokens ────────────────────────────────────────────
-export const lightColors = {
+/** The light scheme's tree for `set` (today only `light`). */
+function lightTree(set: BrandSet) {
+    const brandLight = brandColours(set);
+    const ground = brandGrounds(set).phone;
+    // brand.onDark only: the brand green as words on a dark ground. ink.brand is the same in every dark set: only the
+    // library's 17 themed leaves (the accent family and the own bubble) carry a set value, and its test fails on an 18th.
+    const brandDark = brandColours('dark');
+    return {
     // Text
     text: {
         heading: '#1c1d1a',      // warm charcoal
@@ -200,11 +209,11 @@ export const lightColors = {
 
     // Surfaces & borders
     surface: {
-        app: '#faf9f6',          // premium warm off-white (Claude-like)
-        page: '#faf9f6' as string, // page background; 'transparent' when the doodle pattern is on
-        chrome: '#faf9f6' as string, // bars and floating control blocks; the pattern's ground when it is on
-        card: palette.white,
-        subtle: '#f1efea',       // sunken warm off-white/gray
+        app: ground.page,        // premium warm off-white (Claude-like)
+        page: ground.page,       // page background; 'transparent' when the doodle pattern is on
+        chrome: ground.page,     // bars and floating control blocks; the pattern's ground when it is on
+        card: ground.card,
+        subtle: ground.sunken,   // sunken warm off-white/gray
     },
     border: {
         default: '#ebebe6',
@@ -305,10 +314,10 @@ export const lightColors = {
         daySeparatorBg: '#ebebe6',
         quoteMeBg: 'rgba(0, 0, 0, 0.05)',
         quoteOtherBg: 'rgba(0, 0, 0, 0.04)',
-        quoteTextMe: '#1e291e',
-        messageMeBg: '#d8f2e1',       // soft sage/mint green (WhatsApp-like sender bubble)
+        quoteTextMe: brandLight.bubble.ink, // a quote's words inside your own bubble: the bubble's words
+        messageMeBg: brandLight.bubble.tint, // soft sage/mint green (WhatsApp-like sender bubble)
         messageOtherBg: '#ffffff',     // clean white receiver bubble
-        messageTextMe: '#1e291e',      // dark forest charcoal text
+        messageTextMe: brandLight.bubble.ink, // dark forest charcoal text
         messageTextOther: '#1f2937',    // dark gray text
     },
 
@@ -340,9 +349,14 @@ export const lightColors = {
         releasedBg: rgbaOf(brandLight.deal.released.tint, 0.7),
         cancelledBg: rgbaOf(brandLight.deal.cancelled.tint, 0.7),
     },
-} as const;
+    } as const;
+}
 
-export const darkColors = {
+/** The dark scheme's tree for `set`: Classic (`dark`) and Dark (`night`). */
+function darkTree(set: BrandSet) {
+    const brandDark = brandColours(set);
+    const ground = brandGrounds(set).phone;
+    return {
     // Text
     text: {
         heading: palette.white,
@@ -359,13 +373,14 @@ export const darkColors = {
 
     // Surfaces & borders
     surface: {
-        app: palette.neutral950, // screen background (dark)
-        page: palette.neutral950 as string, // page background; 'transparent' when the doodle pattern is on
-        chrome: palette.neutral950 as string, // bars and floating control blocks; the pattern's ground when it is on
-        // Card background. #1a1a1a was 1.01:1 on the doodle ground, so cards did not lift off the page; #222822 is 1.17
-        // there and 1.31 on surface.app, and every text ink still reads 4.5 on it (home look S4, Marty's yes 2 Nov).
-        card: palette.charcoal850,
-        subtle: palette.neutral800, // chips, sunken rows (dark neutral)
+        app: ground.page,        // screen background (dark): neutral-950 in every dark set
+        page: ground.page,       // page background; 'transparent' when the doodle pattern is on
+        chrome: ground.page,     // bars and floating control blocks; the pattern's ground when it is on
+        // Card background. #1a1a1a was 1.01:1 on the doodle ground, so cards did not lift off the page; Classic's #222822
+        // (palette.charcoal850) is 1.17 there and 1.31 on surface.app, and every text ink still reads 4.5 on it (home look S4,
+        // Marty's yes 2 Nov). Each dark set has its own card in the library, as light as Classic's.
+        card: ground.card,
+        subtle: ground.sunken,   // chips, sunken rows (dark neutral-800 in every dark set)
     },
     border: {
         default: palette.neutral600, // 1.19:1 on the card (#262626 vanished on the lifted card, 1.01)
@@ -454,10 +469,10 @@ export const darkColors = {
         daySeparatorBg: 'rgba(38, 38, 38, 0.85)',
         quoteMeBg: 'rgba(255, 255, 255, 0.06)',
         quoteOtherBg: 'rgba(255, 255, 255, 0.04)',
-        quoteTextMe: '#e6f4ea',
-        messageMeBg: '#1e2923',      // dark green-gray
+        quoteTextMe: brandDark.bubble.ink, // a quote's words inside your own bubble: the bubble's words
+        messageMeBg: brandDark.bubble.tint, // dark green-gray in Classic
         messageOtherBg: '#262626',    // dark gray
-        messageTextMe: '#e6f4ea',
+        messageTextMe: brandDark.bubble.ink,
         messageTextOther: '#f3f4f6',
     },
 
@@ -488,8 +503,36 @@ export const darkColors = {
         releasedBg: rgbaOf(brandDark.deal.released.tint, 0.7),
         cancelledBg: rgbaOf(brandDark.deal.cancelled.tint, 0.7),
     },
-} as const;
+    } as const;
+}
+
+/** Light, as before: what a screen draws in light, and the static set (utils/__tests__/static-colours-ceiling.test.ts lists who imports it). */
+export const lightColors = lightTree('light');
+/** Classic dark, as before. */
+export const darkColors = darkTree('dark');
 
 export const colors = lightColors;
 export type AppColors = typeof colors;
 export default colors;
+
+/**
+ * The phone's tree for each set of the library, built once at start. `light` and `dark` are lightColors and darkColors
+ * themselves. The dark trees are typed as the light one, as ThemeContext always drew them (the dark tree has no
+ * `trust.parent`; every other key is the same).
+ */
+export const COLOUR_SETS = Object.fromEntries(BRAND_SETS.map((set) => [set, treeFor(set)])) as { readonly [S in BrandSet]: AppColors };
+
+function treeFor(set: BrandSet): AppColors {
+    if (set === 'light') return lightColors;
+    if (set === 'dark') return darkColors as unknown as AppColors;
+    return (brandScheme(set) === 'dark' ? darkTree(set) : lightTree(set)) as unknown as AppColors;
+}
+
+/**
+ * The flat colour the doodle tile of `set` is drawn on: the phone's surface.chrome while the pattern is on. From the
+ * library (BRAND_GROUNDS.doodle.ground), sampled there from the art itself. Dark's (`night`) is the charcoal tile slice T5
+ * bakes; until then no member can pick that set (the picker is T3).
+ */
+export function doodleGround(set: BrandSet): string {
+    return brandGrounds(set).doodle.ground;
+}

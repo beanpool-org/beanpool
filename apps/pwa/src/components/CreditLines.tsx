@@ -5,8 +5,8 @@
  * never composes a reason from its figures (amendment 2 §8), so the web, the phone and the node say one thing.
  *
  * Text wraps to as many lines as it needs and is never cut with "…" (§3.2). The risk is a word with a shape (○ ✓ ! ✕), never
- * colour alone; chip colours come from the central tokens, light and dark. A balance is read aloud with its sign ("minus 420
- * Beans"), the visible text hidden from a screen reader so it is not read twice.
+ * colour alone; chip colours come from the central tokens, light and dark. A balance is read aloud as "minus 420 Beans", never
+ * a dash read as nothing, and the visible text is hidden from a screen reader so it is not read twice.
  */
 import {
     CREDIT_SIGHT_WORDS, RISK_SHAPES, balanceSentence, balanceSpoken, creditLineSentence, position, riskLevelSentence,

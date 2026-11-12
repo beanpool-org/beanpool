@@ -40,10 +40,10 @@ export function CreditCard({ memberPubkey, myVouching }: CreditCardProps) {
         setPerson(null);
         setLooks([]);
         (async () => {
-            // Who may see it is the node's word: a voucher's own budget is already read, the role is asked of the node once.
-            const owner = await request<{ role?: unknown }>('GET', '/api/node-admin/me').then((b) => isOwnerOrAdmin(readInviteRole(b?.role))).catch(() => false);
-            if (!owner && myVouching?.voucher !== true) return;
             try {
+                // Who may see it is the node's word: a voucher's own budget is already read, the role is asked of the node once.
+                const owner = await request<{ role?: unknown }>('GET', '/api/node-admin/me').then((b) => isOwnerOrAdmin(readInviteRole(b?.role))).catch(() => false);
+                if (!owner && myVouching?.voucher !== true) return;
                 const card = await getCreditPerson(memberPubkey);
                 if (!alive) return;
                 setPerson(card.person);
@@ -76,8 +76,9 @@ export function CreditCard({ memberPubkey, myVouching }: CreditCardProps) {
             <CreditLines person={p} reasons="all" />
             {full && p.parts && (
                 <p className="m-0 text-[12px] text-nature-700 dark:text-nature-300 break-words" data-testid="credit-made-of">
-                    {t(W.madeOf, { known: formatHundredths(p.parts.known_c), vouched: formatHundredths(p.parts.room_c), who, earned: formatHundredths(p.parts.earned_c) })}
-                    {p.parts.granted_c > 0 ? ` · ${t(W.madeOfGranted, { granted: formatHundredths(p.parts.granted_c) })}` : ''}
+                    {p.parts.granted_c > 0
+                        ? t(W.madeOfGranted, { known: formatHundredths(p.parts.known_c), vouched: formatHundredths(p.parts.room_c), who, earned: formatHundredths(p.parts.earned_c), granted: formatHundredths(p.parts.granted_c) })
+                        : t(W.madeOf, { known: formatHundredths(p.parts.known_c), vouched: formatHundredths(p.parts.room_c), who, earned: formatHundredths(p.parts.earned_c) })}
                 </p>
             )}
             {cap > 0 && p.line_c >= cap && (
@@ -88,7 +89,7 @@ export function CreditCard({ memberPubkey, myVouching }: CreditCardProps) {
             )}
             {full && seen.length > 0 && (
                 <p className="m-0 text-[12px] text-nature-700 dark:text-nature-300 break-words" data-testid="credit-looked-at-by">
-                    {t(W.lookedAtBy)}: {seen.map((l) => `@${l.actorCallsign} ${dayWords(l.day)}`).join(' · ')}
+                    {t(W.lookedAtBy, { who: seen.map((l) => `@${l.actorCallsign} ${dayWords(l.day)}`).join(' · ') })}
                 </p>
             )}
         </section>

@@ -41,6 +41,8 @@ export interface CreditPeoplePanelProps {
     start?: CreditStart | null;
     /** The page hides its own member list while credit is on (the credit list replaces it, same people, search and order). */
     onShowing?: (showing: boolean) => void;
+    /** Called once `start` has switched credit on: the page then stops handing it over (credit is off at every visit). */
+    onStartUsed?: (nonce: number) => void;
 }
 
 const FILTER_WORDS: Readonly<Record<CreditFilter, typeof W[keyof typeof W]>> = {
@@ -52,6 +54,17 @@ function Avatar({ person }: { person: { callsign: string; memberPubkey: string }
     return <img src={src} alt="" className="rounded-full object-cover border border-nature-200 dark:border-nature-700 shrink-0" style={{ width: 36, height: 36, minWidth: 36 }} />;
 }
 
+/** "! Running low" or "✕ Nothing left to vouch with": a word with a shape, never colour alone (the glyph is for the eye only). */
+function BudgetMark({ nothingLeft, runningLow }: { nothingLeft: boolean; runningLow: boolean }) {
+    if (!nothingLeft && !runningLow) return null;
+    return (
+        <span className={`ml-2 inline-flex gap-1 rounded-lg px-2 py-0.5 text-[11px] font-bold ${nothingLeft ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink' : 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'}`} data-testid="budget-mark">
+            <span aria-hidden="true">{nothingLeft ? '✕' : '!'}</span>
+            <span>{nothingLeft ? t(W.nothingLeftToVouch) : t(W.runningLow)}</span>
+        </span>
+    );
+}
+
 /** A voucher's budget on a row: "Voucher · 150 of 1,000 left ! Running low", "Owner · no limit", and when they asked. */
 export function VoucherBudgetLines({ b }: { b: VoucherBudgetLine }) {
     if (b.noLimit) return <p className="m-0 text-[13px] text-nature-800 dark:text-nature-200" data-testid="voucher-line">{t(W.ownerLine)}</p>;
@@ -59,16 +72,14 @@ export function VoucherBudgetLines({ b }: { b: VoucherBudgetLine }) {
         <div className="space-y-0.5" data-testid="voucher-line">
             <p className="m-0 text-[13px] text-nature-800 dark:text-nature-200 break-words">
                 {t(W.voucherLine, { left: formatHundredths(b.left_c ?? 0), level: formatHundredths(b.setLevel_c ?? b.level_c ?? 0) })}
-                {b.nothingLeft
-                    ? <span className="ml-2 inline-block rounded-lg px-2 py-0.5 text-[11px] font-bold bg-bp-chip-danger-tint text-bp-chip-danger-ink">✕ {t(W.nothingLeftToVouch)}</span>
-                    : b.runningLow && <span className="ml-2 inline-block rounded-lg px-2 py-0.5 text-[11px] font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink">! {t(W.runningLow)}</span>}
+                <BudgetMark nothingLeft={b.nothingLeft} runningLow={b.runningLow} />
             </p>
             {b.askedAt && <p className="m-0 text-[12px] text-nature-700 dark:text-nature-300" data-testid="voucher-asked">{t(W.askedOn, { day: dayWords(b.askedAt) })}</p>}
         </div>
     );
 }
 
-export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShowing }: CreditPeoplePanelProps) {
+export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShowing, onStartUsed }: CreditPeoplePanelProps) {
     const [giver, setGiver] = useState<GiverFacts | null | 'loading'>('loading');
     const [on, setOn] = useState(false);
     const [chip, setChip] = useState<CreditFilter>('all');
@@ -101,11 +112,13 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
     const full = giver !== 'loading' && giver !== null && isOwnerOrAdmin(giver.role);
 
     // A way in that arrives with a chip (the bell's ask, the Invites door): switch on, this chip, off again at the next visit.
+    // The page is told it was used, so opening Community again by hand in the same People visit starts with the switch off.
     useEffect(() => {
         if (!start) return;
         setOn(true);
         setChip(start.chip);
         setFocusBy(start.by);
+        onStartUsed?.(start.nonce);
     }, [start?.nonce]);
 
     useEffect(() => { onShowing?.(may && on); }, [may, on]);
@@ -130,10 +143,11 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
             setVouchersTried(true);
         }
     }
+    // On switch-on (the probe) and each time the Vouchers chip is picked, so its rows are the node's now, never an earlier visit's.
     useEffect(() => {
         if (!on || !full) return;
         void loadVouchers();
-    }, [on, full]);
+    }, [on, full, chip === 'vouchers']);
 
     // The list: the node's page for the chip and the search; a late answer to an earlier ask is dropped.
     useEffect(() => {
@@ -275,9 +289,7 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
                                                         <>
                                                             <span className="block text-[13px] text-nature-800 dark:text-nature-200 break-words" data-testid="voucher-left">
                                                                 {t(W.voucherLine, { left: formatHundredths(v.left), level: formatHundredths(v.setLevel_c ?? v.level) })}
-                                                                {v.nothingLeft
-                                                                    ? <span className="ml-2 inline-block rounded-lg px-2 py-0.5 text-[11px] font-bold bg-bp-chip-danger-tint text-bp-chip-danger-ink">✕ {t(W.nothingLeftToVouch)}</span>
-                                                                    : v.runningLow && <span className="ml-2 inline-block rounded-lg px-2 py-0.5 text-[11px] font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink">! {t(W.runningLow)}</span>}
+                                                                <BudgetMark nothingLeft={v.nothingLeft} runningLow={v.runningLow} />
                                                             </span>
                                                             <span className="block text-[12px] text-nature-700 dark:text-nature-300 break-words">
                                                                 {t(W.vouchedTo, { amount: formatHundredths(v.vouched), people: tn(v.peopleVouched, '{n} person', '{n} people'), held: formatHundredths(v.held) })}
@@ -317,8 +329,8 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
                             )}
                         </div>
                     ) : pageState === 'offline' ? (
-                        <p className={note} data-testid="credit-offline">
-                            {t(W.offline)}{' '}
+                        <p className={`${note} flex flex-wrap items-center gap-x-2`} data-testid="credit-offline">
+                            <span>{t(W.offline)}</span>
                             <button type="button" onClick={() => setRetry((n) => n + 1)} className="min-h-[44px] px-2 font-bold underline bg-transparent border-none cursor-pointer text-nature-800 dark:text-nature-100">{t(W.tryAgain)}</button>
                         </p>
                     ) : pageState === 'failed' ? (
@@ -331,18 +343,24 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
                         <>
                             <ul className="list-none p-0 m-0 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden" data-testid="credit-list">
                                 {shown.map((p) => (
-                                    <li key={p.memberPubkey} className={`p-3 px-4 space-y-2 ${p.status === 'paused' ? 'opacity-60' : ''}`} data-testid="credit-row" data-pubkey={p.memberPubkey}>
+                                    // Under the text on a narrow screen (320 px at 130%), beside it where there is room (design §3.2).
+                                    <li key={p.memberPubkey} className={`p-3 px-4 space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-4 ${p.status === 'paused' ? 'opacity-60' : ''}`} data-testid="credit-row" data-pubkey={p.memberPubkey}>
                                         <button
                                             type="button"
                                             onClick={() => onOpenProfile?.(p.memberPubkey)}
                                             aria-label={t("View {name}'s profile", { name: p.callsign })}
-                                            className="flex items-start gap-3 w-full min-h-[44px] text-left bg-transparent border-0 p-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+                                            aria-describedby={`credit-lines-${p.memberPubkey.slice(0, 16)}`}
+                                            className="flex items-start gap-3 w-full sm:flex-1 sm:w-auto min-w-0 min-h-[44px] text-left bg-transparent border-0 p-0 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
                                         >
                                             <Avatar person={p} />
                                             <span className="min-w-0 space-y-1 flex-1">
                                                 <span className="block font-bold text-[14px] text-nature-900 dark:text-white break-words">{p.callsign}</span>
-                                                <CreditLines person={p} />
-                                                {p.voucherBudget && <VoucherBudgetLines b={p.voucherBudget} />}
+                                                {/* The button's name is the callsign (aria-label); what the row says, balance and risk included, is its
+                                                    description, so a screen reader hears "minus 420 Beans" and the word, not only "View Rob's profile". */}
+                                                <span id={`credit-lines-${p.memberPubkey.slice(0, 16)}`} className="block space-y-1">
+                                                    <CreditLines person={p} />
+                                                    {p.voucherBudget && <VoucherBudgetLines b={p.voucherBudget} />}
+                                                </span>
                                             </span>
                                         </button>
                                         {giveable(p) && (
@@ -350,7 +368,7 @@ export function CreditPeoplePanel({ query, blocked, onOpenProfile, start, onShow
                                                 type="button"
                                                 onClick={() => setSheet(p.memberPubkey)}
                                                 aria-label={t(W.sheetTitle, { name: p.callsign })}
-                                                className="w-full min-h-[48px] px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-0 text-sm font-bold cursor-pointer shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="w-full sm:w-auto sm:shrink-0 sm:min-w-[160px] min-h-[48px] px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-0 text-sm font-bold cursor-pointer shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 data-testid="credit-give"
                                             >
                                                 {t(W.giveCredit)}

@@ -13,7 +13,7 @@
  * component's state; nothing goes to browser storage.
  */
 import { useEffect, useState } from 'react';
-import { t } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
 import { request } from '../lib/api';
 import { readInviteRole } from '../lib/node-invites';
 import { CREDIT_LIST_WORDS as W, dayWords, getCreditLooks, isOwnerOrAdmin, refusalText, type LookGroup, type LookLine } from '../lib/credit-sight';
@@ -114,7 +114,7 @@ export function CreditLooksSection() {
                                                 onClick={() => openDay(g)}
                                                 className="w-full min-h-[48px] py-2 text-left bg-transparent border-0 cursor-pointer text-[13px] text-nature-900 dark:text-white break-words"
                                             >
-                                                {t(W.looksGroup, { name: g.callsign, day: dayWords(g.day), people: g.people })}
+                                                {t(W.looksGroup, { name: g.callsign, day: dayWords(g.day), people: tn(g.people, '{n} person', '{n} people') })}
                                             </button>
                                         </li>
                                     ))}

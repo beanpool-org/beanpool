@@ -65,7 +65,8 @@ export function GiveCreditSheet({ person, myVouching, knownFloor_c, full, onClos
     const held = person.parts?.known_c ?? 0;
     const cap = person.parts?.cap_c ?? 0;
     const confirmed = !!person.standsBehind?.confirmedBy;
-    const mayRaise = full && confirmed && person.canGive && cap > held && !person.frozen?.known;
+    // A community with the confirmation dial off shows neither known line (design §3.3): the node's rule says whether it confirms.
+    const mayRaise = full && knownFloor_c !== null && confirmed && person.canGive && cap > held && !person.frozen?.known;
     const [target, setTarget] = useState<number>(Math.min(cap, held + STEP_C));
     const raiseTarget = Math.min(cap, Math.max(held + STEP_C, target));
     const mayConfirm = full && !confirmed && person.canGive && knownFloor_c !== null && knownFloor_c > 0;

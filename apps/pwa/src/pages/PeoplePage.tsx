@@ -107,6 +107,8 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
     const [searchQuery, setSearchQuery] = useState('');
     // Show credit is on: the node's credit list replaces the plain member list below (same people, search and order).
     const [creditShowing, setCreditShowing] = useState(false);
+    // The credit start (the bell's ask, the Invites door) already used in this visit: Community opened by hand starts with credit off.
+    const [creditUsed, setCreditUsed] = useState<number | null>(null);
 
     const [blocklistVersion, setBlocklistVersion] = useState(0);
 
@@ -577,7 +579,7 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                     </p>
 
                     {/* Show credit: only for someone who can give credit, the node's word; off at every visit (components/CreditPeoplePanel). */}
-                    {!preview && <CreditPeoplePanel query={searchQuery} blocked={blockedSet} onOpenProfile={onOpenProfile} start={creditStart} onShowing={setCreditShowing} />}
+                    {!preview && <CreditPeoplePanel query={searchQuery} blocked={blockedSet} onOpenProfile={onOpenProfile} start={creditStart && creditStart.nonce !== creditUsed ? creditStart : null} onShowing={setCreditShowing} onStartUsed={setCreditUsed} />}
 
                     {/* Search */}
                     <div className="mb-4">

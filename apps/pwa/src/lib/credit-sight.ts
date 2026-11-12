@@ -10,7 +10,7 @@
  */
 import { request, getMyVouching, type MyVouching } from './api';
 import { readInviteRole, type InviteRole } from './node-invites';
-import { word } from '@beanpool/core';
+import { formatDate, word } from '@beanpool/core';
 import type { CreditRisk, CreditSight } from '@beanpool/core';
 
 // ── What the node sends ──────────────────────────────────────────────────────────────────────────────────────────
@@ -127,8 +127,8 @@ export const CREDIT_LIST_WORDS = {
     capped: word('Capped at {cap}, the most this community allows.'),
     cardTitle: word('Credit'),
     madeOf: word('Made of: known floor {known} · vouched {vouched}{who} · earned {earned}'),
-    madeOfGranted: word('granted {granted}'),
-    lookedAtBy: word('Looked at by'),
+    madeOfGranted: word('Made of: known floor {known} · vouched {vouched}{who} · earned {earned} · granted {granted}'),
+    lookedAtBy: word('Looked at by: {who}'),
     riskWhy: word('Why this word'),
     cardUnavailable: word('Credit can’t be read right now.'),
     joined: word('Joined {when} · invited by @{name}'),
@@ -163,12 +163,11 @@ export const CREDIT_LIST_WORDS = {
     looksMore: word('Show more'),
 } as const;
 
-/** A day as "12 Nov", in the member's language. */
+/** A day as "12 Nov", written in the member's language from core's tables (UTC, the node's own day: the log and the ask both count in it). */
 export function dayWords(iso: string | null | undefined): string {
     if (!iso) return '';
     const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return Number.isNaN(d.getTime()) ? '' : formatDate(d, 'day-month', { utc: true });
 }
 
 // ── Reads and writes (all signed with the member's own key by `request`) ────────────────────────────────────────────────

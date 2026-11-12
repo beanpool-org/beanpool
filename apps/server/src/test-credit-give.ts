@@ -5,7 +5,8 @@
  * refusal. Each check says the change that turns it red.
  *
  *  8. The raise: an owner raises Dee 1,000 → 1,500, writing `exception_raised` and Dee's `credit_known_floor` notice (one kept
- *     copy and one bell row, hers alone, asserted by its kind, not rebuilt); a plain admin raises too (Q4: every admin).
+ *     copy and one bell row, hers alone, asserted by its kind, not rebuilt); a plain admin raises too (Q4: every admin);
+ *     a training limit under the community's floor (300) is raised from what the member holds, never back down.
  *     Refused, with nothing written and nobody told: their own 403; at or below what Dee holds now 409; above the cap 400;
  *     a member not confirmed, or waiting for a second admin, 409; the dial off 409; a frozen line or known floor 409 (the
  *     floor stays frozen); a work-off's 0 409 (the work-off keeps it); a voucher, a moderator and a member 403; unsigned, a
@@ -136,13 +137,13 @@ async function main(): Promise<void> {
         const inv = generateInvite(owen.pk)!;
         require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
     };
-    const [ada, mo, val, mel, dee, hal, sam, fay, kit, wil, gus, pia] = ['Ada', 'Mo', 'Val', 'Mel', 'Dee', 'Hal', 'Sam', 'Fay', 'Kit', 'Wil', 'Gus', 'Pia'].map(newId);
-    for (const who of [ada, mo, val, mel, dee, hal, sam, fay, kit, wil, gus, pia]) enter(who);
+    const [ada, mo, val, mel, dee, hal, sam, fay, kit, wil, gus, pia, kat] = ['Ada', 'Mo', 'Val', 'Mel', 'Dee', 'Hal', 'Sam', 'Fay', 'Kit', 'Wil', 'Gus', 'Pia', 'Kat'].map(newId);
+    for (const who of [ada, mo, val, mel, dee, hal, sam, fay, kit, wil, gus, pia, kat]) enter(who);
     grantNodeRole(ada.pk, 'admin', owen.pk);
     grantNodeRole(mo.pk, 'moderator', owen.pk);
     require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(val, owen), amount_c: hc(500) })).status === 201, 'Val is made a voucher with 500');
-    // Confirmed: Dee, Pia, Fay, Kit, Wil (and Ada, so her own floor is a real one). Sam waits for a second admin. Hal is not.
-    for (const who of [dee, pia, fay, kit, wil, ada]) confirm(who, owen);
+    // Confirmed: Dee, Pia, Fay, Kit, Wil, Kat (and Ada, so her own floor is a real one). Sam waits for a second admin. Hal is not.
+    for (const who of [dee, pia, fay, kit, wil, kat, ada]) confirm(who, owen);
     confirm(sam, owen, true);
     const raise = (by: Id, who: Id, beans: number | unknown) => call(by, 'POST', '/api/credit/known-floor', { memberPubkey: who.pk, raiseTo_c: typeof beans === 'number' ? hc(beans) : beans });
 
@@ -157,6 +158,8 @@ async function main(): Promise<void> {
     db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount_c, frozen, set_by, set_at) VALUES (?, 0, 0, ?, ?)`).run(wil.pk, owen.pk, workOffAt);
     db.prepare(`INSERT INTO names_debts (id, entry_id, amount_c, reason, removed_at, status, repaying_pubkey, work_off_floor_before, work_off_floor_set_at)
         VALUES (?, ?, ?, 'removed', ?, 'open', ?, 'default', ?)`).run(crypto.randomBytes(8).toString('hex'), crypto.randomBytes(8).toString('hex'), hc(300), workOffAt, wil.pk, workOffAt);
+    // Kat: a training limit of 300 under the community's 1,000, set in Settings.
+    setKnownFloorException(owen.pk, { memberPubkey: kat.pk, amount_c: hc(300) });
 
     const accountsAtStart = accountsNow();
     const txAtStart = txCount();
@@ -226,6 +229,15 @@ async function main(): Promise<void> {
     setNodeRole('primary');
     const piaOk = await raise(owen, pia, 1100);
     assert(piaOk.status === 200 && piaOk.body?.knownFloor_c === hc(1100), `8. after every refusal Pia's raise still lands: the refusals were the rules, not a broken route (${show(piaOk)})`);
+    // A training limit under the community's floor (Settings set Kat 300): the app raises it to 800, still under 1,000. What
+    // she holds is the 300, so 800 is a raise; Settings' writer labels the line by the community's floor, as it does there.
+    const katUp = await noticesOf(() => raise(ada, kat, 800));
+    const katLine = db.prepare('SELECT action, old_value, new_value FROM known_floor_log WHERE member_pubkey = ? ORDER BY rowid DESC LIMIT 1').get(kat.pk) as any;
+    assert(katUp.res.status === 200 && katUp.res.body?.was_c === hc(300) && katUp.res.body?.knownFloor_c === hc(800) && exceptionOf(kat)?.amount_c === hc(800)
+        && katLine?.old_value === String(hc(300)) && katLine?.new_value === String(hc(800)) && katLine?.action === 'exception_lowered'
+        && katUp.kept.length === 1 && katUp.kept[0].recipient === kat.pk && /raised your known floor to 800 Beans/.test(katUp.kept[0].body),
+        `8. Kat's training limit 300 → 800: a raise from what she holds, the writer's own line (300 → 800, labelled by the community's floor) and "raised" in her notice (${show(katUp.res)} ${JSON.stringify(katLine)})`);
+    await refused("8. Kat back down to 500 from the app (red when the route compares with the community's floor, not what she holds)", () => raise(ada, kat, 500), 409, 'not_above');
 
     // No Bean moved, and the module can't move one.
     assert(accountsNow() === accountsAtStart && txCount() === txAtStart, '8. no `accounts` row moved and no transaction was written (red when a writer touches `accounts`)');

@@ -51,8 +51,9 @@
  * may hold 500 in all, and the three-vouchers rule never refuses an owner's vouch. Never from a profile for a member below zero now,
  * read from the stored balance (rule 3), nor for a member whose credit line or known floor an admin froze (Marty's Q5 of
  * 12 Nov, DESIGN-credit-list-fable.md §6: a vouch then bought nothing until an unfreeze, or gave back part of a line the
- * freeze took away), refused with the sentence a credit-line gift to them gets. A vouch on an invite lands at the redeem, in its transaction (the joiner is new,
- * so it is their first, and it is that voucher's one vouch for them); an offline ticket never carries one.
+ * freeze took away), refused with the sentence a credit-line gift to them gets. A vouch on an invite lands at the redeem,
+ * in its transaction (the joiner is new, so it is their first, and it is that voucher's one vouch for them); an offline
+ * ticket never carries one.
  *
  * ## Ledger rules (memory ledger-transaction-rules)
  * Nothing here is a Bean: no `accounts` row, no transfer, no conservingTransaction. Every writer is a plain db.transaction

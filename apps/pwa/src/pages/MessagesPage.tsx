@@ -2245,9 +2245,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     <div
                         data-testid="chat-drop-hint"
                         aria-hidden="true"
+                        // The accent as words on --bg-hover (ramp 800): Light and Classic read the accent fill as they did; in
+                        // Dark the blue is 4.35:1 there, so every dark look takes the quiet chip's own pair (Classic: the same #c0ccc0).
+                        className="text-bp-accent-fill dark:text-bp-chip-quiet-ink"
                         style={{
                             padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 600,
-                            fontSize: '0.9rem', color: 'var(--bp-accent-fill)', background: 'var(--bg-hover)',
+                            fontSize: '0.9rem', background: 'var(--bg-hover)',
                         }}
                     >
                         {t('Drop the picture to send it')}

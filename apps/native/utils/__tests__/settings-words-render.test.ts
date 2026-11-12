@@ -44,6 +44,7 @@ vi.mock('react-native', () => {
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (accessibilityState?.disabled !== undefined) attrs['aria-disabled'] = String(accessibilityState.disabled);
+        if (accessibilityState?.checked !== undefined) attrs['aria-checked'] = String(accessibilityState.checked);
         if (accessibilityState?.busy !== undefined) attrs['aria-busy'] = String(accessibilityState.busy);
         if (placeholder) attrs.placeholder = placeholder;
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
@@ -52,6 +53,7 @@ vi.mock('react-native', () => {
         const s = flat(props.style);
         if (s.flexWrap) attrs['data-wrap'] = s.flexWrap;
         if (s.flex !== undefined) attrs['data-flex'] = String(s.flex);
+        if (typeof s.minHeight === 'number') attrs['data-min-height'] = String(s.minHeight);
         if (typeof s.fontSize === 'number') attrs['data-font'] = String(s.fontSize);
         if (s.textTransform) attrs['data-transform'] = s.textTransform;
         return createElement(tag, attrs, children);
@@ -137,10 +139,11 @@ vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: async () => ({ status: 'granted', canAskAgain: true }),
     requestForegroundPermissionsAsync: async () => ({ status: 'granted' }),
 }));
+const chosen = vi.hoisted(() => ({ now: '' }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return {
-        useTheme: () => ({ theme: 'light', colors: lightColors, themePreference: 'light', setThemePreference() {}, patternEnabled: false, setPatternEnabled() {} }),
+        useTheme: () => ({ theme: 'light', colors: lightColors, themePreference: 'light', setThemePreference(v: string) { chosen.now = v; }, patternEnabled: false, setPatternEnabled() {} }),
         useStyles: (make: (t: { theme: string; colors: unknown; patternEnabled: boolean }) => unknown) => make({ theme: 'light', colors: lightColors, patternEnabled: false }),
     };
 });
@@ -958,8 +961,19 @@ describe('Settings at 320 dp with 1.3× text, in the pseudo-locale', () => {
     // 320 - 2 × 20 (the page's padding) - 2 × 14 (a row's) - 48 (its icon) = 204; a switch takes 50 more, a chevron ~22.
     const ROW_TEXT = 204;
 
+    /**
+     * The text column of an Appearance row (components/AppearanceChoice.tsx): 320 - 2 × 20 (the page) - 2 × 14 (the block)
+     * - 2 × 2 (the row's border) - 2 × 12 (its padding) - the dots (14 each, 4 apart, 12 before the words) - the tick (22 + 8).
+     */
+    const appearanceColumn = (radio: Element): number => {
+        const dots = radio.children[0].children.length;
+        return 320 - 40 - 28 - 4 - 24 - (14 * dots + 4 * (dots - 1) + 12) - 30;
+    };
+
     /** A menu row's text column: beside a switch, a chevron, or nothing. */
     const columnOf = (span: Element): number => {
+        const radio = span.closest('[role="radio"]');
+        if (radio) return appearanceColumn(radio);
         const rowEl = span.getAttribute('data-flex') === '1' ? span.parentElement! : span.parentElement!.parentElement!;
         const kids = Array.from(rowEl.children);
         if (kids.some((k) => k.tagName === 'BUTTON' && !(k.textContent ?? '').trim())) return ROW_TEXT - 50;
@@ -998,22 +1012,42 @@ describe('Settings at 320 dp with 1.3× text, in the pseudo-locale', () => {
         for (const h of headers) expect(h.getAttribute('data-transform'), h.textContent ?? '').toBeNull();
     });
 
-    it('Appearance\'s three choices: each stays whole on its two lines in its third, shrinking to fit', async () => {
+    it('Appearance\'s four choices: a full-width row each, 48 dp tall, its name and line wrapping whole in the row, none cut short or shrunk', async () => {
         await renderIn('xx');
-        // 320 - 2 × 20 - 2 × 14 (the block's padding) - 2 × 3 (the row's) - 2 × 3 (its gaps), in thirds, less 2 × 4 each.
-        const third = (320 - 40 - 28 - 6 - 6) / 3 - 8;
         const radios = Array.from(host.querySelectorAll('[role="radio"]'));
-        expect(radios).toHaveLength(3);
+        expect(radios).toHaveLength(4);
+        expect(radios.map((r) => r.getAttribute('aria-label'))).toEqual(
+            ['Same as phone', 'Classic', 'Light', 'Dark'].map((name) => pseudoLocalise(name)),
+        );
         for (const radio of radios) {
-            const label = radio.querySelector('span[data-shrinks]')!;
-            const text = label.textContent ?? '';
-            expect(label.getAttribute('data-lines'), text).toBe('2');
-            const px = 13 * SCALE * Number(label.getAttribute('data-min-scale'));
-            expect(widthOf(longestWord(text), px), longestWord(text)).toBeLessThanOrEqual(third);
-            // Plus one tilde at the smallest size: the pseudo pad rounds up to whole tildes (slice T4, 4 Nov 2026), so the
-            // 13-letter "Same as phone" carries 6 at 40 % where 35 % gave 5 (132.0 against 129.6 dp; a tilde is 6.3 dp here).
-            expect(widthOf(text, px), text).toBeLessThanOrEqual(2 * third * 0.9 + widthOf('~', px));
+            const name = radio.querySelector('span[data-font="15"]')!;
+            const line = radio.querySelector('span[data-font="12"]')!;
+            // The row is at least 48 dp, and what it says to a screen reader is its name, then its line as the hint.
+            expect(radio.getAttribute('data-min-height'), name.textContent ?? '').toBe('48');
+            expect(radio.getAttribute('aria-label')).toBe(name.textContent);
+            expect(radio.getAttribute('data-hint')).toBe(line.textContent);
+            for (const span of [name, line]) {
+                const text = span.textContent ?? '';
+                // Wrapped, never cut short or shrunk: no line count, no fit-to-width.
+                expect(span.getAttribute('data-lines'), text).toBeNull();
+                expect(span.getAttribute('data-shrinks'), text).toBeNull();
+                // In the pseudo-locale every word is bracketed, so one that bypassed t() shows.
+                expect(text, text).toMatch(/^\[/);
+                // Its longest word, at 1.3×, fits the column the row leaves for words (the dots and the tick take the rest).
+                const px = Number(span.getAttribute('data-font')) * SCALE;
+                expect(widthOf(longestWord(text), px), longestWord(text)).toBeLessThanOrEqual(appearanceColumn(radio));
+            }
         }
+    });
+
+    it('Appearance: the chosen row is the one the phone holds, and a tap on another chooses it at once', async () => {
+        await renderIn('en');
+        const checked = () => Array.from(host.querySelectorAll('[role="radio"]')).filter((r) => r.getAttribute('aria-checked') === 'true').map((r) => r.getAttribute('aria-label'));
+        // The test's ThemeContext holds Light (its mock, above).
+        expect(checked()).toEqual(['Light']);
+        const dark = Array.from(host.querySelectorAll('[role="radio"]')).find((r) => r.getAttribute('aria-label') === 'Dark')!;
+        await click(dark, 'Dark');
+        expect(chosen.now).toBe('night');
     });
 });
 

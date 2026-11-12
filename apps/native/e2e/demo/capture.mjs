@@ -390,7 +390,8 @@ function androidDevice() {
         async setScheme(scheme) {
             dev.open('beanpool://settings');
             await sleep(6000);
-            const label = scheme === 'dark' ? 'Dark' : 'Light';
+            // The dark the store pictures always showed is Classic; the list's "Dark" is the newer charcoal-and-blue look.
+            const label = scheme === 'dark' ? 'Classic' : 'Light';
             let xml = '';
             for (let i = 0; i < 14; i++) {
                 if (await dev.ensureApp()) { dev.open('beanpool://settings'); await sleep(6000); }
@@ -407,7 +408,7 @@ function androidDevice() {
                 dev.swipeUp();
                 await sleep(1200);
             }
-            throw new Error(`could not find Appearance -> ${label} in Settings (on screen: ${wordsOf(xml).slice(0, 300)}; radios: ${nodes(xml).filter((n) => /radio/i.test(attr(n, 'class')) || /Light|Dark|Same as phone/.test(attr(n, 'content-desc'))).map((n) => `${attr(n, 'class')}/${attr(n, 'content-desc')}/${attr(n, 'clickable')}`).join(' ')})`);
+            throw new Error(`could not find Appearance -> ${label} in Settings (on screen: ${wordsOf(xml).slice(0, 300)}; radios: ${nodes(xml).filter((n) => /radio/i.test(attr(n, 'class')) || /Light|Classic|Dark|Same as phone/.test(attr(n, 'content-desc'))).map((n) => `${attr(n, 'class')}/${attr(n, 'content-desc')}/${attr(n, 'clickable')}`).join(' ')})`);
         },
         async teardown() {
             try { dev.stop(); } catch { /* gone */ }

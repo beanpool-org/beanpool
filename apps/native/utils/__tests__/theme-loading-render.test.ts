@@ -32,10 +32,10 @@ vi.mock('expo-navigation-bar', () => ({ setStyle: () => {} }));
 import { ThemeProvider, useTheme } from '../../app/ThemeContext';
 import { DEFAULT_LIGHT_MIGRATION_KEY, THEME_PREFERENCE_KEY } from '../theme-preference';
 
-const seen: Array<{ theme: string; themeLoading: boolean }> = [];
+const seen: Array<{ theme: string; themeLoading: boolean; set?: string }> = [];
 function Probe() {
-    const { theme, themeLoading } = useTheme();
-    seen.push({ theme, themeLoading });
+    const { theme, themeLoading, set } = useTheme();
+    seen.push({ theme, themeLoading, set });
     return null;
 }
 
@@ -55,22 +55,42 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); });
 
 describe('themeLoading', () => {
-    it('starts true, on the light the provider starts with', async () => {
+    it('starts true, on Classic: the default the provider starts with', async () => {
         await open();
-        expect(seen[0]).toEqual({ theme: 'light', themeLoading: true });
+        expect(seen[0]).toEqual({ theme: 'dark', themeLoading: true, set: 'dark' });
+    });
+
+    it('a phone with nothing stored ends on Classic, with nothing written for it', async () => {
+        await open();
+        expect(seen[seen.length - 1]).toEqual({ theme: 'dark', themeLoading: false, set: 'dark' });
+        expect(store.map.has(THEME_PREFERENCE_KEY)).toBe(false);
+    });
+
+    it.each([
+        ['light', 'light', 'light'],
+        ['dark', 'dark', 'dark'],
+        ['night', 'dark', 'night'],
+    ] as const)('a stored %s ends as the %s scheme and the %s set, and is not written over', async (stored, theme, set) => {
+        store.map.set(THEME_PREFERENCE_KEY, stored);
+        store.map.set(DEFAULT_LIGHT_MIGRATION_KEY, '1');
+        await open();
+        expect(seen[seen.length - 1]).toEqual({ theme, themeLoading: false, set });
+        expect(store.map.get(THEME_PREFERENCE_KEY)).toBe(stored);
+        // Never reports done while still drawing the guess when the guess is not the member's.
+        if (stored !== 'dark') expect(seen.filter((s) => !s.themeLoading && s.set !== set)).toEqual([]);
     });
 
     it('never goes false before the member\'s own theme is in', async () => {
         store.map.set(THEME_PREFERENCE_KEY, 'dark');
         store.map.set(DEFAULT_LIGHT_MIGRATION_KEY, '1');
         await open();
-        expect(seen[seen.length - 1]).toEqual({ theme: 'dark', themeLoading: false });
+        expect(seen[seen.length - 1]).toEqual({ theme: 'dark', themeLoading: false, set: 'dark' });
         expect(seen.filter((s) => !s.themeLoading && s.theme === 'light')).toEqual([]);
     });
 
     it('ends when the stored read fails, so the map still shows', async () => {
         store.fails = true;
         await open();
-        expect(seen[seen.length - 1]).toEqual({ theme: 'light', themeLoading: false });
+        expect(seen[seen.length - 1]).toEqual({ theme: 'dark', themeLoading: false, set: 'dark' });
     });
 });

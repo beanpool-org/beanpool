@@ -45,7 +45,7 @@ export function webSetVariableMap(set) {
 /** The sets beyond Classic's two, each written as a block on top of Classic dark (each is a dark look). */
 export const THEME_BLOCK_SETS = BRAND_SETS.filter((set) => set !== 'light' && set !== 'dark');
 
-/** The selector a further set's block is written under. The picker (slice T3) sets the attribute on <html>. */
+/** The selector a further set's block is written under. The picker (slice T3: src/lib/useTheme.ts and public/theme-boot.js) sets the attribute on <html>. */
 export const themeBlockSelector = (set) => `:root.dark-theme[data-bp-theme="${set}"]`;
 
 /** Only the variables a set changes from Classic dark: the rest it inherits from :root.dark-theme. */

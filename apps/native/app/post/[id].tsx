@@ -15,12 +15,14 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
-    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, getListingItems,
+    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, getListingItems, refreshPost,
 } from '../../utils/db';
 import { PerItemFields } from '../../components/PerItemFields';
+import { PerItemTakeUp } from '../../components/PerItemTakeUp';
 import {
     carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
     perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
+    ITEM_BOX_START, itemDealRow, itemDealTakenLine, itemSellerStock, itemTakeUpBox, itemTakeUpRefusalIn, type ItemBoxState,
 } from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
 import { standingOfRow } from '../../utils/standing-row';
@@ -605,6 +607,9 @@ function PostDetailModal() {
     // Transactions / Reporting state
     const [accepting, setAccepting] = useState(false);
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
+    // The per-item box's choice (core ItemBoxState), and the node's refusal of its last Confirm, said until the count changes.
+    const [eachState, setEachState] = useState<ItemBoxState>(ITEM_BOX_START);
+    const [eachRefusal, setEachRefusal] = useState<string | null>(null);
     // Keeps the field being typed in (the edit form, the rating comment, the reply box) above the keyboard.
     const { scrollRef: scrollViewRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
     // The style box (components/market-card-shell.ts): the card's chips, the page's boxes and buttons, as the event page draws them.
@@ -1123,6 +1128,11 @@ function PostDetailModal() {
         </Text>
     ) : null;
     const priceLabel = freeLabel ? upperCase(freeLabel) : isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
+    // The buyer's "How many would you like?" (DESIGN-per-item-price-fable.md §2.2, slice P3): core's box, the web's too; null for
+    // any listing not priced each, which keeps its own confirm. Its Confirm sends exactly the total it shows.
+    const eachTakeUp = isOffer && !isLoan ? itemTakeUpBox(post, eachState, post.author_callsign || t('Peer')) : null;
+    // A deal on a listing priced each is for a number of items, not a time: Release asks none and pays what is held (D5).
+    const asksTime = post.price_type !== 'fixed' && post.price_type !== 'each';
     // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
     // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
     // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
@@ -1147,6 +1157,8 @@ function PostDetailModal() {
     const deals = listingDeals(listingTxs, { id: post.id, authorPublicKey: post.author_pubkey, type: post.type, status: post.status }, me, operatedTreasuries);
     const pinnedTxId = Array.isArray(txId) ? txId[0] : txId;
     const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === pinnedTxId) - Number(a.tx.id === pinnedTxId)) : [];
+    // The price box's stock line: its own people also read how many their deals under way hold, "17 left · 3 held for buyers" (§2.3).
+    const eachStock = eachBox ? (deals.own ? itemSellerStock(post, deals.held.map((m) => m.tx)) ?? eachBox.stock : eachBox.stock) : null;
     // The reader's own request, by core's one rule (dealMoves), as on the web: theirs to withdraw, a keeper's too (the node
     // lets a keeper ask for their enterprise's lendable Offer or offer to help with its Need), and never on its own people's
     // list to approve or deny as the enterprise. Every other request stays on that list, as it always did (an older row on
@@ -1204,10 +1216,53 @@ function PostDetailModal() {
             }
         } finally { setAccepting(false); }
     };
+    // Confirm in the per-item box (§2.2): exactly the number, the way and the total it showed (core itemTakeUpBox's send). When
+    // the listing has moved on since (a count, the price for all, a price), the node holds nothing and says why: the sentence
+    // goes in the box and the listing is read again, so the member chooses on it as it is now. Never a different amount.
+    const takeUpEach = async (send: { hours: number; itemOption: 'each' | 'lot'; expect_c: number } | null) => {
+        if (accepting || !identity || !post.id || !send) return;
+        setAccepting(true);
+        setEachRefusal(null);
+        try {
+            await acceptMarketplacePost(post.id, identity.publicKey, send.hours, undefined, { itemOption: send.itemOption, expect_c: send.expect_c });
+            hapticSuccess();
+            setShowAcceptConfirm(false);
+            requestSync().catch(console.error);
+            // Then the chat with the seller, as every one-step accept opens it.
+            try {
+                const conv = await createConversationApi('dm', [post.author_pubkey, identity.publicKey], identity.publicKey, undefined, post.id);
+                if (conv) { router.replace(`/chat/${conv.id}`); return; }
+            } catch (chatError) {
+                console.error('Failed to start chat after a per-item take-up', chatError);
+            }
+            router.replace({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
+        } catch (e: any) {
+            hapticWarning();
+            const refused = itemTakeUpRefusalIn(e);
+            if (refused) {
+                setEachRefusal(refused.text);
+                await refreshPost(post.id).catch(() => false);
+                requestSync().catch(console.error);
+            } else if (changedElsewhere(e, 'deal_open')) {
+                Alert.alert(t('Already under way'), t('You already have a deal under way on this. Finish or cancel it first.'));
+                requestSync().catch(console.error);
+                setShowAcceptConfirm(false);
+            } else if (changedElsewhere(e, 'post_gone')) {
+                Alert.alert(t('Already Updated'), t('This post was already accepted or modified elsewhere. Refreshing your screen...'));
+                requestSync().catch(console.error);
+                setShowAcceptConfirm(false);
+            } else {
+                const x = explainTradeError(e);
+                Alert.alert(x.title, x.message);
+            }
+        } finally {
+            setAccepting(false);
+        }
+    };
     // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
     const releaseRow = async (m: DealMoves) => {
         if (!identity) return;
-        const hoursRead = post.price_type !== 'fixed' ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null;
+        const hoursRead = asksTime ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null;
         if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
         const finalHours = hoursRead?.ok ? hoursRead.value : undefined;
         setAccepting(true);
@@ -1272,7 +1327,7 @@ function PostDetailModal() {
     const renderReleaseLine = (deal: { amount_c?: number | null; hours?: number | null }, payee: string, testID: string) => (
         <Text testID={testID} style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>
             {releaseLine(deal, { priceType: post.price_type, lendable: post.lendable },
-                post.price_type !== 'fixed' ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null, payee)}
+                asksTime ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null, payee)}
         </Text>
     );
     const renderOwnDeal = (m: DealMoves) => {
@@ -1286,7 +1341,8 @@ function PostDetailModal() {
         return (
             <View key={tx.id} testID={`deal-row-${tx.id}`} style={{ borderWidth: 1, borderColor: tx.id === pinnedTxId ? colors.brand.primary : colors.border.default, borderRadius: SHELL.radius, padding: SHELL.textPadding, gap: 8, marginBottom: 8 }}>
                 <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>
-                    {listingDealLines.heldRow(otherName, (tx as any).amount_c ?? 0, since)}
+                    {/* A per-item deal says how many (§2.3): "Dana · 3 for 900 Beans held · since 11 Nov". */}
+                    {itemDealRow(tx, otherName, since) ?? listingDealLines.heldRow(otherName, (tx as any).amount_c ?? 0, since)}
                 </Text>
                 {!m.release && (
                     <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>
@@ -1295,19 +1351,19 @@ function PostDetailModal() {
                 )}
                 {m.release && (confirming ? (
                     <View style={styles.confirmBox}>
-                        {post.price_type !== 'fixed' && renderWorkedField()}
+                        {asksTime && renderWorkedField()}
                         {renderReleaseLine({ amount_c: (tx as any).amount_c ?? null, hours: (tx as any).hours ?? null }, otherName, `release-line-${tx.id}`)}
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => { setShowCompleteConfirm(false); setReleaseRowId(null); }} disabled={accepting}>
                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
                             </Pressable>
-                            <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !completeHours)} onPress={() => releaseRow(m)}>
+                            <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (asksTime && !completeHours)} onPress={() => releaseRow(m)}>
                                 <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Beans')}</Text>
                             </Pressable>
                         </View>
                     </View>
                 ) : (
-                    <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setReleaseRowId(tx.id!); setShowCompleteConfirm(true); if (post.price_type !== 'fixed') setCompleteHours((tx as any).hours ? formatNumber((tx as any).hours) : '1'); }}>
+                    <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setReleaseRowId(tx.id!); setShowCompleteConfirm(true); if (asksTime) setCompleteHours((tx as any).hours ? formatNumber((tx as any).hours) : '1'); }}>
                         <Text style={styles.acceptBtnText}>{t('✅ Release Beans')}</Text>
                     </Pressable>
                 ))}
@@ -1804,7 +1860,7 @@ function PostDetailModal() {
                         </View>
                         {/* An Offer priced for each one (DESIGN-per-item-price-fable.md §2.2): how many are left, then the price for all of
                             them while it is on offer, each its own line. */}
-                        {!!eachBox && <Text style={styles.termsNote} testID="price-each-stock">{eachBox.stock}</Text>}
+                        {!!eachStock && <Text style={styles.termsNote} testID="price-each-stock">{eachStock}</Text>}
                         {!!eachBox?.boxLot && <Text style={styles.termsNote} testID="price-each-lot">{eachBox.boxLot}</Text>}
                     </View>
                 )}
@@ -1843,11 +1899,13 @@ function PostDetailModal() {
                                 {/* The taker's line (design §3.2): never the author's (on a Need the author pays), and only with the
                                     deal's own date, never the post's while the deals are still loading. */}
                                 {!isOwnPost && !!(activeTx?.created_at || activeTx?.createdAt) && (
-                                    <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
-                                        {t('✅ You took this up on {date} · {n} Beans held in trust', {
-                                            date: formatDate(new Date(activeTx.created_at || activeTx.createdAt), 'day-month'),
-                                            n: formatHundredths(activeTx.amount_c ?? post.price_c),
-                                        })}
+                                    <Text testID="taker-line" style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                                        {/* A per-item deal says how many it is for (§2.3): "✅ You took up 3 on 11 Nov · 900 Beans held in trust". */}
+                                        {itemDealTakenLine(activeTx, formatDate(new Date(activeTx.created_at || activeTx.createdAt), 'day-month'))
+                                            ?? t('✅ You took this up on {date} · {n} Beans held in trust', {
+                                                date: formatDate(new Date(activeTx.created_at || activeTx.createdAt), 'day-month'),
+                                                n: formatHundredths(activeTx.amount_c ?? post.price_c),
+                                            })}
                                     </Text>
                                 )}
                                 <Text style={{ color: colors.text.secondary, fontSize: 11, textAlign: 'center', marginBottom: post.type === 'offer' && !!post.repeatable ? 4 : 12, paddingHorizontal: 16 }}>
@@ -1862,14 +1920,14 @@ function PostDetailModal() {
                                 {showCompleteConfirm ? (
                                     <View style={styles.confirmBox}>
                                         <Text style={styles.confirmBoxTitle}>{t('Finalize Transaction')}</Text>
-                                        {post.price_type !== 'fixed' && renderWorkedField()}
+                                        {asksTime && renderWorkedField()}
                                         {/* The deal's own rate; the listing's price while the deal is still loading. */}
                                         {renderReleaseLine(activeTx ?? { amount_c: post.price_c, hours: 1 }, targetPeerCallsign, 'release-line-panel')}
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowCompleteConfirm(false)} disabled={accepting}>
                                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
                                             </Pressable>
-                                            <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !completeHours)} onPress={async () => {
+                                            <Pressable accessibilityRole="button" testID="release-confirm" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (asksTime && !completeHours)} onPress={async () => {
                                                 const txToComplete = activeTx?.id || post.pending_transaction_id;
                                                 if (!txToComplete) {
                                                     Alert.alert(t('Loading'), t('Trust transaction details are still loading. Please wait a moment and try again.'));
@@ -1877,7 +1935,7 @@ function PostDetailModal() {
                                                 }
                                                 if (!identity) return;
                                                 // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.
-                                                const hoursRead = post.price_type !== 'fixed' ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null;
+                                                const hoursRead = asksTime ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null;
                                                 if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
                                                 const finalHours = hoursRead?.ok ? hoursRead.value : undefined;
                                                 setAccepting(true);
@@ -1903,7 +1961,7 @@ function PostDetailModal() {
                                         </View>
                                     </View>
                                 ) : (
-                                    <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setShowCompleteConfirm(true); if(post.price_type !== 'fixed' && !completeHours) setCompleteHours(activeTx?.hours ? formatNumber(activeTx.hours) : '1'); }}>
+                                    <Pressable accessibilityRole="button" testID="release-open" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setShowCompleteConfirm(true); if(asksTime && !completeHours) setCompleteHours(activeTx?.hours ? formatNumber(activeTx.hours) : '1'); }}>
                                         <Text style={styles.acceptBtnText}>{t('✅ Release Beans')}</Text>
                                     </Pressable>
                                 )}
@@ -2276,6 +2334,22 @@ function PostDetailModal() {
                                 room={spendRoom}
                                 busy={accepting} onCancel={() => setShowAcceptConfirm(false)}
                                 onAgree={(choice) => takeUpStanding(choice, post.author_pubkey)} />
+                        ) : showAcceptConfirm && eachTakeUp ? (
+                            // An Offer priced for each one (§2.2): how many, or all of them, in the confirm box; Confirm sends its total.
+                            <View style={styles.confirmBox} testID="each-confirm">
+                                <Text style={styles.confirmBoxTitle}>{eachTakeUp.title}</Text>
+                                <PerItemTakeUp listing={post} box={eachTakeUp} state={eachState} nodeRefusal={eachRefusal} disabled={accepting}
+                                    onState={(next) => { setEachState(next); setEachRefusal(null); }} />
+                                <View style={{ flexDirection: 'row', gap: 10 }}>
+                                    <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => { setShowAcceptConfirm(false); setEachRefusal(null); }} disabled={accepting}>
+                                        <Text style={styles.cancelActionBtnText}>{t('Cancel')}</Text>
+                                    </Pressable>
+                                    <Pressable accessibilityRole="button" testID="each-confirm-btn" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen, (accepting || !eachTakeUp.send) && { opacity: 0.6 }]}
+                                        disabled={accepting || !eachTakeUp.send} onPress={() => takeUpEach(eachTakeUp.send)}>
+                                        <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Confirm')}</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
                         ) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
                                 <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t(NEED_ANSWER_WORDS.title)}</Text>
@@ -2375,6 +2449,9 @@ function PostDetailModal() {
                                     </Pressable>
                                 </View>
                             </View>
+                        ) : eachBox?.stockOut ? (
+                            // None can be taken just now (all held in deals under way): the listing says so, and there is nothing to accept.
+                            <Text testID="each-all-taken" style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center', marginTop: 12 }}>{eachBox.stock}</Text>
                         ) : (
                             <Pressable accessibilityRole="button" testID="post-take-up" style={[styles.acceptBtn, isOffer ? styles.acceptBtnOffer : styles.acceptBtnNeed, (accepting || post.status === 'pending') && { opacity: 0.6 }]} disabled={accepting || post.status === 'pending'} onPress={async () => {
                                 // A name AND a photo are required before you can accept or fulfil — routed to the setup wizard.
@@ -2392,6 +2469,9 @@ function PostDetailModal() {
                                 }
                                 // Accepting an Offer extracts value → gated. Fulfilling a Need is a contribution → allowed.
                                 if (isOffer && blockedFromTrading) { setShowContributionRequired(true); } else {
+                                    // A per-item box opens at one, with no refusal left from before.
+                                    setEachState(ITEM_BOX_START);
+                                    setEachRefusal(null);
                                     setShowAcceptConfirm(true);
                                     // The confirmation opens where the button is, near the top now: scroll it up to the screen's top so
                                     // its Confirm is in view (to the page's end, as when it was the last thing here, would scroll it away).

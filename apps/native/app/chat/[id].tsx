@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Image, Activit
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { dealStateWords, dealStep, formatHundredths, freePriceWords, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
+import { dealStateWords, dealStep, formatHundredths, freePriceWords, itemDealTitle, itemTrustLine, normaliseTappedUrl, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine, requestReportNotSentWords, chatAboutDrafts, type RequestReportOutcome } from '@beanpool/core';
 import { localDealRow, localDealMoves, isChatStripDeal } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
@@ -1209,9 +1209,15 @@ function ChatScreen({ id }: { id: string }) {
                 <View style={[chat.systemMessageBubble, { backgroundColor: bgColor, borderColor: borderColor, borderWidth: 1 }]}>
                     <MaterialCommunityIcons name={iconName} size={16} color={iconColor} style={{ marginRight: 6 }} />
                     <Text style={[chat.systemMessageText, { color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
-                        {item.metadata?.postId && dealTitleByPostId[item.metadata.postId]
-                            ? t('{title}: {text}', { title: dealTitleByPostId[item.metadata.postId], text: chatLineWords(item.text) })
-                            : chatLineWords(item.text)}
+                        {(() => {
+                            const title = item.metadata?.postId ? dealTitleByPostId[item.metadata.postId] : undefined;
+                            // A per-item deal's trust line carries how many, as its push does (DESIGN-per-item-price-fable.md §2.3):
+                            // 'Dana took 3 of "Solar Panels". 900 Beans are held in trust.', from the line's own metadata.
+                            const buyerKey = item.metadata?.buyerPubkey;
+                            const buyer = buyerKey && buyerKey === identity?.publicKey ? identity?.callsign : buyerKey && buyerKey === peerPubkey ? peerName : null;
+                            const counted = item.systemType === 'ESCROW_FUNDED' ? itemTrustLine(item.metadata, buyer, title) : null;
+                            return counted ?? (title ? t('{title}: {text}', { title, text: chatLineWords(item.text) }) : chatLineWords(item.text));
+                        })()}
                     </Text>
                 </View>
                 <Text style={chat.systemTimestamp}>{messageTime(item)}</Text>
@@ -1556,7 +1562,8 @@ function ChatScreen({ id }: { id: string }) {
                                 style={styles.dealCard}
                                 onPress={() => d.postId && router.push({ pathname: '/post/[id]', params: { id: d.postId, txId: d.txId } })}
                             >
-                                <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle || t('Deal')}</Text>
+                                {/* A per-item deal says how many, as Your deals does: "3 × Solar Panels". */}
+                                <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle ? itemDealTitle(d, d.postTitle) : t('Deal')}</Text>
                                 {d.status === 'requested' ? (
                                     // Nothing is held yet, so never "held in trust": whose step it is, in core's words. Approve and Deny
                                     // live on the listing, which the card opens at this deal.

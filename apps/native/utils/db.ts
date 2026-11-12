@@ -389,8 +389,10 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
  * brings them. It is cleared and read again, as the rule above says for a change to the cache's shape: nothing is rewritten.
  * 6 (per-item prices, slice P2, DESIGN-per-item-price-fable.md §3): three columns on `posts`, `units_left`, `lot_price_c` and `lot_units`,
  * NULL on every listing not priced for each one. A copy at 5 has none of them, so it is cleared and read again with them.
+ * 7 (per-item prices, slice P3): `marketplace_transactions.item_option` ('each' or 'lot', the node's), NULL on every other deal,
+ * so Your deals and the item page say "3 × Solar Panels". A copy at 6 has no such column: it is cleared and read again with it.
  */
-export const COPY_SCHEMA = 6;
+export const COPY_SCHEMA = 7;
 
 /** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
 const CACHE_TABLES = [
@@ -641,7 +643,9 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             -- period's row the standing deal as the node's transactions read says it (phase, Beans, unit, dates; standingOfRow).
             standing_id TEXT,
             period_no INTEGER,
-            standing TEXT
+            standing TEXT,
+            -- A deal on an Offer priced for each one (DESIGN-per-item-price-fable.md §3): 'each' (hours holds how many) or 'lot'.
+            item_option TEXT
         );
         -- The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat names
         -- it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
@@ -1105,6 +1109,18 @@ export async function refreshPostForPhoto(id: string, photoUrl: string): Promise
 }
 
 /**
+ * Reads one listing from the node again, as opening it does (refreshCachedPost), and resolves once it is written: after a
+ * take-up the node refused because the listing moved on (a count, a price for all, a price changed: core itemTakeUpRefusalIn),
+ * so the page shows it as it is now before the member chooses again. Resolves whether the screens were told to reload.
+ */
+export async function refreshPost(id: string): Promise<boolean> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    if (!anchorUrl) return false;
+    const database = await waitForInit();
+    return refreshCachedPost(database, anchorUrl, id);
+}
+
+/**
  * A listing's count and price for all of them as the node holds them now (DESIGN-per-item-price-fable.md §2.5): the edit form
  * sends the count it read here back as `unitsLeftWas`, and the node writes a changed count only if the row still holds it.
  * The phone's own copy of a post doesn't keep the two, and a copy would be as old as the last sync. Null when the node has
@@ -1473,7 +1489,7 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
 export async function getDealsBetween(myPubkey: string, peerPubkey: string): Promise<any[]> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
-        SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.amount_c as amount_c,
+        SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.amount_c as amount_c, mt.hours as hours, mt.item_option as item_option,
                mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
                mt.standing_id as standing_id, mt.period_no as period_no, mt.standing as standing,
                p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
@@ -1586,6 +1602,12 @@ const hundredthsOrNull = (v: unknown): number | null => (isHundredths(v) ? v : n
 
 /** What a deal holds as this phone keeps it (marketplace_transactions.amount_c): the node's whole hundredths, or null. */
 const dealAmountColumn = (tx: any): number | null => (isHundredths(tx?.amount_c) && tx.amount_c >= 0 ? tx.amount_c : null);
+
+/** A per-item deal's way as this phone keeps it (marketplace_transactions.item_option): the node's 'each' or 'lot', else null. */
+const itemOptionColumn = (tx: any): 'each' | 'lot' | null => {
+    const v = tx?.itemOption ?? tx?.item_option;
+    return v === 'each' || v === 'lot' ? v : null;
+};
 
 /**
  * Reads the member's balance from the node, keeps it on the phone, and answers the node's figures; null when the node
@@ -4609,7 +4631,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                 }
 
                 await txn.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, completed_at, cover_image, rated_by_buyer, rated_by_seller, post_title, standing_id, period_no, standing, item_option) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         tx.id ?? null,
                         tx.postId ?? tx.post_id ?? null,
@@ -4630,6 +4652,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                         tx.standingId ?? null,
                         tx.periodNo ?? null,
                         standingJsonOf(tx),
+                        itemOptionColumn(tx),
                     ]
                 );
 
@@ -8221,9 +8244,16 @@ export async function toggleMessageReactionApi(messageId: string, authorPubkey: 
 /**
  * Accept an Offer. A listing priced per week or per month is taken up as a standing deal (DESIGN-standing-deals-fable §2.2):
  * `standing` is the payer's signed authorisation (utils/member-statements.ts signStandingStatement), and no hours go.
+ * A listing priced for each one (DESIGN-per-item-price-fable.md §3) is taken up for `hours` of them, or all of them, with the
+ * total the box showed (`item`: core itemTakeUpBox's send); the node refuses any other figure, and holds nothing then.
  */
-export async function acceptMarketplacePost(postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody) {
-    const res = await _signedRequest('/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing } : { postId, buyerPublicKey, hours });
+export async function acceptMarketplacePost(
+    postId: string, buyerPublicKey: string, hours?: number, standing?: StandingStartBody,
+    item?: { itemOption: 'each' | 'lot'; expect_c: number },
+) {
+    const res = await _signedRequest('/api/marketplace/posts/accept', standing ? { postId, buyerPublicKey, standing }
+        : item ? { postId, buyerPublicKey, hours, itemOption: item.itemOption, expect_c: item.expect_c }
+        : { postId, buyerPublicKey, hours });
 
     // Await the local write: callers navigate into the chat as soon as this resolves,
     // and the chat screen reads the pending tx from local SQLite. The write itself is
@@ -8234,8 +8264,10 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
             const database = await getDb();
             const txId = res?.transaction?.id || null;
             console.log(`[Escrow] Offer accepted — txId=${txId}, postId=${postId}`);
-            const postParam = await database.getFirstAsync<{ repeatable: number }>('SELECT repeatable FROM posts WHERE id = ?', [postId]);
-            if (postParam?.repeatable !== 1) {
+            const postParam = await database.getFirstAsync<{ repeatable: number; price_type: string | null }>('SELECT repeatable, price_type FROM posts WHERE id = ?', [postId]);
+            // A listing priced for each one stays on the board under its deals, as the node keeps it: its count comes with the
+            // next read of it, never worked out here (a sync may have brought it already).
+            if (postParam?.repeatable !== 1 && postParam?.price_type !== 'each' && !item) {
                 await database.runAsync(
                     "UPDATE posts SET status = 'pending', accepted_by = ?, pending_transaction_id = ? WHERE id = ?",
                     [buyerPublicKey, txId, postId]
@@ -8248,8 +8280,8 @@ export async function acceptMarketplacePost(postId: string, buyerPublicKey: stri
                 const postRow = await database.getFirstAsync<{ title: string }>('SELECT title FROM posts WHERE id = ?', [postId]);
                 if (postRow) postTitle = postRow.title;
                 await database.runAsync(
-                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, dealAmountColumn(tx), tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx)]
+                    'INSERT OR REPLACE INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours, status, created_at, cover_image, post_title, standing_id, period_no, standing, item_option) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [tx.id, tx.postId || postId, tx.buyerPublicKey || buyerPublicKey, tx.sellerPublicKey || null, dealAmountColumn(tx), tx.hours || null, tx.status || 'pending', tx.createdAt || new Date().toISOString(), tx.coverImage || null, postTitle, tx.standingId ?? null, tx.periodNo ?? null, standingJsonOf(tx), itemOptionColumn(tx)]
                 );
             }
 
@@ -8780,6 +8812,8 @@ export interface MarketplaceTransaction {
     postAuthorPublicKey?: string;
     postRepeatable?: boolean;
     postLendable?: boolean;
+    /** A deal on an Offer priced for each one: 'each' (`hours` is how many) or 'lot' (all of them). Absent on every other deal. */
+    itemOption?: 'each' | 'lot';
     /** A period of a standing deal, and on its current period's row the standing deal itself (standingOfRow; core StandingDealRow). */
     standingId?: string | null;
     periodNo?: number | null;
@@ -8856,6 +8890,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             postAuthorPublicKey: r.postAuthorPublicKey || undefined,
             postRepeatable: r.postRepeatable != null ? Boolean(r.postRepeatable) : undefined,
             postLendable: r.postLendable != null ? Boolean(r.postLendable) : undefined,
+            ...(itemOptionColumn(r) ? { itemOption: itemOptionColumn(r)! } : {}),
             ...standingOfRow(r),
         };
     });

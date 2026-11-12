@@ -102,7 +102,7 @@ const KEPT_TABLES = ['tool_docs', 'group_chat_epochs', 'group_chat_key_state', '
  */
 const LATE_COLUMNS: Record<string, string[]> = {
     members: ['card_fetched_at', 'archetype', 'profile_updated_at'],
-    marketplace_transactions: ['rated_by_buyer', 'rated_by_seller', 'standing_id', 'period_no', 'standing', 'cover_image', 'post_title'],
+    marketplace_transactions: ['rated_by_buyer', 'rated_by_seller', 'standing_id', 'period_no', 'standing', 'cover_image', 'post_title', 'item_option'],
     messages: ['edited_at'],
     conversations: ['listed', 'request', 'post_title', 'post_status', 'post_photo'],
     posts: ['carried_banner', 'carried_callsign', 'carried_avatar', 'tags', 'free_tags', 'pinned_until', 'pinned_at', 'shown_from', 'lendable', 'event_repeat_skips', 'units_left', 'lot_price_c', 'lot_units'],
@@ -112,14 +112,14 @@ const LATE_COLUMNS: Record<string, string[]> = {
 const MONEY_COLUMN = /^(\w*_c|balance|amount|tax_fee|fee|credits|post_credits|earned_credit|goal_amount|current_amount)$/;
 const CACHE_TABLES = ['members', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'conversations', 'projects'];
 
-// The number is 6 since per-item prices (slice P2: three columns on posts, utils/db.ts COPY_SCHEMA), 5 since Learn (slice K2: the new
-// cache table knowledge_posts); 4 was the whole-hundredths cutover this file is about, and a copy of 4 or 5 is now cleared and read
-// again like a 1.3 one (utils/__tests__/learn-copy-sync.test.ts).
-describe("the phone's copy and its schema number (whole hundredths since 4; COPY_SCHEMA 6)", () => {
+// The number is 7 since per-item prices P3 (item_option on marketplace_transactions), 6 since P2 (three columns on posts, utils/db.ts
+// COPY_SCHEMA), 5 since Learn (slice K2: the new cache table knowledge_posts); 4 was the whole-hundredths cutover this file is about,
+// and a copy of 4, 5 or 6 is now cleared and read again like a 1.3 one (utils/__tests__/learn-copy-sync.test.ts).
+describe("the phone's copy and its schema number (whole hundredths since 4; COPY_SCHEMA 7)", () => {
     it('a 1.3 copy (user_version 3, Beans as REAL) loses its cache and every old figure, keeps the tools and group keys, and is read whole again', async () => {
         oldCopy();
         await getDb();
-        expect(userVersion()).toBe(6);
+        expect(userVersion()).toBe(7);
         // Dropped, not converted: no row of the old copy is carried, so no old figure can be read as hundredths.
         for (const table of ['members', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'conversations']) expect(count(table), table).toBe(0);
         expect(await getPosts()).toEqual([]);
@@ -161,11 +161,28 @@ describe("the phone's copy and its schema number (whole hundredths since 4; COPY
         sql.prepare("INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, price_type) VALUES ('P5', 'offer', 'tools', 'Solar panels', '', 30000, ?, 'fixed')").run(ANA);
         expect(columnsOf('posts').map((c) => c.name)).not.toContain('units_left');
         await getDb();
-        expect(userVersion()).toBe(6);
+        expect(userVersion()).toBe(7);
         // Cleared, not converted: the listing is read again from the node, with its count.
         expect(count('posts')).toBe(0);
         const have = columnsOf('posts');
         for (const name of ['units_left', 'lot_price_c', 'lot_units']) expect(have.find((c) => c.name === name)?.type, name).toBe('INTEGER');
+    });
+
+    it('a copy at 6, made before per-item deals said which way they were taken up, is cleared and made again with item_option (nothing altered on open)', async () => {
+        // The copy a build at 6 left: its deal table without the column, a deal in it.
+        await closeDB();
+        sql.exec(`
+            DROP TABLE marketplace_transactions;
+            CREATE TABLE marketplace_transactions (id TEXT PRIMARY KEY, post_id TEXT NOT NULL, buyer_pubkey TEXT NOT NULL, seller_pubkey TEXT NOT NULL, amount_c INTEGER, hours REAL, status TEXT DEFAULT 'pending');
+            PRAGMA user_version = 6;
+        `);
+        sql.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, amount_c, hours) VALUES ('T6', 'P6', ?, 'seller', 90000, 3)").run(ME);
+        expect(columnsOf('marketplace_transactions').map((c) => c.name)).not.toContain('item_option');
+        await getDb();
+        expect(userVersion()).toBe(7);
+        // Cleared, not converted: the deal is read again from the node, with its way.
+        expect(count('marketplace_transactions')).toBe(0);
+        expect(columnsOf('marketplace_transactions').find((c) => c.name === 'item_option')?.type).toBe('TEXT');
     });
 
     it('a copy already at the number keeps every row when it opens again, and nothing alters it on the way', async () => {
@@ -174,7 +191,7 @@ describe("the phone's copy and its schema number (whole hundredths since 4; COPY
         await closeDB();
         adapter.execAsync.mockClear();
         await getDb();
-        expect(userVersion()).toBe(6);
+        expect(userVersion()).toBe(7);
         expect(sql.prepare("SELECT price_c FROM posts WHERE id = 'L2'").get()).toEqual({ price_c: 4925 });
         expect(removed).toEqual([]);
         // The standing rule: the schema is the whole shape, so opening a copy at the number runs no ALTER TABLE and drops nothing.

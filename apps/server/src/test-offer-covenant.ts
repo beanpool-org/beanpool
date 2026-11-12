@@ -6,7 +6,7 @@
  *   1. A member with no earned, granted or known credit has no credit line (floor 0): nothing opens one but those.
  *   4. Offer covenant: spending into a negative balance requires a LIVE offer (COVENANT_REQUIRED), in bands.
  *   4b. The author sees their own paused Offer; others and the feed don't.
- *   6. Admin tier badges (adminSetTier): grant a tier's entry floor (Resident -200 … Elder -1400).
+ *   6. Admin tier badges (engine/badges.ts setMemberBadge) are recognition only: the floor stays where it was.
  *   7. Holiday mode.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-offer-covenant.ts
@@ -14,9 +14,12 @@
 import {
     initStateEngine, seedGenesisMember,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
-    isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
+    isOnHoliday, setHolidayMode, getPosts, getBalance,
 } from './state-engine.js';
 import { db } from './db/db.js';
+import { setMemberBadge } from './engine/badges.js';
+/** A credit line to draw on, set by hand in the granted lane (members.earned_credit_c): a tier badge gives none (badges.ts). */
+const grantLine = (pk: string, c: number) => { db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(c, pk); };
 import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -60,9 +63,9 @@ function main() {
     assert(getMemberTrustProfile('newbie').activated === false, 'and no line is open (activated false)');
 
     // ── 4. Offer covenant (v3, BANDED): live-offer count gates how deep you may spend on credit ──
-    // Give the payer a deep earned limit (Elder −1400) so the OFFER band is the binding constraint.
+    // Give the payer a deep limit (1,400 Beans) so the OFFER band is the binding constraint.
     seedMember('payer'); seedMember('seller');
-    adminSetTier('payer', 'Elder'); // earned limit -1400, balance 0
+    grantLine('payer', hc(1400)); // limit -1400, balance 0
     const sOffer = offer('seller', true, 10); // seller's live offer, costs 10
     offer('payer', false); // payer has LISTED an offer (clears contribution gate) but it is NOT live
     assert(hasLiveOffer('payer') === false, 'payer has no live offer');
@@ -74,7 +77,7 @@ function main() {
     assert(!!tx && tx.status === 'requested', 'spend within the unlocked band → allowed');
 
     // Band boundaries: each extra live offer unlocks a deeper band, capped by the earned limit.
-    seedMember('deep'); adminSetTier('deep', 'Elder'); // earned limit -1400
+    seedMember('deep'); grantLine('deep', hc(1400)); // limit -1400
     assert(getBalance('deep').usableFloor_c === 0, 'deep: 0 offers → 0');
     offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(200),  'deep: 1 offer → -200');
     offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(500),  'deep: 2 offers → -500');
@@ -82,7 +85,7 @@ function main() {
     offer('deep', true); assert(getBalance('deep').usableFloor_c === -hc(1400), 'deep: 4 offers → full earned -1400 (band -1500 capped by limit)');
 
     // Freeze: dropping below the offers your debt needs freezes spending (inbound stays open).
-    seedMember('frozen'); adminSetTier('frozen', 'Elder');
+    seedMember('frozen'); grantLine('frozen', hc(1400));
     const fOfferA = offer('frozen', true); offer('frozen', true); // 2 offers → -500 line
     db.prepare(`UPDATE accounts SET balance_c = ? WHERE public_key = 'frozen'`).run(-hc(400));
     reconcileLedgerFromDb();
@@ -99,16 +102,14 @@ function main() {
     assert(!getPosts({ authorPubkey: 'pauser', viewerPubkey: 'someone-else' }).some(p => p.id === pausedId), 'a different viewer does NOT see the author\'s paused Offer');
     assert(!getPosts().some(p => p.id === pausedId), 'the general feed hides paused Offers');
 
-    // ── 6. Admin tier badges grant the tier's entry floor ──
+    // ── 6. Admin tier badges are recognition only: the tier shows, the floor stays (Marty, 12 Nov 2026: "tiers badge only") ──
     seedMember('badgeUser');
-    adminSetTier('badgeUser', 'Resident');
-    assert(floorOf('badgeUser') === -hc(200), 'Resident badge → floor -200');
-    adminSetTier('badgeUser', 'Steward');
-    assert(floorOf('badgeUser') === -hc(600), 'Steward badge → floor -600');
-    adminSetTier('badgeUser', 'Elder');
-    assert(floorOf('badgeUser') === -hc(1400), 'Elder badge → floor -1400');
-    adminSetTier('badgeUser', 'Newcomer');
-    assert(floorOf('badgeUser') === 0, 'Newcomer badge clears the grant → floor 0');
+    for (const tier of ['Resident', 'Steward', 'Elder'] as const) {
+        setMemberBadge('genesis_admin', 'badgeUser', tier);
+        assert(floorOf('badgeUser') === 0 && getMemberTrustProfile('badgeUser').tier.name === tier, `${tier} badge → shows ${tier}, floor stays 0`);
+    }
+    setMemberBadge('genesis_admin', 'badgeUser', 'Newcomer');
+    assert(floorOf('badgeUser') === 0 && getMemberTrustProfile('badgeUser').tier.name === 'Newcomer', 'Newcomer takes the badge back → Newcomer, floor 0');
 
     // ── 7. Holiday mode ──
     seedMember('holA');

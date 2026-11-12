@@ -285,10 +285,10 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await renderIn('xx');
         expect(text()).toContain(xx('YOUR TRUST LEVEL'));
         expect(text()).toContain(xx('Resident'));
-        expect(text()).toContain(xx('Level {level} of {levels} · {n} trust').replace('{level}', '2').replace('{levels}', '4').replace('{n}', '200'));
+        expect(text()).toContain(xx('Level {level} of {levels} · credit line {n} Beans').replace('{level}', '2').replace('{levels}', '4').replace('{n}', '200'));
         expect(text()).toContain(xx('Send Beans'));
         expect(text()).toContain(xx('Invite Members'));
-        expect(text()).toContain(xx("You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows."));
+        expect(text()).toContain(xx('Recognised by the community for the value you bring. A level is recognition only: it gives no credit.'));
         expect(text()).toContain(xx('WHAT BUILDS YOUR TRUST'));
         expect(byTestId('page-title-ledger')?.textContent ?? text()).toContain(xx('Ledger'));
         expect(bracketed()).toBeGreaterThan(30);
@@ -525,8 +525,8 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
     it('in English nothing is bracketed, and the words are as they were', async () => {
         await renderIn('en');
         expect(bracketed()).toBe(0);
-        for (const english of ['YOUR TRUST LEVEL', 'Resident', 'Level 2 of 4 · 200 trust', '400 more trust to 🏛️ Steward', 'Send Beans', 'Invite Members', 'ALL LEVELS',
-            "You're here", '600 trust', 'Your current floor', 'Credit floor deepens with the value you trade', 'Invite others to join', '🚀 Reach 🏛️ Steward', 'Trust Manual', '400 trust to go',
+        for (const english of ['YOUR TRUST LEVEL', 'Resident', 'Level 2 of 4 · credit line 200 Beans', '400 more trust to 🏛️ Steward', 'Send Beans', 'Invite Members', 'ALL LEVELS',
+            "You're here", '600 trust', 'Your current floor', 'Recognised as a community Resident', 'Invite others to join', '🚀 Reach 🏛️ Steward', 'Trust Manual', '400 trust to go',
             'beans of value to trade', 'THE LEVER', 'new partners (roughly)', 'WHAT BUILDS YOUR TRUST', 'VALUE TRADED', '+150 trust', '3 reviews', 'diverse = faster', 'BEANS', 'Levels', 'Wallet',
             KNOWN_FROZEN.part, '⚠️  Spending paused — your balance is below what your 1 active offer unlock (−150). Post an Offer or trade back up to lift it. You can still receive and sell.']) {
             expect(text(), english).toContain(english);

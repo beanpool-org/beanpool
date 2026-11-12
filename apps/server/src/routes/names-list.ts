@@ -59,7 +59,7 @@ import { creditSightOn } from '../engine/credit-sight.js';
 import { HealthError, healthSummary, knownRule, openExceptions, readHealthAccessLog, setHealthSettings, stepBackFromConfirmed } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
-import { getMember, isVisitorKey, generateInvite, broadcast, dispatchPushNotification } from '../state-engine.js';
+import { getMember, isVisitorKey, generateInvite, broadcast, dispatchPushNotification, tellBellSeen } from '../state-engine.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { revokeEntryInvite } from '../engine/invites.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
@@ -271,8 +271,10 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body, tell), 201));
     router.post('/api/names/vouchers/settings', (ctx) => asAdmin(ctx, (actor, body) => setVoucherSettings(actor, body)));
     router.get('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => readVoucherCard(actor, ctx.params.member)));
-    router.delete('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => stopVoucher(actor, ctx.params.member, tell)));
-    router.post('/api/names/vouchers/:member/budget', (ctx) => asAdmin(ctx, (actor, body) => setBudgetLevel(actor, ctx.params.member, body, tell)));
+    // Setting a budget or stopping one also answers the voucher's open Ask for more: its copies leave every owner's and
+    // committee admin's bell in the change's transaction, and their open apps hear it (tellBellSeen) after (slice C3).
+    router.delete('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => stopVoucher(actor, ctx.params.member, tell, tellBellSeen)));
+    router.post('/api/names/vouchers/:member/budget', (ctx) => asAdmin(ctx, (actor, body) => setBudgetLevel(actor, ctx.params.member, body, tell, tellBellSeen)));
     router.post('/api/names/committee', (ctx) => asAdmin(ctx, (actor, body) => setCreditCommittee(actor, body)));
 
     // The signer's own locked copy, and nobody else's: no parameter names an owner.

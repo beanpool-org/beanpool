@@ -178,7 +178,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(perkPills()).toEqual([]);
             expect(text()).not.toMatch(/Invite others to join/);
             expect(text()).not.toMatch(/Anyone can invite/);
-            expect(text()).toMatch(/Levels are merit badges — they don't gate any action\. Direct sends require a positive balance/);
+            expect(text()).toMatch(/Levels are merit badges — they don't gate any action and give no credit\. Direct sends require a positive balance/);
             // L3: a member visiting the preview ledger records saw_ledger: true once on mount
             expect(net.calls).toEqual(['db.signedRequest']);
         });

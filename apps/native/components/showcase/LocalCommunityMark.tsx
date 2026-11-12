@@ -14,6 +14,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, t, type ShowcaseFeature,
 } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
+// Static colours: the classic light blue info tone, used only when the drawn set's own info tone does not read; info has no per-set value in the library, so no colour set changes it.
 import { lightColors, type AppColors } from '../../constants/colors';
 import { contrastRatio } from '../../utils/readable-color';
 

@@ -51,17 +51,6 @@ export const PROTOCOL_CONSTANTS = {
     STEWARD_THRESHOLD: -beans(1400),   // -600 ≥ floor > -1400 Beans = Steward
     // floor ≤ -1400 = Elder
 
-    // === Admin Tier-Badge / Genesis Grants ===
-    // Pre-seeded GRANTED credit that places a member at a tier's ENTRY floor. An admin can assign
-    // a tier badge (adminSetTier), or a genesis invite can pre-seed it. On this granted path the
-    // grant IS the whole floor: floor = -(granted + earned).
-    //   Resident: -200 → granted = 200
-    //   Steward:  -600 → granted = 600
-    //   Elder:   -1400 → granted = 1400
-    GENESIS_TRUSTED_EARNED: beans(200),     // Resident badge — floor -200 Beans
-    GENESIS_AMBASSADOR_EARNED: beans(600),  // Steward badge — floor -600 Beans
-    GENESIS_ELDER_EARNED: beans(1400),      // Elder badge — floor -1400 Beans
-
     // === Transaction Guardrails ===
     TRANSACTION_WARNING_THRESHOLD: 0.5, // Warn when using >50% of remaining credit
 } as const;
@@ -75,6 +64,8 @@ export const PER_COUNTERPARTY_VOLUME_CAP = PROTOCOL_CONSTANTS.PER_COUNTERPARTY_V
 // ===================== TYPES =====================
 
 export type TierName = 'Newcomer' | 'Resident' | 'Steward' | 'Elder';
+/** A badge an owner or admin can give (Newcomer is no badge: taking one back leaves what the member did). */
+export type BadgeTier = Exclude<TierName, 'Newcomer'>;
 export type GenesisInviteType = 'standard' | 'trusted' | 'ambassador' | 'elder';
 
 /** A tier is a merit badge: it names how much trust backs a member's floor and gates nothing. */
@@ -166,29 +157,28 @@ export function getTier(floor: number): TierInfo {
 }
 
 /**
- * Returns the pre-seeded earnedCredit for an admin genesis invite type.
- * Standard invites return 0 (no boost — member starts as Ghost).
+ * The badge a genesis invite gives its joiner: recognition only, never credit (Marty, 12 Nov 2026: "tiers badge only").
+ * A standard invite gives none. The server keeps it as it keeps an admin's badge (apps/server engine/badges.ts).
  */
-export function getGenesisEarnedCredit(type: GenesisInviteType): number {
-    const c = PROTOCOL_CONSTANTS;
+export function genesisBadgeFor(type: GenesisInviteType): BadgeTier | null {
     switch (type) {
-        case 'trusted': return c.GENESIS_TRUSTED_EARNED;
-        case 'ambassador': return c.GENESIS_AMBASSADOR_EARNED;
-        case 'elder': return c.GENESIS_ELDER_EARNED;
-        default: return 0;
+        case 'trusted': return 'Resident';
+        case 'ambassador': return 'Steward';
+        case 'elder': return 'Elder';
+        default: return null;
     }
 }
 
-// Admin tier badge → the GRANTED credit that lands a member at that tier's entry floor.
-// Newcomer clears the grant (0). Mirrors the genesis pre-seed values.
-export function grantedCreditForTier(tier: TierName): number {
-    const c = PROTOCOL_CONSTANTS;
-    switch (tier) {
-        case 'Elder': return c.GENESIS_ELDER_EARNED;        // 1400 → -1400
-        case 'Steward': return c.GENESIS_AMBASSADOR_EARNED; // 600  → -600
-        case 'Resident': return c.GENESIS_TRUSTED_EARNED;   // 200  → -200
-        default: return 0;                                  // Newcomer — no grant
-    }
+/**
+ * The tier a member shows: the higher of the one their own record reads (`earned`) and a badge an owner or admin gave
+ * them (`badge`, or null). A badge is recognition: it gives no credit, and it never shows a member below what they did.
+ */
+export function withBadge(earned: TierInfo, badge: BadgeTier | null): TierInfo {
+    if (!badge) return earned;
+    const b = tierIndexForName(badge);
+    if (b <= tierIndexForName(earned.name)) return earned;
+    const { name, emoji } = TIER_LEVELS[b];
+    return { name, emoji };
 }
 
 // ===================== OFFER COVENANT (Trust Model v3) =====================

@@ -670,7 +670,7 @@ async function main(): Promise<void> {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c, priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],
         })).post;
-        built('the admin makes Gwen an Elder (credit to buy with)', await A('POST', `/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
+        built('Gwen is given a 1,400-Bean line to buy with (a tier gives none)', await main.send('grant-line', { pk: gwen.pk, amount_c: 140000 }));
         await offer(gwen, 'Sourdough loaf', 400);
         const tuneUp = await offer(kip, 'Bike tune-up', 1000);
         const tx = built('Gwen asks for Kip\'s tune-up', await S_(gwen, '/api/marketplace/posts/request', { postId: tuneUp.id, buyerPublicKey: gwen.pk })).transaction;

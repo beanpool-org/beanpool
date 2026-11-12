@@ -343,7 +343,7 @@ async function main(): Promise<void> {
             built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
-        built('the admin makes Bo an Elder (a credit line to buy with)', await A(`/api/local/admin/users/${bo.pk}/elder`, { grant: true }));
+        built('Bo is given a 1,400-Bean line to buy with (a tier gives none)', await main.send('grant-line', { pk: bo.pk, amount_c: 140000 }));
         const offer = async (who: Id, title: string, description: string, pin: number[] | null, photos: string[]) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description, price_c: 300 /* 3 Beans, whole hundredths */, priceType: 'fixed', authorPublicKey: who.pk,
             ...(pin ? { lat: pin[0], lng: pin[1] } : {}), photos,

@@ -967,7 +967,7 @@
             <div class="glass" data-tab="invites">
                 <h3>🎟️ Invite Management</h3>
                 <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1rem;">
-                    Generate invite codes for new members. Choose the starting tier for the invitee.
+                    Generate invite codes for new members. Choose the badge the invitee starts with: a badge is recognition only and gives no credit.
                 </p>
 
                 <!-- Tier Selector -->
@@ -985,7 +985,7 @@
                         <span style="font-size: 1.2rem;">🏠</span>
                         <div style="flex: 1;">
                             <strong style="color: #93c5fd; font-size: 0.85rem;">Resident</strong>
-                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Resident. Can gift &amp; invite immediately.</p>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts with the Resident badge. Recognition only: no credit.</p>
                         </div>
                     </label>
                     <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 2px solid #334155; cursor: pointer; transition: border-color 0.2s;" class="tier-option" data-type="ambassador">
@@ -993,7 +993,7 @@
                         <span style="font-size: 1.2rem;">🏛️</span>
                         <div style="flex: 1;">
                             <strong style="color: #c4b5fd; font-size: 0.85rem;">Steward</strong>
-                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Steward. For market promoters &amp; organisers.</p>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts with the Steward badge, for market promoters &amp; organisers. Recognition only: no credit.</p>
                         </div>
                     </label>
                     <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; border-radius: 10px; border: 2px solid #334155; cursor: pointer; transition: border-color 0.2s;" class="tier-option" data-type="elder">
@@ -1001,7 +1001,7 @@
                         <span style="font-size: 1.2rem;">⛰️</span>
                         <div style="flex: 1;">
                             <strong style="color: #fde68a; font-size: 0.85rem;">Elder</strong>
-                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts as Elder. Highest trust level and borrowing limits.</p>
+                            <p style="color: #64748b; font-size: 0.7rem; margin: 0;">Starts with the Elder badge, the highest. Recognition only: no credit.</p>
                         </div>
                     </label>
                 </div>
@@ -1419,7 +1419,7 @@
             <!-- Admin Members & Audit -->
             <div class="glass" data-tab="members" style="display:none;">
                 <h3>🌳 Members & Audit Tree</h3>
-                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use the <strong style="color:#fbbf24;">Tier</strong> picker to set a member's credit-floor badge (🥚 Newcomer → ⛰️ Elder) — this only widens/narrows their credit limit; their balance is never touched.</p>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use the <strong style="color:#fbbf24;">badge</strong> picker to give a member a badge (🥚 Newcomer → ⛰️ Elder): recognition only. A badge gives no credit and never touches their balance or credit line, and the member is told.</p>
                 <div id="member-search-row">
                     <div style="position:relative; flex:1;">
                         <span style="position:absolute; left:0.6rem; top:50%; transform:translateY(-50%); color:#64748b; font-size:0.8rem; pointer-events:none;">🔍</span>

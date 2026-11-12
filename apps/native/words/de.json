@@ -335,8 +335,6 @@
   "ADD POST": "BEITRAG ERSTELLEN",
   "The amount is a number of Beans above 0, to the cent.": "Der Betrag ist eine Anzahl von Bohnen über 0, centgenau.",
   "Send Beans": "Bohnen senden",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Stufen sind Leistungsabzeichen – sie schränken keine Aktionen ein. Direktes Senden erfordert ein positives Guthaben und einen abgeschlossenen Handel. Höhere Stufen bedeuten einen höheren Kreditrahmen und Anerkennung in der Community.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "Stufen sind Leistungsabzeichen – sie schränken keine Aktionen ein. Jeder kann einladen. Direktes Senden erfordert ein positives Guthaben und einen abgeschlossenen Handel. Höhere Stufen bedeuten einen höheren Kreditrahmen und Anerkennung in der Community.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "Nichts geht an das Gemeingut, solange du {free} Bohnen oder weniger besitzt.",
   "✨ Generate Ticket": "✨ Ticket erstellen",
   "✨ Generate Offline Ticket": "✨ Offline-Ticket erstellen",
@@ -3186,13 +3184,7 @@
   "Browse & trade the marketplace": "Marktplatz durchstöbern & handeln",
   "Receive credits": "Guthaben empfangen",
   "Send credits after first trade (needs positive balance)": "Guthaben nach erstem Handel senden (erfordert positives Guthaben)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "Du hast echten Wert mit der Community gehandelt. Dein Kreditrahmen wächst mit jedem Handel – je mehr Wert du austauschst, desto größer wird er.",
-  "Credit floor deepens with the value you trade": "Kreditrahmen wächst mit dem gehandelten Wert",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "Ein vertrauenswürdiger Händler mit einem breiten Partnerkreis. Die Community erkennt dich an, und dein Kreditrahmen wächst weiter.",
-  "Credit floor continues deepening": "Kreditrahmen wächst weiter",
   "Trusted-trader recognition": "Anerkennung als vertrauenswürdiger Händler",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "Eine Säule des Gemeinguts – der größtmögliche Kreditrahmen und die höchste Anerkennung der Community.",
-  "Credit floor can reach -2000 (the maximum)": "Kreditrahmen kann bis zu -2000 erreichen (das Maximum)",
   "Recognised as a community Elder": "Als Ältester der Community anerkannt",
   "Export failed": "Export fehlgeschlagen",
   "Export my transactions": "Meine Transaktionen exportieren",
@@ -3207,10 +3199,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "Du kannst nur Bohnen senden, die du aktuell besitzt – direktes Senden erfordert ein positives Guthaben.",
   "How trust works": "Wie Vertrauen funktioniert",
   "YOUR TRUST LEVEL": "DEIN VERTRAUENSLEVEL",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "Stufe {level} von {levels} · {n} Vertrauen",
-    "other": "Stufe {level} von {levels} · {n} Vertrauen"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "Noch **{n}** Vertrauen bis {emoji} {tier}",
     "other": "Noch **{n}** Vertrauen bis {emoji} {tier}"
@@ -3440,7 +3428,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "Neue Mitglieder haben bis zu ihrem ersten Handel das Abzeichen **🔑 Gründer**.",
   "Tiers & Perks": "Stufen & Vorteile",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "Stufen sind **Anerkennungsmeilensteine** – sie zeigen, wie weit dein Vertrauen gewachsen ist. Der einzige Vorteil, der mit ihnen wächst, ist dein **Kreditrahmen** (wie weit du ins Minus gehen kannst). Dein Rahmen wächst kontinuierlich mit dem gehandelten Wert; die Stufen sind Wegweiser.",
   "🔑 Founding Status (before 1st trade)": "🔑 Gründerstatus (vor dem 1. Handel)",
   "A starting state that lasts until you complete your **very first trade**": "Ein Anfangsstatus, der bis zu deinem **allersten Handel** gilt",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "Wird als **🔑 GRÜNDER** angezeigt, damit andere dir beim Einstieg helfen können",

@@ -12,7 +12,8 @@ import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './member-key.js';
-import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, word } from '@beanpool/core';
+import { PROTOCOL_CONSTANTS, word } from '@beanpool/core';
+import { giveGenesisBadge } from './badges.js';
 import {
     getMember,
     mayBringSomeoneIn,
@@ -445,23 +446,16 @@ export function redeemInvite(
             .run(publicKey, new Date().toISOString(), outcome, voucher?.outcome ?? null, code);
         const voucherMaker = invite.issued_by || invite.created_by;
         if (invite.vouch_amount_c) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount_c);
+        // A genesis invite (trusted, ambassador, elder) gives a badge in its maker's name: recognition only, no credit
+        // (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only").
+        const badge = giveGenesisBadge(invite.created_by, publicKey, (invite.genesis_type || 'standard') as GenesisInviteType);
+        if (badge) console.log(`🌟 Genesis invite redeemed: ${callsign} joins with the ${badge} badge (no credit)`);
         return m;
     })();
     if (!member) {
         recordFunnelEvent('invite_failed', 'registration_failed');
         return { success: false, error: word('Registration failed') };
     }
-    // Pre-seed earned credit for tiered genesis invites
-    const genesisType = (invite.genesis_type || 'standard') as GenesisInviteType;
-    if (genesisType !== 'standard') {
-        const earnedCredit = getGenesisEarnedCredit(genesisType);
-        if (earnedCredit > 0) {
-            db.prepare("UPDATE members SET earned_credit_c = ? WHERE public_key = ?").run(earnedCredit, publicKey);
-            const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - earnedCredit);
-            console.log(`🌟 Genesis invite redeemed: ${callsign} starts as ${tier.emoji} ${tier.name} (earned_credit_c: ${earnedCredit})`);
-        }
-    }
-
     return vouch ? { success: true, member, vouch } : { success: true, member };
 }
 

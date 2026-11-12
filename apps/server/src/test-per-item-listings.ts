@@ -11,8 +11,9 @@
  *   3. Edit: into Each, a count changed with the count the seller saw, a stale or missing one refused 409 `units_changed` with
  *      the count now; an edit that leaves the count alone writes none (a take-up made while the screen was open survives);
  *      the count's own write refuses a row that moved; 0 refused; the price for all bound to the count saved with it, kept
- *      when sent back as it is, cleared by null, refused when the price for one drops under it, and a new one refused 409
- *      `units_changed` when the count moved under the screen; out of Each clears all three. The count is never frozen by an
+ *      when sent back as it is for the number left or not sent, bound to the count left when sent at its figure for another
+ *      number, cleared by null, refused when the price for one drops under it, and a new one refused 409 `units_changed`
+ *      when the count moved under the screen; out of Each clears all three. The count is never frozen by an
  *      open deal; the unit is, and a weekly listing with a live standing deal can't be edited into Each.
  *   4. The deal doors as an older app knocks (slice P1 opened them; test-per-item-deals.ts walks them): a one-step accept in
  *      an app's old shape (a number of hours, no way, no total) is refused 409 `price_changed`, and a request 409
@@ -41,7 +42,7 @@ import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { LEND_PRICE_TYPE_REFUSED, PRICE_FROZEN_ERROR } from './engine/posts.js';
 import { writeItemCount } from './engine/per-item.js';
 import { setMemberPhoto } from '@beanpool/engine';
-import { itemTakeUpRefusalText, perItemRefusalText, wordsFor } from '@beanpool/core';
+import { itemTakeUpRefusalText, lotOffered, perItemEditFields, perItemEditStart, perItemRefusalText, wordsFor } from '@beanpool/core';
 import { signRequest, SIGNED_FOR_HEADER, signedForHost } from './signed-request-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -207,12 +208,20 @@ async function main(): Promise<void> {
     assert(authority === 'units_changed:22' && row(robs).units_left === 22, `the guarded write changes no row that moved, and says the count now (${authority})`);
     const zero = await edit(rob, robs, { unitsLeft: 0, unitsLeftWas: 22 });
     assert(zero.status === 400 && zero.body?.code === 'units_zero' && zero.body?.error === said('units_zero') && row(robs).units_left === 22, `0 is refused: pause or remove instead (${brief(zero)})`);
-    // The price for all: bound to the count saved with it.
+    // The price for all: bound to the count saved with it. Sent at the figure it already had, but stored for another number
+    // (the 20 it was set for, 22 left now), it is for the 22 the seller saved it with. Changed on purpose (review of #3089 on
+    // per-item-form.ts:265): this check said "keeps the 20 it was for", so the form's "All 22 for 5,500" was not on offer.
+    // Red if itemColumnsOnEdit keeps a price sent at its stored figure bound to the old number.
     const sentBack = await edit(rob, robs, { lot: { price_c: hc(5500) }, unitsLeft: 22, unitsLeftWas: 22 });
-    assert(sentBack.status === 200 && row(robs).lot_units === 20 && row(robs).lot_price_c === hc(5500), 'sent back as it is, the price for all keeps the 20 it was for');
+    assert(sentBack.status === 200 && row(robs).lot_units === 22 && row(robs).lot_price_c === hc(5500) && sentBack.body.post.lot?.units === 22,
+        `sent at the figure it had, but set for another number (20, with 22 left): the price for all is for the 22 left (${brief(sentBack)})`);
     const rebound = await edit(rob, robs, { lot: { price_c: hc(6000) }, unitsLeft: 22, unitsLeftWas: 22 });
     assert(rebound.status === 200 && row(robs).lot_units === 22 && row(robs).lot_price_c === hc(6000) && rebound.body.post.lot?.units === 22,
         `a new price for all is for the 22 left (6,000 < 6,600) (${brief(rebound)})`);
+    // Sent back as it is, for the number it is for: kept, with or without the count seen (it is not new, so nothing to guard).
+    const keptAsIs = await edit(rob, robs, { lot: { price_c: hc(6000) } });
+    assert(keptAsIs.status === 200 && row(robs).lot_units === 22 && row(robs).lot_price_c === hc(6000),
+        `sent back as it is and still for the 22 left: kept, no count seen needed (${brief(keptAsIs)})`);
     const lower = await edit(rob, robs, { price_c: hc(250) });
     assert(lower.status === 400 && lower.body?.code === 'lot_not_less' && row(robs).price_c === hc(300),
         `the price for one lowered under the price for all (22 × 250 = 5,500 ≤ 6,000) is refused (${brief(lower)})`);
@@ -234,6 +243,35 @@ async function main(): Promise<void> {
     assert(reasked.status === 200 && row(robs).lot_units === 20 && row(robs).lot_price_c === hc(4500), 'saved again with the count now: the price for all is for the 20 he saw');
     const cleared = await edit(rob, robs, { lot: null });
     assert(cleared.status === 200 && row(robs).lot_price_c === null && row(robs).lot_units === null && !('lot' in cleared.body.post), 'null takes the price for all off');
+    // The review of #3089 (per-item-form.ts:265), with the forms' own bodies (core perItemEditStart / perItemEditFields):
+    // 20 chairs at 300 each, all 20 for 5,000; 3 taken (P1's write, made here by hand), 17 left. The edit opens with the
+    // price-for-all box empty and "was for 20".
+    const chairsMade = await offer(rob, { title: 'Chairs', priceType: 'each', price_c: hc(300), unitsLeft: 20, lot: { price_c: hc(5000) } });
+    const chairs = chairsMade.body.post.id as string;
+    db.prepare('UPDATE posts SET units_left = 17 WHERE id = ?').run(chairs);
+    const chairsStored = { wasEach: true, unitsLeft: 17, lot: { units: 20, price_c: hc(5000) } };
+    const opened = perItemEditStart(chairsStored);
+    // The box left alone: no lot sent, and the price for all keeps the 20 it was for (back if that deal is cancelled).
+    const leftAlone = perItemEditFields({ price: '300', count: opened.count, lot: opened.lot }, chairsStored, false);
+    const titleOnly = await edit(rob, chairs, { ...(leftAlone.ok ? leftAlone.fields : {}), title: 'Chairs, oak' });
+    const c1 = row(chairs);
+    assert(opened.lot === '' && leftAlone.ok && !('lot' in leftAlone.fields) && titleOnly.status === 200 && c1.title === 'Chairs, oak'
+        && c1.units_left === 17 && c1.lot_units === 20 && c1.lot_price_c === hc(5000) && !lotOffered(await byId(rob, chairs)),
+        `an untouched price-for-all box sends no lot: the price for all keeps the 20 it was for, not on offer with 17 left (${brief(titleOnly)})`);
+    // A screen opened before the take-up still shows all 20 for 5,000 and sends it back with the 20 it read: refused 409 with
+    // the count now, nothing lands. Red if the rebind skips the unitsLeftWas guard (all 17 for 5,000, made from a screen of 20).
+    const staleScreen = await edit(rob, chairs, { priceType: 'each', unitsLeft: 20, unitsLeftWas: 20, lot: { price_c: hc(5000) }, title: 'Chairs, stale' });
+    const c2 = row(chairs);
+    assert(staleScreen.status === 409 && staleScreen.body?.code === 'units_changed' && staleScreen.body?.unitsLeft === 17 && staleScreen.body?.error === said('units_changed', { count: 17 })
+        && c2.title === 'Chairs, oak' && c2.units_left === 17 && c2.lot_units === 20 && c2.lot_price_c === hc(5000),
+        `the stored figure sent back from a screen that read 20: refused 409 with the 17 now, nothing of the edit lands (${brief(staleScreen)})`);
+    // The seller types 5,000 again for the 17 left (the live line says "All 17 for 5,000 Beans"): the form's own body.
+    const typed = perItemEditFields({ price: '300', count: opened.count, lot: '5000' }, chairsStored, true);
+    const retyped = await edit(rob, chairs, { ...(typed.ok ? typed.fields : {}) });
+    const c3 = row(chairs);
+    assert(typed.ok && typed.fields.unitsLeftWas === 17 && typed.fields.lot?.price_c === hc(5000) && retyped.status === 200
+        && c3.units_left === 17 && c3.lot_price_c === hc(5000) && c3.lot_units === 17 && retyped.body.post.lot?.units === 17 && lotOffered(await byId(rob, chairs)),
+        `typed again at the figure it had, for the 17 left: all 17 for 5,000, on offer (red if itemColumnsOnEdit keeps it bound to 20) (${brief(retyped)})`);
     const needEach = await call('POST', '/api/marketplace/posts', rob, { type: 'need', title: 'Seedlings wanted', category: 'garden', description: '', authorPublicKey: rob.pk, photos: TEST_PHOTOS, price_c: hc(2) });
     const needEdit = await edit(rob, needEach.body.post.id, { priceType: 'each', unitsLeft: 10 });
     assert(needEdit.status === 400 && needEdit.body?.code === 'each_offer_only' && row(needEach.body.post.id).price_type === 'fixed', `a Need can't be edited into Each (${brief(needEdit)})`);

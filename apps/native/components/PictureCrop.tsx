@@ -22,6 +22,7 @@ import {
     PICTURE_CROP_MOVE_STEP, PICTURE_CROP_ZOOM_STEP, cropPlacement, cropRectOf, moveCropView, startCropView, t, zoomCropView,
     type CropView, type PictureShape,
 } from '@beanpool/core';
+// Static colours: only the default of the `colors` prop. Every caller passes its screen's set (measured 12 Nov 2026, colour themes T2), so a colour set reaches it through the prop. usePictureCrop's three callers pass theirs too.
 import { colors as lightColors, palette, type AppColors } from '../constants/colors';
 import { cutPicture, type CropPicture, type WorkingPicture } from '../utils/picture-crop';
 

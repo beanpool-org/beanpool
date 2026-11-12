@@ -1044,8 +1044,8 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
     if (frozenRow?.credit_frozen === 1) return { ok: false, error: word('Member credit is frozen') };
     if (member.isTreasury) return { ok: false, error: word('Enterprises cannot propose decisions') };
 
-    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit_c, which
-    // adminSetTier and genesis invites write): badges are recognition and unlock nothing (Marty, 23 Oct).
+    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (engine/badges.ts, which an
+    // admin or a genesis invite gives): badges are recognition and unlock nothing (Marty, 23 Oct).
     const tradeVal = engine.qualifiedTradeValue(db, authorPubkey);
     const isAdmin = isNodeAdmin(authorPubkey);
     if (tradeVal <= 0 && !isAdmin) {

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
-import { contrastRatio } from '@beanpool/core';
-import { darkColors, lightColors } from '../../constants/colors';
+import { BRAND_SETS, contrastRatio } from '@beanpool/core';
+import { COLOUR_SETS } from '../../constants/colors';
 
 /**
  * In dark the sage accent is a light fill (nature-300) under charcoal words. White on it is 1.66:1, so words and icons
@@ -263,18 +263,23 @@ function reachableStylesHaveFill(s: Source): boolean {
     return false;
 }
 
-describe('words on the sage tint (accent.tint) reach 4.5 in both themes', () => {
+describe('words on the sage tint (accent.tint) reach 4.5 in every colour set', () => {
     const WORDS = ['text.heading', 'text.body', 'text.secondary', 'text.muted', 'accent.primary'] as const;
     const get = (tree: unknown, path: string) => path.split('.').reduce<unknown>((n, k) => (n as Record<string, unknown>)[k], tree) as string;
+    // Light, Classic dark and Dark (night): the tint is the accent family's, which each set may colour (core's BRAND_SETS).
     const ratios = WORDS.map((token) => {
-        const light = contrastRatio(get(lightColors, token), lightColors.accent.tint);
-        const dark = contrastRatio(get(darkColors, token), darkColors.accent.tint);
-        return { token, light, dark, min: Math.min(light, dark) };
+        const by = Object.fromEntries(BRAND_SETS.map((set) => [set, contrastRatio(get(COLOUR_SETS[set], token), COLOUR_SETS[set].accent.tint)]));
+        return { token, by, min: Math.min(...Object.values(by)) };
+    });
+    const shown = (by: Record<string, number>) => Object.entries(by).map(([set, r]) => `${set} ${r.toFixed(2)}`).join(', ');
+
+    it('judges every set of the library', () => {
+        expect(Object.keys(ratios[0].by)).toEqual(['light', 'dark', 'night']);
     });
 
-    // text.secondary (4.22) and text.muted (3.29) fall short on the dark sage tint; the ban below keeps them off it.
+    // text.secondary (4.22 in Classic, 4.26 in Dark) and text.muted (3.29) fall short on a dark tint; the ban below keeps them off it.
     it.each(ratios.filter((r) => r.token !== 'text.secondary' && r.token !== 'text.muted').map((r) => [r.token, r] as const))('%s on accent.tint', (_t, r) => {
-        expect(Number(r.min.toFixed(2)), `light ${r.light.toFixed(2)}, dark ${r.dark.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
+        expect(Number(r.min.toFixed(2)), shown(r.by)).toBeGreaterThanOrEqual(4.5);
     });
 
     it('no style or element on accent.tint uses a word token that reads below 4.5 on it (text.secondary: 4.22 in dark)', () => {

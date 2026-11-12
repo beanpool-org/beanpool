@@ -10,6 +10,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
+// Static colours: the default of the `colors` prop. Settings passes its set; welcome.tsx (the backup step) passes none, so it draws light there in dark today. Passing welcome's colours changes Classic dark, which colour themes T2 does not do: left for a slice that looks at it in dark.
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';

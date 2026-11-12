@@ -22,7 +22,7 @@
  */
 import {
     ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage,
-    tierForCredit, word, type TierName,
+    word, type TierName,
 } from '@beanpool/core';
 import { getAverageRating, getMemberTrustProfile, getPosts, passesReadGate, setMemberPhoto } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -197,7 +197,8 @@ export function shopfrontOf<K extends { publicKey: string }>(treasury: string, k
         const rating = getAverageRating(db, k.publicKey);
         return {
             ...k,
-            tier: tierForCredit(profile.tierCredit).name,
+            // The tier every surface shows: the higher of their badge and what they did (engine trust.ts).
+            tier: profile.tier.name,
             rating: { average: rating.average, count: rating.count },
             trades: profile.stats.tradeCount,
             offerCategories: liveOfferCategories(k.publicKey, reader),

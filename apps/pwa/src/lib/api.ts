@@ -268,6 +268,8 @@ async function refusalError(res: Response): Promise<Error> {
     if (typeof err.prior === 'number' && Number.isInteger(err.prior) && err.prior > 0) (error as Error & { prior?: number }).prior = err.prior;
     // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
     if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
+    // And how many are left now beside `units_changed` (a take-up landed while the seller edited, DESIGN-per-item-price §2.5).
+    if (typeof err.unitsLeft === 'number' && Number.isInteger(err.unitsLeft)) (error as Error & { unitsLeft?: number }).unitsLeft = err.unitsLeft;
     return error;
 }
 
@@ -379,6 +381,9 @@ export interface CommunityInfo {
         /** Present, and true, only where members may share a post outside the community (front doors S6, lib/peek.ts):
          *  Share outside the community, and Settings' Shared outside. Absent (turned off, global, an older node): neither. */
         shareOutside?: true;
+        /** Present, and true, only once this node takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6; core
+         *  perItemOffered): the create and edit forms offer the unit Each only then. Absent (until every slice is merged, or an older node): not offered. */
+        perItem?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
@@ -1654,8 +1659,8 @@ export interface MarketplacePost {
     title: string;
     description: string;
     price_c: number;
-    priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
-    /** An Offer priced for each one (the node sends priceType 'each'; the union above is widened by the slice that offers it, P4): how many can be taken now, and the price for all of them as stored (core per-item.ts). */
+    priceType: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+    /** Priced for each one only (DESIGN-per-item-price-fable.md §3): how many can be taken up now, and the price for all of them as stored (core per-item.ts, where lot is `ItemLot | null`). */
     unitsLeft?: number;
     lot?: { units: number; price_c: number } | null;
     authorPublicKey: string;
@@ -1858,7 +1863,10 @@ export async function createMarketplacePost(post: {
     description: string;
     /** The price, whole hundredths of a Bean (0: free). */
     price_c: number;
-    priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+    priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+    /** Priced for each one (DESIGN-per-item-price-fable.md §3): how many the seller has (1 to 9,999) and, optionally, the price for all of them. */
+    unitsLeft?: number;
+    lot?: { price_c: number };
     authorPublicKey: string;
     lat?: number;
     lng?: number;
@@ -2299,7 +2307,15 @@ export async function updateMarketplacePost(
         title?: string;
         description?: string;
         price_c?: number;
-        priceType?: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+        priceType?: 'fixed' | 'each' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+        /**
+         * Priced for each one (§4.6): the count, the count the screen read (the node writes a changed count only if the row still
+         * holds it, else 409 `units_changed` with `unitsLeft`), and the price for all of them: `{ price_c }` sets it, null clears
+         * it, absent keeps what is stored.
+         */
+        unitsLeft?: number;
+        unitsLeftWas?: number;
+        lot?: { price_c: number } | null;
         lat?: number;
         lng?: number;
         repeatable?: boolean;

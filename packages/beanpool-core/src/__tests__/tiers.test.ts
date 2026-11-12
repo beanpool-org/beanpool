@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-    PROTOCOL_CONSTANTS, TIER_LEVELS, getTier, grantedCreditForTier, tierForCredit, tierIndexForCredit, tierIndexForName,
+    PROTOCOL_CONSTANTS, TIER_LEVELS, genesisBadgeFor, getTier, tierForCredit, withBadge, tierIndexForCredit, tierIndexForName,
 } from '../protocol.js';
 
 // Credit in whole hundredths (hundredths.ts): 200 Beans is 20000, and one hundredth below a tier is the tier before it.
@@ -26,10 +26,20 @@ describe('TIER_LEVELS', () => {
         expect(TIER_LEVELS.map(t => t.minCredit)).toEqual([0, 20000, 60000, 140000]);
     });
 
-    it('an admin tier badge lands exactly on that tier', () => {
-        for (const t of TIER_LEVELS) {
-            expect(tierForCredit(grantedCreditForTier(t.name)).name).toBe(t.name);
-        }
+    it('a genesis invite gives a badge, never credit: core keeps no credit figure for a tier', () => {
+        expect(genesisBadgeFor('standard')).toBeNull();
+        expect(genesisBadgeFor('trusted')).toBe('Resident');
+        expect(genesisBadgeFor('ambassador')).toBe('Steward');
+        expect(genesisBadgeFor('elder')).toBe('Elder');
+        expect(Object.keys(PROTOCOL_CONSTANTS).filter(k => /GENESIS/.test(k))).toEqual([]);
+    });
+
+    it('a badge shows the higher of itself and what the member did, never lower', () => {
+        expect(withBadge(getTier(0), null).name).toBe('Newcomer');
+        expect(withBadge(getTier(0), 'Resident').name).toBe('Resident');
+        expect(withBadge(getTier(0), 'Elder')).toEqual({ name: 'Elder', emoji: TIER_LEVELS[3].emoji });
+        // A member whose trades made them a Steward keeps Steward under a Resident badge.
+        expect(withBadge(tierForCredit(TIER_LEVELS[2].minCredit), 'Resident').name).toBe('Steward');
     });
 
     it('Newcomer shows the seedling', () => {

@@ -15,8 +15,13 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance, refreshBalanceFromServer,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
-    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal,
+    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode, signStandingStart, stopStandingDeal, getListingItems,
 } from '../../utils/db';
+import { PerItemFields } from '../../components/PerItemFields';
+import {
+    carryTotalToEach, itemsHeldIn, perItemAfterUnitsChanged, perItemEditFields, perItemEditStart, perItemHeldNote, perItemLines,
+    perItemLotForOtherLine, perItemRefusalText, priceUnitsOffered, type ItemLot, type PerItemField,
+} from '@beanpool/core';
 import { StandingPanel, StandingTakeUp, type StandingChoice } from '../../components/StandingDeal';
 import { standingOfRow } from '../../utils/standing-row';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
@@ -570,6 +575,17 @@ function PostDetailModal() {
     const [editCredits, setEditCredits] = useState('');
     const [editPriceType, setEditPriceType] = useState<string>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
+    // A listing priced for each one (DESIGN-per-item-price-fable.md §2.5): the two boxes, the count and price for all of them the
+    // node held when the form opened (what the count is saved against), whether the seller touched the price-for-all box, and
+    // a stored price for all that was for another number than are left (its box opens empty and says why).
+    const [editItemCount, setEditItemCount] = useState('');
+    const [editItemLot, setEditItemLot] = useState('');
+    const [editLotTouched, setEditLotTouched] = useState(false);
+    const [editItemRefusal, setEditItemRefusal] = useState<{ field: PerItemField; text: string } | null>(null);
+    const [editItemStored, setEditItemStored] = useState<{ unitsLeft: number | null; lot: ItemLot | null } | null>(null);
+    /** The form for a listing priced each is waiting for the count to be read from the node: it can't be saved before. */
+    const [editItemLoading, setEditItemLoading] = useState(false);
+    const editPriceRef = useRef<TextInput>(null);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
     // "Put this in your shop" (slice S4′): where the listing is now, as the node says, and where the edit puts it.
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
@@ -1324,6 +1340,33 @@ function PostDetailModal() {
         } catch {}
     }
 
+    // The edit's units: Each (right after Total) on an Offer once the node says it takes them up, and for a listing already
+    // priced each, so an edit never takes its unit away. The unit chosen falls back to Total where the list lacks it (a Need).
+    const editUnits = priceUnitsOffered(reader.effective ?? nodeProfile?.features, editType, post.price_type);
+    const editUnit: string = (editUnits as readonly string[]).includes(editPriceType) ? editPriceType : 'fixed';
+    const editEach = showsBeans && editUnit === 'each';
+    /** What the node held of this listing when the form opened: the count the save is made against, and a stored price for all. */
+    const editStoredItems = post.price_type === 'each' && editItemStored
+        ? { wasEach: true, unitsLeft: editItemStored.unitsLeft, lot: editItemStored.lot }
+        : { wasEach: false, unitsLeft: null, lot: null };
+    /** The unit button: the next unit. Into Each from Total, the Total typed moves to "Or all of them for" and the price for one is focused (§2.4). */
+    const nextEditUnit = () => {
+        const next = editUnits[(editUnits.indexOf(editUnit as (typeof editUnits)[number]) + 1) % editUnits.length];
+        if (next === 'each') {
+            if (editUnit === 'fixed') {
+                const moved = carryTotalToEach({ price: editCredits, count: editItemCount, lot: editItemLot });
+                if (moved.price !== editCredits) {
+                    setEditCredits(moved.price);
+                    setEditItemLot(moved.lot);
+                    setTimeout(() => editPriceRef.current?.focus(), 60);
+                }
+            }
+            setEditRepeatable(false);
+        }
+        setEditItemRefusal(null);
+        setEditPriceType(next);
+    };
+
     const startEdit = () => {
         setEditType(post.type);
         setEditCategory(post.category);
@@ -1337,6 +1380,23 @@ function PostDetailModal() {
         setEditCredits(priceAsTyped(post.price_c));
         setEditPriceType(post.price_type || 'fixed');
         setEditRepeatable(!!post.repeatable);
+        // Priced for each one: its count and price for all of them are read from the node now (the phone's copy doesn't keep
+        // them), and the count read is the one the save is made against. A listing that is not starts with empty boxes.
+        setEditItemCount(''); setEditItemLot(''); setEditLotTouched(false); setEditItemRefusal(null); setEditItemStored(null);
+        setEditItemLoading(post.price_type === 'each');
+        if (post.price_type === 'each') {
+            void getListingItems(post.id).then((items) => {
+                if (!items || items.unitsLeft === null) throw new Error('no count');
+                const start = perItemEditStart({ wasEach: true, unitsLeft: items.unitsLeft, lot: items.lot });
+                setEditItemStored({ unitsLeft: items.unitsLeft, lot: items.lot });
+                setEditItemCount(start.count);
+                setEditItemLot(start.lot);
+            }).catch(() => {
+                // Not opened on a count it never saw: the node couldn't be read, so the form closes and says so.
+                setEditMode(false);
+                Alert.alert(t('Error'), t("Your community couldn't be reached. Try again."));
+            }).finally(() => setEditItemLoading(false));
+        }
         setEditPhotos(photos);
         setEditMode(true);
         // A member's own Offer for everyone here can go in their shop: the toggle starts where the node says it is now, and
@@ -1362,6 +1422,16 @@ function PostDetailModal() {
         // as 0, and never past two decimals (the one rule everywhere). An empty box is 0, as before.
         const price = showsBeans ? parseHundredths(editCredits) : null;
         if (price && !price.ok && price.refusal !== 'empty') { Alert.alert(t('Error'), amountRefusalWords(price.refusal)); return; }
+        // Priced for each one: how many, and the price for all of them, held to the node's own rules (core per-item-form). An
+        // empty price box is 0 here, as it is for every unit, so a Free listing is checked as one.
+        const itemSave = editEach ? perItemEditFields({ price: editCredits.trim() === '' ? '0' : editCredits, count: editItemCount, lot: editItemLot }, editStoredItems, editLotTouched) : null;
+        if (editEach && editItemLoading) return;
+        if (itemSave && !itemSave.ok) {
+            setEditItemRefusal({ field: itemSave.refusal.field, text: itemSave.refusal.text });
+            Alert.alert(t('Error'), itemSave.refusal.text);
+            return;
+        }
+        setEditItemRefusal(null);
         setSaving(true);
         try {
             // Its shop: in, out (a Need never stays in one), or left as it is; a shop the member has none of yet is opened first.
@@ -1377,8 +1447,9 @@ function PostDetailModal() {
                 title: editTitle.trim(),
                 description: editDescription.trim(),
                 price_c: price?.ok ? price.value : 0,
-                price_type: editPriceType,
-                repeatable: editRepeatable,
+                price_type: editEach ? 'each' : editUnit,
+                ...(itemSave && itemSave.ok ? itemSave.fields : {}),
+                repeatable: editEach ? false : editRepeatable,
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
                 ...(shopId !== undefined ? { shopId } : {}),
             });
@@ -1387,8 +1458,22 @@ function PostDetailModal() {
             setPost(updated);
             setEditMode(false);
         } catch (e: any) {
-            // The node's own words when it gave any: a price held by an open deal says so, and how to change it.
-            Alert.alert(t('Error'), e?.message ? signedRequestWords(String(e.message)) : t('Failed to save changes'));
+            if (e?.code === 'units_changed' && typeof e.unitsLeft === 'number') {
+                // A take-up landed while the seller edited (§2.5): the count box now shows what is left, the save is made against
+                // it, and the seller is told to check the number and save again. Nothing of this save was written. The price-for-all
+                // box is read again for that count (core): one the seller did not touch showed the stored price because it was for
+                // the old count, and sent back unchanged the node would keep it for that number.
+                const text = perItemRefusalText({ code: 'units_changed', count: e.unitsLeft });
+                const after = perItemAfterUnitsChanged(editItemStored?.lot ?? null, e.unitsLeft, editItemLot, editLotTouched);
+                setEditItemStored(after.stored);
+                setEditItemCount(after.count);
+                setEditItemLot(after.lot);
+                setEditItemRefusal({ field: 'count', text });
+                Alert.alert(t('Error'), text);
+            } else {
+                // The node's own words when it gave any: a price held by an open deal says so, and how to change it.
+                Alert.alert(t('Error'), e?.message ? signedRequestWords(String(e.message)) : t('Failed to save changes'));
+            }
         }
         setSaving(false);
     };
@@ -2003,18 +2088,35 @@ function PostDetailModal() {
                                     {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} />}
                                 </View>
                             ) : (
-                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-                                <TextInput accessibilityLabel={t('Credits')} style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder={t('Credits (B)')} placeholderTextColor={colors.text.muted} keyboardType="numeric" />
-                                <Pressable accessibilityRole="button" onPress={() => {
-                                    const types = ['fixed', 'hourly', 'daily', 'weekly', 'monthly'];
-                                    setEditPriceType(types[(types.indexOf(editPriceType) + 1) % types.length]);
-                                }} style={{ backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 16, justifyContent: 'center' }}>
-                                    <Text style={{ color: colors.text.body, fontSize: 13, fontWeight: '700' }}>{priceUnitWords(editPriceType) || t('Total', undefined, 'a price for the whole job')}</Text>
-                                </Pressable>
+                            <View style={{ marginBottom: 10 }}>
+                                {editEach ? <Text style={styles.editPhotoLabel}>{upperCase(perItemLines.priceForOne())} <Text style={styles.requiredStar}>*</Text></Text> : null}
+                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                    <TextInput ref={editPriceRef} accessibilityLabel={editEach ? perItemLines.priceForOne() : t('Credits')} style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder={t('Credits (B)')} placeholderTextColor={colors.text.muted} keyboardType="numeric" />
+                                    <Pressable accessibilityRole="button" onPress={nextEditUnit} style={{ backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 16, justifyContent: 'center', minHeight: 44 }}>
+                                        <Text style={{ color: colors.text.body, fontSize: 13, fontWeight: '700' }}>{editUnit === 'each' ? perItemLines.unitEach() : priceUnitWords(editUnit) || t('Total', undefined, 'a price for the whole job')}</Text>
+                                    </Pressable>
+                                </View>
                             </View>
                             )}
 
-                            {/* Repeatable Toggle */}
+                            {/* Each: how many are left, and the price for all of them, with their live line (core per-item-form) */}
+                            {editEach && (editItemLoading ? (
+                                <ActivityIndicator color={colors.brand.primary} style={{ marginBottom: 10 }} testID="per-item-loading" />
+                            ) : (
+                                <PerItemFields
+                                    edit
+                                    text={{ price: editCredits, count: editItemCount, lot: editItemLot }}
+                                    onCount={(v) => { setEditItemCount(v); setEditItemRefusal(null); }}
+                                    onLot={(v) => { setEditItemLot(v); setEditLotTouched(true); setEditItemRefusal(null); }}
+                                    refusal={editItemRefusal}
+                                    heldNote={perItemHeldNote(itemsHeldIn(deals.held.map((m) => m.tx)))}
+                                    lotForOtherLine={editItemStored?.lot && editItemStored.unitsLeft !== null && editItemStored.lot.units !== editItemStored.unitsLeft ? perItemLotForOtherLine(editItemStored.lot, editItemStored.unitsLeft) : null}
+                                    showFeeLine
+                                />
+                            ))}
+
+                            {/* Repeatable Toggle: not on Each, where the count takes its place (DESIGN-per-item-price-fable.md D4) */}
+                            {!editEach && (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: editRepeatable }}
@@ -2029,6 +2131,7 @@ function PostDetailModal() {
                                     <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 2 }}>{t('Post remains active after completion.')}</Text>
                                 </View>
                             </Pressable>
+                            )}
 
                             {/* Put this in your shop (slice S4′): an Offer only */}
                             {editType === 'offer' ? (
@@ -2065,7 +2168,7 @@ function PostDetailModal() {
                                 <Pressable accessibilityRole="button" style={styles.editCancelBtn} onPress={() => setEditMode(false)}>
                                     <Text style={styles.editCancelBtnText}>{t('Cancel')}</Text>
                                 </Pressable>
-                                <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)}>
+                                <Pressable accessibilityRole="button" style={[styles.editSaveBtn, (saving || editItemLoading || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)) && styles.editSaveBtnDisabled]} onPress={handleSave} disabled={saving || editItemLoading || !editTitle.trim() || (photos.length > 0 && editPhotos.length === 0)}>
                                     <Text style={styles.editSaveBtnText}>{saving ? t('Saving...') : t('💾 Save')}</Text>
                                 </Pressable>
                             </View>

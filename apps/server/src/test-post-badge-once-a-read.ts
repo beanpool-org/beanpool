@@ -52,12 +52,13 @@ async function main() {
     console.log("A member's board read works out each author's badge once...\n");
     const { initTls } = await import('./services/tls.js');
     const se: any = await import('./state-engine.js');
+    const { setMemberBadge } = await import('./engine/badges.js');
     const { startHttpServer } = await import('./http-server.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { getMemberTrustProfile } = await import('@beanpool/engine');
-    const { tierForCredit } = await import('@beanpool/core');
+    const { TIER_LEVELS, tierIndexForName } = await import('@beanpool/core');
 
     await initTls();
     se.initStateEngine();
@@ -105,7 +106,8 @@ async function main() {
         return { status: res.status, text: await res.text() };
     }
     // Each author's badge worked out fresh, as rowToPost did for every post before this change.
-    const badgeOf = (pk: string) => { try { return tierForCredit(getMemberTrustProfile(db, pk).tierCredit).minCredit; } catch { return 0; } };
+    // The least credit of the tier the profile shows: what they did, or a badge an owner or admin gave where higher (engine/badges.ts).
+    const badgeOf = (pk: string) => { try { return TIER_LEVELS[Math.max(0, tierIndexForName(getMemberTrustProfile(db, pk).tier.name))].minCredit; } catch { return 0; } };
 
     // Every time a trust profile is worked out: getMemberTrustStats' first statement, run once a profile.
     const Statement = Object.getPrototypeOf(db.prepare('SELECT 1')) as { get: (...a: unknown[]) => unknown };
@@ -126,11 +128,11 @@ async function main() {
     ];
     const states: Array<[string, () => void]> = [
         ['as seeded', () => {}],
-        ['tiers set', () => { se.adminSetTier(authors[0].pubKeyHex, 'Resident'); se.adminSetTier(authors[1].pubKeyHex, 'Steward'); }],
+        ['badges given', () => { setMemberBadge('SYSTEM', authors[0].pubKeyHex, 'Resident'); setMemberBadge('SYSTEM', authors[1].pubKeyHex, 'Steward'); }],
         ['trades completed', () => { for (let i = 0; i < 30; i++) trade(2 + (i % 5), (i + 7) % 12, 40 + i * 7); }],
         ['a line frozen', () => { db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(authors[2].pubKeyHex); }],
         ['a grant written to the row', () => { db.prepare('UPDATE members SET earned_credit_c = 50 WHERE public_key = ?').run(authors[9].pubKeyHex); }],
-        ['a tier taken back', () => { se.adminSetTier(authors[1].pubKeyHex, 'Newcomer'); }],
+        ['a badge taken back', () => { setMemberBadge('SYSTEM', authors[1].pubKeyHex, 'Newcomer'); }],
     ];
     const seenBadges = new Set<number>();
     for (const [state, change] of states) {

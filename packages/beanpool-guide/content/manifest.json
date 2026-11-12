@@ -46,7 +46,7 @@
       "id": "ledger",
       "title": "Ledger",
       "summary": "Your balance, your credit line, gifts, trust badges, the limit per trading partner, and the circulation fee.",
-      "pages": ["your-balance", "credit-line", "gifts", "trust-badges", "trading-partner-limit", "circulation-fee"]
+      "pages": ["your-balance", "credit-line", "credit-risk", "gifts", "trust-badges", "trading-partner-limit", "circulation-fee"]
     },
     {
       "id": "settings",

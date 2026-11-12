@@ -37,9 +37,9 @@ On a Decision or a Poll, yes, until the vote closes. On a keepers' vote, a group
 
 On a Decision, the app shows only the totals, and your own vote to you. Your vote is stored on your community's server. The owners and admins who run the server can take a copy of its files, and could look it up there. A Poll is anonymous in the same way, unless the person who started it made it an **open vote**: then members can see who chose what. The poll says which it is before you vote.
 
-## Can other members see my balance?
+## Who can see my balance?
 
-No. Other members never see your balance. On the phone, in a community with Beans, they see your trust badge and how many trades you have done. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. Admins can see more in some cases, and those looks are logged: see "What the admins can see".
+You, and the people who give credit in a community with Beans: its owners, admins and vouchers. They see your balance and your credit line so they can decide whether to give you more, and each look is recorded. Members who don't give credit don't see your balance. On the phone, in a community with Beans, they see your trust badge and how many trades you have done. A trade shows only its two people. If the community votes on removing you, the members who can vote in it see your balance and any debt, in that vote only. Admins can see more in some cases, and those looks are logged: see "What the admins can see".
 
 ## I lost my phone. Is my account gone?
 

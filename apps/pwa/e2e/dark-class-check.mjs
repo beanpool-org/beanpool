@@ -37,8 +37,10 @@
  *
  * Run:  pnpm --filter @beanpool/pwa dark-class-check
  *   DARK_CLASSES_PWA=<dir>  check another checkout's apps/pwa (fail-first on an older commit; its node_modules linked)
- *   DARK_CLASSES_ALL=1      also write every measurement to e2e/screenshots/dark-classes.json
+ *   DARK_CLASSES_ALL=1      also write every measurement to e2e/screenshots/dark-classes.json (dark, and under `light` the same
+ *                           places in light: a colour-library change compares the two files before and after)
  *   DARK_CLASSES_JSON=<f>   also write the failures (and the palette's) to that file
+ *   DARK_CLASSES_SET=night  measure the dark half in that set (data-bp-theme on <html>, as slice T3's picker sets it)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
 /* global console, process, document, getComputedStyle -- Node, and the page's side of evaluate() */
@@ -54,6 +56,9 @@ const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PWA = process.env.DARK_CLASSES_PWA ? path.resolve(process.env.DARK_CLASSES_PWA) : HERE;
 const SRC = path.join(PWA, 'src');
 const started = Date.now();
+/** Which dark set to measure: `dark` (Classic, the default) or a further one the library writes a block for (`night`). */
+const SET = process.env.DARK_CLASSES_SET || 'dark';
+if (!/^[a-z]+$/.test(SET)) throw new Error(`DARK_CLASSES_SET must be a set's name, got ${SET}`);
 
 /**
  * [file, a piece of the class string that marks the one place, why its dark words may read under AA]. The same four the
@@ -366,7 +371,8 @@ const APPLIES = (token, state) => {
 /** Draw places, measure rest, hover and focus; return the failures. */
 async function measurePlaces(browser, css, places) {
     const page = await browser.newPage({ viewport: { width: 320, height: 720 } });
-    await page.setContent(`<!doctype html><html class="dark dark-theme"><head><meta charset="utf-8"><style>${css}</style>
+    // DARK_CLASSES_SET=night measures the dark half in that set (the colour library's Dark), as the picker will set it on <html>.
+    await page.setContent(`<!doctype html><html class="dark dark-theme"${SET === 'dark' ? '' : ` data-bp-theme="${SET}"`}><head><meta charset="utf-8"><style>${css}</style>
 <style>*,*::before,*::after{transition:none!important;animation:none!important}
 #page{background-color:var(--pattern-bg,var(--bg-primary));color:var(--text-primary);padding:4px}
 #probe{color:rgb(1,2,3);background:none}</style></head><body><div id="probe"></div><div id="page"></div></body></html>`);
@@ -460,7 +466,7 @@ async function measurePlaces(browser, css, places) {
             }
         }
     });
-    return { failures, palette, drawn: drawn.length, hovered, focused: focusable.length, rest, hover, focus, drawnPlaces: drawn, hoverable };
+    return { failures, palette, drawn: drawn.length, hovered, focused: focusable.length, rest, hover, focus, restLight, hoverLight, focusLight, drawnPlaces: drawn, hoverable };
 }
 
 /** Relative luminance of an 'r,g,b' string. */
@@ -533,7 +539,8 @@ try {
     if (process.env.DARK_CLASSES_ALL === '1') {
         const file = path.join(HERE, 'e2e/screenshots/dark-classes.json');
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify(result.drawnPlaces.map((p, i) => ({ at: `${p.rel}:${p.line}`, cls: p.cls, tag: p.tag, rest: result.rest[i], hover: p.hovers ? result.hover[i] : undefined, focus: p.focuses ? result.focus[i] : undefined })), null, 1));
+        fs.writeFileSync(file, JSON.stringify(result.drawnPlaces.map((p, i) => ({ at: `${p.rel}:${p.line}`, cls: p.cls, tag: p.tag, rest: result.rest[i], hover: p.hovers ? result.hover[i] : undefined, focus: p.focuses ? result.focus[i] : undefined,
+            light: { rest: result.restLight[i], hover: p.hovers ? result.hoverLight[i] : undefined, focus: p.focuses ? result.focusLight[i] : undefined } })), null, 1));
     }
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     console.log(`${canaryCount} canaries as expected; ${new Set(places.map((p) => p.cls)).size} class strings in ${places.length} places, ${result.drawn} drawn and measured in dark at rest, ${result.hovered} elements hovered, ${result.focused} focused (${secs} s).`);

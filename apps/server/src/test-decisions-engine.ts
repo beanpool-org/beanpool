@@ -194,8 +194,9 @@ async function runDecisionsSuite() {
     testAssert(!zeroCheck.ok && zeroCheck.error === NO_TRADE_REFUSAL, `A member with no completed trade cannot propose decisions (got ${JSON.stringify(zeroCheck)})`);
     testAssert(!/earnedCredit|earned_credit|standing/.test(zeroCheck.error ?? ''), `The refusal names no field and no "standing" (got "${zeroCheck.error}")`);
 
-    // Badges unlock nothing (Marty, 23 Oct): a trust badge an admin gave (members.earned_credit, adminSetTier's Steward
-    // here) is no standing to propose; only a trading record is. Its words are the no-standing refusal's.
+    // Badges unlock nothing (Marty, 23 Oct): granted credit with no trades (members.earned_credit_c, a Steward's 600 here; a
+    // tier is a badge only since 12 Nov and writes none) is no standing to propose; only a trading record is. Its words are
+    // the no-standing refusal's.
     const badgeOnly = 'member_badge_only_' + Date.now();
     seedTestMember(badgeOnly, 'BadgeOnly', { earnedCredit: 600 });
     const badgeCheck = checkCanProposeDecision(badgeOnly);

@@ -151,7 +151,14 @@ async function main() {
     moves('an archetype', () => se.updateProfile(people[6].pk, { archetype: 'gardener' }));
     moves('an archetype cleared', () => se.updateProfile(people[6].pk, { archetype: null }));
     moves('a photo saved with its profile', () => se.updateProfile(people[7].pk, { avatar: PNG_1PX }));
-    moves('a tier set by an admin', () => se.adminSetTier(people[9].pk, 'trusted' as any));
+    {
+        // A badge is recognition only (engine/badges.ts): it writes nothing to the member's row, so the directory (which
+        // carries the granted lane, earnedCredit) stays as it was.
+        const { setMemberBadge } = await import('./engine/badges.js');
+        const rowsBefore = directoryNow();
+        setMemberBadge(owner.pk, people[9].pk, 'Resident');
+        assert(directoryNow() === rowsBefore, 'a badge set by an admin leaves the directory as it was: it gives no credit');
+    }
     moves('a node role granted', () => grantNodeRole(people[10].pk, 'admin', owner.pk));
     moves('a node role revoked', () => revokeNodeRole(people[10].pk, 'admin', owner.pk));
     moves('a member removed', () => se.adminPruneUser(people[11].pk, se.COMMUNITY_DECISION_ACTOR));

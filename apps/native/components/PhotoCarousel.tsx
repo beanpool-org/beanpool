@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { t } from '@beanpool/core';
+// Static colours: the carousel's frame and dots (surface.subtle, surface.card, text.inverse) are module-level styles, drawn light in both schemes today. Moving them to the theme hook changes Classic dark, which colour themes T2 does not do: left for a slice that looks at it in dark.
 import { colors } from '../constants/colors';
 
 interface Props {

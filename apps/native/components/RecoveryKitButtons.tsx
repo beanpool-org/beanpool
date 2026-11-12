@@ -1,5 +1,6 @@
 import React from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+// Static colours: only the default of the `colors` prop. Every caller passes its screen's set (measured 12 Nov 2026, colour themes T2), so a colour set reaches it through the prop.
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { anchorUrl } from '../utils/node-post';
 import { getSavedNodes } from '../utils/nodes';

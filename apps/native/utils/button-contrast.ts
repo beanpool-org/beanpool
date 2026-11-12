@@ -1,13 +1,14 @@
 /**
  * Static check: every piece of words that a phone screen draws on a background THE SAME SCREEN sets reaches WCAG 4.5:1
- * (3:1 for 24px words, or 18.66px and bold) in the light AND the dark colour set.
+ * (3:1 for 24px words, or 18.66px and bold) in every colour set of the library (core's BRAND_SETS: light, Classic dark and
+ * Dark, `night`; constants/colors.ts COLOUR_SETS).
  *
  * Why: Save Profile was white on white in dark for two weeks after the colour library moved (settings.tsx: background
  * `colors.text.heading` with words `colors.text.inverse`, both #ffffff in darkColors). text-ink-contrast.test.ts holds the
  * grey inks to the standard grounds, and the web has pwa_dark_classes; nothing read a button's own fill against its own
  * label. This does, without a device: it parses app/, components/ and tools/ with the TypeScript compiler, and for every JSX
  * element whose style sets a `color` (a <Text>) it finds the nearest enclosing element that sets a `backgroundColor`
- * (or the element's own), resolves both through lightColors and darkColors, and measures them with core's contrastRatio.
+ * (or the element's own), resolves both through each set's tree, and measures them with core's contrastRatio.
  *
  * What it reads, per theme:
  *   - style={styles.x}, arrays (later entries win), object literals, `cond && style`, `cond ? a : b`, spreads, StyleSheet.flatten,
@@ -19,7 +20,8 @@
  *     its tones as colours, `shell.tones.event.bg` or `const tone = shell.tones.event` then `tone.fg`, each from `chipTones(colors)`
  *     in the theme being measured; and `cardType(...)` spread into a style, which sets a size and a weight and never a colour.
  *   - colours as `colors.a.b` (also `c.a.b`), `palette.x`, hex/rgb/rgba strings, and a local `const X = '#...'`.
- *   - `theme === 'dark'`, `dark`, `isDark` and their negations are folded for the theme being measured.
+ *   - `theme === 'dark'`, `dark`, `isDark` and their negations are folded for the theme being measured, by the set's scheme
+ *     (a screen's `theme` is the scheme: in Dark, `night`, it is 'dark').
  *   - any other condition is a switch: the background and the words are measured under the SAME setting of it, so
  *     `active && bg` beside `active && ink` is never crossed with `!active`. A pair that exists only while the control is
  *     `disabled` is not measured (WCAG exempts inactive controls): a `disabled` prop on the words' element or any element
@@ -42,13 +44,22 @@
 import * as ts from 'typescript';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
-import { blendOver, contrastRatio } from '@beanpool/core';
-import { darkColors, lightColors, palette } from '../constants/colors';
+import { BRAND_SETS, blendOver, brandScheme, contrastRatio, type BrandSet } from '@beanpool/core';
+// Static colours: the scanner models a screen's module-level `colors` import as the light set and resolves `lightColors.x` / `darkColors.x` as written; every set it measures comes from COLOUR_SETS. Node only, never drawn.
+import { COLOUR_SETS, darkColors, lightColors, palette } from '../constants/colors';
 import { BUTTON_CONTRAST_EXCEPTIONS, type ContrastException } from './button-contrast-exceptions';
 
-export type Theme = 'light' | 'dark';
-const THEMES: readonly Theme[] = ['light', 'dark'];
-const TREES = { light: lightColors, dark: darkColors } as const;
+/** A colour set the scan measures in (core's BRAND_SETS); its scheme answers the screens' light/dark tests. */
+export type Theme = BrandSet;
+/** The whole-tree check (scanTree) measures every set of the library. */
+export const ALL_SETS: readonly Theme[] = BRAND_SETS;
+/**
+ * Classic's two sets, the ones the scanner's canaries (utils/__tests__/button-contrast.test.ts, through scanSource) were
+ * written for; a canary that measures Dark too passes `sets`. Also the two sets the coverage counts (unread styles) add up,
+ * so a third set does not move the ceilings in e2e/button-contrast.check.ts: Dark reads the same source the same way.
+ */
+export const CLASSIC_SETS: readonly Theme[] = ['light', 'dark'];
+const TREES = COLOUR_SETS;
 
 /** Names a screen binds the colour set to (`const { colors } = useTheme()`, `colors: c`). */
 const COLOUR_ROOTS = new Set(['colors', 'c']);
@@ -342,8 +353,8 @@ function condCases(e0: ts.Expression, ctx: Ctx): Case[] {
     if (e.kind === ts.SyntaxKind.TrueKeyword) return constant(true);
     if (e.kind === ts.SyntaxKind.FalseKeyword) return constant(false);
     if (ts.isIdentifier(e)) {
-        if (e.text === 'dark' || e.text === 'isDark') return constant(ctx.theme === 'dark');
-        if (e.text === 'isLight') return constant(ctx.theme === 'light');
+        if (e.text === 'dark' || e.text === 'isDark') return constant(brandScheme(ctx.theme) === 'dark');
+        if (e.text === 'isLight') return constant(brandScheme(ctx.theme) === 'light');
     }
     if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.ExclamationToken) {
         return condCases(e.operand, ctx).map((c) => ({ cond: c.cond, value: !c.value }));
@@ -356,7 +367,7 @@ function condCases(e0: ts.Expression, ctx: Ctx): Case[] {
             const [l, r] = [unwrap(e.left), unwrap(e.right)];
             const themeSide = ts.isIdentifier(l) && l.text === 'theme' ? r : ts.isIdentifier(r) && r.text === 'theme' ? l : undefined;
             if (themeSide && ts.isStringLiteralLike(themeSide) && (themeSide.text === 'dark' || themeSide.text === 'light')) {
-                return constant((ctx.theme === themeSide.text) === eq);
+                return constant((brandScheme(ctx.theme) === themeSide.text) === eq);
             }
         }
         if (op === ts.SyntaxKind.AmpersandAmpersandToken || op === ts.SyntaxKind.BarBarToken) {
@@ -808,17 +819,17 @@ export interface Finding {
 
 export interface Stats {
     files: number;
-    /** Pairs measured, per theme. */
-    checked: Record<Theme, number>;
+    /** Pairs measured, per set measured (a set the scan did not measure has no entry). */
+    checked: { [S in Theme]?: number };
     /** Words with a colour that had no background set above them on the same screen. */
     noGround: number;
-    /** Pairs that would have been measured but sit on a control held disabled (WCAG exempts it), both themes added. */
+    /** Pairs that would have been measured but sit on a control held disabled (WCAG exempts it), every set measured added. */
     inactive: number;
     /** Why a pair could not be measured -> how many. */
     skipped: Map<string, number>;
     /** Style expressions the scanner could not read (props, calls): they add nothing, as if layout only. */
     opaqueStyles: number;
-    /** The same, per file (both themes added), for the files with any. */
+    /** The same, per file (Classic's light and dark added: CLASSIC_SETS), for the files with any. */
     opaqueByFile: Map<string, number>;
     /** Files that read a style from a name (`styles.card`) whose StyleSheet.create table the scanner could not find: every style from it adds nothing. */
     unreadTables: Map<string, string[]>;
@@ -939,18 +950,18 @@ function chipAlts(opening: ts.JsxOpeningLikeElement, ctx: Ctx): Alt[] | null {
     return simplify(roles.map(({ cond, v }): Alt => ({ cond, props: { bg: tone(v, 'bg'), color: tone(v, 'fg') } })));
 }
 
-function scanFile(file: string, text: string, stats: Stats, found: Map<string, Finding>): void {
+function scanFile(file: string, text: string, stats: Stats, found: Map<string, Finding>, sets: readonly Theme[]): void {
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     stats.files++;
     const unread = new Set<string>();
     let opaque = 0;
-    for (const theme of THEMES) {
+    for (const theme of sets) {
         const ctx: Ctx = { sf, theme, opaque: { count: 0 }, unreadTables: new Set() };
         const skip = (why: string) => stats.skipped.set(why, (stats.skipped.get(why) ?? 0) + 1);
 
         const check = (el: ts.Node, words: Colour, props: Props, chain: Chain, cond: Cond, content: Content, extraKeys: string[] = []) => {
             if (chain.poison !== undefined) return skip(`background unresolved: ${chain.poison}`);
-            if (chain.paints.length === 0) { if (theme === 'light') stats.noGround++; return; }
+            if (chain.paints.length === 0) { if (theme === sets[0]) stats.noGround++; return; }
             if (isUnresolved(words)) return skip(`words unresolved: ${words.unresolved}`);
             // A border colour is never a text ink (text-ink-contrast holds those): words in one are a decorative glyph, the
             // list chevron `›` in border.strong.
@@ -962,7 +973,7 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
             // A control held disabled (its own `disabled` prop or an ancestor's, or a switch named for it) is exempt from the bar.
             // Counted, so an over-wide name or alias shows up as a number in the report instead of passing silently.
             if (heldInactive(chain.disabled, cond, sf) || [...cond].some(([k, v]) => v && isDisabledName(k))) { stats.inactive++; return; }
-            stats.checked[theme]++;
+            stats.checked[theme] = (stats.checked[theme] ?? 0) + 1;
             const { ratio, ground, inkHex } = groundRatios(chain.paints, words.rgba, theme);
             // A symbol on its own (a star, a tick, a cross) is a graphical object, held to WCAG 1.4.11's 3:1, not to the text bar.
             const min = content === 'glyph' ? 3 : needed(props.size, props.bold);
@@ -1065,7 +1076,9 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
         };
 
         visit(sf, fresh());
-        opaque += ctx.opaque.count;
+        // Counted in Classic's two sets only, as before the third: a dark set folds the screen as Classic dark does, so it
+        // reads (and fails to read) exactly the same styles, and the ceilings keep their meaning.
+        if (CLASSIC_SETS.includes(theme)) opaque += ctx.opaque.count;
         ctx.unreadTables.forEach((name) => unread.add(name));
     }
     stats.opaqueStyles += opaque;
@@ -1128,8 +1141,8 @@ function report(found: Map<string, Finding>, stats: Stats, exceptions: readonly 
     return { stats, findings, excused, badExceptions: bad };
 }
 
-const newStats = (): Stats => ({
-    files: 0, checked: { light: 0, dark: 0 }, noGround: 0, inactive: 0, skipped: new Map(), opaqueStyles: 0, opaqueByFile: new Map(), unreadTables: new Map(),
+const newStats = (sets: readonly Theme[]): Stats => ({
+    files: 0, checked: Object.fromEntries(sets.map((set) => [set, 0])), noGround: 0, inactive: 0, skipped: new Map(), opaqueStyles: 0, opaqueByFile: new Map(), unreadTables: new Map(),
 });
 
 /** Reads the files a scan follows imports into (see importedDecl), for one scan, then forgets them. */
@@ -1148,23 +1161,25 @@ function withModules<T>(read: (rel: string) => string | null, scan: () => T): T 
  * Scan one source text (the canaries in utils/__tests__/button-contrast.test.ts use this). `file` is only a label, and the path
  * `modules` are keyed by (`components/market-card-shell.ts`), relative to apps/native, for a table built in another file.
  */
-export function scanSource(file: string, text: string, exceptions: readonly ContrastException[] = [], modules: Record<string, string> = {}): ContrastReport {
-    const stats = newStats();
+export function scanSource(
+    file: string, text: string, exceptions: readonly ContrastException[] = [], modules: Record<string, string> = {}, sets: readonly Theme[] = CLASSIC_SETS,
+): ContrastReport {
+    const stats = newStats(sets);
     const found = new Map<string, Finding>();
-    withModules((rel) => modules[rel] ?? null, () => scanFile(file, text, stats, found));
+    withModules((rel) => modules[rel] ?? null, () => scanFile(file, text, stats, found, sets));
     return report(found, stats, exceptions);
 }
 
-/** Scan app/, components/ and tools/ (the shared tool button, chips and frame) under `nativeRoot` (apps/native). */
-export function scanTree(nativeRoot: string, exceptions: readonly ContrastException[] = BUTTON_CONTRAST_EXCEPTIONS): ContrastReport {
-    const stats = newStats();
+/** Scan app/, components/ and tools/ (the shared tool button, chips and frame) under `nativeRoot` (apps/native), in every set. */
+export function scanTree(nativeRoot: string, exceptions: readonly ContrastException[] = BUTTON_CONTRAST_EXCEPTIONS, sets: readonly Theme[] = ALL_SETS): ContrastReport {
+    const stats = newStats(sets);
     const found = new Map<string, Finding>();
     const read = (rel: string) => { try { return readFileSync(join(nativeRoot, rel), 'utf8'); } catch { return null; } };
     withModules(read, () => {
         for (const dir of SCANNED_DIRS) {
             for (const abs of walk(join(nativeRoot, dir))) {
                 const rel = relative(nativeRoot, abs).split(sep).join('/');
-                scanFile(rel, readFileSync(abs, 'utf8'), stats, found);
+                scanFile(rel, readFileSync(abs, 'utf8'), stats, found, sets);
             }
         }
     });
@@ -1173,8 +1188,9 @@ export function scanTree(nativeRoot: string, exceptions: readonly ContrastExcept
 
 export function formatReport(r: ContrastReport): string {
     const lines: string[] = [];
-    const checked = r.stats.checked.light + r.stats.checked.dark;
-    lines.push(`${checked} button/label pairs measured (${r.stats.checked.light} light, ${r.stats.checked.dark} dark) in ${r.stats.files} files; ` +
+    const perSet = Object.entries(r.stats.checked);
+    const checked = perSet.reduce((sum, [, n]) => sum + (n ?? 0), 0);
+    lines.push(`${checked} button/label pairs measured (${perSet.map(([set, n]) => `${n} ${set}`).join(', ')}) in ${r.stats.files} files; ` +
         `${r.stats.noGround} words had no background set above them; ${[...r.stats.skipped.values()].reduce((a, b) => a + b, 0)} could not be resolved; ` +
         `${r.stats.inactive} sit on a control held disabled (not measured); ${r.excused.length} excused.`);
     // How much was NOT read: a style the scanner cannot follow adds nothing, so a screen that moves into such a shape looks clean.

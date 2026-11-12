@@ -533,9 +533,9 @@ async function main(): Promise<void> {
             const honey = await offer(ann, 'Honey', 20);
             need(ok(honey) && honey.body?.post?.id, `Ann lists honey (${brief(honey)})`);
             assert(ok(await offer(bo, 'Sourdough', 4)), 'Bo lists sourdough');
-            // Bo's credit line to buy with: an owner's grant, as the harness's buyer gets one (a new member's floor is 0).
-            const elder = await olive.admin(`/api/local/admin/users/${bo.pk}/elder`, { grant: true }, oliveAdmin);
-            need(ok(elder), `Olive makes Bo an Elder (${brief(elder)})`);
+            // Bo's credit line to buy with: an owner's vouch (a new member's floor is 0, and a tier badge gives no credit).
+            const vouched = await olive.post('/api/vouch', { memberPubkey: bo.pk, vouchAmount: hc(200) });
+            need(ok(vouched), `Olive vouches for Bo, 200 Beans (${brief(vouched)})`);
             const asked = await bo.post('/api/marketplace/posts/request', { postId: honey.body.post.id, buyerPublicKey: bo.pk });
             need(ok(asked) && asked.body?.transaction?.id, `Bo asks for the honey (${brief(asked)})`);
             dealId = asked.body.transaction.id;

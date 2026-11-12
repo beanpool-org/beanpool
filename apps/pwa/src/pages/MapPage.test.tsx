@@ -4065,3 +4065,167 @@ describe("the New Post form's choices each say what they are (core post-type-lin
         expect(hint.className).not.toMatch(/truncate|line-clamp|whitespace-nowrap/);
     });
 });
+
+// A price for each one (DESIGN-per-item-price-fable.md §2.4, slice P4): the web's create form offers the unit Each on an Offer once
+// the node says it takes them up, with the count, the optional price for all of them and their live line, and sends the unit, the
+// count and { price_c } as the node takes them. Each names the change that turns it red.
+describe('MapPage: the seller\'s fields for a price for each one (P4)', () => {
+    const LOCAL = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance_c: 0, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };
+    const WITH_EACH = { ...LOCAL, features: { ...LOCAL.features, perItem: true } };
+    const TAP = { lat: -28.55437, lng: 153.50261 };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance_c: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+    afterEach(() => resetCommunityInfoOnce());
+
+    const open = async (info: unknown) => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost onNavigate={vi.fn()} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Offer$/ })); });
+        return panel;
+    };
+    const tapPin = async (panel: HTMLElement) => {
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: TAP })); });
+    };
+    const unit = (panel: HTMLElement) => within(panel).getByDisplayValue('Total') as HTMLSelectElement;
+    const typeInto = (el: HTMLElement, value: string) => fireEvent.change(el, { target: { value } });
+    const fillOffer = async (panel: HTMLElement) => {
+        typeInto(within(panel).getByPlaceholderText('What do you need/offer?'), 'Solar panels');
+        typeInto(within(panel).getByPlaceholderText('Describe what you need/offer...'), 'Second-hand, tested');
+        await pickPhoto(panel);
+        await tapPin(panel);
+    };
+    const post = async (panel: HTMLElement) => { await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Offer' })); }); };
+
+    it('the node does not say perItem: the five units it always had, no Each (red if Each shows early)', async () => {
+        const panel = await open(LOCAL);
+        expect(Array.from(unit(panel).options).map(o => o.value)).toEqual(['fixed', 'hourly', 'daily', 'weekly', 'monthly']);
+    });
+
+    it('the node says perItem: Each is right after Total, on an Offer only (red if a Need can pick it)', async () => {
+        const panel = await open(WITH_EACH);
+        expect(Array.from(unit(panel).options).map(o => o.value)).toEqual(['fixed', 'each', 'hourly', 'daily', 'weekly', 'monthly']);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Need$/ })); });
+        expect(within(panel).queryByRole('option', { name: 'Each' })).toBeNull();
+    });
+
+    it('Each: PRICE FOR ONE, HOW MANY DO YOU HAVE?, OR ALL OF THEM FOR (OPTIONAL), and no Repeatable tick (red if the tick stays)', async () => {
+        const panel = await open(WITH_EACH);
+        expect(within(panel).getByText(/Repeatable/)).toBeInTheDocument();
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        expect(within(panel).getByText(/PRICE FOR ONE/)).toBeInTheDocument();
+        expect(within(panel).getByText(/HOW MANY DO YOU HAVE\?/)).toBeInTheDocument();
+        expect(within(panel).getByText('OR ALL OF THEM FOR (OPTIONAL)')).toBeInTheDocument();
+        expect(within(panel).queryByText(/Repeatable/)).toBeNull();
+        expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent('Leave this empty to sell them one by one only.');
+    });
+
+    it("Damo's way in: 5500 typed as the Total moves to the price for all, the price for one is empty and focused (red if it stays in the price box)", async () => {
+        const panel = await open(WITH_EACH);
+        typeInto(within(panel).getByPlaceholderText('B'), '5500');
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        await act(async () => { await new Promise(r => setTimeout(r, 10)); });
+        const price = within(panel).getByPlaceholderText('B') as HTMLInputElement;
+        expect(price.value).toBe('');
+        expect(within(panel).getByTestId('per-item-lot')).toHaveValue('5500');
+        expect(document.activeElement).toBe(price);
+    });
+
+    it('the live line and the fee line follow the boxes: good, then not less (red if the compare or the sums drift)', async () => {
+        const panel = await open(WITH_EACH);
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        typeInto(within(panel).getByPlaceholderText('B'), '300');
+        typeInto(within(panel).getByTestId('per-item-count'), '20');
+        typeInto(within(panel).getByTestId('per-item-lot'), '5500');
+        expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent('All 20 for 5,500 Beans. One by one they come to 6,000.');
+        expect(within(panel).getByText(/You receive 295\.50 Beans for each one, or 5,417\.50 Beans for all of them\./)).toBeInTheDocument();
+        typeInto(within(panel).getByTestId('per-item-lot'), '6000');
+        expect(within(panel).getByTestId('per-item-hint')).toHaveTextContent('One by one, 20 come to 6,000 Beans. A price for all of them has to be less.');
+    });
+
+    it('Free: no price-for-all box at all (red if the box stays for a free listing)', async () => {
+        const panel = await open(WITH_EACH);
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        typeInto(within(panel).getByPlaceholderText('B'), '0');
+        expect(within(panel).queryByTestId('per-item-lot')).toBeNull();
+        expect(within(panel).getByTestId('per-item-count')).toBeInTheDocument();
+    });
+
+    it('posts the unit, the count and { price_c } for all, never Repeatable (red if the body loses a field or sends text for the count)', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'offer-new' } } as any);
+        const panel = await open(WITH_EACH);
+        await fillOffer(panel);
+        await act(async () => { fireEvent.click(within(panel).getByLabelText(/Repeatable/)); });
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        typeInto(within(panel).getByPlaceholderText('B'), '300');
+        typeInto(within(panel).getByTestId('per-item-count'), '20');
+        typeInto(within(panel).getByTestId('per-item-lot'), '5500');
+        await post(panel);
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ type: 'offer', priceType: 'each', price_c: 30000, unitsLeft: 20, lot: { price_c: 550000 }, repeatable: false });
+    });
+
+    it('no price for all: no lot key at all (red if null or 0 is sent)', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'offer-new' } } as any);
+        const panel = await open(WITH_EACH);
+        await fillOffer(panel);
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        typeInto(within(panel).getByPlaceholderText('B'), '300');
+        typeInto(within(panel).getByTestId('per-item-count'), '20');
+        await post(panel);
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ priceType: 'each', unitsLeft: 20 });
+        expect(create.mock.calls[0][0]).not.toHaveProperty('lot');
+    });
+
+    it('what the node would refuse is refused first, in its words, and nothing is sent (red if a bad count or lot is posted)', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'offer-new' } } as any);
+        const panel = await open(WITH_EACH);
+        await fillOffer(panel);
+        await act(async () => { fireEvent.change(unit(panel), { target: { value: 'each' } }); });
+        typeInto(within(panel).getByPlaceholderText('B'), '300');
+        await post(panel);
+        expect(await within(panel).findByTestId('per-item-refusal')).toHaveTextContent('Say how many you have: a whole number from 1 to 9,999.');
+        typeInto(within(panel).getByTestId('per-item-count'), '1');
+        typeInto(within(panel).getByTestId('per-item-lot'), '200');
+        await post(panel);
+        expect(await within(panel).findByTestId('per-item-refusal')).toHaveTextContent('A price for all of them needs 2 or more.');
+        typeInto(within(panel).getByTestId('per-item-count'), '20');
+        typeInto(within(panel).getByTestId('per-item-lot'), '6000');
+        await post(panel);
+        expect(await within(panel).findByTestId('per-item-refusal')).toHaveTextContent('One by one, 20 come to 6,000 Beans. A price for all of them has to be less.');
+        // Said once, in red, not again as the live line under it.
+        expect(within(panel).queryByTestId('per-item-hint')).toBeNull();
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it('a Total listing is posted as it always was: no unitsLeft, no lot (red if the new fields leak into other units)', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'offer-new' } } as any);
+        const panel = await open(WITH_EACH);
+        await fillOffer(panel);
+        typeInto(within(panel).getByPlaceholderText('B'), '300');
+        await post(panel);
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ priceType: 'fixed', price_c: 30000 });
+        expect(create.mock.calls[0][0]).not.toHaveProperty('unitsLeft');
+        expect(create.mock.calls[0][0]).not.toHaveProperty('lot');
+    });
+});

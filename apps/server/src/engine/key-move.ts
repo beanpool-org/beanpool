@@ -362,6 +362,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // looks, and the looks they took. The new key of a re-key is no member before it, so no line already names it.
     move('credit_look_log', 'actor_pubkey');
     move('credit_look_log', 'subject_pubkey');
+    // A member's badge (engine/badges.ts) and the badges an owner or admin gave: recognition follows the person.
+    move('member_badges', 'member_pubkey');
+    move('member_badges', 'set_by');
     // A voucher's budget, the lines that wrote it, and the credit line each vouch or gift gave, beside invited_by (engine/vouchers.ts):
     // the budget and the room follow the person.
     move('vouchers', 'member_pubkey');

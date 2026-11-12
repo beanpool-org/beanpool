@@ -335,8 +335,6 @@
   "ADD POST": "பகிர்வைச் சேர்",
   "The amount is a number of Beans above 0, to the cent.": "தொகை என்பது 0 க்கு மேற்பட்ட பயறுகளின் எண்ணிக்கை, பைசா வரை துல்லியமானது.",
   "Send Beans": "பயறுகளை அனுப்புங்கள்",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "நிலைகள் என்பது தகுதி பேட்ஜ்கள் — அவை எந்த நடவடிக்கையையும் தடுப்பதில்லை. நேரடிப் பரிமாற்றங்களுக்கு நேர்மறை இருப்பும் ஒரு நிறைவுற்ற பரிவர்த்தனையும் தேவை. உயர் நிலைகள் அதிக கடன் வரம்பையும் சமூக அங்கீகாரத்தையும் குறிக்கின்றன.",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "நிலைகள் என்பது தகுதி பேட்ஜ்கள் — அவை எந்த நடவடிக்கையையும் தடுப்பதில்லை. யார் வேண்டுமானாலும் அழைக்கலாம். நேரடிப் பரிமாற்றங்களுக்கு நேர்மறை இருப்பும் ஒரு நிறைவுற்ற பரிவர்த்தனையும் தேவை. உயர் நிலைகள் அதிக கடன் வரம்பையும் சமூக அங்கீகாரத்தையும் குறிக்கின்றன.",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "நீங்கள் {free} அல்லது அதற்கும் குறைவான பயறுகளை வைத்திருக்கும் வரை பொது நிதிக்கு எதுவும் போகாது.",
   "✨ Generate Ticket": "✨ டிக்கெட்டை உருவாக்கு",
   "✨ Generate Offline Ticket": "✨ ஆஃப்லைன் டிக்கெட்டை உருவாக்கு",
@@ -3186,13 +3184,7 @@
   "Browse & trade the marketplace": "சந்தையில் உலாவவும் வர்த்தகம் செய்யவும்",
   "Receive credits": "வரவுகளைப் பெறுங்கள்",
   "Send credits after first trade (needs positive balance)": "முதல் வர்த்தகத்திற்குப் பிறகு வரவுகளை அனுப்புங்கள் (நேர்மறை இருப்பு தேவை)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "நீங்கள் சமூகத்துடன் உண்மையான மதிப்பை வர்த்தகம் செய்துள்ளீர்கள். ஒவ்வொரு வர்த்தகத்தின் போதும் உங்கள் கடன் வரம்பு ஆழமாகிறது — நீங்கள் அதிக மதிப்பை பரிமாறிக் கொள்ளும்போது, அது மேலும் வளர்கிறது.",
-  "Credit floor deepens with the value you trade": "நீங்கள் வர்த்தகம் செய்யும் மதிப்பிற்கேற்ப கடன் தளம் ஆழமாகிறது",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "பரந்த கூட்டாளிகளைக் கொண்ட நம்பகமான வர்த்தகர். சமூகம் உங்களை அங்கீகரிக்கிறது, உங்கள் கடன் வரம்பு மேலும் ஆழமாகிறது.",
-  "Credit floor continues deepening": "கடன் தளம் தொடர்ந்து ஆழமாகிறது",
   "Trusted-trader recognition": "நம்பகமான வர்த்தகர் அங்கீகாரம்",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "பொது நிதியின் தூண் — அதிகபட்ச சாத்தியமான கடன் வரம்பு மற்றும் சமூகத்தின் மிக உயர்ந்த அங்கீகாரம்.",
-  "Credit floor can reach -2000 (the maximum)": "கடன் தளம் -2000 வரை எட்டக்கூடும் (அதிகபட்சம்)",
   "Recognised as a community Elder": "சமூகத்தின் மூத்தவராக அங்கீகரிக்கப்பட்டவர்",
   "Export failed": "ஏற்றுமதி தோல்வியடைந்தது",
   "Export my transactions": "என் பரிவர்த்தனைகளை ஏற்றுமதி செய்",
@@ -3207,10 +3199,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "நீங்கள் தற்போது வைத்துள்ள பயறை மட்டுமே அனுப்ப முடியும் — நேரடி அனுப்புதலுக்கு நேர்மறை இருப்பு தேவை.",
   "How trust works": "நம்பிக்கை எவ்வாறு செயல்படுகிறது",
   "YOUR TRUST LEVEL": "உங்கள் நம்பிக்கை நிலை",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "{levels}-இல் நிலை {level} · {n} நம்பிக்கை",
-    "other": "{levels}-இல் நிலை {level} · {n} நம்பிக்கை"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-ஐ எட்ட மேலும் **{n}** நம்பிக்கை",
     "other": "{emoji} {tier}-ஐ எட்ட மேலும் **{n}** நம்பிக்கை"
@@ -3440,7 +3428,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "புதிய உறுப்பினர்களுக்கு அவர்களின் முதல் வர்த்தகம் வரை **🔑 நிறுவனர்கள்** பேட்ஜ் காட்டப்படும்.",
   "Tiers & Perks": "அடுக்குகள் & பலன்கள்",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "அடுக்குகள் என்பவை **அங்கீகார மைல்கற்கள்** — உங்கள் நம்பிக்கை எவ்வளவு தூரம் வளர்ந்துள்ளது என்பதை அவை குறிக்கின்றன. அவற்றுடன் ஆழமாகும் ஒரே வெகுமதி உங்கள் **கடன் தளம்** (பூஜ்ஜியத்திற்குக் கீழே எவ்வளவு செலவிடலாம் என்பது). நீங்கள் வர்த்தகம் செய்யும் மதிப்பிற்கு ஏற்ப உங்கள் தளம் தொடர்ந்து மாறும்; அடுக்குகள் வழியில் உள்ள வழிகாட்டிகள் மட்டுமே.",
   "🔑 Founding Status (before 1st trade)": "🔑 நிறுவனர்கள் நிலை (1வது வர்த்தகத்திற்கு முன்)",
   "A starting state that lasts until you complete your **very first trade**": "உங்கள் **முதல் வர்த்தகத்தை** முடிக்கும் வரை நீடிக்கும் ஒரு தொடக்க நிலை",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "உறுப்பினர்கள் நீங்கள் தொடங்க உதவ வேண்டும் என்பதை அறிய **🔑 நிறுவனர்கள்** எனக் காட்டுகிறது",

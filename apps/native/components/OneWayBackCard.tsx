@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+// Static colours: only the default of the `colors` prop. Every caller passes its screen's set (measured 12 Nov 2026, colour themes T2), so a colour set reaches it through the prop.
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { LinkSignInSheet } from './LinkSignInSheet';

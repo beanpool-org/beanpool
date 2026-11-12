@@ -1104,6 +1104,22 @@ export async function refreshPostForPhoto(id: string, photoUrl: string): Promise
     return refreshCachedPost(database, anchorUrl, id);
 }
 
+/**
+ * A listing's count and price for all of them as the node holds them now (DESIGN-per-item-price-fable.md §2.5): the edit form
+ * sends the count it read here back as `unitsLeftWas`, and the node writes a changed count only if the row still holds it.
+ * The phone's own copy of a post doesn't keep the two, and a copy would be as old as the last sync. Null when the node has
+ * no such listing; throws when it can't be read (the form then isn't opened on a count it never saw).
+ */
+export async function getListingItems(id: string): Promise<{ unitsLeft: number | null; lot: { units: number; price_c: number } | null } | null> {
+    const res = await signedGet(`/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`);
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    const posts = await res.json();
+    const p = Array.isArray(posts) ? posts[0] : null;
+    if (!p) return null;
+    const lot = p.lot && Number.isInteger(p.lot.units) && Number.isInteger(p.lot.price_c) ? { units: p.lot.units as number, price_c: p.lot.price_c as number } : null;
+    return { unitsLeft: Number.isInteger(p.unitsLeft) ? (p.unitsLeft as number) : null, lot };
+}
+
 export async function getPost(id: string) {
     const database = await waitForInit();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
@@ -2124,6 +2140,8 @@ export async function createPost(post: any) {
         // Whole hundredths of a Bean (the composer's typed price through core parseHundredths), as the node takes it.
         price_c: post.price_c,
         priceType: post.price_type || 'fixed',
+        // A listing priced for each one (DESIGN-per-item-price-fable.md §3): how many, and the price for all of them if set.
+        ...(post.price_type === 'each' && typeof post.unitsLeft === 'number' ? { unitsLeft: post.unitsLeft, ...(post.lot ? { lot: post.lot } : {}) } : {}),
         authorPublicKey: post.author_pubkey,
         lat: post.lat,
         lng: post.lng,
@@ -3757,6 +3775,13 @@ export async function updatePost(id: string, updates: any) {
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
         photos,
+        // A listing priced for each one (§4.6): the count, the count the screen read, and the price for all of them
+        // (`{ price_c }` sets it, null clears it, absent keeps it).
+        ...(updates.price_type === 'each' ? {
+            unitsLeft: updates.unitsLeft,
+            ...(updates.unitsLeftWas !== undefined ? { unitsLeftWas: updates.unitsLeftWas } : {}),
+            ...(updates.lot !== undefined ? { lot: updates.lot } : {}),
+        } : {}),
         ...(tags !== undefined ? { tags } : {}),
         ...(freeTags !== undefined ? { freeTags } : {}),
         // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
@@ -7963,6 +7988,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         let nodeMessage: string | undefined;
         // The node's code beside its sentence (`shop_paused`: an Offer in a shop closed for now), so a screen can say why.
         let nodeCode: string | undefined;
+        // How many are left now, beside `units_changed` (a take-up landed while the seller edited, §2.5).
+        let nodeUnitsLeft: number | undefined;
         // What the body was, for telling a busy network's answer from the node's own: the JSON when it parsed, else its text.
         let errBody: unknown;
         let errText = '';
@@ -7974,6 +8001,7 @@ async function _signedRequest(endpoint: string, payload: any) {
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
             if (typeof errJson.code === 'string') nodeCode = errJson.code;
+            if (typeof errJson.unitsLeft === 'number') nodeUnitsLeft = errJson.unitsLeft;
         } catch {
             try {
                 const txt = await res.text();
@@ -8012,6 +8040,7 @@ async function _signedRequest(endpoint: string, payload: any) {
         err.nodeAnswered = nodeAnswered;
         err.nodeMessage = nodeMessage;
         if (nodeCode) err.code = nodeCode;
+        if (nodeUnitsLeft !== undefined) err.unitsLeft = nodeUnitsLeft;
         throw err;
     }
 

@@ -598,8 +598,8 @@ async function main(): Promise<void> {
             if (finish) built(`${buyer.name} confirms: the Beans are released`, await S_(buyer, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: buyer.pk }));
             return tx.id as string;
         };
-        built('the admin makes Gwen an Elder (a credit line to buy with)', await A(`/api/local/admin/users/${gwen.pk}/elder`, { grant: true }));
-        built('and Cy', await A(`/api/local/admin/users/${cy.pk}/elder`, { grant: true }));
+        built('Gwen is given a 1,400-Bean line to buy with (a tier gives none)', await main.send('grant-line', { pk: gwen.pk, amount_c: 140000 }));
+        built('and Cy', await main.send('grant-line', { pk: cy.pk, amount_c: 140000 }));
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
         await offer(cy, 'Bike repair', 6);
         await deal(gwen, ann, (await offer(ann, 'Honey', 20)).id, true); // the Commons takes its fee
@@ -855,7 +855,7 @@ async function main(): Promise<void> {
         // Gwen and Yan joined a month ago: their trades are with each other only, and a new pair's would be a flagged cluster
         // with no earned credit, so each of Yan's sends (steps 11 and 17) would pass only on a wash analysis cached before it.
         require_(await main0.send('backdate-members', { publicKeys: [gwen0.pk, yan.pk], days: 30 }) === 2, 'M0: Gwen and Yan joined a month ago');
-        built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: await main0.send('owner-session'), body: { grant: true } }));
+        built('M0: Gwen is given a 1,400-Bean line to buy with', await main0.send('grant-line', { pk: gwen0.pk, amount_c: 140000 }));
         const offer0 = async (who: Id, title: string, beans: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, price_c: hc(beans), priceType: 'fixed', authorPublicKey: who.pk,
             photos: [TINY_PNG],

@@ -134,7 +134,7 @@ export const WATCH_WORDS = {
     joinFirst: word('Join first: being told is kept for a member. Join is at the top of this page.'),
     needsPlace: word('Share your area or type your town first, so we know where "here" is.'),
 } as const;
-const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill';
 const HOME_CARD_IN_STYLE = '@keyframes home-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }';
 /** The safety poll while the tab is in front (§5.2: the 120 s the header runs on the phone). */
 export const HOME_SAFETY_POLL_MS = 120_000;
@@ -390,7 +390,7 @@ function MarketListingItem({
                 onClick={() => onNavigate('marketplace', item.id)}
                 aria-label={label}
                 data-testid={testId}
-                className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
             >
                 {/* The photo's slot: `relative`, so a photo still loading stays inside it (components/ListPhoto.tsx). */}
                 <div data-testid="home-photo-slot" className="relative w-full h-24 rounded-lg overflow-hidden mb-2 shrink-0">
@@ -656,7 +656,7 @@ function PulseBody({
                                 onClick={() => onNavigate('pulse')}
                                 aria-label={label}
                                 data-testid="home-pulse-tile"
-                                className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
                             >
                                 {thumb ? (
                                     <img
@@ -3062,7 +3062,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     <HomeCard key={id} {...common} titleAside={!isVisitor && (
                         <button type="button" onClick={openTune} aria-label={t('Tune: pick what comes first')} data-testid="home-tune"
                             style={{ color: 'var(--bp-card-orange-ink)' }}
-                            className="min-h-[44px] -my-1 px-2 bg-transparent border-0 text-xs font-bold cursor-pointer rounded-lg hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            className="min-h-[44px] -my-1 px-2 bg-transparent border-0 text-xs font-bold cursor-pointer rounded-lg hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill">
                             {t('Tune')}
                         </button>
                     )}>
@@ -3358,7 +3358,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
                         <span className="min-w-0 flex-1 break-words">{saveNote}</span>
                         <button type="button" aria-label={t('Close this note')} onClick={() => setSaveNote(null)}
-                            className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill">
                             ✕
                         </button>
                     </p>

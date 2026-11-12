@@ -32,7 +32,10 @@ const classes = (s: string) => s.split(/\s+/).filter(Boolean);
  */
 async function leftBorder(classString: string, scheme: 'light' | 'dark'): Promise<string | null> {
     const configUrl = pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href;
-    const { default: config } = await import(/* @vite-ignore */ configUrl);
+    const { default: config, webSetVariableMap } = await import(/* @vite-ignore */ configUrl);
+    // The `nature` scale is the set's channel variables (rgb(var(--bp-n-800) / var(--tw-border-opacity, 1))), which the
+    // plugin writes per set: Light under :root, Classic under :root.dark-theme. A step is read through the scheme's own.
+    const vars = webSetVariableMap(scheme) as Record<string, string>;
     const own = new Set(classes(classString));
     // Tailwind brings its own copy of postcss's types; the plugin is the same object either way.
     const plugin = tailwindcss({ ...config, content: [{ raw: `<div class="${classString}"></div>`, extension: 'html' }] }) as unknown as AcceptedPlugin;
@@ -49,7 +52,9 @@ async function leftBorder(classString: string, scheme: 'light' | 'dark'): Promis
         if (!own.has(name) || (scheme === 'light' && name.startsWith('dark:'))) return;
         const weight = 1 + (/:is\(/.test(m[2]) ? 1 : 0);
         rule.walkDecls(/^border-(left-)?color$/, (d) => {
-            const rgb = d.value.match(/^rgb\((\d+) (\d+) (\d+)/);
+            const ramp = d.value.match(/^rgb\(var\((--bp-n-\d+)\)/);
+            if (ramp && vars[ramp[1]] == null) throw new Error(`${ramp[1]} is not written for ${scheme}`);
+            const rgb = ramp ? vars[ramp[1]].match(/^(\d+) (\d+) (\d+)$/) : d.value.match(/^rgb\((\d+) (\d+) (\d+)/);
             if (rgb) set.push({ weight, order, colour: `rgb(${rgb[1]}, ${rgb[2]}, ${rgb[3]})` });
         });
     });

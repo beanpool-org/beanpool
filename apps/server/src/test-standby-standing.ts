@@ -13,13 +13,13 @@
  *  1. The main server M: an enterprise, Probe Co, with a purpose, a map pin, a working capital ceiling, two keepers who
  *     each pledge backing, an external sale (earned surplus) and no legacy credit floor (E29's line is gone with whole
  *     hundredths: members has no legacy_credit_floor column); a project with a goal and a
- *     deadline; Elders (granted credit), two members given a Resident badge (granted credit too), a frozen
+ *     deadline; Elders (granted credit), two members given a 200-Bean line (granted credit too; a tier badge gives none), a frozen
  *     Elder, a member on holiday and one with a notification opt-out, a reminder default, and a Home layout and interests
  *     (slice H1 of scratch/global-node/DESIGN-home-dashboard-fable.md). A preference save moves the member's row, as
  *     holiday does.
  *  2. The standby S's first copy: every members column (but last_active_at), every preference, keeper and pledge is M's,
  *     stamps included; the copy records the importer's format.
- *  3. Between two pulls, on M: one of those badges taken back, a keeper unbound, a pledge released, the enterprise paused, its
+ *  3. Between two pulls, on M: one of those lines taken back, a keeper unbound, a pledge released, the enterprise paused, its
  *     ceiling changed by the admin (a write of that column alone), another opt-out, a moved Home card and a new interest. A
  *     delta brings every one.
  *  4. A whole copy leaves every row and stamp as M's, and puts back the members touch triggers the import set aside.
@@ -44,7 +44,7 @@
  *     none of its rows at boot. M, booted on this
  *     build as if for the first time (its marker gone), brings the goal into the schema's rules once: the column's
  *     default, the row stamped, nothing else changed.
- *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the badge
+ *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the line
  *     taken back gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
  *     board is M's (the paused enterprise's listing and the holiday member's stay off); the holiday member can't be traded
  *     with; the enterprises pay no demurrage; the opt-outs hold; the member reads her Home
@@ -461,7 +461,7 @@ async function main(): Promise<void> {
             built(`${buyer.name} confirms: the Beans are released`, await S_(buyer, '/api/marketplace/transactions/complete', { transactionId: tx.id, confirmerPublicKey: buyer.pk }));
             return tx.id as string;
         };
-        for (const who of [gwen, cy, fay]) built(`the admin makes ${who.name} an Elder (granted credit)`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
+        for (const who of [gwen, cy, fay]) built(`${who.name} is given a 1,400-Bean line (granted credit; a tier gives none)`, await main.send('grant-line', { pk: who.pk, amount_c: 140000 }));
         await offer(gwen, 'Sourdough', 400); // a buyer lists an offer first (the offer covenant)
         await offer(cy, 'Bike repair', 600);
         await deal(gwen, ann, (await offer(ann, 'Honey', 800)).id); // Ann has Beans to buy with
@@ -486,8 +486,8 @@ async function main(): Promise<void> {
         const seed = built('Eve starts a project with a goal and a deadline', await S_(eve, '/api/treasury', {
             name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount_c: 10000, deadlineAt: deadline,
         }));
-        built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
-        built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
+        built('Eve is given a 200-Bean line (granted credit, as a Resident badge once gave)', await main.send('grant-line', { pk: eve.pk, amount_c: 20000 }));
+        built('and Lou one', await main.send('grant-line', { pk: lou.pk, amount_c: 20000 }));
         built('the admin freezes Fay\'s credit (an Elder: her floor goes to 0)', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
         built('Hal goes on holiday', await S_(hal, '/api/members/holiday', { enabled: true }));
         const annBefore = ((await main.send('rows')) as Rows).members.find((r) => r.public_key === ann.pk)?.updated_at;
@@ -527,8 +527,8 @@ async function main(): Promise<void> {
         assert(MEMBERS_TOUCH.every((t) => s.touch.includes(t)), `the members touch triggers are in place after the import (${s.touch.join(', ')})`);
 
         // ── 3. Changes between two pulls, then a delta ──
-        console.log('\n— 3. between two pulls: a badge taken back, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
-        built("the admin takes Lou's badge back, which the first copy copied", await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Newcomer' }));
+        console.log('\n— 3. between two pulls: a granted line taken back, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
+        built("Lou's line is taken back, which the first copy copied", await main.send('grant-line', { pk: lou.pk, amount_c: 0 }));
         built('the admin unbinds Dee from Probe Co', await api(m, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${dee.pk}`, { admin: await main.send('owner-session') }));
         built('Kip releases 1 of his 2 Beans of backing', await S_(kip, `/api/treasury/${probe.publicKey}/release`, { amount_c: 100 }));
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
@@ -543,12 +543,12 @@ async function main(): Promise<void> {
             && m3.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling_c === 8000
             && !m3.treasury_operators.some((o) => o.member_pubkey === dee.pk)
             && m3.enterprise_pledges.some((p) => p.keeper === kip.pk && p.released_at !== null),
-            'M: Lou\'s badge is gone, Probe Co is paused with its new ceiling, Dee is no keeper, and a pledge of Kip\'s is released');
+            'M: Lou\'s granted line is gone, Probe Co is paused with its new ceiling, Dee is no keeper, and a pledge of Kip\'s is released');
         const delta = await standby.send('pull', {});
         s = await standby.send('rows');
         assert(delta.ok === true && delta.mode === 'delta', `the delta lands (${delta.ok ? delta.mode : delta.error})`);
         assert(s.members.find((r) => r.public_key === lou.pk)?.earned_credit_c === 0,
-            `the badge taken back is gone on S too (${JSON.stringify(s.members.find((r) => r.public_key === lou.pk)?.earned_credit_c)})`);
+            `the line taken back is gone on S too (${JSON.stringify(s.members.find((r) => r.public_key === lou.pk)?.earned_credit_c)})`);
         assert(s.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling_c === 8000, 'the ceiling the admin changed alone arrives');
         assert(!s.treasury_operators.some((o) => o.member_pubkey === dee.pk), 'the unbound keeper is no keeper on S');
         assert(rowsDiff(m3, s).length === 0, `every row and stamp is M's after the delta (differences ${first(rowsDiff(m3, s))})`);
@@ -787,11 +787,11 @@ async function main(): Promise<void> {
             everyone.map(async ([n, pk, reader]) => [n, standingOf(await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: reader }))])));
         await main.send('fresh-trust');
         const onMain = { standing: await standingOn(m), board: await boardOn(m) };
-        // 200 Beans of a Resident badge's credit: 20000 hundredths.
+        // 200 Beans of granted credit: 20000 hundredths.
         require_((onMain.standing as any).Eve?.grantedCredit === 20000 && (onMain.standing as any).Lou?.grantedCredit === 0
             && (onMain.standing as any).Fay?.floor_c === 0 && (onMain.standing as any).Fay?.grantedCredit > 0
             && !onMain.board.includes(checkId) && !onMain.board.includes(walking.id),
-            `M: Eve holds her badge's credit and Lou no longer; Fay, an Elder, is frozen at 0; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou, fay: (onMain.standing as any).Fay })})`);
+            `M: Eve holds her granted line and Lou no longer; Fay, an Elder, is frozen at 0; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou, fay: (onMain.standing as any).Fay })})`);
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
@@ -815,7 +815,7 @@ async function main(): Promise<void> {
         const promoted = { standing: await standingOn(p), board: await boardOn(p) };
         const floorsDiffer = Object.keys(onMain.standing).filter((n) => JSON.stringify((onMain.standing as any)[n]) !== JSON.stringify((promoted.standing as any)[n]));
         assert(floorsDiffer.length === 0,
-            `every balance, floor, tier and granted credit is M's, the badge taken back giving no credit back (differ: ${floorsDiffer.map((n) => `${n} ${JSON.stringify((onMain.standing as any)[n])} / ${JSON.stringify((promoted.standing as any)[n])}`).join(' | ') || 'none'})`);
+            `every balance, floor, tier and granted credit is M's, the line taken back giving no credit back (differ: ${floorsDiffer.map((n) => `${n} ${JSON.stringify((onMain.standing as any)[n])} / ${JSON.stringify((promoted.standing as any)[n])}`).join(' | ') || 'none'})`);
         assert(JSON.stringify(promoted.board) === JSON.stringify(onMain.board),
             `the board is M's: the paused enterprise's listing and the holiday member's stay off (${promoted.board.length} against ${onMain.board.length})`);
         const page = await api(p, 'GET', `/api/treasury/${probe.publicKey}`, { as: kip2 });

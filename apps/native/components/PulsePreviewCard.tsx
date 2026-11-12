@@ -27,7 +27,7 @@ import {
     type ChannelPlatform,
     type ChannelCategory,
 } from '@beanpool/core';
-import { lightColors } from '../constants/colors';
+import type { AppColors } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 export interface PulsePreviewData {
@@ -179,7 +179,7 @@ export function PulsePreviewCard({
     );
 }
 
-export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; theme: string }) =>
+export const makeStyles = ({ colors, theme }: { colors: AppColors; theme: string }) =>
     StyleSheet.create({
         cardContainer: {
             backgroundColor: colors.surface.card,

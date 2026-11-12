@@ -24,7 +24,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { PINS_MAX, avatarUrlOf, lendBackAroundOf, pollIsSealed, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
+import { PINS_MAX, TIER_LEVELS, avatarUrlOf, lendBackAroundOf, pollIsSealed, shopPhotoUrlOf, tierIndexForName, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared, preparedShape } from './statements.js';
@@ -187,8 +187,8 @@ export interface MarketplacePost {
     /** Peer ids named when `reach === 'peers'`. Empty for every other reach. */
     reachPeers?: string[];
     /**
-     * The least credit of the author's tier (TIER_LEVELS minCredit: 0, 200, 600 or 1,400), from the credit that gives
-     * their tier (the profile's tierCredit: what they did, never the known grant): tierForCredit of it is their badge,
+     * The least credit of the author's tier (TIER_LEVELS minCredit: 0, 200, 600 or 1,400), the tier their profile shows
+     * (what they did, never the known grant, or a badge an owner or admin gave them where it is higher): tierForCredit of it is their badge,
      * and every member reads it, so it is never the figure itself. The name is historical: it is not beans sent.
      */
     authorEnergyCycled?: number;
@@ -902,7 +902,8 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             trustPoints = known;
         } else {
             try {
-                trustPoints = tierForCredit(getMemberTrustProfile(db, row.author_pubkey).tierCredit).minCredit;
+                // The tier the profile shows: what they did, or a badge an owner or admin gave them where that is higher.
+                trustPoints = TIER_LEVELS[Math.max(0, tierIndexForName(getMemberTrustProfile(db, row.author_pubkey).tier.name))].minCredit;
             } catch (e) {
                 trustPoints = 0;
             }

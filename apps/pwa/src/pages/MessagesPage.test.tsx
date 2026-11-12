@@ -4,7 +4,7 @@ import React from 'react';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { setLanguage } from '@beanpool/core';
-import { brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
+import { BRAND_SETS, brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
@@ -1670,7 +1670,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
             expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
         });
 
-        it('contrast of the sentence colour token on the own bubble meets 4.5:1 in both light and dark themes', async () => {
+        it('contrast of the sentence colour token on the own bubble, as the app draws it, meets 4.5:1 in every set (Light, Classic, Dark)', async () => {
             mockMessagesByConv = {
                 'conv-1': [{
                     id: 'msg-contrast', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
@@ -1689,16 +1689,23 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
             expect(varMatch, 'must use a central CSS variable token, not a raw rgba/hex').not.toBeNull();
 
             const token = varMatch![1];
-            const theme = { light: brandCssVariableMap('light'), dark: brandCssVariableMap('dark') };
-            const bubbleBg = { light: '#647664', dark: '#809380' };
+            // The ground is the bubble the app draws around the sentence, read from its own style and resolved per set from
+            // the library, never a copied hex: the own bubble moved from the old accent to the sage fill in T1, and a
+            // pinned '#809380' went on passing the old ink while the bubble under it changed.
+            const bubble = sentence.closest('[data-testid="chat-bubble"]') as HTMLElement | null;
+            expect(bubble, 'the sentence is drawn inside the own bubble').not.toBeNull();
+            const bubbleMatch = /^var\((--[a-z0-9-]+)\)$/.exec(bubble!.style.background);
+            expect(bubbleMatch, 'the own bubble must be a central CSS variable token').not.toBeNull();
+            const bubbleToken = bubbleMatch![1];
 
-            const lightColor = theme.light[token];
-            const darkColor = theme.dark[token];
-            expect(lightColor).toBeDefined();
-            expect(darkColor).toBeDefined();
-
-            expect(contrastRatio(lightColor, bubbleBg.light)).toBeGreaterThanOrEqual(4.5);
-            expect(contrastRatio(darkColor, bubbleBg.dark)).toBeGreaterThanOrEqual(4.5);
+            for (const set of BRAND_SETS) {
+                const vars = brandCssVariableMap(set);
+                const ink = vars[token];
+                const ground = vars[bubbleToken];
+                expect(ink, `${token} in ${set}`).toBeDefined();
+                expect(ground, `${bubbleToken} in ${set}`).toBeDefined();
+                expect(contrastRatio(ink, ground), `${token} on ${bubbleToken} in ${set}`).toBeGreaterThanOrEqual(4.5);
+            }
         });
 
         it('clicking an expired Edit gives the sentence role="status" and keeps focus off body', async () => {

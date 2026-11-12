@@ -47,7 +47,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, createPost as rawCreatePost, getCommonsBalanceExact, runLedgerAudit, adminSetTier, acceptPost,
+    initStateEngine, transfer, createPost as rawCreatePost, getCommonsBalanceExact, runLedgerAudit, acceptPost,
     completePostTransaction, dismissReport, purgeMemberSelf, getReports,
 } from './state-engine.js';
 import { getAlertsStatus } from './services/alerts.js';
@@ -247,7 +247,8 @@ async function main(): Promise<void> {
     // ── 4. A first bill is paid with Beans held ─────────────────────────────────────────────────────────────────────────
     console.log('── 4. First bills: Beans held only ──');
     const lee = makeMember('Lee', 10);
-    adminSetTier(lee.pk, 'Resident');
+    // A 200-Bean line to pay from, set by hand in the granted lane: a tier badge gives no credit (engine/badges.ts).
+    db.prepare('UPDATE members SET earned_credit_c = ? WHERE public_key = ?').run(hc(200), lee.pk);
     const leeRoom = (await call(lee, 'GET', `/api/ledger/balance/${lee.pk}`)).body;
     assert(leeRoom?.usableFloor_c < 0, `Lee has a credit line open (usable floor ${leeRoom?.usableFloor_c})`);
     const b4 = await bill(rob, lee, 60, 'Garden tools hire');

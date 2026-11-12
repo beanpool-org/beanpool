@@ -334,8 +334,6 @@
   "ADD POST": "পোস্ট যোগ করুন",
   "The amount is a number of Beans above 0, to the cent.": "পরিমাণটি ০-এর বেশি শিমের একটি সংখ্যা, পয়সা পর্যন্ত।",
   "Send Beans": "শিম পাঠান",
-  "Levels are merit badges — they don't gate any action. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "লেভেলগুলো যোগ্যতার ব্যাজ — এগুলো কোনো কার্যক্রম আটকে রাখে না। সরাসরি পাঠানোর জন্য ইতিবাচক ব্যালেন্স এবং একটি সম্পন্ন বাণিজ্য প্রয়োজন। উচ্চতর লেভেল মানে বৃহত্তর ক্রেডিট সীমা এবং সম্প্রদায়ের স্বীকৃতি।",
-  "Levels are merit badges — they don't gate any action. Anyone can invite. Direct sends require a positive balance and one completed trade. Higher levels mean a deeper credit line and community recognition.": "লেভেলগুলো যোগ্যতার ব্যাজ — এগুলো কোনো কার্যক্রম আটকে রাখে না। যে কেউ আমন্ত্রণ জানাতে পারে। সরাসরি পাঠানোর জন্য ইতিবাচক ব্যালেন্স এবং একটি সম্পন্ন বাণিজ্য প্রয়োজন। উচ্চতর লেভেল মানে বৃহত্তর ক্রেডিট সীমা এবং সম্প্রদায়ের স্বীকৃতি।",
   "Nothing goes to the Commons while you hold {free} Beans or less.": "আপনার কাছে {free} বা তার কম শিম থাকলে যৌথ তহবিলে কিছুই যায় না।",
   "✨ Generate Ticket": "✨ টিকিট তৈরি করুন",
   "✨ Generate Offline Ticket": "✨ অফলাইন টিকিট তৈরি করুন",
@@ -3184,13 +3182,7 @@
   "Browse & trade the marketplace": "বাজার ব্রাউজ ও বাণিজ্য করুন",
   "Receive credits": "ক্রেডিট গ্রহণ করুন",
   "Send credits after first trade (needs positive balance)": "প্রথম বাণিজ্যের পর ক্রেডিট পাঠান (ইতিবাচক ব্যালেন্স প্রয়োজন)",
-  "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.": "আপনি সম্প্রদায়ের সাথে প্রকৃত মূল্যের বাণিজ্য করেছেন। প্রতিটি বাণিজ্যের সাথে আপনার ক্রেডিট সীমা বৃদ্ধি পায় — আপনি যত বেশি মূল্য বিনিময় করবেন, এটি তত প্রসারিত হবে।",
-  "Credit floor deepens with the value you trade": "বাণিজ্যের মূল্যের সাথে সাথে ক্রেডিট সীমা প্রসারিত হয়",
-  "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.": "ব্যাপক অংশীদার বলয় সহ একজন বিশ্বস্ত ব্যবসায়ী। সম্প্রদায় আপনাকে স্বীকৃতি দেয় এবং আপনার ক্রেডিট সীমা আরও গভীর হয়।",
-  "Credit floor continues deepening": "ক্রেডিট সীমা প্রসারিত হতে থাকে",
   "Trusted-trader recognition": "বিশ্বস্ত ব্যবসায়ীর স্বীকৃতি",
-  "A pillar of the commons — the deepest possible credit line and the community's highest recognition.": "যৌথ সম্পদের একটি স্তম্ভ — সর্বোচ্চ সম্ভাব্য ক্রেডিট সীমা এবং সম্প্রদায়ের সর্বোচ্চ স্বীকৃতি।",
-  "Credit floor can reach -2000 (the maximum)": "ক্রেডিট সীমা -২০০০ পর্যন্ত পৌঁছাতে পারে (সর্বোচ্চ)",
   "Recognised as a community Elder": "সম্প্রদায়ের একজন প্রবীণ হিসেবে স্বীকৃত",
   "Export failed": "রপ্তানি ব্যর্থ হয়েছে",
   "Export my transactions": "আমার লেনদেন রপ্তানি করুন",
@@ -3205,10 +3197,6 @@
   "You can only send beans you currently hold — direct sends require a positive balance.": "আপনি কেবল বর্তমানে থাকা শিম পাঠাতে পারেন — সরাসরি পাঠানোর জন্য ইতিবাচক ব্যালেন্স প্রয়োজন।",
   "How trust works": "আস্থা যেভাবে কাজ করে",
   "YOUR TRUST LEVEL": "আপনার আস্থার স্তর",
-  "Level {level} of {levels} · {n} trust|Level {level} of {levels} · {n} trust": {
-    "one": "{levels}টির মধ্যে লেভেল {level} · {n} আস্থা",
-    "other": "{levels}টির মধ্যে লেভেল {level} · {n} আস্থা"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-এ পৌঁছাতে আরও **{n}** আস্থা প্রয়োজন",
     "other": "{emoji} {tier}-এ পৌঁছাতে আরও **{n}** আস্থা প্রয়োজন"
@@ -3438,7 +3426,6 @@
   "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**": "🌱 **{newcomer}** → 🏠 **{resident}** → 🏛️ **{steward}** → ⛰️ **{elder}**",
   "New members show a **🔑 Founding** badge until their first trade.": "নতুন সদস্যদের প্রথম বাণিজ্যের আগ পর্যন্ত একটি **🔑 প্রতিষ্ঠাতা** ব্যাজ দেখানো হয়।",
   "Tiers & Perks": "স্তর ও সুবিধাসমূহ",
-  "Tiers are **recognition milestones** — they mark how far your trust has grown. The one reward that deepens with them is your **credit floor** (how far below zero you can spend). Your floor slides continuously with the value you trade; the tiers are just the signposts along the way.": "স্তরগুলো হলো **স্বীকৃতির মাইলফলক** — আপনার আস্থা কতটা বেড়েছে তা এগুলো চিহ্নিত করে। একমাত্র পুরস্কার যা এগুলোর সাথে গভীর হয় তা হলো আপনার **ক্রেডিট সীমা** (আপনি শূন্যের কতটা নিচে খরচ করতে পারেন)। আপনার সীমা বাণিজ্যের মূল্যের সাথে ধারাবাহিকভাবে পরিবর্তিত হয়; স্তরগুলো কেবল পথের নির্দেশক চিহ্ন।",
   "🔑 Founding Status (before 1st trade)": "🔑 প্রতিষ্ঠাতা স্থিতি (প্রথম বাণিজ্যের আগে)",
   "A starting state that lasts until you complete your **very first trade**": "একটি প্রাথমিক অবস্থা যা আপনার **একেবারে প্রথম বাণিজ্য** সম্পন্ন না হওয়া পর্যন্ত থাকে",
   "Shows as **🔑 FOUNDING** so members know to help you get started": "এটি **🔑 প্রতিষ্ঠাতা** হিসেবে প্রদর্শিত হয় যাতে সদস্যরা আপনাকে শুরু করতে সাহায্য করার বিষয়টি জানতে পারেন",

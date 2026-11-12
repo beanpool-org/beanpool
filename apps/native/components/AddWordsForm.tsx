@@ -14,6 +14,7 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+// Static colours: only the default of the `colors` prop. Every caller passes its screen's set (measured 12 Nov 2026, colour themes T2), so a colour set reaches it through the prop.
 import { colors as defaultColors, type AppColors } from '../constants/colors';
 import { addMnemonicToIdentity, type BeanPoolIdentity } from '../utils/identity';
 import { NoScreenCapture } from './WordsOnScreen';

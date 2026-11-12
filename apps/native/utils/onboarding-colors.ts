@@ -1,5 +1,5 @@
 import { BRAND_SETS, brandScheme, type BrandSet } from '@beanpool/core';
-import { COLOUR_SETS, lightColors, palette, type AppColors } from '../constants/colors';
+import { COLOUR_SETS, palette, type AppColors } from '../constants/colors';
 
 /**
  * A dark set's tokens with the two inks onboarding needs raised: the app's dark `text.muted` (gray500) reads 3.60:1 on the
@@ -29,6 +29,6 @@ const ONBOARDING_SETS = Object.fromEntries(
  * and strong borders raised as above.
  */
 export function onboardingColors(set: BrandSet): { colors: AppColors; dark: boolean } {
-    if (set === 'light') return { colors: lightColors, dark: false };
+    if (set === 'light') return { colors: COLOUR_SETS.light, dark: false };
     return { colors: ONBOARDING_SETS[set], dark: brandScheme(set) === 'dark' };
 }

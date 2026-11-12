@@ -45,6 +45,7 @@ import * as ts from 'typescript';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { BRAND_SETS, blendOver, brandScheme, contrastRatio, type BrandSet } from '@beanpool/core';
+// Static colours: the scanner models a screen's module-level `colors` import as the light set and resolves `lightColors.x` / `darkColors.x` as written; every set it measures comes from COLOUR_SETS. Node only, never drawn.
 import { COLOUR_SETS, darkColors, lightColors, palette } from '../constants/colors';
 import { BUTTON_CONTRAST_EXCEPTIONS, type ContrastException } from './button-contrast-exceptions';
 

@@ -54,6 +54,7 @@ import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } f
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../../utils/credit-line-card';
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../../utils/credit-gift';
+import { CreditSeenByGivers } from '../../components/CreditSeenByGivers';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -174,6 +175,12 @@ export default function LedgerScreen() {
     const [heldSample, setHeldSample] = useState(false);
     const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
     const txns = heldSample === preview ? heldTxns : NO_TXNS;
+    // "What people who give credit see" (slice C6) is asked of the node only where credit lives: a community whose Beans are
+    // live for this reader (never a preview, read-only or hidden: the worldwide community's are a preview, a node with Beans
+    // off hides them), with no further profile read. The node still decides: it answers 404 anywhere else, and the card then
+    // draws nothing. Asked once the member's own balance has been read (not the empty one before it), so it is read once at
+    // open and again only when the balance moves.
+    const creditSeen = beansMode === 'live' && balanceState !== NO_BALANCE;
     // Your name and picture in this community (utils/use-own-profile.ts), as the header and My Profile draw them. Never
     // read while the mode is unknown or in preview, where the card is Example Valley's member and not yours.
     const own = useOwnProfile(beansMode !== undefined && !preview);
@@ -886,6 +893,13 @@ export default function LedgerScreen() {
             </View>
 
             <Text style={styles.formula}>{t("💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.")}</Text>
+
+            {/* What a voucher reads about you, from the node, with the one sentence about who can see it (slice C6). */}
+            {creditSeen && identity && vouchAnchor ? (
+                <View style={{ marginTop: 20 }}>
+                    <CreditSeenByGivers anchorUrl={vouchAnchor} identity={identity} reread={balanceState.balance_c} />
+                </View>
+            ) : null}
         </View>
         );
     };

@@ -8,7 +8,7 @@
  *
  * Nothing here touches a BeanPool node: every /api request is answered below, and any other /api or /ws request is aborted.
  *
- *   node e2e/credit-list-shots.mjs [shots-dir]
+ *   node e2e/credit-list-shots.mjs [shots-dir]          (SHOTS_ONLY=seen,card takes only the screens whose names start with those)
  *
  * Run from apps/pwa: Tailwind reads its config from the working directory. Needs @beanpool/core built.
  */
@@ -22,6 +22,7 @@ import path from 'node:path';
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(PWA_DIR);
 const OUT_DIR = process.argv[2] ? path.resolve(process.argv[2]) : path.join(PWA_DIR, 'e2e', 'shots');
+const ONLY = process.env.SHOTS_ONLY ? process.env.SHOTS_ONLY.split(',').map((x) => x.trim()).filter(Boolean) : null;
 
 // The three looks as the stored value spells them (lib/useTheme.ts): dark = Classic, light = Light, night = Dark.
 const LOOKS = [{ name: 'classic', stored: 'dark' }, { name: 'light', stored: 'light' }, { name: 'dark', stored: 'night' }];
@@ -82,10 +83,21 @@ const SAM_LOOKS = [
     { actorPubkey: K('8'), actorCallsign: 'marty', subjectPubkey: SAM, subjectCallsign: 'Sam', surface: 'card', sight: 'owner', day: '2026-11-11', at: '2026-11-11T01:00:00Z' },
 ];
 
+// What a member's own Ledger reads (GET /api/credit/me, slice C6): a voucher's answer about them, never parts or who stands behind.
+const ME_FOR = {
+    rob: { callsign: 'Rob', line_c: 0, usable_c: 0, liveOffers: 4, balance_c: 0, owed_c: 0, risk: NOT_KNOWN },
+    jane: { callsign: 'Jane', line_c: 130000, usable_c: 130000, liveOffers: 1, balance_c: -42000, owed_c: 42000, risk: { level: 'low', more: true, reasons: [{ code: 'new', level: 'not_known', mark: 'open', values: {} }] } },
+    // Sam after the gift (amendment 2): the row says Balance 0, the word does not follow the gift.
+    sam: { callsign: 'Sam', line_c: 100000, usable_c: 100000, liveOffers: 0, balance_c: 0, owed_c: 0, risk: SAM_VOUCHER },
+    val: { callsign: 'Val', line_c: 80000, usable_c: 20000, liveOffers: 1, balance_c: -43713, owed_c: 43713, paused: true, risk: VAL_RISK },
+};
+const meAnswer = (who) => ({ memberPubkey: K('9'), status: 'active', own: false, over_c: 0, paused: false, canGive: true, ...ME_FOR[who] });
+
 const json = (status, body) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 function answer(url, state) {
     const u = new URL(url);
     const sight = state.role === 'voucher' ? 'voucher' : 'owner';
+    if (u.pathname === '/api/credit/me') return ME_FOR[state.who] ? json(200, { told: 'x', me: meAnswer(state.who) }) : json(404, { error: 'Nobody here by that key.', code: 'not_listed' });
     if (u.pathname === '/api/node-admin/me') return state.role === 'voucher' ? json(403, { error: 'Not an admin.' }) : json(200, { role: 'owner', communityName: 'Mullumbimby' });
     if (u.pathname === '/api/vouchers/me') {
         return json(200, state.role === 'voucher'
@@ -113,7 +125,7 @@ const MEASURE = () => {
         // The switch is a native checkbox inside a 44 px label; the label is the target.
         .filter(({ el, box }) => (el.type === 'checkbox' ? el.closest('label').getBoundingClientRect().height : box.height) < 44)
         .map(({ el, box }) => `${el.tagName.toLowerCase()} "${(el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 30)}" ${Math.round(box.height)}px`);
-    const cut = [...document.querySelectorAll('[data-testid=credit-sentence], [data-testid=credit-balance], [data-testid=credit-risk-reasons], [data-testid=voucher-line], [data-testid=voucher-vouched], [data-testid=credit-made-of], [data-testid=credit-confirmed-by], [data-testid=credit-vouched-by], [data-testid=credit-live-offers], [data-testid=give-blocked]')]
+    const cut = [...document.querySelectorAll('[data-testid=credit-seen-line], [data-testid=credit-seen-balance], [data-testid=credit-seen-reasons], [data-testid=credit-seen-told], [data-testid=credit-sentence], [data-testid=credit-balance], [data-testid=credit-risk-reasons], [data-testid=voucher-line], [data-testid=voucher-vouched], [data-testid=credit-made-of], [data-testid=credit-confirmed-by], [data-testid=credit-vouched-by], [data-testid=credit-live-offers], [data-testid=give-blocked]')]
         .filter((el) => /…/.test(el.textContent || '') || ['ellipsis'].includes(getComputedStyle(el).textOverflow) || getComputedStyle(el).webkitLineClamp !== 'none')
         .map((el) => (el.textContent || '').slice(0, 40));
     const give = [...document.querySelectorAll('[data-testid=credit-give]')].map((b) => Math.round(b.getBoundingClientRect().height)).filter((h) => h < 48);
@@ -144,14 +156,21 @@ const SCREENS = [
     { name: 'card-jane-voucher', view: 'card', who: 'jane', role: 'voucher', ready: '[data-testid=credit-card]' },
     { name: 'card-voucher', view: 'card', role: 'voucher', ready: '[data-testid=credit-card]' },
     { name: 'ask', view: 'ask', role: 'owner', ready: '[data-testid=ask-for-more]' },
+    // The member's own Ledger card (slice C6): Rob (no credit yet), Jane (−420 of 1,300), Sam after the gift, Val (−437.13, paused).
+    { name: 'seen-rob', view: 'seen', who: 'rob', role: 'member', ready: '[data-testid=credit-seen-by-givers]' },
+    { name: 'seen-jane', view: 'seen', who: 'jane', role: 'member', ready: '[data-testid=credit-seen-by-givers]' },
+    { name: 'seen-sam-gift', view: 'seen', who: 'sam', role: 'member', ready: '[data-testid=credit-seen-by-givers]' },
+    { name: 'seen-val-paused', view: 'seen', who: 'val', role: 'member', ready: '[data-testid=credit-seen-by-givers]' },
     { name: 'looks', view: 'looks', role: 'owner', ready: '[data-testid=credit-looks-toggle]', act: async (page) => { await page.click('[data-testid=credit-looks-toggle]'); await page.waitForSelector('[data-testid=credit-looks-groups]'); } },
 ];
 try {
     for (const vp of VIEWPORTS) {
         for (const look of vp.looks) {
             for (const s of SCREENS) {
+                // SHOTS_ONLY=seen takes just the screens whose name starts with it (a lane shooting one slice).
+                if (ONLY && !ONLY.some((p) => s.name.startsWith(p))) continue;
                 const context = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, colorScheme: look.stored === 'light' ? 'light' : 'dark' });
-                const state = { role: s.role };
+                const state = { role: s.role, who: s.who };
                 await context.route('**/*', (route) => {
                     const req = route.request();
                     if (req.url().includes('/api/')) {

@@ -149,6 +149,14 @@ export function fetchCreditPerson(anchor: string, identity: BeanPoolIdentity, me
     return get(anchor, `/api/credit/people/${encodeURIComponent(memberPubkey)}`, identity);
 }
 
+/**
+ * What givers see about the signer: `GET /api/credit/me`, a voucher's answer about them from the node's one builder (slice C6,
+ * the member's own Ledger). Any member may ask; no look is recorded (it is their own). A node with Beans off answers 404.
+ */
+export function fetchCreditMe(anchor: string, identity: BeanPoolIdentity): Promise<CreditResult<{ told: string; me: CreditPerson }>> {
+    return get(anchor, '/api/credit/me', identity);
+}
+
 /** The Vouchers chip: owners and the credit committee only (anyone else: 403 `committee_only`). No look is recorded. */
 export function fetchVouchersChip(anchor: string, identity: BeanPoolIdentity): Promise<CreditResult<{ sight: CreditSightKind; vouchers: VoucherChipRow[] }>> {
     return get(anchor, '/api/credit/people?filter=vouchers', identity);

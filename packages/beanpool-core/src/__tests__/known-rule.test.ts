@@ -319,10 +319,15 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
         }
     });
 
-    it('the balance page and What\'s new say private, not "only you", and the balance page points to the rules page', () => {
+    it('the balance page and What\'s new say who can see a balance (the people who give credit), not "only you" or "private", and the balance page points to the rules page', () => {
         const balance = readFileSync(join(GUIDE, 'ledger/your-balance.md'), 'utf8');
-        expect(balance).toContain('Your balance and these transactions are private.');
+        // Credit on the People list C7: owners, admins and vouchers see each member's balance (Marty, 12 Nov), so the page no longer
+        // says "private" without them: it names them, says they never see the transactions, and each look is recorded.
+        expect(balance).toContain('The people who give credit here (the owners, admins and vouchers) can see your balance and your credit line, never these transactions, and each look is recorded.');
+        expect(balance).not.toContain('Your balance and these transactions are private.');
         expect(balance).toContain('"How this community works"');
-        expect(readFileSync(join(GUIDE, 'about/whats-new.md'), 'utf8')).toContain("Other members can't read your balance or your history.");
+        const news = readFileSync(join(GUIDE, 'about/whats-new.md'), 'utf8');
+        expect(news).toContain("Members who don't give credit can't read your balance or your history.");
+        expect(news).not.toContain("Other members can't read your balance or your history.");
     });
 });

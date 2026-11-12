@@ -39,7 +39,7 @@ import { readGroupInvitations, type GroupInvitations } from '@beanpool/core';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, mayChooseLongPolls, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { busyError, isBusyAnswer, isBusyStatus, refusalTextOf, retryAfterMs, waitBeforeRetry } from '@beanpool/core';
-import { hundredthsAsDecimalText, isHundredths } from '@beanpool/core';
+import { hundredthsAsDecimalText, isHundredths, perItemOf } from '@beanpool/core';
 import type { StandingAuthorisationFields, StandingPeriodUnit, StandingPhase, StandingStartBody } from '@beanpool/core';
 import { chatAboutOfLine, metadataWithAbout, sealChatAbout, type AboutPostLike, type ChatAboutChip } from '@beanpool/core';
 import { standingJsonOf, standingOfRow } from './standing-row';
@@ -387,8 +387,10 @@ const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
  * 5 (Learn, slice K2): a new cache table, `knowledge_posts` (Local knowledge, DESIGN-local-knowledge-fable.md §4.3). A copy at 4
  * was read without the pages, and its cursor is past any page written before this build, so only a read from the start
  * brings them. It is cleared and read again, as the rule above says for a change to the cache's shape: nothing is rewritten.
+ * 6 (per-item prices, slice P2, DESIGN-per-item-price-fable.md §3): three columns on `posts`, `units_left`, `lot_price_c` and `lot_units`,
+ * NULL on every listing not priced for each one. A copy at 5 has none of them, so it is cleared and read again with them.
  */
-export const COPY_SCHEMA = 5;
+export const COPY_SCHEMA = 6;
 
 /** The tables that are a copy of the node's: clearDB drops them, and so does an open of a copy below COPY_SCHEMA. */
 const CACHE_TABLES = [
@@ -538,7 +540,11 @@ async function _doInitDB(database: SQLite.SQLiteDatabase, clear: CopyClear | nul
             free_tags TEXT NOT NULL DEFAULT '',
             shown_from TEXT,
             pinned_until TEXT,
-            pinned_at TEXT
+            pinned_at TEXT,
+            -- A price for each one (core per-item.ts): how many can be taken now, and the price for all of them with the number it is for.
+            units_left INTEGER,
+            lot_price_c INTEGER,
+            lot_units INTEGER
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -3967,7 +3973,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
     await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, price_c, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at, units_left, lot_price_c, lot_units) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -4023,8 +4029,20 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             syncedAuthorBanner(p),
             p.pinnedUntil || p.pinned_until || null,
             p.pinnedAt || p.pinned_at || null,
+            ...syncedItemColumns(p),
         ]
     );
+}
+
+/**
+ * The three per-item columns of a listing from the node (core per-item.ts): its count and the price for all of them with the
+ * number it is for, written only for a listing priced for each one that carries a whole count; NULL on every other listing, and
+ * on one from an older node that sent none, which then reads as it always did.
+ */
+function syncedItemColumns(p: any): [number | null, number | null, number | null] {
+    const each = perItemOf(p);
+    if (!each) return [null, null, null];
+    return [each.unitsLeft ?? null, each.lot?.price_c ?? null, each.lot?.units ?? null];
 }
 
 function syncedTagsColumn(p: any): string {

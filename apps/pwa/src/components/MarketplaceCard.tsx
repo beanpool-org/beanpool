@@ -12,8 +12,9 @@
 import { type CSSProperties, type ReactNode } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, typeWords, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, freePriceWords, listingChipWords, pinLive, t, upperCase, type ListingChip, formatHundredths } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, freePriceWords, listingChipWords, perItemCard, pinLive, t, upperCase, type ListingChip, formatHundredths } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { BeansText } from './BeansText';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
 import { CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard } from './market-card-shell';
@@ -126,7 +127,11 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // A listing priced at 0 reads "Free" (core listing-price.ts, the one rule both apps read), in the price's own place: no Beans
     // sign and no unit, and a screen reader reads "Free", not "0 B".
     const freePrice = showPrice ? freePriceWords(post.price_c, post.type) : null;
-    const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
+    // An Offer priced for each one (core per-item.ts, DESIGN-per-item-price-fable.md §2.1): "300 🫘 each" in the price's place and
+    // how many are left (and the price for all of them while it is on offer) as its own phrases. Where the price is not shown (a
+    // copy, Beans off, the Pulse) there is no count either. Any other listing reads as it always did.
+    const each = showPrice ? perItemCard(post) : null;
+    const foundingChip =!!post.authorFoundingNeeded && !beansMarked;
 
     // On the photo: at most ONE status chip, by precedence PENDING > YOU.
     // RECURRING is placed under the photo in grid view so overlays fit at 320dp / 1.3x text (market-card-43).
@@ -225,6 +230,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {pinnedChip}
                             {dealPill}
                             {distanceTag}
+                            {each && <span data-testid="card-stock" className="font-semibold text-nature-600 dark:text-nature-300">{each.stock}</span>}
                             {foundingChip && (
                                 <span data-testid="author-founding" className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
                                     {t('🔑 FOUNDING')}
@@ -244,14 +250,19 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 <div className={COMPACT_END}>
                     {/* Compact Price */}
                     {showPrice && (
-                        <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
-                            {freePrice ?? (<>
+                        <span data-testid={each ? 'compact-each-price' : undefined} className={`font-black text-sm text-nature-950 dark:text-white flex ${each ? 'flex-col items-end' : 'items-center'}`}>
+                            {freePrice ?? (each ? (<>
+                                <BeansText text={each.price!} />
+                                {each.allShort && (
+                                    <span data-testid="compact-each-all" className="text-[10px] font-medium text-nature-600 dark:text-nature-300"><BeansText text={each.allShort} px={10} /></span>
+                                )}
+                            </>) : (<>
                                 {priceAmount(post.price_c)}
                                 <img src="/assets/bean.png" className="mx-0.5" style={{ width: '12px', height: '12px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                                 <span className="text-[9px] text-nature-500 font-normal">
                                     {priceUnit(post.priceType)}
                                 </span>
-                            </>)}
+                            </>))}
                         </span>
                     )}
 
@@ -299,13 +310,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <div data-testid="listing-list-head" className={`flow-root min-w-0 leading-none -mb-1${popUp ? ` ${POP_UP_CLOSE_ROOM}` : ''}`}>
                         {showPrice && (
                             <span data-testid="listing-list-price" className={`float-right rtl:float-left ms-2 mb-1 flex flex-row items-center flex-nowrap ${LIST_TYPE.price} ${CARD_INK.title}`}>
-                                {freePrice ?? (<>
+                                {freePrice ?? (each ? <BeansText text={each.price!} px={LIST_BEAN_PX} /> : (<>
                                     {priceAmount(post.price_c)}
                                     <img src="/assets/bean.png" className="mx-0.5" style={{ width: `${LIST_BEAN_PX}px`, height: `${LIST_BEAN_PX}px`, flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                                     <span className={`${LIST_TYPE.priceUnit} ${CARD_INK.secondary}`}>
                                         {priceUnit(post.priceType)}
                                     </span>
-                                </>)}
+                                </>))}
                             </span>
                         )}
                         <span data-testid="listing-list-chips" className="[&>span]:me-1 [&>span]:mb-1 [&>span]:align-top">
@@ -344,6 +355,15 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <h3 dir="auto" data-testid="listing-list-title" className={`m-0 break-words line-clamp-2 ${LIST_TYPE.loud} ${CARD_INK.title}`}>
                         {post.title}
                     </h3>
+
+                    {/* How many are left, and the price for all of them while it is on offer (DESIGN-per-item-price-fable.md §2.1):
+                        one line of whole phrases, each kept whole when it wraps, never cut. */}
+                    {each && (
+                        <p data-testid="listing-list-each-line" className={`m-0 ${LIST_TYPE.distance} ${CARD_INK.secondary}`}>
+                            <span className="inline-block whitespace-nowrap">{each.stock}</span>
+                            {each.orAll && <> · <span className="inline-block whitespace-nowrap"><BeansText text={each.orAll} /></span></>}
+                        </p>
+                    )}
 
                     {copyLine || <PostAuthorTrust
                         callsign={authorName}
@@ -388,6 +408,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         }
         if (isPaused) return <span className={gridChip('warn')}>{upperCase(t('⏸ Paused'))}</span>;
         if (groupScopeBadge) return <span className={gridChip('quiet')}>{groupScopeBadge}</span>;
+        // How many are left (an Offer priced for each one, which is never Repeatable), in RECURRING's place: "20 LEFT", or "ALL TAKEN
+        // FOR NOW" / "SOLD OUT" (DESIGN-per-item-price-fable.md §2.1).
+        if (each) return <span data-testid="card-stock-chip" className={gridChip(each.stockOut ? 'warn' : 'quiet')}>{each.chip}</span>;
         // RECURRING by the photo's precedence, PENDING > YOU > RECURRING: an own or pending listing's chip says more.
         if (post.repeatable && !isOwnPost && post.status !== 'pending') return <span className={gridChip('quiet')}>{t('↻ RECURRING')}</span>;
         return null;
@@ -435,6 +458,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Price pill bottom-trailing */}
                     {showPrice && (
                         <div className="ml-auto bg-nature-900/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2.5 py-1 rounded-lg text-sm pointer-events-auto">
+                            {each && !freePrice ? (
+                                <span data-testid="grid-each-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                    <BeansText text={each.price!} />
+                                    {each.allShort && <BeansText text={each.allShort} px={10} className="text-[10px] font-normal opacity-80" />}
+                                </span>
+                            ) : (
                             <span style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                 {freePrice ? <span>{freePrice}</span> : (<>
                                     <span>{priceAmount(post.price_c)}</span>
@@ -444,6 +473,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     </span>
                                 </>)}
                             </span>
+                            )}
                         </div>
                     )}
                 </div>

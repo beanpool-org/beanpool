@@ -84,6 +84,8 @@ import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
 import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, freePriceWords, shapeFeaturesOf } from '@beanpool/core';
+import { perItemCard, perItemLines } from '@beanpool/core';
+import { BeansText } from '../components/BeansText';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -364,15 +366,19 @@ function MarketListingItem({
     const photo = resolveImageUrl(item.photoUrl || item.bannerUrl);
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
     const copy = eventCopyOf(item);
+    // An Offer priced for each one (core per-item.ts, DESIGN-per-item-price-fable.md §2.1): "300 Beans each" where the price stands, and
+    // how many are left (with the price for all of them while it is on offer) on a line under it. Never for a copy or where Beans are off.
+    const each = !copy && beansOn ? perItemCard(item) : null;
     const price = copy ? copyPriceLine(copy)
         : !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
-        : typeof item.price_c === 'number' ? (freePriceWords(item.price_c, item.type) ?? priceWords(item.price_c)) : null;
+        : typeof item.price_c === 'number' ? (freePriceWords(item.price_c, item.type) ?? (each ? perItemLines.each(item.price_c) : priceWords(item.price_c))) : null;
+    const eachLine = each ? <span data-testid="home-each-line" className="block text-xs text-text-secondary"><BeansText text={each.line} px={11} /></span> : null;
     const km = distanceText(item.distanceKm);
     const kind = item.type === 'need' ? 'NEED' : 'OFFER';
     const label = [
         kind === 'NEED' ? t('Need', undefined, 'listing type') : t('Offer', undefined, 'listing type'),
         item.title,
-        price,
+        each ? each.label : price,
         km ? t('{km} away', { km }) : null,
     ].filter(Boolean).join(', ');
 
@@ -412,6 +418,7 @@ function MarketListingItem({
                             {[price, km].filter(Boolean).join(' · ')}
                         </span>
                     )}
+                    {eachLine}
                 </div>
             </button>
         );
@@ -442,6 +449,7 @@ function MarketListingItem({
                     <span dir="auto">{item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}</span>
                 </span>
                 {(price || km) && <span className="block text-xs text-text-secondary">{[price, km].filter(Boolean).join(' · ')}</span>}
+                {eachLine}
             </span>
         </HomeLine>
     );

@@ -11,7 +11,7 @@
  *
  * Pure: no I/O, no Node built-ins (the barrel is bundled for the phone).
  */
-import { t, tn, word, wordn, type Words } from './words.js';
+import { t, tn, upperCase, word, wordn, type Words } from './words.js';
 import { dealAmountFor, feeOf, formatHundredths, isHundredths, type Hundredths } from './hundredths.js';
 import { FREE_PRICE_WORDS } from './listing-price.js';
 
@@ -288,6 +288,86 @@ export function perItemLine(p: PerItemListing & { status?: string | null }): str
     const price = p.price_c > 0 ? perItemLines.each(p.price_c) : t(FREE_PRICE_WORDS.short);
     const stock = p.status === 'completed' ? perItemLines.soldOut() : p.unitsLeft === 0 ? perItemLines.allTakenForNow() : perItemLines.left(p.unitsLeft);
     return [price, stock, ...(lotOffered(p) ? [perItemLines.orAllFor(p.lot!.price_c)] : [])].join(' · ');
+}
+
+// ── The cards (slice P2, design §2.1, §2.2) ───────────────────────────────────────────────────────────────────────
+// Every card, row and price box reads a listing priced for each one through these two functions, so the phone, the web and
+// the node's Home answer say the same thing in the same pieces.
+
+/**
+ * A listing as either app holds it, read as a per-item one: the web's post (`priceType`, `unitsLeft`, `lot`), the phone's cached
+ * row (`price_type`, `units_left`, `lot_units`, `lot_price_c`) and a Home row (`priceType`, `unitsLeft`, `lot`). Null for a
+ * listing that is not priced for each one, and for one the node sent no count for (an older node): such a listing reads as it
+ * always did.
+ */
+export function perItemOf(p: unknown): (PerItemListing & { status?: string | null }) | null {
+    const r = p as Record<string, unknown> | null | undefined;
+    if (!r || typeof r !== 'object') return null;
+    const priceType = (r.priceType ?? r.price_type) as string | undefined;
+    if (priceType !== EACH) return null;
+    const unitsLeft = r.unitsLeft ?? r.units_left;
+    if (!isUnitsLeft(unitsLeft)) return null;
+    const price_c = r.price_c;
+    if (!isHundredths(price_c) || price_c < 0) return null;
+    const rawLot = r.lot as { units?: unknown; price_c?: unknown } | null | undefined;
+    const lot: ItemLot | null = rawLot && isUnitsLeft(rawLot.units) && isHundredths(rawLot.price_c)
+        ? { units: rawLot.units, price_c: rawLot.price_c }
+        : isUnitsLeft(r.lot_units) && isHundredths(r.lot_price_c) ? { units: r.lot_units, price_c: r.lot_price_c } : null;
+    return { priceType, price_c, unitsLeft, lot, status: typeof r.status === 'string' ? r.status : null };
+}
+
+/** The Beans sign the card words are written with (🫘). */
+export const BEANS_SIGN = '🫘';
+/**
+ * A line split at its Beans sign: the text before it and after it, so a card can draw its Beans picture there instead of the
+ * emoji (an old Android has no glyph for it). A line without the sign comes back whole, as one piece.
+ */
+export function splitBeansSign(text: string): string[] {
+    return text.split(BEANS_SIGN);
+}
+
+/** What a card, a row or the price box says of a listing priced for each one. */
+export interface PerItemCard {
+    /** The price for one, "300 🫘 each"; null when it is free (the card's own "Free" stands there). */
+    price: string | null;
+    /** How many can be taken: "20 left", "All taken for now" (none left, deals held) or "Sold out" (closed). */
+    stock: string;
+    /** True when none can be taken now: the stock is words, not a count. */
+    stockOut: boolean;
+    /** "or all for 5,500 🫘" while the price for all is on offer; null otherwise. */
+    orAll: string | null;
+    /** The same for the grid's pill and the compact row's end: "all 5,500 🫘". */
+    allShort: string | null;
+    /** The grid's one chip: "20 LEFT", or the stock in capitals. */
+    chip: string;
+    /** The one line under the title: "20 left · or all for 5,500 🫘". */
+    line: string;
+    /** The item page's price box: "or all 20 for 5,500 Beans". */
+    boxLot: string | null;
+    /** The whole card in words, for a screen reader: "300 Beans each · 20 left · or all for 5,500". */
+    label: string;
+}
+
+/** The card's pieces for a listing priced for each one (design §2.1); null for any other, which reads as it always did. */
+export function perItemCard(source: unknown): PerItemCard | null {
+    const p = perItemOf(source);
+    if (!p || !isUnitsLeft(p.unitsLeft)) return null;
+    const closed = p.status === 'completed';
+    const stockOut = closed || p.unitsLeft === 0;
+    const stock = closed ? perItemLines.soldOut() : stockOut ? perItemLines.allTakenForNow() : perItemLines.left(p.unitsLeft);
+    const offered = lotOffered(p);
+    const orAll = offered ? perItemLines.orAllForShort(p.lot!.price_c) : null;
+    return {
+        price: p.price_c > 0 ? perItemLines.eachShort(p.price_c) : null,
+        stock,
+        stockOut,
+        orAll,
+        allShort: offered ? perItemLines.allShort(p.lot!.price_c) : null,
+        chip: stockOut ? upperCase(stock) : perItemLines.leftChip(p.unitsLeft),
+        line: [stock, ...(orAll ? [orAll] : [])].join(' · '),
+        boxLot: offered ? perItemLines.orAllCountFor(p.lot!.units, p.lot!.price_c) : null,
+        label: perItemLine(p) ?? stock,
+    };
 }
 
 /**

@@ -22,6 +22,7 @@ import { CardChip, useCardShell } from './market-card-shell';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { ListingCopyLine } from './ListingCopyLine';
 import { ListingPrice } from './ListingPrice';
+import { ListingEachLine } from './ListingEachLine';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { marketCardPicture } from '../utils/market-card-picture';
 import { isPostPinned } from '../utils/pins';
@@ -110,10 +111,12 @@ function ListingPinCard({ post, copy, showsBeans, me, onOpen }: {
                         {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} wrap />}
                     </View>
                     {showsBeans && !copy && (
-                        <ListingPrice price_c={post.price_c} type={post.type} unit={priceUnit(post.price_type)} style={shell.price} />
+                        <ListingPrice price_c={post.price_c} type={post.type} unit={priceUnit(post.price_type)} style={shell.price} listing={post} />
                     )}
                 </View>
                 <Text style={[shell.loud, styles.title]} numberOfLines={1}>{post.title}</Text>
+                {/* An Offer priced for each one: how many are left, and the price for all of them while it is on offer. Nothing for any other. */}
+                {showsBeans && !copy && <View style={styles.eachLine}><ListingEachLine listing={post} style={shell.distance} /></View>}
                 {copy ? (
                     <View testID="map-preview-copy-line"><ListingCopyLine copy={copy} /></View>
                 ) : (
@@ -131,4 +134,5 @@ const styles = StyleSheet.create({
     head: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
     chips: { flex: 1 },
     title: { marginBottom: 4 },
+    eachLine: { marginBottom: 4 },
 });

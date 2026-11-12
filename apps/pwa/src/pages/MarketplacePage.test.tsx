@@ -1831,6 +1831,36 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             expect(box.textContent).not.toContain('Free');
         });
 
+        // An Offer priced for each one (core per-item.ts; DESIGN-per-item-price-fable.md §2.2, slice P2): three lines in the one box.
+        it('an Offer priced for each one: 300 each, 20 left, or all 20 for 5,500 Beans, under the label it always had, with no hours line', async () => {
+            await open(listing({ price_c: 30000, priceType: 'each', unitsLeft: 20, lot: { units: 20, price_c: 550000 } }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent(/^Asking Price300 each20 leftor all 20 for 5,500 Beans$/i);
+            expect(box.querySelector('img')).not.toBeNull();
+            expect(screen.getByTestId('listing-each-stock')).toHaveTextContent('20 left');
+            expect(screen.getByTestId('listing-each-lot')).toHaveTextContent('or all 20 for 5,500 Beans');
+            expect(box.textContent).not.toMatch(/hrs|\/Hr/);
+        });
+
+        it('one taken singly: 19 left and the price for all is off; all taken for now says so', async () => {
+            await open(listing({ price_c: 30000, priceType: 'each', unitsLeft: 19, lot: { units: 20, price_c: 550000 } }), []);
+            expect(screen.getByTestId('listing-price')).toHaveTextContent(/^Asking Price300 each19 left$/i);
+            expect(screen.queryByTestId('listing-each-lot')).toBeNull();
+        });
+
+        it('all taken for now: words in place of the count', async () => {
+            await open(listing({ price_c: 30000, priceType: 'each', unitsLeft: 0, lot: { units: 20, price_c: 550000 } }), []);
+            expect(screen.getByTestId('listing-price')).toHaveTextContent(/^Asking Price300 eachAll taken for now$/i);
+        });
+
+        it('a plain fixed price keeps its figure, its unit and its hours line (red if the box changes for every listing)', async () => {
+            await open(listing({ price_c: 2000, priceType: 'fixed' }), []);
+            const box = screen.getByTestId('listing-price');
+            expect(box).toHaveTextContent('20');
+            expect(box.textContent).toMatch(/hrs/);
+            expect(screen.queryByTestId('listing-each-stock')).toBeNull();
+        });
+
         it('places the photo left from md up, spanning the three rows, and the head, the action and the rest right, by the grid', async () => {
             await open(listing({}), []);
             const detail = screen.getByTestId('listing-detail');

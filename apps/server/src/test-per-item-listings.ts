@@ -20,6 +20,8 @@
  *   5. The features answer offers no Each yet (no `perItem`).
  *   6. A standby copy carries the three columns and the deal's item_option, by plain assignment.
  *   7. The CHECKs hold on this fresh file (test-schema-upgrade-fresh-shape.ts holds them on an upgraded one).
+ *   8. The Home card (slice P2): the market row of a listing priced each carries the unit, the count and the price for all; any
+ *      other listing's row is exactly as before.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-per-item-listings)
  */
@@ -332,6 +334,25 @@ async function main(): Promise<void> {
         && refusedWrite('UPDATE posts SET lot_price_c = 0 WHERE id = ?', panels) && refusedWrite('UPDATE posts SET lot_units = 1 WHERE id = ?', panels)
         && refusedWrite("UPDATE marketplace_transactions SET item_option = 'x' WHERE id = 'deal-lot'"),
         'the table refuses a count below 0 or past 9,999, a price for all of 0, one for fewer than 2, and an unknown way of taking it up');
+
+    // ── 8. The Home card (slice P2) ───────────────────────────────────────────────────────────────────────────────
+    console.log('\n— 8. Home: the market card says a listing priced for each one');
+    const homePanels = await offer(rob, { title: 'Home panels', ...PANELS });
+    const homePlain = await offer(rob, { title: 'Home firewood', priceType: 'fixed', price_c: hc(40) });
+    assert(homePanels.status === 200 && homePlain.status === 200, `two listings made for the Home card (${brief(homePanels)} ${brief(homePlain)})`);
+    const homeId = (r: { body: any }) => r.body?.post?.id ?? r.body?.id;
+    const homeAnswer = await call('GET', '/api/home?cards=market', dana);
+    const homeItems: any[] = homeAnswer.body?.cards?.market?.items ?? [];
+    const homeEach = homeItems.find((i) => i.id === homeId(homePanels));
+    const homeFixed = homeItems.find((i) => i.id === homeId(homePlain));
+    // Red if home-answer.ts eachFieldsOf is dropped: the card could not say "300 Beans each" or how many are left.
+    assert(homeEach?.priceType === 'each' && homeEach?.unitsLeft === 20 && homeEach?.lot?.units === 20 && homeEach?.lot?.price_c === hc(5500) && homeEach?.price_c === hc(300),
+        `the card's row carries the unit, the count and the price for all (${JSON.stringify(homeEach)})`);
+    assert(!!homeFixed && !('priceType' in homeFixed) && !('unitsLeft' in homeFixed) && !('lot' in homeFixed),
+        `any other listing's row is exactly as it was: no unit, no count (${JSON.stringify(homeFixed)})`);
+    db.prepare('UPDATE posts SET units_left = 19, updated_at = ? WHERE id = ?').run(new Date().toISOString(), homeId(homePanels));
+    const afterOne = ((await call('GET', '/api/home?cards=market', dana)).body?.cards?.market?.items ?? []).find((i: any) => i.id === homeId(homePanels));
+    assert(afterOne?.unitsLeft === 19 && afterOne?.lot?.units === 20, 'one taken: the row says 19 left and keeps the price for all as stored (the card hides it, core lotOffered)');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run && process.exitCode !== 1 ? 0 : 1);

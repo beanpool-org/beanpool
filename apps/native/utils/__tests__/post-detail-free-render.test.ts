@@ -274,3 +274,50 @@ describe("a listing priced at 0 reads Free on its page (phone; core listing-pric
         expect(bypassing(), 'the page').toEqual([]);
     });
 });
+
+// Per-item prices, slice P2 (scratch/fable-design/DESIGN-per-item-price-fable.md §2.2): the price box of an Offer priced for each one
+// has three lines in the one box under the label it always had: "300 [bean] each", "20 left", "or all 20 for 5,500 Beans". The
+// phone's cached row holds the three columns beside the price.
+describe('an Offer priced for each one on its page (phone)', () => {
+    const PANELS = { ...OFFER, id: 'p-panels', title: 'Solar panels', price_c: 30000, price_type: 'each', units_left: 20, lot_units: 20, lot_price_c: 550000, repeatable: 0, cash_also_needed: 0, audience_scope: 'public', target_group_id: null };
+    const stock = () => host.querySelector('[data-testid="price-each-stock"]');
+    const lot = () => host.querySelector('[data-testid="price-each-lot"]');
+
+    it('300 each, 20 left, or all 20 for 5,500 Beans, under ASKING PRICE, with the Beans picture and no hours or unit', async () => {
+        await open(PANELS, 'en');
+        expect(priceBox()?.textContent).toBe('ASKING PRICE300  each20 leftor all 20 for 5,500 Beans');
+        expect(host.querySelector('[data-testid="price-each"]')?.textContent).toBe('300  each');
+        expect(stock()?.textContent).toBe('20 left');
+        expect(lot()?.textContent).toBe('or all 20 for 5,500 Beans');
+        // The sign is the picture, never the emoji, and the screen reader hears the whole line in words.
+        expect(priceBox()?.textContent).not.toContain('🫘');
+        expect(priceBox()?.querySelectorAll('img')).toHaveLength(1);
+        expect(host.querySelector('[data-testid="price-each"]')?.getAttribute('aria-label')).toBe('300 Beans each · 20 left · or all for 5,500');
+        expect(priceBox()?.textContent).not.toMatch(/\/ Hr|hrs/);
+    });
+
+    it('one taken singly: 19 left and no price for all; all held: words in place of the count', async () => {
+        await open({ ...PANELS, units_left: 19 }, 'en');
+        expect(stock()?.textContent).toBe('19 left');
+        expect(lot()).toBeNull();
+        root.unmount();
+        root = createRoot(host);
+        await open({ ...PANELS, units_left: 0 }, 'en');
+        expect(stock()?.textContent).toBe('All taken for now');
+        expect(lot()).toBeNull();
+    });
+
+    it('a free one says Free (the same words as every free listing) and nothing about a price for all', async () => {
+        await open({ ...PANELS, price_c: 0, lot_units: null, lot_price_c: null }, 'en');
+        expect(freeLine()?.textContent).toBe('Free');
+        expect(lot()).toBeNull();
+        expect(priceBox()?.querySelector('img')).toBeNull();
+    });
+
+    it('a plain fixed price and an hourly one keep their figure and unit, with no count lines', async () => {
+        await open({ ...OFFER, id: 'p-fixed-offer', price_c: 2000, price_type: 'hourly' }, 'en');
+        expect(priceBox()?.textContent).toContain('/ Hr');
+        expect(stock()).toBeNull();
+        expect(lot()).toBeNull();
+    });
+});

@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     EACH, ITEM_COUNT_MAX, ITEM_TAKE_UP_REFUSALS, NOT_PER_ITEM, isItemCount, isUnitsLeft, itemColumnsRefusal, itemStockRefusal, itemTakeUpOf,
-    itemTakeUpRefusalText, itemTotal, itemsAmount, lotOffered, lotPriceIn, lotSaving, PER_ITEM_REFUSALS, perItemLine, perItemLines,
-    perItemOffered, perItemRefusalText, sellerReceives, type PerItemListing,
+    itemTakeUpRefusalText, itemTotal, itemsAmount, lotOffered, lotPriceIn, lotSaving, PER_ITEM_REFUSALS, perItemCard, perItemLine, perItemLines,
+    perItemOf, perItemOffered, perItemRefusalText, sellerReceives, splitBeansSign, type PerItemListing,
 } from '../per-item';
 import { feeOf, formatHundredths } from '../hundredths';
 import { beansPriceWords, copyPriceLine, copyPriceOf, copyPriceText } from '../event-copy';
@@ -20,6 +20,11 @@ const panels = (unitsLeft: number, lot: { units: number; beans: number } | null 
     ({ priceType: EACH, price_c: c(300), unitsLeft, lot: lot ? { units: lot.units, price_c: c(lot.beans) } : null });
 
 afterEach(() => setLanguage('en'));
+
+const CATALOG_DIR = join(__dirname, '..', '..', 'words');
+const catalogOf = (lang: string): Catalog[] => {
+    try { return [JSON.parse(readFileSync(join(CATALOG_DIR, `${lang}.json`), 'utf8')) as Catalog]; } catch { return []; }
+};
 
 describe('a count is a whole number from 1 to 9,999, never rounded', () => {
     it('takes 1 and 9,999 and refuses everything else at the door (red if isItemCount rounds or reads a string)', () => {
@@ -219,10 +224,6 @@ describe('a copy on global says the price for one only (§6, the copy per)', () 
 });
 
 describe('every sentence, in en/ru/fr/pt/es, with one and with many (§9 Core)', () => {
-    const CATALOG_DIR = join(__dirname, '..', '..', 'words');
-    const catalogOf = (lang: string): Catalog[] => {
-        try { return [JSON.parse(readFileSync(join(CATALOG_DIR, `${lang}.json`), 'utf8')) as Catalog]; } catch { return []; }
-    };
     // Every line, with a count or a figure of one and of many. Red when a line is added without a case here.
     const say: Record<keyof typeof perItemLines, (n: number) => string> = {
         each: (n) => perItemLines.each(c(n)), left: (n) => perItemLines.left(n), orAllFor: (n) => perItemLines.orAllFor(c(n)),
@@ -266,4 +267,98 @@ describe('every sentence, in en/ru/fr/pt/es, with one and with many (§9 Core)',
             }
         });
     }
+});
+
+// ── The cards (slice P2, design §2.1, §2.2) ──────────────────────────────────────────────────────────────────────────────
+describe('perItemOf reads a listing priced for each one in every shape an app holds it', () => {
+    const web = { priceType: 'each', price_c: c(300), unitsLeft: 20, lot: { units: 20, price_c: c(5500) }, status: 'active' };
+    it('the web post, the phone row and the Home row read the same (red if one shape is dropped)', () => {
+        const row = { price_type: 'each', price_c: c(300), units_left: 20, lot_units: 20, lot_price_c: c(5500), status: 'active' };
+        const home = { priceType: 'each', price_c: c(300), unitsLeft: 20, lot: { units: 20, price_c: c(5500) } };
+        expect(perItemOf(web)).toEqual({ priceType: 'each', price_c: c(300), unitsLeft: 20, lot: { units: 20, price_c: c(5500) }, status: 'active' });
+        expect(perItemOf(row)).toEqual(perItemOf(web));
+        expect(perItemOf(home)).toEqual({ ...perItemOf(web), status: null });
+    });
+    it('any other listing, and one with no count or no whole price, reads as it always did: null (red if it guesses a count)', () => {
+        for (const other of [
+            { priceType: 'fixed', price_c: c(300) }, { price_type: 'hourly', price_c: c(30), units_left: 5 }, null, undefined, 'each', 5,
+            { priceType: 'each', price_c: c(300) }, { priceType: 'each', price_c: c(300), unitsLeft: null },
+            { priceType: 'each', price_c: c(300), unitsLeft: 2.5 }, { priceType: 'each', price_c: null, unitsLeft: 3 },
+            { priceType: 'each', price_c: 300.5, unitsLeft: 3 },
+        ]) expect(perItemOf(other), JSON.stringify(other)).toBeNull();
+    });
+    it('a half-written lot (a number without its price) is no lot, never a price for all of nothing', () => {
+        expect(perItemOf({ ...web, lot: { units: 20 } })?.lot).toBeNull();
+        expect(perItemOf({ price_type: 'each', price_c: c(300), units_left: 20, lot_units: 20, lot_price_c: null })?.lot).toBeNull();
+    });
+});
+
+describe('perItemCard: the phrases a card, a row and the price box are drawn from', () => {
+    it("Rob's panels: 300 each, 20 left, or all for 5,500 (red if a phrase changes or is glued to another)", () => {
+        const card = perItemCard({ ...panels(20), status: 'active' })!;
+        expect(card.price).toBe('300 🫘 each');
+        expect(card.stock).toBe('20 left');
+        expect(card.orAll).toBe('or all for 5,500 🫘');
+        expect(card.allShort).toBe('all 5,500 🫘');
+        expect(card.line).toBe('20 left · or all for 5,500 🫘');
+        expect(card.chip).toBe('20 LEFT');
+        expect(card.boxLot).toBe('or all 20 for 5,500 Beans');
+        expect(card.stockOut).toBe(false);
+        // The screen reader's line is the card's whole line in words, with no emoji in it.
+        expect(card.label).toBe('300 Beans each · 20 left · or all for 5,500');
+        expect(card.label).not.toContain('🫘');
+    });
+    it('one taken singly, the price for all is off; the deal cancelled, it is back (red if the lot is not tied to the count)', () => {
+        const nineteen = perItemCard(panels(19))!;
+        expect(nineteen.stock).toBe('19 left');
+        expect(nineteen.orAll).toBeNull();
+        expect(nineteen.allShort).toBeNull();
+        expect(nineteen.boxLot).toBeNull();
+        expect(nineteen.line).toBe('19 left');
+        expect(perItemCard(panels(20))!.orAll).toBe('or all for 5,500 🫘');
+    });
+    it('no lot set: one by one only', () => {
+        const solo = perItemCard(panels(20, null))!;
+        expect(solo.line).toBe('20 left');
+        expect(solo.orAll).toBeNull();
+    });
+    it('none left with deals open is "All taken for now", closed is "Sold out": words, never a count', () => {
+        const taken = perItemCard({ ...panels(0), status: 'active' })!;
+        expect(taken.stock).toBe('All taken for now');
+        expect(taken.stockOut).toBe(true);
+        expect(taken.chip).toBe('ALL TAKEN FOR NOW');
+        expect(taken.line).toBe('All taken for now');
+        const sold = perItemCard({ ...panels(0), status: 'completed' })!;
+        expect(sold.stock).toBe('Sold out');
+        expect(sold.chip).toBe('SOLD OUT');
+        // A closed listing is sold out whatever count it still holds.
+        expect(perItemCard({ ...panels(3), status: 'completed' })!.stock).toBe('Sold out');
+    });
+    it('a free one has no price phrase (the card says Free) and no price for all', () => {
+        const free = perItemCard({ priceType: EACH, price_c: 0, unitsLeft: 20, lot: null })!;
+        expect(free.price).toBeNull();
+        expect(free.line).toBe('20 left');
+        expect(free.label).toBe('Free · 20 left');
+    });
+    it('a listing not priced for each one has no card (red if a plain price gets a count)', () => {
+        expect(perItemCard({ priceType: 'fixed', price_c: c(300), unitsLeft: 5 })).toBeNull();
+        expect(perItemCard({ priceType: 'hourly', price_c: c(30) })).toBeNull();
+    });
+    it('every phrase is whole in another language, and the Beans sign is where the words put it', () => {
+        setLanguage('fr', catalogOf('fr'));
+        const card = perItemCard(panels(20))!;
+        for (const phrase of [card.price!, card.stock, card.orAll!, card.allShort!, card.chip, card.boxLot!, card.line, card.label]) {
+            expect(phrase.length).toBeGreaterThan(0);
+            expect(phrase).not.toMatch(/\{[A-Za-z0-9_]+\}/);
+        }
+        expect(card.price).toContain('🫘');
+    });
+});
+
+describe('splitBeansSign: the Beans sign is a place for the picture', () => {
+    it('splits a line at the sign, and a line without one comes back whole (red if the sign is dropped)', () => {
+        expect(splitBeansSign('300 🫘 each')).toEqual(['300 ', ' each']);
+        expect(splitBeansSign('or all for 5,500 🫘')).toEqual(['or all for 5,500 ', '']);
+        expect(splitBeansSign('20 left')).toEqual(['20 left']);
+    });
 });

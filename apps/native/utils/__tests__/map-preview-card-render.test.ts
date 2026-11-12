@@ -299,4 +299,57 @@ describe.each([['light', false], ['dark', true]] as const)("the map's pin card a
         await show({ ...TWILIGHT, author_pubkey: ME.publicKey, myRsvp: null });
         expect(q('event-mark').textContent).toBe("You're hosting this event");
     });
+
+    // Per-item prices, slice P2 (DESIGN-per-item-price-fable.md §2.1): Rob's panels, 300 Beans each, 20 of them, or all 20 for 5,500.
+    // The price goes through ListingPrice (the protected map files are untouched) and the count is one line under the title.
+    const PANELS = {
+        id: 'p-panels', type: 'offer', status: 'active', title: 'Solar panels', category: 'tools', repeatable: 0, author_pubkey: 'rob-key',
+        author_callsign: 'Rob', author_energy_cycled: 0, price_c: 30000, price_type: 'each', units_left: 20, lot_units: 20, lot_price_c: 550000,
+        photos: [], lat: -28.65, lng: 153.6,
+    };
+    const flatWords = (el: Element) => Array.from(el.querySelectorAll('span')).filter((x) => !x.querySelector('span')).map((x) => (x.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
+
+    it('an Offer priced for each one: "300 each" at the first row\'s end, "20 left · or all for 5,500" under the title, nothing past the card or over the ✕', async () => {
+        await show(PANELS);
+        const card = q('map-preview-open');
+        expect(flatWords(q('listing-price-each'))).toBe('300 each');
+        expect(flatWords(q('listing-each-line'))).toBe('20 left · or all for 5,500');
+        expect(card.textContent).not.toContain('🫘');
+        expect(q('listing-price-each').querySelectorAll('img'), 'the Beans picture, not the emoji').toHaveLength(1);
+        const l = lay();
+        const title = Array.from(card.querySelectorAll('span')).find((x) => x.textContent === 'Solar panels')!;
+        // The count line is under the title, and the who-line under that.
+        expect(at(l, q('listing-each-line')).top).toBeGreaterThanOrEqual(at(l, title).top + l.height(title) - 0.5);
+        expect(at(l, q('map-preview-author')).top).toBeGreaterThanOrEqual(at(l, q('listing-each-line')).top + l.height(q('listing-each-line')) - 0.5);
+        const right = at(l, card).left + l.width(card);
+        // Every box Yoga laid out (the Beans picture sits inside its text, which Yoga draws as one box).
+        const laidOut = (el: Element) => { try { l.box(el); return true; } catch { return false; } };
+        for (const el of Array.from(card.querySelectorAll('*')).filter(laidOut)) {
+            expect(at(l, el).left + l.width(el), el.textContent || el.tagName).toBeLessThanOrEqual(right + 0.5);
+        }
+        // The first row (chips and the price) still ends before the ✕ begins.
+        const head = (card.lastElementChild as HTMLElement).firstElementChild as HTMLElement;
+        expect(at(l, head).left + l.width(head)).toBeLessThanOrEqual(at(l, q('map-preview-close')).left);
+        console.log(`panels pin card ${l.height(card)} dp at 320 x 1.3 (${_name})`);
+        // Still one press: the line and the price open the item like the rest of the card.
+        for (const el of [q('listing-each-line'), q('listing-price-each')]) {
+            opened.length = 0;
+            await press(el, el.getAttribute('data-testid')!);
+            expect(opened).toEqual(['p-panels']);
+        }
+    });
+
+    it('one taken singly: the price for all is gone from the line; all held: words; Beans off: no price and no line; a fixed price: no line', async () => {
+        await show({ ...PANELS, units_left: 19 });
+        expect(flatWords(q('listing-each-line'))).toBe('19 left');
+        await show({ ...PANELS, units_left: 0 });
+        expect(flatWords(q('listing-each-line'))).toBe('All taken for now');
+        await show(PANELS, { showsBeans: false });
+        expect(q('listing-each-line')).toBeNull();
+        expect(q('listing-price-each')).toBeNull();
+        expect(q('map-preview-open').textContent).not.toMatch(/each|left|5,500/);
+        await show({ ...PANELS, price_type: 'fixed', units_left: null, lot_units: null, lot_price_c: null });
+        expect(q('listing-each-line')).toBeNull();
+        expect(q('listing-price-each')).toBeNull();
+    });
 });

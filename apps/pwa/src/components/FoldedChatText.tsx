@@ -21,7 +21,7 @@ interface Props {
     enabled?: boolean;
     /** How the words sit when they are not folded: in the line with the time (a bubble's body) or on their own (a caption). */
     display?: 'inline' | 'block';
-    /** The bubble is the member's own (white on the accent), or someone else's. */
+    /** The bubble is the member's own (white on the sage fill), or someone else's. */
     mine?: boolean;
     /** The button's ink on a bubble of another colour, a line that failed; it follows `mine` otherwise. A link takes it too. */
     ink?: string;

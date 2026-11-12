@@ -123,7 +123,8 @@ describe('brand colours are readable in every set', () => {
     // grounds since slice T1: each is declared twice, under :root (light) then :root.dark-theme (dark), as the variable the
     // web's Tailwind plugin writes per set from brandGrounds(set).web (apps/pwa/src/themeBase.test.ts holds that side).
     const WEB_GROUND_VARIABLE = { primary: ['page', '--bp-web-page'], secondary: ['sunken', '--bp-web-sunken'], card: ['card', '--bp-web-card'] } as const;
-    const webDeclared = (name: string) => [...readFileSync(WEB_CSS, 'utf8').matchAll(new RegExp(`--bg-${name}:\\s*([^;]+);`, 'g'))].map((m) => m[1].trim());
+    const webCss = () => readFileSync(WEB_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const webDeclared = (name: string) => [...webCss().matchAll(new RegExp(`--bg-${name}:\\s*([^;]+);`, 'g'))].map((m) => m[1].trim());
 
     it("judges inks on every page, card and sunken ground the web app declares (index.css), in every set", () => {
         // Dark --bg-secondary (#384038) sits under words in Messages, the consent card and the radius picker; leaving it out
@@ -666,7 +667,7 @@ describe("Dark's doodle and banner: charcoal, not olive (Marty and Damo, 12 Nov 
         expect(phone).toContain(`PATTERN_GROUND = { light: '${brandGrounds('light').doodle.ground}', dark: '${classic.doodle.ground}' }`);
         // The web reads them from the library since slice T1 (light, then dark), as the variables its Tailwind plugin writes
         // per set (apps/pwa/src/themeBase.test.ts); Classic's values stay main's.
-        const css = readFileSync(WEB_CSS, 'utf8');
+        const css = readFileSync(WEB_CSS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
         const declared = (name: string) => [...css.matchAll(new RegExp(`--${name}:\\s*([^;]+);`, 'g'))].map((m) => m[1].trim());
         expect(declared('pattern-bg').slice(0, 2)).toEqual(['var(--bp-doodle-ground)', 'var(--bp-doodle-ground)']);
         expect(declared('header-bg')).toEqual(['var(--bp-web-banner)', 'var(--bp-web-banner)']);

@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { BRAND_SETS, brandCssVariableMap, brandGrounds, type BrandSet } from '@beanpool/core/brand-colours';
+import { BRAND_SETS, brandCssVariableMap, brandGrounds, contrastRatio, type BrandSet } from '@beanpool/core/brand-colours';
 
 const SRC = __dirname;
 const CSS = fs.readFileSync(path.join(SRC, 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -153,6 +153,21 @@ describe("the web's base comes from the colour library, per set", () => {
         expect(Object.keys(night).filter((n) => !n.startsWith('--bp-n-') && !/^--bp-(web|doodle)-/.test(n))).toHaveLength(15);
         expect(Object.keys(night).filter((n) => n.startsWith('--bp-n-'))).toHaveLength(11);
         expect(Object.keys(night).filter((n) => /^--bp-(web|doodle)-/.test(n))).toHaveLength(5);
+    });
+
+    it("the own chat bubble is the sage fill under white: 4.86:1 in Classic dark (main's --accent was 3.28), 4.5+ in every set", () => {
+        const page = fs.readFileSync(path.join(SRC, 'pages/MessagesPage.tsx'), 'utf8');
+        expect(page).toContain("background: isMe ? 'var(--bp-sage-fill)' : 'var(--bg-card)',");
+        expect(page).toContain("background: failed ? 'var(--bp-chip-danger-tint)' : 'var(--bp-sage-fill)',"); // a line still going
+        for (const set of BRAND_SETS) {
+            const v = brandCssVariableMap(set);
+            expect(v['--bp-sage-on'], set).toBe('#ffffff');
+            expect(contrastRatio(v['--bp-sage-on'], v['--bp-sage-fill']), set).toBeGreaterThanOrEqual(4.5);
+        }
+        expect(contrastRatio('#ffffff', brandCssVariableMap('dark')['--bp-sage-fill']).toFixed(2)).toBe('4.86');
+        expect(brandCssVariableMap('light')['--bp-sage-fill']).toBe('#647664'); // Light's bubble: main's --accent, unchanged
+        // Can fail: main's dark --accent under the same white words.
+        expect(contrastRatio('#ffffff', '#809380').toFixed(2)).toBe('3.28');
     });
 
     it('--accent is gone: no declaration in index.css, no var(--accent) or *-accent class in the app', () => {

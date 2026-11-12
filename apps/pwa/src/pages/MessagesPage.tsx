@@ -2861,7 +2861,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </div>
                                 )}
                                 {/* The words are selectable with the mouse and copyable by hand; only the time and the chips are not
-                                    (userSelect below). A member's own bubble is the accent colour, so its selection is drawn in a darker
+                                    (userSelect below). A member's own bubble is the sage fill (bp-sage), so its selection is drawn in a darker
                                     shade of it (index.css .bp-bubble-mine): the global accent one vanished on it. */}
                                 <div className={isMe ? 'bp-bubble-mine' : undefined} data-testid="chat-bubble" style={{
                                     background: isMe ? 'var(--bp-sage-fill)' : 'var(--bg-card)',
@@ -3271,7 +3271,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 className="max-w-[85%] md:max-w-[70%]"
                                 style={{ alignSelf: 'flex-end', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}
                             >
-                                {/* A line still going is the accent bubble with white words, as a sent one is, so it takes the same class: the
+                                {/* A line still going is the sage-fill bubble with white words, as a sent one is, so it takes the same class: the
                                     selection and a link's focus ring are drawn for it (index.css .bp-bubble-mine). A failed one is the danger chip. */}
                                 <div className={failed ? undefined : 'bp-bubble-mine'} style={{
                                     // A line that hasn't gone is never drawn as one that has: on a failed one, the danger chip's own pair.

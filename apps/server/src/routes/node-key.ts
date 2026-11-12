@@ -48,7 +48,10 @@ export function createNodeKeyRoutes(): Router {
             ctx.body = { error: 'This server has no node key yet.', code: 'no_node_key' };
             return;
         }
-        ctx.set('Cache-Control', 'public, max-age=3600');
+        // Never kept by a shared cache (guest-cache.ts: only the visitors' board reads say `public`): after a key change an
+        // edge could hand out the old document, and other servers would refuse the new key's requests until it let go. A
+        // server asking keeps the document itself (engine/node-signature.ts), and this server makes it once an hour.
+        ctx.set('Cache-Control', 'no-cache');
         ctx.body = doc;
     });
 

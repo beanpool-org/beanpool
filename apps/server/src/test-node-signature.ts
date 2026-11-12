@@ -135,7 +135,9 @@ async function main(): Promise<void> {
     assert(validFor > NODE_KEY_VALIDITY_MS - 120_000 && validFor <= NODE_KEY_VALIDITY_MS,
         `1c. valid 7 days from when it was made (${Math.round(validFor / 3_600_000)} h ahead)`);
     assert(Array.isArray(readBack?.previousKeys) && readBack!.previousKeys.length === 0, '1d. no previous key: nothing changes a node key today');
-    assert(/public/.test(keyRes.headers.get('cache-control') ?? ''), '1e. the same for everyone, and cacheable');
+    const cacheControl = keyRes.headers.get('cache-control') ?? '';
+    assert(/no-cache/.test(cacheControl) && !/public|s-maxage/.test(cacheControl),
+        `1e. no shared cache keeps it, so a changed key is never answered stale (${cacheControl})`);
     const again = await (await fetch(`${BASE}/api/node/key`)).json();
     assert(JSON.stringify(again) === JSON.stringify(keyDoc), '1f. asked again within the hour: the same document, signed once');
 

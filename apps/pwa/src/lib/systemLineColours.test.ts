@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEAL_TINT_ALPHA, WEB_INK_GROUNDS, brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
+import { DEAL_TINT_ALPHA, WEB_INK_GROUNDS, brandColours, brandCssVariableMap, brandGrounds, contrastRatio } from '@beanpool/core/brand-colours';
 import { systemLineColours } from './systemLineColours';
 
 const theme = { light: brandCssVariableMap('light'), dark: brandCssVariableMap('dark') };
@@ -75,11 +75,19 @@ describe("a removed group line's words (the tombstone on --bg-hover)", () => {
     const css = fs.readFileSync(path.resolve(__dirname, '../index.css'), 'utf8');
     const decl = (name: string) => [...css.matchAll(new RegExp(`${name}:\\s*([^;]+);`, 'g'))].map((m) => m[1].trim());
 
-    it('light stays --text-muted; dark is the library sage ink, 4.5:1+ on --bg-hover', () => {
+    it("light stays --text-muted; dark is the quiet chip's ink, 4.5:1+ on --bg-hover in Classic and in Dark", () => {
         const [light, dark] = decl('--text-muted-on-hover');
         expect(light).toBe('var(--text-muted)');
-        expect(dark).toBe('var(--bp-ink-accent)');
-        const hoverDark = decl('--bg-hover').find((v) => v.startsWith('#') && v !== decl('--bg-hover')[0]);
-        expect(contrastRatio(theme.dark['--bp-ink-accent'], hoverDark!)).toBeGreaterThanOrEqual(4.5);
+        expect(dark).toBe('var(--bp-chip-quiet-ink)');
+        // Dark --bg-hover is the ramp's 800 (index.css, from the library per set), which is the quiet chip's own tint.
+        expect(decl('--bg-hover')[1]).toBe('rgb(var(--bp-n-800))');
+        expect(theme.dark['--bp-chip-quiet-ink']).toBe('#c0ccc0'); // Classic: the colour these words had before T1
+        for (const set of ['dark', 'night'] as const) {
+            const hover = brandGrounds(set).web.ramp['800'];
+            expect(brandColours(set).chip.quiet.tint, set).toBe(hover);
+            expect(contrastRatio(brandColours(set).chip.quiet.ink, hover), set).toBeGreaterThanOrEqual(4.5);
+        }
+        // Can fail: the accent's ink, which these words were until T1, is under the bar on Dark's grey.
+        expect(contrastRatio(brandColours('night').ink.accent, brandGrounds('night').web.ramp['800'])).toBeLessThan(4.5);
     });
 });

@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { brandCssVariableMap } from '@beanpool/core/brand-colours';
 
 const css = readFileSync(resolve(__dirname, 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -96,12 +97,14 @@ describe("a link in the member's own chat bubble: its focus ring is white, in li
         expect(ring.colour).toBe('#fff');
     });
 
-    it('a link anywhere else keeps the page\'s ring: the pale one in dark, the accent one in light', () => {
+    it('a link anywhere else keeps the page\'s ring: the accent, which is the pale one in dark and the sage one in light', () => {
         document.body.innerHTML = '<div><a class="bp-chat-link" href="https://byron.beanpool.org">link</a></div>';
         link = document.querySelector('a')!;
         document.documentElement.classList.add('dark-theme');
-        expect(ringOf(link).colour).toBe('#c0ccc0');
+        expect(ringOf(link).colour).toBe('var(--bp-accent-fill)');
+        expect(brandCssVariableMap('dark')['--bp-accent-fill']).toBe('#c0ccc0');
         document.documentElement.classList.remove('dark-theme');
-        expect(ringOf(link).colour).toBe('var(--accent)');
+        expect(ringOf(link).colour).toBe('var(--bp-accent-fill)');
+        expect(brandCssVariableMap('light')['--bp-accent-fill']).toBe('#647664');
     });
 });

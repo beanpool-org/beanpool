@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import React from 'react';
+import { brandGrounds } from '@beanpool/core/brand-colours';
 import { App, navTabWeight, NAV_LABEL_FONT_SIZE } from './App';
 import type { BeanPoolIdentity } from './lib/identity';
 
@@ -413,7 +414,12 @@ describe('Full-page views clear the desktop sidebar', () => {
         // pages had — the same pair .page-surface uses, light and dark.
         expect(css).toMatch(/:root\s*\{\s*--page-ground:\s*var\(--pattern-bg\)/);
         expect(css).toMatch(/:root\.plain-background\s*\{\s*--page-ground:\s*#fbfaf8/);
-        expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-ground:\s*#1d231d/);
+        // Under :root.dark-theme (Classic, and Dark on top of it) the flat page colour is the library's web page ground since
+        // slice T1 (the Tailwind plugin writes --bp-web-page per set), the same variable .page-surface reads; Classic's is the
+        // #1d231d these pages had.
+        expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-ground:\s*var\(--bp-web-page\)/);
+        expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-surface:\s*var\(--bp-web-page\)/);
+        expect(brandGrounds('dark').web.page).toBe('#1d231d');
     });
 });
 

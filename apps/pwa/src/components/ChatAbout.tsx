@@ -69,7 +69,7 @@ export function AboutChipBar({ conversationId }: { conversationId: string }) {
             padding: '0.5rem 1rem', background: 'var(--bg-secondary)', borderTop: '1px solid var(--border-primary)',
             fontSize: '0.85rem', color: 'var(--text-secondary)',
         }}>
-            <div style={{ borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0, flex: 1, ...WRAP }}>
+            <div style={{ borderLeft: '3px solid var(--bp-accent-fill)', paddingLeft: '8px', minWidth: 0, flex: 1, ...WRAP }}>
                 <span aria-hidden="true">🏷️ </span>{words}
             </div>
             <button

@@ -13,6 +13,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { word, type WordKey } from '@beanpool/core';
+import { brandGrounds } from '@beanpool/core/brand-colours';
 
 export type Theme = 'dark' | 'light';
 export type ThemePreference = 'system' | 'light' | 'dark';
@@ -23,8 +24,8 @@ export const DEFAULT_PREFERENCE: ThemePreference = 'dark';
 const STORAGE_KEY = 'beanpool-theme-mode';
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
-// --header-bg in index.css, so the browser chrome runs on from the header.
-const THEME_COLOR: Record<Theme, string> = { light: '#fbfaf8', dark: '#1d231d' };
+// The banner's ground (--header-bg in index.css, the library's web.banner), so the browser chrome runs on from the header.
+const THEME_COLOR: Record<Theme, string> = { light: brandGrounds('light').web.banner, dark: brandGrounds('dark').web.banner };
 
 /** Settings → Appearance's three choices. The labels are word() keys: Settings shows them through t(). */
 export const THEME_PREFERENCE_OPTIONS: { value: ThemePreference; label: WordKey }[] = [

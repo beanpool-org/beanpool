@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { brandGrounds } from '@beanpool/core/brand-colours';
 import { loadThemePreference, resolveTheme } from './useTheme';
 
 const BOOT = fs.readFileSync(path.resolve(__dirname, '../../public/theme-boot.js'), 'utf8');
@@ -59,6 +60,8 @@ describe('theme-boot.js agrees with useTheme for every stored state', () => {
 
         expect(boot.theme).toBe(expected);
         expect(boot.scheme).toBe(expected);
+        // The browser bar is the banner's ground, as the library has it (theme-boot.js cannot import it, so this holds the copy).
+        expect(boot.color).toBe(brandGrounds(expected).web.banner);
         expect(boot.color).toBe(expected === 'dark' ? '#1d231d' : '#fbfaf8');
         expect(boot.classes).toBe(expected === 'dark' ? 'dark dark-theme' : 'light-theme');
     });

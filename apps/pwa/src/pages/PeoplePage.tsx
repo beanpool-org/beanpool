@@ -398,7 +398,7 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                                         type="button"
                                         onClick={() => onOpenProfile?.(a.publicKey)}
                                         aria-label={t('{name} added you. Open their profile', { name: a.callsign })}
-                                        className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
+                                        className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill rounded-lg"
                                     >
                                         <Avatar callsign={a.callsign} avatarUrl={a.avatarUrl} pubkey={a.publicKey} size={32} />
                                         <span className="min-w-0 text-[14px] text-text-primary break-words">
@@ -409,7 +409,7 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                                         type="button"
                                         onClick={() => handleAddFriend(a.publicKey)}
                                         aria-label={t('Add {name} back', { name: a.callsign })}
-                                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-accent bg-transparent text-text-primary text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-bp-accent-fill bg-transparent text-text-primary text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-bp-accent-fill"
                                     >
                                         {t('Add back')}
                                     </button>

@@ -1,14 +1,68 @@
 import plugin from 'tailwindcss/plugin';
-import { brandCssVariableMap, brandTailwindColours } from '@beanpool/core/brand-colours';
+import { BRAND_SETS, brandCssVariableMap, brandGrounds, brandTailwindColours } from '@beanpool/core/brand-colours';
 
 /*
- * Brand and status colours come from the shared library (packages/beanpool-core/src/brand-colours.ts, docs/brand-colours.md):
- * the plugin below writes every role into index.css's @tailwind base as a CSS variable, light under :root and dark under
- * :root.dark-theme, and brandTailwindColours() names them, so a control writes bg-bp-commit-fill hover:bg-bp-commit-hover
- * text-bp-commit-on. Change a colour there, never here or in a screen.
+ * Every colour that changes with the look comes from the shared library (packages/beanpool-core/src/brand-colours.ts,
+ * docs/brand-colours.md): the plugin below writes it into index.css's @tailwind base as CSS variables, Light under :root,
+ * Classic under :root.dark-theme, and each further set (Dark is `night` in code) under :root.dark-theme[data-bp-theme="…"]
+ * with only what that set changes. Two kinds:
+ *   - the brand roles (--bp-cta-fill …), which brandTailwindColours() names, so a control writes bg-bp-commit-fill
+ *     hover:bg-bp-commit-hover text-bp-commit-on;
+ *   - the web's base: the grey ramp as colour channels (--bp-n-900: 56 64 56), so the `nature` scale below keeps every
+ *     `/50` opacity class working on old Android WebViews (rgb(r g b / a), no color-mix()), and the grounds the base
+ *     variables in index.css read (--bp-web-page, --bp-web-card, --bp-web-sunken, --bp-web-banner, --bp-doodle-ground).
+ * Change a colour there, never here, in index.css or in a screen.
  */
+
+/** The steps of the web's grey ramp, Tailwind's `nature` scale. */
+export const RAMP_STEPS = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'];
+
+/** '#384038' → '56 64 56': a colour as the channels rgb(var(--bp-n-900) / <alpha-value>) takes. */
+export function channels(hex) {
+    const m = /^#([0-9a-f]{6})$/i.exec(hex);
+    if (!m) throw new Error(`not a #rrggbb colour: ${hex}`);
+    return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)).join(' ');
+}
+
+/** One set's web base: the ramp as channels, and the grounds index.css's base variables read. */
+export function webBaseVariableMap(set) {
+    const g = brandGrounds(set);
+    const out = {};
+    for (const step of RAMP_STEPS) out[`--bp-n-${step}`] = channels(g.web.ramp[step]);
+    out['--bp-web-page'] = g.web.page;
+    out['--bp-web-card'] = g.web.card;
+    out['--bp-web-sunken'] = g.web.sunken;
+    out['--bp-web-banner'] = g.web.banner;
+    out['--bp-doodle-ground'] = g.doodle.ground;
+    return out;
+}
+
+/** Everything one set writes: the brand roles and the web base. */
+export function webSetVariableMap(set) {
+    return { ...brandCssVariableMap(set), ...webBaseVariableMap(set) };
+}
+
+/** The sets beyond Classic's two, each written as a block on top of Classic dark (each is a dark look). */
+export const THEME_BLOCK_SETS = BRAND_SETS.filter((set) => set !== 'light' && set !== 'dark');
+
+/** The selector a further set's block is written under. The picker (slice T3) sets the attribute on <html>. */
+export const themeBlockSelector = (set) => `:root.dark-theme[data-bp-theme="${set}"]`;
+
+/** Only the variables a set changes from Classic dark: the rest it inherits from :root.dark-theme. */
+export function themeBlockVariables(set) {
+    const classic = webSetVariableMap('dark');
+    return Object.fromEntries(Object.entries(webSetVariableMap(set)).filter(([name, value]) => classic[name] !== value));
+}
+
+/** The whole base the plugin writes, selector → variables, in cascade order. */
+export function brandBase() {
+    const base = { ':root': webSetVariableMap('light'), ':root.dark-theme': webSetVariableMap('dark') };
+    for (const set of THEME_BLOCK_SETS) base[themeBlockSelector(set)] = themeBlockVariables(set);
+    return base;
+}
+
 const brandVariables = plugin(({ addBase }) => {
-  addBase({ ':root': brandCssVariableMap('light'), ':root.dark-theme': brandCssVariableMap('dark') });
+  addBase(brandBase());
 });
 
 /** @type {import('tailwindcss').Config} */
@@ -22,19 +76,9 @@ export default {
     extend: {
       colors: {
         ...brandTailwindColours(),
-        nature: {
-          50: '#f6f7f6',
-          100: '#eef1ee',
-          200: '#dce3dc',
-          300: '#c0ccc0',
-          400: '#9eaf9e',
-          500: '#809380',
-          600: '#647664', // Sage Green primary
-          700: '#526052',
-          800: '#434e43',
-          900: '#384038',
-          950: '#1d231d', // Charcoal
-        },
+        // The grey ramp, from the library per set (webBaseVariableMap): `nature` names the accent family by its Classic
+        // colour, and is Dark's charcoal greys in Dark.
+        nature: Object.fromEntries(RAMP_STEPS.map((step) => [step, `rgb(var(--bp-n-${step}) / <alpha-value>)`])),
         terra: {
           50: '#fdf7f5',
           100: '#fcedea',
@@ -79,7 +123,6 @@ export default {
           secondary: 'var(--border-secondary)',
           input: 'var(--border-input)',
         },
-        accent: 'var(--accent)',
         link: 'var(--link)',
       },
       fontFamily: {

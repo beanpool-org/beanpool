@@ -90,7 +90,7 @@ export function ContactsPage({ identity, start = 'list', onBack, onMessage }: {
 
     const header = (title: string, onTap: () => void) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <button type="button" onClick={onTap} style={{ ...btn, border: 'none', background: 'none', color: 'var(--accent)', padding: '0 0.25rem' }}>{t('← Back')}</button>
+            <button type="button" onClick={onTap} style={{ ...btn, border: 'none', background: 'none', color: 'var(--bp-accent-fill)', padding: '0 0.25rem' }}>{t('← Back')}</button>
             <h2 style={{ fontSize: '1.2rem', margin: 0, flex: 1, minWidth: 0 }}>{title}</h2>
             <button type="button" onClick={() => setInfo(true)} aria-label={t('About your private contacts')} style={{ ...btn, minWidth: '44px', borderRadius: '22px' }}>ⓘ</button>
         </div>
@@ -357,7 +357,7 @@ function ImportView({ list, header, onBack, onRead, onTypeOne, publicKey }: {
             ))}
             <h3 style={{ fontSize: '1rem', margin: '1rem 0 0.5rem' }}>{t('2. Bring the file here')}</h3>
             <div data-testid="contacts-drop" onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}
-                style={{ ...card, borderStyle: 'dashed', borderColor: over ? 'var(--accent)' : 'var(--border-primary)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+                style={{ ...card, borderStyle: 'dashed', borderColor: over ? 'var(--bp-accent-fill)' : 'var(--border-primary)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
                 <button type="button" style={btn} onClick={() => fileInput.current?.click()}>{t('Choose a contacts file')}</button>
                 <span style={{ color: 'var(--text-muted)' }}>{t('or drop it here.')}</span>
                 <input ref={fileInput} type="file" accept=".vcf,.vcard,text/vcard,text/x-vcard" hidden data-testid="contacts-file" onChange={(e) => { void read(e.target.files?.[0]); e.target.value = ''; }} />
@@ -365,7 +365,7 @@ function ImportView({ list, header, onBack, onRead, onTypeOne, publicKey }: {
             <p style={muted}>{t("The file is read in this browser. It isn't uploaded.")}</p>
             {problem && <p role="alert" style={{ ...muted, color: 'var(--danger)' }}>{problem}</p>}
             {list.contacts.length < CONTACTS_LIMITS.contacts && (
-                <button type="button" onClick={onTypeOne} style={{ ...btn, border: 'none', background: 'none', color: 'var(--accent)', padding: 0 }}>{t('Or: Type one in ›')}</button>
+                <button type="button" onClick={onTypeOne} style={{ ...btn, border: 'none', background: 'none', color: 'var(--bp-accent-fill)', padding: 0 }}>{t('Or: Type one in ›')}</button>
             )}
             {phoneCard && (
                 <div style={{ marginTop: '1rem' }}>

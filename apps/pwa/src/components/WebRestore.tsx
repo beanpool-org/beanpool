@@ -484,7 +484,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
                     <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{t('Which community?')}</p>
                     <p data-testid="restore-community" dir="auto" style={{
                         padding: '0.6rem 0.9rem', borderRadius: '10px', marginBottom: '0.75rem', overflowWrap: 'anywhere',
-                        border: '2px solid var(--accent)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 600,
+                        border: '2px solid var(--bp-accent-fill)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 600,
                     }}>
                         {community}
                     </p>

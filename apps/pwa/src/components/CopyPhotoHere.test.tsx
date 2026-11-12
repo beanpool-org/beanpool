@@ -139,10 +139,21 @@ describe('the web copies the kept photo into this community, only when asked', (
 describe('the card at 320 px wide with the text at 130 %, in light and in dark', () => {
     // The classes are what jsdom can read; the palette is the app's own (tailwind.config.js). Chromium measures the same
     // class strings in e2e/dark-class-check.mjs (test-all's pwa_dark_classes).
-    const natureShades = async () => {
-        const { default: config } = await import(/* @vite-ignore */ pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href);
-        return (resolveConfig(config).theme.colors as any).nature as Record<string, string>;
+    // tailwind.config.js names each `nature` step by its channel variable (rgb(var(--bp-n-900) / <alpha-value>)) and each look
+    // writes those channels (webSetVariableMap), so a step is read through the set it is drawn in: a plain class in Light, a
+    // dark: class in Classic (`dark`) and in Dark (`night`).
+    const natureShades = async (set: 'light' | 'dark' | 'night') => {
+        const { default: config, webSetVariableMap } = await import(/* @vite-ignore */ pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href);
+        const vars = webSetVariableMap(set) as Record<string, string>;
+        const steps = (resolveConfig(config).theme.colors as any).nature as Record<string, string>;
+        return Object.fromEntries(Object.entries(steps).map(([step, value]) => {
+            const ref = /^rgb\(var\((--bp-n-\d+)\) \/ <alpha-value>\)$/.exec(value);
+            const ch = ref ? vars[ref[1]]?.split(' ').map(Number) : undefined;
+            if (!ch || ch.length !== 3 || ch.some(c => !Number.isInteger(c))) throw new Error(`nature-${step} in ${set} is not a ramp channel: ${value}`);
+            return [step, `#${ch.map(c => c.toString(16).padStart(2, '0')).join('')}`];
+        })) as Record<string, string>;
     };
+    const DARK_SETS = ['dark', 'night'] as const;
     const lum = (hex: string) => {
         const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -170,16 +181,19 @@ describe('the card at 320 px wide with the text at 130 %, in light and in dark',
 
         // The words read in both (4.5:1), from the palette the classes name: on the card (white / nature-900) and on the button
         // (nature-900 with white words in light; white with nature-900 words in dark).
-        const nature = await natureShades();
+        const light = await natureShades('light');
         const white = '#ffffff';
-        expect(ratio(nature['900'], white)).toBeGreaterThanOrEqual(4.5);  // the heading in light
-        expect(ratio(white, nature['900'])).toBeGreaterThanOrEqual(4.5);  // the heading in dark
-        expect(ratio(nature['600'], white)).toBeGreaterThanOrEqual(4.5);  // the hint in light (nature-500 was 3.3:1)
-        expect(ratio(nature['300'], nature['900'])).toBeGreaterThanOrEqual(4.5); // the hint in dark
-        expect(ratio(white, nature['900'])).toBeGreaterThanOrEqual(4.5);  // the button's words in light
-        expect(ratio(nature['900'], white)).toBeGreaterThanOrEqual(4.5);  // and in dark
-        expect(ratio(nature['800'], white)).toBeGreaterThanOrEqual(4.5);  // the line after the tap in light
-        expect(ratio(nature['100'], nature['900'])).toBeGreaterThanOrEqual(4.5); // and in dark
+        expect(ratio(light['900'], white)).toBeGreaterThanOrEqual(4.5);  // the heading in light
+        expect(ratio(light['600'], white)).toBeGreaterThanOrEqual(4.5);  // the hint in light (nature-500 was 3.3:1)
+        expect(ratio(white, light['900'])).toBeGreaterThanOrEqual(4.5);  // the button's words in light
+        expect(ratio(light['800'], white)).toBeGreaterThanOrEqual(4.5);  // the line after the tap in light
+        for (const set of DARK_SETS) {
+            const dark = await natureShades(set);
+            expect(ratio(white, dark['900']), `the heading in ${set}`).toBeGreaterThanOrEqual(4.5);
+            expect(ratio(dark['300'], dark['900']), `the hint in ${set}`).toBeGreaterThanOrEqual(4.5);
+            expect(ratio(dark['900'], white), `the button's words in ${set}`).toBeGreaterThanOrEqual(4.5);
+            expect(ratio(dark['100'], dark['900']), `the line after the tap in ${set}`).toBeGreaterThanOrEqual(4.5);
+        }
     });
 
     it('the line after the tap and a refusal keep their dark partners and read on the card', async () => {
@@ -192,7 +206,9 @@ describe('the card at 320 px wide with the text at 130 %, in light and in dark',
         const { default: config } = await import(/* @vite-ignore */ pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href);
         const colors = resolveConfig(config).theme.colors as any;
         expect(ratio(colors.red['700'], '#ffffff')).toBeGreaterThanOrEqual(4.5);
-        expect(ratio(colors.red['300'], colors.nature['900'])).toBeGreaterThanOrEqual(4.5);
+        for (const set of DARK_SETS) {
+            expect(ratio(colors.red['300'], (await natureShades(set))['900']), `red-300 on the card in ${set}`).toBeGreaterThanOrEqual(4.5);
+        }
     });
 
     it('a refusal is drawn in those colours', async () => {

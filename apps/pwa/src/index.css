@@ -80,23 +80,26 @@
   box-sizing: border-box;
 }
 
-/* ——— Premium Earth-Tone Theme (Default) ——— */
+/* ——— The base, Light ———
+   Every sage, charcoal and ground below is a variable the colour library writes per set (tailwind.config.js, the
+   brandVariables plugin): --bp-web-page / card / sunken / banner, --bp-doodle-ground, and the grey ramp as channels,
+   --bp-n-50 to --bp-n-950 (the `nature` scale; rgb(var(--bp-n-600)) is nature-600). So a look (Classic, Dark) re-colours
+   these without a block of its own here. Change a value in packages/beanpool-core/src/brand-colours.ts, never here.
+   The oat, terracotta, blue and status hexes are not the accent family and stay as they are in every look. */
 :root {
-  --bg-primary: #f6f4f0;      /* oat-100 */
-  --bg-secondary: #fbfaf8;    /* oat-50 */
-  --bg-card: #ffffff;
-  --bg-input: #ffffff;
+  --bg-primary: var(--bp-web-page);       /* oat-100 */
+  --bg-secondary: var(--bp-web-sunken);   /* oat-50 */
+  --bg-card: var(--bp-web-card);
+  --bg-input: var(--bp-web-card);
   --bg-hover: #ebe6df;        /* oat-200 */
-  --text-primary: #1d231d;    /* nature-950 (Charcoal) */
-  --text-secondary: #384038;  /* nature-900 */
-  --text-muted: #647664;      /* nature-600 (Sage Green) */
-  --text-faint: #9eaf9e;      /* nature-400 */
+  --text-primary: rgb(var(--bp-n-950));   /* Charcoal */
+  --text-secondary: rgb(var(--bp-n-900));
+  --text-muted: rgb(var(--bp-n-600));     /* Sage Green */
+  --text-faint: rgb(var(--bp-n-400));
   --text-muted-on-hover: var(--text-muted); /* muted words on a --bg-hover pill (a removed group line) */
-  --border-primary: #dce3dc;  /* nature-200 */
-  --border-secondary: #eef1ee;/* nature-100 */
-  --border-input: #c0ccc0;    /* nature-300 */
-  --accent: #647664;          /* nature-600 (Sage Green) */
-  --accent-hover: #526052;    /* nature-700 */
+  --border-primary: rgb(var(--bp-n-200));
+  --border-secondary: rgb(var(--bp-n-100));
+  --border-input: rgb(var(--bp-n-300));
   --danger: #c2583b;          /* terra-600 (Soft Terracotta) */
   --on-danger: #fff;
   --link: #2563eb;
@@ -108,18 +111,18 @@
   --cta-go: #10b981;
   --sync-guest: #d97706; --sync-guest-bg: #fffbeb; --sync-offline: #ef4444;
   --tier-track: #e2e8f0; --tier-card: #fff; --tier-card-border: #e5e7eb;
-  --success: #647664;         /* nature-600 */
-  --scrollbar-thumb: #c0ccc0; /* nature-300 */
-  --header-bg: #fbfaf8;       /* oat-50 */
+  --success: rgb(var(--bp-n-600));
+  --scrollbar-thumb: rgb(var(--bp-n-300));
+  --header-bg: var(--bp-web-banner);      /* oat-50: the leafy banner's ground, and the browser bar's */
   --pattern-image: url('/pattern-light.webp');
   --pattern-image-hidpi: image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
   --pattern-image-hidpi-webkit: -webkit-image-set(url('/pattern-light.webp') 1x, url('/pattern-light-2x.webp') 2x);
-  --pattern-bg: #f1f1e4;      /* the tile's own ground — what shows between the doodles */
+  --pattern-bg: var(--bp-doodle-ground); /* the tile's own ground — what shows between the doodles */
   --header-overlay: rgba(251, 250, 248, 0.85);
   --image-viewer-bg: rgba(0, 0, 0, 0.92);
   --image-viewer-close-bg: rgba(0, 0, 0, 0.5);
   --nav-bg: #ffffff;
-  --shadow-card: 0 4px 6px -1px rgba(100, 118, 100, 0.1), 0 2px 4px -2px rgba(100, 118, 100, 0.05);
+  --shadow-card: 0 4px 6px -1px rgb(var(--bp-n-600) / 0.1), 0 2px 4px -2px rgb(var(--bp-n-600) / 0.05);
   --nav-height: 4rem;
   --bottom-nav-height: 4rem;
   /* The tour's bar while it runs (components/TourBar.tsx sets it): what rides on the offset (the Market's + ADD POST,
@@ -146,25 +149,25 @@
   }
 }
 
-/* Optional Dark Mode / High Contrast */
+/* ——— The base, dark: Classic, and every dark look on top of it (Dark is :root.dark-theme[data-bp-theme="night"], whose
+   block the plugin writes with only the library variables it changes). The same variables as the light block above. */
 :root.dark-theme {
-  --bg-primary: #1d231d;
-  --bg-secondary: #384038;
-  --bg-card: #2a322a;
-  --bg-input: #2a322a;
-  --bg-hover: #434e43;
+  --bg-primary: var(--bp-web-page);
+  --bg-secondary: var(--bp-web-sunken);
+  --bg-card: var(--bp-web-card);
+  --bg-input: var(--bp-web-card);
+  --bg-hover: rgb(var(--bp-n-800));
   --text-primary: #f6f4f0;
-  --text-secondary: #dce3dc;
-  --text-muted: #9eaf9e;
-  --text-faint: #9eaf9e;
-  --text-muted-on-hover: var(--bp-ink-accent); /* #c0ccc0, 5.25:1 on --bg-hover; --text-muted's #9eaf9e is 3.77 there */
-  --border-primary: #434e43;
-  --border-secondary: #384038;
-  --border-input: #809380;
-  --accent: #809380;
-  --accent-hover: #9eaf9e;
+  --text-secondary: rgb(var(--bp-n-200));
+  --text-muted: rgb(var(--bp-n-400));
+  --text-faint: rgb(var(--bp-n-400));
+  --text-muted-on-hover: var(--bp-chip-quiet-ink); /* #c0ccc0, 5.25:1 on --bg-hover (the quiet chip's own pair: its tint is
+     nature-800); --text-muted's #9eaf9e is 3.77 there. Not ink.accent: in Dark that is the blue, 4.35:1 on Dark's grey. */
+  --border-primary: rgb(var(--bp-n-800));
+  --border-secondary: rgb(var(--bp-n-900));
+  --border-input: rgb(var(--bp-n-500));
   --danger: #e5967f;
-  --on-danger: #1d231d;
+  --on-danger: rgb(var(--bp-n-950));
   --link: #93c5fd;
   /* A visitor listing's Offer / Need / Poll / Event word on the dark card (the 500s were 2.6 to 4.2:1 on #384038). */
   --post-type-offer: #34d399; --post-type-need: #f0a08a; --post-type-poll: #c4b5fd; --post-type-event: #c4b5fd;
@@ -176,19 +179,19 @@
   --tier-elder: #fcd34d; --tier-elder-bg: #3a2f17; --tier-elder-border: #6b5520;
   --cta-go: #047857;
   --sync-guest: #fcd34d; --sync-guest-bg: #3a2f17; --sync-offline: #f87171;
-  --credit-red: #f0a08a; --credit-warm: #f2b765; --credit-bean: #6fd38a; --credit-muted: #9eaf9e;
-  --tier-track: #434e43; --tier-card: #2a322a; --tier-card-border: #434e43;
-  --success: #809380;
-  --scrollbar-thumb: #526052;
-  --header-bg: #1d231d;
-  --header-overlay: rgba(29, 35, 29, 0.85);
+  --credit-red: #f0a08a; --credit-warm: #f2b765; --credit-bean: #6fd38a; --credit-muted: rgb(var(--bp-n-400));
+  --tier-track: rgb(var(--bp-n-800)); --tier-card: var(--bp-web-card); --tier-card-border: rgb(var(--bp-n-800));
+  --success: rgb(var(--bp-n-500));
+  --scrollbar-thumb: rgb(var(--bp-n-700));
+  --header-bg: var(--bp-web-banner);
+  --header-overlay: rgb(var(--bp-n-950) / 0.85);
   --image-viewer-bg: rgba(0, 0, 0, 0.95);
   --image-viewer-close-bg: rgba(0, 0, 0, 0.6);
   --pattern-image: url('/pattern-dark.webp');
   --pattern-image-hidpi: image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
   --pattern-image-hidpi-webkit: -webkit-image-set(url('/pattern-dark.webp') 1x, url('/pattern-dark-2x.webp') 2x);
-  --pattern-bg: #141a1a;
-  --nav-bg: #2a322a;
+  --pattern-bg: var(--bp-doodle-ground);
+  --nav-bg: var(--bp-web-card);
   --shadow-card: 0 4px 12px rgba(0,0,0,0.3);
 }
 
@@ -280,7 +283,7 @@ html, body, #root {
 
 :root { --page-surface: transparent; }
 :root.plain-background { --page-surface: #fbfaf8; }            /* oat-50, as the pages had */
-:root.dark-theme.plain-background { --page-surface: #1d231d; } /* nature-950, as the pages had */
+:root.dark-theme.plain-background { --page-surface: var(--bp-web-page); } /* nature-950, as the pages had */
 
 :root.plain-background {
   --pattern-image: none;
@@ -326,7 +329,7 @@ html, body, #root {
 
 :root { --page-ground: var(--pattern-bg); }              /* the tile's own ground, so the doodles sit right */
 :root.plain-background { --page-ground: #fbfaf8; }            /* oat-50, as .page-surface gives */
-:root.dark-theme.plain-background { --page-ground: #1d231d; } /* nature-950, as .page-surface gives */
+:root.dark-theme.plain-background { --page-ground: var(--bp-web-page); } /* nature-950, as .page-surface gives */
 
 @media print {
   #root, .page-overlay, .page-wallpaper { background-image: none; }
@@ -400,51 +403,53 @@ html, body, #root {
   }
 }
 
-/* Selection color */
+/* Selection colour: the sage button's fill under its own words (white), as the own chat bubble is. */
 ::selection {
-  background: var(--accent);
-  color: #fff;
+  background: var(--bp-sage-fill);
+  color: var(--bp-sage-on);
 }
 
-/* A member's own chat bubble is the accent colour, so the selection above vanishes on it (accent on accent): their words
+/* A member's own chat bubble is the same sage fill, so the selection above vanishes on it (fill on fill): their words
    looked as if they could not be selected (Marty, 9 Nov). There the highlight is a darker shade of the bubble, under the same
-   white words (white on the accent is the bubble's own pair, and a darker ground only raises its contrast, in light and dark). */
+   white words (white on the sage fill is the bubble's own pair, and a darker ground only raises its contrast, in every look). */
 .bp-bubble-mine ::selection,
 .bp-bubble-mine::selection {
   background: rgba(0, 0, 0, 0.4);
   color: #fff;
 }
 
-/* Focus visible for accessibility */
+/* Focus visible for accessibility: the accent (accent.fill: Classic's sage in light, its pale sage in dark, Dark's blue). */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--bp-accent-fill);
   outline-offset: 2px;
 }
 
-/* Dark: the sage ring is under 3:1 on the cards; a pale ring, and placeholders at 4.5:1 on the dark fields. */
+/* Dark: the deep sage ring was under 3:1 on the cards; the accent's dark value is the pale ring (#c0ccc0 in Classic), and
+   placeholders read at 4.5:1 on the dark fields. Stated again in dark so the Leaflet and chat-link rules below keep their order. */
 :root.dark-theme :focus-visible {
-  outline-color: #c0ccc0;
+  outline-color: var(--bp-accent-fill);
 }
 
-/* Leaflet's controls and attribution keep their light surface in dark: the light theme's sage ring reads there (3.6:1 on #ddd). */
+/* Leaflet's controls and attribution keep their light surface in dark: the light theme's sage ring reads there (3.6:1 on #ddd).
+   A fixed hex on purpose: Leaflet's controls are the same light grey in every look, so their ring is too (design §5). */
 :root.dark-theme .leaflet-container :focus-visible {
   outline-color: #647664;
 }
 
 /* Fields that turn the outline off inline (Welcome, chat box) had no focus mark at all in dark. */
 :root.dark-theme :is(input, textarea, select)[style*="outline: none"]:focus-visible {
-  outline: 2px solid #c0ccc0 !important;
+  outline: 2px solid var(--bp-accent-fill) !important;
   outline-offset: 0;
 }
 
 :root.dark-theme input::placeholder,
 :root.dark-theme textarea::placeholder {
-  color: #9eaf9e;
+  color: rgb(var(--bp-n-400));
   opacity: 1;
 }
 
-/* A link in a chat message (components/ChatLinkedText.tsx). The page's focus ring is the accent colour, which is the member's own
-   bubble: on a link there it would not show, so it is white (4.9:1 on the bubble in light, 3.3:1 in dark; measured in Chromium).
+/* A link in a chat message (components/ChatLinkedText.tsx). The page's focus ring is the accent colour, and the member's own
+   bubble is the sage fill: on a link there it would not show, so it is white (4.9:1 on the bubble in light and in Classic dark).
    It sits AFTER the dark ring above and starts at :root, so it wins on specificity ((0,4,0) against (0,3,0)) and on order:
    written before it, at the same specificity, the dark ring won and the link had #c0ccc0 on #809380, 2.0:1 (Opus review of
    #2990, finding 2). */

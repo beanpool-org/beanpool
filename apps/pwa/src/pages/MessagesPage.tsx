@@ -1890,7 +1890,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * The answered message drawn at the top of a reply's bubble, as the thread judged it (quoteOf), never its row's raw
      * words and name: on a row, and on a line still going. `ink`: its words on this bubble's own colour.
      */
-    function replyQuote(replyToId: string, isMe: boolean, ink = isMe ? '#fff' : 'var(--accent)') {
+    function replyQuote(replyToId: string, isMe: boolean, ink = isMe ? '#fff' : 'var(--bp-accent-fill)') {
         const quoted = quoteOf(messagesById.get(replyToId));
         return (
             <div
@@ -2078,7 +2078,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     <button
                         type="button"
                         onClick={() => { setShowNewDm(false); setPickerQuery(''); }}
-                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', minHeight: '44px', minWidth: '44px', padding: '0 0.25rem' }}
+                        style={{ background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', minHeight: '44px', minWidth: '44px', padding: '0 0.25rem' }}
                     >
                         {t('← Back')}
                     </button>
@@ -2134,7 +2134,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                     <button
                         onClick={() => setShowNewDm(false)}
-                        style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                        style={{ background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
                         {t('← Back')}
                     </button>
@@ -2210,7 +2210,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return (
             <div
                 className="h-full max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full flex flex-col"
-                style={dragActive ? { outline: '2px dashed var(--accent)', outlineOffset: '-4px' } : undefined}
+                style={dragActive ? { outline: '2px dashed var(--bp-accent-fill)', outlineOffset: '-4px' } : undefined}
                 onDragEnter={acceptsDrop ? (e) => {
                     if (!dragCarriesFile(e.dataTransfer)) return;
                     e.preventDefault();
@@ -2247,7 +2247,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         aria-hidden="true"
                         style={{
                             padding: '0.5rem 1rem', textAlign: 'center', fontWeight: 600,
-                            fontSize: '0.9rem', color: 'var(--accent)', background: 'var(--bg-hover)',
+                            fontSize: '0.9rem', color: 'var(--bp-accent-fill)', background: 'var(--bg-hover)',
                         }}
                     >
                         {t('Drop the picture to send it')}
@@ -2269,7 +2269,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 loadConversations();
                             }}
                             aria-label={t('Back to messages')}
-                            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minWidth: '44px', minHeight: '44px' }}
+                            style={{ background: 'none', border: 'none', color: 'var(--bp-accent-fill)', fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, minWidth: '44px', minHeight: '44px' }}
                         >
                             ←
                         </button>
@@ -2349,7 +2349,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 onClick={() => setChatSearch((q) => (q === null ? '' : null))}
                                 aria-label={chatSearch === null ? t('Search this chat') : t('Close search')}
                                 aria-expanded={chatSearch !== null}
-                                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
+                                style={{ background: 'none', border: 'none', color: 'var(--bp-accent-fill)', cursor: 'pointer', fontSize: '1rem', minWidth: '44px', minHeight: '44px', flexShrink: 0 }}
                             >
                                 {chatSearch === null ? '🔍' : '✕'}
                             </button>
@@ -2840,7 +2840,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 }}
                                                 style={{
                                                     background: myReaction?.emoji === emoji ? 'var(--bg-hover)' : 'transparent',
-                                                    border: myReaction?.emoji === emoji ? '1px solid var(--accent)' : '1px solid transparent',
+                                                    border: myReaction?.emoji === emoji ? '1px solid var(--bp-accent-fill)' : '1px solid transparent',
                                                     borderRadius: '16px',
                                                     padding: '2px 4px',
                                                     width: '32px',
@@ -2861,10 +2861,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </div>
                                 )}
                                 {/* The words are selectable with the mouse and copyable by hand; only the time and the chips are not
-                                    (userSelect below). A member's own bubble is the accent colour, so its selection is drawn in a darker
+                                    (userSelect below). A member's own bubble is the sage fill (bp-sage), so its selection is drawn in a darker
                                     shade of it (index.css .bp-bubble-mine): the global accent one vanished on it. */}
                                 <div className={isMe ? 'bp-bubble-mine' : undefined} data-testid="chat-bubble" style={{
-                                    background: isMe ? 'var(--accent)' : 'var(--bg-card)',
+                                    background: isMe ? 'var(--bp-sage-fill)' : 'var(--bg-card)',
                                     color: isMe ? '#fff' : 'var(--text-primary)',
                                     borderRadius: isMe
                                         ? '12px 12px 4px 12px'
@@ -3001,7 +3001,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 padding: '4px 6px',
                                                 minHeight: '24px',
                                                 cursor: 'pointer',
-                                                color: isMe ? '#ffffff' : 'var(--accent)',
+                                                color: isMe ? '#ffffff' : 'var(--bp-accent-fill)',
                                                 fontWeight: 600,
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
@@ -3027,7 +3027,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 padding: '4px 6px',
                                                 minHeight: '24px',
                                                 cursor: 'pointer',
-                                                color: isMe ? '#ffffff' : 'var(--accent)',
+                                                color: isMe ? '#ffffff' : 'var(--bp-accent-fill)',
                                                 fontWeight: 600,
                                                 display: 'inline-flex',
                                                 alignItems: 'center',
@@ -3057,7 +3057,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     padding: '4px 6px',
                                                     minHeight: '24px',
                                                     cursor: 'pointer',
-                                                    color: 'var(--accent)',
+                                                    color: 'var(--bp-accent-fill)',
                                                     fontWeight: 600,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
@@ -3083,7 +3083,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     padding: '4px 6px',
                                                     minHeight: '24px',
                                                     cursor: 'pointer',
-                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    color: isMe ? '#ffffff' : 'var(--bp-accent-fill)',
                                                     fontWeight: 600,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
@@ -3105,7 +3105,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     padding: '4px 6px',
                                                     minHeight: '24px',
                                                     cursor: 'pointer',
-                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    color: isMe ? '#ffffff' : 'var(--bp-accent-fill)',
                                                     fontWeight: 600,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
@@ -3130,7 +3130,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     padding: '4px 6px',
                                                     minHeight: '24px',
                                                     cursor: 'pointer',
-                                                    color: 'var(--accent)',
+                                                    color: 'var(--bp-accent-fill)',
                                                     fontWeight: 600,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
@@ -3155,7 +3155,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     padding: '4px 6px',
                                                     minHeight: '24px',
                                                     cursor: 'pointer',
-                                                    color: isMe ? '#ffffff' : 'var(--accent)',
+                                                    color: isMe ? '#ffffff' : 'var(--bp-accent-fill)',
                                                     fontWeight: 600,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
@@ -3182,7 +3182,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         fontSize: '0.75rem',
                                                         lineHeight: 1.3,
                                                         padding: '4px 6px',
-                                                        color: isMe ? 'var(--bp-accent-on)' : 'var(--text-muted)',
+                                                        color: isMe ? 'var(--bp-sage-on)' : 'var(--text-muted)',
                                                         whiteSpace: 'normal',
                                                         outline: 'none',
                                                     }}
@@ -3206,7 +3206,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         padding: '4px 6px',
                                                         minHeight: '24px',
                                                         cursor: 'pointer',
-                                                        color: isMe ? '#ffffff' : 'var(--accent)',
+                                                        color: isMe ? '#ffffff' : 'var(--bp-accent-fill)',
                                                         fontWeight: 600,
                                                         display: 'inline-flex',
                                                         alignItems: 'center',
@@ -3237,7 +3237,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             alignItems: 'center',
                                             gap: '3px',
                                             background: 'var(--bg-card)',
-                                            border: `1px solid ${myReaction ? 'var(--accent)' : 'var(--border-primary)'}`,
+                                            border: `1px solid ${myReaction ? 'var(--bp-accent-fill)' : 'var(--border-primary)'}`,
                                             borderRadius: '12px',
                                             padding: '2px 8px',
                                             minHeight: '24px',
@@ -3271,11 +3271,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 className="max-w-[85%] md:max-w-[70%]"
                                 style={{ alignSelf: 'flex-end', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}
                             >
-                                {/* A line still going is the accent bubble with white words, as a sent one is, so it takes the same class: the
+                                {/* A line still going is the sage-fill bubble with white words, as a sent one is, so it takes the same class: the
                                     selection and a link's focus ring are drawn for it (index.css .bp-bubble-mine). A failed one is the danger chip. */}
                                 <div className={failed ? undefined : 'bp-bubble-mine'} style={{
                                     // A line that hasn't gone is never drawn as one that has: on a failed one, the danger chip's own pair.
-                                    background: failed ? 'var(--bp-chip-danger-tint)' : 'var(--accent)',
+                                    background: failed ? 'var(--bp-chip-danger-tint)' : 'var(--bp-sage-fill)',
                                     color: failed ? 'var(--bp-chip-danger-ink)' : '#fff',
                                     border: failed ? '1px solid var(--bp-ink-danger)' : 'none',
                                     borderRadius: '12px 12px 4px 12px',
@@ -3338,8 +3338,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         fontSize: '0.85rem', color: 'var(--text-secondary)',
                         gap: '8px',
                     }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0, flex: 1 }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--bp-accent-fill)', paddingLeft: '8px', minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--bp-accent-fill)' }}>
                                 {t('Editing message')}
                             </div>
                             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
@@ -3369,13 +3369,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         fontSize: '0.85rem', color: 'var(--text-secondary)',
                         gap: '8px',
                     }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--bp-accent-fill)', paddingLeft: '8px', minWidth: 0, flex: 1 }}>
                             {(() => {
                                 // What is being answered, as the thread judged it (quoteOf).
                                 const q = quoteOf(replyToMessage);
                                 return (
                                     <>
-                                        <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--bp-accent-fill)' }}>
                                             {t('Replying to {name}', { name: !q.named ? q.author : replyToMessage.authorPubkey === identity.publicKey ? t('You') : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || t('Someone')) })}
                                         </div>
                                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
@@ -3468,7 +3468,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 type="button"
                                 onClick={sendPendingImage}
                                 disabled={sending}
-                                style={{ minHeight: '32px', padding: '0 12px', borderRadius: '8px', border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}
+                                style={{ minHeight: '32px', padding: '0 12px', borderRadius: '8px', border: 'none', background: 'var(--bp-sage-fill)', color: '#fff', fontFamily: 'inherit', fontSize: '0.85rem', fontWeight: 600, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}
                             >
                                 {sending ? t('Sending…') : t('Send')}
                             </button>
@@ -3645,7 +3645,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 border: 'none',
-                                background: draft.trim() ? 'var(--accent)' : 'var(--bg-hover)',
+                                background: draft.trim() ? 'var(--bp-sage-fill)' : 'var(--bg-hover)',
                                 color: draft.trim() ? '#fff' : 'var(--text-muted)',
                                 fontSize: '1.2rem',
                                 cursor: draft.trim() ? 'pointer' : 'default',

@@ -1265,7 +1265,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             checked={showAsConnection}
                                             onChange={handleToggleShowAsConnection}
                                             label={t('Show me as a connection in common')}
-                                            activeBgClass="bg-accent border-accent"
+                                            activeBgClass="bg-bp-sage-fill border-bp-sage-fill"
                                             inactiveBgClass="bg-bg-hover border-border-primary"
                                         />
                                     </div>
@@ -1281,7 +1281,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             checked={inviterShown}
                                             onChange={handleToggleInviterShown}
                                             label={showInviterSwitchWords().label}
-                                            activeBgClass="bg-accent border-accent"
+                                            activeBgClass="bg-bp-sage-fill border-bp-sage-fill"
                                             inactiveBgClass="bg-bg-hover border-border-primary"
                                         />
                                     </div>

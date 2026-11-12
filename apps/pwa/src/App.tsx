@@ -47,6 +47,8 @@ const ToolsPage = lazy(() => import('./pages/ToolsPage').then(m => ({ default: m
 import { parseToolTarget, type OpenTool } from './tools/route';
 import type { ComposerDraft } from './tools/builder';
 import { PeoplePage } from './pages/PeoplePage';
+import type { CreditStart } from './components/CreditPeoplePanel';
+import type { CreditFilter } from './lib/credit-sight';
 import { MessagesPage } from './pages/MessagesPage';
 import { onConversationRead } from './lib/conversation-read';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -222,6 +224,9 @@ export function App() {
     const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [peopleNavNonce, setPeopleNavNonce] = useState(0);
+    // People → Community opened with Show credit on at a chip (the bell's ask, the Invites door): off again at the next visit.
+    const [peopleCredit, setPeopleCredit] = useState<CreditStart | null>(null);
+    useEffect(() => { if (activeTab !== 'people') setPeopleCredit(null); }, [activeTab]);
     // People → Invites was opened from the line "N people asked to join" (the Needs-you icon, Home's line): WantsToJoin says
     // so if they have all been answered by now, rather than showing nothing.
     const [peopleFromNotice, setPeopleFromNotice] = useState(false);
@@ -578,7 +583,20 @@ export function App() {
             return;
         }
         // From Home's cards: People's community list or its invites, and Settings at the profile.
+        // The bell's `credit` row and the Invites door: Community with Show credit on at that chip (contextId: the chip, and for
+        // a voucher's ask `vouchers:<their key>`). An unknown chip lands on All; a build without this screen lands on People.
+        if (tab === 'people-credit') {
+            const [chip, by] = (contextId ?? 'all').split(':');
+            const chips: CreditFilter[] = ['all', 'no_credit', 'has_offers', 'mine', 'vouchers'];
+            setPeopleCredit({ chip: chips.includes(chip as CreditFilter) ? (chip as CreditFilter) : 'all', by: by || undefined, nonce: Date.now() });
+            setPeopleSubView('community');
+            setPeopleFromNotice(false);
+            setPeopleNavNonce(n => n + 1);
+            setActiveTab('people');
+            return;
+        }
         if (tab === 'people-community' || tab === 'people-invites') {
+            setPeopleCredit(null);
             setPeopleSubView(tab === 'people-invites' ? 'invites' : 'community');
             setPeopleFromNotice(tab === 'people-invites' && contextId === 'asked');
             setPeopleNavNonce(n => n + 1);
@@ -1466,6 +1484,7 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     preview={invitesMode === 'preview'}
                                     canSeeKnocks={canSeeKnocks}
+                                    creditStart={peopleCredit}
                                     onNearYou={() => setActiveTab('home')}
                                     onGuide={(slug) => navigateToTab('guide', slug)}
                                 />

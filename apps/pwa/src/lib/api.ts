@@ -884,6 +884,11 @@ export interface MyVouching {
     vouchMax: number;
     budgetMax: number;
     vouchedBy: { memberPubkey: string; callsign: string; amount_c: number; at: string }[];
+    /**
+     * Ask for more (credit on the People list C3): the node's word on whether this voucher may ask and when they asked, null
+     * for an owner and for a member who is not a voucher. Read from the node each time, never worked out here.
+     */
+    ask?: { askedAt: string | null; lastAskedAt: string | null; askAgainAt: string | null; blocked: 'paused' | 'frozen' | null } | null;
 }
 
 export interface VoucherHistoryLine {

@@ -24,6 +24,7 @@ import { type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { Sentence } from '../components/Sentence';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { onlyAdminsInvite, readInviteRole, roleReadRefused, mayInviteHere, takesKnocks, type InviteRole } from '../lib/node-invites';
+import { CreditPeoplePanel, type CreditStart } from '../components/CreditPeoplePanel';
 
 interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity;
@@ -36,6 +37,8 @@ interface Props extends LocalCommunityWays {
     onOpenProfile?: (pubkey: string) => void;
     preview?: boolean;
     canSeeKnocks?: boolean;
+    /** Opened from the bell's `credit` row or the Invites door: Community with Show credit on at this chip (App carries it). */
+    creditStart?: CreditStart | null;
 }
 
 type SubView = 'friends' | 'community' | 'invites';
@@ -85,7 +88,7 @@ function Avatar({ callsign, avatarUrl, pubkey, size = 40 }: { callsign: string; 
     );
 }
 
-export function PeoplePage({ identity, initialView = 'friends', navNonce, onViewChange, fromNotice, onNavigate, onOpenProfile, preview, canSeeKnocks, ...ways }: Props) {
+export function PeoplePage({ identity, initialView = 'friends', navNonce, onViewChange, fromNotice, onNavigate, onOpenProfile, preview, canSeeKnocks, creditStart, ...ways }: Props) {
     const [view, setView] = useState<SubView>(initialView);
     // Invites was opened from the line "N people asked to join" (App carries it across a remount; it ends here with the next
     // pill the member picks, and in App with a tab-bar visit): WantsToJoin says so if nobody is waiting now.
@@ -102,6 +105,10 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
     // The whole list couldn't be read (offline, the node busy): said, with Try again, never an empty list.
     const [membersFailed, setMembersFailed] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    // Show credit is on: the node's credit list replaces the plain member list below (same people, search and order).
+    const [creditShowing, setCreditShowing] = useState(false);
+    // The credit start (the bell's ask, the Invites door) already used in this visit: Community opened by hand starts with credit off.
+    const [creditUsed, setCreditUsed] = useState<number | null>(null);
 
     const [blocklistVersion, setBlocklistVersion] = useState(0);
 
@@ -571,6 +578,9 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                         <Sentence text={t('All members on this node. Tap {add} to add someone as a friend.')} parts={{ add: <strong className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded shadow-sm border border-emerald-100 dark:border-emerald-800">{t('+ Add')}</strong> }} />
                     </p>
 
+                    {/* Show credit: only for someone who can give credit, the node's word; off at every visit (components/CreditPeoplePanel). */}
+                    {!preview && <CreditPeoplePanel query={searchQuery} blocked={blockedSet} onOpenProfile={onOpenProfile} start={creditStart && creditStart.nonce !== creditUsed ? creditStart : null} onShowing={setCreditShowing} onStartUsed={setCreditUsed} />}
+
                     {/* Search */}
                     <div className="mb-4">
                         <input
@@ -580,14 +590,14 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
                         />
-                        {searchQuery && (
+                        {searchQuery && !creditShowing && (
                             <div className="text-xs text-nature-400 mt-1.5 font-medium">
                                 {tn(filteredMembers.length, '{n} member found', '{n} members found')}
                             </div>
                         )}
                     </div>
 
-                    {loading || onDemand === null ? (
+                    {creditShowing ? null : loading || onDemand === null ? (
                         <p className="text-center text-nature-500 p-8 font-medium animate-pulse">{t('Loading community...')}</p>
                     ) : membersFailed && members.length === 0 ? (
                         <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-members-failed">

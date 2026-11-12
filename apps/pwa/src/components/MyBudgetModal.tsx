@@ -7,6 +7,7 @@ import { useRef } from 'react';
 import { formatDate, formatHistoryLine, formatHundredths, t, tn, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import type { MyVouching } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
+import { AskForMore } from './AskForMore';
 
 export interface MyBudgetModalProps {
     vouching: MyVouching & { budget: NonNullable<MyVouching['budget']> };
@@ -78,14 +79,22 @@ export function MyBudgetModal({ vouching, onClose }: MyBudgetModalProps) {
                     </div>
                 </div>
 
-                <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
-                    <h3 className="m-0 mb-1 text-sm font-bold text-nature-950 dark:text-white">
-                        {t('Ask for more')}
-                    </h3>
-                    <p className="m-0 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">
-                        {t('To get a bigger budget to vouch from, ask an owner of this community.')}
-                    </p>
-                </div>
+                {/* Ask for more: one tap, the node's state (credit on the People list C3). A node that does not send `ask` yet
+                    (an older one) keeps the sentence; an owner, who has no budget to ask for, is shown neither. */}
+                {vouching.ask !== null && (
+                    <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 space-y-2" data-testid="my-budget-ask">
+                        <h3 className="m-0 text-sm font-bold text-nature-950 dark:text-white">
+                            {t('Ask for more')}
+                        </h3>
+                        {vouching.ask === undefined ? (
+                            <p className="m-0 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">
+                                {t('To get a bigger budget to vouch from, ask an owner of this community.')}
+                            </p>
+                        ) : (
+                            <AskForMore ask={vouching.ask} />
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

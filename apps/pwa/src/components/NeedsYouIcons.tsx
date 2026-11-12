@@ -80,6 +80,9 @@ export function goToNoticeTarget(kind: string, data: Record<string, unknown>, on
         case 'group': case 'invite': if (id(data.groupId)) return onNavigate('group', id(data.groupId)); break;
         case 'decide': return onNavigate('projects');
         case 'settings': return onNavigate('settings');
+        // A voucher's Ask for more (credit on the People list C3): People → Community, Show credit on, the Vouchers chip and that
+        // voucher's row. A build without this screen lands on the kind's tab (People) through the default below.
+        case 'credit': return onNavigate('people-credit', typeof data.by === 'string' && /^[0-9a-f]{64}$/.test(data.by) ? `vouchers:${data.by}` : 'vouchers');
         default: break;
     }
     const tab = isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';

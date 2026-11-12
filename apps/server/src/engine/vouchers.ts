@@ -759,7 +759,7 @@ export function askStateOf(pk: string, at = Date.now()): AskState {
  * Ask for more (POST /api/vouchers/ask): one tap, no words and no amount (5 Nov §10: every allocation is the giver's pick),
  * from a live voucher who is not an owner (an owner vouches with no limit), whose account is active and credit line not
  * frozen, once in {@link ASK_EVERY_DAYS} days whether or not anyone answered. One plain transaction on a main server with
- * Beans on: one `budget_asked` line in the known floor's log (old: what is left, new: the level in hand), and one kept
+ * Beans on: one `budget_asked` line in the known floor's log (old: what is left, new: the level last set), and one kept
  * notice for each owner and committee admin but the asker, with what is left, the level, and the five facts of the branch
  * health (5 Nov): below zero, written off and its share, trading only inside their own circle, how long a voucher, how long
  * confirmed. Counts and sums of vouches only, never a balance. Each is told by the route after the commit (`tell`). Nothing
@@ -782,27 +782,40 @@ export function askForMore(pk: string, at = Date.now()): { askedAt: string; askA
             throw new VoucherError(409, 'asked_this_week', askedThisWeek(last.at, again), { askedAt: last.at, askAgainAt: again });
         }
         const s = voucherSummary(pk);
-        logLine(pk, 'budget_asked', pk, s.left, s.level, askedAt);
+        const setLevel = Math.max(lastLevelOf(pk), s.level);
+        logLine(pk, 'budget_asked', pk, s.left, setLevel, askedAt);
         const title = VOUCHER_WORDS.askTitle;
-        const body = askBody(pk, s, at);
+        const body = askBody(s, setLevel, at);
         const data = { kind: VOUCHER_ASK_KIND, by: pk, screen: 'credit' };
         return committeeKeys().filter((to) => to !== pk).map((to) => ({ to, title, body, data, id: keepNotice(to, title, body, data, at) }));
     })();
     return { askedAt, askAgainAt, notices };
 }
 
+/** The facts an ask's words carry: counts and sums of vouches, never a balance. */
+export interface AskFacts {
+    callsign: string; left: number; level: number; vouched: number; people: number; belowZero: number; writtenOff: number;
+    insideOnly: number; voucherDays: number; confirmedDays: number | null;
+}
+
 /** The ask's words: who, what is left of the level, and the branch health in counts and sums (amendment §3.6). */
-function askBody(pk: string, s: ReturnType<typeof voucherSummary>, at: number): string {
-    const days = (iso: string | null) => (iso && Number.isFinite(Date.parse(iso)) ? Math.max(0, Math.floor((at - Date.parse(iso)) / DAY_MS)) : null);
-    const pct = s.vouched > 0 ? Math.round((s.writtenOff * 100) / s.vouched) : 0;
-    const confirmedFor = days(s.confirmedSince);
+export function askNoticeBody(f: AskFacts): string {
+    const pct = f.vouched > 0 ? Math.min(100, Math.round((f.writtenOff * 100) / f.vouched)) : 0;
     return [
-        askAsks(s.callsign),
-        askLeft(s.left, s.level),
-        askBranch(s.vouched, s.peopleVouched, s.belowZero, s.writtenOff, pct, s.trading.insideOnly),
-        askVoucherAge(days(s.madeAt) ?? 0),
-        confirmedFor === null ? askNotConfirmed() : askConfirmedAge(confirmedFor),
+        askAsks(f.callsign),
+        askLeft(f.left, f.level),
+        askBranch(f.vouched, f.people, f.belowZero, f.writtenOff, pct, f.insideOnly),
+        askVoucherAge(f.voucherDays),
+        f.confirmedDays === null ? askNotConfirmed() : askConfirmedAge(f.confirmedDays),
     ].join(' ');
+}
+
+function askBody(s: ReturnType<typeof voucherSummary>, setLevel: number, at: number): string {
+    const days = (iso: string | null) => (iso && Number.isFinite(Date.parse(iso)) ? Math.max(0, Math.floor((at - Date.parse(iso)) / DAY_MS)) : null);
+    return askNoticeBody({
+        callsign: s.callsign, left: s.left, level: setLevel, vouched: s.vouched, people: s.peopleVouched, belowZero: s.belowZero,
+        writtenOff: s.writtenOff, insideOnly: s.trading.insideOnly, voucherDays: days(s.madeAt) ?? 0, confirmedDays: days(s.confirmedSince),
+    });
 }
 
 /** What a budget change took off each recipient's bell: their kept copies' ids and their bell rows' ids. */
@@ -1266,6 +1279,8 @@ export type TopUpBlocked = 'no_limit' | 'own' | 'paused' | 'frozen' | 'at_most';
  * writes, and no app works out a level.
  */
 export interface BudgetSight {
+    /** The level they were last set to, never below what they hold now: the "of 1,000" in "150 of 1,000 left". */
+    setLevel_c: number | null;
     runningLow: boolean;
     nothingLeft: boolean;
     askedAt: string | null;
@@ -1274,11 +1289,15 @@ export interface BudgetSight {
 }
 
 export function budgetSightOf(viewer: string, pk: string, b: { left: number; level: number; noLimit: boolean }, at = Date.now()): BudgetSight {
-    if (b.noLimit) return { runningLow: false, nothingLeft: false, askedAt: null, topUpTo_c: null, topUpBlocked: 'no_limit' };
+    if (b.noLimit) return { setLevel_c: null, runningLow: false, nothingLeft: false, askedAt: null, topUpTo_c: null, topUpBlocked: 'no_limit' };
     const m = getMember(db, pk);
-    const target = topUpTarget(b.level, lastLevelOf(pk));
+    const lastLevel = lastLevelOf(pk);
+    const target = topUpTarget(b.level, lastLevel);
     const blocked: TopUpBlocked | null = viewer === pk ? 'own' : !m || m.status !== 'active' ? 'paused' : isFrozen(pk) ? 'frozen' : target === null ? 'at_most' : null;
-    return { runningLow: runningLow(b.left), nothingLeft: nothingLeft(b.left), askedAt: openAskOf(pk, at), topUpTo_c: blocked ? null : target, topUpBlocked: blocked };
+    return {
+        setLevel_c: Math.max(lastLevel, b.level), runningLow: runningLow(b.left), nothingLeft: nothingLeft(b.left), askedAt: openAskOf(pk, at),
+        topUpTo_c: blocked ? null : target, topUpBlocked: blocked,
+    };
 }
 
 /**
@@ -1392,9 +1411,12 @@ export function vouchersChip(viewer: string) {
 export function voucherBudgetLine(pk: string, at = Date.now()) {
     if (!liveVoucher(pk)) return null;
     const noLimit = isNodeOwner(pk);
-    if (noLimit) return { noLimit, left_c: null, held_c: null, level_c: null, runningLow: false, nothingLeft: false, askedAt: null };
+    if (noLimit) return { noLimit, left_c: null, held_c: null, level_c: null, setLevel_c: null, runningLow: false, nothingLeft: false, askedAt: null };
     const b = budgetOf(pk, at);
-    return { noLimit, left_c: b.left, held_c: b.held, level_c: b.level, runningLow: runningLow(b.left), nothingLeft: nothingLeft(b.left), askedAt: openAskOf(pk, at) };
+    return {
+        noLimit, left_c: b.left, held_c: b.held, level_c: b.level, setLevel_c: Math.max(lastLevelOf(pk), b.level),
+        runningLow: runningLow(b.left), nothingLeft: nothingLeft(b.left), askedAt: openAskOf(pk, at),
+    };
 }
 
 /**

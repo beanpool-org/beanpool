@@ -26,6 +26,7 @@ import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
 import { InvitedByCard } from '../components/InvitedByCard';
 import { ProfileVoucherButton } from '../components/ProfileVoucherButton';
+import { CreditCard } from '../components/CreditCard';
 import { AddToContacts } from '../components/AddToContacts';
 
 interface Props {
@@ -452,6 +453,10 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {invite && invite.for === pubkey && (
                     <InvitedByCard vouchedInBy={invite.vouchedInBy} broughtIn={invite.broughtIn} isSelf={isSelf} targetPubkey={pubkey} onOpenProfile={onOpenProfile} />
                 )}
+
+                {/* Credit: above the names-list button and the Vouch box, for owners, admins and vouchers only, read from the node when
+                    the profile has opened (credit on the People list C5). A plain member's profile makes no credit request. */}
+                {!isSelf && !loading && profile && <CreditCard memberPubkey={pubkey} myVouching={myVouching} />}
 
                 {/* The names list first, the voucher second (I4): the node says which button, to owners and admins only. */}
                 {!isSelf && invite && invite.for === pubkey && <ProfileVoucherButton button={invite.voucherButton} memberPubkey={pubkey} />}

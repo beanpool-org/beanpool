@@ -24,6 +24,7 @@ import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type Loc
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
+import { CREDIT_LIST_WORDS } from '../lib/credit-sight';
 import { InviteAddsBoxes } from '../components/InviteAddsBoxes';
 import { VoucherCardModal } from '../components/VoucherCardModal';
 import { InviteMadeCard, PendingInvites } from '../components/PendingInvites';
@@ -653,6 +654,17 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                 budgetTotal={myVouching.budget?.level ?? 0}
                                 noLimit={myVouching.noLimit === true}
                             />
+                        )}
+                        {/* A second door to the credit list (credit on the People list): Community with Show credit on and "No credit yet" chosen. */}
+                        {myVouching?.voucher && onNavigate && !isPreview && (
+                            <button
+                                type="button"
+                                onClick={() => onNavigate('people-credit', 'no_credit')}
+                                className="mb-4 min-h-[44px] px-1 text-left text-[14px] font-bold text-bp-ink-accent bg-transparent border-0 cursor-pointer break-words"
+                                data-testid="invite-give-credit-door"
+                            >
+                                {t(CREDIT_LIST_WORDS.door)}
+                            </button>
                         )}
 
                         {showsNamesBoxes && <InviteAddsBoxes />}

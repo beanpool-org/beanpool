@@ -49,6 +49,7 @@ import { LanguageLoadNote } from '../components/LanguageSwitch';
 import { loadPatternPreference, setPatternPreference } from '../lib/usePatternBackground';
 import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { NodeAdminLink } from '../components/NodeAdminLink';
+import { CreditLooksSection } from '../components/CreditLooksSection';
 import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
 import { OwnerUnlockCard } from '../components/OwnerUnlockCard';
 import { NewAccountCard } from '../components/NewAccountCard';
@@ -882,6 +883,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <NewAccountCard />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
+                        {/* Owners and admins only: who looked at credit (the log of looks; the node answers who may read it). */}
+                        <CreditLooksSection />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}
                         <OwnerWordsCheck identity={identity} startOpen={openOwnerWordsCheck} hasWords={hasWords} />
                         {/* Owners only, remembered: take over or restore with this browser (sealed keys slice 6). */}

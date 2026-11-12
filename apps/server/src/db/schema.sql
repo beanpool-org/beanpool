@@ -2233,8 +2233,20 @@ CREATE TABLE IF NOT EXISTS known_floor_exceptions (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
--- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3): every owner and admin
--- reads it. `member_pubkey` is null for a community-wide setting.
+-- A tier badge (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only"): one an owner or admin gave a member, or a genesis
+-- invite gave its joiner. Recognition only: it gives no credit and no floor reads it; the tier a member shows is the higher
+-- of it and what they did (@beanpool/engine trust.ts). No row: no badge. Each change is a line in known_floor_log ('badge').
+CREATE TABLE IF NOT EXISTS member_badges (
+    member_pubkey  TEXT PRIMARY KEY,
+    tier           TEXT NOT NULL CHECK (tier IN ('Resident', 'Steward', 'Elder')),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3), and to a member's badge
+-- (action 'badge'): every owner and admin reads it. `member_pubkey` is null for a community-wide setting.
 CREATE TABLE IF NOT EXISTS known_floor_log (
     id             TEXT PRIMARY KEY,
     actor_pubkey   TEXT NOT NULL,

@@ -488,6 +488,8 @@ export const TABLES: Record<string, TableEntry> = {
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
     known_floor_exceptions: plain('member_pubkey amount_c frozen set_by set_at updated_at'),
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
+    // A member's tier badge (engine/badges.ts): recognition only, no credit. A take-over shows every member the same badge.
+    member_badges: plain('member_pubkey tier set_by set_at updated_at'),
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),

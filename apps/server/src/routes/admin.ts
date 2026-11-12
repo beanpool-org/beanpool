@@ -12,7 +12,7 @@ import {
     getAllMembers, getAllProfiles, getMember, getAdminMembersPage, parseAdminMemberPageKey, getAdminMemberCounts, type Member,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
-    adminSetCreditFrozen, adminSetTier,
+    adminSetCreditFrozen, broadcast, dispatchPushNotification,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
@@ -74,6 +74,8 @@ import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js
 import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
+import { setMemberBadge, BadgeError } from '../engine/badges.js';
+import { tellVoucherNotice } from '../engine/vouchers.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
@@ -116,7 +118,7 @@ import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
 import { actionableKnockCount } from '../engine/knocks.js';
-import { likeContains, withoutTradeParty, parsePageKey, type SyncPage } from '@beanpool/engine';
+import { likeContains, withoutTradeParty, parsePageKey, memberBadge, type SyncPage } from '@beanpool/engine';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 
 // The most post ids one POST /api/local/admin/posts/bulk-delete takes. The manager (PeopleSafetySection.tsx) and the
@@ -948,6 +950,8 @@ function adminMemberRows(members: Member[], keys?: string[]) {
             lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
             tier,
             standing: tier,
+            // The badge an owner or admin gave them (engine/badges.ts), or null: the tier picker's value. Recognition only.
+            badge: memberBadge(db, m.publicKey),
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
         };
@@ -1822,42 +1826,30 @@ router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {
     }
 });
 
-// Promote a member to (or demote from) the Elder tier — grants Elder *standing* (a deep
-// credit floor via granted credit), but NOT password-admin powers. Tiers gate nothing.
-// Body: { password, grant?: boolean } (defaults to grant).
-router.post('/api/local/admin/users/:pubkey/elder', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    const body = (ctx as any).requestBody || {};
-    const grant = body.grant !== false; // default: grant
-    try {
-        adminSetTier(ctx.params.pubkey, grant ? 'Elder' : 'Newcomer');
-        logger.info('ADMIN', `${grant ? 'Granted' : 'Revoked'} Elder for ${ctx.params.pubkey.substring(0, 12)}`);
-        ctx.body = { success: true, granted: grant };
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update Elder status' };
-    }
-});
-
-// Assign a TIER BADGE to a member. The badge grants that tier's trust value (granted-credit
-// lane), landing the member's floor at the tier entry: Resident -200, Steward -600, Elder
-// -1400, Newcomer clears it. Body: { password, tier }.
+// Give a member a tier BADGE, or take it back (Newcomer): recognition only, it gives no credit (Marty, 12 Nov 2026: "tiers
+// badge only"; engine/badges.ts). An owner or admin, by their own key session, which names them in the log; never their own.
+// The member is told (a kept notice, live and as a push). Body: { tier }.
 router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const body = (ctx as any).requestBody || {};
-    const tier = body.tier;
-    if (!['Newcomer', 'Resident', 'Steward', 'Elder'].includes(tier)) {
-        ctx.status = 400;
-        ctx.body = { error: 'tier must be one of Newcomer, Resident, Steward, Elder' };
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can give a badge.')) return;
+    const actor = (ctx.state as any)?.actor;
+    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Sign in with your own key to give a badge, so it is logged in your name.', code: 'key_session_only' };
         return;
     }
+    const body = (ctx as any).requestBody || {};
     try {
-        adminSetTier(ctx.params.pubkey, tier);
-        logger.info('ADMIN', `Set tier ${tier} for ${ctx.params.pubkey.substring(0, 12)}`);
-        ctx.body = { success: true, tier };
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to set tier' };
+        const result = setMemberBadge(actor, ctx.params.pubkey, body.tier, (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification }));
+        if (result.changed) {
+            broadcast({ type: 'profile_updated', publicKey: ctx.params.pubkey });
+            logger.info('ADMIN', `Badge ${result.badge} for ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
+        }
+        ctx.body = { success: true, tier: result.badge, changed: result.changed };
+    } catch (e) {
+        if (!(e instanceof BadgeError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
     }
 });
 

@@ -83,6 +83,7 @@ function logValue(v: string | null, knownFloor_c: number): string {
 const LOG_VERBS: Record<string, string> = {
     exception_lowered: 'set it', exception_raised: 'raised it', exception_frozen: 'froze it', exception_unfrozen: 'unfroze it',
     exception_cleared: 'restored the default',
+    badge: 'changed their badge (recognition only, no credit)',
 };
 
 /** One log line in plain words: "Ada raised it from the community default (1,000 Beans) to 2,000 Beans". */

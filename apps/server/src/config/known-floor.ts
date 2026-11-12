@@ -53,6 +53,11 @@ function setFloor(floor: number): void {
     else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(KNOWN_FLOOR_KEY, String(floor));
 }
 
+/** One line in known_floor_log, the log every owner and admin reads; engine/badges.ts writes a badge's ('badge') here too. */
+export function writeKnownFloorLog(actor: string, action: string, memberPubkey: string | null, oldValue: unknown, newValue: unknown, at?: string): void {
+    log(actor, action, memberPubkey, oldValue, newValue, at);
+}
+
 function log(actor: string, action: string, memberPubkey: string | null, oldValue: unknown, newValue: unknown, at?: string): void {
     db.prepare(`INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at)
                 VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))`)

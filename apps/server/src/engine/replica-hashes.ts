@@ -213,7 +213,13 @@ export interface TableHashes {
  * both tables over more columns. REPLICA_FORMAT stays, as for the knowledge columns (31): all four are NULL on every row until
  * a seller prices a listing for each one, which no app offers until every slice is in (config/node-profile.ts `perItem`).
  */
-export const TABLE_HASHES_VERSION = 35;
+/**
+ * 36: tier badges (engine/badges.ts; Marty, 12 Nov 2026: "tiers badge only"): a new plain table, member_badges. Raised for the
+ * same reason as 22: a standby updated before its main server hashes the new table too. REPLICA_FORMAT stays: each side's
+ * import writes only the tables its own database has. What an older importer drops is the badges (recognition, no credit):
+ * after a take-over from such a copy a badged member shows the tier their own record reads until an admin gives it again.
+ */
+export const TABLE_HASHES_VERSION = 36;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

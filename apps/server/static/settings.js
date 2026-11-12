@@ -2037,7 +2037,7 @@
         // tier instead of leaving it showing an unapplied choice.
         async function setMemberTier(pubkey, tier) {
             const labels = { Newcomer: '🥚 Newcomer', Resident: '🏠 Resident', Steward: '🏛️ Steward', Elder: '⛰️ Elder' };
-            if (!confirm(`Set tier badge to ${labels[tier] || tier}?\n\nThis adjusts the member's credit floor only — their balance is never touched.`)) {
+            if (!confirm(`Give the ${labels[tier] || tier} badge?\n\nRecognition only: a badge gives no credit. The member is told.`)) {
                 renderAdminMembers();
                 return;
             }
@@ -2486,16 +2486,10 @@
                 const memberReportCount = reportsByMember[pubkey] || 0;
                 
                 const isSystemAccount = pubkey === 'SYSTEM' || member.callsign === 'Admin' || member.callsign === 'System';
-                // Tier badge lives in the granted-credit lane (earned_credit column) at fixed grant
-                // values (Resident 200, Steward 600, Elder 1400; Newcomer clears it — protocol.ts).
-                // Derive the current badge here so the tier picker and the Elder pill agree on one
-                // source of truth. adminSetTier is the single lever behind both.
-                const earnedGrant = member.earnedCredit || 0;
-                const badgeTier = earnedGrant >= 1320 ? 'Elder'
-                    : earnedGrant >= 600 ? 'Steward'
-                    : earnedGrant >= 200 ? 'Resident'
-                    : 'Newcomer';
-                const isElderGranted = badgeTier === 'Elder';
+                // The badge an owner or admin gave (the node's `badge`, engine/badges.ts): recognition only, no credit.
+                // The picker shows it (Newcomer: none); the Elder pill shows the tier the member shows, badge or not.
+                const badgeTier = ['Resident', 'Steward', 'Elder'].includes(member.badge) ? member.badge : 'Newcomer';
+                const isElderGranted = member.tier === 'Elder';
 
                 const bFlags = getBranchFlags(pubkey);
                 const hasFlags = bFlags.length > 0;
@@ -2511,7 +2505,7 @@
                 }
                 let elderPill = '';
                 if (isElderGranted) {
-                    elderPill = `<span style="background:#f59e0b;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Elder tier badge — floor −1400">⛰️ Elder</span>`;
+                    elderPill = `<span style="background:#f59e0b;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Elder: recognition only, a badge gives no credit">⛰️ Elder</span>`;
                 }
 
                 // Personal stat chips (compact inline indicators)
@@ -2582,7 +2576,7 @@
                                         ${statsBtn}
                                         <button class="btn btn-sm btn-outline" onclick="event.preventDefault(); viewMemberPosts('${pubkey}')" title="View posts by this member">📦 Posts</button>
                                         ${!isGenesis && !isPruned ? `<button class="btn btn-sm ${isActive?'btn-outline':'btn-primary'}" onclick="event.preventDefault(); ${isActive ? `suspendMember('${pubkey}')` : `adminAction('/users/${pubkey}/status', {status:'active'})`}">${isActive?'Suspend':'Lift suspension'}</button>` : ''}
-                                        ${!isSystemAccount && !isPruned ? `<select class="tier-select" onclick="event.stopPropagation();" onchange="setMemberTier('${pubkey}', this.value)" title="Tier badge — sets this member's credit floor (Resident −200, Steward −600, Elder −1400; Newcomer clears the grant). This widens/narrows their credit limit only — their balance is never touched.">
+                                        ${!isSystemAccount && !isPruned ? `<select class="tier-select" onclick="event.stopPropagation();" onchange="setMemberTier('${pubkey}', this.value)" title="Badge: recognition only, it gives no credit. Newcomer takes back a badge you gave.">
                                             <option value="Newcomer" ${badgeTier==='Newcomer'?'selected':''}>🥚 Newcomer</option>
                                             <option value="Resident" ${badgeTier==='Resident'?'selected':''}>🏠 Resident</option>
                                             <option value="Steward" ${badgeTier==='Steward'?'selected':''}>🏛️ Steward</option>

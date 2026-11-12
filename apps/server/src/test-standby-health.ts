@@ -517,9 +517,10 @@ async function main(): Promise<void> {
         // knowledge_helped; engine/knowledge-drafts.ts, slice K3).
         // Version 35: posts with units_left, lot_price_c and lot_units, and marketplace_transactions with item_option (per-item
         // prices, slice P0); no new table.
-        assert(snap?.tableHashes?.v === 35 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
+        // Version 36: a new table, member_badges (a tier badge an owner or admin gave: recognition only, engine/badges.ts).
+        assert(snap?.tableHashes?.v === 36 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
             'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests', 'contact_copies', 'bills',
-            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped', 'member_badges'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

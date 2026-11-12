@@ -19,17 +19,11 @@
  */
 import Router from '@koa/router';
 import { checkRelayItem } from '@beanpool/core';
-import { ownNodeKeyDocument } from '../engine/node-key.js';
+import { isOwnNodeHome, ownNodeKeyDocument } from '../engine/node-key.js';
 import type { NodeOrigin } from '../engine/node-signature.js';
-import { audienceStanding } from '../engine/own-addresses.js';
 
 /** The most items one check may carry. */
 export const NODE_CHECK_ITEMS_MAX = 16;
-
-/** Whether `host` is one of this server's own names: an item for any other host is not for here. */
-function isHere(host: string): boolean {
-    return audienceStanding(host) === 'own';
-}
 
 export function createNodeKeyRoutes(): Router {
     const router = new Router();
@@ -74,7 +68,8 @@ export function createNodeKeyRoutes(): Router {
             origin: from.origin,
             key: from.key,
             items: items.map((item: unknown) => {
-                const verdict = checkRelayItem(item, { signedBy: from.origin, isHere });
+                // For here: one of this server's own homes, never on a server that knows none of its names.
+                const verdict = checkRelayItem(item, { signedBy: from.origin, isHere: isOwnNodeHome });
                 if (verdict.ok) return { itemId: verdict.item.envelope.itemId, ok: true };
                 const id = (item as { envelope?: { itemId?: unknown } } | null)?.envelope?.itemId;
                 return { itemId: typeof id === 'string' && id.length <= 64 ? id : null, ok: false, reason: verdict.reason };

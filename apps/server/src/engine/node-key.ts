@@ -19,7 +19,7 @@ import crypto from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { NODE_KEY_VALIDITY_MS, buildNodeRequestHeaders, signNodeKeyDocument, type NodeKeyDocument } from '@beanpool/core';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
-import { primaryAddress } from './own-addresses.js';
+import { audienceStanding, knowsItsNames, primaryAddress } from './own-addresses.js';
 
 /** The DER header of a PKCS#8 Ed25519 private key; the 32-byte seed follows it. */
 const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
@@ -58,6 +58,16 @@ export async function ownNodeKeyDocument(now = Date.now()): Promise<NodeKeyDocum
     const doc = await signNodeKeyDocument({ key: s.keyHex, validUntil: now + NODE_KEY_VALIDITY_MS, previousKeys: [] }, s.sign);
     made = { at: now, doc };
     return doc;
+}
+
+/**
+ * Whether `host` is one of this server's own names, for a request another server signed (engine/node-signature.ts, the
+ * destination) or an item it carries (routes/node-key.ts, the recipient's home). Never on a server that knows none of its
+ * names: it can't tell a request meant for it from one that wasn't, and a loopback or home-network host is every such
+ * server's (own-addresses.ts item 5), so a request signed for one would be good at all of them.
+ */
+export function isOwnNodeHome(host: string): boolean {
+    return knowsItsNames() && audienceStanding(host) === 'own';
 }
 
 /** The X-BeanPool-Node header for a request this server sends to `url`. Throws when it has no key or knows none of its names. */

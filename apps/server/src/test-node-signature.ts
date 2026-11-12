@@ -22,6 +22,9 @@
  *  11  the node's own signer: a request it signs is taken by its own door, its document fetched from its own route
  *  12  at most 8 key fetches at once: the ninth origin is answered busy (503), and nothing waits on it
  *  13  two requests from one origin while its document is on its way: the second waits for it, one fetch
+ *  14  a node that knows none of its names takes no server request: signed for localhost, 127.0.0.1, 192.168.1.10, 10.0.0.5
+ *      or mybox.local, each is refused (421), and no item for one is for here; named again, its own name is taken
+ *  15  512 + 1 origins' documents: the one in use is kept, the least recently used goes
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-node-signature.ts
  */
@@ -91,7 +94,7 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { __useNodeKeyFetchForTests, NODE_KEY_FETCHES_AT_ONCE } = await import('./engine/node-signature.js');
-    const { ownNodeRequestHeaders } = await import('./engine/node-key.js');
+    const { isOwnNodeHome, ownNodeRequestHeaders } = await import('./engine/node-key.js');
 
     await initTls();
     initStateEngine();
@@ -323,6 +326,53 @@ async function main(): Promise<void> {
     const [one, two] = await Promise.all([firstLate, secondLate]);
     assert(one.status === 200 && two.status === 200 && lateAsked === 1,
         `13a. both are taken, on one fetch: the second waited for the first's answer (got ${one.status}, ${two.status}; fetched ${lateAsked})`);
+
+    // ── 14. A node that knows none of its names takes no server request ───────────────────
+    console.log('\n14. A node that knows none of its names takes no server request');
+    const { forgetOwnAddresses, knowsItsNames } = await import('./engine/own-addresses.js');
+    process.env.BEANPOOL_ADDRESSES = '';
+    forgetOwnAddresses();
+    assert(!knowsItsNames(), '14a. with no address set, the node knows none of its names');
+    const LOCAL_HOSTS = ['localhost', '127.0.0.1', '192.168.1.10', '10.0.0.5', 'mybox.local'];
+    for (const [i, destination] of LOCAL_HOSTS.entries()) {
+        const r = await serverPost('/api/node/check', { items: [] }, A, { destination });
+        assert(r.status === 421 && r.body?.code === 'wrong_destination' && /knows none of its own names/.test(r.body?.error ?? ''),
+            `14${'bcdef'[i]}. signed for ${destination}, on a node that knows none of its names: refused 421, saying so (got ${r.status} ${r.body?.code}: ${r.body?.error})`);
+    }
+    const forHere = LOCAL_HOSTS.filter(isOwnNodeHome);
+    assert(forHere.length === 0, `14g. nor is an item for any of them for here (routes/node-key.ts isHere) (for here: ${forHere.join(', ') || 'none'})`);
+    process.env.BEANPOOL_ADDRESSES = 'b.example';
+    forgetOwnAddresses();
+    const namedAgain = await serverPost('/api/node/check', { items: [] }, A);
+    assert(knowsItsNames() && namedAgain.status === 200 && namedAgain.body?.origin === 'a.example' && isOwnNodeHome('b.example'),
+        `14h. named again (b.example): a request signed for its own name is taken, and an item for it is for here (got ${namedAgain.status})`);
+
+    // ── 15. Kept documents: the least recently used goes first ────────────────────────────
+    console.log('\n15. 512 + 1 origins: the one in use is kept');
+    const { originKeyStanding, nodeKeysKept, NODE_KEYS_KEPT } = await import('./engine/node-signature.js');
+    const PEER = server('peer.example');
+    const FILLER = server('filler.example');
+    const peerDoc = await docOf(PEER, Date.now() + NODE_KEY_VALIDITY_MS);
+    const fillerDoc = await docOf(FILLER, Date.now() + NODE_KEY_VALIDITY_MS);
+    const fetchesOf = new Map<string, number>();
+    __useNodeKeyFetchForTests(async (origin) => {
+        fetchesOf.set(origin, (fetchesOf.get(origin) ?? 0) + 1);
+        return origin === 'peer.example' ? peerDoc : fillerDoc;
+    });
+    const t0 = Date.now();
+    const peerFirst = await originKeyStanding('peer.example', PEER.key, t0);
+    for (let i = 1; i < NODE_KEYS_KEPT; i++) await originKeyStanding(`filler${i}.example`, FILLER.key, t0);
+    const keptFull = nodeKeysKept();
+    const peerInUse = await originKeyStanding('peer.example', PEER.key, t0);
+    assert(peerFirst === 'current' && keptFull === NODE_KEYS_KEPT && peerInUse === 'current' && fetchesOf.get('peer.example') === 1,
+        `15a. peer.example fetched, then ${NODE_KEYS_KEPT - 1} other origins (${keptFull} kept), then peer.example used again from its kept document (fetched ${fetchesOf.get('peer.example')} time)`);
+    await originKeyStanding(`filler${NODE_KEYS_KEPT}.example`, FILLER.key, t0);
+    const peerAfter = await originKeyStanding('peer.example', PEER.key, t0);
+    assert(peerAfter === 'current' && fetchesOf.get('peer.example') === 1 && nodeKeysKept() === NODE_KEYS_KEPT,
+        `15b. one more origin past ${NODE_KEYS_KEPT}: peer.example, used since, is still kept, not fetched again (got ${peerAfter}; fetched ${fetchesOf.get('peer.example')} time(s); ${nodeKeysKept()} kept)`);
+    const firstFiller = await originKeyStanding('filler1.example', FILLER.key, t0);
+    assert(firstFiller === 'unknown' && fetchesOf.get('filler1.example') === 1,
+        `15c. the least recently used, filler1.example, went instead: asked about again within the minute, it is unknown and not fetched (got ${firstFiller}; fetched ${fetchesOf.get('filler1.example')} time(s))`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -25,7 +25,8 @@
  * (engine/pulse-resolver.ts ssrfSafeFetch: public addresses only, after every lookup; no redirect), at most
  * NODE_KEY_FETCHES_AT_ONCE at once (503 busy past them), each within NODE_KEY_FETCH_TIMEOUT_MS and NODE_KEY_DOCUMENT_MAX_BYTES.
  * A document is kept until it expires and for NODE_KEY_VALIDITY_MS at most (the most a document may promise), for at most
- * NODE_KEYS_KEPT origins, the least recently used going first. A key the kept document doesn't name, or names as expired,
+ * NODE_KEYS_KEPT origins, the least recently used going first (used: fetched, or found to name a request's key, current or
+ * previous), so a peer in use is never dropped for origins seen once. A key the kept document doesn't name, or names as expired,
  * asks the origin again, at most once every NODE_KEY_ASK_AGAIN_MS (an origin that changed its key). An origin whose
  * document could not be had is not asked again for NODE_KEY_ASK_AGAIN_MS either. So a flood of requests naming other
  * origins costs at most one small fetch an origin a minute, and no origin is ever asked from inside a member's request.
@@ -41,7 +42,8 @@ import {
     parseNodeRequestHeader, readNodeKeyDocument, type NodeKeyDocument,
 } from '@beanpool/core';
 import { NonceStore } from './member-signature.js';
-import { audienceStanding } from './own-addresses.js';
+import { isOwnNodeHome } from './node-key.js';
+import { knowsItsNames } from './own-addresses.js';
 import { ssrfSafeFetch } from './pulse-resolver.js';
 import { logger } from '../logger.js';
 
@@ -188,9 +190,13 @@ export type OriginKeyStanding = 'current' | 'previous' | 'expired' | 'unknown' |
 export async function originKeyStanding(origin: string, keyHex: string, now = Date.now()): Promise<OriginKeyStanding> {
     const have = kept.get(origin);
     const trusted = have && now < have.trustUntil ? have.doc : null;
-    if (trusted) {
+    if (have && trusted) {
         const standing = nodeKeyStanding(trusted, keyHex, now);
-        if (standing === 'current' || standing === 'previous') return standing;
+        if (standing === 'current' || standing === 'previous') {
+            // In use: to the back of the line, so the document dropped past NODE_KEYS_KEPT is the least recently used one.
+            remember(kept, origin, have, NODE_KEYS_KEPT);
+            return standing;
+        }
     }
     let asked: Promise<NodeKeyDocument | null> | 'busy' | undefined = fetching.get(origin);
     if (!asked) {
@@ -234,13 +240,16 @@ export async function verifyNodeRequest(
     const h = parseNodeRequestHeader(request.header);
     if (!h) return refuse(400, 'bad_node_signature', `The ${NODE_REQUEST_HEADER} header is not one this server reads.`);
     if (Math.abs(now - h.at) > NODE_REQUEST_SKEW_MS) return refuse(401, 'stale', 'The request time is too far from this server\'s clock.');
-    let standing: ReturnType<typeof audienceStanding>;
-    try {
-        standing = audienceStanding(h.destination);
-    } catch {
-        standing = 'foreign';
+    if (!knowsItsNames()) {
+        return refuse(421, 'wrong_destination', 'This server knows none of its own names yet, so it takes no request from another server.');
     }
-    if (standing !== 'own') return refuse(421, 'wrong_destination', 'This request was signed for another server.');
+    let here: boolean;
+    try {
+        here = isOwnNodeHome(h.destination);
+    } catch {
+        here = false;
+    }
+    if (!here) return refuse(421, 'wrong_destination', 'This request was signed for another server.');
     const nonces = opts.nonces ?? nodeRequestNonces;
     if (nonces.isSpent(h.nonce, now)) return refuse(403, 'replay', 'Replay detected: nonce already used.');
 

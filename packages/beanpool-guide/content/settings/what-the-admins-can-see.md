@@ -1,9 +1,27 @@
 ---
 slug: what-the-admins-can-see
 title: What the admins can see
-summary: In a community whose admins keep a names list: what it holds about you, who can read it, what your community's server keeps, and what being confirmed means.
-related: privacy, joining, leaving-or-deleting, admins-ai-assistants, how-your-community-works
+summary: Who can see your balance and credit line, and that every look is recorded. In a community whose admins keep a names list: what it holds about you, who can read it, and what being confirmed means.
+related: privacy, joining, leaving-or-deleting, admins-ai-assistants, how-your-community-works, credit-line, credit-risk
 ---
+
+## Who can see your balance and your credit line
+
+In a community with Beans, the join screen and "How this community works" say:
+
+"People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded."
+
+A **voucher** is a member an owner or the credit committee gave a budget to vouch from. Owners and admins give credit by their role. There is nothing to agree to and nothing to withdraw, and it needs no names list: it is the same whether or not an admin has confirmed you.
+
+- **What every giver sees:** your credit line and how much of it you can use now, your live Offers, your balance with its sign and its figure (plus or minus), how much of your line you are using, and your credit risk with the reasons any giver may read. See "Credit risk: what it reads".
+- **What only owners and admins see:** what your line is made of (the known floor, vouches and what you earned), who confirmed you and who vouched for you, a freeze, and the reasons built from those: a ring, a dispute an admin decided, when you last made a sale, and how the people you stood behind are doing.
+- **What no giver sees:** your trades, a history, or an older balance. They see your balance now, nothing before it. It is never in a notification, and it is not kept on their phone: the view lives in memory while the screen is open.
+- **Who sees none of it:** a member who is not a giver, and a moderator. Their apps never ask for it. Nor is it on the global community, or in a community with Beans off.
+- **It ends with the budget.** Your community's server decides at each request. When an owner or the credit committee stops a voucher, they see nothing from the next request on.
+
+**Every look is recorded:** who looked, at whom, on which day and as what (owner, admin or voucher). There is one line for each person, each place and each day, so a page of 30 people is 30 lines the first time that day and none on a repeat. A line is written before the answer, so a look that can't be recorded isn't answered. The record holds no balance. Every owner and admin can read it in Settings, beside the log of who looked at a balance: grouped by who looked and the day, and on one member's panel. A voucher can't read it. You are not shown the names, but you are told that looks are recorded and that the owners and admins can say who. A line is kept 12 months, then it goes.
+
+**You can read what givers see about you.** On your Ledger, **What people who give credit see** shows the answer a voucher gets about you, and this sentence. It leaves out what only owners and admins see: a ring flag shown to the people in the ring would only warn them.
 
 ## The names list
 
@@ -40,13 +58,13 @@ Every member can see who invited you on your profile, with **owner** or **admin*
 
 ## What the names list doesn't show the admins
 
-The list holds names and notes, and which account is whose. Apart from the note, above, of a debt you left owing, it doesn't show anyone your balance or your trades (an admin can see your balance in the cases below, and some of your trades: see the end of this page). See "Your privacy" for what members and admins can see otherwise.
+The list holds names and notes, and which account is whose. Apart from the note, above, of a debt you left owing, it doesn't show anyone your balance or your trades. The people who give credit see your balance and credit line as the section above says, and an admin sees your balance in the other cases below and some of your trades (see the end of this page). See "Your privacy" for what members and admins can see otherwise.
 
-## The balance rule in a known community
+## The admins' list in a known community
 
-A community that confirms its members, a **known community**, works the way a LETS always has: the admins keep an eye on debts that grow too big or stay too long. The join screen and "How this community works" say how, in your community's numbers. With the usual numbers, the join screen says how much a confirmed member can owe (the known floor), then:
+A community that confirms its members, a **known community**, works the way a LETS always has: the admins keep an eye on debts that grow too big or stay too long. The join screen and "How this community works" say how, in your community's numbers. With the usual numbers, the join screen says how much a confirmed member can owe (the known floor), then the sentence above, then:
 
-"The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged."
+"The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days."
 
 That comes with being confirmed: there is nothing to agree to and nothing to withdraw. While an admin has confirmed you:
 
@@ -56,7 +74,7 @@ That comes with being confirmed: there is nothing to agree to and nothing to wit
 
 Only an owner moves the two lines. A tighter line applies 14 days after the change, and "How this community works" says from when; a looser one applies at once.
 
-## When an admin sees your balance anyway
+## Other times your balance is seen
 
 In any community, confirmed or not:
 

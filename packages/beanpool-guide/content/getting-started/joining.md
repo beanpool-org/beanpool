@@ -36,7 +36,7 @@ To join:
 - Paste the invite link or code. If you only have a code, also type the community's name or address. The person who invited you can tell you.
 - Choose the name people will see. It needs at least 2 characters. Keep it short: when you join, names longer than 20 characters are cut short.
 - Tap **Next**. The app checks the invite and the name. If someone already has that name, it suggests others. Until it has finished, **← Back to Home** and **Restore Existing Identity** don't work.
-- In some communities the same screen also shows **What this community's admins can see**: the known floor and the rule, in your community's own numbers. There's nothing to tick. See "What the admins can see".
+- In a community with Beans the same screen also shows **What this community's admins can see**: that the people who give credit (the owners, admins and vouchers) can see your balance and your credit line and each look is recorded, and, in a known community, the known floor and the admins' list, in your community's own numbers. There's nothing to tick. See "What the admins can see".
 
 ## Joining the global community
 

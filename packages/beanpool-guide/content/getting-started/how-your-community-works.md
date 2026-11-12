@@ -3,7 +3,7 @@ slug: how-your-community-works
 title: How this community works
 summary: The rules and settings for your community: who can join, Beans, decisions, message requests, and safety.
 help: This page explains the settings on your community's card: how people join, Beans, message requests, votes and safety rules.
-related: home, joining, rules, messages, what-the-admins-can-see
+related: home, joining, rules, messages, what-the-admins-can-see, credit-risk
 ---
 
 ## How this community works
@@ -24,9 +24,13 @@ When a **Private preview** is active, the community is getting ready. Only peopl
 
 **Beans** are the community's mutual credit currency. When Beans are on, members can trade, prices are shown, credit is available, and the community has a Commons pool. When Beans are off, the community runs on mutual aid and gifts without prices or balances.
 
+## Who can see your balance and credit line
+
+In a community with Beans this page says: "People who give credit here (the owners, admins and vouchers) can see your balance and your credit line, and each look is recorded." Nothing to tick. See "What the admins can see" for what they see and "Credit risk: what it reads".
+
 ## Confirmed members and the known floor
 
-In communities where Beans and member confirmation are active, **confirmed members** can owe up to an agreed amount of Beans — the known floor — while keeping an offer listed. This gives members the confidence to start trading from day one.
+In communities where Beans and member confirmation are active, **confirmed members** can owe up to an agreed amount of Beans — the known floor — while keeping an offer listed. This gives members the confidence to start trading from day one. The page then says what the admins keep an eye on: "The admins also keep a list of confirmed members who owe more than half their credit line, or are in debit and haven't made a sale for 60 days", in your community's own numbers.
 
 ## Messages
 

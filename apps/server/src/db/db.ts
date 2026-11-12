@@ -10,7 +10,6 @@ import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
-import { runHundredthsStep, hundredthsStepLogLine } from './hundredths-step.js';
 import { readSchemaGate, writeSchemaStamp } from './schema-gate.js';
 import { getVersion } from '../version.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
@@ -492,7 +491,7 @@ export function refuseUnopenableDatabase(): void {
 
 /**
  * The boot's schema work, at every start (state-engine.ts initStateEngine). The gate first (db/schema-gate.ts): a file this
- * release may not open is refused before anything writes. Then the schema steps born since 1.2.36, schema.sql, and the
+ * release may not open is refused before anything writes. Then the schema steps born since 1.4.0, schema.sql, and the
  * passes every boot runs. The stamp is written last, once all of it has run, so `schema_release` names the release whose
  * steps ran on this file in full.
  */
@@ -504,45 +503,16 @@ export function initSchema() {
     // file, which the gate would refuse. Everything below then runs as on any later boot, and finds nothing to do.
     if (gate.kind === 'fresh') db.transaction(() => { db.exec(schemaSql); writeSchemaStamp(db, getVersion()); })();
 
-    // ── The schema steps born since 1.2.36 ────────────────────────────────────────────────────────────────────────────
-    // CONVERSION CODE (schema steps), log row CUT2, remove in 1.4.1, once every kept node has started 1.4.0. The gate opens
-    // a file last started on 1.2.36 or later (castlemaine's release, the oldest kept node's); these bring one from 1.2.36 or
-    // 1.2.37 to this release's shape, and do nothing on a file that has it. Before the schema.sql exec, which indexes some
-    // of these columns: CREATE INDEX on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds
-    // every column schema.sql names to that). On a fresh install each ALTER finds its column and does nothing.
-    //
-    // Money is whole hundredths in INTEGER *_c columns (db/hundredths-step.ts): a database from before has its old money
-    // dropped (never converted) FIRST, before anything below touches a money table. A failure changed nothing and stops
-    // the boot: this code cannot run against the old columns.
-    const hundredths = runHundredthsStep(db);
-    if (hundredths.ran) console.log(hundredthsStepLogLine(hundredths));
-    // Born in 1.2.37: what became of the voucher budget a names-bound invite promised (engine/vouchers.ts landInviteVoucher).
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN voucher_outcome TEXT`).run(); } catch { }
-    // A period of a standing deal (schema.sql standing_deals; engine/standing-deals.ts), which schema.sql indexes.
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN standing_id TEXT REFERENCES standing_deals(id)`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN period_no INTEGER`).run(); } catch { }
-    // The find hash a restore by sign-in finds a copy by (engine/recovery-find.ts), which schema.sql indexes. NULL on every
-    // existing copy until its member's first restore heals it.
-    try { db.prepare(`ALTER TABLE recovery_shares ADD COLUMN sso_find_hash TEXT`).run(); } catch { }
-    // Where a request to join came from (shared-listing door A3, engine/peek-tickets.ts peekProvenance).
-    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_post_id TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE join_requests ADD COLUMN via_sharer_pubkey TEXT`).run(); } catch { }
-    // How many asked to join from each link shared outside (the sharer's Shared outside row).
-    try { db.prepare(`ALTER TABLE peek_tickets ADD COLUMN asked INTEGER NOT NULL DEFAULT 0 CHECK (asked >= 0)`).run(); } catch { }
-    // The bell (engine/push-notices.ts): when the member took a notice off it.
-    try { db.prepare(`ALTER TABLE push_notices ADD COLUMN seen_at INTEGER`).run(); } catch { }
-    // Born after 1.2.37: the member's "Show who invited me to other members" (state-engine.ts getTrustProfileForViewer), a new
-    // column with its default, 1 (shown), which is what every member reads today; nothing is rewritten.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN inviter_shown INTEGER DEFAULT 1`).run(); } catch { }
-    // members_touch_updated_at lists inviter_shown and the hundredths columns: dropped, so the exec makes it in this release's
-    // shape (CREATE TRIGGER IF NOT EXISTS keeps a 1.2.36 one, which names the money columns the hundredths step dropped).
-    db.exec('DROP TRIGGER IF EXISTS members_touch_updated_at');
-    // ── The end of the CUT2 steps ─────────────────────────────────────────────────────────────────────────────────────
+    // ── The schema steps born since 1.4.0 ─────────────────────────────────────────────────────────────────────────────
+    // The gate opens a file 1.4.0 or later last started (db/schema-gate.ts). These bring one from 1.4.0 to this release's
+    // shape, and do nothing on a file that has it. Before the schema.sql exec, which may index their columns: CREATE INDEX
+    // on a missing column stops the whole exec (test-schema-upgrade-fresh-shape.ts holds every column schema.sql names to
+    // that). (The steps born between 1.2.36 and 1.4.0, the hundredths step among them, were log rows CUT2, B10 and B11,
+    // removed once every kept node had started 1.4.0.)
 
     // Born with Local knowledge (slice K1; DESIGN-local-knowledge-fable.md §4.1, §4.4): seven columns on posts, empty on every
     // row that is there (knowledge_helped takes its default, 0). Additions, not conversion code (Marty's pick 6, 11 Nov
-    // 2026): nothing is read or rewritten. Not part of CUT2, so they don't go with its removal; on a fresh install each finds
-    // its column and does nothing.
+    // 2026): nothing is read or rewritten. On a fresh install each finds its column and does nothing.
     for (const column of ['knowledge_sources TEXT', 'knowledge_place TEXT', 'knowledge_lang TEXT', 'knowledge_checked_at TEXT',
         'knowledge_outdated_at TEXT', 'knowledge_outdated_note TEXT', 'knowledge_helped INTEGER NOT NULL DEFAULT 0']) {
         try { db.prepare(`ALTER TABLE posts ADD COLUMN ${column}`).run(); } catch { }

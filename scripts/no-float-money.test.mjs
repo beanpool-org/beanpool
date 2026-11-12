@@ -30,7 +30,6 @@ export const MONEY_FILES = [
     'packages/beanpool-engine/src/audit.ts',
     'packages/beanpool-engine/src/known-floor.ts',
     'apps/server/src/money-body.ts',
-    'apps/server/src/db/hundredths-step.ts',
     'apps/server/src/engine/audit.ts',
     'apps/server/src/engine/escrow.ts',
     'apps/server/src/engine/escrow-write-off.ts',

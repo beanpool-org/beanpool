@@ -5,9 +5,9 @@
  * version. idx_posts_copy_authors (a plain partial index, no function in it, so an older release still opens the file)
  * makes it one seek.
  *
- *  1. A state.db a kept node last started on 1.2.36 (__fixtures__/schema-v1.2.36.sql, with posts in it; the release that
- *     made the index), booted by initSchema: the index is kept, partial on origin_node, every post kept; booted again,
- *     nothing changes. (A file from before the index is one the 1.4.0 gate refuses: db/schema-gate.ts reads this index.)
+ *  1. A state.db a kept node last started on 1.4.0 (kept-node-test-fixture.ts: __fixtures__/schema-v1.4.0.sql, stamped,
+ *     with posts in it; the index came in 1.2.36), booted by initSchema: the index is kept, partial on origin_node, every
+ *     post kept; booted again, nothing changes. (A file from before the index is one the gate refuses: db/schema-gate.ts.)
  *  2. The question's plan uses the index, and no EXISTS in it scans the posts table.
  *  3. The answers did not change: a member with a copy of their own posts held from elsewhere, with a post here, with a post
  *     for them or assigned to them, or in no way: false for the first four, true for the last, and the same as an
@@ -22,6 +22,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { makeKeptNodeDatabase } from './kept-node-test-fixture.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -30,7 +31,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const INDEX = 'idx_posts_copy_authors';
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const key = (c: string) => c.repeat(64);
 const GENESIS = 'genesis';
 const LOCAL = key('a'), COPY = key('b'), BOTH = key('c'), TARGET = key('d'), ASSIGNED = key('e'), NOBODY = key('f'), FILLER = key('1');
@@ -70,18 +70,16 @@ async function main(): Promise<void> {
     assert(!!dataDir, 'BEANPOOL_DATA_DIR is set');
     fs.mkdirSync(dataDir!, { recursive: true });
 
-    // ── 1. A database of v1.2.36, with posts in it ──
-    console.log('\n── 1. A state.db a kept node last started on 1.2.36, booted ──');
+    // ── 1. A database of v1.4.0, with posts in it ──
+    console.log('\n── 1. A state.db a kept node last started on 1.4.0, booted ──');
     const old = new Database(path.join(dataDir!, 'state.db'));
-    old.exec(fs.readFileSync(path.join(HERE, '__fixtures__', 'schema-v1.2.36.sql'), 'utf8'));
-    old.pragma('user_version = 4');
-    assert(!!old.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(INDEX), '1. the 1.2.36 file has the index, as 1.2.36 made it');
+    makeKeptNodeDatabase(old);
+    assert(!!old.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?`).get(INDEX), '1. the 1.4.0 file has the index, as 1.4.0 made it');
     const at = new Date().toISOString();
     old.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, 'Genesis', ?)`).run(GENESIS, at);
     for (const [pk, name] of [[LOCAL, 'Local'], [COPY, 'Copy'], [BOTH, 'Both'], [TARGET, 'Target'], [ASSIGNED, 'Assigned'], [NOBODY, 'Nobody'], [FILLER, 'Filler']]) {
         old.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by) VALUES (?, ?, ?, ?)`).run(pk, name, at, GENESIS);
-        // The v1.2.36 file's own column (REAL `balance`): the boot's hundredths step drops old money (db/hundredths-step.ts).
-        old.prepare(`INSERT INTO accounts (public_key, balance) VALUES (?, 0)`).run(pk);
+        old.prepare(`INSERT INTO accounts (public_key, balance_c) VALUES (?, 0)`).run(pk);
     }
     // A post for a member and one assigned to a member are set after the first boot, through the booted connection.
     const addPost = old.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey, origin_node)

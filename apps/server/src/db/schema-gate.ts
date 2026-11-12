@@ -4,18 +4,17 @@
  *
  * The stamp is two things in the file: `PRAGMA user_version` = SCHEMA_STAMP (5), and node_config `schema_release`, the
  * release whose schema steps last ran on it in full (initSchema writes it at the end of a boot that got that far). At
- * open, readSchemaGate says which of four cases the file is, reading only:
+ * open, readSchemaGate says which of three cases the file is, reading only:
  *
  *  1. `fresh`: no table at all. A fresh install: initSchema writes schema.sql and the stamp in one transaction, so a
  *     first boot stopped part way leaves no half-made file that a later boot would refuse.
- *  2. `stamped`: user_version 5 and a schema_release row. Opens, and the boot writes its own release.
- *  3. `release-1.2.36`: user_version 4 and the 1.2.36 shape (RELEASE_1_2_36_OBJECT, the one object born in 1.2.36). A
- *     database a kept node last started on 1.2.36 or 1.2.37: it opens, the schema steps born since run (db.ts, CUT2),
- *     and the stamp is written once they have.
- *     CONVERSION CODE, log row CUT1, remove in 1.4.1: it recognises an unstamped database and marks it. It goes once the
- *     four kept nodes have started 1.4.0; from then on a database is stamped or it is refused.
- *  4. `refused`: anything else (a database last started before 1.2.36, or by a release newer than this one). One line,
- *     and the process stops. Nothing has been written, so the file is byte for byte as it was.
+ *  2. `stamped`: user_version 5 and a schema_release row: a database 1.4.0 or later last started. Opens, and the boot
+ *     writes its own release.
+ *  3. `refused`: anything else (a database last started before 1.4.0, which is unstamped, or by a release newer than
+ *     this one). One line, and the process stops. Nothing has been written, so the file is byte for byte as it was.
+ *
+ * (1.4.0 alone also opened an unstamped database a kept node last started on 1.2.36 or 1.2.37, and stamped it: conversion
+ * code, log row CUT1, removed in the release after every kept node had started 1.4.0.)
  *
  * The standing rule from here (§1): a release keeps only the schema steps born since the previous release, the gate's
  * minimum is that previous release, and each step has a log row that is removed in the next release. An operator who
@@ -30,16 +29,9 @@ export const SCHEMA_STAMP = 5;
 /** The node_config key that holds the release whose schema steps last ran on this file in full. */
 export const SCHEMA_RELEASE_KEY = 'schema_release';
 
-/**
- * The one object born in 1.2.36 (schema.sql's partial index for "does this member have a copy held from another node?",
- * routes/home-listings.ts): a user_version 4 file that has it was last started by 1.2.36 or later. Read by gate rule 3
- * only (CUT1), and goes with it in 1.4.1.
- */
-export const RELEASE_1_2_36_OBJECT = 'idx_posts_copy_authors';
-
-/** What an operator reads when the file was last started before 1.2.36 (§1's words). Nothing was written. */
-export const REFUSED_TOO_OLD = 'This database was last started by a BeanPool older than 1.2.36. BeanPool 1.4.0 opens databases from 1.2.36 on. '
-    + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.2.36, then start this version again. Nothing was changed.';
+/** What an operator reads when the file was last started before 1.4.0 (§1's words). Nothing was written. */
+export const REFUSED_TOO_OLD = 'This database was last started by a BeanPool older than 1.4.0. This version opens databases from 1.4.0 on. '
+    + 'Start it once on ghcr.io/beanpool-org/beanpool-node:1.4.0, then start this version again. Nothing was changed.';
 
 /** What an operator reads when a newer release has stamped the file (rollback by image, which §1 rules out). Nothing was written. */
 export const refusedTooNew = (stamp: number): string =>
@@ -49,10 +41,9 @@ export const refusedTooNew = (stamp: number): string =>
 export type SchemaGate =
     | { kind: 'fresh' }
     | { kind: 'stamped'; release: string }
-    | { kind: 'release-1.2.36' }
     | { kind: 'refused'; line: string };
 
-/** Which of the four cases this file is (above). Reads only: never writes, never throws on a file SQLite can read. */
+/** Which of the three cases this file is (above). Reads only: never writes, never throws on a file SQLite can read. */
 export function readSchemaGate(conn: Database.Database): SchemaGate {
     const has = (type: string, name: string) => !!conn.prepare('SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?').get(type, name);
     const tables = (conn.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'`).get() as { n: number }).n;
@@ -66,8 +57,6 @@ export function readSchemaGate(conn: Database.Database): SchemaGate {
         } catch { /* a node_config no release made (no key or value column): no stamp */ }
         if (typeof release === 'string') return { kind: 'stamped', release };
     }
-    // CONVERSION CODE, log row CUT1, remove in 1.4.1: an unstamped database a kept node last started on 1.2.36 or 1.2.37.
-    if (stamp === 4 && has('index', RELEASE_1_2_36_OBJECT)) return { kind: 'release-1.2.36' };
     return { kind: 'refused', line: REFUSED_TOO_OLD };
 }
 

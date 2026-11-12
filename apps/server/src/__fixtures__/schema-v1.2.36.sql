@@ -1,6 +1,7 @@
 -- apps/server/src/db/schema.sql as released in v1.2.36 (`git show v1.2.36:apps/server/src/db/schema.sql`), unchanged below this
--- header: the oldest shape 1.4.0's gate opens (db/schema-gate.ts), castlemaine's release at the cutover. A file made from it,
--- with user_version 4, is a database a kept node last started on 1.2.36 (test-schema-gate.ts and the upgrade suites).
+-- header: the oldest shape 1.4.0's gate opened, castlemaine's release at the cutover. The gate refuses it since that rule went
+-- (db/schema-gate.ts, log row CUT1): a file made from it, with user_version 4, is a database a node last started on 1.2.36,
+-- which test-schema-gate.ts sees refused and left as it was.
 -- 1. Members and Profiles
 CREATE TABLE IF NOT EXISTS members (
     public_key TEXT PRIMARY KEY,

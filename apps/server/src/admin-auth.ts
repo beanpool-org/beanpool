@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, isPhoneHandoffSession, FRESH_PROOF_WINDOW_MS, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, type AdminSessionBinding } from './admin-key-auth.js';
-import { acquirePasswordAttempt, settlePasswordAttempt, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
+import { acquirePasswordAttempt, settlePasswordAttempt, refuseBraked, resetPasswordBrake, passwordBrakeNow, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
 import { logger } from './logger.js';
@@ -441,7 +441,7 @@ const breakGlassWhileBraked = new Map<string, number>();
 let breakGlassWhileBrakedNode: number[] = [];
 
 /** 0 when this held source may have its code checked now; otherwise the seconds to wait. */
-function admitBreakGlassWhileBraked(key: string, now = Date.now()): number {
+function admitBreakGlassWhileBraked(key: string, now = passwordBrakeNow()): number {
     const last = breakGlassWhileBraked.get(key);
     if (last !== undefined && now - last < BREAK_GLASS_WHILE_BRAKED_MS) return Math.ceil((BREAK_GLASS_WHILE_BRAKED_MS - (now - last)) / 1000);
     breakGlassWhileBrakedNode = breakGlassWhileBrakedNode.filter(t => now - t < 60_000);

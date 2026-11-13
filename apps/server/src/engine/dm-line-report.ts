@@ -16,7 +16,7 @@
 //   signature that fails reads as such.
 // - A voice part kept with a report (submitDmLineReport) is held to the gates a stored voice line is: its reporter's day of
 //   photo bytes and the free-disk floor, refused in the send path's words with nothing filed. Its signature alone doesn't
-//   need the line to be stored, and a report is kept for good, so this is the one limit on what a pair can file that way.
+//   need the line to be stored, and a report is kept for good: without these, a pair could file parts no send would store.
 //
 // Who may report a line: the other person in a direct conversation it is in, and only that line. Anything else answers as
 // an id nobody has (GROUP_LINE_REPORT_NOT_FOUND), a conversation they are not in included.

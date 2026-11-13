@@ -12,7 +12,7 @@ import {
     getAllMembers, getAllProfiles, getMember, getAdminMembersPage, parseAdminMemberPageKey, getAdminMemberCounts, type Member,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
-    adminSetCreditFrozen, broadcast, dispatchPushNotification,
+    adminSetCreditFrozen, creditFreezeRefusal, CREDIT_FREEZE_WORDS, broadcast, dispatchPushNotification,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
@@ -71,7 +71,7 @@ import { APP_PLATFORMS, appStoreCheckDisabled, getMinAppVersion, getMinAppVersio
 import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, TOKEN_REFUSED_CODE, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
-import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpool/core';
+import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText, wordsFor } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import { setMemberBadge, BadgeError } from '../engine/badges.js';
@@ -930,6 +930,12 @@ function adminMemberRows(members: Member[], keys?: string[]) {
     for (const r of rolesList) {
         rolesByPubkey.set(r.member_pubkey, r.role);
     }
+    // The member's credit freeze as the node holds it (members.credit_frozen), so the manager's Freeze shows what the node
+    // did, not a guess: a refused freeze never shows as frozen, nor a done one as unfrozen after a refresh (the deciding
+    // review of #3121; Marty, 14 Nov 2026: four presses each froze, and the panel showed none of them).
+    const frozenKeys = new Set(((keys
+        ? db.prepare(`SELECT public_key FROM members WHERE credit_frozen = 1 AND public_key IN (SELECT value FROM json_each(?))`).all(JSON.stringify(keys))
+        : db.prepare(`SELECT public_key FROM members WHERE credit_frozen = 1`).all()) as Array<{ public_key: string }>).map(r => r.public_key));
 
     return members.filter(m => m.status !== 'pruned').map(m => {
         // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
@@ -955,6 +961,7 @@ function adminMemberRows(members: Member[], keys?: string[]) {
             badge: memberBadge(db, m.publicKey),
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
+            creditFrozen: frozenKeys.has(m.publicKey),
         };
     });
 }
@@ -1808,18 +1815,37 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     ctx.body = { success: true };
 });
 
+// Freeze or unfreeze a member's whole credit line (the manager's "Freeze"; Marty, 14 Nov 2026). An owner or admin, by their
+// own key session, which names them in the log; never their own account, and only an owner an owner (state-engine
+// creditFreezeRefusal), with the phone's step-up there (adminActionNeedsOwner 'freeze'). Body: { freeze }.
 router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can freeze a member.')) return;
+    const actor = (ctx.state as any)?.actor;
+    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: wordsFor('en').t(CREDIT_FREEZE_WORDS.keyOnly), code: 'key_session_only' };
+        return;
+    }
+    const target = ctx.params.pubkey;
+    const refusal = creditFreezeRefusal(actor, target);
+    if (refusal) {
+        ctx.status = refusal.status;
+        ctx.body = { error: refusal.error, code: refusal.code };
+        return;
+    }
+    if (!stepUpIfOwnerOnly(ctx, 'freeze', target, actor)) return;
     const body = (ctx as any).requestBody || {};
     const freeze = body.freeze === true;
     try {
-        const ok = adminSetCreditFrozen(ctx.params.pubkey, freeze);
+        const ok = adminSetCreditFrozen(target, freeze);
         if (!ok) {
             ctx.status = 404;
             ctx.body = { error: 'Member not found' };
             return;
         }
-        logger.info('ADMIN', `${freeze ? 'Froze' : 'Unfroze'} credit floor for ${ctx.params.pubkey.substring(0, 12)}`);
+        // Whom, then by whom (both short keys); the log row carries when.
+        logger.info('ADMIN', `${freeze ? 'Froze' : 'Unfroze'} the credit line of ${target.substring(0, 12)} by ${actor.substring(0, 12)}`);
         ctx.body = { success: true, frozen: freeze };
     } catch (e: any) {
         ctx.status = 400;

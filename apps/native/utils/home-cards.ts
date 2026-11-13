@@ -793,9 +793,11 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
 export function cardsToAsk(
     layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards } | null,
 ): string[] {
-    // A Home never saved is Getting started, and the starter set at Skip or Done: their bodies are asked for already, so
-    // the five are drawn the moment the tour ends, with no second read (DESIGN-getting-started-fable.md §1).
-    const base = layout ?? { ...defaultHomeLayout(), cards: [...defaultHomeLayout().cards, ...starterCards()] };
+    // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
+    // has answered, the caller passes the global node's profile when the phone's copy says it is that one (index.tsx
+    // `globalAsk`, §2.9); with nothing known, the node builds none it doesn't show (routes/home-answer.ts `shownHere`), and
+    // once an answer is in hand only those it shows are asked (review of #1699, finding 5).
+    const base = layout ?? defaultHomeLayout();
     return frameCardsToAsk(base, pinned).filter(id => {
         const type = base.cards.find(l => l.id === id)?.type ?? id;
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));

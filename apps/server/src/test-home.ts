@@ -1469,6 +1469,13 @@ async function main(): Promise<void> {
             `Beans off: no Beans card and her balance nowhere in her answer (${cardsOf(gated).join(',')})`);
         assert(gated.body?.cards?.deals === undefined && !gated.body?.cards?.needs?.items?.some((i: any) => i.kind === 'deal') && !gated.text.includes('tx-home-global'),
             'escrow off: no deals card and no deal line, though a deal waits on her');
+        // A first read from an app with no answer yet asks for the default list (DESIGN-home-default-fable.md §2.2), Your Beans,
+        // Your deals and Decide among it: the worldwide community builds none of them, nor an enterprise's (review of #1699, finding 5).
+        const builtBefore = ['beans', 'deals', 'enterprise', 'decide'].map(k => homeCardBuilds[k] ?? 0);
+        const firstRead = await get('/api/home?cards=needs,beans,deals,enterprise,decide,market,community', alice);
+        assert(firstRead.status === 200 && ['beans', 'deals', 'enterprise', 'decide'].every(k => firstRead.body?.cards?.[k] === undefined)
+            && JSON.stringify(['beans', 'deals', 'enterprise', 'decide'].map(k => homeCardBuilds[k] ?? 0)) === JSON.stringify(builtBefore),
+            `asked for Beans, deals, enterprise and Decide, global builds none of them (${cardsOf(firstRead).join(',')}; builds ${JSON.stringify(builtBefore)})`);
         // No community listed yet here: a count of 0 is left out (DESIGN-home-default-fable.md §2.7).
         const listed = listedCommunityCount();
         assert(c.find?.point === 'area' && (listed === 0 ? !('communities' in (c.community ?? {})) : c.community?.communities === listed) && c.community?.tradesThisMonth === undefined,

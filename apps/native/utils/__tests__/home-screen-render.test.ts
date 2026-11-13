@@ -190,7 +190,7 @@ import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import * as tourStore from '../tour-store';
-import { DEFAULT_PRICING_CATALOG, START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
+import { DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, HOME_STARTER_SET, START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { QUIET_OPACITY } from '../../components/home/quiet';
 import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
@@ -379,6 +379,14 @@ const cards = () => Array.from(document.querySelectorAll('[data-testid^="home-ca
     .filter(id => !id.endsWith('-menu'));
 const byLabel = (label: string) => document.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
+/**
+ * A newcomer's Home past the tour as this file's local member draws it: the default list less Welcome, in its order
+ * (DESIGN-home-default-fable.md §2.2), each card drawn only where the fixture gives it something to say.
+ */
+const NEWCOMER_DRAWN = ['market', 'steps', 'interests', 'events', 'beans', 'joined', 'tips', 'community'];
+/** The default list less Welcome, less Coming up; and less the Market too (the edits the standby tests make). */
+const STARTER_LESS_EVENTS = HOME_STARTER_SET.filter(id => id !== 'events');
+const STARTER_LESS_BOTH = HOME_STARTER_SET.filter(id => id !== 'events' && id !== 'market');
 const marketOrder = () => Array.from(document.querySelectorAll('[data-testid^="home-market-p"]')).map(e => e.getAttribute('data-testid')!.replace('home-market-', ''));
 // What the phone sent since a point, the cards a layout save named, the phone-only mark (index.tsx `phoneOver`), a Remove
 // through a card's "…" menu, and whether Arrange says the cards aren't on the account yet (review of #1699, confirmation).
@@ -851,7 +859,7 @@ describe('links into Home, and the "one way back" card', () => {
         // No copy of the member's list on this phone, and the account's names nothing: unknown, so the newcomer's list is
         // drawn and its one read is enough (review of #1699, finding 2: an empty version-1 list is not "every card").
         expect(node.requests.map(r => new URL(r.url).pathname)).toEqual(['/api/home']);
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
     });
 
     it('"+ ADD POST" opens the same chooser as the Market\'s', async () => {
@@ -1720,7 +1728,7 @@ describe('Arrange', () => {
         await press('home-arrange-reset');
         expect(has('home-arrange-bar')).toBe(true);
         await done();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
     });
 
     it('Done saves nothing, and gives TalkBack back what opened it; from a "…", that "…"', async () => {
@@ -2671,7 +2679,7 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         await render();
         // Not every version-1 card: the newcomer's list.
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
         await act(async () => { byLabel('Card options for Coming up')!.click(); });
         await act(async () => { byLabel('Remove Coming up from Home')!.click(); });
         await settle();
@@ -2728,7 +2736,7 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         const when = at();
         asOnTheStandby(when);
         await render();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
         node.refuse = 0;
         node.answer = { ...localMember(), layout: real(when) as never };
         const before = node.requests.length;
@@ -2770,18 +2778,18 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         await removeVia('events');
         // Each read asks the edited list, so it carries no tag (another list): a 200.
         expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 400']);
-        // The newcomer's list less Coming up (Your way back in, Asked near you and Notices are on it, drawn when they have something).
-        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices']);
+        // The newcomer's list less Coming up (the cards with nothing to say are on it, drawn when they have something).
+        expect(sentIds(posts().at(-1)!)).toEqual(STARTER_LESS_EVENTS);
         expect(mem.store.get(markKey())).toBe(when);
         before = node.requests.length;
         await removeVia('market');
         expect(trace(before)).toEqual(['GET /api/home 200']);
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN.filter(id => id !== 'market' && id !== 'events'));
         before = node.requests.length;
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(trace(before)).toEqual(['GET /api/home 304', 'POST /api/members/preferences 400']);
-        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'asked', 'notices']);
+        expect(sentIds(posts().at(-1)!)).toEqual(STARTER_LESS_BOTH);
     });
 
     it('an updated node that holds a real empty version-1 list gets the edit right after the read, and the mark is gone', async () => {
@@ -2792,9 +2800,9 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         const before = node.requests.length;
         await removeVia('events');
         expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
-        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices']);
+        expect(sentIds(posts().at(-1)!)).toEqual(STARTER_LESS_EVENTS);
         expect(mem.store.has(markKey())).toBe(false);
-        expect(phoneIds()).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices']);
+        expect(phoneIds()).toEqual(STARTER_LESS_EVENTS);
     });
 });
 
@@ -2804,9 +2812,9 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     const phoneIds = () => ids(JSON.parse(mem.store.get(homeLayoutStoreKey(who.identity.publicKey, NODE)) ?? 'null'));
     const sentKey = () => homeLayoutPhoneOnlySentStoreKey(who.identity.publicKey, NODE);
     const stampOf = (l: unknown) => ((l as { updatedAt?: string } | null)?.updatedAt ? Date.parse((l as { updatedAt: string }).updatedAt) : -Infinity);
-    // The newcomer's list less Coming up, then less the Market too (Your way back in and Notices are on it).
-    const LESS_EVENTS = ['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices'];
-    const LESS_BOTH = ['safety', 'steps', 'tips', 'interests', 'asked', 'notices'];
+    // The newcomer's list less Coming up, then less the Market too (the cards with nothing to say are on it).
+    const LESS_EVENTS = STARTER_LESS_EVENTS;
+    const LESS_BOTH = STARTER_LESS_BOTH;
 
     function emptyV1(when: string) {
         node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: when } as never };
@@ -2969,7 +2977,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         emptyV1(iso(Date.now() - 2 * H));
         const save = slowFirstSave();
         await render();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
         let before = node.requests.length;
         await removeVia('events');
         expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
@@ -3147,10 +3155,14 @@ describe('the global node is never asked for a card it doesn\'t show (review of 
         const base = globalMember(60);
         node.answer = { ...base, layout: { v: 1, order: ['pulse'], hidden: [], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) } as never };
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
+        // The phone's copy of the node's profile (utils/node-profile.ts, kept current by the tab strip): the first read, with
+        // no answer in hand, asks the default list (DESIGN-home-default-fable.md §2.2) less what global never shows (§2.9).
+        rememberProfile('global');
         await render();
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(homeReads().length).toBeGreaterThan(1);
+        expect(homeCards()[0]).toEqual(expect.arrayContaining(['market', 'steps']));
         for (const asked of homeCards()) {
             for (const off of ['beans', 'deals', 'enterprise', 'decide']) expect(asked).not.toContain(off);
         }
@@ -3614,10 +3626,11 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         expect(fewerLines()).toHaveLength(1);
         expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
         // Drawn with the newcomer's list (§3), under the first card (where the one-time hint goes).
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
-        const first = document.querySelector('[data-testid="home-card-steps"]')!;
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
+        // The first card is New in the Market now (DESIGN-home-default-fable.md §2.2), First steps the second.
+        const first = document.querySelector('[data-testid="home-card-market"]')!;
         expect(first.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-        expect(document.querySelector('[data-testid="home-card-tips"]')!.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+        expect(document.querySelector('[data-testid="home-card-steps"]')!.compareDocumentPosition(fewerLines()[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
         // Nothing is written for them: they still never edited.
         expect(mem.store.has(phoneKey())).toBe(false);
         expect(posts()).toHaveLength(0);
@@ -3634,7 +3647,7 @@ describe('the frame on screen: the fewer-cards line, the standby tie, a newer ap
         node.answer = longStanding({ v: 1, order: [], hidden: [], dismissed: { safety: iso(Date.now() - 20 * DAY) }, updatedAt: iso(Date.now() - 20 * DAY) });
         mem.store.delete(phoneKey());
         await render();
-        expect(cards()).toEqual(['steps', 'tips', 'interests', 'market', 'events', 'community']);
+        expect(cards()).toEqual(NEWCOMER_DRAWN);
         expect(fewerLines()).toHaveLength(1);
         expect(fewerLines()[0].textContent).toContain(FEWER_CARDS_LINE);
         expect(posts()).toHaveLength(0);
@@ -4028,14 +4041,15 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
     });
 
-    it('a newcomer sees Getting started between Needs you and Your community, with Look around and Skip, no "…"; the five are asked for already', async () => {
+    it('a newcomer sees Welcome first and the default list under it, with Look around and Skip, no "…"; nothing folds behind it', async () => {
         await render();
-        expect(cards()).toEqual(['start', 'community']);
+        // DESIGN-home-default-fable.md §2.2: the cards are there from the first second.
+        expect(cards()).toEqual(['start', ...NEWCOMER_DRAWN]);
         expect(document.querySelector('[data-testid="home-start-words"]')!.textContent).toBe(START_CARD_WORDS);
         expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe('Look around ›');
         expect(byLabel('Skip the tour')).not.toBeNull();
         expect(document.querySelector('[data-testid="home-card-start-menu"]')).toBeNull();
-        // The starter set's bodies come with the first read, so Skip draws them with no second read.
+        // The default list's bodies come with the first read.
         expect(new URL(homeReads()[0].url).searchParams.get('cards')!.split(',')).toEqual(expect.arrayContaining(['steps', 'events', 'market', 'notices']));
         // Never auto-plays.
         expect(tourStore.currentTour()).toBeNull();
@@ -4054,31 +4068,28 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(document.querySelector('[data-testid="add-card-sheet"]')).not.toBeNull();
     });
 
-    it('Skip: one layout write with the starter set, the account\'s record "skipped", the card gone and the five drawn', async () => {
+    it('Skip: one layout write, the default list less Welcome (nothing added), the account\'s record "skipped", the card gone', async () => {
         await render();
         const from = node.requests.length;
         await act(async () => { byLabel('Skip the tour')!.click(); });
         await settle(20);
         const posts = prefsPosts(from).map(r => JSON.parse(r.body).preferences);
         const layoutWrite = posts.find(p => 'home.layout' in p);
-        expect(layoutWrite['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'events', 'notices']);
+        expect(layoutWrite['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual([...HOME_STARTER_SET]);
         expect(posts.find(p => 'tour' in p)?.tour).toMatchObject({ v: 1, state: 'skipped' });
         expect(cards()).not.toContain('start');
         expect(cards()).toEqual(expect.arrayContaining(['steps', 'market', 'events']));
     });
 
-    it('the chips go on Home through the picker\'s own add; Done with a pick keeps the pick alone and writes "done"', async () => {
+    it('the last step offers no chips; Done removes Welcome, adds nothing and writes "done"', async () => {
         await render();
-        const home = tourStore.tourHome()!;
-        expect(home.chips).toEqual(['steps', 'market', 'beans']);
-        await act(async () => { home.addChip('beans'); });
-        await settle(20);
-        expect(tourStore.tourHome()!.onHome('beans')).toBe(true);
+        // DESIGN-home-default-fable.md §2.3: Home already holds the default list.
+        expect(tourStore.tourHome()!.chips).toEqual([]);
         const from = node.requests.length;
         await act(async () => { tourStore.tourHome()!.end('done'); });
         await settle(20);
         const posts = prefsPosts(from).map(r => JSON.parse(r.body).preferences);
-        expect(posts.find(p => 'home.layout' in p)['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual(['beans']);
+        expect(posts.find(p => 'home.layout' in p)['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual([...HOME_STARTER_SET]);
         expect(posts.find(p => 'tour' in p)?.tour).toMatchObject({ v: 1, state: 'done' });
         expect(cards()).not.toContain('start');
     });
@@ -4156,7 +4167,8 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
             node.answer = { ...base, me, layout: null, features: { ...base.features, showcase } };
             mem.store.set(`beanpool_tour_progress_${who.identity.publicKey}`, JSON.stringify({ v: 1, step: 7, startedAt: iso(Date.now() - H) }));
             await render();
-            expect(cards()).toEqual(['needs', 'find', 'start', 'community']);
+            // The default list under the pinned Find your community (DESIGN-home-default-fable.md §2.9): nothing folds behind Welcome.
+            expect(cards()).toEqual(['needs', 'find', 'start', 'market', 'steps', 'events', 'groups', 'notices', 'joined', 'tips', 'community']);
             const step = showcase ? 7 : 5;
             expect(document.querySelector('[data-testid="home-start-look"]')!.textContent).toBe(`Pick up the tour at step ${step + 1} ›`);
             await act(async () => { (document.querySelector('[data-testid="home-start-look"]') as HTMLElement).click(); });
@@ -4216,16 +4228,17 @@ describe('the Your Beans card where Beans are previewed: its own card, put away 
         expect(cards()).toContain('steps');
     });
 
-    // Both designs: a newcomer's global Home is Needs you · Find your community · Getting started · Your community, and
-    // the example waits in the tour's Ledger step (DESIGN-getting-started-fable.md §0, §1; pick 10). Skip brings it.
-    it('a newcomer on the worldwide community: none while Getting started is up; Skip brings it, under First steps', async () => {
+    // A newcomer's global Home is the default list under Find your community (DESIGN-home-default-fable.md §2.9), and the
+    // example still waits in the tour's Ledger step while Welcome is up (DESIGN-getting-started-fable.md pick 10). Skip brings it.
+    it('a newcomer on the worldwide community: none while Welcome is up; Skip brings it, under First steps', async () => {
         const a = showcase();
         const { tour: _t, ...me } = a.me!;
         node.answer = { ...a, me, layout: null };
         mem.store.delete(homeLayoutStoreKey(who.identity.publicKey, NODE));
         tourStore.closeTour();
         await render();
-        expect(cards()).toEqual(['needs', 'find', 'start', 'community']);
+        expect(cards().slice(0, 3)).toEqual(['needs', 'find', 'start']);
+        expect(cards()).toContain('steps');
         expect(beansCard()).toBeNull();
         await act(async () => { byLabel('Skip the tour')!.click(); });
         await settle(20);

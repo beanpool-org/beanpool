@@ -460,9 +460,10 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
 export function cardsToAsk(
     layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards'> | null,
 ): string[] {
-    // A Home never saved is Getting started, and the starter set at Skip or Done: their bodies are asked for already, so
-    // the five are drawn the moment the tour ends, with no second read (DESIGN-getting-started-fable.md §1).
-    const base = layout ?? { ...defaultHomeLayout(), cards: [...defaultHomeLayout().cards, ...starterCards()] };
+    // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
+    // has answered, the app can't tell which of them it shows: the node builds none it doesn't (routes/home-answer.ts
+    // `shownHere`), and once an answer is in hand only those it shows are asked (review of #1699, finding 5).
+    const base = layout ?? defaultHomeLayout();
     return frameCardsToAsk(base, pinned).filter(id => {
         const type = base.cards.find(l => l.id === id)?.type ?? id;
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));

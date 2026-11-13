@@ -73,7 +73,7 @@ import {
     NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, standingNeedsLines,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
-    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver,
+    type ShopCounts, type TourRecord, HUNDREDTHS_PER_BEAN, knowledgeToCheckLine, wordsFor, decidePollOrder, firstStepsOver, homeCardType, type HomeNodeFacts,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -1570,6 +1570,20 @@ const BUILDERS: Partial<Record<string, Builder>> = {
     beans: beansCard, notices: noticesCard, community: communityCard,
 };
 
+/**
+ * The cards whose catalogue entry (core home-frame.ts `onNode`) says this node shows them only with its money, enterprise
+ * or Decide switches, never on the worldwide community: none is built where that says no, whoever asks. A first read from
+ * an app holding no answer yet asks for the default list (DESIGN-home-default-fable.md §2.2), Your Beans, Your deals and
+ * Decide among it, before it can know which node this is (the web's first read sends no `cards=`, so the node picks that
+ * list itself); a builder that ran for them here would be a body nobody draws (review of #1699, finding 5: Decide's polls
+ * query on global). `facts` is the answer's own `profile` and `features`, so this is the apps' `cardOnNode` for these four.
+ */
+const GATED_BY_NODE: ReadonlySet<string> = new Set(['beans', 'deals', 'enterprise', 'decide']);
+function shownHere(type: string, facts: HomeNodeFacts): boolean {
+    if (!GATED_BY_NODE.has(type)) return true;
+    return homeCardType(type)?.onNode(facts) === true;
+}
+
 /** Whether this reader may have this card at all: their own cards, the community's, or the visitors' subset. */
 function mayHave(c: Ctx, id: string): boolean {
     if (id === 'community') return true;
@@ -1650,10 +1664,11 @@ export function buildHome(reader: HomeReader): HomeBuilt {
     };
 
     const cards: HomeCards = {};
+    const facts: HomeNodeFacts = { profile: getNodeProfile(), features: { ...features, door } };
     for (const instance of cardsToBuild(c, reader.asked, layout, row?.joinedAt ?? null)) {
         const { id, type } = instance;
         const build = BUILDERS[type];
-        if (!build || !mayHave(c, type)) continue;
+        if (!build || !mayHave(c, type) || !shownHere(type, facts)) continue;
         // One card that can't be read is left out, never the whole screen (nothing on Home blocks the app): the next
         // read tries again, and the tag of an answer without it is a different tag.
         let card: unknown;

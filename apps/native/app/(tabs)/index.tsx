@@ -183,6 +183,9 @@ async function readsGlobal(url: string, kept: StoredHome | null): Promise<boolea
     return (await getCachedNodeProfile(url).catch(() => null))?.profile === 'global';
 }
 
+/** What `cardsToAsk` filters by before the first answer: the global node's profile when the phone knows it is that one, else nothing (every card asked, the answer says which stay). */
+const globalAsk = (global: boolean) => (global ? { profile: 'global' as const, features: {} } : undefined);
+
 export default function HomeScreen() {
     const { colors, theme } = useTheme();
     const { identity } = useIdentity();
@@ -520,8 +523,9 @@ export default function HomeScreen() {
         const u = raw.replace(/\/+$/, '');
         setUrl(u);
         const held = storedRef.current?.url === u ? storedRef.current : null;
-        const asked = cardsToAsk(pickLayout(held?.answer.layout ?? null, null, held?.answer.layoutV1, null).layout, askPinned(held?.answer, Date.now()), held?.answer);
-        const point = (await readsGlobal(u, held)) ? await lastKnownPlace() : null;
+        const global = await readsGlobal(u, held);
+        const asked = cardsToAsk(pickLayout(held?.answer.layout ?? null, null, held?.answer.layoutV1, null).layout, askPinned(held?.answer, Date.now()), held?.answer ?? globalAsk(global));
+        const point = global ? await lastKnownPlace() : null;
         const read = await readVisitorHome(u, asked, { point });
         if (identityRef.current) return;
         setPlace(was => (was?.lat === point?.lat && was?.lng === point?.lng ? was : point));
@@ -587,9 +591,11 @@ export default function HomeScreen() {
         // (the first landing), from what this read brings, at its end.
         const tipsLandNow = why === 'focus' && !!cached?.answer.me;
         if (tipsLandNow) void landTips(whose);
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1, phoneOver.current).layout, askPins(cached?.answer), cached?.answer);
         // The global node only: "near you" from where the phone is (where location is already allowed).
         const global = await readsGlobal(u, cached);
+        // With no answer in hand, a node the phone already knows is the global one is asked none of the default list's cards
+        // it never shows (Your Beans, Your deals, Decide: DESIGN-home-default-fable.md §2.9, `globalAsk`).
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1, phoneOver.current).layout, askPins(cached?.answer), cached?.answer ?? globalAsk(global));
         const point = global ? await lastKnownPlace() : null;
         if (identityRef.current?.publicKey !== id.publicKey || !stillOnPhone(whose)) return;
         setPlace(was => (was?.lat === point?.lat && was?.lng === point?.lng ? was : point));

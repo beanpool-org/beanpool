@@ -250,14 +250,19 @@ export default function ProfileSetupScreen() {
                     });
                     const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
-                    if (res.status === 409) {
-                        const answer = await res.json().catch(() => null);
+                    // A 409, or a 400 that refuses the name for good (too short, or an invite or a web address, such as a
+                    // link name copied here from another community), sends the member back to the name step in the
+                    // community's words. Any other answer is no refusal of the name: kept, as offline, for the retry.
+                    const answer = res.ok ? null : await res.json().catch(() => null);
+                    if (res.status === 409 || (res.status === 400 && nameRefusedForGood(res.status, answer?.error))) {
                         const serverMsg = answer?.message;
                         if (pending && sentName !== undefined && sentName === pending.callsign && nameRefusedForGood(res.status, answer?.error)) {
                             await pendingNameRefused(url, pending, sentName);
                         }
                         setStep('name');
-                        setError(serverMsg || t('That name was just taken — please pick another.'));
+                        setError(serverMsg || (res.status === 409
+                            ? t('That name was just taken — please pick another.')
+                            : t('The community node rejected this profile update. Please try again.')));
                         return; // finally clears loading; name-step effect refreshes suggestions
                     }
                     published = res.ok;

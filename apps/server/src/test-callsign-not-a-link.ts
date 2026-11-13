@@ -108,6 +108,11 @@ async function main(): Promise<void> {
     console.log('\n── 3. the profile ──');
     const rename = await call('POST', dee, '/api/profile/update', { callsign: 'https://example.org/me' });
     assert(refusedAs(rename, NAME_BOX_WORDS.webLink), `a rename to a web address: 400 callsign_link (got ${rename.status} ${JSON.stringify(rename.body)})`);
+    // As this route's other name refusals answer (callsign_taken, callsign_too_short): the code in `error`, the line in
+    // `message`. The phone reads `error` to drop a waiting name for good (apps/native/utils/pending-profile-sync.ts
+    // nameRefusedForGood): a sentence there kept a copied link name, and the photo with it, resent at every sync.
+    assert(rename.body?.error === 'callsign_link' && rename.body?.message === NAME_BOX_WORDS.webLink,
+        `the profile route's refusal has error "callsign_link" and the line in message (got ${JSON.stringify(rename.body)})`);
     const renameInvite = await call('POST', dee, '/api/profile/update', { callsign: HER_LINK });
     assert(refusedAs(renameInvite, NAME_BOX_WORDS.inviteLink), `a rename to her invite link, read whole before the 32-character cut, says invite link (got ${renameInvite.status} ${JSON.stringify(renameInvite.body)})`);
     assert(nameOf(dee.pk) === 'Dee Dee', 'and the name is unchanged');

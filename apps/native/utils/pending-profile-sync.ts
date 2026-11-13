@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { archetypeIsAfter, archetypeIsNewer } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, CALLSIGN_LINK_CODE } from '@beanpool/core';
 import { plainOriginOf } from './node-url';
 import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, PENDING_PROFILE_STORE_PREFIX } from './storage-keys';
 
@@ -22,12 +22,12 @@ import { PENDING_ARCHETYPE_STORE_PREFIX, PENDING_PROFILE_REFUSAL_STORE_PREFIX, P
  * The bio and contact are in the row, which no sync writes over, and the retry reads them from there. An entry with
  * neither still says a change is waiting there: the retry publishes that community's row.
  *
- * A name the community refuses for good (nameRefusedForGood: someone else holds it there, or it is too short) would get
- * the same answer every time, and the photo and bio waiting with it would never arrive. So it leaves the entry
- * (pendingNameRefused), which keeps `refusedCallsign`: the retry then sends no name at all, and the community keeps the
- * one it holds, and a Save sends that name again only when the member types it. What the community said is kept
- * beside the entry until Settings has said it once (takeNameRefusal). A busy, limited or unreachable community, and any
- * other refusal, leave everything waiting for the next retry.
+ * A name the community refuses for good (nameRefusedForGood: someone else holds it there, it is too short, or it is a
+ * link) would get the same answer every time, and the photo and bio waiting with it would never arrive. So it leaves
+ * the entry (pendingNameRefused), which keeps `refusedCallsign`: the retry then sends no name at all, and the community
+ * keeps the one it holds, and a Save sends that name again only when the member types it. What the community said is
+ * kept beside the entry until Settings has said it once (takeNameRefusal). A busy, limited or unreachable community,
+ * and any other refusal, leave everything waiting for the next retry.
  *
  * Each entry names the account it was made under, and is read only for that account: a change is never sent under
  * another key. It is published only to its own community (pushProfileToServer reads the entry of the community it
@@ -343,12 +343,14 @@ export async function pendingNameAccepted(community: string | null | undefined):
 
 /**
  * Whether a community's answer to a profile update refuses the name in it for good: someone else holds that name there
- * (409 `callsign_taken`) or it is too short (400 `callsign_too_short`), as the server's profile route answers
- * (apps/server/src/routes/community.ts). The same name gets the same answer every time. Any other answer is not: a busy,
- * limited or unreachable community, or a refusal of something else, leaves the change waiting for the next retry.
+ * (409 `callsign_taken`), it is too short (400 `callsign_too_short`), or it is an invite or a web address (400
+ * `callsign_link`, core name-box.ts: a link name copied from the community that holds it), as the server's profile route
+ * answers (apps/server/src/routes/community.ts). The same name gets the same answer every time. Any other answer is not:
+ * a busy, limited or unreachable community, or a refusal of something else, leaves the change waiting for the next retry.
  */
 export function nameRefusedForGood(status: number, error: unknown): boolean {
-    return (status === 409 && error === 'callsign_taken') || (status === 400 && error === 'callsign_too_short');
+    return (status === 409 && error === 'callsign_taken')
+        || (status === 400 && (error === 'callsign_too_short' || error === CALLSIGN_LINK_CODE));
 }
 
 /**

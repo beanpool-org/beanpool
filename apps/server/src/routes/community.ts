@@ -1516,6 +1516,14 @@ router.post('/api/profile/update', async (ctx) => {
     try {
         profile = updateProfile(activeKey, { avatar, bio, contact, callsign, archetype });
     } catch (e: any) {
+        // An invite or a web address as the new name: as this route's other name refusals answer, the code in `error` and
+        // the line in `message`. The phone reads `error` to drop a waiting name for good (apps/native/utils/
+        // pending-profile-sync.ts nameRefusedForGood), or a name copied from another community is resent at every sync.
+        if (e instanceof CallsignNotANameError) {
+            ctx.status = e.status;
+            ctx.body = { error: e.code, message: e.message, code: e.code };
+            return;
+        }
         if (respondProfileRefusal(ctx, e)) return;
         if (e?.message === 'CALLSIGN_TAKEN') {
             ctx.status = 409;

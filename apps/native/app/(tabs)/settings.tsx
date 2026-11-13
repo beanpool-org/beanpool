@@ -91,6 +91,7 @@ import { communityName } from '../../utils/community-name';
 import { useGlobalEntry } from '../../utils/use-global-entry';
 import { useGlobalGuestVisit } from '../../utils/use-global-guest-visit';
 import { isGlobalInUse } from '../../utils/one-way-back';
+import { keepWords } from '../../utils/words-kept';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
@@ -1035,6 +1036,12 @@ export default function SettingsScreen() {
     // And when the member comes back to the app after 15 seconds or more away, App Lock on or off.
     usePutAwayAfterLeave(revealWords, putProtectionWordsAway);
     usePutAwayAfterLeave(seedWords !== null, putSeedWordsAway);
+
+    // The recovery kit printed or saved counts as "I still have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5).
+    const keptFromKit = () => {
+        const who = identity;
+        if (who) void getAnchorUrl().catch(() => null).then(u => keepWords(u, who));
+    };
 
     const handleShowSeedWords = async () => {
         const turn = seedWordsTurnRef.current;
@@ -2504,7 +2511,7 @@ export default function SettingsScreen() {
                                         </Pressable>
                                     </View>
                                     <View style={{ marginTop: 10 }}>
-                                        <RecoveryKitButtons words={mnemonicWords ? mnemonicWords.split(' ') : null} colors={colors} />
+                                        <RecoveryKitButtons words={mnemonicWords ? mnemonicWords.split(' ') : null} colors={colors} onKept={keptFromKit} />
                                     </View>
                                     <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
                                     <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
@@ -3257,7 +3264,7 @@ export default function SettingsScreen() {
                                         </Text>
                                     </Pressable>
                                     <View style={{ marginTop: 12 }}>
-                                        <RecoveryKitButtons words={seedWords} colors={colors} />
+                                        <RecoveryKitButtons words={seedWords} colors={colors} onKept={keptFromKit} />
                                     </View>
                                     <CopyClearsNote style={[styles.infoText, { marginTop: 10, marginBottom: 0 }]} />
                                     <NoScreenLockNote style={[styles.infoText, { marginTop: 8, marginBottom: 0 }]} />

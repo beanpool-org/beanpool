@@ -9,7 +9,6 @@ import { QUIET_OPACITY, quietWrapperProps } from './home/quiet';
 import {
     askOneWayBackStandingShared,
     dismissOneWayBack,
-    finishOneWayBack,
     isGlobalInUse,
     noteOneWayBackAsked,
     oneWayBackAskNow,
@@ -30,6 +29,7 @@ import { vaultCopyKnown } from '../utils/vault';
 import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { getSavedNodes } from '../utils/nodes';
 import { communityName } from '../utils/community-name';
+import { keepWords } from '../utils/words-kept';
 import { t, word } from '@beanpool/core';
 
 /**
@@ -43,6 +43,16 @@ export const ONE_WAY_BACK_LINES = {
     checkWords: word('Show my 12 words'),
     checked: word('I still have my 12 words'),
     notNow: word('Not now'),
+} as const;
+
+/**
+ * The card's words for every other member whose 12 words are the only way back (DESIGN-home-default-fable.md §2.5): "one
+ * way back" isn't true where an admin can set a member up again with a new key. The long form where a sign-in can be
+ * added, the short one where it can't (the node takes none from them). The 12-words door's card keeps its own words.
+ */
+export const WORDS_HOW_BACK_LINES = {
+    withSignIn: word('Your 12 words are how you get back in. Check you still have them, or add a sign-in.'),
+    noSignIn: word('Your 12 words are how you get back in. Check you still have them.'),
 } as const;
 
 const sameCommunity = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
@@ -157,19 +167,26 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         await show(stored);
         if (!identity || !key) return;
         const inUse = await anchorUrl().catch(() => null);
-        const where = oneWayBackCommunity(stored, inUse);
+        const fromHome = homeWordRef.current;
+        // Home's word is about the community Home reads: a record of every member's reminder starts there (§2.5).
+        const where = oneWayBackCommunity(stored, inUse) ?? fromHome?.url ?? null;
         if (!where) return;
         const now = Date.now();
+        if (fromHome && sameCommunity(fromHome.url, where) && (askNode !== 'now' || stored?.by === 'wayBack')) {
+            // Home's answer already holds the community's word on this account (me.wayBack, cards.safety): no second request.
+            await noteOneWayBackAsked(key, { at: now, answer: fromHome.standing.words ? 'words' : 'ordinary', joinedAt: fromHome.standing.joinedAt });
+            if (call !== latest.current) return;
+            await show(await oneWayBackFromNode(key, where, fromHome.standing, now, { vaultCopy: vault }));
+            return;
+        }
+        // A reminder by `me.wayBack` is moved by Home's word alone: /api/community/me's `rules` says how they joined, and its
+        // "ordinary" is not a sign-in added (it would end the reminder of every member who came by invite).
+        if (stored?.by === 'wayBack') return;
         const asked = await readOneWayBackAsked(key);
         const decision = oneWayBackAskNow(stored, isGlobalInUse(inUse), asked, now, askNode === 'now');
         if (decision === 'never') return;
         let word: OneWayBackAsked | null = asked;
-        const fromHome = homeWordRef.current;
-        if (askNode !== 'now' && fromHome && sameCommunity(fromHome.url, where)) {
-            // Home's answer already holds the community's word on this account: no second request.
-            word = { at: now, answer: fromHome.standing.words ? 'words' : 'ordinary', joinedAt: fromHome.standing.joinedAt };
-            await noteOneWayBackAsked(key, word);
-        } else if (decision === 'ask') {
+        if (decision === 'ask') {
             const answer = await askOneWayBackStandingShared(where, identity);
             word = answer === null ? { at: now, answer: 'none' }
                 : answer === 'not_member' ? { at: now, answer: 'not_member' }
@@ -210,6 +227,12 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     }, [wordKey, accountDismissedAt, refresh]);
 
     const quiet = record?.done === 'checked' || vaultCopy;
+    // "Add a sign-in" only where the node takes one from this member (the 12-words door's rule; review of #3110, round 2):
+    // Home's word says so where it is about this record's community, else the record's own kind.
+    const homeHere = !!homeWord && !!record && sameCommunity(homeWord.url, record.url);
+    const canLink = homeHere ? homeWord!.standing.door !== false : record?.by !== 'wayBack';
+    // The door's own words, or every other member's (§2.5).
+    const everyMember = record?.by === 'wayBack' || (homeHere && homeWord!.standing.door === false);
     const up = !!identity && !!record && record.done !== 'linked' && (place === 'settings' || (shown === 'card' && !quiet));
     // The floating button learns when the landing card goes (put away, done, or a vault copy found).
     useEffect(() => {
@@ -221,8 +244,10 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;
-    const bodyLine = t(ONE_WAY_BACK_LINES.body);
+    const bodyLine = !everyMember ? t(ONE_WAY_BACK_LINES.body) : canLink ? t(WORDS_HOW_BACK_LINES.withSignIn) : t(WORDS_HOW_BACK_LINES.noSignIn);
     const checkedLine = t(ONE_WAY_BACK_LINES.checked);
+    // Said here, kept on the account so every device and the web agree (utils/words-kept.ts), then the card reads again.
+    const stillHave = async () => { await keepWords(record.url, identity); void refresh(); };
 
     const sheet = (
         <LinkSignInSheet
@@ -239,7 +264,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     // Settings, after the member said they still have their words, or where the key vault keeps a copy: the sign-in is
     // still offered, quietly (it lifts the 12-words limits).
     if (quiet) {
-        if (place !== 'settings') return null;
+        if (place !== 'settings' || !canLink) return null;
         return (
             <View style={s.quietCard}>
                 <Text style={s.body}>{t('A sign-in can be a second way back, and it lifts the limits on new 12-words accounts.')}</Text>
@@ -275,9 +300,18 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
             </View>
             {/* Not flattened away (Android), so it can be measured on screen. */}
             <View ref={actionsRef} collapsable={false} onLayout={onActionsLayout}>
-            <Pressable style={s.primary} onPress={() => setLinking(true)} accessibilityRole="button">
-                <Text style={s.primaryText}>{t(ONE_WAY_BACK_LINES.addSignIn)}</Text>
-            </Pressable>
+            {canLink && (
+                <Pressable style={s.primary} onPress={() => setLinking(true)} accessibilityRole="button" testID="one-way-back-add-sign-in">
+                    <Text style={s.primaryText}>{t(ONE_WAY_BACK_LINES.addSignIn)}</Text>
+                </Pressable>
+            )}
+            {place === 'landing' && !canLink && (
+                // No sign-in to offer: what works is the words themselves, and saying they are still kept.
+                <Pressable style={s.secondary} onPress={() => { void stillHave(); }} accessibilityRole="button"
+                    accessibilityHint={t('Says you checked you still have your 12 words written down')} testID="one-way-back-still-have">
+                    <Text style={s.secondaryText}>✓ {checkedLine}</Text>
+                </Pressable>
+            )}
             {place === 'landing' ? (
                 <Pressable
                     style={s.secondary}
@@ -289,9 +323,10 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
             ) : (
                 <Pressable
                     style={s.secondary}
-                    onPress={async () => { await finishOneWayBack(identity.publicKey, 'checked'); void refresh(); }}
+                    onPress={() => { void stillHave(); }}
                     accessibilityRole="button"
                     accessibilityHint={t('Says you checked you still have your 12 words written down')}
+                    testID="one-way-back-still-have"
                 >
                     <Text style={s.secondaryText}>✓ {checkedLine}</Text>
                 </Pressable>

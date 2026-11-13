@@ -1177,13 +1177,26 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
 
 /**
  * The community's word on the account's way back, from an answer that asked for `safety` and was answered as the
- * account's own (a `me`): `cards.safety` present is a 12-words member with no sign-in, absent is not. Null when the answer
- * can't say (not asked, or a visitor's answer), and the "one way back" card asks for itself as before.
+ * account's own (a `me`). Null when the answer can't say (not asked, or a visitor's answer), and the "one way back" card
+ * asks for itself as before.
+ *
+ * - `me.wayBack` (DESIGN-home-default-fable.md §2.5, the node's D1) decides who it is for: `covered` (a sign-in's copy is
+ *   linked there) is no reminder; `words` is a reminder for every member whose words are the only way back, however they
+ *   joined.
+ * - `door`: whether the node takes a sign-in from them, which is `cards.safety` (the 12-words door's rule, the only one
+ *   routes/open-join.ts `linkState` accepts): the card offers "Add a sign-in" only then (review of #3110, round 2).
+ * - `kept`: First steps' `steps.words` true, the member said they still have their words or saved the kit, anywhere.
+ * - A node from before D1 sends no `wayBack`: `cards.safety` alone, as before.
  */
-export function safetyWord(answer: HomeAnswer, asked: readonly string[]): { words: boolean; joinedAt: number | null } | null {
+export function safetyWord(answer: HomeAnswer, asked: readonly string[]): { words: boolean; joinedAt: number | null; door?: boolean; kept?: boolean } | null {
     if (!answer.me || !asked.includes('safety')) return null;
     const joined = answer.me.joinedAt ? Date.parse(answer.me.joinedAt) : NaN;
-    return { words: !!answer.cards.safety, joinedAt: Number.isFinite(joined) ? joined : null };
+    const joinedAt = Number.isFinite(joined) ? joined : null;
+    const door = !!answer.cards.safety;
+    const way = answer.me.wayBack;
+    if (way !== 'words' && way !== 'covered') return { words: door, joinedAt };
+    if (way === 'covered') return { words: false, joinedAt };
+    return { words: true, joinedAt, door, kept: answer.cards.steps?.words === true };
 }
 
 // ── Needs you: the phone's own lines, and the node's ──────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import {
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications } from '../../utils/notification-permission';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
+import { resendWordsKept } from '../../utils/words-kept';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
@@ -1172,8 +1173,13 @@ export default function HomeScreen() {
         if (!pk || tourRun) return;
         void readProgress(pk).then(p => { if (identityRef.current?.publicKey === pk) setTourProgress(p); });
     }, [identity?.publicKey, tourRun]);
-    // A Done or Skip the node didn't take (offline) is sent again on the next Home open.
-    useEffect(() => { if (url && identity) void resendTourRecord(url, identity); }, [url, identity?.publicKey]);
+    // A Done or Skip the node didn't take (offline) is sent again on the next Home open, and so is "I still have my 12 words"
+    // (or the kit saved) said where the node couldn't hear it (utils/words-kept.ts).
+    useEffect(() => {
+        if (!url || !identity) return;
+        void resendTourRecord(url, identity);
+        void resendWordsKept(url, identity);
+    }, [url, identity?.publicKey]);
 
     /** ↑ or ↓ in Arrange: saved at once through `moveCard`; the place is said, and focus stays on the arrow or its twin. */
     const moveInArrange = (c: HomeCardInstance, dir: 'up' | 'down') => {

@@ -29,7 +29,15 @@ const kitAlert: Parameters<typeof askBeforeSavingKit>[0] = (title, message, butt
  * label wraps rather than clips; 48dp targets. The labels are in the member's language, and so is the printed kit (core's
  * printedKitLines(), asked for by utils/recovery-kit.ts when the page is made); its 12 words stay English in every language.
  */
-export function RecoveryKitButtons({ words, colors = lightColors }: { words: readonly string[] | null; colors?: AppColors }): React.JSX.Element | null {
+export function RecoveryKitButtons({ words, colors = lightColors, onKept }: {
+    words: readonly string[] | null;
+    colors?: AppColors;
+    /**
+     * The kit was printed or saved: the words are kept, as "I still have my 12 words" says (DESIGN-home-default-fable.md
+     * §2.5, the director's addition to D1). The caller records it for its account (utils/words-kept.ts `keepWords`).
+     */
+    onKept?: () => void;
+}): React.JSX.Element | null {
     const s = styles(colors);
     const [busy, setBusy] = React.useState(false);
     if (!words || words.length !== 12) return null;
@@ -45,6 +53,7 @@ export function RecoveryKitButtons({ words, colors = lightColors }: { words: rea
                 ? await action({ words, ...community, date: new Date() })
                 : 'failed';
             if (result === 'failed') Alert.alert(t('Recovery kit'), welcomeLineWords(KIT_FAILED_LINE));
+            else if (result === 'done') onKept?.();
         } finally {
             setBusy(false);
         }

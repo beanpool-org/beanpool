@@ -210,6 +210,25 @@ async function main(): Promise<void> {
     const listed = getReports().reports.find((r: any) => r.id === repId) as any;
     assert(!!listed?.directMessage && listed.groupMessage === null && !JSON.stringify(listed).includes(nastyWords),
         `the Reports list names a direct message, without its words (${JSON.stringify(listed?.directMessage)})`);
+    // The queue never reads a report's disclosure (a DM voice report's is ~1.25 MB, and both queue routes read every report,
+    // unpaged): no column of it comes back from any statement getReports prepares, and no JSON function parses it.
+    const prepared: Array<{ sql: string; columns: Array<{ column: string | null; table: string | null }> }> = [];
+    const ownPrepare = Object.getOwnPropertyDescriptor(db, 'prepare');
+    const realPrepare = db.prepare.bind(db);
+    (db as any).prepare = (sql: string) => {
+        const stmt = realPrepare(sql);
+        prepared.push({ sql, columns: stmt.reader ? stmt.columns() : [] });
+        return stmt;
+    };
+    let probed: any;
+    try { probed = getReports().reports.find((r: any) => r.id === repId); } finally {
+        if (ownPrepare) Object.defineProperty(db, 'prepare', ownPrepare); else delete (db as any).prepare;
+    }
+    const readsDisclosure = prepared.filter((p) => p.columns.some((c) => c.table === 'abuse_reports' && c.column === 'disclosure'));
+    const parsesDisclosure = prepared.filter((p) => /json_\w+\s*\(\s*(\w+\.)?disclosure\b/.test(p.sql));
+    assert(prepared.length > 0 && readsDisclosure.length === 0 && parsesDisclosure.length === 0,
+        `the Reports queue reads no report's disclosure: of ${prepared.length} statements, ${readsDisclosure.length} return it and ${parsesDisclosure.length} parse it`);
+    assert(JSON.stringify(probed) === JSON.stringify(listed), 'and lists the report exactly as before the probe');
     const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: owner.pk, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null, canPost: false };
     const got = AGENT_TOOLS.find((t) => t.name === 'report_get')!.run(grant, { report_id: repId }, 'B0UNDARY') as any;
     assert(got.result?.report?.targetKind === 'direct_message' && !JSON.stringify(got).includes(nastyWords),

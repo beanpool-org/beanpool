@@ -47,9 +47,34 @@ export const VOICE_BARS = 48;
 export const VOICE_SEALED_MAX_BYTES = 1_150_000;
 /** The first byte of a voice part, inside the seal. */
 export const VOICE_PART_VERSION = 1;
+/**
+ * Days the community's server keeps a voice message's sealed part (DESIGN §5.4). Then the server deletes it there and keeps
+ * the line, so the chat still shows the bubble; a phone that has the sound keeps playing it, and the node answers the part's
+ * read with 410 and code VOICE_EXPIRED_CODE, which the apps show as "no longer on the server".
+ */
+export const VOICE_SERVER_KEEP_DAYS = 30;
+/** The code a voice part's read answers with once the server no longer keeps it (VOICE_SERVER_KEEP_DAYS). */
+export const VOICE_EXPIRED_CODE = 'voice_expired';
 
 /** Bytes before the sound: version, length, bar count, bars. */
 const VOICE_HEADER_BYTES = 1 + 4 + 1 + VOICE_BARS;
+/**
+ * The fewest bytes a seal adds around a voice part: a group line's (its format, the signature, the after's length, the
+ * AEAD tag: 1 + 64 + 1 + 16). A direct line's adds more (its format, the signature, the time, the frame, the tag: 107).
+ */
+const VOICE_SEAL_MIN_OVERHEAD = 1 + 64 + 1 + 16;
+
+/** Characters of base64 that `bytes` bytes become. */
+function base64Length(bytes: number): number {
+    return Math.ceil(bytes / 3) * 4;
+}
+
+/**
+ * The most sound one voice part may carry, in bytes of .m4a: the most that could still come to VOICE_SEALED_MAX_BYTES of
+ * base64 once sealed, in the smallest seal (a group line's, with no after). 862,364 bytes. A recorder stopping at 3:00 at
+ * 32 kbps writes about 720,000.
+ */
+export const VOICE_SOUND_MAX_BYTES = Math.floor(VOICE_SEALED_MAX_BYTES / 4) * 3 - VOICE_SEAL_MIN_OVERHEAD - VOICE_HEADER_BYTES;
 /** The smallest `ftyp` box: its size and type, a major brand and a minor version. */
 const FTYP_MIN_BYTES = 16;
 
@@ -115,7 +140,7 @@ function checkLength(durationMs: unknown): number {
 /**
  * A voice part's bytes, [version][length][bar count][bars][sound], from what the recorder gives. Refuses (VoiceRefusedError)
  * a length outside 1 to VOICE_MAX_MS, anything but VOICE_BARS whole bars of 0 to 255, a sound that isn't an .m4a, and a
- * part that could never fit under VOICE_SEALED_MAX_BYTES once sealed.
+ * part that could never fit under VOICE_SEALED_MAX_BYTES of base64 once sealed (over VOICE_SOUND_MAX_BYTES of sound).
  */
 export function voicePartBytes(voice: VoiceInput): Uint8Array {
     if (!voice || typeof voice !== 'object') throw new VoiceRefusedError('header');
@@ -127,8 +152,12 @@ export function voicePartBytes(voice: VoiceInput): Uint8Array {
         if (typeof b !== 'number' || !Number.isInteger(b) || b < 0 || b > 255) throw new VoiceRefusedError('header');
     }
     if (!looksLikeM4a(voice.sound)) throw new VoiceRefusedError('not-m4a');
-    // base64 is longer than the bytes it carries: a part over the cap here is over it sealed.
-    if (VOICE_HEADER_BYTES + voice.sound.length > VOICE_SEALED_MAX_BYTES) throw new VoiceRefusedError('too-big');
+    // The cap counts characters of base64 as sent: a part whose smallest seal would come to more is refused here, before
+    // anything is sealed. The sealing functions check the sealed part itself, which a direct line's longer seal or a long
+    // `after` can still take over the cap by a few hundred characters.
+    if (base64Length(VOICE_HEADER_BYTES + voice.sound.length + VOICE_SEAL_MIN_OVERHEAD) > VOICE_SEALED_MAX_BYTES) {
+        throw new VoiceRefusedError('too-big');
+    }
     const out = new Uint8Array(VOICE_HEADER_BYTES + voice.sound.length);
     out[0] = VOICE_PART_VERSION;
     out[1] = (durationMs >>> 24) & 0xff;

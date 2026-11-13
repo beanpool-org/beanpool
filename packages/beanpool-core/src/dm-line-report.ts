@@ -15,7 +15,8 @@
  * disclosure of `v: 2` adds it (`mk`), and the words read as proven. The report needs no stored row once its signature
  * verifies, so a sender's delete can't take it back, and S2.5's lines, which no node keeps, report the same way.
  */
-import { dmConversationIdsToTry, dmLineSigVerifies, isDmEncryptedNonce, type DmPayload } from './dm-crypto.js';
+import { dmConversationIdsToTry, dmLineSigVerifies, isDmEncryptedNonce, type DmPart, type DmPayload } from './dm-crypto.js';
+import { VOICE_SEALED_MAX_BYTES } from './voice.js';
 
 /** What the `kind` of a stored disclosure says, beside a group line's `{ epoch, mk }`, which has none. */
 export const DM_LINE_DISCLOSURE_KIND = 'dm-line';
@@ -34,6 +35,13 @@ export interface DmLineDisclosure {
     conversationId: string;
     /** The words the reporter says it opens to: their word, until a message key can prove them. */
     words: string;
+    /**
+     * A voice message's sealed part (voice.ts), as the reporter's app fetched it beside the line: optional, and only on a
+     * voice line. Its signature is checked as the words' is, under the part name `voice` (dmLineSignedBy's `part`), and it
+     * is kept with the report, so the server deleting it after VOICE_SERVER_KEEP_DAYS, or its sender deleting the line,
+     * takes nothing back. Like the words' seal it proves who sent it to whom and when, never what it says.
+     */
+    voice?: DmPayload;
 }
 
 /**
@@ -63,11 +71,12 @@ export function dmLineSignedBy(
     line: DmPayload,
     to: { conversationId: string; metadata?: unknown; recipients: readonly string[]; messageId: string },
     signers: readonly string[],
+    part: Extract<DmPart, 'body' | 'voice'> = 'body',
 ): { conversationId: string; signer: string } | null {
     for (const conversationId of dmConversationIdsToTry(to.conversationId, to.metadata).slice(0, DM_LINE_SIG_IDS_MAX)) {
         for (const senderPubHex of signers) {
             for (const recipientPubHex of to.recipients) {
-                if (dmLineSigVerifies(line, { conversationId, senderPubHex, recipientPubHex, messageId: to.messageId, part: 'body' })) {
+                if (dmLineSigVerifies(line, { conversationId, senderPubHex, recipientPubHex, messageId: to.messageId, part })) {
                     return { conversationId, signer: senderPubHex };
                 }
             }
@@ -76,20 +85,38 @@ export function dmLineSignedBy(
     return null;
 }
 
+/** A sealed part in an encrypted line's form, its ciphertext at most `max` characters: the part, or null. */
+function sealedPartOf(v: unknown, max: number): DmPayload | null {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const { ciphertext, nonce } = v as Record<string, unknown>;
+    if (typeof ciphertext !== 'string' || !ciphertext || ciphertext.length > max) return null;
+    if (typeof nonce !== 'string' || nonce.length > 100 || !isDmEncryptedNonce(nonce)) return null;
+    return { ciphertext, nonce };
+}
+
 /**
  * The disclosure's shape, as the node takes it and as it reads one back: null for anything else. The line must be in an
- * encrypted line's form, and only the words the report keeps.
+ * encrypted line's form, and only the words the report keeps; a voice part, when there is one, in that form too and at most
+ * VOICE_SEALED_MAX_BYTES.
  */
 export function dmLineDisclosureOf(v: unknown): DmLineDisclosure | null {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
     const d = v as Record<string, unknown>;
-    if (d.v !== 1 || typeof d.ciphertext !== 'string' || !d.ciphertext || d.ciphertext.length > DM_REPORT_SEALED_MAX) return null;
-    if (typeof d.nonce !== 'string' || d.nonce.length > 100 || !isDmEncryptedNonce(d.nonce)) return null;
+    if (d.v !== 1) return null;
+    const line = sealedPartOf(d, DM_REPORT_SEALED_MAX);
+    if (!line) return null;
     if (typeof d.conversationId !== 'string' || !d.conversationId || typeof d.words !== 'string' || d.words.length > DM_REPORT_WORDS_MAX) return null;
-    return { v: 1, ciphertext: d.ciphertext, nonce: d.nonce, conversationId: d.conversationId, words: d.words };
+    const out: DmLineDisclosure = { v: 1, ciphertext: line.ciphertext, nonce: line.nonce, conversationId: d.conversationId, words: d.words };
+    if (d.voice === undefined || d.voice === null) return out;
+    const voice = sealedPartOf(d.voice, VOICE_SEALED_MAX_BYTES);
+    return voice ? { ...out, voice } : null;
 }
 
-/** What a reporter's app hands over for a line it holds, with the words it reads there. Long words are cut, never refused. */
-export function dmLineDisclosureFor(line: { ciphertext: string; nonce: string; conversationId: string }, words: string): DmLineDisclosure {
-    return { v: 1, ciphertext: line.ciphertext, nonce: line.nonce, conversationId: line.conversationId, words: words.slice(0, DM_REPORT_WORDS_MAX) };
+/**
+ * What a reporter's app hands over for a line it holds, with the words it reads there, and a voice line's sealed voice part
+ * as it fetched it. Long words are cut, never refused.
+ */
+export function dmLineDisclosureFor(line: { ciphertext: string; nonce: string; conversationId: string }, words: string, voice?: DmPayload): DmLineDisclosure {
+    const out: DmLineDisclosure = { v: 1, ciphertext: line.ciphertext, nonce: line.nonce, conversationId: line.conversationId, words: words.slice(0, DM_REPORT_WORDS_MAX) };
+    return voice ? { ...out, voice: { ciphertext: voice.ciphertext, nonce: voice.nonce } } : out;
 }

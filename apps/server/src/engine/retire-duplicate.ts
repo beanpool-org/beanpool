@@ -99,6 +99,8 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'names_debt_payments', columns: ['payer_pubkey'] },
         { table: 'known_floor_exceptions', columns: ['member_pubkey'] },
         { table: 'known_floor_log', columns: ['member_pubkey'] },
+        // A new member whose credit allowance the cohort check found past its line (engine/audit.ts): given credit.
+        { table: 'cohort_allowance_members', columns: ['member_pubkey'] },
     ] },
     { rule: 'enterprise', checks: [
         { table: 'treasury_operators', columns: ['member_pubkey', 'treasury_pubkey'] },

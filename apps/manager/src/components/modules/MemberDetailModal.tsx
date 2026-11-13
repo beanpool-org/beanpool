@@ -140,6 +140,8 @@ export function MemberDetailModal({
     const [retireNote, setRetireNote] = useState<string | null>(null);
     const [retireError, setRetireError] = useState<string | null>(null);
     const [localRetiredAt, setLocalRetiredAt] = useState<string | null | undefined>(undefined);
+    // Freezing an owner from a stale phone hand-off asks the phone's unlock again (server stepUpIfOwnerOnly 'freeze').
+    const freezeProof = useFreshProof();
 
     const pubkey = member?.publicKey || member?.pubkey || '';
     const memberStatus = localStatus ?? (member?.status ? String(member.status) : 'active');
@@ -310,12 +312,14 @@ export function MemberDetailModal({
     };
 
     // Freeze / Unfreeze: disabled while the node answers, then the freeze the node holds and one line saying so; a refusal
-    // in the node's words.
+    // in the node's words (your own account, an owner), and the phone's unlock again in the fresh-proof box. A refusal
+    // changes nothing on the page (the deciding review of #3121: a refused freeze showed as "Frozen").
     const handleFreeze = async () => {
         const want = !isFrozen;
         setFreezeBusy(true);
         setFreezeError(null);
         setFreezeNote(null);
+        freezeProof.close();
         try {
             const now = await onToggleFreeze(pubkey, want);
             if (now === true || now === false) {
@@ -327,7 +331,8 @@ export function MemberDetailModal({
                 setFreezeNote('Sent. The node’s answer could not be read back; refresh to see it.');
             }
         } catch (e: unknown) {
-            setFreezeError(e instanceof Error ? e.message : 'The freeze was not changed.');
+            if (freezeProof.checkError(e, () => handleFreeze())) return;
+            setFreezeError(e instanceof Error && e.message ? e.message : 'The freeze was not changed.');
         } finally {
             setFreezeBusy(false);
         }
@@ -566,7 +571,7 @@ export function MemberDetailModal({
                         <span className={`font-mono font-bold text-xs uppercase ${
                             isFrozen ? 'text-red-400' : 'text-amber-400'
                         }`}>
-                            {isFrozen ? '🧊 Frozen' : member?.standing || 'Citizen'}
+                            {isFrozen ? '🛑 Frozen' : member?.standing || 'Citizen'}
                         </span>
                     </div>
 
@@ -1023,7 +1028,8 @@ export function MemberDetailModal({
                         </div>
                     )}
                     {freezeNote && <p className="m-0 text-[11px] text-emerald-300 font-semibold" data-testid="freeze-note">{freezeNote}</p>}
-                    {freezeError && <p className="m-0 text-[11px] text-red-300 font-semibold" data-testid="freeze-error">{freezeError}</p>}
+                    {freezeError && <p className="m-0 text-[11px] text-red-300 font-semibold" role="alert" data-testid="freeze-error">{freezeError}</p>}
+                    <FreshProofBox proof={freezeProof} testId="freeze-proof" />
                     {broughtBackHere !== null && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="can-be-brought-back">
                             {broughtBackHere ? 'Can be brought back by this community: yes.' : 'Can be brought back by this community: no.'}

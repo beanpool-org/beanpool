@@ -5,6 +5,7 @@
  *   1. Cap 500: repeat trade with one partner caps at 500.
  *   2. Wash trading pair (r < 0.15): mutual volume is excluded from trust.
  *   3. Sybil ring (size <= 12, insularity >= 0.8, >= 50% new members): internal trade volume is excluded from trust.
+ *      The flag names a ring of three or more only: a pair is never one (SYBIL_RING_MIN_MEMBERS).
  *   4. Hard credit freeze: admin can set credit_frozen to force floor to 0.
  *   5. Community health names flagged members by callsign but never reads the whole members table:
  *      nothing flagged reads no callsigns, something flagged reads only those keys (#673).
@@ -141,6 +142,25 @@ async function main() {
         assert(!!ringFlag && ringFlag.description.endsWith(`% new members (${expectedNames})`),
             `Ring flag names members by callsign in member order (got ${ringFlag?.description})`);
         assert(!readsAllCallsigns(ringSql), 'Ring flagged: health does not read the whole members table');
+
+        // --- Test 3b: a ring needs at least three members (Marty, 14 Nov 2026: the owner and one admin, two new accounts
+        // trading with each other, were named as "A tight ring of mostly new accounts") ---
+        const pair = [`pairA-${Date.now()}`, `pairB-${Date.now()}`];
+        for (const p of pair) seedMember(p, 2);
+        mtx(pair[0], pair[1], 600); // one way: no wash pair, just two new members who only trade with each other
+        const trio = Array.from({ length: 3 }, (_, i) => `trio${i}-${Date.now()}`);
+        for (const p of trio) seedMember(p, 2);
+        mtx(trio[0], trio[1], 600);
+        mtx(trio[1], trio[2], 600);
+        mtx(trio[2], trio[0], 600);
+        clearWashTradingCache();
+        const health3 = getCommunityHealth();
+        assert(!health3.flags.some(f => f.type === 'sybil_ring' && pair.some(p => f.members.includes(p))),
+            `two new members trading only with each other are never a ring (${JSON.stringify(health3.flags.filter(f => f.type === 'sybil_ring').map(f => f.members.length))})`);
+        assert(!health3.flags.some(f => f.type === 'wash_trading' && pair.some(p => f.members.includes(p))),
+            'nor a wash pair (one trade, one way): the pair is flagged by nothing');
+        assert(health3.flags.some(f => f.type === 'sybil_ring' && trio.every(p => f.members.includes(p)) && f.members.length === 3),
+            'three new members who meet the same rule are still a ring, and the flag names all three');
 
         // --- Test 4: Hard credit freeze ---
         const frozenUser = 'frozen-' + Date.now();

@@ -64,7 +64,7 @@ describe('MemberDetailModal', () => {
         );
 
         await userEvent.click(screen.getByText('🛑 Freeze'));
-        // Which way, said: freeze, since the node holds it unfrozen.
+        // The freeze it asks for: Freeze on a member not frozen (the page then shows what the node answers).
         expect(handleToggleFreeze).toHaveBeenCalledWith('pubkey-1234567890-abcdef', true);
     });
 

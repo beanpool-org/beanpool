@@ -1100,7 +1100,11 @@ export async function fetchNodeLogs(nodeUrl: string, credential?: string): Promi
     return data.logs || [];
 }
 
-/** Freeze or unfreeze a member's credit. A refusal throws the node's own words (yourself, an owner, a key session only). */
+/**
+ * Freeze or unfreeze a member's credit. A refusal throws the node's own words (yourself, an owner, a key session only)
+ * with its code (NodeRefusalError: own_account, owner_only, key_session_only); the phone's unlock again (step_up_required)
+ * throws FreshProofRequiredError, in the node's words too (the deciding review of #3121: it said "HTTP 403: Forbidden").
+ */
 export async function freezeNodeUser(
     nodeUrl: string,
     pubkey: string,
@@ -3078,6 +3082,14 @@ export function adminTallyLine(tally: AdminDecisionItem['tally'], status: string
     return `${tally.totalVoters} of ${tally.quorumRequired} votes needed · Yes ${tally.yesWeight} · No ${tally.noWeight}`;
 }
 
+/** A refusal from the node: its own words as the message, with its HTTP status and its short code when it gave one. */
+export class NodeRefusalError extends Error {
+    constructor(message: string, readonly status: number, readonly code?: string) {
+        super(message);
+        this.name = 'NodeRefusalError';
+    }
+}
+
 async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, unknown>, credential?: string): Promise<T> {
     const res = await fetch(resolveNodeApiUrl(nodeUrl, path), {
         method: 'POST',
@@ -3088,7 +3100,7 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
     if (!res.ok) {
         // A refusal asking an owner's fresh proof keeps its sentence as the message, so a screen without the box is unchanged.
         throwIfFreshProof(res.status, data);
-        throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+        throw new NodeRefusalError(data?.error || `HTTP ${res.status}: ${res.statusText}`, res.status, typeof data?.code === 'string' ? data.code : undefined);
     }
     return data as T;
 }

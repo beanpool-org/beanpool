@@ -137,6 +137,17 @@ describe('after the kit: "Did you keep it somewhere safe?"', () => {
         expect(onKept).not.toHaveBeenCalled();
     });
 
+    it('answering gives the focus back to the kit button, never to the page (WCAG 2.4.3; review of #3114 at a3aa15f9)', async () => {
+        for (const answer of ["Yes, it's kept", 'Not yet']) {
+            printed(vi.fn());
+            fireEvent.click(await screen.findByRole('button', { name: answer }));
+            const kit = screen.getByRole('button', { name: 'Print or save your recovery kit' });
+            expect(document.activeElement).toBe(kit);
+            expect(document.activeElement).not.toBe(document.body);
+            cleanup();
+        }
+    });
+
     it('a kit that could not be made asks nothing and records nothing; with no onKept, nothing is asked', async () => {
         const onKept = vi.fn();
         printed(onKept, () => { throw new Error('no print here'); });

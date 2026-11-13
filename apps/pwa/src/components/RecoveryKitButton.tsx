@@ -38,6 +38,11 @@ export function RecoveryKitButton({ words, print, onKept }: { words: readonly st
     const question = useRef<HTMLDivElement | null>(null);
     const askId = useId();
     useEffect(() => { if (askKept) question.current?.focus(); }, [askKept]);
+    // Answering removes the focused question: the focus goes back to the kit's button, which takes its place again
+    // (WCAG 2.4.3; review of #3114 at a3aa15f9), so a keyboard or screen-reader user keeps their place.
+    const kitButton = useRef<HTMLButtonElement | null>(null);
+    const [answered, setAnswered] = useState(false);
+    useEffect(() => { if (answered && !askKept) { kitButton.current?.focus(); setAnswered(false); } }, [answered, askKept]);
     if (!words || words.length !== 12) return null;
 
     async function onContinue() {
@@ -53,18 +58,18 @@ export function RecoveryKitButton({ words, print, onKept }: { words: readonly st
                 <div role="group" aria-labelledby={askId} data-testid="recovery-kit-kept" ref={question} tabIndex={-1} style={{ outline: 'none' }}>
                     <p id={askId} style={{ fontSize: '0.9rem', fontWeight: 700, lineHeight: 1.4, margin: '0 0 0.5rem', overflowWrap: 'anywhere' }}>{t(KIT_KEPT_WORDS.ask)}</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <button type="button" onClick={() => setAskKept(false)}
+                        <button type="button" onClick={() => { setAnswered(true); setAskKept(false); }}
                             style={{ ...target, flex: '1 1 8em', width: 'auto', border: '1px solid var(--text-muted, #888)', background: 'transparent', color: 'inherit' }}>
                             {t(KIT_KEPT_WORDS.notYet)}
                         </button>
-                        <button type="button" onClick={() => { setAskKept(false); onKept?.(); }}
+                        <button type="button" onClick={() => { setAnswered(true); setAskKept(false); onKept?.(); }}
                             style={{ ...target, flex: '1 1 8em', width: 'auto', border: 'none', background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)' }}>
                             {t(KIT_KEPT_WORDS.yes)}
                         </button>
                     </div>
                 </div>
             ) : !asking ? (
-                <button type="button" onClick={() => { setFailed(false); setAsking(true); }}
+                <button type="button" ref={kitButton} onClick={() => { setFailed(false); setAsking(true); }}
                     style={{ ...target, border: '1px solid var(--bp-ink-accent)', background: 'transparent', color: 'var(--bp-ink-accent)' }}>
                     <span aria-hidden="true">🖨️ </span>{keyLineWords(KIT_WEB_LABEL)}
                 </button>

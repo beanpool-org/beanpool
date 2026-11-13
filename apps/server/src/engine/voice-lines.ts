@@ -12,10 +12,11 @@
 //
 // Kept VOICE_SERVER_KEEP_DAYS on the server, then deleted there (expireVoiceOnce, daily on the main server): the
 // attachment row goes with a tombstone, as a deleted photo's does, so a standby deletes its row and its object too; the
-// object goes after the delete commits. The line stays, so the chat still shows the bubble, and the part's read answers
-// 410 with VOICE_EXPIRED_CODE. A line kept for its sender alone (engine/withheld-lines.ts) loses its part on the same day,
-// so its sender reads the same answer and learns nothing from it. A line under a pending report keeps its part until the
-// report is closed: a moderator hears what was reported.
+// object goes after the delete commits. The line stays, so the chat still shows the bubble. The part's read answers 410
+// with VOICE_EXPIRED_CODE from the day it is that old, by its time alone (voicePartGone). A line kept for its sender alone
+// (engine/withheld-lines.ts) loses its part on the same day and answers the same, so its sender learns nothing from it. A
+// line under a pending report keeps its part until the report is closed, for the moderators only: a moderator hears what
+// was reported, and its sender reads the same 410 as for any other.
 
 import { VOICE_EXPIRED_CODE, VOICE_MIME, VOICE_SEALED_MAX_BYTES, VOICE_SERVER_KEEP_DAYS } from '@beanpool/core';
 import { afterTransactionCommit, db, writeTombstone } from '../db/db.js';
@@ -97,12 +98,14 @@ export function expireVoiceOnce(now = Date.now(), limit = 500): VoiceExpiryPass 
 }
 
 /**
- * Whether `id` is a voice line whose part the server no longer keeps, as `who` may read it: a stored voice line with no
- * attachment row, or `who`'s own withheld voice line with no part. The caller has checked that `who` may read the line.
+ * Whether a voice line's part is no longer served, to whoever may read the line: once it is VOICE_SERVER_KEEP_DAYS old, by
+ * its time alone, whether or not a pass has deleted it yet, and whether or not a pending report keeps it for the moderators
+ * (so its sender can't learn from the answer that it was reported, nor, from a withheld line answering later than a stored
+ * one, that they are blocked); and a voice line with no part left. `hasPart`: the server still holds its part.
  */
-export function voicePartExpired(id: string, row: { type: string } | undefined): boolean {
-    if (row?.type !== VOICE_LINE_TYPE) return false;
-    return !db.prepare('SELECT 1 FROM message_attachments WHERE message_id = ?').get(id);
+export function voicePartGone(line: { type?: unknown; timestamp?: unknown } | undefined, hasPart: boolean, now = Date.now()): boolean {
+    if (line?.type !== VOICE_LINE_TYPE) return false;
+    return !hasPart || typeof line.timestamp !== 'string' || line.timestamp < voiceKeptSince(now);
 }
 
 const VOICE_EXPIRY_INTERVAL_MS = 6 * 60 * 60 * 1000;

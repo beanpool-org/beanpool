@@ -61,7 +61,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { ownWithheldLine, withheldAttachmentFor, withheldLine } from '../engine/withheld-lines.js';
-import { VOICE_EXPIRED_CODE, VOICE_EXPIRED_ERROR, VOICE_LINE_TYPE, voicePartExpired } from '../engine/voice-lines.js';
+import { VOICE_EXPIRED_CODE, VOICE_EXPIRED_ERROR, voicePartGone } from '../engine/voice-lines.js';
 import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
 import { newListingCategory } from '../engine/shops.js';
@@ -280,6 +280,16 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     // The row first, for the same reason as the photo route above.
     const inIt = !!viewer && mayReadAttachmentOf(id, viewer);
     const row = inIt ? db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined : undefined;
+    // A voice line past the days the server keeps its part (engine/voice-lines.ts voicePartGone): 410 to whoever may read
+    // the line, by its time alone, and to its own sender for a withheld line alike, so the answer says nothing a stored
+    // line's wouldn't. Anyone else gets the 404 for an id with no attachment, below.
+    const asRead = inIt ? db.prepare('SELECT type, timestamp FROM messages WHERE id = ?').get(id) as { type: string; timestamp: string } | undefined
+        : ownWithheldLine(id, viewer) ? withheldLine(id) : undefined;
+    if (voicePartGone(asRead, inIt ? !!row : !!withheldAttachmentFor(id))) {
+        ctx.status = 410;
+        ctx.body = { error: VOICE_EXPIRED_ERROR, code: VOICE_EXPIRED_CODE };
+        return;
+    }
     if (!row) {
         // The photo of a line kept for its sender alone (engine/withheld-lines.ts): served by its id as a stored one is, from
         // the row or the image store as a chat photo is.
@@ -302,16 +312,6 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
                 ctx.body = { data: ownData, nonce: own.nonce, mime: own.mime };
                 return;
             }
-        }
-        // A voice line whose part the server no longer keeps (engine/voice-lines.ts): 410 to whoever may read the line, its
-        // own sender's withheld line alike, so the answer says nothing a stored line's wouldn't. Anyone else, the 404 below.
-        const voiceGone = inIt
-            ? voicePartExpired(id, db.prepare('SELECT type FROM messages WHERE id = ?').get(id) as { type: string } | undefined)
-            : !own && ownWithheldLine(id, viewer) && withheldLine(id)?.type === VOICE_LINE_TYPE;
-        if (voiceGone) {
-            ctx.status = 410;
-            ctx.body = { error: VOICE_EXPIRED_ERROR, code: VOICE_EXPIRED_CODE };
-            return;
         }
         ctx.status = 404;
         ctx.body = { error: 'Attachment not found' };

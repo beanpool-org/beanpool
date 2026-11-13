@@ -1541,7 +1541,7 @@ function ChatScreen({ id }: { id: string }) {
                     <View style={styles.headerTextContainer}>
                         <Text style={styles.headerTitle} numberOfLines={1}>{peerName}</Text>
                         <Text style={styles.headerSubtitle} numberOfLines={1}>
-                            {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via Mullum Node')}
+                            {isEncrypted ? t('🔒 End-to-end encrypted') : t('Connected via your community')}
                         </Text>
                     </View>
                 </Pressable>

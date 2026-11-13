@@ -455,7 +455,7 @@ router.post('/api/local/connectors', async (ctx) => {
             parsed = new URL(publicUrl.trim());
         } catch {
             ctx.status = 400;
-            ctx.body = { error: 'publicUrl must be a valid URL, e.g. https://eastgippy.beanpool.org:8450' };
+            ctx.body = { error: 'publicUrl must be a valid URL, e.g. https://riverside.example.org:8450' };
             return;
         }
         if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {

@@ -83,7 +83,7 @@ describe('what each person sees, top down (§3.2)', () => {
     });
 
     it('(b) an enterprise keeper gets the enterprise card after deals', () => {
-        const a = answer({ deals: { open: 1, waiting: 0, waitingOnMe: null }, enterprise: { id: 'x', name: 'Mullum Ceramics', requests: 3, others: 0 }, events, community },
+        const a = answer({ deals: { open: 1, waiting: 0, waitingOnMe: null }, enterprise: { id: 'x', name: 'Riverside Ceramics', requests: 3, others: 0 }, events, community },
             { me: me({ joinedAt: daysAgo(200), interests: ['arts'], isKeeper: true }) });
         expect(shown(a, { now: NOW })).toEqual(['deals', 'enterprise', 'events', 'community']);
     });

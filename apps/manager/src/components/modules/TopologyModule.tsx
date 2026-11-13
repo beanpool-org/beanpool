@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fleetNodeSlug } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
 import {
@@ -383,30 +384,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         return `${date.toLocaleDateString()} ${date.toLocaleTimeString()} (${relTime(date.toISOString())})`;
     };
 
-    const getSlug = (node: NodeProfile | string): string => {
-        if (!node) return 'unknown';
-        const id = typeof node === 'string' ? node : node.id;
-        const url = typeof node === 'object' ? node.url || '' : '';
-        const name = typeof node === 'object' ? node.name || '' : '';
-
-        if (['test', 'mullum', 'bris', 'bindarrabi', 'eastgippy', 'gippsland', 'castlemaine', 'melb', 'review', 'local-node'].includes(id)) {
-            return id;
-        }
-
-        const str = `${id} ${url} ${name}`.toLowerCase();
-        if (str.includes('test')) return 'test';
-        if (str.includes('mullum')) return 'mullum';
-        if (str.includes('bris')) return 'bris';
-        if (str.includes('bindarrabi')) return 'bindarrabi';
-        if (str.includes('eastgippy') || str.includes('east-gippsland')) return 'eastgippy';
-        if (str.includes('gippsland')) return 'gippsland';
-        if (str.includes('castlemaine')) return 'castlemaine';
-        if (str.includes('melb') || str.includes('melbourne')) return 'melb';
-        if (str.includes('review')) return 'review';
-        if (str.includes('localhost') || str.includes('127.0.0.1')) return 'local-node';
-
-        return id;
-    };
+    // The key the harvester keeps each node's state under (apps/server services/harvester.ts nodeSlug): the same rule.
+    const getSlug = (node: NodeProfile | string): string => fleetNodeSlug(node);
 
     const fleetNodesList = profiles.length > 0 ? profiles : (activeNode ? [activeNode] : []);
     const totalFleetBackupBytes = Object.values(harvesterState).reduce((acc, curr) => acc + (curr.dbSizeBytes || 0), 0);

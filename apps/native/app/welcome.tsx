@@ -1338,7 +1338,7 @@ export default function WelcomeScreen() {
             return;
         }
         if (!looksLikeNodeAddress(nodeUrl)) {
-            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
+            setError(t("That doesn't look right. Try your community name, like riverside, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(nodeUrl)) {
@@ -1637,7 +1637,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
+            setError(t("That doesn't look right. Try your community name, like riverside, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -1732,7 +1732,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(rawAnchor);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
+            setError(t("That doesn't look right. Try your community name, like riverside, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -1860,7 +1860,7 @@ export default function WelcomeScreen() {
         }
         const finalAnchorUrl = normalizeNodeUrl(raw);
         if (!looksLikeNodeAddress(finalAnchorUrl)) {
-            setError(t("That doesn't look right. Try your community name, like mullum, or its full address."));
+            setError(t("That doesn't look right. Try your community name, like riverside, or its full address."));
             return;
         }
         if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
@@ -3262,7 +3262,7 @@ export default function WelcomeScreen() {
                             <>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder={t('Community name or address (e.g. mullum)')}
+                                    placeholder={t('Community name or address (e.g. riverside)')}
                                     placeholderTextColor={colors.text.muted}
                                     value={createAnchorUrl}
                                     onChangeText={setCreateAnchorUrl}
@@ -3270,7 +3270,7 @@ export default function WelcomeScreen() {
                                     autoCorrect={false}
                                     keyboardType="url"
                                     accessibilityLabel={t('Community name or node address')}
-                                    accessibilityHint={t('Enter your community name, like mullum, or its full address')}
+                                    accessibilityHint={t('Enter your community name, like riverside, or its full address')}
                                 />
                                 <Text style={styles.fieldHint}>
                                     {t("Required — the community node you're joining. Ask whoever invited you if you're unsure.")}
@@ -3821,9 +3821,9 @@ export default function WelcomeScreen() {
                         <TextInput
                             ref={recoveryAddressRef}
                             accessibilityLabel={t('Community name or node address')}
-                            accessibilityHint={t('Enter your community name, like mullum, or its full address')}
+                            accessibilityHint={t('Enter your community name, like riverside, or its full address')}
                             style={styles.input}
-                            placeholder={t('Community name or address (e.g. mullum)')}
+                            placeholder={t('Community name or address (e.g. riverside)')}
                             placeholderTextColor={colors.text.muted}
                             value={recoveryAnchorUrl}
                             onChangeText={setRecoveryAnchorUrl}
@@ -3973,9 +3973,9 @@ export default function WelcomeScreen() {
                                 <TextInput
                                     ref={recoveryAddressRef}
                                     accessibilityLabel={t('Community name or node address')}
-                                    accessibilityHint={t('Enter your community name, like mullum, or its full address')}
+                                    accessibilityHint={t('Enter your community name, like riverside, or its full address')}
                                     style={styles.input}
-                                    placeholder={t('Community name or address (e.g. mullum)')}
+                                    placeholder={t('Community name or address (e.g. riverside)')}
                                     placeholderTextColor={colors.text.muted}
                                     value={recoveryAnchorUrl}
                                     onChangeText={(text) => { setAnchorAddressPick('another'); setRecoveryAnchorUrl(text); }}
@@ -4078,7 +4078,7 @@ export default function WelcomeScreen() {
                                         // What the field really holds: the global community, the copy's first one, or another.
                                         accessibilityHint={releaseFieldHints(ssoCommunity, ssoReleased.communities?.[0]).a11y}
                                         style={styles.input}
-                                        placeholder={t('Community name or address (e.g. mullum)')}
+                                        placeholder={t('Community name or address (e.g. riverside)')}
                                         placeholderTextColor={colors.text.muted}
                                         value={ssoCommunity}
                                         onChangeText={setSsoCommunity}
@@ -4155,9 +4155,9 @@ export default function WelcomeScreen() {
                                     {addressFieldShown(ssoAddressPick, ssoCommunity, restoreCommunityChoices(savedNodes)) && (
                                         <TextInput
                                             accessibilityLabel={t('Community name or node address')}
-                                            accessibilityHint={t('Enter your community name, like mullum, or its full address')}
+                                            accessibilityHint={t('Enter your community name, like riverside, or its full address')}
                                             style={styles.input}
-                                            placeholder={t('Community name or address (e.g. mullum)')}
+                                            placeholder={t('Community name or address (e.g. riverside)')}
                                             placeholderTextColor={colors.text.muted}
                                             value={ssoCommunity}
                                             onChangeText={(text) => { ssoCommunityPicked.current = true; setSsoAddressPick('another'); setSsoCommunity(text); }}

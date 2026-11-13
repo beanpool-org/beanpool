@@ -207,7 +207,7 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { APP_TOO_OLD_CODE, APP_TOO_OLD_ERROR, requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_URL, REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion, parseAppVersionHeader } from './app-version-counts.js';
 import { floorLetsThrough, floorRefusing } from './app-store-versions.js';
 import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
@@ -546,7 +546,7 @@ export { LISTINGS_MEMBERS_ONLY };
 export const COMMUNITY_MEMBERS_ONLY = {
     error: word("This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
     code: 'members_only',
-    global: 'https://global.beanpool.org',
+    global: DEFAULT_GLOBAL_COMMUNITY_URL,
 } as const;
 
 /**

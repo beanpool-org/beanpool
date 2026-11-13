@@ -7,7 +7,7 @@
  * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { isPeekTicket, isPublicIpv4, knockStillAnswerable, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
+import { DEFAULT_GLOBAL_COMMUNITY_HOST, isPeekTicket, isPublicIpv4, knockStillAnswerable, retryAfterSecondsOf, t, tn, word } from '@beanpool/core';
 import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 import { isNodeTooOldError } from './node-version-gate';
@@ -103,7 +103,8 @@ export function communityOrigin(raw: unknown): string | null {
     const name = h.replace(/:\d{1,5}$/, '');
     const label = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
     if (/^[\d.]+$/.test(name) ? !isPublicIpv4(name) : !new RegExp(`^${label}(?:\\.${label})+$`).test(name)) return null;
-    if (h === 'global.beanpool.org') return null;
+    // The global community is open to anyone: nobody asks to join it.
+    if (h === DEFAULT_GLOBAL_COMMUNITY_HOST) return null;
     return `https://${h}`;
 }
 

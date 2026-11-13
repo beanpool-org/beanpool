@@ -41,6 +41,7 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { checkDmLineReport, submitDmLineReport } from '../engine/dm-line-report.js';
 import { GroupLineReportError } from '../engine/group-chat-report.js';
 import { fileMessageReport } from './message-report.js';
+import { PhotoBudgetExceededError, StorageNearlyFullError } from '../engine/photo-upload-budget.js';
 import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -379,12 +380,19 @@ router.post('/api/messages/report', async (ctx) => {
         ctx.body = { error: e.message, code: e.code };
         return;
     }
-    fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => {
-        const filed = submitDmLineReport(actor, checked);
-        // One on a request they received counts towards clearing its sender's requests (engine/request-limits.ts).
-        if (filed) weighRequestReports(checked.authorPubkey);
-        return filed;
-    });
+    try {
+        fileMessageReport(ctx, actor, checked.messageId, checked.reason, () => {
+            const filed = submitDmLineReport(actor, checked);
+            // One on a request they received counts towards clearing its sender's requests (engine/request-limits.ts).
+            if (filed) weighRequestReports(checked.authorPubkey);
+            return filed;
+        });
+    } catch (e) {
+        // A voice part over its reporter's day of photo bytes, or the disk nearly full (submitDmLineReport): nothing was
+        // filed, and the answer is the one sending a voice line gets.
+        if ((e instanceof PhotoBudgetExceededError || e instanceof StorageNearlyFullError) && respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
 });
 
 /**

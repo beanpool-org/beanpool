@@ -30,6 +30,18 @@ const { t: tr } = wordsFor('en');
 /** abuse_reports.disclosure's kind on a report of a typed answer: JSON { kind, postId, answerId }. */
 export const POLL_ANSWER_DISCLOSURE_KIND = 'poll-answer';
 
+/**
+ * How a report of a typed answer's disclosure begins, as reportPollOtherAnswer writes it, its kind first: {"kind":"poll-answer",
+ * then the rest. Every statement here tests it before any JSON function reads a disclosure, as the Reports queue does a DM
+ * line's (state-engine getReports): a DM report's disclosure is up to ~1.25 MB with a voice part (engine/dm-line-report.ts),
+ * reports are never deleted, and only a poll line's needs parsing here.
+ */
+const POLL_ANSWER_DISCLOSURE_HEAD = `${JSON.stringify({ kind: POLL_ANSWER_DISCLOSURE_KIND }).slice(0, -1)},`;
+
+/** SQL: `disclosure` (a column, say `r.disclosure`) begins as a report of a typed answer's does. A literal: no bound value. */
+const isPollAnswerDisclosureSql = (disclosure: string) =>
+    `substr(${disclosure}, 1, ${POLL_ANSWER_DISCLOSURE_HEAD.length}) = '${POLL_ANSWER_DISCLOSURE_HEAD}'`;
+
 /** Who a report of a typed answer is about: nobody. No action on the report can reach a member (state-engine reportSubjectOf). */
 export const POLL_ANSWER_REPORT_SUBJECT = 'SYSTEM';
 
@@ -79,7 +91,8 @@ function holdsWords(post: MarketplacePost): boolean {
 
 function reportedAnswers(postId: string): Set<string> {
     const rows = db.prepare(`SELECT json_extract(disclosure, '$.answerId') AS answer FROM abuse_reports
-        WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.postId') = ?
+        WHERE ${isPollAnswerDisclosureSql('disclosure')}
+          AND json_valid(disclosure) AND json_extract(disclosure, '$.kind') = ? AND json_extract(disclosure, '$.postId') = ?
           AND (status = 'pending' OR status IS NULL)`).all(POLL_ANSWER_DISCLOSURE_KIND, postId) as { answer: string }[];
     return new Set(rows.map((r) => r.answer));
 }
@@ -123,13 +136,14 @@ export function removePollOtherAnswer(postId: string, answerId: string, actor: s
 }
 
 /** SQL: a report of one of this poll's lines waits for an owner. `post` is SQL too (a column, say `p.id`). */
-export const pollLineReportWaitsSql = (post: string) => `EXISTS (SELECT 1 FROM abuse_reports r WHERE json_valid(r.disclosure)
-    AND json_extract(r.disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(r.disclosure, '$.postId') = ${post}
+export const pollLineReportWaitsSql = (post: string) => `EXISTS (SELECT 1 FROM abuse_reports r WHERE ${isPollAnswerDisclosureSql('r.disclosure')}
+    AND json_valid(r.disclosure) AND json_extract(r.disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(r.disclosure, '$.postId') = ${post}
     AND (r.status = 'pending' OR r.status IS NULL))`;
 
 /** What waits on a poll's lines, done with, as SQL: `post` and `answer` are SQL too, and an answer of NULL means every line's. */
 const closeReportsSql = (post: string, answer: string) => `UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-    WHERE json_valid(disclosure) AND json_extract(disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(disclosure, '$.postId') = ${post}
+    WHERE ${isPollAnswerDisclosureSql('disclosure')}
+      AND json_valid(disclosure) AND json_extract(disclosure, '$.kind') = '${POLL_ANSWER_DISCLOSURE_KIND}' AND json_extract(disclosure, '$.postId') = ${post}
       AND (${answer} IS NULL OR json_extract(disclosure, '$.answerId') = ${answer}) AND (status = 'pending' OR status IS NULL)`;
 
 function closeLineReports(postId: string, answerId: string): void {
@@ -211,6 +225,7 @@ export function reportPollOtherAnswer(postId: string, answerId: string, reporter
     const post = pollForWords(postId, reporter);
     if (holdsWords(post)) throw new PollOtherError(404, word('That typed answer is not here'));
     lineOf(postId, answerId);
+    // Its kind first: every read of these tests how it begins (POLL_ANSWER_DISCLOSURE_HEAD) before parsing it.
     const disclosure = JSON.stringify({ kind: POLL_ANSWER_DISCLOSURE_KIND, postId, answerId });
     const filed = db.prepare(`SELECT id FROM abuse_reports WHERE reporter_pubkey = ? AND disclosure = ? AND (status = 'pending' OR status IS NULL)`)
         .get(reporter, disclosure) as { id: string } | undefined;

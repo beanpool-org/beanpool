@@ -12,8 +12,11 @@
  *     a voice line not marked audio/mp4 or with no part, a photo marked audio/mp4, in a DM and in a group; and over the
  *     day's photo budget.
  *  3. A standby's first copy holds each voice row as M holds it, and each object byte for byte.
- *  4. Reports: Ben reports Anna's DM voice line handing over its voice part (verified under part `voice`, kept); a part
- *     Ben sealed himself is not kept; Dan reports Anna's group voice line with its key and the moderators hear it.
+ *  4. Reports: Ben reports Anna's DM voice line handing over its voice part (verified under part `voice`, kept, and counted
+ *     in Ben's day of photo bytes); a part Ben sealed himself is not kept; Dan reports Anna's group voice line with its key
+ *     and the moderators hear it. A report keeping a voice part is held to a stored voice line's gates: over Ben's day of
+ *     photo bytes 429, below the free-disk floor 507 (with the photos in S3 too: the report is on this server's disk), each
+ *     in the send path's words, nothing filed; a report with no voice part is filed all the same.
  *  5. After 30 days: the read answers 410 voice_expired by the line's time alone, before any pass, a reported line's and a
  *     withheld line's alike; the expiry deletes the part (object and attachment row) and the line stays; a line of 29 days
  *     keeps its part, and a line under a pending report keeps it for the moderators only; 404 to anyone outside the chat;
@@ -144,6 +147,18 @@ async function child(): Promise<void> {
         'photo-budget': async (a: { bytes: string | null }) => {
             if (a.bytes === null) delete process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY;
             else process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = a.bytes;
+            return true;
+        },
+        /** The free disk every floor check reads, on every disk; null for the real one. */
+        'free-disk': async (a: { bytes: number | null }) => {
+            const { setSimulatedFreeDiskBytesForTests } = await import('./engine/photo-upload-budget.js');
+            setSimulatedFreeDiskBytesForTests(a.bytes);
+            return true;
+        },
+        /** IMAGE_STORE as the floor checks read it (the store itself, built at boot, stays the disk). */
+        'image-store': async (a: { kind: string | null }) => {
+            if (a.kind === null) delete process.env.IMAGE_STORE;
+            else process.env.IMAGE_STORE = a.kind;
             return true;
         },
         resync: async () => {
@@ -419,13 +434,59 @@ async function main(): Promise<void> {
             messageId: s.id, reason: 'Harassment',
             disclosure: { v: 1, ...s.body, conversationId: convoId, words: '(a voice message)', ...(voice ? { voice } : {}) },
         });
-        const repDm = await reportDm(dmReported, { ciphertext: dmReported.data, nonce: dmReported.nonce });
+        const partOf = (s: Sent) => ({ ciphertext: s.data, nonce: s.nonce });
+        const partBytes = (s: Sent) => Buffer.from(s.data, 'base64').length;
+        const benUsed = async (): Promise<number> => main.send('photo-used', { pk: ben.pk });
+        // A new report on file: a repeat answers the one on file, marked duplicate.
+        const filedNew = (r: Res) => r.status === 200 && typeof r.body?.report?.id === 'string' && !r.body?.duplicate;
+        const benUsed0 = await benUsed();
+        const repDm = await reportDm(dmReported, partOf(dmReported));
         require_(repDm.status === 200 && repDm.body?.report?.id, `Ben reports Anna's DM voice line, handing over its voice part (${show(repDm)})`);
+        const benUsed1 = await benUsed();
+        assert(benUsed1 - benUsed0 === partBytes(dmReported),
+            `the voice part kept with it counts in Ben's day of photo bytes, as a stored voice line's does in its sender's (${benUsed1 - benUsed0} of ${partBytes(dmReported)} bytes)`);
         // A part Ben sealed himself, under Anna's line's id.
         const forgedPart = sealDmVoice({ durationMs: 1000, bars: BARS, sound: m4a(500) }, { myEdPrivHex: ben.seedHex, peerEdPubHex: anna.pk, conversationId: convoId },
             { senderPubHex: ben.pk, messageId: dm29.id });
         const repForged = await reportDm(dm29, forgedPart);
         require_(repForged.status === 200 && repForged.body?.report?.id, `Ben reports another, handing over a voice part he sealed himself (${show(repForged)})`);
+        const benUsed2 = await benUsed();
+        assert(benUsed2 === benUsed1, `a part the report doesn't keep counts nothing (${benUsed2 - benUsed1} bytes)`);
+
+        // Held to a stored voice line's gates: a part needs no stored line to be kept, only its signature, and a report is
+        // kept for good. Over Ben's day of photo bytes, or below the free-disk floor, a report that keeps a part is refused
+        // in the send path's words (step 2's overR, and a send below the floor) and nothing is filed; one with no part is not.
+        const [overPart, overPlain, lowPart, lowPlain, s3Part] = [0, 1, 2, 3, 4].map(() => sealDm(anna, ben, convoId));
+        for (const s of [overPart, overPlain, lowPart, lowPlain, s3Part]) require_((await sendDm(anna, s)).status === 200, 'Anna sends another DM voice line');
+        await main.send('photo-budget', { bytes: String(benUsed2 + 1000) });
+        const repOver = await reportDm(overPart, partOf(overPart));
+        const repOverPlain = await reportDm(overPlain);
+        await main.send('photo-budget', { bytes: null });
+        assert(repOver.status === 429 && repOver.body?.code === 'photo_budget' && repOver.body?.code === overR.body?.code && repOver.body?.error === overR.body?.error
+            && typeof repOver.body?.resetsAt === 'string',
+        `over Ben's day of photo bytes, a report keeping a voice part is refused 429 in the words a voice line's send gets (${show(repOver)} | send: ${show(overR)})`);
+        assert(filedNew(repOverPlain), `and one with no voice part is filed (${show(repOverPlain)})`);
+        assert(await benUsed() === benUsed2, 'the refused one counted nothing');
+        const repOverAgain = await reportDm(overPart, partOf(overPart));
+        assert(filedNew(repOverAgain) && await benUsed() === benUsed2 + partBytes(overPart),
+            `nothing was filed: the same report, with room again, is a new one, and counts (${show(repOverAgain)})`);
+
+        await main.send('free-disk', { bytes: 1 });
+        const repLow = await reportDm(lowPart, partOf(lowPart));
+        const sendLow = await sendDm(anna, sealDm(anna, ben, convoId));
+        const repLowPlain = await reportDm(lowPlain);
+        await main.send('image-store', { kind: 's3' });
+        const repS3 = await reportDm(s3Part, partOf(s3Part));
+        await main.send('image-store', { kind: null });
+        await main.send('free-disk', { bytes: null });
+        assert(repLow.status === 507 && sendLow.status === 507 && repLow.body?.code === 'storage_nearly_full' && repLow.body?.code === sendLow.body?.code
+            && repLow.body?.error === sendLow.body?.error,
+        `below the free-disk floor, a report keeping a voice part is refused 507 in the words a voice line's send gets (${show(repLow)} | send: ${show(sendLow)})`);
+        assert(filedNew(repLowPlain), `and one with no voice part is filed (${show(repLowPlain)})`);
+        assert(repS3.status === 507 && repS3.body?.code === 'storage_nearly_full',
+            `with the photos kept in S3 the report still lands on this server's disk, so its floor holds (${show(repS3)})`);
+        const repLowAgain = await reportDm(lowPart, partOf(lowPart));
+        assert(filedNew(repLowAgain), `nothing was filed: with room again, the same report is a new one (${show(repLowAgain)})`);
         const repG = await call(M, 'POST', dan, `/api/groups/${groupId}/chat/report`, {
             messageId: gVoice.id, reason: 'Harassment', disclosure: { epoch: gVoice.epoch, mk: Buffer.from(groupMessageKey(groupKey, gVoice.id)).toString('base64') },
         });

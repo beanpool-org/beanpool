@@ -14,17 +14,22 @@
 // - A handed line whose signature doesn't verify: the line must be the node's own encrypted row, and the node's copy is
 //   what is kept, so a reporter's bytes their sender never signed are never filed as the line. The node's copy with a
 //   signature that fails reads as such.
+// - A voice part kept with a report (submitDmLineReport) is held to the gates a stored voice line is: its reporter's day of
+//   photo bytes and the free-disk floor, refused in the send path's words with nothing filed. Its signature alone doesn't
+//   need the line to be stored, and a report is kept for good, so this is the one limit on what a pair can file that way.
 //
 // Who may report a line: the other person in a direct conversation it is in, and only that line. Anything else answers as
 // an id nobody has (GROUP_LINE_REPORT_NOT_FOUND), a conversation they are not in included.
 
 import crypto from 'node:crypto';
+import path from 'node:path';
 import { DM_LINE_DISCLOSURE_KIND, dmLineDisclosureOf, dmLineKind, dmLineSigOf, dmLineSignedBy, type DmLineDisclosure } from '@beanpool/core';
 import { isNodeMember } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { verifiedFormerKeysReader } from './key-succession.js';
 import { GROUP_LINE_REPORT_NOT_FOUND, GROUP_LINE_REPORT_OWN, GroupLineReportError, type GroupLineReport } from './group-chat-report.js';
 import { requestReceived, wordingOf } from './request-limits.js';
+import { assertFolderFloorSpace, assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 
 export const DM_LINE_REPORT_FORM = 'A report of a direct message names it, gives a reason and hands over the line: { messageId, reason, disclosure }.';
 
@@ -112,9 +117,21 @@ export function checkDmLineReport(reporter: string, body: { messageId?: unknown;
 /**
  * File a checked report: one row naming the line, its author and what was handed over, and the request it reports, if its
  * reporter received one from them (engine/request-limits.ts). Null for a key that is no member's.
+ *
+ * A voice part kept with it is held where a stored voice line is (engine/messaging.ts sendMessage): counted in its reporter's
+ * day of photo bytes, and refused below the free-disk floor, as PhotoBudgetExceededError (429) or StorageNearlyFullError
+ * (507), the send path's own answers, with nothing filed. The row lands in this server's database, on its own disk whatever
+ * store keeps the photos (IMAGE_STORE=s3 skips the image store's floor), so that disk's floor is checked too. A report with no
+ * voice part meets neither.
  */
 export function submitDmLineReport(reporter: string, checked: CheckedDmLineReport): GroupLineReport | null {
     if (!isNodeMember(db, reporter)) return null;
+    const voice = checked.disclosure.voice;
+    const voiceBytes = voice ? incomingPhotoBytes(voice.ciphertext) : 0;
+    if (voice) {
+        assertFolderFloorSpace(path.dirname(db.name));
+        assertMayStorePhotoBytes(reporter, voiceBytes);
+    }
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     const reason = checked.reason.slice(0, 500);
@@ -122,6 +139,7 @@ export function submitDmLineReport(reporter: string, checked: CheckedDmLineRepor
     db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at, request_conversation_id, request_wording)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, reporter, checked.authorPubkey, checked.messageId,
         JSON.stringify({ kind: DM_LINE_DISCLOSURE_KIND, ...checked.disclosure }), reason, createdAt, request, request ? wordingOf(checked.disclosure.words) : null);
+    recordStoredPhotoBytes(reporter, voiceBytes);
     return { id, reporterPubkey: reporter, targetPubkey: checked.authorPubkey, targetMessageId: checked.messageId, reason, createdAt, status: 'pending' };
 }
 

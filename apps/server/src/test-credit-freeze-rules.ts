@@ -8,7 +8,10 @@
  *   3. only by the person's own key session: an owner's automation token is refused (403 key_session_only);
  *      a phone hand-off whose unlock is stale is asked for it again on an owner (403 step_up_required), not on a member;
  *   4. the log line names who froze whom, both short keys, and the row carries when;
- *   5. an admin still freezes and unfreezes a member and another admin; an unknown key is 404.
+ *   5. an admin still freezes and unfreezes a member and another admin; an unknown key is 404;
+ *   6. the members' rows the manager reads (the whole list and a page found by key) say each member's freeze as the node
+ *      holds it, so the manager shows what the node did: a refused freeze never as frozen, a done one as frozen after a
+ *      refresh (the deciding review of #3121).
  *
  * Registered in scripts/server-suites.mjs.
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-credit-freeze-rules.ts
@@ -163,6 +166,29 @@ async function main(): Promise<void> {
     assert(robOnAda.status === 200 && frozen(ada), `an admin may freeze another admin (${show(robOnAda)})`);
     const unknown = await freeze(M, '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', true);
     assert(unknown.status === 404, `an unknown key is 404 (${show(unknown)})`);
+
+    // 6. The rows the manager reads say the freeze the node holds. Ada is frozen (5); Marty is not, after Rob's refused
+    // freeze of her (an admin on an owner).
+    const refusedAgain = await freeze(R, marty, true);
+    assert(refusedAgain.status === 403 && !frozen(marty), `Rob's freeze of the owner is refused again (${show(refusedAgain)})`);
+    const rows = async (path: string, body: Record<string, unknown>): Promise<any[]> => {
+        resetGatewayRateLimit();
+        resetAdminRateLimit();
+        const res = await fetch(`${BASE}${path}`, { method: 'POST', headers: { ...R, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const json: any = await res.json().catch(() => null);
+        return Array.isArray(json?.members) ? json.members : [];
+    };
+    const rowOf = (list: any[], who: Id) => list.find((m) => m.publicKey === who.pk);
+    const whole = await rows('/api/local/admin/data', {});
+    assert(rowOf(whole, ada)?.creditFrozen === true && rowOf(whole, marty)?.creditFrozen === false && rowOf(whole, mia)?.creditFrozen === false,
+        `the whole list says Ada is frozen, and Marty and Mia are not (${JSON.stringify([ada, marty, mia].map(w => rowOf(whole, w)?.creditFrozen))})`);
+    const adaPage = await rows('/api/local/admin/data/members', { q: ada.pk, limit: 5 });
+    const martyPage = await rows('/api/local/admin/data/members', { q: marty.pk, limit: 5 });
+    assert(rowOf(adaPage, ada)?.creditFrozen === true && rowOf(martyPage, marty)?.creditFrozen === false,
+        `a page found by key says the same: the freeze the manager reads back after a change (${rowOf(adaPage, ada)?.creditFrozen}, ${rowOf(martyPage, marty)?.creditFrozen})`);
+    await freeze(R, ada, false);
+    const adaAfter = await rows('/api/local/admin/data/members', { q: ada.pk, limit: 5 });
+    assert(rowOf(adaAfter, ada)?.creditFrozen === false, `and once she is unfrozen, unfrozen (${rowOf(adaAfter, ada)?.creditFrozen})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

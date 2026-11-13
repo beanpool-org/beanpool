@@ -930,6 +930,12 @@ function adminMemberRows(members: Member[], keys?: string[]) {
     for (const r of rolesList) {
         rolesByPubkey.set(r.member_pubkey, r.role);
     }
+    // The member's credit freeze as the node holds it (members.credit_frozen), so the manager's Freeze shows what the node
+    // did, not a guess: a refused freeze never shows as frozen, nor a done one as unfrozen after a refresh (the deciding
+    // review of #3121; Marty, 14 Nov 2026: four presses each froze, and the panel showed none of them).
+    const frozenKeys = new Set(((keys
+        ? db.prepare(`SELECT public_key FROM members WHERE credit_frozen = 1 AND public_key IN (SELECT value FROM json_each(?))`).all(JSON.stringify(keys))
+        : db.prepare(`SELECT public_key FROM members WHERE credit_frozen = 1`).all()) as Array<{ public_key: string }>).map(r => r.public_key));
 
     return members.filter(m => m.status !== 'pruned').map(m => {
         // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
@@ -955,6 +961,7 @@ function adminMemberRows(members: Member[], keys?: string[]) {
             badge: memberBadge(db, m.publicKey),
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
+            creditFrozen: frozenKeys.has(m.publicKey),
         };
     });
 }

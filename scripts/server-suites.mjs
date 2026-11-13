@@ -658,6 +658,7 @@ export const SUITES = [
     'test-dm-line-relay',
     'test-federation-hardening',
     'test-node-signature',
+    'test-relay-mail',
     'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',

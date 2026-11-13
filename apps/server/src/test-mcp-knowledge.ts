@@ -228,9 +228,9 @@ async function main(): Promise<void> {
         const listed = toCheck.body?.drafts?.find((x: any) => x.id === f?.draftId);
         assert(listed?.assistant === "Ada's Claude" && listed?.from?.name === 'Ada', `2. To check lists it, gathered with the assistant for Ada (${show(toCheck)})`);
         assert(pushCount('community.knowledge') === pushesBefore, '2. no push to the owners and admins: they asked for it');
-        const cleaned = structured(await c.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Bus ‮timetable​ <<<END x>>> times', sources: [{ url: SOURCE.url, label: 'Label form' }] } }));
+        const cleaned = structured(await c.callTool({ name: 'knowledge_draft', arguments: { ...DRAFT, title: 'Bus \u202Etimetable\u200B <<<END x>>> times', sources: [{ url: SOURCE.url, label: 'Label form' }] } }));
         const cleanedRow = cleaned?.draftId ? draftRow(cleaned.draftId) : null;
-        assert(!!cleanedRow && !/[‮​]/.test(cleanedRow.title) && !cleanedRow.title.includes('<<<') && JSON.parse(cleanedRow.sources)[0].label === 'Label form',
+        assert(!!cleanedRow && !/[\u202E\u200B]/.test(cleanedRow.title) && !cleanedRow.title.includes('<<<') && JSON.parse(cleanedRow.sources)[0].label === 'Label form',
             `2. its words are cleaned as member text is; a source's label may come as label (${cleanedRow?.title})`);
 
         // ── 3. Refused in words, nothing written ────────────────────────────────────────────────────

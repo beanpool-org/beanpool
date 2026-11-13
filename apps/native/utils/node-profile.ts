@@ -137,6 +137,12 @@ export interface NodeFeatures {
      * edit forms offer the unit Each only then. Absent until every slice is merged, and from a node older than the unit: off.
      */
     perItem?: boolean;
+    /**
+     * This node stores a voice line as one (apps/server engine/voice-lines.ts, voice V2; core voiceLinesOn): direct and locked
+     * group chats offer the microphone only then. A node that doesn't say is from before it, and stores a voice line as words
+     * with a sound no one can play (Byron, 14 Nov): off, the composer exactly as before voice.
+     */
+    voiceLines?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -151,7 +157,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
-    'askedPush', 'knowledge', 'perItem',
+    'askedPush', 'knowledge', 'perItem', 'voiceLines',
 ];
 
 export interface NodeProfile {

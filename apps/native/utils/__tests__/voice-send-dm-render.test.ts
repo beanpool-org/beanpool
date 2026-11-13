@@ -10,6 +10,11 @@
  *     VoiceNotSentError after setting the notice: the recorder keeps it (voice-composer-render.test.ts), adding no word.
  *   - db.ts:7448: each try made a new line id, so a Send after the 60 s timeout was the voice message twice. The recording's
  *     own line id goes to sendVoiceMessage as its messageId on every try, with a signal that gives the send up for real.
+ *
+ * Byron, 14 Nov: a voice message sent to a node from before voice V2 was stored as a text line carrying a sound, an empty
+ * bubble on the other phone. The microphone shows only where the community says `features.voiceLines: true` (core
+ * voiceLinesOn), read from this phone's copy of the community as every other switch is (utils/use-node-profile.ts); a
+ * recording that would still go where it isn't said is kept, not sent, and the chat says so.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
@@ -230,7 +235,8 @@ beforeEach(() => {
     node.refuse = null;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
-    store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: {}, checkedAt: new Date().toISOString() } }));
+    // A community that takes voice messages (features.voiceLines), kept on this phone a moment ago.
+    store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: { voiceLines: true }, checkedAt: new Date().toISOString() } }));
     route.now = { view: 'dm', screenId: 'dm1' };
     params.now = { id: 'dm1' };
     globalThis.fetch = vi.fn(async () => new Response('{}', { status: 404 })) as typeof fetch;
@@ -295,5 +301,62 @@ describe('a direct chat\'s voice message sent twice is one line (PR #3112 review
         expect(node.lines.size).toBe(1);
         // Sent: the notice is cleared.
         expect(notice()).toBeNull();
+    });
+});
+
+describe('the microphone only where the chat\'s community takes voice messages (features.voiceLines; Byron, 14 Nov)', () => {
+    const NOT_TAKEN = "This community doesn't take voice messages yet. Nothing was sent.";
+    const kept = (features: Record<string, unknown>, checkedAt = new Date().toISOString()) =>
+        store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features, checkedAt } }));
+    async function draw(): Promise<void> {
+        await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(ChatRoute)) as any); });
+        await settle();
+        expect(composerProps.now, 'the accepted chat\'s composer is drawn').not.toBeNull();
+    }
+
+    for (const [what, features] of [
+        ['says nothing of it (a node from before voice V2, as Byron was)', {}],
+        ['says voiceLines: false', { voiceLines: false }],
+    ] as const) {
+        it(`a community that ${what}: no microphone, the composer as before voice`, async () => {
+            kept(features);
+            await draw();
+            expect(composerProps.now.onVoice).toBeUndefined();
+        });
+    }
+
+    it('a community this phone has no copy of, whose node can\'t be asked: no microphone', async () => {
+        store.map.delete('beanpool_node_profiles');
+        await draw();
+        expect(composerProps.now.onVoice).toBeUndefined();
+    });
+
+    it('a community that says voiceLines: true: the microphone', async () => {
+        kept({ voiceLines: true });
+        await draw();
+        expect(composerProps.now.onVoice).toBeTypeOf('function');
+    });
+
+    it('a kept "true" is asked again as every switch is; a node that no longer says it takes the microphone away, and a recording already waiting is kept, not sent, and the chat says why', async () => {
+        kept({ voiceLines: true }, new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString());
+        let answer: ((r: Response) => void) | null = null;
+        globalThis.fetch = vi.fn((input: unknown) => String(input).endsWith('/api/community/info')
+            ? new Promise<Response>((r) => { answer = r; })
+            : Promise.resolve(new Response('{}', { status: 404 }))) as typeof fetch;
+        await open();
+        // The recorder holds the onVoice it was given while a recording waits (ChatComposer lastOnVoice).
+        const waiting = composerProps.now.onVoice;
+        expect(answer, 'the stale copy is asked again').not.toBeNull();
+        await act(async () => { answer!(new Response(JSON.stringify({ profile: 'local', features: {} }), { status: 200 })); });
+        await settle();
+        expect(composerProps.now.onVoice, 'the node said nothing of voice lines: no microphone').toBeUndefined();
+
+        let outcome: unknown = 'sent';
+        await act(async () => { try { await waiting(VOICE, LINE); } catch (e) { outcome = e; } });
+        await settle();
+        expect(isVoiceNotSent(outcome), 'the recorder keeps the recording').toBe(true);
+        expect(notice()).toBe(NOT_TAKEN);
+        expect(node.tries, 'nothing went to the node').toEqual([]);
+        expect(alerts.said).toEqual([]);
     });
 });

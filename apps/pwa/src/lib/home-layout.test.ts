@@ -10,7 +10,7 @@ import { HOME_DEFAULT_LIST, HOME_FRAME_LIMITS, starterCards, translateV1 } from 
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
     FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
-    columnsFor, fewerCardsNews, gridWidth, layoutPrint,
+    columnsFor, gridWidth, layoutPrint,
     moveCard, moveCardTo, packHome, pickLayout, pickerGroups, pinnedCards, placeLifted, placedBoxes, readLayout, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
@@ -249,17 +249,6 @@ describe('which copy wins, and the members who were here before (§2.6)', () => 
         expect(pickLayout(a, { ...a })).toEqual({ layout: a, push: false });
     });
 
-    // Since D0 a Home never saved starts with the whole default list, longer than before: the line is said to nobody, the
-    // member who never edited and joined over a week ago included (DESIGN-home-default-fable.md §2.8; review of #3110).
-    it('the one-time "fewer cards" line: to nobody, not even a member who never edited and joined over a week ago', () => {
-        const old = { joinedAt: iso(NOW - 30 * 24 * H) };
-        expect(fewerCardsNews(null, null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 365 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, { joinedAt: iso(NOW - 2 * 24 * H) }, NOW)).toBe(false);
-        expect(fewerCardsNews(starterLayout(), null, old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, starterLayout(), old, NOW)).toBe(false);
-        expect(fewerCardsNews(null, null, null, NOW)).toBe(false);
-    });
 });
 
 describe('what is drawn and asked', () => {

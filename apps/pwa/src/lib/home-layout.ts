@@ -350,6 +350,16 @@ export function moveCardTo(
  */
 export const resetLayout = (layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 => resetHomeLayout(layout, editAt(layout, now));
 
+/**
+ * Reset's Undo (DESIGN-home-default-fable.md §3, "Home is back to how it started. Undo"): the list as it was before the
+ * reset, stamped after the reset's own write so it wins on the account and in this browser alike.
+ */
+export const undoResetLayout = (before: HomeLayoutV2, current: HomeLayoutV2 | null, now: number): HomeLayoutV2 =>
+    ({ ...before, updatedAt: iso(editAt(current, now)) });
+
+/** Said once Reset has put the default list back, with Undo beside it. */
+export const RESET_DONE_LINE = word('Home is back to how it started.');
+
 /** The `safety` card was put away: when, on the account too. */
 export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
     const l = layout ?? defaultHomeLayout();
@@ -357,17 +367,7 @@ export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLay
     return { ...l, dismissed: { ...l.dismissed, safety: at }, updatedAt: at };
 }
 
-/**
- * The one-time line {@link FEWER_CARDS_LINE} is said to nobody now (DESIGN-home-default-fable.md §2.8, review of #3110):
- * since D0 a Home never saved starts with the whole default list, so it is longer, not shorter. D3 deletes the line and
- * this; until then it says no to everyone.
- */
-export function fewerCardsNews(_account: HomeLayoutV2 | null, _local: HomeLayoutV2 | null, _me: { joinedAt: string | null } | null | undefined, _now: number): boolean {
-    return false;
-}
-
-/** These three are word() keys: Home shows them through t(). */
-export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
+/** These two are word() keys: Home shows them through t(). */
 /** The one-time hint (§1.3), as the web says it: its cards can be dragged (DESIGN-home-arrange-in-place-fable.md §2.9). The phone's own line says "hold a card to arrange" until its drag lands. */
 export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */

@@ -40,16 +40,6 @@ vi.mock('../components/AddressSearch', () => ({
 }));
 // The community's price guide the starter dialog reads as it opens (slice O2): stood in for, so a test says what the guide holds.
 vi.mock('../lib/starter-offers', () => ({ readPricingGuide: vi.fn(async () => null) }));
-/**
- * The one-time "fewer cards" note is said to nobody since D0 (lib/home-layout.ts fewerCardsNews, DESIGN-home-default-fable.md
- * §2.8; review of #3110), but HomePage still draws and packs it until D3 deletes it: the tests of that drawing turn it on
- * here (`fewerNote.on`), and every other test reads the real answer.
- */
-const fewerNote = vi.hoisted(() => ({ on: false }));
-vi.mock('../lib/home-layout', async () => {
-    const actual = await vi.importActual<typeof import('../lib/home-layout')>('../lib/home-layout');
-    return { ...actual, fewerCardsNews: (...args: Parameters<typeof actual.fewerCardsNews>) => fewerNote.on || actual.fewerCardsNews(...args) };
-});
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => unknown) => { hooks.sync.push(cb); return () => { hooks.sync = hooks.sync.filter(c => c !== cb); }; }),
     onSocketOpen: vi.fn((cb: () => void) => { hooks.open.push(cb); return () => { hooks.open = hooks.open.filter(c => c !== cb); }; }),
@@ -64,7 +54,7 @@ import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, HOME_DEFAULT_LIST, FIND_TOWN_SE
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
-import { FEWER_CARDS_LINE, removedLine } from '../lib/home-layout';
+import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, readCachedHome, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 import { routeLivePostChange } from '../lib/live-posts';
@@ -142,7 +132,6 @@ afterEach(() => {
     cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
-    fewerNote.on = false;
 });
 
 describe('one request, the cached answer first (§5)', () => {
@@ -3474,18 +3463,6 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(span('tips')).toBe('');
     });
 
-    it('with no Needs you, the fewer-cards note also stands above the grid, and so does the hint with it', async () => {
-        fewerNote.on = true;
-        width = 800;
-        nodeV2(answer(), null);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const fewer = await screen.findByTestId('home-fewer');
-        expect(cardIds()[0]).not.toBe('needs');
-        aboveTheGrid(fewer);
-        // The hint opens once the answer is drawn (§6.2), a render after the fewer-cards note.
-        aboveTheGrid(await screen.findByTestId('home-hint'));
-    });
-
     it('in one column the hint stays straight under the first card, with or without Needs you, as before', async () => {
         await landAt(360, {});
         const hint = await screen.findByTestId('home-hint');
@@ -3501,18 +3478,15 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(screen.getByTestId('home-hint').previousElementSibling).toBe(screen.getByTestId('home-card-tips'));
     });
 
-    it("the fewer-cards note and the hint in the member's language, above the grid and under the first card (pseudo-locale)", async () => {
-        fewerNote.on = true;
+    it("the hint in the member's language, above the grid and under the first card (pseudo-locale)", async () => {
         await showIn('xx');
         width = 800;
         nodeV2(answer(), null);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const fewer = await screen.findByTestId('home-fewer');
-        aboveTheGrid(fewer);
-        expect(fewer).toHaveTextContent(xx(FEWER_CARDS_LINE));
         const above = await screen.findByTestId('home-hint');
+        aboveTheGrid(above);
         expect(above).toHaveTextContent(xx(HOME_HINT));
-        for (const note of [fewer, above]) expect(bypassing(note), note.dataset.testid).toEqual([]);
+        expect(bypassing(above)).toEqual([]);
         cleanup();
         await landAt(1400);
         const hint = await screen.findByTestId('home-hint');
@@ -4086,27 +4060,6 @@ describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layo
 
         expect(hint.style.gridRow).toBe('30 / span 25');
         expect(card('tips').style.gridRow).toBe('55 / span 54');
-    });
-
-    it('every packed child is watched: the fewer-cards note too, by its own observer and before the paint', async () => {
-        fewerNote.on = true;
-        heights = { ...CARDS, 'home-fewer': 44 };
-        nodeV2(answer({}, { needs: NEEDS }), null);
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const fewer = await screen.findByTestId('home-fewer');
-        await screen.findByTestId('home-card-community');
-        settle();
-        expect(fewer.parentElement).toBe(screen.getByTestId('home-grid'));
-        expect(fewer.style.gridRow).toBe('30 / span 15');
-
-        heights['home-fewer'] = 84;
-        settle();
-        expect(fewer.style.gridRow).toBe('30 / span 25');
-
-        heights['home-fewer'] = 64;
-        width = 1400;
-        Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!.deliver();
-        await waitFor(() => expect(fewer.style.gridRow).toBe('30 / span 20'));
     });
 
     it('the note stands on the packed row, not 4 px above it (no gap over 20 px under it)', async () => {

@@ -3683,7 +3683,9 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // `asks`: and a member's ask that an admin invite someone (components/InviteAsks).
     // `first-need`: and First steps' line "Ask for one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start
     // N2): the node keeps First steps up for that line alone only for an app that says it draws it (home-answer.ts HomeLanding).
-    q.set('lands', 'enterprise,group,invite,people,asks,first-need');
+    // `words`: and First steps' line "Keep your 12 words safe" (DESIGN-home-default-fable.md §2.4, slice D3): the node keeps the
+    // card up for that line only for an app that says it draws it.
+    q.set('lands', 'enterprise,group,invite,people,asks,first-need,words');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));
@@ -3722,7 +3724,11 @@ export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknow
  * card frame refuses a version-2 layout with a 400 (the error carries `status`): pages/HomePage.tsx keeps the cards in
  * this browser then, and sends them again at the next landing.
  */
-export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord; saw_ledger?: boolean }): Promise<SavedHomePreferences> {
+/**
+ * `words_kept`: "I still have my 12 words", or the recovery kit saved or printed (DESIGN-home-default-fable.md §2.5): kept on
+ * the account, one way (a false never clears it), and First steps' words line and the 12-words card on Home end with it.
+ */
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord; saw_ledger?: boolean; words_kept?: true }): Promise<SavedHomePreferences> {
     return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 

@@ -21,6 +21,7 @@ import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { copyFromLine, eventCopyOf, freePriceWords, formatHundredths } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
+import { FIRST_STEPS_WORDS, firstStepsLeft, firstStepsOver, welcomeDrawn } from '@beanpool/core';
 import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
@@ -105,8 +106,18 @@ export interface HomeMe {
     area: { lat: number; lng: number } | null;
     firstOffer: boolean;
     standing: 'member' | 'suspended';
-    /** The account's tour record (DESIGN-getting-started-fable.md §2): Getting started is drawn only while it hasn't ended. */
+    /** The account's tour record (DESIGN-getting-started-fable.md §2): Welcome is drawn only while it hasn't ended. */
     tour?: unknown;
+    /**
+     * Whose invite they used, the reader's own fact (routes/home-answer.ts, DESIGN-home-default-fable.md §2.3): Welcome's
+     * "Ana invited you. Say hello ›". null when no active member here invited them; absent from a node before D1.
+     */
+    invitedBy?: { key: string; name: string | null } | null;
+    /**
+     * `words` when the 12 words are the only way back this server can see (no sign-in's copy linked here), `covered` when
+     * one is (§2.5): who "Your way back in" is for on Home. Absent from a node before D1.
+     */
+    wayBack?: 'words' | 'covered';
 }
 
 export interface HomeCommunity {
@@ -220,6 +231,11 @@ export interface HomeCards {
         firstNeed?: boolean;
         firstPost: boolean; photo: boolean; interests: boolean;
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
+        /**
+         * "Keep your 12 words safe" (§2.4): null when a sign-in's copy is linked here (no line), false while open, true once
+         * the member said they still have their words or saved the kit (kept on the account). Absent from a node before D1.
+         */
+        words?: boolean | null;
     };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: DealItem[] };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
@@ -306,6 +322,8 @@ export interface ShownOptions {
     hasOpenKnock?: boolean;
     hasOpenWatch?: boolean;
     knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[];
+    /** The member said here that they still have their 12 words, before the node's answer says so (wayBackOf). */
+    wordsKeptHere?: boolean;
 }
 
 /** Whether the tour has ended for this reader: the account says so, or this browser just ended it. */
@@ -350,14 +368,18 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
             case 'invite':
                 return me.standing === 'member' && answer.features.invites !== false && me.firstOffer;
             case 'steps':
-                return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now);
+                return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now, opts.wordsKeptHere);
             case 'tips':
                 return !!opts.tipsUp;
-            // A member's only. On a saved list it is drawn whenever it is there: Done or Skip takes it off
-            // (endTourLayout), and a member who puts it back from Add a card gets it (the picker offers it to whoever
-            // wants it, design §1). A Home never saved shows it until the tour ends (shownLayout).
+            // Welcome (DESIGN-home-default-fable.md §2.3), a member's only: until the tour is taken or Not now, and seven
+            // days after joining at most (core welcomeDrawn), on a saved list or not. Done or Not now also takes it off a
+            // saved list (endTourLayout).
             case 'start':
-                return me.standing === 'member';
+                return me.standing === 'member' && welcomeDrawn(tourOverFor(answer, opts), me.joinedAt, now);
+            // Your way back in: for a member whose 12 words are the only way back (wayBackOf, §2.5); the card itself then
+            // goes by its schedule (components/OneWayBack.tsx).
+            case 'safety':
+                return wayBackOf(answer, opts.wordsKeptHere).forThem;
             case 'search':
                 return true;
             // A chosen chat: always drawn, as "Pick a chat", its lines, waiting for the node, or gone with Remove; the
@@ -390,11 +412,8 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
 
 // ── First steps ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** A member is new for this long: First steps stays while they are, even with every line done (the node's own rule). */
-export const STEPS_NEW_DAYS = 14;
-
 export interface StepLine {
-    key: 'firstOffer' | 'photo' | 'interests' | 'firstNeed' | 'invite' | 'firstPost' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch';
+    key: 'firstOffer' | 'photo' | 'interests' | 'firstNeed' | 'invite' | 'firstPost' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch' | 'words';
     done: boolean;
     text: string;
     /** A line the web app can never tick: it keeps no card on its own. */
@@ -404,12 +423,18 @@ export interface StepLine {
 }
 
 /**
- * The lines First steps draws on the web (§3.1, §7; global L3 §3.2). Local: a first Offer, a photo, interests (the chips' taps count at
- * once), and an invite once there is an Offer. Global: the first-week card with the seven steps of §3.2.
+ * The lines First steps counts on the web (§3.1, §7; global L3 §3.2), done or not: the card draws only those left
+ * (core firstStepsLeft) under its count (DESIGN-home-default-fable.md §2.4). Local: a first Offer, a photo, interests (the
+ * chips' taps count at once), and an invite once there is an Offer. Global: the first-week card with the seven steps of
+ * §3.2. Both end with "Keep your 12 words safe" where the 12 words are the only way back (the node's `steps.words`, null
+ * when a sign-in's copy is linked here). "Hear when someone answers you" is the phone's: the web has no such line until
+ * members' web push (slice D5, with W2).
  */
-export function stepLines(answer: HomeAnswer, interests: readonly string[]): StepLine[] {
+export function stepLines(answer: HomeAnswer, interests: readonly string[], wordsKeptHere = false): StepLine[] {
     const s = answer.cards.steps;
     if (!s) return [];
+    const words: StepLine[] = typeof s.words === 'boolean'
+        ? [{ key: 'words', done: s.words || wordsKeptHere, text: t(FIRST_STEPS_WORDS.words) }] : [];
     if (answer.profile === 'global') {
         return [
             { key: 'name', done: true, text: t('Choose a name') },
@@ -419,6 +444,7 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[]): Ste
             { key: 'firstPost', done: !!s.firstPost, text: t('Post something free or for swap') },
             { key: 'saidHello', done: !!s.saidHello, text: t('Say hello to someone near you') },
             { key: 'watch', done: !!s.watch, text: t("Tell me when a community starts here, or say you'd help start one") },
+            ...words,
         ];
     }
     return [
@@ -430,25 +456,89 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[]): Ste
         ...(s.firstOffer && typeof s.firstNeed === 'boolean'
             ? [{ key: 'firstNeed' as const, done: s.firstNeed, text: t("Ask for one thing you'd pay a neighbour for") }] : []),
         ...(s.invited !== null && (s.firstOffer || answer.me?.firstOffer) ? [{ key: 'invite' as const, done: s.invited, text: t('Invite someone') }] : []),
+        ...words,
     ];
 }
 
 /**
- * Whether First steps has something to say here (§6.1 "a card with nothing to say disappears", §3.1 "member < 14 days
- * or any line undone", §3.2 & §6 "the card ends after 14 days or all done" on global): the member is new, a line the web can tick is undone, or the new-account limits apply.
+ * Whether First steps has something to say here (DESIGN-home-default-fable.md §2.4, the node's own rule): a line the web
+ * can tick is left, or the new-account limits apply, and its days are not up (30 after joining on a local community, 14
+ * for global's first week: core firstStepsOver). A card whose lines are all done is not drawn, young or not.
  */
-export function stepsSaySomething(answer: HomeAnswer, interests: readonly string[], now: number = Date.now()): boolean {
+export function stepsSaySomething(answer: HomeAnswer, interests: readonly string[], now: number = Date.now(), wordsKeptHere = false): boolean {
     const s = answer.cards.steps;
     if (!s) return false;
-    const joined = Date.parse(s.joinedAt ?? answer.me?.joinedAt ?? '');
-    const young = Number.isFinite(joined) && now - joined < STEPS_NEW_DAYS * DAY_MS;
-    const lines = stepLines(answer, interests);
-    if (answer.profile === 'global') {
-        return young && lines.some(l => !l.done);
-    }
-    if (young) return true;
-    if (lines.some(l => !l.done && !l.untracked)) return true;
-    return probationSentence(answer.me?.probation) !== null;
+    if (firstStepsOver(s.joinedAt ?? answer.me?.joinedAt, now, answer.profile)) return false;
+    const left = firstStepsLeft(stepLines(answer, interests, wordsKeptHere)).filter(l => !l.untracked);
+    if (left.length > 0) return true;
+    return answer.profile !== 'global' && probationSentence(answer.me?.probation) !== null;
+}
+
+// ── Welcome ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Welcome's words (DESIGN-home-default-fable.md §2.3, §5.1): where you are, who invited you and the way to say hello, or
+ * for an owner alone on a new community the way to invite someone; then the tour and Not now. Shown through t().
+ */
+export const WELCOME_WORDS = {
+    where: word("You're in {community}."),
+    invitedYou: word('{name} invited you.'),
+    sayHello: word('Say hello ›'),
+    firstHere: word("You're the first one here."),
+    inviteSomeone: word('Invite someone ›'),
+    tour: word('Take the tour ›'),
+} as const;
+
+// ── Your way back in ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** What Home's own answer says about the 12-words card, so its first paint is what it settles on (no `/me` on Home). */
+export interface WayBackOnHome {
+    /** The card is for this member at all (its schedule then decides whether it is up now). */
+    forThem: boolean;
+    /**
+     * "Add a sign-in" works for them: the node builds `cards.safety` only for a member who came in by the 12-words door and
+     * has no sign-in (routes/home-answer.ts safetyCard), the one member its link route takes (routes/open-join.ts
+     * linkState). Anyone else is refused (404 invite_only, 409 not_words_member), so is never offered it.
+     */
+    canAddSignIn: boolean;
+    /** The schedule starts as put away: sign-up counted as the first showing (§2.5), for all but the 12-words door's own. */
+    startsAway: boolean;
+    /** Posts the member has up, as far as Home's answer tells: the schedule's return after a post. */
+    keptPosts: number;
+    /** When their first week is over (joined + 7 days): the schedule's second return. null when the join date is unknown. */
+    weekOverAt: number | null;
+}
+
+const WEEK_MS = 7 * DAY_MS;
+
+/**
+ * Who "Your way back in" is for on Home, from the Home answer alone (DESIGN-home-default-fable.md §2.5, slice D3): every
+ * member whose 12 words are the only way back (`me.wayBack` `words`), however they joined, until they say they still have
+ * them or save the kit (First steps' `steps.words` true, or said in this browser). A 12-words joiner with no sign-in
+ * (`cards.safety`) also has it on a node from before `wayBack`. Nobody else: a sign-in's copy linked here ends it.
+ *
+ * Kept on the account but read back through First steps' fact only: once that card has gone (its days up, or removed) a
+ * say-so made on another device is not seen here, and the card keeps its schedule (two returns at most, then Settings).
+ */
+export function wayBackOf(answer: HomeAnswer, wordsKeptHere = false): WayBackOnHome {
+    const me = answer.me;
+    const none: WayBackOnHome = { forThem: false, canAddSignIn: false, startsAway: false, keptPosts: 0, weekOverAt: null };
+    if (!me || answer.welcome || me.standing !== 'member') return none;
+    const door = !!answer.cards.safety;
+    const s = answer.cards.steps;
+    // The 12-words door's own member, on probation, with no `safety`: the node left it out because they said they still
+    // have their words (safetyCard), whatever `steps` says.
+    const keptByDoor = !door && me.probation?.rules === 'words';
+    const kept = wordsKeptHere || s?.words === true || keptByDoor;
+    const forThem = door || (me.wayBack === 'words' && !kept);
+    const joined = Date.parse(me.joinedAt ?? '');
+    return {
+        forThem,
+        canAddSignIn: door,
+        startsAway: !door,
+        keptPosts: Math.max(Number(me.probation?.keptPosts) || 0, me.firstOffer || s?.firstPost ? 1 : 0),
+        weekOverAt: Number.isFinite(joined) ? joined + WEEK_MS : null,
+    };
 }
 
 /**

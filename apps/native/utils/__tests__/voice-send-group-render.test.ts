@@ -11,7 +11,7 @@
  *   - db.ts:7490: each try made a new clientId, so a Send after the 60 s timeout was a second line. The recording's own line
  *     id is the clientId on every try, and the node's duplicate guard (engine/group-thread.ts) answers the line it stored.
  *
- * Byron, 14 Nov: a voice message sent to a node from before voice V2 was stored as a text line carrying a sound. The
+ * A live community, 14 Nov: a voice message sent to a node from before voice V2 was stored as a text line carrying a sound. The
  * microphone shows only where the community says `features.voiceLines: true` (core voiceLinesOn, through useNodeProfile,
  * stood in for here so the test can change what the community says); a recording that would still go where it isn't said
  * is kept, not sent, and the chat says so.
@@ -236,7 +236,7 @@ describe('a locked group\'s voice message sent twice is one line (PR #3112 revie
     });
 });
 
-describe('the microphone only where the group\'s community takes voice messages (features.voiceLines; Byron, 14 Nov)', () => {
+describe('the microphone only where the group\'s community takes voice messages (features.voiceLines; a live community, 14 Nov)', () => {
     const NOT_TAKEN = "This community doesn't take voice messages yet. Nothing was sent.";
     async function draw(): Promise<void> {
         host = document.createElement('div');
@@ -250,7 +250,7 @@ describe('the microphone only where the group\'s community takes voice messages 
     }
 
     for (const [what, profile] of [
-        ['says nothing of it (a node from before voice V2, as Byron was)', { profile: 'local', features: {} }],
+        ['says nothing of it (a node from before voice V2, as one live community was)', { profile: 'local', features: {} }],
         ['says voiceLines: false', { profile: 'local', features: { voiceLines: false } }],
         ['isn\'t known on this phone yet', null],
     ] as const) {

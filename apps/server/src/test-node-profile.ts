@@ -103,7 +103,7 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // while the owners' switch is on, as it is by default (test-contact-copies). A price for each one (DESIGN-per-item-price-fable.md
 // §6): a capability of the build, on every profile from 1.4.1 (config/node-profile.ts PER_ITEM_BUILT; test-per-item-listings).
 // Voice lines (DESIGN-cross-chat-voice-fable.md §5.4, V2): a capability of the build, on every profile, said outright so a
-// phone offers its microphone only where the node stores a voice line as one (test-voice-line; Byron, 14 Nov).
+// phone offers its microphone only where the node stores a voice line as one (test-voice-line; a live community, 14 Nov).
 const BUILT_TODAY = {
     local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, askedPush: true, knowledge: true, bills: true, perItem: true, voiceLines: true, contacts: true, door: 'members' },
     global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, perItem: true, voiceLines: true, contacts: true, door: 'open' },

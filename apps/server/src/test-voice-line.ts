@@ -275,7 +275,7 @@ async function main(): Promise<void> {
 
         // The node says outright that it takes voice lines, where both apps read a community's switches: its public info, and
         // a member's own answer. A node from before V2 says nothing and stores a voice line as words with a sound no one can
-        // play (Byron, 14 Nov), so the phone offers its microphone only where this says true.
+        // play (a live community, 14 Nov), so the phone offers its microphone only where this says true.
         const infoPublic = await adminGet(M, '/api/community/info', { Accept: 'application/json' });
         assert(infoPublic.status === 200 && infoPublic.body?.features?.voiceLines === true,
             `GET /api/community/info, unsigned, says features.voiceLines: true (${infoPublic.status} ${JSON.stringify(infoPublic.body?.features?.voiceLines)})`);

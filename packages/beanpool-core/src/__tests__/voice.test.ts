@@ -14,7 +14,8 @@ import {
 } from '../group-crypto.js';
 import {
     looksLikeM4a, readVoicePart, voicePartBytes, voiceSealedTooBig, VoiceRefusedError,
-    VOICE_BARS, VOICE_MAX_MS, VOICE_MIME, VOICE_PART, VOICE_PART_VERSION, VOICE_SEALED_MAX_BYTES, type VoiceRefusal,
+    VOICE_BARS, VOICE_MAX_MS, VOICE_MIME, VOICE_PART, VOICE_PART_VERSION, VOICE_SEALED_MAX_BYTES, VOICE_SERVER_KEEP_DAYS,
+    VOICE_SOUND_MAX_BYTES, type VoiceRefusal,
 } from '../voice.js';
 import * as barrel from '../index.js';
 import { checkVoiceVectors, VOICE_VECTOR_SOUND, VOICE_DM_VECTOR, VOICE_GROUP_VECTOR } from '../voice-vectors.js';
@@ -285,6 +286,20 @@ describe('a direct chat\'s voice message', () => {
         expect(voiceSealedTooBig(over.ciphertext)).toBe(true);
         expect(refusedFor(() => openDmVoice(over, keysOf(ben, ana), ref))).toBe('too-big');
         expect(refusedFor(() => openDmVoice({ ...over, ciphertext: over.ciphertext + 'AAAA' }, keysOf(ben, ana), ref))).toBe('too-big');
+    });
+
+    it('the check before sealing counts the cap in base64 as sent, not in bytes of sound (the #3103 review, V2)', () => {
+        // 1,150,000 characters carry 862,500 bytes; the smallest seal (a group line's, no after) adds 82 and the header 54.
+        expect(VOICE_SOUND_MAX_BYTES).toBe(862_364);
+        expect(VOICE_SERVER_KEEP_DAYS).toBe(30);
+        const soundOf = (total: number) => m4a(total - m4a(0).length);
+        expect(voicePartBytes({ ...VOICE, sound: soundOf(VOICE_SOUND_MAX_BYTES) }).length).toBe(54 + VOICE_SOUND_MAX_BYTES);
+        expect(refusedFor(() => voicePartBytes({ ...VOICE, sound: soundOf(VOICE_SOUND_MAX_BYTES + 1) }))).toBe('too-big');
+        // Between the most that fits and the cap read as bytes: once sealed before it was refused, now refused unsealed.
+        expect(refusedFor(() => voicePartBytes({ ...VOICE, sound: soundOf(1_000_000) }))).toBe('too-big');
+        expect(refusedFor(() => voicePartBytes({ ...VOICE, sound: soundOf(VOICE_SEALED_MAX_BYTES - 54) }))).toBe('too-big');
+        // The most that fits, sealed as a group line with no after, is exactly at the cap.
+        expect(gSeal(ana, newDmMessageId(), { ...VOICE, sound: soundOf(VOICE_SOUND_MAX_BYTES) }).ciphertext.length).toBe(VOICE_SEALED_MAX_BYTES);
     });
 
     it('an app refuses to seal what a reader would refuse', () => {

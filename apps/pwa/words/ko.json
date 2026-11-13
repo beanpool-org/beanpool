@@ -17,15 +17,6 @@
   "(100% community owned)": "(100% 커뮤니티 소유)",
   "(You)": "(나)",
   "(You)\u0004roster: the viewer": "(나)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "other": "신용 한도를 열려면 **'드려요'를 등록**하세요 — **{n}개** 올리면 전체 −{limit} 한도가 열려요."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "other": "**{n}개 제공** 등록 시 −{limit} 한도가 열려요"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "other": "**{n}개 제공** 등록 시 → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "other": "{emoji} {tier}까지 신뢰 **{n}** 남음"
   },
@@ -629,7 +620,6 @@
   "Creating...": "만드는 중...",
   "Creator account linking:": "크리에이터 계정 연결:",
   "Credit Line": "신용 한도",
-  "Credit balance gauge": "신용 잔액 게이지",
   "Credits (B)": "크레딧 (콩)",
   "Credits (🫘 Beans)": "크레딧 (🫘 콩)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "크레딧은 상호 신용 통화예요. 거래하면 크레딧이 멤버 사이에서 오가요. 모든 멤버는 0에서 시작해요. 서로 주고받기를 북돋우고 가치가 지역 안에서 계속 돌도록 만들어졌어요.",
@@ -1322,7 +1312,6 @@
   "No bond required.": "보증금이 필요하지 않아요.",
   "No comment provided.": "작성된 코멘트가 없어요.",
   "No conversations yet.": "아직 대화가 없어요.",
-  "No credit line yet": "아직 신용 한도가 없습니다",
   "No deals in progress": "진행 중인 거래가 없어요",
   "No friends yet": "아직 친구가 없어요",
   "No groups found": "모임이 없어요",
@@ -2013,9 +2002,6 @@
   "Spam or scam": "스팸 또는 사기",
   "Specific Action / Effect": "구체적 조치 / 효과",
   "Specific Action or Effect": "구체적 조치 또는 효과",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "other": "지출이 일시 중지되었어요 — 활성 상태인 {n}개의 '드려요'가 제공하는 한도(−{limit})보다 잔액이 낮아요. '드려요'를 올리거나 거래를 통해 잔액을 회복하면 해제돼요. 받기와 판매는 계속할 수 있어요."
-  },
   "Sprout": "새싹",
   "Square — nothing owed either way": "정산 완료 — 서로 빚진 것 없음",
   "Start": "시작하기",
@@ -2699,7 +2685,6 @@
   "You can propose a Decision once you have completed a trade.": "거래를 1회 이상 완료하면 결정을 제안할 수 있어요.",
   "You can propose once you have completed a trade.": "거래를 1건 이상 완료하면 제안할 수 있어요.",
   "You can still read, edit your profile and leave.": "글 읽기, 프로필 수정, 커뮤니티 나가기는 계속할 수 있어요.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "보유한 콩으로 바로 거래할 수 있어요. 첫 거래를 완료하면 신용 한도가 자동으로 열리며, 거래 가치가 커질수록 한도도 더 늘어납니다. (커뮤니티 보증인을 통해 시작 한도를 받을 수도 있습니다.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "시간이나 장소를 바꿨어요. 행사에 '변경됨'이 표시되고 참석하는 모든 사람에게 알림이 가요.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "직접 보유하거나 대여한 머신에서 운영해요. beanpool.org가 필요 없으며 자체 웹 주소로도 작동해요.",
   "You have already rated this trade.": "이미 이 거래를 평가했어요.",
@@ -2886,8 +2871,6 @@
   "execution pending grace\u0004Decision status": "집행 대기(유예 기간)",
   "execution void\u0004Decision status": "집행 무효",
   "failed\u0004Decision status": "부결됨",
-  "fee-free": "수수료 면제",
-  "fee/mo": "수수료/월",
   "for {n} day|for {n} days": {
     "other": "{n}일 동안"
   },
@@ -2902,7 +2885,6 @@
   "from {who} · {when}": "{who}님으로부터 · {when}",
   "general\u0004group category": "일반",
   "guild\u0004group category": "길드",
-  "hold credit →": "신용 보유 →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... 또는 tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -2948,7 +2930,6 @@
   "request to join\u0004join policy": "가입 신청",
   "requested\u0004deal status": "요청됨",
   "social\u0004group category": "소셜",
-  "sweet spot": "균형 구간",
   "the account saved from the other tab": "다른 탭에서 저장된 계정",
   "the lever": "레버",
   "them\u0004the other member of a trade, name unknown": "상대방",
@@ -2965,7 +2946,6 @@
   "working group\u0004group category": "실무 그룹",
   "yesterday": "어제",
   "you": "나",
-  "your limit": "내 한도",
   "{actor} completed a trade with {target}": "{actor}님이 {target}님과의 거래를 완료했어요",
   "{actor} joined": "{actor}님이 참여함",
   "{actor} joined the community": "{actor}님이 커뮤니티에 참여했어요",
@@ -2981,8 +2961,6 @@
   "{actor} traded with {target}": "{actor}님이 {target}님과 거래했어요",
   "{actor} traded with {target}: {title}": "{actor}님이 {target}님과 거래함: {title}",
   "{amount} B": "{amount} 콩",
-  "{amount} B · ≈{rate}%/mo": "{amount} 콩 · 월 약 {rate}%",
-  "{amount} Beans": "{amount} 콩",
   "{amount} Beans from the pool: {what}.": "기금에서 지원된 콩 {amount}개: {what}.",
   "{amount} raised of {goal} 🫘": "{goal} 🫘 중 {amount} 모금됨",
   "{amount} · held in trust": "{amount} · 보관 중",
@@ -3274,7 +3252,6 @@
   "← Choose another way": "← 다른 방법 선택",
   "← Keep it": "← 유지하기",
   "← Start again": "← 처음부터 다시 시작",
-  "← carry credit": "← 신용 사용",
   "↑ Sent": "↑ 보냄",
   "↓ Received": "↓ 받음",
   "↻ RECURRING": "↻ 반복",

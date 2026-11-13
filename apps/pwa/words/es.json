@@ -17,18 +17,6 @@
   "(100% community owned)": "(100% propiedad de la comunidad)",
   "(You)": "(Tú)",
   "(You)\u0004roster: the viewer": "(Tú)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Publica una Oferta** para abrir tu línea de crédito — **{n}** oferta desbloquea tu total de −{limit}.",
-    "other": "**Publica una Oferta** para abrir tu línea de crédito — **{n}** ofertas desbloquean tu total de −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} oferta** desbloquea −{limit}",
-    "other": "**{n} ofertas** desbloquean −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} oferta** → −{limit}",
-    "other": "**{n} ofertas** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "**{n}** más de confianza para {emoji} {tier}",
     "other": "**{n}** más de confianza para {emoji} {tier}"
@@ -642,7 +630,6 @@
   "Creating...": "Creando...",
   "Creator account linking:": "Vinculación de cuenta de creador:",
   "Credit Line": "Línea de crédito",
-  "Credit balance gauge": "Indicador de saldo de crédito",
   "Credits (B)": "Créditos (B)",
   "Credits (🫘 Beans)": "Créditos (🫘 frijoles)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Los créditos son una moneda de crédito mutuo. Cuando intercambias, los créditos pasan de un miembro a otro. Todos los miembros empiezan en cero. El sistema está pensado para fomentar la reciprocidad y mantener el valor circulando en lo local.",
@@ -1342,7 +1329,6 @@
   "No bond required.": "No se requiere fianza.",
   "No comment provided.": "Sin comentarios.",
   "No conversations yet.": "Aún no hay conversaciones.",
-  "No credit line yet": "Sin línea de crédito aún",
   "No deals in progress": "No hay tratos en curso",
   "No friends yet": "Aún no tienes amigos",
   "No groups found": "No se encontraron grupos",
@@ -2051,10 +2037,6 @@
   "Spam or scam": "Spam o estafa",
   "Specific Action / Effect": "Acción específica / Efecto",
   "Specific Action or Effect": "Acción específica o efecto",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Gastos en pausa — tu saldo está por debajo de lo que tu {n} oferta activa desbloquea (−{limit}). Publica una Oferta o intercambia para recuperarte y retirarla. Todavía puedes recibir y vender.",
-    "other": "Gastos en pausa — tu saldo está por debajo de lo que tus {n} ofertas activas desbloquean (−{limit}). Publica una Oferta o intercambia para recuperarte y retirarla. Todavía puedes recibir y vender."
-  },
   "Sprout": "Brote",
   "Square — nothing owed either way": "A mano — no se debe nada en ninguna dirección",
   "Start": "Empezar",
@@ -2760,7 +2742,6 @@
   "You can propose a Decision once you have completed a trade.": "Puedes proponer una Decisión una vez que hayas completado un intercambio.",
   "You can propose once you have completed a trade.": "Puedes proponer una vez que hayas completado un intercambio.",
   "You can still read, edit your profile and leave.": "Aún puedes leer, editar tu perfil y salir.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Puedes intercambiar ahora mismo con los frijoles que tienes. Completa tu primer intercambio y tu línea de crédito se abrirá automáticamente; cuanto más valor intercambies, más se ampliará. (Un aval comunitario también puede darte una línea inicial).",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Cambiaste la hora o el lugar. El evento mostrará ACTUALIZADO y se avisará a todos los que asistan.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Tú, en tu propia máquina o en la que alquiles. Nunca necesita beanpool.org: tu propia dirección web también funciona.",
   "You have already rated this trade.": "Ya has valorado este intercambio.",
@@ -2954,8 +2935,6 @@
   "execution pending grace\u0004Decision status": "ejecución pendiente de gracia",
   "execution void\u0004Decision status": "ejecución anulada",
   "failed\u0004Decision status": "rechazada",
-  "fee-free": "sin comisión",
-  "fee/mo": "comisión/mes",
   "for {n} day|for {n} days": {
     "one": "por {n} día",
     "other": "por {n} días"
@@ -2973,7 +2952,6 @@
   "from {who} · {when}": "de {who} · {when}",
   "general\u0004group category": "general",
   "guild\u0004group category": "gremio",
-  "hold credit →": "acumular crédito →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... o tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3022,7 +3000,6 @@
   "request to join\u0004join policy": "solicitar unirse",
   "requested\u0004deal status": "solicitado",
   "social\u0004group category": "social",
-  "sweet spot": "punto ideal",
   "the account saved from the other tab": "la cuenta guardada desde la otra pestaña",
   "the lever": "la palanca",
   "them\u0004the other member of a trade, name unknown": "la otra persona",
@@ -3039,7 +3016,6 @@
   "working group\u0004group category": "grupo de trabajo",
   "yesterday": "ayer",
   "you": "tú",
-  "your limit": "tu límite",
   "{actor} completed a trade with {target}": "{actor} completó un intercambio con {target}",
   "{actor} joined": "{actor} se unió",
   "{actor} joined the community": "{actor} se unió a la comunidad",
@@ -3055,8 +3031,6 @@
   "{actor} traded with {target}": "{actor} intercambió con {target}",
   "{actor} traded with {target}: {title}": "{actor} intercambió con {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/mes",
-  "{amount} Beans": "{amount} frijoles",
   "{amount} Beans from the pool: {what}.": "{amount} frijoles del fondo: {what}.",
   "{amount} raised of {goal} 🫘": "{amount} recaudados de {goal} 🫘",
   "{amount} · held in trust": "{amount} · en custodia",
@@ -3399,7 +3373,6 @@
   "← Choose another way": "← Elegir otra forma",
   "← Keep it": "← Conservarla",
   "← Start again": "← Empezar de nuevo",
-  "← carry credit": "← usar crédito",
   "↑ Sent": "↑ Enviados",
   "↓ Received": "↓ Recibidos",
   "↻ RECURRING": "↻ PERIÓDICO",

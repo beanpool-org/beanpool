@@ -17,18 +17,6 @@
   "(100% community owned)": "(%100 topluluğa ait)",
   "(You)": "(Sen)",
   "(You)\u0004roster: the viewer": "(Sen)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "Kredi limitinizi açmak için **Bir Teklif Paylaşın** — **{n}** teklif tam −{limit} limitinizi açar.",
-    "other": "Kredi limitinizi açmak için **Bir Teklif Paylaşın** — **{n}** teklif tam −{limit} limitinizi açar."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} teklif** −{limit} limitini açar",
-    "other": "**{n} teklif** −{limit} limitini açar"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} teklif** → −{limit}",
-    "other": "**{n} teklif** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier} seviyesine **{n}** güven kaldı",
     "other": "{emoji} {tier} seviyesine **{n}** güven kaldı"
@@ -642,7 +630,6 @@
   "Creating...": "Oluşturuluyor...",
   "Creator account linking:": "İçerik üretici hesabı bağlama:",
   "Credit Line": "Kredi Limiti",
-  "Credit balance gauge": "Kredi bakiyesi göstergesi",
   "Credits (B)": "Kredi (Fasulye)",
   "Credits (🫘 Beans)": "Krediler (🫘 Fasulye)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Krediler, karşılıklı kredi türünde bir para birimidir. Takas yaptığınızda krediler üyeler arasında aktarılır. Her üye sıfırdan başlar. Sistem, karşılıklılığı teşvik edecek ve değerin yerel olarak dolaşmasını sağlayacak şekilde tasarlanmıştır.",
@@ -1342,7 +1329,6 @@
   "No bond required.": "Teminat gerekmez.",
   "No comment provided.": "Yorum yapılmadı.",
   "No conversations yet.": "Henüz sohbet yok.",
-  "No credit line yet": "Henüz kredi limiti yok",
   "No deals in progress": "Devam eden anlaşma yok",
   "No friends yet": "Henüz arkadaş yok",
   "No groups found": "Grup bulunamadı",
@@ -2051,10 +2037,6 @@
   "Spam or scam": "Spam veya dolandırıcılık",
   "Specific Action / Effect": "Belirli Eylem / Etki",
   "Specific Action or Effect": "Belirli Eylem veya Etki",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Harcama duraklatıldı — bakiyeniz {n} aktif teklifinizin açtığı limitin (−{limit}) altında. Bu durumu kaldırmak için bir Teklif paylaşın veya takas yaparak bakiyenizi yükseltin. Yine de ödeme alabilir ve satış yapabilirsiniz.",
-    "other": "Harcama duraklatıldı — bakiyeniz {n} aktif teklifinizin açtığı limitin (−{limit}) altında. Bu durumu kaldırmak için bir Teklif paylaşın veya takas yaparak bakiyenizi yükseltin. Yine de ödeme alabilir ve satış yapabilirsiniz."
-  },
   "Sprout": "Filiz",
   "Square — nothing owed either way": "Hesap denk — iki tarafın da borcu yok",
   "Start": "Başla",
@@ -2760,7 +2742,6 @@
   "You can propose a Decision once you have completed a trade.": "Bir takas tamamladıktan sonra Karar önerebilirsin.",
   "You can propose once you have completed a trade.": "Bir takas tamamladıktan sonra öneride bulunabilirsiniz.",
   "You can still read, edit your profile and leave.": "Yine de okuyabilir, profilinizi düzenleyebilir ve ayrılabilirsiniz.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Şu anda sahip olduğunuz fasulyelerle hemen takas yapabilirsiniz. İlk takasınızı tamamlayın, kredi limitiniz otomatik olarak açılsın — ne kadar çok değer takas ederseniz, o kadar derinleşir. (Bir topluluk kefili de size bir başlangıç limiti sağlayabilir.)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Zamanı veya yeri değiştirdin. Etkinlikte GÜNCELLENDİ yazacak ve katılan herkese haber verilecek.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Kendi makinenizde veya kiraladığınız sunucuda siz barındırırsınız. Asla beanpool.org'a ihtiyaç duymaz: kendi web adresiniz de çalışır.",
   "You have already rated this trade.": "Bu takası zaten değerlendirdiniz.",
@@ -2954,8 +2935,6 @@
   "execution pending grace\u0004Decision status": "uygulama beklemede (itiraz süresi)",
   "execution void\u0004Decision status": "uygulama geçersiz",
   "failed\u0004Decision status": "reddedildi",
-  "fee-free": "kesintisiz",
-  "fee/mo": "kesinti/ay",
   "for {n} day|for {n} days": {
     "one": "{n} gün için",
     "other": "{n} gün için"
@@ -2973,7 +2952,6 @@
   "from {who} · {when}": "gönderen: {who} · {when}",
   "general\u0004group category": "genel",
   "guild\u0004group category": "lonca",
-  "hold credit →": "alacak tutma →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... veya tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3022,7 +3000,6 @@
   "request to join\u0004join policy": "katılma isteği",
   "requested\u0004deal status": "istendi",
   "social\u0004group category": "sosyal",
-  "sweet spot": "ideal aralık",
   "the account saved from the other tab": "diğer sekmeden kaydedilen hesap",
   "the lever": "kaldıraç",
   "them\u0004the other member of a trade, name unknown": "onlar",
@@ -3039,7 +3016,6 @@
   "working group\u0004group category": "çalışma grubu",
   "yesterday": "dün",
   "you": "sen",
-  "your limit": "limitiniz",
   "{actor} completed a trade with {target}": "{actor}, {target} ile bir takası tamamladı",
   "{actor} joined": "{actor} katıldı",
   "{actor} joined the community": "{actor} topluluğa katıldı",
@@ -3055,8 +3031,6 @@
   "{actor} traded with {target}": "{actor}, {target} ile takas yaptı",
   "{actor} traded with {target}: {title}": "{actor}, {target} ile takas yaptı: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈%{rate}/ay",
-  "{amount} Beans": "{amount} Fasulye",
   "{amount} Beans from the pool: {what}.": "Havuzdan {amount} Fasulye: {what}.",
   "{amount} raised of {goal} 🫘": "{goal} 🫘 hedeften {amount} toplandı",
   "{amount} · held in trust": "{amount} · emanette",
@@ -3397,7 +3371,6 @@
   "← Choose another way": "← Başka bir yol seç",
   "← Keep it": "← Sakla",
   "← Start again": "← Baştan başla",
-  "← carry credit": "← borçlanma",
   "↑ Sent": "↑ Gönderilen",
   "↓ Received": "↓ Alınan",
   "↻ RECURRING": "↻ TEKRARLAYAN",

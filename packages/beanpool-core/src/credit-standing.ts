@@ -165,6 +165,10 @@ export const CREDIT_STANDING_WORDS = {
     feeStarts: word('monthly fee starts'),
     noLineYet: word('no credit line yet'),
     opens: word('Opens how this works.'),
+    /** Each mark's one line, under it from 640 px wide (amendment §2); on a narrow screen the sheet carries them. */
+    limitLine: word('The lowest your balance can go.'),
+    balancedLine: word('You have given as much as you have received.'),
+    noLineLine: word('This side opens with your first completed trade.'),
 };
 
 /** A note under the sentence: its tone (a library chip), its sign (never colour alone) and its words. */
@@ -312,7 +316,10 @@ export function creditStandingCard(a: CreditStandingAnswer): CreditStandingCard 
         sentence,
         ...(note ? [note.text] : []),
         ...(s.line_c > 0 ? [t('Your limit is minus {line}.', { line: B(s.line_c) })] : []),
-        ...(parts.items.length > 0 ? [t('Your credit line: {parts}.', { parts: parts.items.map((i) => i.text).join(', ') })] : []),
+        // The parts that count in the line now (the strip's blocks); "Earned by trading 0 so far" is for the eye only.
+        ...(parts.items.some((i) => i.inLine_c > 0)
+            ? [t('Your credit line: {parts}.', { parts: parts.items.filter((i) => i.inLine_c > 0).map((i) => i.text).join(', ') })]
+            : []),
         t(CREDIT_STANDING_WORDS.opens),
     ];
     return { headline, sentence, note, parts: parts.line, spoken: spokenParts.join(' ') };
@@ -420,6 +427,14 @@ export interface CreditBarBlock {
     width: number;
 }
 
+/** One mark under the track. `figure` is empty for the left end with no line yet ("no credit line yet"). */
+export interface CreditBarMark {
+    at: number;
+    figure: string;
+    words: string;
+    line: string;
+}
+
 export interface CreditBarPicture {
     /** The dot's place, in percent of the track. */
     dot: number;
@@ -430,8 +445,8 @@ export interface CreditBarPicture {
     stripes: { from: number; width: number } | null;
     /** The strip under the left half, one block per part, left to right, widths adding up to the left half. */
     blocks: CreditBarBlock[];
-    /** The marks under the track. `limit` is null with no line. */
-    marks: { limit: { at: number; figure: string; words: string } | null; zero: { at: number; figure: string; words: string }; fee: { at: number; figure: string; words: string } };
+    /** The marks under the track: the figure at its place, a word or two under it, and its one line (wide screens). */
+    marks: { limit: CreditBarMark; zero: CreditBarMark; fee: CreditBarMark };
     /** No credit line yet: the left half is striped and says so. */
     noLine: boolean;
 }
@@ -482,9 +497,16 @@ export function creditBarPicture(a: CreditStandingAnswer): CreditBarPicture {
         stripes,
         blocks,
         marks: {
-            limit: noLine ? null : { at: BAR_LIMIT_AT, figure: `${MINUS_SIGN}${B(s.line_c)}`, words: t(CREDIT_STANDING_WORDS.limit) },
-            zero: { at: BAR_ZERO_AT, figure: B(0), words: t(CREDIT_STANDING_WORDS.balanced) },
-            fee: { at: BAR_FEE_AT, figure: `+${B(CIRCULATION_FREE_BEANS)}`, words: t(CREDIT_STANDING_WORDS.feeStarts) },
+            limit: noLine
+                ? { at: BAR_LIMIT_AT, figure: '', words: t(CREDIT_STANDING_WORDS.noLineYet), line: t(CREDIT_STANDING_WORDS.noLineLine) }
+                : { at: BAR_LIMIT_AT, figure: `${MINUS_SIGN}${B(s.line_c)}`, words: t(CREDIT_STANDING_WORDS.limit), line: t(CREDIT_STANDING_WORDS.limitLine) },
+            zero: { at: BAR_ZERO_AT, figure: B(0), words: t(CREDIT_STANDING_WORDS.balanced), line: t(CREDIT_STANDING_WORDS.balancedLine) },
+            fee: {
+                at: BAR_FEE_AT,
+                figure: `+${B(CIRCULATION_FREE_BEANS)}`,
+                words: t(CREDIT_STANDING_WORDS.feeStarts),
+                line: t('Hold more than {free} Beans and a small monthly fee starts on the part above.', { free: B(CIRCULATION_FREE_BEANS) }),
+            },
         },
         noLine,
     };

@@ -17,18 +17,6 @@
   "(100% community owned)": "(১০০% সম্প্রদায়ের মালিকানাধীন)",
   "(You)": "(আপনি)",
   "(You)\u0004roster: the viewer": "(আপনি)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "আপনার ক্রেডিট লাইন খুলতে **একটি প্রস্তাব দিন** — **{n}**টি প্রস্তাব আপনার সম্পূর্ণ −{limit} আনলক করে।",
-    "other": "আপনার ক্রেডিট লাইন খুলতে **একটি প্রস্তাব দিন** — **{n}**টি প্রস্তাব আপনার সম্পূর্ণ −{limit} আনলক করে।"
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n}টি প্রস্তাব** −{limit} আনলক করে",
-    "other": "**{n}টি প্রস্তাব** −{limit} আনলক করে"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n}টি প্রস্তাব** → −{limit}",
-    "other": "**{n}টি প্রস্তাব** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "{emoji} {tier}-এ পৌঁছাতে আরও **{n}** আস্থা প্রয়োজন",
     "other": "{emoji} {tier}-এ পৌঁছাতে আরও **{n}** আস্থা প্রয়োজন"
@@ -642,7 +630,6 @@
   "Creating...": "তৈরি হচ্ছে...",
   "Creator account linking:": "নির্মাতা অ্যাকাউন্ট সংযোগ:",
   "Credit Line": "ক্রেডিট লাইন",
-  "Credit balance gauge": "ক্রেডিট ব্যালেন্স গেজ",
   "Credits (B)": "ক্রেডিট (শিম)",
   "Credits (🫘 Beans)": "ক্রেডিট (🫘 শিম)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "ক্রেডিট হলো পারস্পরিক ক্রেডিটের একটি মুদ্রা। আপনি লেনদেন করলে সদস্যদের মধ্যে ক্রেডিট হাত বদলায়। প্রত্যেক সদস্য শূন্য থেকে শুরু করেন। ব্যবস্থাটি এমনভাবে তৈরি যাতে পারস্পরিকতা উৎসাহিত হয় এবং মূল্য স্থানীয়ভাবেই ঘুরতে থাকে।",
@@ -1342,7 +1329,6 @@
   "No bond required.": "কোনো জামানতের প্রয়োজন নেই।",
   "No comment provided.": "কোনো মন্তব্য দেওয়া হয়নি।",
   "No conversations yet.": "এখনও কোনো বার্তালাপ নেই।",
-  "No credit line yet": "এখনও কোনো ক্রেডিট সীমা নেই",
   "No deals in progress": "কোনো চুক্তি চলমান নেই",
   "No friends yet": "এখনও কোনো বন্ধু নেই",
   "No groups found": "কোনো দল পাওয়া যায়নি",
@@ -2051,10 +2037,6 @@
   "Spam or scam": "স্প্যাম বা প্রতারণা",
   "Specific Action / Effect": "নির্দিষ্ট পদক্ষেপ / প্রভাব",
   "Specific Action or Effect": "নির্দিষ্ট পদক্ষেপ বা প্রভাব",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "খরচ করা স্থগিত রয়েছে — আপনার ব্যালেন্স আপনার {n}টি সক্রিয় প্রস্তাবের আনলক করা সীমার (−{limit}) নিচে নেমে গেছে। এটি তুলতে একটি প্রস্তাব দিন বা লেনদেন করে ব্যালেন্স বাড়ান। আপনি এখনও গ্রহণ ও বিক্রি করতে পারবেন।",
-    "other": "খরচ করা স্থগিত রয়েছে — আপনার ব্যালেন্স আপনার {n}টি সক্রিয় প্রস্তাবের আনলক করা সীমার (−{limit}) নিচে নেমে গেছে। এটি তুলতে একটি প্রস্তাব দিন বা লেনদেন করে ব্যালেন্স বাড়ান। আপনি এখনও গ্রহণ ও বিক্রি করতে পারবেন।"
-  },
   "Sprout": "অঙ্কুর",
   "Square — nothing owed either way": "হিসাব সমান — কোনো দিকেই কিছু বাকি নেই",
   "Start": "শুরু করুন",
@@ -2760,7 +2742,6 @@
   "You can propose a Decision once you have completed a trade.": "একটি লেনদেন সম্পন্ন করার পর আপনি সিদ্ধান্তের প্রস্তাব দিতে পারবেন।",
   "You can propose once you have completed a trade.": "আপনি একটি লেনদেন সম্পন্ন করার পরে প্রস্তাব দিতে পারেন।",
   "You can still read, edit your profile and leave.": "আপনি এখনও পড়তে, প্রোফাইল সম্পাদনা করতে এবং ত্যাগ করতে পারেন।",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "আপনার কাছে থাকা শিম দিয়ে আপনি এখনই বাণিজ্য করতে পারেন। আপনার প্রথম বাণিজ্য সম্পন্ন করুন এবং আপনার ক্রেডিট সীমা স্বয়ংক্রিয়ভাবে খুলে যাবে — আপনি যত বেশি মূল্য বিনিময় করবেন, এটি তত গভীর হবে। (একটি সম্প্রদায় ভাউচারও আপনাকে একটি প্রাথমিক সীমা দিতে পারে।)",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "আপনি সময় বা জায়গা বদলেছেন। ইভেন্টটিতে 'আপডেট করা হয়েছে' দেখাবে এবং যাঁরা যাচ্ছেন তাঁদের সবাইকে জানানো হবে।",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "আপনি নিজেই করেন, আপনার যন্ত্রে বা ভাড়ার সার্ভারে। এর জন্য beanpool.org-এর কোনো প্রয়োজন নেই: আপনার নিজস্ব ওয়েব ঠিকানাও কাজ করে।",
   "You have already rated this trade.": "আপনি ইতিমধ্যে এই লেনদেনের রেটিং দিয়েছেন।",
@@ -2954,8 +2935,6 @@
   "execution pending grace\u0004Decision status": "কার্যকরের অবকাশ মেয়াদ অপেক্ষমান",
   "execution void\u0004Decision status": "কার্যকর বাতিল",
   "failed\u0004Decision status": "ব্যর্থ",
-  "fee-free": "ফি-মুক্ত",
-  "fee/mo": "ফি/মাস",
   "for {n} day|for {n} days": {
     "one": "{n} দিনের জন্য",
     "other": "{n} দিনের জন্য"
@@ -2973,7 +2952,6 @@
   "from {who} · {when}": "{who} থেকে · {when}",
   "general\u0004group category": "সাধারণ",
   "guild\u0004group category": "গিল্ড",
-  "hold credit →": "ক্রেডিট সংরক্ষণ →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... বা tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3022,7 +3000,6 @@
   "request to join\u0004join policy": "যোগদানের অনুরোধ",
   "requested\u0004deal status": "অনুরোধকৃত",
   "social\u0004group category": "সামাজিক",
-  "sweet spot": "আদর্শ সীমা",
   "the account saved from the other tab": "অন্য ট্যাব থেকে সেভ হওয়া অ্যাকাউন্টটি",
   "the lever": "লিভার",
   "them\u0004the other member of a trade, name unknown": "অপর পক্ষ",
@@ -3039,7 +3016,6 @@
   "working group\u0004group category": "কর্মদল",
   "yesterday": "গতকাল",
   "you": "আপনি",
-  "your limit": "আপনার সীমা",
   "{actor} completed a trade with {target}": "{actor} {target}-এর সাথে একটি লেনদেন সম্পন্ন করেছেন",
   "{actor} joined": "{actor} যোগ দিয়েছেন",
   "{actor} joined the community": "{actor} সম্প্রদায়ে যোগ দিয়েছেন",
@@ -3055,8 +3031,6 @@
   "{actor} traded with {target}": "{actor} {target}-এর সাথে লেনদেন করেছেন",
   "{actor} traded with {target}: {title}": "{actor} {target}-এর সাথে লেনদেন করেছেন: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/মাস",
-  "{amount} Beans": "{amount} শিম",
   "{amount} Beans from the pool: {what}.": "তহবিল থেকে {amount}টি শিম: {what}।",
   "{amount} raised of {goal} 🫘": "{goal} 🫘-এর মধ্যে {amount} সংগৃহীত",
   "{amount} · held in trust": "{amount} · এসক্রোতে রয়েছে",
@@ -3397,7 +3371,6 @@
   "← Choose another way": "← অন্য উপায় বেছে নিন",
   "← Keep it": "← এটি রাখুন",
   "← Start again": "← আবার শুরু করুন",
-  "← carry credit": "← ঋণ বহন",
   "↑ Sent": "↑ পাঠানো হয়েছে",
   "↓ Received": "↓ গ্রহণ করা হয়েছে",
   "↻ RECURRING": "↻ পুনরাবৃত্ত",

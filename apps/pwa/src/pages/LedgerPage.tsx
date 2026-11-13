@@ -26,7 +26,7 @@ import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
 import { CreditSeenByGivers } from '../components/CreditSeenByGivers';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerCreditLine, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerBudget, VOUCH_PRESET_WORDS, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -445,10 +445,6 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     // Whole hundredths of a Bean, every one (the node's `*_c` fields); written through formatHundredths.
     const balance = balanceInfo?.balance_c ?? 0;
     const floor = balanceInfo?.floor_c ?? 0;              // earned credit LIMIT (how deep you could go)
-    const usableFloor = balanceInfo?.usableFloor_c ?? floor; // v3: how deep you may go NOW (gated by live offers)
-    const liveOffers = balanceInfo?.liveOffers ?? 0;       // v3: currently-live Offer count
-    const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
-    const activated = balanceInfo?.activated;   // has a credit line at all (earned/granted/known)
     const earned = balanceInfo?.earnedCredit_c ?? 0;     // from the saturating value curve
     // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
     // its tierCredit, the credit that tier is read from (what they did, never the known grant), so the badge above and the
@@ -585,8 +581,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 </div>
             </div>
 
-            {/* Credit position — zero is the sweet spot. A brand-new member (no trades yet) has no
-                credit line (floor 0); their line opens automatically on their first real trade. */}
+            {/* Credit position: an admin's freeze keeps its own card; everyone else, a newcomer too, the credit card. */}
             {creditLineCard(balanceInfo ?? {}) === 'frozen' ? (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm" data-testid="ledger-known-frozen">
                     <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3">
@@ -600,44 +595,15 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         </div>
                     </div>
                 </div>
-            ) : activated === false ? (
-                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm">
-                    <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
-                        <span className="text-xl leading-none">🌱</span>
-                        <div>
-                            <div className="text-sm font-extrabold text-emerald-700 dark:text-emerald-300">{t('No credit line yet')}</div>
-                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">
-                                {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
-                            </div>
-                            {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
-                                <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                                    {ledgerCreditLine(balanceInfo.vouchedBy)}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
-                    {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance_c={balance} floor_c={floor} usableFloor_c={usableFloor} liveOffers={liveOffers} knownGrant_c={balanceInfo?.knownGrant_c ?? 0} />
+                    {/* The member's own card (DESIGN-credit-bar-amend-fable.md, slice R1): the two sentences, the rainbow with
+                        the strip of what the line is made of, one note and the parts line, all from core. One button: until
+                        the sheet (slice R2) it opens the guide's page on the credit line. A newcomer sees it too, the left
+                        half striped. */}
+                    <CreditBar answer={balanceInfo ?? {}} onOpen={onNavigate ? () => onNavigate('guide', 'credit-line') : undefined} />
                     {knownFrozenPartNote(balanceInfo ?? {}) && (
                         <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
-                    )}
-                    {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
-                        <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
-                            {ledgerCreditLine(balanceInfo.vouchedBy)}
-                        </div>
-                    )}
-                    {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
-                    {frozen && (
-                        <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
-                            <span>⚠️</span>
-                            <span>{tn(liveOffers,
-                                'Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
-                                'Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.',
-                                { limit: formatHundredths(Math.abs(usableFloor)) })}</span>
-                        </div>
                     )}
                 </div>
             )}

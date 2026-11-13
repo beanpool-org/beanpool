@@ -17,24 +17,6 @@
   "(100% community owned)": "(100% в собственности сообщества)",
   "(You)": "(Вы)",
   "(You)\u0004roster: the viewer": "(Вы)",
-  "**Post an Offer** to open your credit line — **{n}** offer unlocks your full −{limit}.|**Post an Offer** to open your credit line — **{n}** offers unlock your full −{limit}.": {
-    "one": "**Опубликуйте Предложение**, чтобы открыть кредитную линию — **{n}** предложение открывает полный −{limit}.",
-    "few": "**Опубликуйте Предложение**, чтобы открыть кредитную линию — **{n}** предложения открывают полный −{limit}.",
-    "many": "**Опубликуйте Предложение**, чтобы открыть кредитную линию — **{n}** предложений открывают полный −{limit}.",
-    "other": "**Опубликуйте Предложение**, чтобы открыть кредитную линию — **{n}** предложения открывают полный −{limit}."
-  },
-  "**{n} offer** unlocks −{limit}|**{n} offers** unlock −{limit}": {
-    "one": "**{n} предложение** открывает −{limit}",
-    "few": "**{n} предложения** открывают −{limit}",
-    "many": "**{n} предложений** открывают −{limit}",
-    "other": "**{n} предложения** открывают −{limit}"
-  },
-  "**{n} offer** → −{limit}|**{n} offers** → −{limit}": {
-    "one": "**{n} предложение** → −{limit}",
-    "few": "**{n} предложения** → −{limit}",
-    "many": "**{n} предложений** → −{limit}",
-    "other": "**{n} предложения** → −{limit}"
-  },
   "**{n}** more trust to {emoji} {tier}|**{n}** more trust to {emoji} {tier}": {
     "one": "ещё **{n}** доверия до {emoji} {tier}",
     "few": "ещё **{n}** доверия до {emoji} {tier}",
@@ -668,7 +650,6 @@
   "Creating...": "Создаём...",
   "Creator account linking:": "Привязка аккаунта автора:",
   "Credit Line": "Кредитная линия",
-  "Credit balance gauge": "Шкала кредитного баланса",
   "Credits (B)": "Кредиты (B)",
   "Credits (🫘 Beans)": "Кредиты (🫘 Бобы)",
   "Credits are a mutual credit currency. When you trade, credits transfer between members. Every member starts at zero. The system is designed to encourage reciprocity and keep value circulating locally.": "Кредиты — это валюта взаимного кредита. Когда вы обмениваетесь, кредиты переходят от одного участника к другому. Каждый участник начинает с нуля. Система создана, чтобы поощрять взаимность и удерживать ценность в обороте на месте.",
@@ -1382,7 +1363,6 @@
   "No bond required.": "Залог не требуется.",
   "No comment provided.": "Без комментария.",
   "No conversations yet.": "Бесед пока нет.",
-  "No credit line yet": "Пока нет кредитной линии",
   "No deals in progress": "Нет текущих сделок",
   "No friends yet": "Пока нет друзей",
   "No groups found": "Группы не найдены",
@@ -2127,12 +2107,6 @@
   "Spam or scam": "Спам или мошенничество",
   "Specific Action / Effect": "Конкретное действие или результат",
   "Specific Action or Effect": "Конкретное действие или результат",
-  "Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.|Spending paused — your balance is below what your {n} active offers unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.": {
-    "one": "Расходы приостановлены — ваш баланс ниже лимита, который открывает ваше {n} активное предложение (−{limit}). Создайте Предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать.",
-    "few": "Расходы приостановлены — ваш баланс ниже лимита, который открывают ваши {n} активных предложения (−{limit}). Создайте Предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать.",
-    "many": "Расходы приостановлены — ваш баланс ниже лимита, который открывают ваши {n} активных предложений (−{limit}). Создайте Предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать.",
-    "other": "Расходы приостановлены — ваш баланс ниже лимита, который открывают ваши {n} активных предложений (−{limit}). Создайте Предложение или совершите сделку, чтобы снять ограничение. Вы по-прежнему можете получать переводы и продавать."
-  },
   "Sprout": "Росток",
   "Square — nothing owed either way": "По нулям — взаимных задолженностей нет",
   "Start": "Начать",
@@ -2882,7 +2856,6 @@
   "You can propose a Decision once you have completed a trade.": "Вы сможете предложить Решение после первой завершённой сделки.",
   "You can propose once you have completed a trade.": "Вы можете внести предложение после совершения сделки.",
   "You can still read, edit your profile and leave.": "Вы по-прежнему можете читать, редактировать профиль и покинуть сообщество.",
-  "You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)": "Вы можете обмениваться прямо сейчас на имеющиеся бобы. Совершите первую сделку, и кредитная линия откроется автоматически: чем больше объём обмена, тем глубже лимит. (Поручитель из сообщества также может открыть стартовую линию).",
   "You changed the time or place. The event will show UPDATED and everyone going will be told.": "Вы изменили время или место. На событии появится «ОБНОВЛЕНО», и все, кто идёт, получат уведомление.",
   "You do, on your machine or the one you rent. It never needs beanpool.org: your own web address works too.": "Вы сами — на своём компьютере или на арендованном сервере. beanpool.org не обязателен: ваш собственный веб-адрес тоже подойдёт.",
   "You have already rated this trade.": "Вы уже оценили этот обмен.",
@@ -3090,8 +3063,6 @@
   "execution pending grace\u0004Decision status": "исполнение ожидает периода отсрочки",
   "execution void\u0004Decision status": "исполнение аннулировано",
   "failed\u0004Decision status": "отклонено",
-  "fee-free": "без комиссии",
-  "fee/mo": "комиссия/мес",
   "for {n} day|for {n} days": {
     "one": "на {n} день",
     "few": "на {n} дня",
@@ -3115,7 +3086,6 @@
   "from {who} · {when}": "от {who} · {when}",
   "general\u0004group category": "общее",
   "guild\u0004group category": "гильдия",
-  "hold credit →": "держать кредит →",
   "https://": "https://",
   "https://instagram.com/p/... or tiktok.com/...": "https://instagram.com/p/... или tiktok.com/...",
   "in about a minute|in about {n} minutes": {
@@ -3170,7 +3140,6 @@
   "request to join\u0004join policy": "по запросу",
   "requested\u0004deal status": "запрошено",
   "social\u0004group category": "общение",
-  "sweet spot": "оптимальная зона",
   "the account saved from the other tab": "аккаунт, сохранённый из другой вкладки",
   "the lever": "кредитный рычаг",
   "them\u0004the other member of a trade, name unknown": "второй участник",
@@ -3187,7 +3156,6 @@
   "working group\u0004group category": "рабочая группа",
   "yesterday": "вчера",
   "you": "вы",
-  "your limit": "ваш лимит",
   "{actor} completed a trade with {target}": "{actor} завершил обмен с {target}",
   "{actor} joined": "{actor} присоединился",
   "{actor} joined the community": "{actor} присоединился к сообществу",
@@ -3203,8 +3171,6 @@
   "{actor} traded with {target}": "{actor} совершил обмен с {target}",
   "{actor} traded with {target}: {title}": "{actor} совершил обмен с {target}: {title}",
   "{amount} B": "{amount} B",
-  "{amount} B · ≈{rate}%/mo": "{amount} B · ≈{rate}%/мес",
-  "{amount} Beans": "{amount} бобов",
   "{amount} Beans from the pool: {what}.": "{amount} бобов из фонда: {what}.",
   "{amount} raised of {goal} 🫘": "Собрано {amount} из {goal} 🫘",
   "{amount} · held in trust": "{amount} · депонировано",
@@ -3643,7 +3609,6 @@
   "← Choose another way": "← Выбрать другой способ",
   "← Keep it": "← Оставить",
   "← Start again": "← Начать сначала",
-  "← carry credit": "← взять кредит",
   "↑ Sent": "↑ Отправлено",
   "↓ Received": "↓ Получено",
   "↻ RECURRING": "↻ РЕГУЛЯРНО",

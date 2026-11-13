@@ -1,92 +1,91 @@
+/**
+ * The web's credit card (DESIGN-credit-bar-amend-fable.md, slice R1): one button whose label is core's spoken sentence, no
+ * `role="meter"` (its range ended at 200 and said nothing of the limit, F11), the drawing hidden from screen readers, every
+ * word equal to core's, and the source holds no hex and no size under 12 (§8). Replaces main's meter tests.
+ */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { creditBarPicture, creditStandingCard, type CreditStandingAnswer } from '@beanpool/core';
 import { CreditBar } from './CreditBar';
 
-describe('CreditBar ARIA Meter Semantics & Accessibility', () => {
-    it('renders meter role with correct label and bounds for standard balance', () => {
-        render(<CreditBar balance_c={5000} floor_c={-50000} />);
-        const meter = screen.getByRole('meter', { name: 'Credit balance gauge' });
-        expect(meter).toBeInTheDocument();
-        expect(meter).toHaveAttribute('aria-valuemin', '-500');
-        expect(meter).toHaveAttribute('aria-valuemax', '200');
-        expect(meter).toHaveAttribute('aria-valuenow', '50');
-        expect(meter).toHaveAttribute('aria-valuetext', '+50 Beans');
+/** Marty on 14 Nov: owes 50 of a 500 line, all of it Damo's vouch, one live Offer. */
+const MARTY: CreditStandingAnswer = {
+    balance_c: -5000, floor_c: -50000, usableFloor_c: -50000, knownGrant_c: 0, roomHeld_c: 50000, earnedCredit_c: 0, liveOffers: 1,
+    vouchedBy: [{ callsign: 'Damo', amount_c: 50000 }],
+};
+/** A confirmed member with a vouch of 100: the line is 1,100, never "100" (F7). */
+const CONFIRMED_AND_VOUCH: CreditStandingAnswer = {
+    balance_c: 0, floor_c: -110000, usableFloor_c: -110000, knownGrant_c: 100000, roomHeld_c: 10000, earnedCredit_c: 0, liveOffers: 1,
+    vouchedBy: [{ callsign: 'Olive', amount_c: 10000 }],
+};
+
+describe('the web credit card is one button, its words core\'s', () => {
+    it('Marty\'s card: the button\'s label is core\'s spoken sentence, and there is no meter', () => {
+        render(<CreditBar answer={MARTY} />);
+        const card = creditStandingCard(MARTY);
+        const button = screen.getByRole('button', { name: card.spoken });
+        expect(button).toHaveAttribute('type', 'button');
+        expect(card.spoken).toBe('You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: @Damo vouched 500. Opens how this works.');
+        expect(screen.queryByRole('meter')).toBeNull();
+        expect(document.querySelector('[role="meter"]')).toBeNull();
     });
 
-    it('correctly handles negative balances within limit', () => {
-        render(<CreditBar balance_c={-15000} floor_c={-50000} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuemin', '-500');
-        expect(meter).toHaveAttribute('aria-valuemax', '200');
-        expect(meter).toHaveAttribute('aria-valuenow', '-150');
-        expect(meter).toHaveAttribute('aria-valuetext', '−150 Beans');
+    it('shows core\'s headline, sentence and parts line, and hides the drawing from screen readers', () => {
+        render(<CreditBar answer={MARTY} />);
+        const card = creditStandingCard(MARTY);
+        expect(screen.getByTestId('credit-headline').textContent).toBe(card.headline);
+        expect(screen.getByTestId('credit-sentence').textContent).toBe(card.sentence);
+        expect(screen.getByTestId('credit-parts').textContent).toBe(card.parts);
+        expect(screen.getByTestId('credit-parts').textContent).toBe('Credit line 500: ■ Earned by trading 0 so far · □ @Damo vouched 500');
+        expect(screen.getByTestId('credit-drawing')).toHaveAttribute('aria-hidden', 'true');
+        expect(screen.getByTestId('credit-label').textContent).toBe('−50 Beans');
     });
 
-    it('correctly handles balance exactly at the floor', () => {
-        render(<CreditBar balance_c={-50000} floor_c={-50000} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuemin', '-500');
-        expect(meter).toHaveAttribute('aria-valuemax', '200');
-        expect(meter).toHaveAttribute('aria-valuenow', '-500');
-        expect(meter).toHaveAttribute('aria-valuetext', '−500 Beans');
+    it('a confirmed member with a vouch reads the whole line (F7)', () => {
+        render(<CreditBar answer={CONFIRMED_AND_VOUCH} />);
+        expect(screen.getByTestId('credit-parts').textContent).toBe('Credit line 1,100: ■ Earned by trading 0 so far · □ Confirmed member 1,000 · □ @Olive vouched 100');
+        expect(screen.queryByText(/Your credit line: 100/)).toBeNull();
     });
 
-    it('clamps aria-valuenow at floor when balance drops below floor, keeping valuetext accurate', () => {
-        render(<CreditBar balance_c={-65000} floor_c={-50000} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuemin', '-500');
-        expect(meter).toHaveAttribute('aria-valuemax', '200');
-        expect(meter).toHaveAttribute('aria-valuenow', '-500');
-        expect(meter).toHaveAttribute('aria-valuetext', '−650 Beans');
+    it('draws the strip\'s blocks where core puts them, and no stray mark: one live Offer opens a vouched line whole', () => {
+        render(<CreditBar answer={MARTY} />);
+        const blocks = Array.from(screen.getByTestId('credit-strip').querySelectorAll('[data-kind]'));
+        expect(blocks.map((b) => b.getAttribute('data-kind'))).toEqual(['vouch']);
+        expect(screen.queryByTestId('credit-stripes')).toBeNull();
+        const pic = creditBarPicture(MARTY);
+        expect((blocks[0] as HTMLElement).style.left).toBe(`calc(${pic.blocks[0]!.from}% + 1px)`);
     });
 
-    it('clamps aria-valuenow at valuemax when balance exceeds the top of the scale', () => {
-        render(<CreditBar balance_c={35000} floor_c={-50000} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuemin', '-500');
-        expect(meter).toHaveAttribute('aria-valuemax', '200');
-        expect(meter).toHaveAttribute('aria-valuenow', '200');
-        expect(meter).toHaveAttribute('aria-valuetext', '+350 Beans');
+    it('a tap opens what the Ledger gives it', () => {
+        const onOpen = vi.fn();
+        render(<CreditBar answer={MARTY} onOpen={onOpen} />);
+        screen.getByRole('button').click();
+        expect(onOpen).toHaveBeenCalledTimes(1);
     });
 
-    it('respects zero floor for members without a credit line', () => {
-        render(<CreditBar balance_c={0} floor_c={0} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuemin', '0');
-        expect(meter).toHaveAttribute('aria-valuemax', '200');
-        expect(meter).toHaveAttribute('aria-valuenow', '0');
-        expect(meter).toHaveAttribute('aria-valuetext', '+0 Beans');
+    it('a newcomer sees the bar, its left half striped, "no credit line yet", and the note', () => {
+        render(<CreditBar answer={{ balance_c: 0, floor_c: 0, activated: false } as CreditStandingAnswer} />);
+        expect(screen.getByTestId('credit-stripes')).toBeInTheDocument();
+        expect(screen.getByText('no credit line yet')).toBeInTheDocument();
+        expect(screen.getByTestId('credit-note').textContent).toContain('Your credit line opens with your first completed trade');
     });
+});
 
-    it('supports custom feeFreeMax bound', () => {
-        render(<CreditBar balance_c={40000} floor_c={-100000} feeFreeMax={500} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuemin', '-1000');
-        expect(meter).toHaveAttribute('aria-valuemax', '500');
-        expect(meter).toHaveAttribute('aria-valuenow', '400');
-        expect(meter).toHaveAttribute('aria-valuetext', '+400 Beans');
+describe('the source', () => {
+    const src = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'CreditBar.tsx'), 'utf8');
+    it('holds no hex colour', () => {
+        expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     });
-
-    it('formats decimal balances properly in aria-valuetext (two decimals, as formatHundredths writes them)', () => {
-        render(<CreditBar balance_c={1250} floor_c={-50000} />);
-        const meter = screen.getByRole('meter');
-        expect(meter).toHaveAttribute('aria-valuenow', '12.5');
-        expect(meter).toHaveAttribute('aria-valuetext', '+12.50 Beans');
+    it('holds no size under 12', () => {
+        const sizes = [...src.matchAll(/text-\[(\d+(?:\.\d+)?)px\]|fontSize:\s*(\d+(?:\.\d+)?)/g)].map((m) => Number(m[1] ?? m[2]));
+        expect(sizes.length).toBeGreaterThan(0);
+        expect(sizes.filter((n) => n < 12)).toEqual([]);
+        expect(src).not.toMatch(/text-\[(?:[0-9]|1[01])px\]|text-xxs|text-\[0?\.\d+rem\]/);
     });
-
-    it('hides decorative emojis from assistive technology', () => {
-        const { container } = render(
-            <CreditBar
-                balance_c={-10000}
-                floor_c={-50000}
-                usableFloor_c={-20000}
-                liveOffers={1}
-            />
-        );
-
-        const hiddenEmojis = container.querySelectorAll('[aria-hidden="true"]');
-        const emojiTexts = Array.from(hiddenEmojis).map((el) => el.textContent?.trim());
-        expect(emojiTexts).toContain('⚖️');
-        expect(emojiTexts).toContain('🎣');
+    it('reads no old credit variable and draws no meter', () => {
+        expect(src).not.toMatch(/--credit-|role="meter"|aria-valuenow/);
     });
 });

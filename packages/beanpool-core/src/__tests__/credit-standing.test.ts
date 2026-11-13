@@ -159,7 +159,7 @@ describe('(4) the picture', () => {
         const pic = creditBarPicture({ balance_c: b(40), floor_c: 0 });
         expect(pic.noLine).toBe(true);
         expect(pic.stripes).toEqual({ from: BAR_LIMIT_AT, width: BAR_ZERO_AT - BAR_LIMIT_AT });
-        expect(pic.marks.limit).toBeNull();
+        expect([pic.marks.limit.figure, pic.marks.limit.words]).toEqual(['', 'no credit line yet']);
     });
     it('the label: "−50 Beans", red at nine tenths, gold above 200', () => {
         expect(creditBarPicture(MARTY).label).toBe('−50 Beans');
@@ -172,7 +172,8 @@ describe('(4) the picture', () => {
     });
     it('the marks: −500 your limit, 0 balanced, +200 monthly fee starts', () => {
         const m = creditBarPicture(MARTY).marks;
-        expect([m.limit!.figure, m.limit!.words, m.limit!.at]).toEqual(['−500', 'your limit', 4]);
+        expect([m.limit.figure, m.limit.words, m.limit.at]).toEqual(['−500', 'your limit', 4]);
+        expect(m.fee.line).toBe('Hold more than 200 Beans and a small monthly fee starts on the part above.');
         expect([m.zero.figure, m.zero.words, m.zero.at]).toEqual(['0', 'balanced', 50]);
         expect([m.fee.figure, m.fee.words, m.fee.at]).toEqual(['+200', 'monthly fee starts', 68]);
     });
@@ -200,7 +201,7 @@ describe('(6) the sentences of every state, and the spoken sentence', () => {
         expect(card(MARTY)).toEqual(['You owe 50 Beans', 'You can spend 450 more of your 500 credit line.', null]);
         expect(creditStanding(MARTY).state).toBe('owing');
         expect(creditStandingCard(MARTY).spoken).toBe(
-            'You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: Earned by trading 0 so far, @Damo vouched 500. Opens how this works.');
+            'You owe 50 Beans. You can spend 450 more of your 500 credit line. Your limit is minus 500. Your credit line: @Damo vouched 500. Opens how this works.');
     });
     it('nearly', () => {
         expect(card({ ...MARTY, balance_c: -b(480) })).toEqual(['You owe 480 Beans', 'Only 20 left of your 500 credit line.', '! Sell or receive Beans to make room. Owing costs nothing.']);
@@ -260,7 +261,7 @@ describe('(7) no old word, and no "B" after a figure', () => {
                 const a = { ...base, balance_c };
                 const c = creditStandingCard(a);
                 const p = creditBarPicture(a);
-                const all = [c.headline, c.sentence, c.note?.text, c.parts, c.spoken, p.label, p.marks.limit?.figure, p.marks.limit?.words, p.marks.zero.words, p.marks.fee.words]
+                const all = [c.headline, c.sentence, c.note?.text, c.parts, c.spoken, p.label, ...[p.marks.limit, p.marks.zero, p.marks.fee].flatMap((m) => [m.figure, m.words, m.line])]
                     .filter((x): x is string => typeof x === 'string');
                 for (const s of all) {
                     expect(s).not.toMatch(/floor|overdraft|sweet spot|fee-free|carry credit|hold credit/i);

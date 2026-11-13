@@ -45,8 +45,8 @@ const DANA = '1'.repeat(64);
 const identity: BeanPoolIdentity = { publicKey: '9'.repeat(64), privateKey: 'p', callsign: 'Visitor', createdAt: '2026-09-17T00:00:00.000Z' };
 const RU = ruWords as Record<string, unknown>;
 
-/** The credit bar's bold parts, drawn inside their bracketed sentence (CreditBar.words.test.tsx checks them there). */
-const barBold = () => Array.from(document.querySelectorAll('[role="meter"] b')).map((b) => b.textContent ?? '');
+/** Bold parts inside the credit card: none since slice R1 (its sentences are core's, whole); kept so a bold part would show here. */
+const barBold = () => Array.from(document.querySelectorAll('[data-testid="credit-card"] b')).map((b) => b.textContent ?? '');
 
 const TS = '2026-10-01T10:00:00.000Z';
 const line = (id: string, from: string, to: string, memo: string) => ({ id, from, to, amount_c: 300, fee_c: 0, memo, timestamp: TS });
@@ -84,7 +84,9 @@ describe('the Ledger in the pseudo-locale', () => {
     it('a Newcomer: the balance, the no-credit-line card, the Levels tab and each level\'s detail', async () => {
         await showIn('xx');
         await open(NEWCOMER);
-        expect(screen.getByText(xx('No credit line yet'))).toBeInTheDocument();
+        // Slice R1: a newcomer sees the credit card, its left half striped and "no credit line yet" under it.
+        expect(screen.getByText(xx('no credit line yet'))).toBeInTheDocument();
+        expect(screen.getByTestId('credit-sentence').textContent).toBe(xx('No credit line yet, so there is nothing to spend and nothing to repay.'));
         expect(screen.getByText(xx('YOUR TRUST LEVEL'))).toBeInTheDocument();
         expect(screen.getByText(xx('Send (needs 1st trade)'))).toBeInTheDocument();
         expect(bracketed()).toBeGreaterThan(25);
@@ -99,13 +101,15 @@ describe('the Ledger in the pseudo-locale', () => {
         expect(screen.getByTestId('level-detail').textContent).toContain(xx('Up ahead'));
     });
 
-    it('a Resident: the credit bar with spending paused, the Levels hero and the way to the next level', async () => {
+    it('a Resident: the credit card (slice R1), the Levels hero and the way to the next level', async () => {
         await showIn('xx');
         await open(RESIDENT);
         expect(screen.getByText(xx('WHAT BUILDS YOUR TRUST'))).toBeInTheDocument();
-        expect(screen.getByText(xx('Spending paused — your balance is below what your {n} active offer unlock (−{limit}). Post an Offer or trade back up to lift it. You can still receive and sell.').replace('{n}', '1').replace('{limit}', '200'))).toBeInTheDocument();
+        // The card's words are core's (credit-standing.ts): holding 450, one live Offer opening 200 of a 1,000 line.
+        expect(screen.getByTestId('credit-headline').textContent).toBe(xx('You hold {amount} Beans').replace('{amount}', '450'));
+        expect(screen.getByTestId('credit-card')).toBeInTheDocument();
         expect(screen.getByText(xx('{n} trust to go').replace('{n}', formatHundredths(TIER_LEVELS[2].minCredit - RESIDENT.tierCredit_c)))).toBeInTheDocument();
-        expect(barBold()).toHaveLength(2);
+        expect(barBold()).toHaveLength(0);
         expect(bypassing(document.body, { others: [...OTHERS, ...barBold()] })).toEqual([]);
     });
 
@@ -215,7 +219,8 @@ describe('the Ledger in English', () => {
         expect(screen.getByTestId('ledger-balance').textContent).toBe('+450B');
         expect(screen.getByText('Level 2 of 4 · credit line 1,000 Beans')).toBeInTheDocument();
         expect(document.body.textContent).toContain('more trust to');
-        expect(screen.getByText('Spending paused — your balance is below what your 1 active offer unlock (−200). Post an Offer or trade back up to lift it. You can still receive and sell.')).toBeInTheDocument();
+        // The credit card's words (slice R1), core's: holding 450, one live Offer opening 200 of the 1,000 line.
+        expect(screen.getByTestId('credit-sentence').textContent).toBe('You can spend 650: your 450 Beans, then 200 of your 1,000 credit line.');
         expect(screen.getByRole('button', { name: 'View Elder level details' })).toBeInTheDocument();
         expect(screen.getByText('+300 trust')).toBeInTheDocument();
         expect(screen.getByText('3 reviews')).toBeInTheDocument();

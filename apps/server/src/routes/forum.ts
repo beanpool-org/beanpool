@@ -2,7 +2,8 @@
  * The forum (slice F1; scratch/fable-design/DESIGN-forums-fable.md §2 to §4). engine/forum.ts holds the rules; every route is
  * signed, and the actor is always the signer, never a body field.
  *
- * A member of this community (a paused one reads too); anyone else 403 `not_member`, unsigned 401:
+ * A member of this community who reads as one (readsAsMember, as the Market's members-only reads): anyone else 403
+ * `not_member`, a paused member 403 `not_active` while the pause lasts, unsigned 401:
  *   GET  /api/forum                         → { sections: [section], public, told }   (owners and admins also get archived ones)
  *   GET  /api/forum/topics?section&offset   → { topics: [topic], next }   (pinned first, then the newest activity; 30 a page;
  *        ETag, so an unchanged list answers 304)
@@ -31,8 +32,9 @@
  * All 404 `feature_off` while the owners have the forum switched off (routes/profile-feature-gate.ts). No route here reads
  * `checkAdminAuth`, so neither an automation token nor a Settings session reaches one.
  */
+import crypto from 'node:crypto';
 import Router from '@koa/router';
-import { isNodeMember, assertMemberActive, getNodeRole } from '../state-engine.js';
+import { isNodeMember, readsAsMember, assertMemberActive, getNodeRole } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { memberErrorText } from './member-error-text.js';
 import { parseDataUrl } from '../storage/image-columns.js';
@@ -44,7 +46,7 @@ import { FORUM_LIMITS, word } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
 const ONLY_MEMBERS = word('Only a member of this community can read its forum.');
-const PAUSED = word('Your account here is paused for now, so you can’t write in the forum.');
+const PAUSED = word('Your account here is paused for now, so you can’t read or write in the forum.');
 const STANDBY = word('This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.');
 
 function answer(ctx: any, status: number, error: string, code: string): void {
@@ -52,11 +54,23 @@ function answer(ctx: any, status: number, error: string, code: string): void {
     ctx.body = { error, code };
 }
 
-/** A member's key (a paused one reads too), or null once the refusal is written. */
+/** A member's key, or null once the refusal is written. Not yet the test for reading: reader() and writer() add theirs. */
 function member(ctx: any): string | null {
     const key = ctx.state?.actor as string | undefined;
     if (!key) { answer(ctx, 401, word('A signed request is required.'), 'unsigned'); return null; }
     if (!isNodeMember(key)) { answer(ctx, 403, ONLY_MEMBERS, 'not_member'); return null; }
+    return key;
+}
+
+/**
+ * The key of a member who reads as one (readsAsMember: not 'disabled' by an admin's or a report's pause or a community
+ * vote, nor 'suspended'), or null once the refusal is written. While suspended, a member sees what a non-member sees
+ * (Marty, 26 Sep): the forum is community content, every topic, post, photo and writer's name.
+ */
+function reader(ctx: any): string | null {
+    const key = member(ctx);
+    if (!key) return null;
+    if (!readsAsMember(key)) { answer(ctx, 403, PAUSED, 'not_active'); return null; }
     return key;
 }
 
@@ -92,7 +106,7 @@ function whole(raw: unknown, fallback: number, max: number): number | null {
 /** Runs `fn` for a read, answering a refusal. */
 function read(ctx: any, fn: (key: string) => unknown): void {
     ctx.set('Cache-Control', 'no-store');
-    const key = member(ctx);
+    const key = reader(ctx);
     if (!key) return;
     try {
         ctx.body = fn(key);
@@ -121,13 +135,15 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     router.get('/api/forum', (ctx) => read(ctx, (key) => forumFront(key)));
 
     router.get('/api/forum/topics', (ctx) => {
-        const key = member(ctx);
+        const key = reader(ctx);
         if (!key) return;
         const { section } = ctx.query;
         const offset = whole(ctx.query.offset, 0, 100_000);
         if ((section !== undefined && typeof section !== 'string') || offset === null) return answer(ctx, 400, 'section is one id; offset a whole number.', 'bad_request');
-        // `private`: the answer varies by member (their blocks, their role) and only a signed member may read it.
-        const etag = `W/"forum-topics-${forumListTag(key)}-${section ?? ''}-${offset}"`;
+        // `private`: the answer varies by member (their blocks, their role) and only a signed member may read it. What was
+        // asked goes in hashed, never as sent: a header takes no character past Latin-1, and request text is no header's.
+        const asked = crypto.createHash('sha256').update(`${section ?? ''}\n${offset}`).digest('hex').slice(0, 16);
+        const etag = `W/"forum-topics-${forumListTag(key)}-${asked}"`;
         ctx.set('ETag', etag);
         ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
         const inm = ctx.get('If-None-Match');
@@ -146,7 +162,7 @@ export function createForumRoutes(_deps: RouteDeps): Router {
     });
 
     router.get('/api/forum/posts/:id/photos/:n', (ctx) => {
-        const key = member(ctx);
+        const key = reader(ctx);
         if (!key) return;
         const n = whole(ctx.params.n, -1, FORUM_LIMITS.photos - 1);
         let data: string | null = null;

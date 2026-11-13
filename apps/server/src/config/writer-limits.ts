@@ -106,6 +106,14 @@ export const WRITER_LIMITS = {
      *  newest 20 each (240), plus a day of new posts across them (a daily blog, a podcast and a busy video channel:
      *  tens, not 160). Before it, a feed its owner controls could add ~57,600 rows a day. */
     pulseHarvestedItemsPerDay: 400,
+    /** Edits a member makes to their own forum posts in any 24 hours, every post together (engine/forum.ts). Each keeps
+     *  the wording before it for moderators, a row a standby copies. Heavy real user: fixing typos in a day's 10 topics
+     *  and 100 replies, a few dozen. An owner or admin: the owners' setting. */
+    forumEditsPerDay: 100,
+    /** The earlier wordings kept per forum post: the most recent ones, each for 30 days, for moderators (forum design
+     *  §3). An edit past it deletes the oldest, with its tombstone, and that edit still counts in forumEditsPerDay. The
+     *  director's pick (14 Nov 2026), after the review of #3128 measured 3,000 edits of one post keeping 3,000 rows. */
+    forumEarlierWordingsKept: 10,
 };
 
 /**

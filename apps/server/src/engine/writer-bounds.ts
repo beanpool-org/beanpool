@@ -1,6 +1,6 @@
 /**
  * The per-route writer limits (W-main, design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.2): how many
- * posts, groups, enterprises, invites, Pulse links and new people by DM one member makes in a day, how many enterprises
+ * posts, groups, enterprises, invites, Pulse links, forum edits and new people by DM one member makes in a day, how many enterprises
  * and unused invites they hold at once, and how long a DM line may be. The numbers are in config/writer-limits.ts
  * (WRITER_LIMITS), with the day budget and the chat minute that are enforced elsewhere.
  *
@@ -55,7 +55,8 @@ export type WriterLimitCode =
     | 'friend_adds_per_day'
     | 'invites_per_day'
     | 'invites_unused'
-    | 'pulse_per_day';
+    | 'pulse_per_day'
+    | 'forum_edits_per_day';
 
 export class WriterLimitError extends Error {
     constructor(
@@ -411,4 +412,32 @@ export function pulseSyncAllowance(member: string, now = Date.now()): number {
  */
 export function pulseHarvestAllowance(member: string, now = Date.now()): number {
     return Math.max(0, WRITER_LIMITS.pulseHarvestedItemsPerDay - pulseItemsToday(member, 'autolist', now).length);
+}
+
+// ── The forum ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The edits `member` made in the day to their own forum posts: each edit's earlier wording (forum_post_edits, keyed on the
+ * post and when it was edited), and those deleted since, read from their tombstones (`<post id>|<edited at>`). So the oldest
+ * wording an edit drops past the 10 kept (engine/forum.ts), and a removal's, never free a place. A tombstone is written at
+ * or after its edit, so `deleted_at` bounds the read to the day's.
+ */
+function forumEditTimes(member: string, now: number): string[] {
+    return column(db.prepare(`
+        SELECT e.edited_at AS t FROM forum_post_edits e JOIN forum_posts p ON p.id = e.post_id
+         WHERE p.writer_pubkey = @member AND e.edited_at > @since
+        UNION ALL
+        SELECT substr(s.row_key, instr(s.row_key, '|') + 1) AS t FROM tombstones s
+          JOIN forum_posts p ON p.id = substr(s.row_key, 1, instr(s.row_key, '|') - 1)
+         WHERE s.table_name = 'forum_post_edits' AND s.deleted_at > @since AND p.writer_pubkey = @member
+           AND substr(s.row_key, instr(s.row_key, '|') + 1) > @since`).all({ member, since: since(now) }));
+}
+
+/** Before `member` edits one of their forum posts: 100 edits in any 24 hours; an owner's or admin's, the owners' setting. */
+export function assertMayEditForumToday(member: string, now = Date.now()): void {
+    const owners = ownerAdminLimit(member);
+    const limit = owners ?? WRITER_LIMITS.forumEditsPerDay;
+    assertUnderDaily(forumEditTimes(member, now), limit, now, 'forum_edits_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} edits to forum posts in any 24 hours`)} You can edit again ${when}.`
+        : (when) => `You can make ${limit} edits to your forum posts in any 24 hours. You can edit again ${when}.`);
 }

@@ -7,15 +7,16 @@
  *  3. Topics list pinned first, then the newest activity; a reply moves its topic up.
  *  4. Pins: owners and admins only, 2 a section. Move: owners and admins, to a section that is there.
  *  5. A closed topic refuses a reply; its writer, an owner or an admin closes it, nobody else.
- *  6. Edit: the writer only, the earlier wording kept for moderators; the form's limits (title, words, links, mentions).
+ *  6. Edit: the writer only, the earlier wording kept for moderators, the 10 most recent a post; 100 edits in any 24 hours,
+ *     the dropped wordings counted; the form's limits (title, words, links, mentions).
  *  7. Remove: a reply leaves a marker; an opening post with others' replies blanks the topic and keeps them; with none the
  *     topic is gone from every list and read.
  *  8. Sections: owners and admins make, rename and archive them, 12 at most; a staff section takes topics from staff only.
  *  9. Daily limits: 10 topics and 100 replies in any 24 hours, removed ones counted; owners and admins the owners' number.
- * 10. A muted member writes nothing; a paused one reads but writes nothing.
+ * 10. A muted member writes nothing; a paused ('disabled' or 'suspended') one reads nothing and writes nothing.
  * 11. Blocks: a member never sees topics or posts by someone they blocked.
  * 12. Photos: kept in the row, served to members only, deleted with the post.
- * 13. List versions: an unchanged list answers 304; a change answers the new list.
+ * 13. List versions: an unchanged list answers 304; a change answers the new list; the tag holds nothing that was sent.
  * 14. A public forum (the global community's switch): a first post without the told stamp is refused; told once, it posts.
  * 15. The owners' off-switch (How this community works): every route 404 feature_off, members told, topics kept; on again.
  * 16. A standby: the manifest classes every forum table; the copy holds them; every write 503 `standby`; reads answer.
@@ -227,6 +228,21 @@ async function main(): Promise<void> {
     assert(quoting.status === 201 && quoting.body?.post?.quotes === 2, `6. a reply quoting post 2 (${show(quoting)})`);
     db.prepare("UPDATE forum_post_edits SET edited_at = '2026-01-01T00:00:00.000Z' WHERE post_id = ?").run(openingId);
     assert(tidyForumEdits() >= 1 && !db.prepare('SELECT 1 FROM forum_post_edits WHERE post_id = ?').get(openingId), '6. the wording before goes 30 days after');
+    // Edits: 100 in any 24 hours (engine/writer-bounds.ts), and the 10 most recent earlier wordings kept a post. Before
+    // these, 3,000 edits of one post kept 3,000 copied rows (the review of #3128).
+    const sueEdits = await reply(sue, tb, { words: 'A first try' });
+    const sueReply = sueEdits.body?.post?.id as string;
+    require_(sueEdits.status === 201, 'Sue replies in Pat\'s topic, to edit it');
+    const editStatuses: number[] = [];
+    for (let i = 1; i <= 100; i++) editStatuses.push((await call(sue, 'POST', `/api/forum/posts/${sueReply}/edit`, { words: `Take ${i}` })).status);
+    const keptWordings = db.prepare('SELECT words FROM forum_post_edits WHERE post_id = ? ORDER BY edited_at').pluck().all(sueReply) as string[];
+    const droppedWordings = (db.prepare("SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'forum_post_edits' AND row_key LIKE ?").get(`${sueReply}|%`) as { n: number }).n;
+    assert(editStatuses.every((s) => s === 200) && keptWordings.length === 10 && keptWordings[0] === 'Take 90' && keptWordings[9] === 'Take 99' && droppedWordings === 90,
+        `6. 100 edits of one reply: each saved, the 10 most recent earlier wordings kept, the 90 older gone with tombstones (${editStatuses.filter((s) => s !== 200).length} refused, ${keptWordings.length} kept from "${keptWordings[0]}", ${droppedWordings} tombstones)`);
+    const overEdit = await call(sue, 'POST', `/api/forum/posts/${sueReply}/edit`, { words: 'One edit too many' });
+    assert(overEdit.status === 429 && overEdit.body?.code === 'forum_edits_per_day' && !!overEdit.headers.get('retry-after') && /100 edits/.test(overEdit.body?.error)
+        && (await topic(mel, tb)).text.includes('Take 100') && (db.prepare('SELECT COUNT(*) AS n FROM forum_post_edits WHERE post_id = ?').get(sueReply) as { n: number }).n === 10,
+        `6. a 101st edit in 24 hours, the dropped wordings counted: 429 with Retry-After, the post as it was (${show(overEdit)})`);
 
     // ── 7. Remove ─────────────────────────────────────────────────────────────────────────────────
     console.log('── 7. remove ──');
@@ -305,10 +321,23 @@ async function main(): Promise<void> {
     const mutedRemove = await call(gus, 'POST', `/api/forum/posts/${gusOwn}/remove`, {});
     assert(mutedRemove.status === 200, `10. but may take his own words down: a mute blocks posting, not removing (${show(mutedRemove)})`);
     db.prepare('UPDATE members SET moderation_muted_until = NULL WHERE public_key = ?').run(gus.pk);
+    const tbPhoto = (await reply(owen, tb, { words: 'A photo for the pause', photos: [TEST_PHOTO] })).body?.post?.id as string;
+    resetPhotoBudgetForTests();
+    require_((await call(gus, 'GET', `/api/forum/posts/${tbPhoto}/photos/0`)).status === 200 && (await topic(gus, tb)).status === 200, 'Gus reads the topic and its photo before the pause');
     setUserStatusRow(gus.pk, 'disabled');
     const paused = await reply(gus, tb, { words: 'y' });
-    assert(paused.status === 403 && paused.body?.code === 'not_active' && (await topic(gus, tb)).status === 200, `10. a paused member writes nothing, reads (${show(paused)})`);
+    assert(paused.status === 403 && paused.body?.code === 'not_active', `10. a paused member writes nothing (${show(paused)})`);
+    // While suspended a member reads what a non-member reads (readsAsMember, Marty 26 Sep): the forum's every read refused.
+    const pausedReads = async () => [await front(gus), await topics(gus), await topics(gus, `?section=${ideas}`), await topic(gus, tb), await call(gus, 'GET', `/api/forum/posts/${tbPhoto}/photos/0`)];
+    const disabledReads = await pausedReads();
+    assert(disabledReads.every((r) => r.status === 403 && r.body?.code === 'not_active' && !r.text.includes('Bike repair') && !r.text.includes('Owen')),
+        `10. a paused ('disabled') member reads nothing: the front, the lists, a topic, a photo all 403 not_active (${disabledReads.map((r) => `${r.status} ${r.body?.code}`).join()})`);
+    // 'suspended': the old key of a member being re-keyed, or a report's suspension from before the pause wrote 'disabled'.
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(gus.pk);
+    const suspendedReads = await pausedReads();
+    assert(suspendedReads.every((r) => r.status === 403 && r.body?.code === 'not_active'), `10. nor a 'suspended' one (${suspendedReads.map((r) => `${r.status} ${r.body?.code}`).join()})`);
     setUserStatusRow(gus.pk, 'active');
+    assert((await topic(gus, tb)).status === 200, '10. the pause over, he reads again');
 
     // ── 11. Blocks ────────────────────────────────────────────────────────────────────────────────
     console.log('── 11. blocks ──');
@@ -358,6 +387,13 @@ async function main(): Promise<void> {
     await call(mel, 'POST', '/api/blocks', { targetPubkey: sue.pk });
     assert((await call(mel, 'GET', '/api/forum/topics', undefined, { 'If-None-Match': after.headers.get('etag') ?? '' })).status === 200, '13. a block later: the new list');
     await call(mel, 'POST', '/api/blocks/remove', { targetPubkey: sue.pk });
+    // What was asked goes into the tag hashed: a section outside Latin-1 can't go in a header (it answered 500), and request
+    // text never goes in one.
+    const wide = await topics(mel, `?section=${encodeURIComponent('中')}`);
+    const asked = await topics(mel, '?section=zz-nope');
+    assert(wide.status === 404 && wide.body?.code === 'not_found' && /^W\/"[\w-]+"$/.test(wide.headers.get('etag') ?? '')
+        && asked.status === 404 && !(asked.headers.get('etag') ?? 'zz-nope').includes('zz-nope'),
+        `13. a section outside Latin-1: 404 not_found, not 500; the tag holds nothing that was sent (${show(wide)}; ${asked.headers.get('etag')})`);
 
     // ── 14. A public forum: told first ────────────────────────────────────────────────────────────
     console.log('── 14. told first ──');

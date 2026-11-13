@@ -3,8 +3,9 @@
  * replies under them, readable by this community's members. routes/forum.ts answers it; @beanpool/core forum.ts holds the
  * limits, the starter sections and the order.
  *
- * - **Who reads.** Members of this community, whatever its kind: anyone else nothing (the routes answer 403 `not_member`, as
- *   Learn's do). A topic or post by someone the reader blocked is left out of every answer, as listings are. The public
+ * - **Who reads.** Members of this community, whatever its kind, who read as members (readsAsMember, as the Market's
+ *   members-only reads): anyone else nothing (the routes answer 403 `not_member`), and a paused member nothing while the
+ *   pause lasts (403 `not_active`). A topic or post by someone the reader blocked is left out of every answer, as listings are. The public
  *   pages of the global community's forum are slice F7, through `public_from`, which nothing stamps yet.
  * - **Who writes.** An active, unmuted member: a topic in a section open to members, a reply in an open topic, an edit or a
  *   removal of their own post, closing their own topic. Owners and admins also start topics in "News from BeanPool" (a
@@ -13,7 +14,8 @@
  * - **Told first.** Where the forum is public (`forumPublic`, the global community), a member's first post is refused until
  *   they were told, once, that anyone on the web can read it with their name (`POST /api/forum/told`).
  * - **Limits.** 10 topics and 100 replies in any 24 hours (owners and admins: the "Owner and admin limit"); a removed topic
- *   or reply still counts, so remove-and-repost resets nothing. A new account's smaller numbers are slice F2's.
+ *   or reply still counts, so remove-and-repost resets nothing. 100 edits in any 24 hours, and the 10 most recent earlier
+ *   wordings kept a post (engine/writer-bounds.ts, config/writer-limits.ts). A new account's smaller numbers are slice F2's.
  * - **Removing.** A reply or an opening post keeps its row as a marker, its words blanked and its photos deleted. A topic its
  *   writer removes with no one else's reply in it is gone from every list and read (`closed_by` 'removed'); with others'
  *   replies, its title and opening words are blanked, it closes, and the replies stay. Deleting an account does the same to
@@ -42,6 +44,8 @@ import { getMembersVersion } from './versions.js';
 import { POST_PHOTO_FORMAT_ERROR } from './posts.js';
 import { photoRefusalError, photosRefusal } from './avatar.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { assertMayEditForumToday } from './writer-bounds.js';
+import { WRITER_LIMITS } from '../config/writer-limits.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -395,7 +399,11 @@ function ownPost(member: string, postId: string): { post: PostRow; topic: TopicR
     return { post, topic };
 }
 
-/** The writer edits their own post while the topic is open; the wording before is kept 30 days for moderators. */
+/**
+ * The writer edits their own post while the topic is open, at most 100 times in any 24 hours (engine/writer-bounds.ts).
+ * The wording before is kept 30 days for moderators, the 10 most recent a post (WRITER_LIMITS.forumEarlierWordingsKept):
+ * past them the oldest goes, with its tombstone.
+ */
 export function editForumPost(member: string, postId: string, raw: { words?: unknown; title?: unknown }, now = Date.now()): { topic: ForumTopic; post: ForumPost } {
     writable(member, now);
     const { post, topic } = ownPost(member, postId);
@@ -408,10 +416,15 @@ export function editForumPost(member: string, postId: string, raw: { words?: unk
         title = text(raw.title, FORUM_LIMITS.title, 'title').replace(/\s+/g, ' ');
         if (!title) throw new ForumRefusal(400, 'title_required', FORUM_WORDS.title);
     }
+    assertMayEditForumToday(member, now);
     const at = iso(now);
     db.transaction(() => {
         db.prepare('INSERT OR REPLACE INTO forum_post_edits (post_id, edited_at, words, title) VALUES (?, ?, ?, ?)')
             .run(postId, at, post.words, title !== null && title !== topic.title ? topic.title : null);
+        // The oldest kept past the most recent 10: edited_at is in the key, so one post never has two the same.
+        const oldestKept = db.prepare('SELECT edited_at FROM forum_post_edits WHERE post_id = ? ORDER BY edited_at DESC LIMIT 1 OFFSET ?')
+            .pluck().get(postId, WRITER_LIMITS.forumEarlierWordingsKept - 1) as string | undefined;
+        if (oldestKept) deletePlainRows('forum_post_edits', 'post_id = ? AND edited_at < ?', postId, oldestKept);
         db.prepare('UPDATE forum_posts SET words = ?, edited_at = ? WHERE id = ?').run(words, at, postId);
         if (title !== null && title !== topic.title) db.prepare('UPDATE forum_topics SET title = ? WHERE id = ?').run(title, topic.id);
     })();

@@ -776,6 +776,10 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     node_config: { kind: 'per-server', reason: 'a JSON object; each field is classified in NODE_CONFIG_BLOB_FIELDS' },
     nodeProfile: { kind: 'payload', reason: 'the node profile record (payload.nodeProfile)' },
     'nodeProfile.*': { kind: 'payload', reason: "the operator's switch overrides (payload.nodeProfile)" },
+    'forum.startersMade': {
+        kind: 'per-server',
+        reason: "when this server made the forum's starter sections (engine/forum.ts): a promoted standby finds its main server's sections in its copy, makes none, and writes its own",
+    },
     // The key itself is a file (data/open-join.key, services/open-join-key.ts), in the take-over bundle only.
     openJoinKeyId: { kind: 'payload', reason: "which key the open door's hashes are made with, a hash of it, never the key (payload.openJoinKeyId)" },
     openJoinSalt: {

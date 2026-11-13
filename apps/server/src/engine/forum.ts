@@ -38,7 +38,6 @@ import { getNodeRole } from './sync.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { nodeRoleOf } from './node-roles.js';
 import { ownerAdminLimit } from './owner-admin-limit.js';
-import { blockListsVersion } from './member-blocks.js';
 import { getMembersVersion } from './versions.js';
 import { POST_PHOTO_FORMAT_ERROR } from './posts.js';
 import { photoRefusalError, photosRefusal } from './avatar.js';
@@ -188,13 +187,22 @@ export function resetForumStartersCheckForTests(): void {
 
 /**
  * What a list answer depends on, as a tag: the topics and sections (their count and newest stamp, which a standby's copy
- * moves too), members' names, the reader's block list and whether they see archived sections. Same tag, same answer, so a
- * list answers "not changed" (304) when nothing did.
+ * moves too), members' names, the reader's own block list (its count and newest stamp: a block or an unblock moves one) and
+ * whether they see archived sections. Same tag, same answer, so a list answers "not changed" (304) when nothing did.
  */
 export function forumListTag(reader: string): string {
-    const t = db.prepare('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_topics').get() as { n: number; u: string | null };
-    const s = db.prepare('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_sections').get() as { n: number; u: string | null };
-    const parts = [reader, t.n, t.u, s.n, s.u, getMembersVersion(), blockListsVersion(), isStaff(reader) ? 'staff' : 'member'].join('|');
+    const stamp = (sql: string, ...args: unknown[]) => {
+        const r = db.prepare(sql).get(...args) as { n: number; u: string | null };
+        return `${r.n}:${r.u ?? ''}`;
+    };
+    const parts = [
+        reader,
+        stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_topics'),
+        stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM forum_sections'),
+        stamp('SELECT COUNT(*) AS n, MAX(updated_at) AS u FROM member_blocks WHERE owner_pubkey = ?', reader),
+        getMembersVersion(),
+        isStaff(reader) ? 'staff' : 'member',
+    ].join('|');
     return crypto.createHash('sha256').update(parts).digest('hex').slice(0, 24);
 }
 

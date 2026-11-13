@@ -320,6 +320,21 @@ describe('voice messages on the web (V4)', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Record a voice message' })).toBeTruthy());
     });
 
+    it('a community that no longer says it takes voice lines at Send gets nothing: the recording is kept and the chat says why', async () => {
+        render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));
+        await screen.findByRole('button', { name: 'Stop recording' });
+        clock += 2000;
+        fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
+        await screen.findByRole('button', { name: 'Play recording' });
+        // The info the page holds now says nothing of voice lines (core voiceLinesOn reads it at Send, as the phone does).
+        delete communityInfo.features.voiceLines;
+        fireEvent.click(screen.getByRole('button', { name: 'Send voice message' }));
+        expect(await screen.findByText("This community doesn't take voice messages yet. Nothing was sent.")).toBeTruthy();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Play recording' })).toBeTruthy();
+    });
+
     it('under a second sends nothing and says so', async () => {
         render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));

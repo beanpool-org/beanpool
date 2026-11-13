@@ -3,8 +3,8 @@
  * the page in them. The phone's twins are apps/native/utils/voice-recorder.ts and utils/dm-voice.ts (V3, #3112); the sound
  * format, the part and its checks are core's (voice.ts, V1), the node's side is V2 (#3111).
  *
- * Where the microphone shows: only where the chat's community says it takes voice lines (`features.voiceLines`, read by
- * nodeTakesVoice alone, so its name changes in one place), and only where this browser can write the one format every phone
+ * Where the microphone shows: only where the chat's community says it takes voice lines (`features.voiceLines`, read through
+ * core's voiceLinesOn, as the phone reads it), and only where this browser can write the one format every phone
  * plays (AAC in .m4a, VOICE_RECORD_TYPE): Chrome, Edge and Safari. Firefox can't, and gets one line instead of a microphone;
  * so does a page on a plain http address, where no browser gives the microphone (lights-out mode on the hall Wi-Fi).
  *
@@ -14,7 +14,7 @@
  * click, never before.
  */
 import {
-    openDmVoice, VOICE_BARS, VOICE_MAX_MS, word,
+    openDmVoice, voiceLinesOn, VOICE_BARS, VOICE_MAX_MS, word,
     type DmKeys, type VoicePart, type WordKey,
 } from '@beanpool/core';
 
@@ -58,13 +58,13 @@ export const VOICE_MIN_MS = 1000;
 export const VOICE_SEND_GIVE_UP_MS = 60_000;
 
 /**
- * The community says it takes voice lines: `features.voiceLines === true` on its info (GET /api/community/info). Absent, as on
- * a node from before V2 (Byron 1.4.1), is no: such a node stores a voice line as an empty text line. The flag's name is read
- * here and nowhere else (the node's flag is added by the lane feat/voice-mic-when-node-takes-it).
+ * The community says it takes voice lines: core's voiceLinesOn (#3120), the one rule both apps read, on the features of its
+ * info (GET /api/community/info). Absent, false or not yet read, as on a node from before V2 (Byron 1.4.1), is no: such a node
+ * stores a voice line as an empty text line.
  */
 export function nodeTakesVoice(info: { features?: unknown } | null | undefined): boolean {
-    const features = info?.features as Record<string, unknown> | null | undefined;
-    return !!features && typeof features === 'object' && features.voiceLines === true;
+    const features = info?.features;
+    return !!features && typeof features === 'object' && voiceLinesOn(features as { voiceLines?: unknown });
 }
 
 /** Whether this browser can record a voice message here: 'yes', 'no-format' (Firefox: no AAC recorder), 'no-microphone' (http). */

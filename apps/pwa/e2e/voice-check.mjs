@@ -10,9 +10,8 @@
  *   3. Firefox: no microphone, the design's one line instead, and it plays the same voice message;
  *   4. the gate: a node that says nothing of voice lines (features.voiceLines absent, as from before V2) gets no microphone.
  *
- * Until the node's flag (lane feat/voice-mic-when-node-takes-it) is on main, the node built here says nothing of voice lines,
- * so step 1-3's browsers see features.voiceLines: true added to GET /api/community/info's answer (said in the log when
- * added); step 4 sees the node's own answer. Everything else is the node's own.
+ * The node says features.voiceLines: true itself (#3120); step 4's browser has it taken out of GET /api/community/info's
+ * answer, as a node from before V2 answers (counted in the log). Everything else is the node's own.
  *
  * Fails on any sideways scroll at 320 px, or a request to any host but this machine (the shipped index.html's Google Fonts
  * link aside: aborted, as every other host is). VOICE_SHOTS names a folder for screenshots.
@@ -96,12 +95,12 @@ async function startNode(root, members) {
     return { port, ask, log, stop, origin: `https://localhost:${port}` };
 }
 
-let infoPatched = 0;
+let infoChanged = 0;
 const otherHosts = new Set();
 async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }).catch((e) => console.error('shot', name, e?.message)); }
 
-/** A browser context signed in as `identity`; `voiceFlag` adds features.voiceLines: true where the node says nothing of it. */
-async function openAs(browser, origin, identity, { theme = 'light', voiceFlag = true, mic = false } = {}) {
+/** A browser context signed in as `identity`; `voiceLines: 'drop'` takes features.voiceLines out of the node's info (an old node). */
+async function openAs(browser, origin, identity, { theme = 'light', voiceLines = 'as-is', mic = false } = {}) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce', ...(mic ? { permissions: ['microphone'] } : {}) });
     await context.addInitScript((mode) => {
         try {
@@ -111,11 +110,11 @@ async function openAs(browser, origin, identity, { theme = 'light', voiceFlag = 
     }, theme);
     // Network requests only: the page's own blob: URLs (a voice message opened here) have no host and never leave it.
     await context.route((url) => /^(https?|wss?):$/.test(url.protocol) && url.hostname !== 'localhost', (route) => { otherHosts.add(new URL(route.request().url()).hostname); return route.abort(); });
-    if (voiceFlag) {
+    if (voiceLines === 'drop') {
         await context.route((url) => url.hostname === 'localhost' && url.pathname === '/api/community/info', async (route) => {
             const res = await route.fetch();
             const body = await res.json().catch(() => null);
-            if (body?.features && body.features.voiceLines === undefined) { body.features.voiceLines = true; infoPatched += 1; }
+            if (body?.features && 'voiceLines' in body.features) { delete body.features.voiceLines; infoChanged += 1; }
             await route.fulfill({ response: res, json: body });
         });
     }
@@ -296,17 +295,14 @@ async function main() {
         }
 
         console.log("4. The gate: a node that says nothing of voice lines gets no microphone");
-        if (own?.features?.voiceLines === undefined) {
-            const g = await openAs(chrome, node.origin, ana, { voiceFlag: false, mic: true });
-            await openChat(g.page, node, 'Ben');
-            await g.page.getByRole('button', { name: /^Play voice message, / }).first().waitFor({ timeout: 30_000 });
-            check(await g.page.getByRole('button', { name: 'Record a voice message' }).count() === 0, 'no microphone, and voice messages still play');
-            check(await g.page.getByTestId('voice-cant-record').count() === 0, 'and no line about the browser either');
-            await g.context.close();
-        } else {
-            console.log('  (this node says features.voiceLines itself: step 4 is the node test\'s, test-voice-line)');
-        }
-        console.log(`  (community info answers given features.voiceLines here: ${infoPatched})`);
+        check(own?.features?.voiceLines === true, `this node says features.voiceLines: true itself (#3120): ${JSON.stringify(own?.features?.voiceLines)}`);
+        const g = await openAs(chrome, node.origin, ana, { voiceLines: 'drop', mic: true });
+        await openChat(g.page, node, 'Ben');
+        await g.page.getByRole('button', { name: /^Play voice message, / }).first().waitFor({ timeout: 30_000 });
+        check(await g.page.getByRole('button', { name: 'Record a voice message' }).count() === 0, 'with features.voiceLines taken out of its info (an old node): no microphone, and voice messages still play');
+        check(await g.page.getByTestId('voice-cant-record').count() === 0, 'and no line about the browser either');
+        await g.context.close();
+        console.log(`  (community info answers with features.voiceLines taken out: ${infoChanged})`);
         check([...otherHosts].every((h) => h === 'fonts.googleapis.com' || h === 'fonts.gstatic.com'), `no request left this machine but the aborted font link (${[...otherHosts].join(', ') || 'none'})`);
     } finally {
         for (const b of browsers) await b.close().catch(() => {});

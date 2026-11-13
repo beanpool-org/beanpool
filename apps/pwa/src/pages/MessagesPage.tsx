@@ -46,7 +46,7 @@ import { browserRecordsVoice, nodeTakesVoice, openDmVoiceLine, VoiceNotSentError
 import { setVoiceOrder, stopVoicePlayer } from '../lib/voice-player';
 import { VoiceBubble } from '../components/VoiceBubble';
 import { useVoiceRecorder, VoiceMicButton, VoiceRecorderBar, VoiceRecorderNote } from '../components/VoiceRecorder';
-import { sealDmVoice, VoiceRefusedError, VOICE_MIME, type VoiceInput } from '@beanpool/core';
+import { sealDmVoice, VoiceRefusedError, VOICE_LINES_WORDS, VOICE_MIME, type VoiceInput } from '@beanpool/core';
 import { resizePhotoFile } from '../lib/photo-resize';
 import {
     usePendingChatLines, sendChatLine, retryChatLine, discardChatLine, forgetLinesWithRows, noteChatRead, lineAfter, chatSettled,
@@ -320,6 +320,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // Voice messages (V4): the microphone only where this community says it takes voice lines (lib/voice.ts nodeTakesVoice),
     // and only where this browser writes AAC in .m4a; read once, as the browser's abilities don't change while the page is open.
     const nodeVoice = nodeTakesVoice(communityInfo);
+    const communityInfoRef = useRef(communityInfo);
+    communityInfoRef.current = communityInfo;
     const [voiceRecordable] = useState(() => browserRecordsVoice());
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
@@ -1700,6 +1702,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const conv0 = activeConv;
         if (!conv0) throw new VoiceNotSentError(t(VOICE_WORDS.failedToSend));
         const notSent = (sentence: string): never => { sayRefusal(conv0.id, sentence); throw new VoiceNotSentError(sentence); };
+        // A community that doesn't take voice lines (core voiceLinesOn, read now, as the phone reads it at send) gets none: kept.
+        if (!nodeTakesVoice(communityInfoRef.current)) notSent(t(VOICE_LINES_WORDS.notTaken));
         if (voiceSendingRef.current) notSent(t(VOICE_WORDS.waitForLast));
         voiceSendingRef.current = true;
         try {

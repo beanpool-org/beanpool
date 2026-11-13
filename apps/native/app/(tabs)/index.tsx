@@ -8,11 +8,12 @@ import * as Location from 'expo-location';
 import {
     ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, reorderIds, tipText, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
-    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourEnded, tourRecord, tourSteps, type TourProgress,
+    endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
     starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
+import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications } from '../../utils/notification-permission';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
@@ -47,13 +48,14 @@ import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { readTypedPlace } from '../../utils/typed-place';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
+    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody, WelcomeBody,
 } from '../../components/home/HomeCardBodies';
 import {
     HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
     effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst,
+    welcomeFacts, welcomeUp,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -68,7 +70,7 @@ import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-ac
 import { fabClearanceDp, fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
-import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
+import { createConversationApi, fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
 import { ChatBody } from '../../components/home/ChatBody';
 import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
 import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
@@ -124,7 +126,7 @@ type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | '
 
 /** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
 const LINES = {
-    hint: HOME_HINT_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS, notOnAccount: NOT_ON_ACCOUNT_LINE,
+    hint: HOME_HINT_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, notOnAccount: NOT_ON_ACCOUNT_LINE,
     skyNoPlace: SKY_NO_PLACE_LINE, tipsAllSeen: TIPS_ALL_SEEN,
 };
 
@@ -251,6 +253,18 @@ export default function HomeScreen() {
     /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
     const [tips, setTips] = useState<TipsRecord | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
+    /** First steps' "Hear when someone answers you" from this phone (utils/notification-permission.ts `notifyStep`); null: no such line. */
+    const [notify, setNotify] = useState<boolean | null>(null);
+    const readNotify = useCallback(async () => {
+        const [record, os] = await Promise.all([readNotificationPermissionRecord(), readOsNotificationPermission()]);
+        setNotify(notifyStep(record, os));
+    }, []);
+    // Read at each landing and on each return to the app (back from the phone's settings after Turn on).
+    useFocusEffect(useCallback(() => {
+        void readNotify();
+        const sub = AppState.addEventListener?.('change', next => { if (next === 'active') void readNotify(); });
+        return () => sub?.remove?.();
+    }, [readNotify]));
     const roleRef = useRef<HomeRole>(undefined);
     roleRef.current = role;
 
@@ -411,9 +425,9 @@ export default function HomeScreen() {
         if (await seenOnce(whose.publicKey, 'reveal')) return;
         if (!stillOnPhone(whose)) return;
         void markSeenOnce(whose, 'reveal');
-        // Getting started says the same as the hint: while it is up the hint waits (it shows after a Skip, never after Done).
+        // Welcome says where Add a card and Arrange are: while it is up the hint waits (it shows after a Not now, never after Done).
         const ans = storedRef.current?.answer;
-        const startUp = !!ans?.me && !tourEnded(ans.me.tour);
+        const startUp = !!ans && welcomeUp(ans);
         if (!startUp && !(await seenOnce(whose.publicKey, 'hint')) && stillOnPhone(whose)) {
             setHint(true);
             void markSeenOnce(whose, 'hint');
@@ -948,8 +962,27 @@ export default function HomeScreen() {
         else if (step === 'saidHello') router.push({ pathname: '/(tabs)/people', params: { view: 'community' } });
         else if (step === 'watch') router.push('/find-community');
         else if (step === 'name') { /* already done */ }
+        // Keep your 12 words safe: Account Protection, behind the phone's lock (DESIGN-home-default-fable.md §2.4).
+        else if (step === 'words') router.push({ pathname: '/(tabs)/settings', params: { section: 'protection' } });
+        // Hear when someone answers you: the line is the reason, the tap brings the phone's own question (§2.4, §2.5).
+        else if (step === 'notify') {
+            void turnOnNotifications(identityRef.current?.publicKey).catch(() => 'declined' as const).then(() => readNotify());
+        }
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
-    }, [openTune]);
+    }, [openTune, readNotify]);
+
+    // Welcome's "Say hello ›" (DESIGN-home-default-fable.md §2.3): the chat with whoever's invite brought them, as a
+    // profile's Message opens it (the first message's notifications ask is made there, once in all).
+    const sayHello = useCallback(async (key: string) => {
+        const id = identityRef.current;
+        if (!id) return;
+        try {
+            const conv = await createConversationApi('dm', [id.publicKey, key], id.publicKey);
+            router.push(`/chat/${conv.id}`);
+        } catch {
+            Alert.alert(t('Error'), t('Connect to your community to start a chat.'));
+        }
+    }, []);
 
     const openNeeds = useCallback((e: NeedsYouEntry) => {
         const target = e.target;
@@ -985,7 +1018,7 @@ export default function HomeScreen() {
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver }) : [];
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver, notify }) : [];
     // Find your community's pin (the global node: a member's first 30 days, then while a knock or watch is open): no "…", no move, at the top.
     const pins = currentPins(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
@@ -1070,7 +1103,9 @@ export default function HomeScreen() {
     };
     const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
-    const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
+    const picker = answer && tailor && addOpen
+        ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, { tourOver, now }) ? [] : ['start'])
+        : null;
 
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
     // The bar is the tab layout's (utils/tour-store.ts); Home lends it the chips (the picker's own add) and the end (one
@@ -1101,9 +1136,10 @@ export default function HomeScreen() {
         const u = storedRef.current?.url ?? url;
         if (!id) return;
         setTourOver(false);
-        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
+        // Welcome returns until the tour ends again, inside the member's first seven days (core `welcomeDrawn`): on a Home
+        // already set up it is put back on top (the end takes it off). After those days the tour starts and nothing is added.
         const ans = storedRef.current?.answer;
-        if (canTailor(ans) && layoutRef.current) {
+        if (canTailor(ans) && layoutRef.current && welcomeDrawn(false, ans!.me!.joinedAt)) {
             const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: currentPins(ans) });
             if (added.ok) changeLayout(added.layout);
         }
@@ -1244,22 +1280,28 @@ export default function HomeScreen() {
             }
             case 'steps': {
                 if (!c.steps) return null;
-                const steps = firstSteps(answer, { interests, role, knocked });
-                return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+                const steps = firstSteps(answer, { interests, role, knocked, notify });
+                return frame(<StepsBody left={steps.left} count={steps.count} note={steps.note} colors={colors} onStep={onStep} />);
             }
             case 'start': {
                 // The same rule the tab layout builds the running tour from: the Ledger step is in whenever its tab shows (the showcase included).
                 const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
+                const welcome = welcomeFacts(answer);
+                const inviter = welcome.inviter;
                 return frame(
-                    <StartBody
-                        words={t(LINES.start)}
-                        button={startCardButton(tourProgress, total)}
+                    <WelcomeBody
+                        place={welcome.place}
+                        inviter={inviter?.name ?? null}
+                        firstHere={welcome.firstHere}
+                        tourLabel={tourProgress ? startCardButton(tourProgress, total) : t('Take the tour ›')}
                         colors={colors}
-                        onLookAround={() => {
+                        onSayHello={() => { if (inviter) void sayHello(inviter.key); }}
+                        onInvite={invitesForReader(answer.features, role) ? () => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } }) : undefined}
+                        onTour={() => {
                             const pk = identityRef.current?.publicKey;
                             if (pk) startTour(pk, resumeStep(tourProgress, total));
                         }}
-                        onSkip={() => { closeTour(); void tourEnd('skipped'); }}
+                        onNotNow={() => { closeTour(); void tourEnd('skipped'); }}
                     />,
                 );
             }
@@ -1386,7 +1428,7 @@ export default function HomeScreen() {
     // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
     // as the five do: a newcomer's Home is that card alone, and the tour's Ledger step is the example's way in
     // (DESIGN-getting-started-fable.md §0, pick 10).
-    const touring = !!answer && list.some(c => c.type === 'start') && !tourOverFor(answer, { tourOver });
+    const touring = drawn.some(c => c.type === 'start');
     const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
     const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 

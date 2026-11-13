@@ -7726,6 +7726,9 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
     return row?.owner_pubkey ?? null;
 }
 
+/** How a DM line report's disclosure begins, as submitDmLineReport writes it: {"kind":"dm-line" then , or }. */
+const DM_LINE_DISCLOSURE_HEAD = JSON.stringify({ kind: DM_LINE_DISCLOSURE_KIND }).slice(0, -1);
+
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
     // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
     // (the alert says "look at it first, in the Manager's Reports queue": the follow-up to #1895). Once handled, one takes
@@ -7749,8 +7752,13 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
 
     const pendingCount = (db.prepare("SELECT COUNT(*) as c FROM abuse_reports WHERE status = 'pending' OR status IS NULL").get() as any)?.c || 0;
 
+    // The report's own columns by name, never ar.*: a DM line's report keeps what its reporter handed over in disclosure, up
+    // to ~1.25 MB with a voice part (engine/dm-line-report.ts), and the queue reads none of it. Its kind is read from the
+    // disclosure's first characters, never by parsing the whole of it: a DM line's is written {"kind":"dm-line",...}
+    // (submitDmLineReport), a group line's {"epoch":...} (group-chat-report.ts), a poll line's {"kind":"poll-answer",...}.
     let querySql = `
-        SELECT ar.*, 
+        SELECT ar.id, ar.reporter_pubkey, ar.target_pubkey, ar.target_post_id, ar.target_pulse_item_id, ar.reason, ar.status,
+               ar.created_at, ar.target_message_id,
                mr.callsign as reporter_callsign, 
                mt.callsign as target_callsign,
                p.title as post_title, substr(p.description, 1, 500) as post_description,
@@ -7760,7 +7768,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
                gm.conversation_id as gm_group_id, gm.type as gm_type, gg.name as gm_group_name,
-               CASE WHEN json_valid(ar.disclosure) THEN json_extract(ar.disclosure, '$.kind') END as disclosure_kind
+               CASE WHEN substr(ar.disclosure, 1, ${DM_LINE_DISCLOSURE_HEAD.length + 1}) IN ('${DM_LINE_DISCLOSURE_HEAD},', '${DM_LINE_DISCLOSURE_HEAD}}')
+                    THEN '${DM_LINE_DISCLOSURE_KIND}' END as disclosure_kind
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key

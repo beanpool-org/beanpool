@@ -10,18 +10,20 @@
 // the storage floor (engine/photo-upload-budget.ts), copied to a standby and kept in a backup as a chat photo is (a plain
 // table, engine/replication-manifest.ts message_attachments, gap G4).
 //
-// Kept VOICE_SERVER_KEEP_DAYS on the server, then deleted there (expireVoiceOnce, daily on the main server): the
+// Kept VOICE_SERVER_KEEP_DAYS on the server, then deleted there (expireVoiceOnce, every six hours on the main server): the
 // attachment row goes with a tombstone, as a deleted photo's does, so a standby deletes its row and its object too; the
 // object goes after the delete commits. The line stays, so the chat still shows the bubble. The part's read answers 410
 // with VOICE_EXPIRED_CODE from the day it is that old, by its time alone (voicePartGone). A line kept for its sender alone
 // (engine/withheld-lines.ts) loses its part on the same day and answers the same, so its sender learns nothing from it. A
-// line under a pending report keeps its part until the report is closed, for the moderators only: a moderator hears what
-// was reported, and its sender reads the same 410 as for any other.
+// group line under a pending report keeps its part until the report is closed, for the moderators only: a moderator hears
+// what was reported, and its sender reads the same 410 as for any other. A direct line's part goes on its day, reported or
+// not: its report keeps the part its reporter handed over, which is what the moderators read.
 
 import { VOICE_EXPIRED_CODE, VOICE_MIME, VOICE_SEALED_MAX_BYTES, VOICE_SERVER_KEEP_DAYS } from '@beanpool/core';
 import { afterTransactionCommit, db, writeTombstone } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { deleteStoredObjects } from '../storage/image-columns.js';
+import { GROUP_THREAD_TYPE } from './group-thread.js';
 
 /** A voice line's type, as `messages.type` and `withheld_lines.type` store it. */
 export const VOICE_LINE_TYPE = 'voice';
@@ -59,8 +61,15 @@ export function voiceKeptSince(now = Date.now()): string {
 /** What one expiry pass did. */
 export interface VoiceExpiryPass { expired: number; withheld: number; heldForReport: number; objects: number }
 
-/** Lines a pending report names: their part is kept until the report is closed. */
-const UNDER_PENDING_REPORT = `EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_message_id = m.id AND (r.status = 'pending' OR r.status IS NULL))`;
+/**
+ * Group lines a pending report names: their part is kept until the report is closed, as the moderators hear it from here
+ * (engine/group-chat-report.ts openReportedGroupLine, with the key its reporter handed over). Group lines only, in a chat
+ * of the type a group report must name (checkGroupLineReport): a direct line's part is never kept past its days for a
+ * report, as nothing reads it here: the node holds no key for it, and the moderators read the part its reporter handed
+ * over, kept with the report itself (engine/dm-line-report.ts openReportedDmLine, abuse_reports.disclosure).
+ */
+const UNDER_PENDING_REPORT = `(EXISTS (SELECT 1 FROM conversations c WHERE c.id = m.conversation_id AND c.type = @groupThread)
+    AND EXISTS (SELECT 1 FROM abuse_reports r WHERE r.target_message_id = m.id AND (r.status = 'pending' OR r.status IS NULL)))`;
 
 /**
  * Delete the voice parts the server no longer keeps (VOICE_SERVER_KEEP_DAYS): each stored voice line's attachment row, with
@@ -69,11 +78,13 @@ const UNDER_PENDING_REPORT = `EXISTS (SELECT 1 FROM abuse_reports r WHERE r.targ
  */
 export function expireVoiceOnce(now = Date.now(), limit = 500): VoiceExpiryPass {
     const since = voiceKeptSince(now);
+    // Read here, not when this file loads: group-thread.ts imports this file.
+    const held = { voice: VOICE_LINE_TYPE, since, groupThread: GROUP_THREAD_TYPE };
     const due = db.prepare(`SELECT a.message_id, a.storage_key FROM message_attachments a JOIN messages m ON m.id = a.message_id
-        WHERE m.type = ? AND m.timestamp < ? AND NOT ${UNDER_PENDING_REPORT} ORDER BY m.timestamp LIMIT ?`)
-        .all(VOICE_LINE_TYPE, since, limit) as { message_id: string; storage_key: string | null }[];
+        WHERE m.type = @voice AND m.timestamp < @since AND NOT ${UNDER_PENDING_REPORT} ORDER BY m.timestamp LIMIT @limit`)
+        .all({ ...held, limit }) as { message_id: string; storage_key: string | null }[];
     const heldForReport = (db.prepare(`SELECT COUNT(*) AS n FROM message_attachments a JOIN messages m ON m.id = a.message_id
-        WHERE m.type = ? AND m.timestamp < ? AND ${UNDER_PENDING_REPORT}`).get(VOICE_LINE_TYPE, since) as { n: number }).n;
+        WHERE m.type = @voice AND m.timestamp < @since AND ${UNDER_PENDING_REPORT}`).get(held) as { n: number }).n;
     const withheld = db.prepare(`SELECT w.id, w.storage_key FROM withheld_lines w
         WHERE w.type = ? AND w.timestamp < ? AND (w.attachment_data IS NOT NULL OR w.storage_key IS NOT NULL) ORDER BY w.timestamp LIMIT ?`)
         .all(VOICE_LINE_TYPE, since, limit) as { id: string; storage_key: string | null }[];

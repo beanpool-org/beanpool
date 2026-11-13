@@ -452,7 +452,7 @@ async function main(): Promise<void> {
         `the Reports queue marks both as voice lines (${listed.length} listed)`);
 
         // ── 5. After 30 days ──
-        console.log('\n— 5. after 30 days: the part goes and the line stays; 29 days and a reported line keep theirs; the standby follows —');
+        console.log('\n— 5. after 30 days: the part goes and the line stays; 29 days and a reported group line keep theirs, a reported DM line does not; the standby follows —');
         for (const [id, days] of [[dmOld.id, 31], [gOld.id, 31], [dm29.id, 29], [dmReported.id, 31], [gVoice.id, 31], [eveOld.id, 31]] as Array<[string, number]>) {
             require_(await main.send('age', { id, days }) >= 1, `a line made ${days} days old`);
         }
@@ -466,14 +466,20 @@ async function main(): Promise<void> {
         assert(byTime.every((r) => r.status === 410 && r.body?.code === VOICE_EXPIRED_CODE) && dm29Read.status === 200,
             `past 30 days its read answers 410 before any pass, a reported part and a withheld one alike; at 29 days it is served (${[...byTime, dm29Read].map(show).join(' | ').slice(0, 300)})`);
         const pass = await main.send('expire');
-        assert(pass.expired === 2 && pass.withheld === 1 && pass.heldForReport === 2,
-            `the expiry deletes two stored parts and one withheld part, and keeps the two under a pending report (${JSON.stringify(pass)})`);
+        // A pending report keeps a GROUP line's part for the moderators (they hear it from here, with the handed key). A DM
+        // line's part goes on its day all the same: nothing here can read it, and its report keeps what Ben handed over.
+        assert(pass.expired === 3 && pass.withheld === 1 && pass.heldForReport === 1,
+            `the expiry deletes three stored parts (the reported DM line's among them) and one withheld part, and keeps only the group line under a pending report (${JSON.stringify(pass)})`);
         const mExp = await main.send('lines', { ids: [dmOld.id, gOld.id, dm29.id, dmReported.id, gVoice.id, dmVoice.id] });
-        assert([dmOld.id, gOld.id].every((id) => mExp[id].att === null && mExp[id].object === null),
-            'M: the 31-day parts are gone, attachment row and object');
-        assert([dmOld.id, gOld.id].every((id) => mExp[id].line?.type === 'voice'), 'M: and their lines stay, type voice, so the chat still shows the bubble');
-        assert([dm29.id, dmReported.id, gVoice.id, dmVoice.id].every((id) => mExp[id].att !== null && mExp[id].object !== null),
-            'M: the 29-day part, the two reported parts and a new part are kept');
+        assert([dmOld.id, gOld.id, dmReported.id].every((id) => mExp[id].att === null && mExp[id].object === null),
+            `M: the 31-day parts are gone, attachment row and object, the reported DM line's included (${[dmOld.id, gOld.id, dmReported.id].filter((id) => mExp[id].att !== null || mExp[id].object !== null).length} left)`);
+        assert([dmOld.id, gOld.id, dmReported.id].every((id) => mExp[id].line?.type === 'voice'), 'M: and their lines stay, type voice, so the chat still shows the bubble');
+        assert([dm29.id, gVoice.id, dmVoice.id].every((id) => mExp[id].att !== null && mExp[id].object !== null),
+            'M: the 29-day part, the reported group part and a new part are kept');
+        const dmAfter = await adminGet(M, `/api/local/admin/reports/${repDm.body.report.id}/message`, owner);
+        const dmAfterView = dmAfter.body?.message ?? dmAfter.body;
+        assert(dmAfter.status === 200 && dmAfterView?.voice?.signature === 'verified' && dmAfterView.voice.signedAt === dmView.voice.signedAt,
+            `the DM report still holds its voice part for the moderators, from what Ben handed over (${show(dmAfter)})`);
         const eveAfter = await main.send('withheld', { id: eveOld.id });
         assert(eveAfter?.type === 'voice' && eveAfter.storage_key === null && eveAfter.attachment_nonce === null, "M: Eve's withheld line stays, its part gone");
         const again = await main.send('expire');
@@ -506,10 +512,10 @@ async function main(): Promise<void> {
         const delta = await standby.send('pull');
         require_(delta.ok, `S pulls (${delta.whole ? 'whole' : 'delta'}: ${JSON.stringify(delta).slice(0, 160)})`);
         const sExp = await standby.send('lines', { ids: [dmOld.id, gOld.id, dm29.id, dmReported.id, gVoice.id, dmVoice.id] });
-        assert([dmOld.id, gOld.id].every((id) => sExp[id].att === null && sExp[id].object === null),
-            `S: the expired parts' rows and objects are gone there too (${[dmOld.id, gOld.id].filter((id) => sExp[id].att !== null || sExp[id].object !== null).length} left)`);
-        assert([dmOld.id, gOld.id].every((id) => sExp[id].line?.type === 'voice'), 'S: and their lines stay');
-        assert([dm29.id, dmReported.id, gVoice.id, dmVoice.id].every((id) => sExp[id].att !== null && sExp[id].object === mExp[id].object),
+        assert([dmOld.id, gOld.id, dmReported.id].every((id) => sExp[id].att === null && sExp[id].object === null),
+            `S: the expired parts' rows and objects are gone there too, the reported DM line's included (${[dmOld.id, gOld.id, dmReported.id].filter((id) => sExp[id].att !== null || sExp[id].object !== null).length} left)`);
+        assert([dmOld.id, gOld.id, dmReported.id].every((id) => sExp[id].line?.type === 'voice'), 'S: and their lines stay');
+        assert([dm29.id, gVoice.id, dmVoice.id].every((id) => sExp[id].att !== null && sExp[id].object === mExp[id].object),
             "S: the kept parts are still there, byte for byte as M's");
 
         const blocked = [...await main.send('blocked'), ...await standby.send('blocked')];

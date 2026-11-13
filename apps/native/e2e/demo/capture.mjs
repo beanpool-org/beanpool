@@ -59,7 +59,7 @@ const APP = 'org.beanpool.pillar';
 const PHONE_NODE_PORT = 8080;
 const SIZE = { width: 1080, height: 1920 };
 /** The version the scratch copy's app.json says (`patchTree`): at least the demo node's own floor (the test pins that). */
-export const DEMO_APP_VERSION = '1.4.0';
+export const DEMO_APP_VERSION = '1.4.1';
 const IOS_DEVICE = 'iPhone 17 Pro Max';
 const IOS_SIZE = { width: 1320, height: 2868 };
 
@@ -150,7 +150,7 @@ async function startNode() {
  * Sam on the phone, patched into the COPY only: when `EXPO_PUBLIC_DEMO_WORDS` and `EXPO_PUBLIC_DEMO_SERVER` are set at bundle
  * time, the identity provider makes sure the phone holds the account those 12 invented words give (createIdentityFromMnemonic)
  * and that its community is the demo node, then reads the identity as it always does. Also: LogBox is silenced (a dev build's
- * yellow warning bar would sit in every picture), the app's version (app.json) is the one the node's floor asks for (a 1.4.0 node
+ * yellow warning bar would sit in every picture), the app's version (app.json) is the one the node's floor asks for (a 1.4.1 node
  * otherwise puts "Your app is too old for this community" over every tab), and, for the iOS run, the theme follows the phone so
  * `simctl ui appearance` can switch it.
  */
@@ -190,9 +190,9 @@ export function patchTree(tree, { ios }) {
         // asserted again every half second: the tabs underneath re-render as the phone syncs and would put their own style back
         + p.slice(at).replace(hook, `${hook}    useEffect(() => {\n        const set = () => demoBarStyle(theme === 'dark' ? 'light' : 'dark');\n        set();\n        const timer = setInterval(set, 500);\n        return () => { clearInterval(timer); demoBarStyle('light'); };\n    }, [theme]);\n`);
     fs.writeFileSync(post, p);
-    // The app's version. `app.json` still says the last release, and a 1.4.0 node's floor is 1.4.0 (apps/server/src/app-store-versions.ts
+    // The app's version. `app.json` still says the last release, and a 1.4.1 node's floor is 1.4.1 (apps/server/src/app-store-versions.ts
     // DEFAULT_MIN_APP_VERSION): left as it is, every tab of every picture carries the banner "Your app is too old for this community
-    // — update to v1.4.0". The copy says what the release that goes with this node will say.
+    // — update to v1.4.1". The copy says what the release that goes with this node will say.
     const appJson = path.join(tree, 'apps/native/app.json');
     const config = JSON.parse(fs.readFileSync(appJson, 'utf8'));
     if (!config.expo || typeof config.expo.version !== 'string') throw new Error('app.json no longer reads as the version patch expects (expo.version)');

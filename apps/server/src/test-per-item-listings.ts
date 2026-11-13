@@ -18,7 +18,7 @@
  *   4. The deal doors as an older app knocks (slice P1 opened them; test-per-item-deals.ts walks them): a one-step accept in
  *      an app's old shape (a number of hours, no way, no total) is refused 409 `price_changed`, and a request 409
  *      `each_accept_only`; nothing is held, the count stays; a Total Offer is still taken up as before.
- *   5. The features answer offers no Each yet (no `perItem`).
+ *   5. The features answer offers Each (`perItem: true`): on from node 1.4.1, once both stores carried phone 1.4.1.
  *   6. A standby copy carries the three columns and the deal's item_option, by plain assignment.
  *   7. The CHECKs hold on this fresh file (test-schema-upgrade-fresh-shape.ts holds them on an upgraded one).
  *   8. The Home card (slice P2): the market row of a listing priced each carries the unit, the count and the price for all; any
@@ -332,8 +332,8 @@ async function main(): Promise<void> {
     // ── 5. The features answer ──────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 5. The features answer');
     const info = await call('GET', '/api/community/info', dana);
-    assert(info.status === 200 && typeof info.body?.features === 'object' && !('perItem' in info.body.features),
-        'the forms are offered no Each until every slice is in (red if node-profile.ts PER_ITEM_BUILT is set)');
+    assert(info.status === 200 && typeof info.body?.features === 'object' && info.body.features.perItem === true,
+        `the forms are offered Each: every slice is in, and both stores carry phone 1.4.1 (red if node-profile.ts PER_ITEM_BUILT is false) (${JSON.stringify(info.body?.features?.perItem)})`);
 
     // ── 6. A standby copy ──────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 6. A standby copy');

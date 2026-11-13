@@ -103,7 +103,7 @@ services:
       # asks: phones are told of no newer app, and an app below its floor (MIN_APP_VERSION) gets a banner only, never the
       # full-screen update. See apps/server/src/app-store-versions.ts appStoreCheckDisabled.
       - DISABLE_APP_STORE_CHECK=${DISABLE_APP_STORE_CHECK:-}
-      # FOR A TEST COMMUNITY ONLY: what a store has, in place of asking it, e.g. android=1.4.0,ios=1.4.0, so the floor
+      # FOR A TEST COMMUNITY ONLY: what a store has, in place of asking it, e.g. android=1.4.1,ios=1.4.1, so the floor
       # stops older apps before the stores have the build ("Update required" tried out). A platform it names is never
       # asked. EMPTY = both stores are asked, as always. On a real community it would stop members' older apps before
       # they can get the new one. See apps/server/src/app-store-versions.ts storeVersionsSetting.

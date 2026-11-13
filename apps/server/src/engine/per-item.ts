@@ -17,8 +17,8 @@
  *
  * The deals (P1): a take-up for a number of them or all of them holds exactly their Beans and lowers the count in the same
  * transaction ({@link reserveUnits}, the authority); the five places a deal ends settle the count through one function
- * ({@link settleItemDeal}); a request is refused ({@link assertNotAskedForItems}). The forms don't offer Each until every
- * slice is in: the node's features answer has no `perItem` until then (config/node-profile.ts).
+ * ({@link settleItemDeal}); a request is refused ({@link assertNotAskedForItems}). The forms offer Each where the node's
+ * features answer says `perItem`: every node from 1.4.1 (config/node-profile.ts PER_ITEM_BUILT).
  */
 import {
     EACH, ITEM_COUNT_MAX, ITEM_TAKE_UP_REFUSALS, NOT_PER_ITEM, PER_ITEM_REFUSALS, isItemCount, isPerItem, itemColumnsRefusal, itemStockRefusal,

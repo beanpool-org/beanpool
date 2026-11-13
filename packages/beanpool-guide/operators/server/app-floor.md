@@ -11,7 +11,7 @@ Your server tells every phone app the oldest version it should run: the floor. A
 
 Once a floor stops apps, your server also refuses them: an app below it can't send anything or read anything private. What the member then sees depends on the app's version:
 
-- **From 1.4.0 on** (refused by a floor you raised later): it puts up **Update required** at once, even mid-use.
+- **From 1.4.0 on:** it puts up **Update required** at once, even mid-use.
 - **Older, from the version with the full-screen update:** it does not know that refusal. What it tries fails, without the screen, until its next start or return puts **Update required** up.
 - **Older still:** it does not say its version, so your server does not refuse it. It shows the banner only.
 
@@ -23,15 +23,15 @@ A floor never stops anyone the store cannot help. Your server reads Google Play'
 
 In .env:
 
-- **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.4.2. Unset, it is 1.4.0: apps older than that can't work with this server, so it holds them off without anything set. You can raise it, never lower it.
+- **MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.4.2. Unset, it is 1.4.1: apps older than that can't work with this server, so it holds them off without anything set. You can raise it, never lower it.
 - **MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION. A kind of phone without its own floor has MIN_APP_VERSION's.
 - **MIN_APP_VERSION_FROM**: the grace date, from when an app below the floor stops. A date, such as 2026-10-15 (midnight UTC), or a date and time, such as 2026-10-15T09:00:00+10:00. Until then the app shows its banner only. Unset, an app below the floor stops at its next start.
 - **MIN_APP_VERSION_FROM_ANDROID** and **MIN_APP_VERSION_FROM_IOS**: a grace date for one kind of phone.
-- **APP_STORE_VERSIONS**: for a test community only. It tells your server what each store has, for example android=1.4.0,ios=1.4.0, and your server does not ask that store. It is for trying **Update required** before the stores have the new version: with android=1.4.0, an Android app below 1.4.0 is stopped as if Google Play had 1.4.0. A kind of phone it does not name is checked with its store as usual. It never lowers a floor or moves a grace date. On a real community it would stop older apps before members can get the new version, so leave it empty there. If your server can't read it, it stops no app on the kind of phone it could mean, and its log says why. It applies with DISABLE_APP_STORE_CHECK=true too.
+- **APP_STORE_VERSIONS**: for a test community only. It tells your server what each store has, for example android=1.4.1,ios=1.4.1, and your server does not ask that store. It is for trying **Update required** before the stores have the new version: with android=1.4.1, an Android app below 1.4.1 is stopped as if Google Play had 1.4.1. A kind of phone it does not name is checked with its store as usual. It never lowers a floor or moves a grace date. On a real community it would stop older apps before members can get the new version, so leave it empty there. If your server can't read it, it stops no app on the kind of phone it could mean, and its log says why. It applies with DISABLE_APP_STORE_CHECK=true too.
 
 Then run: docker compose up -d
 
-A floor that is not a version is ignored. So is one below 1.4.0, such as a floor set before this version: your server uses 1.4.0 in its place, and its log says so once when it starts. A grace date that is not a date turns the full-screen update off for that kind of phone until you fix it, and the log says so.
+A floor that is not a version is ignored. So is one below 1.4.1, such as a floor set before this version: your server uses 1.4.1 in its place, and its log says so once when it starts. A grace date that is not a date turns the full-screen update off for that kind of phone until you fix it, and the log says so.
 
 ## Raising it safely
 
@@ -45,7 +45,7 @@ Apps from before the full-screen update show the banner only, whatever the date.
 
 ## Undoing it
 
-A phone too old for the new version cannot install it, and its member cannot get past the screen into your community, which tells them to ask you. Lower the floor (not below 1.4.0), or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in.
+A phone too old for the new version cannot install it, and its member cannot get past the screen into your community, which tells them to ask you. Lower the floor (not below 1.4.1), or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in.
 
 ## What the screen still lets a member do
 

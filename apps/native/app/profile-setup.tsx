@@ -28,7 +28,7 @@ import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
 import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
-import { notANameIn, notANameWords, t } from '@beanpool/core';
+import { NAME_BOX_WORDS, notANameIn, t } from '@beanpool/core';
 
 type Step = ProfileStep;
 
@@ -342,7 +342,7 @@ export default function ProfileSetupScreen() {
                                 <Text style={styles.hintMuted}>{t('Checking availability…')}</Text>
                             )}
                             {notAName && (
-                                <Text style={styles.hintTaken} accessibilityLiveRegion="polite">{t(notANameWords(notAName))}</Text>
+                                <Text style={styles.hintTaken} accessibilityLiveRegion="polite">{t(NAME_BOX_WORDS[notAName])}</Text>
                             )}
                             {nameOk && !notAName && nameStatus === 'available' && (
                                 <Text style={styles.hintOk}>{t('✓ Available on this community')}</Text>

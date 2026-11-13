@@ -8,11 +8,11 @@ const MESSAGE = inviteShareText({ name: 'Byron Shire BeanPool', link: 'https://b
 
 describe('notANameIn', () => {
     it('reads an invite link, the whole message and the code alone as an invite', () => {
-        expect(notANameIn(DEE_DEE)).toBe('invite-link');
-        expect(notANameIn(MESSAGE)).toBe('invite-link');
-        expect(notANameIn('INV-K7Q2-BSXA')).toBe('invite-code');
-        expect(notANameIn('  bp-ab12-cd34 ')).toBe('invite-code');
-        expect(notANameIn('BP-eyJhIjoiYiIsImMiOiJkIn0abcdefghijk')).toBe('invite-code');
+        expect(notANameIn(DEE_DEE)).toBe('inviteLink');
+        expect(notANameIn(MESSAGE)).toBe('inviteLink');
+        expect(notANameIn('INV-K7Q2-BSXA')).toBe('inviteCode');
+        expect(notANameIn('  bp-ab12-cd34 ')).toBe('inviteCode');
+        expect(notANameIn('BP-eyJhIjoiYiIsImMiOiJkIn0abcdefghijk')).toBe('inviteCode');
     });
     it('reads a web address as one, the link the name box cut short included', () => {
         for (const s of [
@@ -27,7 +27,7 @@ describe('notANameIn', () => {
             '10.0.0.7',
             'ftp://x',
             'HTTPS://A.B',
-        ]) expect(notANameIn(s), s).toBe('web-link');
+        ]) expect(notANameIn(s), s).toBe('webLink');
     });
     it('leaves a name a name, dots, dashes and other scripts included', () => {
         for (const s of ['Dee Dee', 'J.R. Smith', 'St.Kilda', 'Dr.Who', 'Mary-Jane', 'Ana B.', 'O\'Brien', 'Marty', 'Nguyễn Văn A', '李小龙', 'Bean Counter 2', 'Inv Smith', 'BP Garage', 'v1.2', 'Mr. Bean', 'Bob.Smithers', '', '   ']) {

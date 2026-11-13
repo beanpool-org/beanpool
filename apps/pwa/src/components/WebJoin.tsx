@@ -23,7 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { notANameIn, notANameWords, t, tn, word } from '@beanpool/core';
+import { NAME_BOX_WORDS, notANameIn, t, tn, word } from '@beanpool/core';
 import { keyLineWords, twoSentences } from './key-lines';
 import { joinHeading, ownCommunityAddress } from '../lib/join-names';
 import { Sentence } from './Sentence';
@@ -1194,7 +1194,7 @@ export function WebJoin({
         // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the node refuses it too.
         const notAName = notANameIn(name);
         if (notAName) {
-            setNotice({ tone: 'error', text: () => t(notANameWords(notAName)) });
+            setNotice({ tone: 'error', text: () => t(NAME_BOX_WORDS[notAName]) });
             return;
         }
         setBusy(true);

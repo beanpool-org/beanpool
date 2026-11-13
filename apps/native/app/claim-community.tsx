@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { notANameIn, notANameWords, t, tn, upperCase } from '@beanpool/core';
+import { NAME_BOX_WORDS, notANameIn, t, tn, upperCase } from '@beanpool/core';
 import { claimOutcomeWords, keyLineWords } from '../components/key-lines';
 import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
@@ -331,7 +331,7 @@ export default function ClaimCommunityScreen() {
         // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the node refuses it too.
         const notAName = needsCallsign ? notANameIn(callsign) : null;
         if (notAName) {
-            setError(t(notANameWords(notAName)));
+            setError(t(NAME_BOX_WORDS[notAName]));
             return;
         }
         setError(null);

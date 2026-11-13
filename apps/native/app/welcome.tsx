@@ -21,7 +21,7 @@ import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
 import {
-    bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, notANameIn, notANameWords,
+    bundledAvatarForPubkey, combineKnockTicks, inviteForInviteBox, joinRuleLines, knockTickOf, landingPostId, lowercaseRecoveryWords, NAME_BOX_WORDS, notANameIn,
     photoStepNote, postIdFromInviteLink, splitBold,
     type KnockWatchTick, type KnownRule,
     shareAddress,
@@ -1321,14 +1321,14 @@ export default function WelcomeScreen() {
         if (!moved) return false;
         setCallsign('');
         if (callsignSuggestions.length) setCallsignSuggestions([]);
-        void processFullUrl(moved).then(() => setError(t(notANameWords(notANameIn(moved) ?? 'invite-code'))));
+        void processFullUrl(moved).then(() => setError(t(NAME_BOX_WORDS[notANameIn(moved) ?? 'inviteCode'])));
         return true;
     }
 
     /** The one line for a name that is a web address or an invite (core name-box.ts), in the screen's language; else null. */
     function notANameHere(name: string): string | null {
         const kind = notANameIn(name);
-        return kind ? t(notANameWords(kind)) : null;
+        return kind ? t(NAME_BOX_WORDS[kind]) : null;
     }
 
     async function handleCreate() {

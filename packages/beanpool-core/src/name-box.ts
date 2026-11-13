@@ -24,7 +24,8 @@ export const NAME_BOX_WORDS = {
     webLink: word('That looks like a web address: your name can’t be a link.'),
 } as const;
 
-export type NotAName = 'invite-link' | 'invite-code' | 'web-link';
+/** What a name box held instead of a name: the keys of {@link NAME_BOX_WORDS}, so a screen says `t(NAME_BOX_WORDS[kind])`. */
+export type NotAName = keyof typeof NAME_BOX_WORDS;
 
 /** Endings a name never has after a dot, so a host on one reads as an address. Short on purpose: no `.me` or `.de`. */
 const HOST_ENDINGS = 'com|org|net|io|app|dev|info|biz|xyz|site|online|link|au|nz|uk';
@@ -43,19 +44,19 @@ export function notANameIn(raw: string | null | undefined): NotAName | null {
     const text = String(raw ?? '');
     if (!text.trim()) return null;
     const address = WEB_ADDRESS.test(text);
-    if (inviteCodeIn(text) !== null) return address ? 'invite-link' : 'invite-code';
-    return address ? 'web-link' : null;
+    if (inviteCodeIn(text) !== null) return address ? 'inviteLink' : 'inviteCode';
+    return address ? 'webLink' : null;
 }
 
 /** The English sentence for what {@link notANameIn} found: the node's `word()`, translated on its way out. */
 export function notANameWords(kind: NotAName): WordKey {
-    return kind === 'invite-link' ? NAME_BOX_WORDS.inviteLink : kind === 'invite-code' ? NAME_BOX_WORDS.inviteCode : NAME_BOX_WORDS.webLink;
+    return NAME_BOX_WORDS[kind];
 }
 
 /** The one line a name box shows when `raw` is no name, in the reader's language; null when it is a name. */
 export function notANameLine(raw: string | null | undefined): string | null {
     const kind = notANameIn(raw);
-    return kind ? t(notANameWords(kind)) : null;
+    return kind ? t(NAME_BOX_WORDS[kind]) : null;
 }
 
 /**
@@ -65,5 +66,5 @@ export function notANameLine(raw: string | null | undefined): string | null {
  */
 export function inviteForInviteBox(raw: string | null | undefined): string | null {
     const kind = notANameIn(raw);
-    return kind === 'invite-link' || kind === 'invite-code' ? String(raw ?? '').trim() : null;
+    return kind === 'inviteLink' || kind === 'inviteCode' ? String(raw ?? '').trim() : null;
 }

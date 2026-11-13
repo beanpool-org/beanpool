@@ -70,7 +70,7 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, notANameIn, notANameWords, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, NAME_BOX_WORDS, notANameIn, PEEK_WORDS, t, word, formatNumber, type QuizResult, showInviterSwitchWords } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -1256,7 +1256,7 @@ export default function SettingsScreen() {
         // name already held is not a rename, so it saves as it is, whatever it is (no conversion code).
         const notAName = renames ? notANameIn(newCallsign) : null;
         if (notAName) {
-            Alert.alert(t('Error'), t(notANameWords(notAName)));
+            Alert.alert(t('Error'), t(NAME_BOX_WORDS[notAName]));
             return;
         }
         profileLoadSeqRef.current++;

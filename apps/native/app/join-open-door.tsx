@@ -40,7 +40,7 @@ import {
 import { askCommunityName } from '../utils/community-name';
 import { getSavedNodes } from '../utils/nodes';
 import { plainOriginOf } from '../utils/node-url';
-import { notANameIn, notANameWords, t, tn } from '@beanpool/core';
+import { NAME_BOX_WORDS, notANameIn, t, tn } from '@beanpool/core';
 
 export { ErrorBoundary };
 
@@ -438,7 +438,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the door refuses it too.
         const notAName = notANameIn(name);
         if (notAName) {
-            setError(t(notANameWords(notAName)));
+            setError(t(NAME_BOX_WORDS[notAName]));
             return;
         }
         setLoading(true);
@@ -488,7 +488,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the door refuses it too.
         const notAName = notANameIn(name);
         if (notAName) {
-            setError(t(notANameWords(notAName)));
+            setError(t(NAME_BOX_WORDS[notAName]));
             return;
         }
         setLoading(true);

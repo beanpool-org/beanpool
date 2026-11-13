@@ -130,7 +130,7 @@ export class CallsignNotANameError extends Error {
     readonly status = 400;
     readonly code = CALLSIGN_LINK_CODE;
     constructor(callsign: string) {
-        super(notANameWords(notANameIn(callsign) ?? 'web-link'));
+        super(notANameWords(notANameIn(callsign) ?? 'webLink'));
         this.name = 'CallsignNotANameError';
     }
 }

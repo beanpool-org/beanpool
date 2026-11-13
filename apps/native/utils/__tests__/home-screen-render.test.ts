@@ -4125,8 +4125,9 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
 
     it('the last step offers no chips; Done removes Welcome, adds nothing and writes "done"', async () => {
         await render();
-        // DESIGN-home-default-fable.md §2.3: Home already holds the default list.
-        expect(tourStore.tourHome()!.chips).toEqual([]);
+        // DESIGN-home-default-fable.md §2.3: Home already holds the default list. The bar's chip row is gone (D2): Home
+        // lends the bar only the end and Take the tour again, nothing that adds a card.
+        expect(Object.keys(tourStore.tourHome()!).sort()).toEqual(['end', 'restart']);
         const from = node.requests.length;
         await act(async () => { tourStore.tourHome()!.end('done'); });
         await settle(20);

@@ -499,7 +499,6 @@ export default function TabLayout() {
                 <TourBar
                     steps={steps}
                     index={tourIndex}
-                    home={tourHomeNow}
                     colors={colors}
                     bottomInset={insets.bottom}
                     onHeight={setTourBarHeight}

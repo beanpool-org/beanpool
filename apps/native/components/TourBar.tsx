@@ -2,9 +2,8 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { t, tourStepCaption, upperCase, type TourStep } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
-import type { TourHome } from '../utils/tour-store';
 
-/** The bar's buttons and chips: the floor's touch target. */
+/** The bar's buttons: the floor's touch target. */
 export const TOUR_TARGET_DP = 48;
 /**
  * What the tab screens give up at the bottom while the bar is up: the tabs' navigator ends at the bar's top, so each
@@ -21,13 +20,13 @@ export const TOUR_TEXT_MAX_SCALE = 1.2;
 /**
  * The tour's bar (scratch/global-node/DESIGN-getting-started-fable.md §2): a card-coloured strip at the bottom of the
  * screen, one or two sentences, "STEP 2 OF 7", Skip (left) and Next › (right). The app behind it is the real tab and
- * stays live: the bar takes only its own strip, so no tap behind it is ever held. The last step adds the three chips,
- * More cards › and Done. The words are a polite live region, so TalkBack reads each step as it comes.
+ * stays live: the bar takes only its own strip, so no tap behind it is ever held. The last step's Next is Done; it offers
+ * no cards (DESIGN-home-default-fable.md §2.3: Home already holds the default list, and Welcome's body takes the tour's
+ * place on Home). The words are a polite live region, so TalkBack reads each step as it comes.
  */
-export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onNext, onSkip, onDone }: {
+export function TourBar({ steps, index, colors, bottomInset, onHeight, onNext, onSkip, onDone }: {
     steps: readonly TourStep[];
     index: number;
-    home: TourHome | null;
     colors: AppColors;
     bottomInset: number;
     onHeight?: (height: number) => void;
@@ -38,7 +37,6 @@ export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onN
     const step = steps[index];
     if (!step) return null;
     const last = index === steps.length - 1;
-    const chips = last && home ? home.chips : [];
     return (
         <View
             style={[tourStyles.bar, { backgroundColor: colors.surface.card, borderTopColor: colors.border.default, paddingBottom: 8 + bottomInset }]}
@@ -52,33 +50,6 @@ export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onN
             <Text style={[tourStyles.words, { color: colors.text.heading }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} accessibilityLiveRegion="polite" accessible testID="tour-words">
                 {t(step.words)}
             </Text>
-            {chips.length > 0 && home && (
-                <View style={tourStyles.chips} testID="tour-chips">
-                    {chips.map(type => {
-                        const on = home.onHome(type);
-                        const name = home.chipName(type);
-                        return (
-                            <Pressable
-                                key={type}
-                                onPress={on ? undefined : () => home.addChip(type)}
-                                disabled={on}
-                                style={[tourStyles.chip, { borderColor: on ? colors.border.default : colors.brand.dark, backgroundColor: on ? colors.surface.app : colors.surface.card }]}
-                                accessibilityRole="button"
-                                accessibilityLabel={on ? t('{name} is on Home', { name }) : t('Put {name} on Home', { name })}
-                                accessibilityState={{ disabled: on }}
-                                testID={`tour-chip-${type}`}
-                            >
-                                <Text style={[tourStyles.chipText, { color: on ? colors.text.secondary : colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} numberOfLines={2}>
-                                    {on ? t('{name} · On Home ✓', { name }) : name}
-                                </Text>
-                            </Pressable>
-                        );
-                    })}
-                    <Pressable onPress={home.moreCards} style={tourStyles.more} accessibilityRole="button" accessibilityLabel={t('More cards: open Add a card')} testID="tour-more-cards">
-                        <Text style={[tourStyles.chipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{t('More cards ›')}</Text>
-                    </Pressable>
-                </View>
-            )}
             <View style={tourStyles.row}>
                 <Pressable onPress={onSkip} style={tourStyles.skip} accessibilityRole="button" accessibilityLabel={t('Skip the tour')} testID="tour-skip">
                     <Text style={[tourStyles.skipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{t('Skip')}</Text>
@@ -102,10 +73,6 @@ export const tourStyles = StyleSheet.create({
     bar: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopWidth: 1, paddingHorizontal: 16, paddingTop: 10, zIndex: 50, elevation: 8 },
     caption: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 },
     words: { fontSize: 15, lineHeight: 21 },
-    chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-    chip: { minHeight: TOUR_TARGET_DP, paddingHorizontal: 12, borderWidth: 1, borderRadius: 24, justifyContent: 'center', maxWidth: '100%' },
-    chipText: { fontSize: 14, fontWeight: '700' },
-    more: { minHeight: TOUR_TARGET_DP, paddingHorizontal: 8, justifyContent: 'center' },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 },
     skip: { minHeight: TOUR_TARGET_DP, minWidth: TOUR_TARGET_DP, paddingHorizontal: 8, justifyContent: 'center' },
     skipText: { fontSize: 15, fontWeight: '700' },

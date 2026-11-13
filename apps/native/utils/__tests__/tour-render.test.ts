@@ -97,10 +97,6 @@ const lines = (text: string, widthDp: number, fontPt: number, scale: number) => 
 
 const SCHEMES: [string, AppColors][] = [['light', lightColors], ['dark', darkColors as unknown as AppColors]];
 const NODES: [string, TourNodeFacts][] = [['local', { global: false, beans: true }], ['global', { global: true, beans: false }]];
-const home = (on: string[] = []) => ({
-    chips: ['steps', 'market', 'beans'], chipName: (t: string) => ({ steps: 'First steps', market: 'New in the Market', beans: 'Your Beans' } as Record<string, string>)[t],
-    onHome: (t: string) => on.includes(t), addChip: vi.fn(), moreCards: vi.fn(), end: vi.fn(), restart: vi.fn(),
-});
 
 describe('the tour bar at 320 dp × 1.3, light and dark, on every step', () => {
     for (const [scheme, colors] of SCHEMES) {
@@ -108,7 +104,7 @@ describe('the tour bar at 320 dp × 1.3, light and dark, on every step', () => {
             const steps = tourSteps('phone', node);
             it(`${scheme}, ${name}: each of the ${steps.length} steps says "STEP n OF ${steps.length}", its words, Skip and Next (Done last), all readable`, () => {
                 steps.forEach((step, i) => {
-                    draw(createElement(TourBar, { steps, index: i, home: home(), colors, bottomInset: 0, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
+                    draw(createElement(TourBar, { steps, index: i, colors, bottomInset: 0, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
                     expect(q('tour-step-caption')!.textContent).toBe(`STEP ${i + 1} OF ${steps.length}`);
                     expect(q('tour-words')!.textContent).toBe(step.words);
                     expect(q('tour-words')!.getAttribute('aria-live')).toBe('polite');
@@ -133,23 +129,25 @@ describe('the tour bar at 320 dp × 1.3, light and dark, on every step', () => {
         }
     }
 
-    it('the last step offers the three chips, More cards and Done; a chip already on Home reads "On Home ✓" and is not a button to press', () => {
-        const steps = tourSteps('phone', NODES[0][1]);
-        const h = home(['market']);
-        draw(createElement(TourBar, { steps, index: steps.length - 1, home: h, colors: lightColors, bottomInset: 0, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
-        expect(q('tour-chip-steps')!.textContent).toBe('First steps');
-        expect(q('tour-chip-market')!.textContent).toBe('New in the Market · On Home ✓');
-        expect(q('tour-chip-market')!.getAttribute('aria-disabled')).toBe('true');
-        act(() => { q('tour-chip-beans')!.click(); });
-        expect(h.addChip).toHaveBeenCalledWith('beans');
-        act(() => { q('tour-more-cards')!.click(); });
-        expect(h.moreCards).toHaveBeenCalled();
-        for (const id of ['tour-chip-steps', 'tour-chip-beans', 'tour-more-cards']) expect(styleOf(q(id)).minHeight).toBeGreaterThanOrEqual(TOUR_TARGET_DP);
+    it('the last step offers no cards (DESIGN-home-default-fable.md §2.3, D2): its words, Skip and Done, and only those two buttons', () => {
+        for (const [, node] of NODES) {
+            const steps = tourSteps('phone', node);
+            const onDone = vi.fn();
+            draw(createElement(TourBar, { steps, index: steps.length - 1, colors: lightColors, bottomInset: 0, onNext: vi.fn(), onSkip: vi.fn(), onDone }));
+            expect(q('tour-chips')).toBeNull();
+            expect(q('tour-more-cards')).toBeNull();
+            expect(document.querySelector('[data-testid^="tour-chip-"]')).toBeNull();
+            expect(Array.from(q('tour-bar')!.querySelectorAll('[role="button"], button')).map(b => b.getAttribute('data-testid'))).toEqual(['tour-skip', 'tour-done']);
+            act(() => { q('tour-done')!.click(); });
+            expect(onDone).toHaveBeenCalledTimes(1);
+            act(() => root?.unmount());
+            host?.remove();
+        }
     });
 
     it('never blocks a tap behind it: one strip at the bottom of the screen, no backdrop, no modal, nothing over the tabs', () => {
         const steps = tourSteps('phone', NODES[0][1]);
-        draw(createElement(TourBar, { steps, index: 2, home: home(), colors: lightColors, bottomInset: 0, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
+        draw(createElement(TourBar, { steps, index: 2, colors: lightColors, bottomInset: 0, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
         const bar = styleOf(q('tour-bar'));
         expect(bar).toMatchObject({ position: 'absolute', left: 0, right: 0, bottom: 0 });
         expect(bar.top).toBeUndefined();
@@ -180,16 +178,16 @@ describe('the tabs\' own bottom buttons ride above the bar (review B1: + ADD POS
         expect(m, rel).not.toBeNull();
         return Number(m![1]);
     };
-    /** The bar's height at the floor on a step (the line model above), chips and their row on the last. */
-    const barAt = (words: string, last: boolean) => {
+    /** The bar's height at the floor on a step (the line model above): caption, words, the buttons' row; the last is no taller. */
+    const barAt = (words: string) => {
         const scale = Math.min(FLOOR.fontScale, 1.2);
-        return 10 + 11 * scale * 1.4 + 4 + lines(words, FLOOR.width - 32, 15, scale) * 21 * scale + (last ? 10 + 2 * (TOUR_TARGET_DP + 8) : 0) + 8 + TOUR_TARGET_DP + 8;
+        return 10 + 11 * scale * 1.4 + 4 + lines(words, FLOOR.width - 32, 15, scale) * 21 * scale + 8 + TOUR_TARGET_DP + 8;
     };
 
     it('the bar reports the height it lays out at', () => {
         const steps = tourSteps('phone', NODES[0][1]);
         const onHeight = vi.fn();
-        draw(createElement(TourBar, { steps, index: 1, home: home(), colors: lightColors, bottomInset: 0, onHeight, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
+        draw(createElement(TourBar, { steps, index: 1, colors: lightColors, bottomInset: 0, onHeight, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
         act(() => { (globalThis as any).__onLayout['tour-bar']({ nativeEvent: { layout: { x: 0, y: 400, width: 320, height: 137.5 } } }); });
         expect(onHeight).toHaveBeenCalledWith(137.5);
     });
@@ -211,8 +209,8 @@ describe('the tabs\' own bottom buttons ride above the bar (review B1: + ADD POS
             const bottom = fabBottom(rel);
             for (const [, node] of NODES) {
                 const steps = tourSteps('phone', node);
-                steps.forEach((step, i) => {
-                    const bar = barAt(step.words, i === steps.length - 1);
+                steps.forEach((step) => {
+                    const bar = barAt(step.words);
                     // Measured from the screen's bottom: the bar's top is its height; the button's bottom edge is the
                     // tabs' inset plus the button's own offset in its screen.
                     expect(tourSceneInset(true, bar) + bottom, `${tab} ${step.id}`).toBeGreaterThanOrEqual(bar);

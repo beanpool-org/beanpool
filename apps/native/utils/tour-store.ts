@@ -1,8 +1,8 @@
 /**
  * The one-minute tour on the phone (scratch/global-node/DESIGN-getting-started-fable.md §2), and the "?"'s screen
- * context (§4). Home starts the tour (Look around ›) and owns what it writes; the tab layout draws the bar and moves
- * the app from tab to tab. The two meet here: a small store of whether a tour is running and at which step, the
- * handlers Home registers for the last step's chips and the end, and the sub-view a tab screen names for the "?".
+ * context (§4). Home starts the tour (Welcome's Take the tour ›) and owns what it writes; the tab layout draws the bar
+ * and moves the app from tab to tab. The two meet here: a small store of whether a tour is running and at which step,
+ * the handlers Home registers for the end and Take the tour again, and the sub-view a tab screen names for the "?".
  *
  * - **On the device, per account:** the step a tour part way is at (`{ v: 1, step, startedAt }`), so a killed app's card
  *   says "Pick up the tour at step n ›"; and a Done or Skip the node hasn't taken yet, sent again on the next Home open.
@@ -28,17 +28,8 @@ export interface TourRun {
     startedAt: string;
 }
 
-/** What Home lends the bar: the last step's chips go on Home through Home's own add, and the end through Home's write. */
+/** What Home lends the bar: the end goes through Home's write. */
 export interface TourHome {
-    /** The chips' card types, already filtered to what this node shows this reader (core `tourChips`). */
-    chips: readonly string[];
-    /** A chip's name as the picker says it. */
-    chipName(type: string): string;
-    /** Whether the card is on Home now (a chip reads "On Home ✓"). */
-    onHome(type: string): boolean;
-    addChip(type: string): void;
-    /** Opens Add a card (More cards ›). */
-    moreCards(): void;
     end(kind: 'done' | 'skipped'): void;
     /** Take the tour again (the "?"): the account's record back to open, and the bar from step 1. */
     restart(): void;

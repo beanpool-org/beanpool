@@ -1114,11 +1114,9 @@ export default function HomeScreen() {
         : null;
 
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
-    // The bar is the tab layout's (utils/tour-store.ts); Home lends it the chips (the picker's own add) and the end (one
-    // layout write, then the account's record). Nothing here starts a tour by itself.
-    // The last step offers no chips any more (DESIGN-home-default-fable.md §2.3: Home already holds the default list); the
-    // bar's chip row is removed with Welcome's body in slice D2.
-    const chips: string[] = [];
+    // The bar is the tab layout's (utils/tour-store.ts); Home lends it the end (one layout write, then the account's
+    // record) and Take the tour again. Nothing here starts a tour by itself. The last step offers no cards
+    // (DESIGN-home-default-fable.md §2.3: Home already holds the default list, and Welcome's body is the tour's door).
     const tourEnd = useCallback(async (kind: 'done' | 'skipped') => {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
@@ -1154,24 +1152,13 @@ export default function HomeScreen() {
         if (u) void saveTourRecord(u, id, tourRecord('open'));
         startTour(id.publicKey, 0);
     }, [url, changeLayout, currentPins]);
-    const tourAddChip = useCallback((type: string) => {
-        const ans = storedRef.current?.answer;
-        const added = addCard(layoutRef.current, type, Date.now(), { pinned: currentPins(ans) });
-        if (added.ok) changeLayout(added.layout, { reread: true });
-    }, [changeLayout, currentPins]);
-    const chipsKey = chips.join(',');
     useEffect(() => {
         if (!answer?.me || !tailor) { lendTourHome(null); return; }
         lendTourHome({
-            chips,
-            chipName: (type) => cardName(type, profile),
-            onHome: (type) => (layoutRef.current?.cards ?? []).some(c => c.type === type),
-            addChip: tourAddChip,
-            moreCards: () => setAddOpen(true),
             end: (kind) => { void tourEnd(kind); },
             restart: tourRestart,
         });
-    }, [answer, tailor, layout, chipsKey, profile, tourAddChip, tourEnd, tourRestart]);
+    }, [answer, tailor, tourEnd, tourRestart]);
     useEffect(() => () => lendTourHome(null), []);
     // Another account on the phone: this one's tour words go; a tour part way here is read again whenever the bar closes.
     useEffect(() => { setTourOver(false); setTourOpen(false); }, [identity?.publicKey]);

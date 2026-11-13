@@ -595,9 +595,11 @@ async function main() {
         const read = await counted(() => get(`/api/marketplace/posts/${id}/other-answers`, maker));
         assert(read.value.body.answers[0]?.reported === true && read.polls > 0 && read.others === 0,
             `a read of the poll's lines finds its reported line, parsing ${read.polls} poll report value(s) and ${read.others} of another kind`);
-        const waits = await counted(() => db.prepare(`SELECT ${pollLineReportWaitsSql('?')} AS w`).pluck().get(id));
-        assert(waits.value === 1 && waits.polls > 0 && waits.others === 0,
-            `the archive sweep's wait finds the report, parsing ${waits.polls} poll report value(s) and ${waits.others} of another kind`);
+        // The sweep asks it of every poll it might archive, most with no report: an EXISTS that finds none reads every report.
+        const waitsFor = db.prepare(`SELECT ${pollLineReportWaitsSql('?')} AS w`).pluck();
+        const waits = await counted(() => [waitsFor.get(id), waitsFor.get(crypto.randomBytes(16).toString('hex'))]);
+        assert(JSON.stringify(waits.value) === '[1,0]' && waits.polls > 0 && waits.others === 0,
+            `the archive sweep's wait finds the report, and none for a poll without one, parsing ${waits.polls} poll report value(s) and ${waits.others} of another kind`);
         const removed = await counted(() => post('/api/marketplace/posts/remove', { id, authorPublicKey: maker.pubKeyHex }, maker));
         const status = (db.prepare('SELECT status FROM abuse_reports WHERE disclosure = ?').get(filedDisclosure) as any)?.status;
         assert(removed.value.status === 200 && status === 'actioned' && removed.polls > 0 && removed.others === 0,

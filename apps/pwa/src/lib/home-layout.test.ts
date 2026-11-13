@@ -52,6 +52,18 @@ describe('the picker (§1.2)', () => {
         expect(pickerGroups(adminsOnly, null, 'owner').groups.flatMap(g => g.rows.map(r => r.type))).toContain('invite');
     });
 
+    it("an invite-only local node (wordsDoor false): Add a card offers Your way back in to a member whose 12 words are the only way back, and to nobody else (review of #3114, finding 1)", () => {
+        const inviteOnly = { ...LOCAL, features: { ...LOCAL.features, wordsDoor: false } };
+        const offered = (me: { joinedAt: string | null; wayBack?: string } | undefined) =>
+            pickerGroups({ ...inviteOnly, me }, { ...starterLayout(), cards: [] }, null).groups.flatMap(g => g.rows.map(r => r.type));
+        expect(offered({ joinedAt: iso(NOW), wayBack: 'words' })).toContain('safety');
+        expect(offered({ joinedAt: iso(NOW), wayBack: 'covered' })).not.toContain('safety');
+        expect(offered(undefined)).not.toContain('safety');
+        // And it is asked of the node with the rest, the answer in hand.
+        expect(cardsToAsk(null, [], { ...inviteOnly, me: { joinedAt: iso(NOW), wayBack: 'words' } })).toContain('safety');
+        expect(cardsToAsk(null, [], { ...inviteOnly, me: { joinedAt: iso(NOW), wayBack: 'covered' } })).not.toContain('safety');
+    });
+
     it('a full Home (24 cards): every Add goes; five saved searches: that row is full', () => {
         const cards = Array.from({ length: HOME_FRAME_LIMITS.cards }, (_, i) => ({ id: `x-${i}`, type: `x${i}` }));
         const full = pickerGroups(LOCAL, { ...starterLayout(), cards }, 'admin');

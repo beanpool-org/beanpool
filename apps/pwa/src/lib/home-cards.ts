@@ -118,6 +118,12 @@ export interface HomeMe {
      * one is (§2.5): who "Your way back in" is for on Home. Absent from a node before D1.
      */
     wayBack?: 'words' | 'covered';
+    /**
+     * The account's "I still have my 12 words" (`words_kept`, said on any device, one way), on every answer of the member's
+     * own: the 12-words card ends with it, after First steps (whose `words` line says the same) has gone. Absent from a node
+     * before it (review of #3114, finding 2): First steps' line is then the only word.
+     */
+    wordsKept?: boolean;
 }
 
 export interface HomeCommunity {
@@ -515,11 +521,12 @@ const WEEK_MS = 7 * DAY_MS;
 /**
  * Who "Your way back in" is for on Home, from the Home answer alone (DESIGN-home-default-fable.md §2.5, slice D3): every
  * member whose 12 words are the only way back (`me.wayBack` `words`), however they joined, until they say they still have
- * them or save the kit (First steps' `steps.words` true, or said in this browser). A 12-words joiner with no sign-in
- * (`cards.safety`) also has it on a node from before `wayBack`. Nobody else: a sign-in's copy linked here ends it.
+ * them (the account's `me.wordsKept`, First steps' `steps.words` true, or said in this browser). A 12-words joiner with no
+ * sign-in (`cards.safety`) also has it on a node from before `wayBack`. Nobody else: a sign-in's copy linked here ends it.
  *
- * Kept on the account but read back through First steps' fact only: once that card has gone (its days up, or removed) a
- * say-so made on another device is not seen here, and the card keeps its schedule (two returns at most, then Settings).
+ * The say-so is the account's, read from `me.wordsKept` on every answer, so it holds once First steps has gone (its days
+ * up, or its last line done, which can be day one): said at sign-up, in Settings or on the phone, the card never comes
+ * back (review of #3114, finding 2). A node from before that field says it through First steps' line alone.
  */
 export function wayBackOf(answer: HomeAnswer, wordsKeptHere = false): WayBackOnHome {
     const me = answer.me;
@@ -530,7 +537,7 @@ export function wayBackOf(answer: HomeAnswer, wordsKeptHere = false): WayBackOnH
     // The 12-words door's own member, on probation, with no `safety`: the node left it out because they said they still
     // have their words (safetyCard), whatever `steps` says.
     const keptByDoor = !door && me.probation?.rules === 'words';
-    const kept = wordsKeptHere || s?.words === true || keptByDoor;
+    const kept = wordsKeptHere || me.wordsKept === true || s?.words === true || keptByDoor;
     const forThem = door || (me.wayBack === 'words' && !kept);
     const joined = Date.parse(me.joinedAt ?? '');
     return {

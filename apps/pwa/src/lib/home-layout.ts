@@ -56,7 +56,8 @@ const DAY_MS = 86_400_000;
 export interface FrameAnswer {
     profile: string;
     features: { [k: string]: unknown };
-    me?: { joinedAt: string | null } | null;
+    /** `wayBack` (slice D1): core's catalogue keeps Your way back in for a member whose 12 words are the only way back. */
+    me?: { joinedAt: string | null; wayBack?: string | null } | null;
     cards?: { [k: string]: unknown };
 }
 
@@ -416,9 +417,10 @@ export interface PickerGroup { id: HomeCardGroup; name: string; rows: PickerRow[
  * Whether a node of this kind can show the card to this reader: core's one rule (`onNode`, per type), and only for a
  * type this build draws. Home draws only these, the picker lists only these, and cardsToAsk asks only these.
  */
-export function cardOnNode(type: HomeCardType, answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards'>, role?: HomeRole): boolean {
+export function cardOnNode(type: HomeCardType, answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'>, role?: HomeRole): boolean {
     const t = homeCardType(type);
-    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards }, role);
+    // `me` too: Your way back in is on any node for a member whose 12 words are the only way back (review of #3114, finding 1).
+    return !!t && HOME_DRAWN.has(type) && t.onNode({ profile: answer.profile, features: answer.features, cards: answer.cards, me: answer.me }, role);
 }
 
 /**
@@ -427,7 +429,7 @@ export function cardOnNode(type: HomeCardType, answer: Pick<FrameAnswer, 'profil
  * and not listed. `full`: Home holds 24 cards, so every Add goes.
  */
 export function pickerGroups(
-    answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards'>, layout: HomeLayoutV2 | null, role: HomeRole,
+    answer: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'>, layout: HomeLayoutV2 | null, role: HomeRole,
     pinned: readonly string[] = [], status: Partial<Record<string, string>> = {},
 ): { groups: PickerGroup[]; full: boolean } {
     const list = listOf(layout);
@@ -465,7 +467,7 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
  * before, so a local member's address stays what their first read's was.
  */
 export function cardsToAsk(
-    layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards'> | null,
+    layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards' | 'me'> | null,
 ): string[] {
     // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
     // has answered, the app can't tell which of them it shows: the node builds none it doesn't (routes/home-answer.ts

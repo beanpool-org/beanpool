@@ -280,6 +280,13 @@ export interface HomeMe {
      * not yet: until slices D2 and D3 it keeps the 12-words door's rule (`safetyCard`).
      */
     wayBack: WayBack;
+    /**
+     * Whether they said "I still have my 12 words" (engine/home-preferences.ts `words_kept`, one way), on any device: the
+     * 12-words card on Home ends with it on both apps (DESIGN-home-default-fable.md §2.5 "kept on the account, so the phone
+     * and the web agree"). Sent on every answer of their own, so it outlives First steps' `words` line, which goes with
+     * that card's days or its last line (review of #3114, finding 2).
+     */
+    wordsKept: boolean;
 }
 
 export interface MarketItem {
@@ -1716,6 +1723,7 @@ export function buildHome(reader: HomeReader): HomeBuilt {
             standing: member ? 'member' : 'suspended',
             invitedBy: invitedByOf(me!),
             wayBack: wayBackFor(c),
+            wordsKept: hasKeptWords(me!),
         };
     }
     const removalRule = removalDeciderFor(me);

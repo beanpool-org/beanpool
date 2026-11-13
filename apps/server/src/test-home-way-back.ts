@@ -16,6 +16,9 @@
  *      its `words` line: null when the account is covered, false while the words are the only way back, true once kept.
  *   6. The community card writes no zero figure: no trades, events or Commons pot of 0. Trades of 0 are left out; a
  *      member's who-joined, events and pot of 0 are sent as null, so the phone's card keeps its rows on a quiet week.
+ *   7. `me.wordsKept` (review of #3114, finding 2): the account's "I still have my 12 words" on every answer of the
+ *      member's own, false until said and true after, with no `steps` asked, once First steps' days are up (a global
+ *      joiner on day 15) and once its last line is done: the 12-words card ends on it, not on First steps' line.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-home-way-back.ts
@@ -264,6 +267,34 @@ async function main() {
         `a quiet week: who joined and events coming up are sent as null (present, not written), no trades (${JSON.stringify(quiet)})`);
     assert(!('commonsPot_c' in quiet) || quiet.commonsPot_c === null || (typeof quiet.commonsPot_c === 'number' && quiet.commonsPot_c > 0),
         `a quiet week: the Commons pot, where Beans are on, is a figure above zero or null (${JSON.stringify(quiet.commonsPot_c)})`);
+
+    // ── 7. me.wordsKept: the account's say-so on its own, outliving First steps ───────────────────────────────────
+    console.log('\n── 7. me.wordsKept on every answer of their own, after First steps has gone ──');
+    const kim = makeMember('WayBackKim', { invitedBy: ana.pk });
+    const kim0 = await home(kim, 'needs,community');
+    assert(kim0.json?.me?.wordsKept === false && kim0.json?.me?.wayBack === 'words', `not said yet: wordsKept false (${kim0.json?.me?.wordsKept})`);
+    await savePrefs(kim, { words_kept: true });
+    const kim1 = await home(kim, 'needs,community');
+    assert(kim1.json?.me?.wordsKept === true && kim1.json?.cards?.steps === undefined,
+        `said: wordsKept true in me, with no steps asked (${kim1.json?.me?.wordsKept}, ${JSON.stringify(kim1.json?.cards?.steps)})`);
+    // Every line of First steps done (the earlier member `done`): no steps at all, the say-so still in me.
+    const doneMe = await signed('GET', '/api/home?cards=needs,safety,steps,community&lands=first-need,words', done);
+    assert(doneMe.json?.cards?.steps === undefined && doneMe.json?.me?.wordsKept === true,
+        `every First steps line done, so no steps: wordsKept still true in me (${JSON.stringify(doneMe.json?.cards?.steps)}, ${doneMe.json?.me?.wordsKept})`);
+    // Past First steps' days (31 on a local community): no steps, and me says it either way.
+    const old = makeMember('WayBackOld', { invitedBy: ana.pk, joinedAt: new Date(Date.now() - 31 * DAY).toISOString() });
+    const old0 = await home(old);
+    await savePrefs(old, { words_kept: true });
+    const old1 = await home(old);
+    assert(old0.json?.cards?.steps === undefined && old0.json?.me?.wordsKept === false && old1.json?.cards?.steps === undefined && old1.json?.me?.wordsKept === true,
+        `past First steps' days: no steps, wordsKept false then true (${old0.json?.me?.wordsKept} → ${old1.json?.me?.wordsKept})`);
+    // A covered account says it too (a say-so is not a way back: wayBack stays covered).
+    await savePrefs(cleo, { words_kept: true });
+    const cleo2 = await home(cleo);
+    assert(cleo2.json?.me?.wayBack === 'covered' && cleo2.json?.me?.wordsKept === true, `a covered account's say-so: wayBack covered, wordsKept true (${cleo2.json?.me?.wayBack}, ${cleo2.json?.me?.wordsKept})`);
+    // Nobody else's: Dev's answer says his own, not Kim's.
+    const dev2 = await home(dev);
+    assert(dev2.json?.me?.wordsKept === false, `another member's say-so is not in Dev's answer (${dev2.json?.me?.wordsKept})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

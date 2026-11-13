@@ -110,6 +110,13 @@ export interface HomeNodeFacts {
     };
     /** The answer's card bodies, by instance id: a `safety` card the node sent is shown where the door has shut since. */
     cards?: Record<string, unknown>;
+    /**
+     * What the answer says of the reader (routes/home-answer.ts `me`), as far as which cards it can show goes: `wayBack`
+     * `words` when the 12 words are the only way back this server can see (DESIGN-home-default-fable.md §2.5, slice D1), so
+     * "Your way back in" is in the catalogue for them however they joined, on a node whose 12-words door is shut too.
+     * Absent (a node before D1, or the node's own build, which has no reader here): the door's rule alone.
+     */
+    me?: { wayBack?: string | null } | null;
 }
 /** The reader's role on this node as the node said it: null for none, undefined not heard. */
 export type HomeReaderRole = 'owner' | 'admin' | 'moderator' | null | undefined;
@@ -355,7 +362,10 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     { id: 'needs', hue: 'sage', name: word('Needs you'), line: word('Things waiting on you, first.'), group: 'you', fixed: true, asks: 'node', onNode: everywhere },
     {
         id: 'safety', hue: 'sage', name: word('Your way back in'), line: word('A reminder to keep your 12 words safe.'), group: 'start', asks: 'node',
-        onNode: (a) => a.features.wordsDoor !== false || !!a.cards?.safety,
+        // Where the 12-words door is open, where the node sent the 12-words door's own card, and for every member whose 12
+        // words are the only way back (`me.wayBack`, §2.5): an invited member on an invite-only local community among them
+        // (review of #3114, finding 1: `wordsDoor: false` kept the card out for all of them).
+        onNode: (a) => a.features.wordsDoor !== false || !!a.cards?.safety || a.me?.wayBack === 'words',
     },
     { id: 'find', hue: 'sage', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
     // Welcome (DESIGN-home-default-fable.md §2.3), first in the default list: drawn by the apps while `welcomeDrawn` says.

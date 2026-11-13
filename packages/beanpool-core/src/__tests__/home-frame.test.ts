@@ -294,6 +294,27 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(HOME_FRAME_LIMITS.cards).toBe(24);
     });
 
+    it("Your way back in is in the catalogue for a member whose 12 words are the only way back, on an invite-only local node too (review of #3114, finding 1)", () => {
+        const safety = HOME_CARD_TYPES.find(t => t.id === 'safety')!;
+        // As every invite-only local node answers: its 12-words door is shut (`wordsDoor: false`), and an invited member
+        // gets no `cards.safety` (that body is the 12-words door's own).
+        const local: HomeNodeFacts = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true, wordsDoor: false } };
+        expect(safety.onNode({ ...local, me: { wayBack: 'words' } })).toBe(true);
+        // A sign-in's copy linked here is a second way back: the door's rule alone, so not on this node.
+        expect(safety.onNode({ ...local, me: { wayBack: 'covered' } })).toBe(false);
+        // A node before D1 (no `wayBack`), or no reader: the door's rule alone, as before.
+        expect(safety.onNode({ ...local, me: {} })).toBe(false);
+        expect(safety.onNode({ ...local, me: null })).toBe(false);
+        expect(safety.onNode(local)).toBe(false);
+        // The 12-words door's own card where the door has shut since, and an open door, whatever `wayBack` says.
+        expect(safety.onNode({ ...local, cards: { safety: { words: true, signInLinked: false } }, me: { wayBack: 'covered' } })).toBe(true);
+        expect(safety.onNode({ ...local, features: { ...local.features, wordsDoor: true }, me: { wayBack: 'covered' } })).toBe(true);
+        // The whole catalogue on that node for such a member: everything the node shows anyone, and Your way back in.
+        const on = (a: HomeNodeFacts) => HOME_CARD_TYPES.filter(t => t.onNode(a)).map(t => t.id);
+        expect(on({ ...local, me: { wayBack: 'words' } })).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'find'));
+        expect(on({ ...local, me: { wayBack: 'covered' } })).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'find' && id !== 'safety'));
+    });
+
     it("Asked near you (cold-start N1): one of a kind, Around you, orange, asked of the node, on every node, just after the Market in the catalogue and after it in the default list; version 1's catalogue is unchanged", () => {
         const asked = HOME_CARD_TYPES.find(t => t.id === 'asked')!;
         expect(asked).toMatchObject({

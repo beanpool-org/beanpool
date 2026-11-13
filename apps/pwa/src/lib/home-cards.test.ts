@@ -15,7 +15,7 @@ import { CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown } from './ho
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
-    askedFacts, starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
+    askedFacts, starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, wayBackOf, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
     homeEventWhere,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -277,6 +277,41 @@ describe('the words (§3.1, §9)', () => {
         expect(probationSentence(p(168, 2, 3))).toBe('For your first 7 days: 2 posts and 3 new chats a day.');
         expect(probationSentence(null)).toBeNull();
         expect(probationSentence({ ...p(72, 3, 10), onProbation: false })).toBeNull();
+    });
+});
+
+describe('Your way back in on Home, from the answer alone (slice D3, review of #3114)', () => {
+    // As an invite-only local community answers (config/node-profile.ts: `wordsDoor` is openJoin && !ssoRequiredForJoin).
+    const INVITE_ONLY = { ...LOCAL_FEATURES, wordsDoor: false };
+
+    it('finding 1: an invited member on an invite-only local node (wordsDoor false), no sign-in: the card is on the frame', () => {
+        const invited = answer({ community }, { features: INVITE_ONLY, me: me({ wayBack: 'words', joinedAt: daysAgo(20) }) });
+        expect(wayBackOf(invited).forThem).toBe(true);
+        expect(shown(invited, { now: NOW })).toContain('safety');
+        // A sign-in's copy linked here: not for them, door shut or not.
+        const covered = answer({ community }, { features: INVITE_ONLY, me: me({ wayBack: 'covered', joinedAt: daysAgo(20) }) });
+        expect(shown(covered, { now: NOW })).not.toContain('safety');
+        // A node from before `wayBack`: the door's rule alone, as before.
+        expect(shown(answer({ community }, { features: INVITE_ONLY, me: me({ joinedAt: daysAgo(20) }) }), { now: NOW })).not.toContain('safety');
+    });
+
+    it("finding 2: a global 12-words joiner who ticked at sign-up, on day 15 (no steps, no safety, probation over): the account's say-so (me.wordsKept) keeps the card away", () => {
+        const day15 = (wordsKept: boolean | undefined) => answer({ community }, {
+            profile: 'global', features: { ...GLOBAL_FEATURES, wordsDoor: true },
+            me: me({ wayBack: 'words', joinedAt: new Date(NOW - 15 * 86_400_000).toISOString(), probation: null, ...(wordsKept === undefined ? {} : { wordsKept }) }),
+        });
+        expect(wayBackOf(day15(true)).forThem).toBe(false);
+        expect(shown(day15(true), { now: NOW })).not.toContain('safety');
+        // Not said: the card is for them (its schedule then decides), as on a node from before the field.
+        expect(wayBackOf(day15(false)).forThem).toBe(true);
+        expect(wayBackOf(day15(undefined)).forThem).toBe(true);
+    });
+
+    it('finding 2, local: an invited member who said it at sign-up and finished every other line on day 2 (no steps sent): the card is not drawn', () => {
+        const day2 = answer({ community }, { features: INVITE_ONLY, me: me({ wayBack: 'words', joinedAt: daysAgo(2), firstOffer: true, wordsKept: true }) });
+        expect(day2.cards.steps).toBeUndefined();
+        expect(wayBackOf(day2).forThem).toBe(false);
+        expect(shown(day2, { now: NOW })).not.toContain('safety');
     });
 });
 

@@ -81,18 +81,11 @@ interface RecordEnv {
  * encoder, so it says "this browser" wherever it is opened; then the microphone, which no browser gives a plain http page.
  */
 export function browserRecordsVoice(env: RecordEnv = globalThis as unknown as RecordEnv): VoiceRecordable {
-    let writes = false;
+    let writes: boolean;
     try { writes = typeof env.MediaRecorder?.isTypeSupported === 'function' && env.MediaRecorder.isTypeSupported(VOICE_RECORD_TYPE) === true; } catch { writes = false; }
     if (!writes) return 'no-format';
     if (env.isSecureContext === false || typeof env.navigator?.mediaDevices?.getUserMedia !== 'function') return 'no-microphone';
     return 'yes';
-}
-
-/** The line shown in the microphone's place when this browser can't record (none when it can): a word() key. */
-export function voiceCantRecordWords(can: VoiceRecordable): WordKey | null {
-    if (can === 'no-format') return VOICE_WORDS.cantRecordBrowser;
-    if (can === 'no-microphone') return VOICE_WORDS.cantRecordAddress;
-    return null;
 }
 
 /** Whether this browser can play an .m4a at all (Firefox on Linux with no AAC decoder can't): '' from canPlayType is no. */
@@ -183,14 +176,6 @@ export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorde
         case 'dismiss':
             return state.phase === 'idle' && state.hint ? { state: VOICE_IDLE, effect: null } : same;
     }
-}
-
-/** The recorder's line for an idle hint: a word() key. */
-export function voiceHintWords(hint: VoiceHint): WordKey | null {
-    if (hint === 'short') return VOICE_WORDS.short;
-    if (hint === 'denied') return VOICE_WORDS.denied;
-    if (hint === 'failed') return VOICE_WORDS.failed;
-    return null;
 }
 
 /** The quietest level drawn as more than nothing, in dBFS: the phone's floor, so both draw a voice the same. */

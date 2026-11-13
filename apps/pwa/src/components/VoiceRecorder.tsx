@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { newDmMessageId, t, VOICE_MAX_MS, type VoiceInput } from '@beanpool/core';
 import {
-    isVoiceNotSent, levelDb, voiceBarsFromLevels, voiceClock, voiceHintWords, voiceRecorderStep, voiceSendWithin,
+    isVoiceNotSent, levelDb, voiceBarsFromLevels, voiceClock, voiceRecorderStep, voiceSendWithin,
     VOICE_BITS_PER_SECOND, VOICE_IDLE, VOICE_RECORD_TYPE, VOICE_SEND_GIVE_UP_MS, VOICE_WORDS,
     type VoiceRecorderEvent, type VoiceRecorderState,
 } from '../lib/voice';
@@ -112,7 +112,6 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
             case 'discard': void discard(); break;
         }
     // The effects below read refs only; dispatch is made once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     /** Still the same chat, still on screen: what an answer that took a while checks before it acts. */
@@ -312,8 +311,9 @@ export function VoiceRecorderBar({ rec }: { rec: VoiceRecorderApi }) {
 
 /** The recorder's line above the box: why nothing was sent, or why a send didn't go. */
 export function VoiceRecorderNote({ rec }: { rec: VoiceRecorderApi }) {
-    const hint = rec.state.phase === 'idle' ? voiceHintWords(rec.state.hint) : null;
-    const words = rec.error ?? (hint ? t(hint) : null);
+    const hint = rec.state.phase === 'idle' ? rec.state.hint : null;
+    const hintWords = hint === 'short' ? t(VOICE_WORDS.short) : hint === 'denied' ? t(VOICE_WORDS.denied) : hint === 'failed' ? t(VOICE_WORDS.failed) : null;
+    const words = rec.error ?? hintWords;
     if (!words) return null;
     return (
         <div role="status" data-testid="voice-note" style={{

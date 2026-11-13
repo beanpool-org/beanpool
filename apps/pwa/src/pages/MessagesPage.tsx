@@ -42,7 +42,7 @@ import {
     groupLineShown, groupRemovedRuns, getDecryptedGroupAttachment, getDecryptedGroupVoice, reportSealedGroupLine, GROUP_CHAT_OLD_NODE_NOTICE, type GroupLineShown,
     type OpenedGroupThread,
 } from '../lib/group-chat-lines';
-import { browserRecordsVoice, nodeTakesVoice, openDmVoiceLine, voiceCantRecordWords, VoiceNotSentError, VOICE_WORDS } from '../lib/voice';
+import { browserRecordsVoice, nodeTakesVoice, openDmVoiceLine, VoiceNotSentError, VOICE_WORDS } from '../lib/voice';
 import { setVoiceOrder, stopVoicePlayer } from '../lib/voice-player';
 import { VoiceBubble } from '../components/VoiceBubble';
 import { useVoiceRecorder, VoiceMicButton, VoiceRecorderBar, VoiceRecorderNote } from '../components/VoiceRecorder';
@@ -1746,12 +1746,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
             if (activeConvIdRef.current === conv0.id) { setReplyToMessage(null); setChatRefusal(null); }
             await loadMessages(conv0.id);
-        } catch (err: any) {
+        } catch (err) {
             if (err instanceof VoiceNotSentError) throw err;
             if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
             if (isDmNotLocked(err)) notSent(dmNotLockedLine(peerNameFor(conv0)));
-            const refusal = nodeRefusal(err) ?? null;
-            notSent(refusal?.message ?? (err?.message ? chatLineWords(err.message) : t(VOICE_WORDS.failedToSend)));
+            const said = (err as { message?: unknown } | null)?.message;
+            notSent(nodeRefusal(err)?.message ?? (typeof said === 'string' && said ? chatLineWords(said) : t(VOICE_WORDS.failedToSend)));
         } finally {
             voiceSendingRef.current = false;
         }
@@ -2270,7 +2270,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             (activeConv.type === 'dm' && requestMode === 'none')
             || (activeConv.type === 'group_thread' && groupLocked && openGroup?.answer?.canPost !== false));
         const showMic = voiceChat && voiceRecordable === 'yes' && !draft.trim();
-        const cantRecordVoice = voiceChat ? voiceCantRecordWords(voiceRecordable) : null;
+        const cantRecordVoice = !voiceChat || voiceRecordable === 'yes' ? null
+            : voiceRecordable === 'no-format' ? t(VOICE_WORDS.cantRecordBrowser) : t(VOICE_WORDS.cantRecordAddress);
 
         // Dropping onto a blocked conversation would only produce a message the
         // person cannot send, so the chat takes no drops at all while blocked; nor
@@ -3769,7 +3770,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         <div data-testid="voice-cant-record" style={{
                             padding: '0 1rem 0.4rem', background: 'var(--bg-secondary)', fontSize: '0.75rem', color: 'var(--text-muted)', overflowWrap: 'anywhere',
                         }}>
-                            <span aria-hidden="true">🎤 </span>{t(cantRecordVoice)}
+                            <span aria-hidden="true">🎤 </span>{cantRecordVoice}
                         </div>
                     )}
                     </>

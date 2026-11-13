@@ -60,8 +60,8 @@ export function VoiceBubble({ messageId, load }: { messageId: string; load: () =
         );
     }
     if (!voice) {
-        const words = shown.kind === 'gone' ? VOICE_WORDS.gone : shown.kind === 'cant-play-here' ? VOICE_WORDS.cantPlayHere : VOICE_WORDS.refused;
-        return <span data-testid="voice-cant-play" style={{ fontStyle: 'italic', opacity: 0.85 }}><span aria-hidden="true">🎤 </span>{t(words)}</span>;
+        const words = shown.kind === 'gone' ? t(VOICE_WORDS.gone) : shown.kind === 'cant-play-here' ? t(VOICE_WORDS.cantPlayHere) : t(VOICE_WORDS.refused);
+        return <span data-testid="voice-cant-play" style={{ fontStyle: 'italic', opacity: 0.85 }}><span aria-hidden="true">🎤 </span>{words}</span>;
     }
 
     const share = voice.durationMs > 0 ? Math.min(1, positionMs / voice.durationMs) : 0;

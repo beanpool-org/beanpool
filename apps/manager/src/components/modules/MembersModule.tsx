@@ -8,7 +8,7 @@ import type { RolesViewer } from './NodeRolesPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
-import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, reportSubject, type NodeTreasury, fetchKnownFloorMarks } from '../../lib/node-client';
+import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, reportSubject, type NodeTreasury, fetchKnownFloorMarks, fetchMemberStanding } from '../../lib/node-client';
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
 import type { KnownFloorException } from './MemberKnownFloorPanel';
 import { ModalBackdrop } from '../common/ModalBackdrop';
@@ -347,44 +347,46 @@ export function MembersModule({
         }
     }, [nodeData]);
 
+    // Each member the window sends, one at a time; only those the node froze show as frozen. A refusal (the node's own
+    // words: your own account, an owner, the phone's unlock again) is thrown back to the window, which shows it and stays
+    // open, after the rest have been tried (Marty, 14 Nov 2026).
     const handleFreezePubkeys = async (pubkeys: string[]) => {
-        setFrozenPubkeys((prev) => {
-            const next = new Set(prev);
-            pubkeys.forEach((p) => next.add(p));
-            return next;
-        });
-        if (onFreezeUser) {
-            for (const p of pubkeys) {
-                try {
-                    await onFreezeUser(p, true);
-                } catch {}
-            }
-            onRefresh();
+        if (!onFreezeUser) {
+            setFrozenPubkeys((prev) => new Set([...prev, ...pubkeys]));
+            return;
         }
+        const froze: string[] = [];
+        let refused: unknown = null;
+        for (const p of pubkeys) {
+            try {
+                await onFreezeUser(p, true);
+                froze.push(p);
+            } catch (e) {
+                refused = refused ?? e;
+            }
+        }
+        setFrozenPubkeys((prev) => new Set([...prev, ...froze]));
+        onRefresh();
+        if (refused) throw refused;
     };
 
-    const handleToggleFreezeMember = async (pubkey: string) => {
-        const isCurrentlyFrozen = Array.from(frozenPubkeys).some(
-            (f) => f === pubkey || (pubkey && f && (pubkey.startsWith(f) || f.startsWith(pubkey)))
-        );
+    // The member panel's Freeze / Unfreeze: asks the node, then reads the member's freeze back from it and shows that, never
+    // a guess (Marty, 14 Nov 2026: four presses each froze on the node while the panel showed none). A refusal (the node's
+    // own words: your own account, an owner, the phone's unlock again) is thrown to the panel, which shows it, and nothing
+    // here changes (the deciding review of #3121: a refused freeze showed as "Frozen"). Answers the freeze the node holds
+    // now, or null when it could not be read back (the refresh then shows it).
+    const handleToggleFreezeMember = async (pubkey: string, freeze: boolean): Promise<boolean | null> => {
+        if (!onFreezeUser) throw new Error('Freeze is not available here.');
+        await onFreezeUser(pubkey, freeze);
+        const standing = activeNodeUrl ? await fetchMemberStanding(activeNodeUrl, pubkey, credential).catch(() => null) : null;
+        onRefresh();
+        if (!standing) return null;
         setFrozenPubkeys((prev) => {
-            const next = new Set(prev);
-            const matches = Array.from(next).filter(
-                (f) => f === pubkey || (pubkey && f && (pubkey.startsWith(f) || f.startsWith(pubkey)))
-            );
-            if (matches.length > 0) {
-                matches.forEach((m) => next.delete(m));
-            } else {
-                next.add(pubkey);
-            }
+            const next = new Set(Array.from(prev).filter((f) => f !== pubkey));
+            if (standing.creditFrozen) next.add(pubkey);
             return next;
         });
-        if (onFreezeUser) {
-            try {
-                await onFreezeUser(pubkey, !isCurrentlyFrozen);
-                onRefresh();
-            } catch {}
-        }
+        return standing.creditFrozen;
     };
 
     const handleToggleOperatorMember = async (pubkey: string, isCurrentlyOperator: boolean) => {
@@ -897,7 +899,8 @@ export function MembersModule({
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleToggleFreezeMember(pubkey);
+                                                                // The node's words when it refuses; the row then shows what the node holds.
+                                                                handleToggleFreezeMember(pubkey, false).catch((err: unknown) => alert(err instanceof Error ? err.message : String(err)));
                                                             }}
                                                             className="px-2.5 py-1 rounded bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[10px] font-sans font-bold transition-all border border-bp-commit-fill shrink-0"
                                                         >
@@ -961,6 +964,7 @@ export function MembersModule({
                     } : undefined}
                     onFreezePubkeys={handleFreezePubkeys}
                     onInspectMember={(m) => setSelectedMember(m as MemberItem)}
+                    viewer={rolesViewer}
                 />
             )}
 

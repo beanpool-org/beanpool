@@ -5,7 +5,7 @@ import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOS
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
-import type { WashAnalysis } from '@beanpool/engine';
+import type { WashAnalysis, AllowancePart } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
 import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing, onNodeRoleChange } from './config/node-role.js';
@@ -8205,7 +8205,18 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+/**
+ * A new member the cohort_velocity flag names: their whole credit allowance, the part counted (not an owner's or admin's
+ * grant), the whole days after joining the check first saw it past the line, and what gave it (engine audit.ts
+ * AllowancePart: earned, vouch, gift, known, granted, with `from` the giver's key for a vouch or gift). Hundredths.
+ */
+export interface CohortAllowance { member: string; allowance_c: number; counted_c: number; daysAfterJoining: number; parts: AllowancePart[] }
+export interface HealthFlag {
+    type: 'wash_trading' | 'isolated_branch' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections';
+    severity: 'warning' | 'alert' | 'critical'; description: string; members: string[];
+    /** cohort_velocity only: each named member's allowance, one per `members` entry. Dropped with the names (alertsSummary). */
+    allowances?: CohortAllowance[];
+}
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; minAppVersionFrom: string | null; appFloors: Record<AppPlatform, PlatformFloor>; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
@@ -8343,6 +8354,19 @@ export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth
     return health;
 }
 
+/**
+ * The fewest members a "tight ring of mostly new accounts" (sybil_ring) can have. Two new members who trade only with each
+ * other are how every community starts (Marty, 14 Nov 2026: the owner and an admin were named as a ring): a pair is no
+ * ring. Two accounts moving Beans between them are the wash-trading rule's (flaggedPairs, the reciprocal flow), and each
+ * partner already counts for at most PER_COUNTERPARTY_VOLUME_CAP of the other's earned credit. A ring takes a third.
+ */
+export const SYBIL_RING_MIN_MEMBERS = 3;
+
+/** Whether a component of the wash analysis is a ring the owners are told about: insular, mostly new, and three or more. */
+function isSybilRingFlag(d: { size: number; insularity: number; newRatio: number }): boolean {
+    return d.size >= SYBIL_RING_MIN_MEMBERS && d.insularity >= 0.8 && d.newRatio >= 0.5;
+}
+
 export function getCommunityHealth(): CommunityHealth {
     const now = Date.now();
     const t = getThresholds();
@@ -8359,7 +8383,7 @@ export function getCommunityHealth(): CommunityHealth {
         const enforcement = getWashTradingEnforcement();
         // Callsigns only for members who can appear in a flag. A healthy community has none, so
         // the common path reads no member rows at all (#673); a flagged one reads just those keys.
-        const ringsToName = enforcement.clusterDetails.filter(d => d.insularity >= 0.8 && d.newRatio >= 0.5);
+        const ringsToName = enforcement.clusterDetails.filter(isSybilRingFlag);
         const keysToName = new Set<string>([
             ...[...enforcement.flaggedPairs].flatMap(pairKey => pairKey.split('|')),
             ...ringsToName.flatMap(d => d.members),
@@ -8386,7 +8410,7 @@ export function getCommunityHealth(): CommunityHealth {
             });
         }
         for (const detail of enforcement.clusterDetails) {
-            if (detail.insularity >= 0.8 && detail.newRatio >= 0.5) {
+            if (isSybilRingFlag(detail)) {
                 // Skip if all members of the ring are already credit-frozen by admin
                 const placeholders = detail.members.map(() => '?').join(',');
                 const frozenCount = (db.prepare(`SELECT COUNT(*) as cnt FROM members WHERE public_key IN (${placeholders}) AND credit_frozen = 1`).get(...detail.members) as any)?.cnt || 0;
@@ -8542,19 +8566,25 @@ export function getCommunityHealth(): CommunityHealth {
         }
     } catch (e) { console.error('Health flag check (aggregate credit spike) failed:', e); }
 
-    // 5. Cohort Velocity Anomaly
+    // 5. New members whose credit allowance reached the line within two weeks of joining: who, from the metrics audit's last
+    // cohort check (cohort_allowance_members; engine audit.ts), each with how deep, when, and what gave it. Only owners and
+    // admins read flags (the admin routes; a look at one that names members is logged). About the allowance, not spending;
+    // an owner's or admin's grant is never counted. The old count rows (system_metrics 'cohort_anomalies') are not read.
     try {
-        const cohortAnomalyRow = db.prepare(`
-            SELECT metric_value FROM system_metrics 
-            WHERE metric_key = 'cohort_anomalies' 
-            ORDER BY timestamp DESC, id DESC LIMIT 1
-        `).get() as any;
-        if (cohortAnomalyRow && cohortAnomalyRow.metric_value > 0) {
+        const rows = db.prepare(`SELECT member_pubkey, allowance_c, counted_c, days_after_joining, parts FROM cohort_allowance_members
+            ORDER BY counted_c DESC, member_pubkey ASC`).all() as { member_pubkey: string; allowance_c: number; counted_c: number; days_after_joining: number; parts: string }[];
+        if (rows.length > 0) {
+            const allowances: CohortAllowance[] = rows.map(r => {
+                let parts: CohortAllowance['parts'] = [];
+                try { const p = JSON.parse(r.parts); if (Array.isArray(p)) parts = p; } catch { /* a row that can't be read names its member with no parts */ }
+                return { member: r.member_pubkey, allowance_c: r.allowance_c, counted_c: r.counted_c, daysAfterJoining: r.days_after_joining, parts };
+            });
             flags.push({
                 type: 'cohort_velocity',
                 severity: 'warning',
-                description: `Cohort Velocity Anomaly: ${cohortAnomalyRow.metric_value} cohort(s) reached deep floors within 14 days of creation`,
-                members: []
+                description: `${rows.length} new member${rows.length === 1 ? '' : 's'} reached a credit allowance of ${formatHundredths(-PROTOCOL_CONSTANTS.RESIDENT_THRESHOLD, 'en')} Beans or more within 14 days of joining, not counting what an owner or admin gave. This is about how much credit they may use, not what they spent.`,
+                members: rows.map(r => r.member_pubkey),
+                allowances,
             });
         }
     } catch (e) { console.error('Health flag check (cohort velocity) failed:', e); }
@@ -8687,6 +8717,27 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
 export function adminSetUserStatus(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
     setUserStatusRow(publicKey, status);
     broadcast({ type: 'profile_updated', publicKey });
+}
+
+/**
+ * Who may freeze or unfreeze a member's whole credit line by hand (the manager's "Freeze", POST
+ * /api/local/admin/users/:pubkey/freeze; Marty, 14 Nov 2026: an admin could freeze the owner and himself). Nobody their
+ * own account, either way: a frozen admin can't lift it himself. Only an owner an owner (one whose role acts or is held
+ * aside by a suspension, heldPrivilegedRole), either way; an admin freezes a member or another admin. The route asks
+ * this of the person's own key session only (no automation token), and the phone's step-up on an owner
+ * (decisions-engine adminActionNeedsOwner 'freeze'). A community vote's freeze (decisions-engine) asks none of it.
+ */
+export const CREDIT_FREEZE_WORDS = {
+    own: word("You can't freeze or unfreeze your own account. Another owner or admin can."),
+    owner: word('Only an owner can freeze or unfreeze an owner.'),
+    keyOnly: word('Sign in with your own key to freeze or unfreeze a member, so it is logged in your name.'),
+} as const;
+
+export function creditFreezeRefusal(actor: string, target: string): { status: number; code: string; error: string } | null {
+    const { t } = wordsFor('en');
+    if (actor === target) return { status: 403, code: 'own_account', error: t(CREDIT_FREEZE_WORDS.own) };
+    if (heldPrivilegedRole(target) === 'owner' && !isNodeOwner(actor)) return { status: 403, code: 'owner_only', error: t(CREDIT_FREEZE_WORDS.owner) };
+    return null;
 }
 
 export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolean {
@@ -10151,12 +10202,12 @@ export function runLedgerAudit(): { sumBalances: number; baseline: number; drift
 }
 
 /** Null where Beans are off: the audit does not run there (engine/audit.ts). */
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
+export function runWashSybilMetricsAudit(): engine.WashSybilMetrics | null {
     return runWashSybilMetricsEngine();
 }
 
 /** runWashSybilMetricsAudit a slice at a time, as the node's timers run it (engine/audit.ts). */
-export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<{ totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null> {
+export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<engine.WashSybilMetrics | null> {
     return runWashSybilMetricsAuditInSlices(opts);
 }
 

@@ -599,6 +599,7 @@ export const TABLES: Record<string, TableEntry> = {
     sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
     system_logs: { kind: 'local', reason: "this server's logs" },
     system_metrics: { kind: 'local', reason: "this server's metrics" },
+    cohort_allowance_members: { kind: 'local', reason: "this server's metrics: who its last cohort check found" },
     signature_audiences: { kind: 'local', reason: 'counts of which addresses signatures named, shown and never deciding' },
     onboarding_funnel: { kind: 'local', reason: "this server's funnel counters" },
     web_visit_days: { kind: 'local', reason: 'the page loads this server served, a day at a time: a standby counts its own' },

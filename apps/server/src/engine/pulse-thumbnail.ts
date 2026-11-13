@@ -23,7 +23,8 @@ import path from 'node:path';
 import { URL } from 'node:url';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
-import { imageSize, tooManyPixels } from '../storage/image-metadata.js';
+import { imageSize, MAX_STORED_PIXELS, tooManyPixels } from '../storage/image-metadata.js';
+import { shrinkToPhotoSize } from '../storage/photo-thumbnails.js';
 import {
     ssrfSafeFetch,
     SsrfSecurityError,
@@ -68,6 +69,39 @@ export function thumbnailPixelsRefusal(buffer: Buffer): string | null {
     if (!imageSize(buffer)) return 'Thumbnail is not an image whose size this node can read';
     const size = tooManyPixels(buffer);
     return size ? `Thumbnail has more pixels than a node stores (${size.width} x ${size.height})` : null;
+}
+
+/**
+ * The decoder's ceiling for a thumbnail the node shrinks (keepableThumbnail): a side of at most 4,096 px and at most
+ * 3,072 × 3,072 = 9,437,184 pixels in all. A podcast or SoundCloud cover is 3,000 × 3,000 (9,000,000) and a 4K video
+ * frame 3,840 × 2,160 (8,294,400): both are shrunk. A 20,000 × 20,000 PNG (#2079 NB1) or a 16,777,216 × 1 strip is
+ * refused from its header and never decoded. Measured (an M-series Mac, sharp with one thread and no cache): a 3,000 ×
+ * 3,000 JPEG takes 37 ms and 11 MB, a 3,000 × 3,000 PNG 108 ms and 14 MB, and the worst this ceiling lets in, a 3,072 ×
+ * 3,072 16-bit PNG with transparency, 162 ms and 42 MB.
+ */
+export const SHRINK_MAX_INPUT_SIDE = 4096;
+export const SHRINK_MAX_INPUT_PIXELS = 3072 * 3072;
+
+/**
+ * What a node keeps and serves for a thumbnail's bytes, or why it refuses them (served as 413, which the backoff
+ * remembers). Bytes whose size it can't read are refused, as before (#2079 confirmation N1). A picture within what a node
+ * stores is kept exactly as it came. A real image with more pixels than that, up to the decoder's ceiling above, is
+ * shrunk to the photo size (storage/photo-thumbnails.ts shrinkToPhotoSize: 800 px on its longest side, no metadata,
+ * one resize at a time), so a 3,000 × 3,000 cover shows instead of the placeholder (Damo, 13 Nov). Anything bigger is
+ * refused unread. What comes back is held to the same rules again: never more pixels than a node stores, never over
+ * `maxBytes`.
+ */
+export async function keepableThumbnail(buffer: Buffer, contentType: string, maxBytes: number = MAX_THUMBNAIL_BYTES):
+    Promise<{ buffer: Buffer; contentType: string; refusal?: undefined } | { refusal: string }> {
+    const size = imageSize(buffer);
+    if (!size) return { refusal: 'Thumbnail is not an image whose size this node can read' };
+    if (size.width * size.height <= MAX_STORED_PIXELS) return { buffer, contentType };
+    const tooBig = `Thumbnail has more pixels than a node stores (${size.width} x ${size.height})`;
+    if (size.width > SHRINK_MAX_INPUT_SIDE || size.height > SHRINK_MAX_INPUT_SIDE
+        || size.width * size.height > SHRINK_MAX_INPUT_PIXELS) return { refusal: tooBig };
+    const shrunk = await shrinkToPhotoSize(buffer, { maxSide: SHRINK_MAX_INPUT_SIDE, maxPixels: SHRINK_MAX_INPUT_PIXELS });
+    if (!shrunk || shrunk.bytes.length > maxBytes || thumbnailPixelsRefusal(shrunk.bytes)) return { refusal: tooBig };
+    return { buffer: shrunk.bytes, contentType: shrunk.mime };
 }
 
 export const ALLOWED_IMAGE_CONTENT_TYPES = [
@@ -740,13 +774,13 @@ export class PulseThumbnailService {
                                 const rawType = imgRes.headers['content-type'] || 'image/jpeg';
                                 const mimeType = rawType.split(';')[0].trim().toLowerCase();
                                 if (ALLOWED_IMAGE_CONTENT_TYPES.includes(mimeType)) {
-                                    const buffer = await imgRes.buffer();
-                                    const pixels = thumbnailPixelsRefusal(buffer);
-                                    if (pixels) {
+                                    const kept = await keepableThumbnail(await imgRes.buffer(), mimeType, this.maxEntryBytes);
+                                    if (kept.refusal !== undefined) {
                                         // The backoff too, keyed as getActive reads it, so the stale URL, the embed page and the
                                         // image are not fetched again each time the negative cache expires (confirmation N2).
-                                        return this.refuse(itemId, row.thumbnail_url?.trim() || null, 413, pixels);
+                                        return this.refuse(itemId, row.thumbnail_url?.trim() || null, 413, kept.refusal);
                                     }
+                                    const { buffer, contentType } = kept;
                                     if (buffer.length <= this.maxEntryBytes) {
                                         try {
                                             const info = db.prepare(
@@ -760,16 +794,16 @@ export class PulseThumbnailService {
                                             return null;
                                         }
 
-                                        const entry = this.cache.set(itemId, buffer, mimeType);
+                                        const entry = this.cache.set(itemId, buffer, contentType);
                                         const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
                                         if (this.diskStore) {
-                                            await this.diskStore.set(itemId, buffer, mimeType, etag);
+                                            await this.diskStore.set(itemId, buffer, contentType, etag);
                                         }
                                         this.clearBackoff(itemId);
                                         if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                                             return { status: 304 };
                                         }
-                                        return { status: 200, buffer, contentType: mimeType, etag };
+                                        return { status: 200, buffer, contentType, etag };
                                     }
                                 }
                             }
@@ -910,21 +944,21 @@ export class PulseThumbnailService {
                     this.cache.setNegative(itemId, 413, 'Thumbnail exceeds maximum size');
                     return { status: 413, error: 'Thumbnail exceeds maximum size' };
                 }
-                const pixels = thumbnailPixelsRefusal(buf);
-                if (pixels) {
-                    this.cache.setNegative(itemId, 413, pixels);
-                    return { status: 413, error: pixels };
+                const kept = await keepableThumbnail(buf, mimeType, this.maxEntryBytes);
+                if (kept.refusal !== undefined) {
+                    this.cache.setNegative(itemId, 413, kept.refusal);
+                    return { status: 413, error: kept.refusal };
                 }
-                const entry = this.cache.set(itemId, buf, mimeType);
-                const etag = entry?.etag || `"${crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)}"`;
+                const entry = this.cache.set(itemId, kept.buffer, kept.contentType);
+                const etag = entry?.etag || `"${crypto.createHash('sha256').update(kept.buffer).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
-                    await this.diskStore.set(itemId, buf, mimeType, etag);
+                    await this.diskStore.set(itemId, kept.buffer, kept.contentType, etag);
                 }
                 this.clearBackoff(itemId);
                 if (options.ifNoneMatch && options.ifNoneMatch === etag) {
                     return { status: 304 };
                 }
-                return { status: 200, buffer: buf, contentType: mimeType, etag };
+                return { status: 200, buffer: kept.buffer, contentType: kept.contentType, etag };
             } catch {
                 this.cache.setNegative(itemId, 400, 'Malformed base64 data URI');
                 return { status: 400, error: 'Malformed base64 data URI' };
@@ -991,16 +1025,16 @@ export class PulseThumbnailService {
                     const error = `Thumbnail body ${buffer.length} bytes exceeds maximum limit of ${this.maxEntryBytes} bytes`;
                     return this.refuse(itemId, rawUrl, 413, error);
                 }
-                const pixels = thumbnailPixelsRefusal(buffer);
-                if (pixels) {
-                    logger.warn('SYS', `[PulseThumbnail] ${pixels} for item ${itemId}`);
-                    return this.refuse(itemId, rawUrl, 413, pixels);
+                const kept = await keepableThumbnail(buffer, mimeType, this.maxEntryBytes);
+                if (kept.refusal !== undefined) {
+                    logger.warn('SYS', `[PulseThumbnail] ${kept.refusal} for item ${itemId}`);
+                    return this.refuse(itemId, rawUrl, 413, kept.refusal);
                 }
 
-                const entry = this.cache.set(itemId, buffer, mimeType);
-                const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
+                const entry = this.cache.set(itemId, kept.buffer, kept.contentType);
+                const etag = entry?.etag || `"${crypto.createHash('sha256').update(kept.buffer).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
-                    await this.diskStore.set(itemId, buffer, mimeType, etag);
+                    await this.diskStore.set(itemId, kept.buffer, kept.contentType, etag);
                 }
                 this.clearBackoff(itemId);
 
@@ -1010,8 +1044,8 @@ export class PulseThumbnailService {
 
                 return {
                     status: 200,
-                    buffer,
-                    contentType: mimeType,
+                    buffer: kept.buffer,
+                    contentType: kept.contentType,
                     etag,
                 };
             } catch (err: any) {
@@ -1107,15 +1141,15 @@ export class PulseThumbnailService {
                 if (buf.length > this.maxEntryBytes) {
                     return { status: 413, error: 'Thumbnail exceeds maximum size' };
                 }
-                const pixels = thumbnailPixelsRefusal(buf);
-                if (pixels) return { status: 413, error: pixels };
-                const entry = this.cache.set(itemId, buf, mimeType);
-                const etag = entry?.etag || `"${crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)}"`;
+                const kept = await keepableThumbnail(buf, mimeType, this.maxEntryBytes);
+                if (kept.refusal !== undefined) return { status: 413, error: kept.refusal };
+                const entry = this.cache.set(itemId, kept.buffer, kept.contentType);
+                const etag = entry?.etag || `"${crypto.createHash('sha256').update(kept.buffer).digest('hex').slice(0, 16)}"`;
                 if (this.diskStore) {
-                    await this.diskStore.set(itemId, buf, mimeType, etag);
+                    await this.diskStore.set(itemId, kept.buffer, kept.contentType, etag);
                 }
                 this.clearBackoff(itemId);
-                return { status: 200, buffer: buf, contentType: mimeType, etag };
+                return { status: 200, buffer: kept.buffer, contentType: kept.contentType, etag };
             } catch {
                 return { status: 400, error: 'Malformed base64 data URI' };
             }
@@ -1176,22 +1210,22 @@ export class PulseThumbnailService {
             if (buffer.length > this.maxEntryBytes) {
                 return { status: 413, error: `Thumbnail body ${buffer.length} bytes exceeds limit` };
             }
-            const pixels = thumbnailPixelsRefusal(buffer);
-            if (pixels) {
-                logger.warn('SYS', `[PulseThumbnail] ${pixels} at ingest for item ${itemId}`);
-                return { status: 413, error: pixels };
+            const kept = await keepableThumbnail(buffer, mimeType, this.maxEntryBytes);
+            if (kept.refusal !== undefined) {
+                logger.warn('SYS', `[PulseThumbnail] ${kept.refusal} at ingest for item ${itemId}`);
+                return { status: 413, error: kept.refusal };
             }
 
-            const entry = this.cache.set(itemId, buffer, mimeType);
-            const etag = entry?.etag || `"${crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
+            const entry = this.cache.set(itemId, kept.buffer, kept.contentType);
+            const etag = entry?.etag || `"${crypto.createHash('sha256').update(kept.buffer).digest('hex').slice(0, 16)}"`;
             if (this.diskStore) {
-                await this.diskStore.set(itemId, buffer, mimeType, etag);
+                await this.diskStore.set(itemId, kept.buffer, kept.contentType, etag);
             }
             // Bytes exist for this item again: a backoff row left from an earlier failure would
             // otherwise refuse the read path once the memory and disk copies age out.
             this.clearBackoff(itemId);
 
-            return { status: 200, buffer, contentType: mimeType, etag };
+            return { status: 200, buffer: kept.buffer, contentType: kept.contentType, etag };
         } catch (err: any) {
             let status = 502;
             let error = err?.message || 'Failed to ingest thumbnail';

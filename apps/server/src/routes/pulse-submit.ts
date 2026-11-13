@@ -49,6 +49,7 @@ import {
     scrubPulseItems,
     PulseError,
     SsrfSecurityError,
+    SHARE_TRACKING_PARAM,
     type PulseFeedCard,
 } from '../engine/pulse-resolver.js';
 import {
@@ -158,8 +159,6 @@ function extractTagText(html: string, tagName: string): string | null {
  * Detect platform and extract identity from URL without making network calls.
  * Performs strict hostname / IP address SSRF validation.
  */
-/** Query parameters that only say where a link was shared from or who shared it, never which page it is. */
-const SHARE_TRACKING_PARAM = /^(utm_[a-z0-9_]*|fbclid|gclid|dclid|gbraid|wbraid|msclkid|mc_cid|mc_eid|igshid|igsh|si|feature|ref|ref_src|ref_url|share_id|is_from_webapp|sender_device|_r|_t)$/i;
 
 /**
  * The one spelling of a link the Pulse dedups on (W-main: one member's varied spellings of a link were each a new row a

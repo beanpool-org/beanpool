@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, sendVoiceMessage, getDecryptedVoice, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, reportDmLine, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { ChatImage, dmKeyContextOf } from '../../components/chat/DmChatImage';
@@ -40,6 +40,9 @@ import { ChatAboutBanner, ChatAboutCard } from '../../components/chat/ChatAbout'
 import { useAboutListings } from '../../utils/about-listings';
 import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line-trade';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
+import { VoiceBubble } from '../../components/chat/VoiceBubble';
+import { VoicePlaybackProvider } from '../../components/chat/VoicePlayback';
+import type { VoiceInput } from '@beanpool/core';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_LOCK_WORDS } from '../../utils/dm-lock';
 import {
@@ -865,6 +868,28 @@ function ChatScreen({ id }: { id: string }) {
         ]);
     };
 
+    // A voice message (DESIGN-cross-chat-voice-fable.md §5.3, slice V3): only in a chat both have accepted, never as a
+    // request (§3.5). Awaits the node as a photo does; a refusal shows as the photo's does, anything else the recorder says.
+    const sendVoice = async (voice: VoiceInput) => {
+        if (!identity?.publicKey || sendingRef.current) throw new Error(t('Wait for the last message to go.'));
+        sendingRef.current = true;
+        try {
+            const metadata = replyToMessage ? JSON.stringify({ replyToId: replyToMessage.id }) : undefined;
+            await withTimeout(sendVoiceMessage(id as string, voice, metadata), 60_000, t('Sending the voice message is taking too long — please try again.'));
+            setReplyToMessage(null);
+            setLockNotice(null);
+            hapticSuccess();
+            loadMessages();
+        } catch (err: any) {
+            hapticWarning();
+            const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+            if (refused) { setLockNotice(refused); return; }
+            throw new Error(err?.message ? chatLineWords(err.message) : t('Could not send the voice message.'));
+        } finally {
+            sendingRef.current = false;
+        }
+    };
+
     const pickAndSendImage = async () => {
         if (!identity?.publicKey || sendingRef.current) return;
         if (!requestTakesPhoto(requestMode) || requestLineId) return;
@@ -1420,11 +1445,18 @@ function ChatScreen({ id }: { id: string }) {
                 ) : (
                     // oldLine: conversion code, log row OLDCHAT, remove after 12 Dec 2026.
                     <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} oldLine={!!item.oldLine} keyContext={dmKeyContextOf(keyChange)} />
+                )) : item.type === 'voice' && !item.oldLine ? (requestMode === 'to-me' ? (
+                    // No voice message comes from a request (design §3.5): one that came anyway stays closed, unfetched.
+                    <Text testID="request-voice-closed" style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>
+                        <Text aria-hidden={true} importantForAccessibility="no">🎤 </Text>{t('Voice message: shown when you accept')}
+                    </Text>
+                ) : (
+                    <VoiceBubble messageId={item.id} isMe={isMe} load={() => getDecryptedVoice(id as string, item.id)} />
                 )) : null}
                 status={status}
-                footer={(item.type === 'image' && !item.text) || item.integrityNote ? (
+                footer={((item.type === 'image' || item.type === 'voice') && !item.text) || item.integrityNote ? (
                     <>
-                        {item.type === 'image' && !item.text ? (
+                        {(item.type === 'image' || item.type === 'voice') && !item.text ? (
                             <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
                                 <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
                                     {messageTime(item)}
@@ -1678,6 +1710,7 @@ function ChatScreen({ id }: { id: string }) {
                         ))}
                     </View>
                 ) : (
+                    <VoicePlaybackProvider voices={messages.filter((m: any) => m?.type === 'voice').map((m: any) => ({ id: String(m.id), mine: !!identity?.publicKey && m.senderId === identity.publicKey }))}>
                     <ChatMessageList
                         listRef={flatListRef}
                         items={listItems}
@@ -1700,6 +1733,7 @@ function ChatScreen({ id }: { id: string }) {
                             loadMessages(true).finally(() => { loadingOlderRef.current = false; });
                         }}
                     />
+                    </VoicePlaybackProvider>
                 )}
 
                 {editingMessage && (
@@ -1826,6 +1860,7 @@ function ChatScreen({ id }: { id: string }) {
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
+                        onVoice={requestMode === 'none' && !requestLineId && !editingMessage ? sendVoice : undefined}
                         leading={
                             <Pressable accessibilityRole="button" accessibilityLabel={t('Attach image')} style={chat.attachBtn} onPress={pickAndSendImage}>
                                 <MaterialCommunityIcons name="plus-circle-outline" size={26} color={colors.text.muted} />

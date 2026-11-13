@@ -41,19 +41,23 @@ export function VoiceBubble({ messageId, load, isMe }: Props) {
     const [waveWidth, setWaveWidth] = useState(0);
     const alive = useRef(true);
     useEffect(() => () => { alive.current = false; }, []);
+    // The screen hands a new loader each render: opened once per message, not once per render.
+    const loadRef = useRef(load);
+    loadRef.current = load;
+    const registerRef = useRef(playback?.register);
+    registerRef.current = playback?.register;
 
     const open = useCallback(() => {
         setState('loading');
-        load().then((r) => {
+        loadRef.current().then((r) => {
             if (!alive.current) return;
             if (r.kind === 'ok') {
                 setVoice(r.voice);
                 setState('ok');
-                playback?.register(messageId, r.voice.uri);
+                registerRef.current?.(messageId, r.voice.uri);
             } else setState(r.kind);
         }).catch(() => { if (alive.current) setState('unavailable'); });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [load, messageId]);
+    }, [messageId]);
     useEffect(() => { open(); }, [open]);
 
     const ink = isMe ? colors.chat.messageTextMe : colors.chat.messageTextOther;

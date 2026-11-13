@@ -51,7 +51,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import * as Crypto from 'expo-crypto';
 import {
-    getGroupChat, postGroupChatMessage, postGroupChatPhoto, getDecryptedGroupPhoto, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi,
+    getGroupChat, postGroupChatMessage, postGroupChatPhoto, getDecryptedGroupPhoto, postGroupChatVoice, getDecryptedGroupVoice, getEnterpriseChat, postEnterpriseChatMessage, muteChatApi,
     fetchGroupDetails, markThreadReadOnNode, toggleMessageReactionApi, editThreadMessage, deleteMessageApi, removeGroupChatMessage,
     groupScreenKeyringFor, noteLockedHistoryRow, reportGroupChatLine,
     type GroupItem, type GroupMemberItem,
@@ -82,6 +82,9 @@ import { makeChatStyles } from './chat/styles';
 import { ChatMessageList, scrollChatToBottom } from './chat/ChatMessageList';
 import { ChatMessageRow } from './chat/ChatMessageRow';
 import { ChatComposer, type ChatComposerHandle } from './chat/ChatComposer';
+import { VoiceBubble } from './chat/VoiceBubble';
+import { VoicePlaybackProvider } from './chat/VoicePlayback';
+import type { VoiceInput } from '@beanpool/core';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from './chat/ChatBanners';
 import { yourGroupsStore } from './useYourGroups';
 import { hapticTick, hapticSuccess, hapticWarning } from '../utils/haptics';
@@ -549,6 +552,34 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         }
     };
 
+    /**
+     * A voice message in a locked group chat (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed on this phone under the
+     * line's message key (utils/db.ts postGroupChatVoice). Not optimistic, as a photo isn't. A refusal says why above the
+     * box, as a photo's does; anything else the recorder says.
+     */
+    const sendVoice = async (voice: VoiceInput) => {
+        if (sending) throw new Error(t('Wait for the last message to go.'));
+        setSending(true);
+        try {
+            const lastSealed = [...rawMessages].reverse().find(m => isSealedGroupLine(m));
+            await withinMs(postGroupChatVoice(id, { voice, replyToId: replyToMessage?.id ?? null, after: lastSealed ? String(lastSealed.id) : null }),
+                60_000, t('Sending the voice message is taking too long — please try again.'));
+            setReplyToMessage(null);
+            setKeyNotice(null);
+            hapticSuccess();
+            while (inFlight.current) await new Promise(r => setTimeout(r, 100));
+            await load();
+            scrollChatToBottom(listRef, true);
+        } catch (e: any) {
+            hapticWarning();
+            const why = e instanceof GroupChatKeyError ? e.message : refusedSendNotice(e);
+            if (why) { setKeyNotice(why); return; }
+            throw new Error(e?.message ? chatLineWords(e.message) : t('Could not send the voice message.'));
+        } finally {
+            setSending(false);
+        }
+    };
+
     const send = async (text: string) => {
         if (photo && !editingMessage) return sendPhoto(text);
         if (!text || sending) return;
@@ -806,7 +837,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             // A photo line quotes as a DM's does: "🔒 Photo" (utils/chat-actions.ts dmQuoteFor).
             const parentText = !parent
                 ? t('Message not found')
-                : isTombstone(parent) ? tombstoneWords(parent, kind) : parent.unattributed ? chatLineWords(parent.text) : parent.type === 'image' ? t('🔒 Photo') : parent.text;
+                : isTombstone(parent) ? tombstoneWords(parent, kind) : parent.unattributed ? chatLineWords(parent.text) : parent.type === 'image' ? t('🔒 Photo') : parent.type === 'voice' ? t('🎤 Voice message') : parent.text;
             const parentAuthor = !parent
                 ? t('Someone')
                 : (me && parent.senderId === me) ? t('You') : (chatAuthorWords(parent.authorName) || (parent.senderId || '').slice(0, 8) || t('Someone'));
@@ -842,7 +873,13 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         const photoSlot = raw && lineView ? (
             <ChatPhoto photoKey={`${item.id}|${lineView.signer}|${lineView.epoch}`} load={() => getDecryptedGroupPhoto(id, raw, lineView)} onOpen={openPhoto} />
         ) : null;
-        const photoFooter = photoSlot && !item.text ? (
+        // A voice line of a locked chat: played only because its words opened (the line is attributed), as a photo is.
+        const voiceRaw = kind === 'group' && item.type === 'voice' ? rawById.get(item.id) : undefined;
+        const voiceView = voiceRaw ? thread?.views.get(item.id) : undefined;
+        const voiceSlot = voiceRaw && voiceView ? (
+            <VoiceBubble messageId={String(item.id)} isMe={isMe} load={() => getDecryptedGroupVoice(id, voiceRaw, voiceView)} />
+        ) : null;
+        const photoFooter = (photoSlot || voiceSlot) && !item.text ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
                 <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 10 }]}>{messageTime(item)}</Text>
                 {status}
@@ -894,7 +931,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 quote={quote}
                 editing={editingMessage?.id === item.id}
                 status={status}
-                attachment={photoSlot}
+                attachment={photoSlot ?? voiceSlot}
                 footer={photoFooter}
             />
             {/* The message's details, with its actions: an earlier key of the member's, or a name on a new key (§6). */}
@@ -945,6 +982,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 </View>
             )}
 
+            <VoicePlaybackProvider voices={rawMessages.filter(m => m?.type === 'voice').map(m => ({ id: String(m.id), mine: !!me && thread?.views.get(String(m.id))?.signer === me }))}>
             <ChatMessageList
                 listRef={listRef}
                 items={listItems}
@@ -965,6 +1003,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     )
                 }
             />
+            </VoicePlaybackProvider>
 
             {editingMessage && (
                 <ChatEditBanner
@@ -978,7 +1017,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 <ChatReplyBanner
                     styles={chat}
                     author={me && replyToMessage.senderId === me ? t('You') : (chatAuthorWords(replyToMessage.authorName) || t('Someone'))}
-                    text={replyToMessage.type === 'image' ? t('🔒 Photo') : replyToMessage.text}
+                    text={replyToMessage.type === 'image' ? t('🔒 Photo') : replyToMessage.type === 'voice' ? t('🎤 Voice message') : replyToMessage.text}
                     onCancel={() => setReplyToMessage(null)}
                 />
             )}
@@ -1008,6 +1047,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     accessibilityLabel={t('Message {name}', { name })}
                     bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
                     onAttach={photoButton ? pickPhoto : undefined}
+                    // Voice messages only where lines are sealed on this phone (§5.4): a locked group's chat.
+                    onVoice={photoButton && !photo ? sendVoice : undefined}
                     attachment={photo && !editingMessage ? (
                         <ChatWaitingPhoto uri={photo.uri} styles={chat} disabled={sending} onRemove={() => setPhoto(null)} />
                     ) : null}

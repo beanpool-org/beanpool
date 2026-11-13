@@ -28,6 +28,7 @@ import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { DoorClosedError } from '../config/door.js';
 import { PhotoBudgetExceededError, StorageNearlyFullError } from '../engine/photo-upload-budget.js';
+import { CallsignNotANameError } from '../engine/members.js';
 import { BEANS_NOTE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
 
 interface GatedRoutes {
@@ -203,6 +204,12 @@ export function respondProfileRefusal(ctx: { status: number; body: unknown; set?
         ctx.status = e.status;
         ctx.body = { error: e.message, message: e.message, code: e.code, resetsAt: e.resetsAt };
         if (e.retryAfterSeconds) ctx.set?.('Retry-After', String(e.retryAfterSeconds));
+        return true;
+    }
+    // A new name that is an invite or a web address (engine/members.ts): 400 `callsign_link`, its one line in both.
+    if (e instanceof CallsignNotANameError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, message: e.message, code: e.code };
         return true;
     }
     // Free disk space floor (P7): 507 Insufficient Storage.

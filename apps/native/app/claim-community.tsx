@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, tn, upperCase } from '@beanpool/core';
+import { NAME_BOX_WORDS, notANameIn, t, tn, upperCase } from '@beanpool/core';
 import { claimOutcomeWords, keyLineWords } from '../components/key-lines';
 import { coreSettingsNextWords } from '../components/settings/settings-lines';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
@@ -328,6 +328,12 @@ export default function ClaimCommunityScreen() {
     const claim = async () => {
         if (!canClaim || !origin || status?.kind !== 'unclaimed' || !code) return;
         const o = origin;
+        // An invite or a web address is no name (core name-box.ts; card callsign-link-guard): the node refuses it too.
+        const notAName = needsCallsign ? notANameIn(callsign) : null;
+        if (notAName) {
+            setError(t(NAME_BOX_WORDS[notAName]));
+            return;
+        }
         setError(null);
         setPhase('unlocking');
         // The phone's lock asks in the member's language, the same English node-admin.ts writes when given none. With

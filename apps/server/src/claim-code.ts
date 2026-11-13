@@ -39,7 +39,7 @@ import { db } from './db/db.js';
 import { getLocalConfig, updateLocalConfig, type LocalConfig } from './config/local-config.js';
 import { assertPlainTablesWritable, getNodeRole } from './config/node-role.js';
 import { grantNodeRole, nodeHasOwner } from './engine/node-roles.js';
-import { registerMemberInternal } from './engine/members.js';
+import { CallsignNotANameError, registerMemberInternal } from './engine/members.js';
 import { BREAK_GLASS_WHILE_BRAKED_MS } from './admin-auth.js';
 import { logger } from './logger.js';
 import { noteSecurityEvent } from './services/security-signal.js';
@@ -381,6 +381,7 @@ export function claimNode(params: {
         })();
     } catch (e: any) {
         if (e?.claimed) return { ok: false, status: 409, error: 'This community already has an owner.', code: 'claim_already_claimed' };
+        if (e instanceof CallsignNotANameError) return { ok: false, status: e.status, error: e.message, code: e.code };
         logger.warn('AUTH', `A claim with a right proof failed: ${e?.message || e}`);
         return { ok: false, status: 400, error: String(e?.message || 'The claim failed'), code: 'claim_failed' };
     }

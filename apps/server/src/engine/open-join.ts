@@ -246,7 +246,8 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
             null,
         );
         // registerMemberInternal refuses only a callsign under two characters, which the route has already
-        // refused. Thrown, not returned, so nothing above commits.
+        // refused, and throws for an invite or a link as a name (CallsignNotANameError), which the route has already
+        // refused too. Thrown, not returned, so nothing above commits.
         if (!member) throw new Error('open join: registration was refused');
         const now = new Date().toISOString();
         db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at, join_cohort) VALUES (?, ?, ?, ?, ?, ?, ?)')

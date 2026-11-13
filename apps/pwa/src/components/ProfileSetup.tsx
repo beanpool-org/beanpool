@@ -6,7 +6,7 @@
  * so saving the avatar never wipes them.
  */
 import { useState, useEffect, useRef } from 'react';
-import { AVATAR_PICTURE, t } from '@beanpool/core';
+import { AVATAR_PICTURE, notANameLine, t } from '@beanpool/core';
 import { updateMemberProfile, getMemberProfile, registerMember, nodeAddress } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
@@ -157,7 +157,12 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                         />
                         {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button
-                            onClick={() => { setError(null); setStep('avatar'); }}
+                            onClick={() => {
+                                // An invite or a web address is no name (core name-box.ts); the name already held is kept as it is.
+                                const notAName = callsign.trim() !== identity.callsign ? notANameLine(callsign) : null;
+                                setError(notAName);
+                                if (!notAName) setStep('avatar');
+                            }}
                             disabled={!nameOk}
                             className={`w-full mt-6 py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md ${nameOk ? 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90 cursor-pointer' : 'bg-nature-300 dark:bg-nature-700 text-white/70 cursor-not-allowed'}`}
                         >

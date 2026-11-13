@@ -95,6 +95,7 @@ vi.mock('expo-location', () => ({
 
 import ProfileSetupScreen from '../../app/profile-setup';
 import { keepPendingProfileChange, pendingProfileChange } from '../pending-profile-sync';
+import { NAME_BOX_WORDS } from '@beanpool/core';
 
 const NODE = 'https://second.example.test';
 const KEY = 'a'.repeat(64);
@@ -269,6 +270,26 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         await click('Done');
         const pending = await pendingProfileChange(NODE, KEY);
         expect(pending?.refusedCallsign).toBe('Rosa Parked');
+    });
+
+    // #3122 review (profile-feature-gate.ts:212): a name that is a link, copied here from the community that holds it, is a
+    // rename here, and the node refuses it, 400 `callsign_link`. Re-run Setup took that for being offline, so the name
+    // waited to be sent again and again; it is refused for good, as a 409 taken name is, and said on the name step.
+    it('when the waiting name is a link the node refuses (400 callsign_link), it is refused for good, said on the name step, and nothing is kept as offline', async () => {
+        const LINK = 'https://mullum.beanpool.org/?inv';
+        community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
+        await keepPendingProfileChange(NODE, KEY, { callsign: LINK });
+        status = 400;
+        responseBody = { error: 'callsign_link', message: NAME_BOX_WORDS.webLink, code: 'callsign_link' };
+        await render();
+        await pickPhoto();
+        await click('Next →');
+        await click('Done');
+        expect(published()).toEqual([{ publicKey: KEY, avatar: PICK, callsign: LINK }]);
+        expect((await pendingProfileChange(NODE, KEY))?.refusedCallsign).toBe(LINK);
+        expect(text()).toContain(NAME_BOX_WORDS.webLink);
+        expect(calls.updateMemberProfile).toEqual([]);
+        expect(calls.updateCallsign).toEqual([]);
     });
 
     it('when the 409 is not callsign_taken, the name is not marked as refused', async () => {

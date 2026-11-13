@@ -5,10 +5,11 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
  * event's chat. Marty, 14 Nov 2026, on a web DM: "a little vertical bar showing? what is this?" It was a
  * scrollbar: the box sat at a fixed 40px, a pixel short of its own one line, so even an empty box scrolled.
  *
- * The box is one line tall when empty (or as many lines as its hint needs), a line taller for each line of
+ * The box is one line tall when empty, the same as with one line of words, a line taller for each line of
  * words up to COMPOSER_MAX_LINES, and it scrolls, with a scrollbar, only past that. It shrinks back when the
  * words go. Below the cap nothing scrolls (overflow hidden), so a sub-pixel rounding at a zoom or a large text
  * size can never draw a bar. The cap is in lines, not pixels, so a larger text size still gets five lines.
+ * The box's hint should stay on its one line (class placeholder:truncate): it is never measured.
  */
 export const COMPOSER_MAX_LINES = 5;
 
@@ -62,8 +63,10 @@ export function fitComposer(el: HTMLTextAreaElement, maxLines: number = COMPOSER
     const cs = window.getComputedStyle(el);
     const copy = measurerLike(cs);
     document.body.appendChild(copy);
-    // The words, or the hint while there are none (a hint that wraps gets its lines); never less than a line.
-    copy.value = el.value || el.placeholder || 'x';
+    // The words, or one line while there are none. Never the hint's lines: a hint that wraps (a long
+    // translation at 320px and 130% text) would make the empty box tall and drop it on the first letter.
+    // The composer keeps its hint to one line instead (placeholder:truncate).
+    copy.value = el.value || 'x';
     const needs = copy.scrollHeight;
     copy.value = Array.from({ length: maxLines }, () => 'x').join('\n');
     const cap = copy.scrollHeight;
@@ -88,7 +91,7 @@ export function fitComposer(el: HTMLTextAreaElement, maxLines: number = COMPOSER
 
 /**
  * Keeps the textarea in `ref` sized to its words. It refits when the box first appears (a chat opening),
- * when its words or hint change (typing, a send clearing it), and when its width changes (a zoom, a turned
+ * when its words change (typing, a send clearing it), and when its width changes (a zoom, a turned
  * phone, a button appearing beside it), since a new width wraps the words anew. The box's own style must
  * leave height and overflow to this; the keys are the composer's own business.
  */
@@ -96,7 +99,7 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement | null>, m
     const fitted = useRef<{ el: HTMLTextAreaElement | null; words: string | null }>({ el: null, words: null });
     const stopWatching = useRef<(() => void) | null>(null);
 
-    // Every render, but it only measures when the box, its words or its hint changed; before paint, so an
+    // Every render, but it only measures when the box or its words changed; before paint, so an
     // opening chat never shows the box at the wrong height.
     useLayoutEffect(() => {
         const el = ref.current;
@@ -109,7 +112,7 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement | null>, m
             fitted.current = { el: null, words: null };
             return;
         }
-        const words = `${el.placeholder}\u0000${el.value}`;
+        const words = el.value;
         if (el === was.el && words === was.words) return;
         fitted.current = { el, words };
         fitComposer(el, maxLines);

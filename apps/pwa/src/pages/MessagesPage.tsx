@@ -3594,6 +3594,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             placeholder={editingMessage ? t('Edit message...') : t('Message...')}
                             disabled={sending}
                             rows={1}
+                            // The hint stays on the box's one line, however long its translation.
+                            className="placeholder:truncate"
                             style={{
                                 ...inputStyle,
                                 // Height and overflow are useGrowingComposer's: one line up to five, then a scrollbar.

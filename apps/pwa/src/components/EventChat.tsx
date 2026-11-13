@@ -363,7 +363,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
                         placeholder={t('Message everyone going…')}
                         aria-label={t('Message everyone going')}
-                        className="flex-1 min-w-0 min-h-[48px] resize-none rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        className="flex-1 min-w-0 min-h-[48px] resize-none placeholder:truncate rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                     />
                     <button
                         type="submit"

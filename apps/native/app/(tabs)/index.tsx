@@ -10,7 +10,7 @@ import {
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
     endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
-    starterSheet, type PricingGuideItem, type StarterRow,
+    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications } from '../../utils/notification-permission';
@@ -35,7 +35,7 @@ import { ArrangeGhost } from '../../components/home/ArrangeGhost';
 import { useArrangeDrag } from '../../components/home/useArrangeDrag';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
-import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
+import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeResetUndo, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { StarterOffersSheet } from '../../components/home/StarterOffersSheet';
 import { readPricingGuide } from '../../utils/starter-offers';
@@ -219,6 +219,8 @@ export default function HomeScreen() {
     const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     // Arrange (DESIGN-home-arrange-in-place-fable.md): Home itself, its cards carrying their arrows and gone quiet.
     const [arranging, setArranging] = useState(false);
+    /** The Home from before a Reset, while its "Home is back to how it started. Undo" line is up (§3); null: no line. */
+    const [undoReset, setUndoReset] = useState<{ was: HomeLayout } | null>(null);
     const [addOpen, setAddOpen] = useState(false);
     // "What could you offer?" (slice O2): First steps' Post your first Offer opens it; the community's price guide is read as it opens.
     const [starterOpen, setStarterOpen] = useState(false);
@@ -364,6 +366,7 @@ export default function HomeScreen() {
         const id = arrangeFrom.current;
         keepPlace.current = false;
         setArranging(false);
+        setUndoReset(null);
         // After the insides come back: TalkBack lands on what opened Arrange rather than the top of the screen.
         setTimeout(() => {
             const target = (id ? menuRefs.current.get(id)?.current : null) ?? arrangeLink.current;
@@ -1591,7 +1594,19 @@ export default function HomeScreen() {
                             </>
                         )}
                         {list.filter(c => c.type === 'community').map(listed)}
-                        {arrangeOn && <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />}
+                        {arrangeOn && <ArrangeReset colors={colors} onPress={() => {
+                            if (tips?.dismissedAt) onTipsOn();
+                            // Undo puts back the Home from before, as it was drawn (a Home never saved: its default list).
+                            setUndoReset({ was: layoutRef.current ?? defaultHomeLayout() });
+                            changeLayout(resetLayout(layoutRef.current, Date.now()));
+                        }} />}
+                        {arrangeOn && undoReset && (
+                            <ArrangeResetUndo
+                                colors={colors}
+                                onUndo={() => { const was = undoReset.was; setUndoReset(null); changeLayout({ ...was, updatedAt: new Date().toISOString() }); }}
+                                onClose={() => setUndoReset(null)}
+                            />
+                        )}
                     </Animated.View>
                 </ScrollView>
 

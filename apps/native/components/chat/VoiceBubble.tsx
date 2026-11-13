@@ -81,6 +81,9 @@ export function VoiceBubble({ messageId, load, isMe }: Props) {
             : <View testID={`voice-${state}`}>{body}</View>;
     }
 
+    // locationX is measured from the view the finger landed on. The bars are views of their own, so the wave takes every touch
+    // itself (pointerEvents box-only, below): the place is then always measured from the whole waveform's own left edge, as
+    // waveWidth is. Without it, a tap on a bar measured 0 to 2 dp from that bar and moved the sound to the start.
     const onWave = (e: GestureResponderEvent) => {
         if (!voice || !playback) return;
         playback.seek(messageId, voice.uri, voiceSeekShare(e.nativeEvent.locationX, waveWidth));
@@ -105,6 +108,7 @@ export function VoiceBubble({ messageId, load, isMe }: Props) {
                 <View
                     testID="voice-wave"
                     accessible={false}
+                    pointerEvents="box-only"
                     onLayout={(e: LayoutChangeEvent) => setWaveWidth(e.nativeEvent.layout.width)}
                     onStartShouldSetResponder={() => state === 'ok'}
                     onResponderRelease={onWave}

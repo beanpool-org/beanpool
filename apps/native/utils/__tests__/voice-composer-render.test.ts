@@ -10,6 +10,11 @@
  *   - let go after two seconds: sent, with its length, 48 bars and the file's bytes;
  *   - slide up and let go: still recording; Stop keeps it; Send sends it;
  *   - every colour the recorder draws is one of the library's roles, and its words read at 4.5:1 on the composer.
+ * And PR #3112's review:
+ *   - the box isn't remounted when the microphone first arrives (a DM's first render has none), so its words stay;
+ *   - a recording pauses the chat's player, and nothing plays, moves on or flips the audio mode until it is sent;
+ *   - a send that didn't go keeps the recording, back for play, bin and Send, and nothing new records while one is going;
+ *   - the microphone turned on in Settings reaches the open chat when the app comes back to the front.
  * The 320 dp layout itself (nothing past the edge, 44 dp targets) is measured in Chromium by e2e/voice-320.mjs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +28,8 @@ const box: { onChangeText?: (t: string) => void; mounts: number } = { mounts: 0 
 /** The microphone's touch responder, as the View was handed it: the test's finger. */
 const pan: { config?: Record<string, (...a: any[]) => any> } = {};
 const theme = vi.hoisted(() => ({ scheme: 'light' as 'light' | 'dark' }));
+/** The app's AppState listeners: the test brings the app back to the front. */
+const appState = vi.hoisted(() => ({ listeners: new Set<(s: string) => void>() }));
 
 vi.mock('react-native', () => {
     const flat = (style: any): Record<string, any> => (Array.isArray(style) ? Object.assign({}, ...style.map(flat)) : style || {});
@@ -54,13 +61,16 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, flatten: flat },
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
         AccessibilityInfo: { isScreenReaderEnabled: async () => false, addEventListener: () => ({ remove() { } }) },
-        AppState: { addEventListener: () => ({ remove() { } }) },
+        AppState: {
+            addEventListener: (_: string, fn: (s: string) => void) => { appState.listeners.add(fn); return { remove() { appState.listeners.delete(fn); } }; },
+        },
         Alert: { alert: vi.fn() },
         Linking: { openSettings: vi.fn(async () => { }) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
+vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => { }) } }));
 vi.mock('expo-file-system/legacy', () => ({
     EncodingType: { Base64: 'base64' },
     // An .m4a's head (ftyp M4A) and four bytes more.
@@ -76,14 +86,22 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 
 import { contrastRatio, VOICE_BARS } from '@beanpool/core';
+import { Alert } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { expoAudioStub } from './expo-audio-stub';
-import { ChatComposer } from '../../components/chat/ChatComposer';
+import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
+import { VoicePlaybackProvider, useVoicePlayback, type VoicePlaybackApi } from '../../components/chat/VoicePlayback';
+import { voiceAudioHold } from '../voice-audio';
 import { makeChatStyles } from '../../components/chat/styles';
 import { lightColors, darkColors } from '../../constants/colors';
 
 let root: Root;
 let host: HTMLDivElement;
 const sent: any[] = [];
+/** The screen's onVoice refuses the next send with these words (as `sendVoice` does while a text is still going). */
+let refuseNext: string | null = null;
+/** A send held open until the test lets it go. */
+let holdSend: Promise<void> | null = null;
 
 const q = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
 const flush = async () => { await act(async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); }); };
@@ -96,22 +114,43 @@ const clock = async (ms: number) => {
     expoAudioStub.recorderState.durationMillis = ms;
     expoAudioStub.recorderState.isRecording = expoAudioStub.recorder.isRecording;
     expoAudioStub.recorderState.metering = -10;
-    await act(async () => { render(); });
+    await act(async () => { expoAudioStub.emit(); });
     await flush();
 };
 
-function render(withVoice = true) {
+const composerRef: { current: ChatComposerHandle | null } = { current: null };
+function composer(withVoice = true) {
     const colors = theme.scheme === 'dark' ? darkColors : lightColors;
-    root.render(createElement(ChatComposer, {
+    return createElement(ChatComposer, {
+        ref: composerRef as any,
         styles: makeChatStyles({ theme: theme.scheme, colors } as any), onSend: async () => { }, placeholder: 'Message', accessibilityLabel: 'Message',
-        bottomPadding: 12, onVoice: withVoice ? async (v: any) => { sent.push(v); } : undefined,
-    }) as any);
+        bottomPadding: 12,
+        onVoice: withVoice ? async (v: any) => {
+            if (holdSend) await holdSend;
+            if (refuseNext) { const why = refuseNext; refuseNext = null; throw new Error(why); }
+            sent.push(v);
+        } : undefined,
+    }) as any;
+}
+function render(withVoice = true) {
+    root.render(composer(withVoice));
+}
+/** A fresh composer, as a chat opening. */
+async function reopen(withVoice = true) {
+    await act(async () => { root.unmount(); });
+    root = createRoot(host);
+    await act(async () => { render(withVoice); });
+    await flush();
 }
 
 beforeEach(async () => {
     expoAudioStub.reset();
     expoAudioStub.permission = { granted: true, canAskAgain: true, status: 'granted' };
     sent.length = 0;
+    refuseNext = null;
+    holdSend = null;
+    vi.mocked(Alert.alert).mockClear();
+    vi.mocked(FileSystem.deleteAsync).mockClear();
     theme.scheme = 'light';
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -143,6 +182,21 @@ describe('ChatComposer: the microphone in Send\'s place', () => {
         await act(async () => { render(true); });
         await act(async () => { render(false); });
         expect(box.mounts).toBe(before);
+    });
+
+    it('the box is never remounted when the microphone first arrives (a DM opens without it): a prefilled nudge stays', async () => {
+        // A DM's first render has no onVoice ('mine-loading'); the screen's prefill writes the nudge into the first box.
+        await reopen(false);
+        const before = box.mounts;
+        await act(async () => { composerRef.current!.setText('Go test your quiz'); });
+        // The conversation row arrives: the microphone comes.
+        await act(async () => { render(true); });
+        await flush();
+        expect(box.mounts).toBe(before);
+        expect(composerRef.current!.currentText()).toBe('Go test your quiz');
+        // The microphone did arrive: with the box empty it is in Send's place.
+        await act(async () => { box.onChangeText!(''); });
+        expect(q('voice-mic')).not.toBeNull();
     });
 
     it('the first hold only asks for the microphone; the next hold records', async () => {
@@ -228,6 +282,136 @@ describe('ChatComposer: the microphone in Send\'s place', () => {
         await flush();
         expect(sent).toEqual([]);
         expect(q('voice-mic')).not.toBeNull();
+    });
+});
+
+describe('ChatComposer: a send that didn\'t go keeps the recording (PR #3112 review)', () => {
+    it('refused ("Wait for the last message to go."): kept, back for play, bin and Send; Send then sends it', async () => {
+        refuseNext = 'Wait for the last message to go.';
+        await hold();
+        await clock(2300);
+        await release();
+        expect(sent).toEqual([]);
+        expect(Alert.alert).toHaveBeenCalledWith('Voice message not sent', 'Wait for the last message to go.');
+        // Not deleted: the file is still there to send.
+        expect(FileSystem.deleteAsync).not.toHaveBeenCalledWith('file:///rec/voice.m4a', expect.anything());
+        expect(q('voice-preview')).not.toBeNull();
+        expect(q('voice-bin')).not.toBeNull();
+        expect(q('voice-clock')?.textContent).toBe('0:02');
+        await act(async () => { q('voice-send')!.click(); });
+        await flush();
+        expect(sent).toHaveLength(1);
+        expect(sent[0].durationMs).toBe(2300);
+        expect(sent[0].bars).toHaveLength(VOICE_BARS);
+        // Sent: now it goes.
+        expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///rec/voice.m4a', expect.anything());
+        expect(q('voice-bar')).toBeNull();
+    });
+
+    it('the chat left while it was going, and then it failed: the file goes, and the audio session is let go', async () => {
+        let go!: () => void;
+        holdSend = new Promise<void>((r) => { go = r; });
+        refuseNext = 'The voice message could not be sent.';
+        await hold();
+        await clock(2000);
+        await release();
+        await act(async () => { root.unmount(); });
+        holdSend = null;
+        await act(async () => { go(); });
+        for (let i = 0; i < 4; i++) await act(async () => { await Promise.resolve(); });
+        expect(FileSystem.deleteAsync).toHaveBeenCalledWith('file:///rec/voice.m4a', expect.anything());
+        // Nothing left holding the session: every other chat's voice messages still play.
+        expect(voiceAudioHold()).toBeNull();
+        root = createRoot(host);   // for afterEach
+    });
+
+    it('nothing new records while a voice message is going', async () => {
+        let go!: () => void;
+        holdSend = new Promise<void>((r) => { go = r; });
+        await hold();
+        await clock(2000);
+        await release();
+        expect(q('voice-mic')?.getAttribute('aria-label')).toBe('Sending…');
+        expect(pan.config!.onStartShouldSetResponder()).toBe(false);
+        holdSend = null;
+        await act(async () => { go(); });
+        await flush();
+        expect(sent).toHaveLength(1);
+        expect(q('voice-mic')?.getAttribute('aria-label')).toBe('Hold to record a voice message');
+    });
+});
+
+describe('ChatComposer: the microphone turned on in Settings (PR #3112 review)', () => {
+    it('reaches the open chat when the app comes back to the front', async () => {
+        expoAudioStub.permission = { granted: false, canAskAgain: false, status: 'denied' };
+        await reopen();
+        await hold();
+        expect(Alert.alert).toHaveBeenCalledWith('The microphone is off for BeanPool', expect.any(String), expect.any(Array));
+        expect(expoAudioStub.recorder.isRecording).toBe(false);
+        await release();
+        // Open Settings, the microphone on, back to BeanPool: the chat was never closed.
+        expoAudioStub.permission = { granted: true, canAskAgain: true, status: 'granted' };
+        await act(async () => { for (const fn of appState.listeners) fn('active'); });
+        await flush();
+        vi.mocked(Alert.alert).mockClear();
+        await hold();
+        expect(Alert.alert).not.toHaveBeenCalled();
+        expect(expoAudioStub.recorder.isRecording).toBe(true);
+        expect(expoAudioStub.asked).toBe(0);
+    });
+});
+
+describe('ChatComposer with the chat\'s player: one owner of the audio mode (PR #3112 review)', () => {
+    it('a recording pauses what plays; nothing plays, moves on or flips the mode until it is sent', async () => {
+        const api: { current: VoicePlaybackApi | null } = { current: null };
+        const Probe = () => { api.current = useVoicePlayback(); return null; };
+        const voices = [{ id: 'a', mine: false }, { id: 'b', mine: false }];
+        await act(async () => { root.render(createElement(VoicePlaybackProvider as any, { voices }, createElement(Probe), composer()) as any); });
+        await flush();
+        // A voice message plays.
+        await act(async () => { api.current!.toggle('a', 'file:///a.m4a'); });
+        await flush();
+        expect(expoAudioStub.player.played).toBe(1);
+        expoAudioStub.playerStatus.playing = true;
+        await act(async () => { expoAudioStub.emit(); });
+        // A hold: it stops before the microphone opens.
+        const pausedBefore = expoAudioStub.player.paused;
+        await hold();
+        expect(expoAudioStub.recorder.isRecording).toBe(true);
+        expect(expoAudioStub.player.paused).toBeGreaterThan(pausedBefore);
+        expoAudioStub.playerStatus.playing = false;
+        await move(0, -100);   // locked: the finger is free to tap a bubble
+        await release();
+        const { played, replaced } = { played: expoAudioStub.player.played, replaced: expoAudioStub.player.replaced.length };
+        // A tap on another bubble's play, a tap on the paused one, and the one that played ending (next plays): nothing.
+        await act(async () => { api.current!.toggle('b', 'file:///b.m4a'); });
+        await flush();
+        await act(async () => { api.current!.toggle('a', 'file:///a.m4a'); });
+        await flush();
+        expoAudioStub.playerStatus.didJustFinish = true;
+        await act(async () => { expoAudioStub.emit(); });
+        await flush();
+        expoAudioStub.playerStatus.didJustFinish = false;
+        expect(expoAudioStub.player.played).toBe(played);
+        expect(expoAudioStub.player.replaced.length).toBe(replaced);
+        // The recording was never cut off (iOS stops it on a playback mode), and no playback mode was asked while it ran.
+        expect(expoAudioStub.recorder.isRecording).toBe(true);
+        expect(expoAudioStub.modes.filter((m) => m.whileRecording && m.mode.allowsRecording === false)).toEqual([]);
+        // Stopped and waiting for review: still nothing plays.
+        await clock(4000);
+        await act(async () => { q('voice-stop')!.click(); });
+        await flush();
+        await act(async () => { api.current!.toggle('b', 'file:///b.m4a'); });
+        await flush();
+        expect(expoAudioStub.player.played).toBe(played);
+        // Sent: the chat plays again.
+        await act(async () => { q('voice-send')!.click(); });
+        await flush();
+        expect(sent).toHaveLength(1);
+        expect(sent[0].durationMs).toBe(4000);
+        await act(async () => { api.current!.toggle('b', 'file:///b.m4a'); });
+        await flush();
+        expect(expoAudioStub.player.played).toBe(played + 1);
     });
 });
 

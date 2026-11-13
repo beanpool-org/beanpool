@@ -59,14 +59,15 @@ export interface VoiceCacheEntry {
     at: number;
 }
 
-/** The ids to delete so what stays is at most `max` bytes: the oldest first, never `keep` (the one just kept). */
-export function voiceCacheToEvict(entries: readonly VoiceCacheEntry[], max: number = VOICE_CACHE_MAX_BYTES, keep?: string): string[] {
+/** The ids to delete so what stays is at most `max` bytes: the oldest first, never one in `keep` (those just kept). */
+export function voiceCacheToEvict(entries: readonly VoiceCacheEntry[], max: number = VOICE_CACHE_MAX_BYTES, keep?: string | ReadonlySet<string>): string[] {
     let total = entries.reduce((sum, e) => sum + Math.max(0, e.bytes), 0);
     if (total <= max) return [];
+    const kept = typeof keep === 'string' ? new Set([keep]) : keep ?? new Set<string>();
     const out: string[] = [];
     for (const e of [...entries].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id))) {
         if (total <= max) break;
-        if (e.id === keep) continue;
+        if (kept.has(e.id)) continue;
         out.push(e.id);
         total -= Math.max(0, e.bytes);
     }

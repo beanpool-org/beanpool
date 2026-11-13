@@ -21,7 +21,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT, CHAT_INPUT_V_PADDING, type ChatStyles } from './styles';
 import { t, type VoiceInput } from '@beanpool/core';
-import { useVoiceRecorder, type VoiceRecorderParts } from './VoiceRecorder';
+import { VoiceRecorderHost, type VoiceRecorderParts } from './VoiceRecorder';
 
 export interface ChatComposerHandle {
     /** Put text in the box and in both mirrors — the way an Edit fills it. */
@@ -67,11 +67,6 @@ interface Props {
      * request), no microphone. Throw and the recorder says the voice message wasn't sent.
      */
     onVoice?: (voice: VoiceInput) => Promise<void>;
-}
-
-/** The recorder's hooks, only in a chat that takes voice messages: nothing of the microphone exists in the others. */
-function WithVoice({ styles, onVoice, disabled, children }: { styles: ChatStyles; onVoice: (voice: VoiceInput) => Promise<void>; disabled: boolean; children: (voice: VoiceRecorderParts) => React.ReactElement }) {
-    return children(useVoiceRecorder({ styles, onSend: onVoice, disabled }));
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
@@ -166,13 +161,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
     const canSend = (draft.trim().length > 0 || !!attachment) && !disabled && !busy;
     // The microphone in Send's place: the box empty, no photo waiting, nothing being waited on.
     const micInsteadOfSend = !!onVoice && !draft.trim() && !attachment && !busy;
+    // Once this chat has had the microphone, its recorder stays mounted when onVoice goes for a while (an Edit, a photo
+    // waiting): with onVoice absent the microphone isn't shown and a hold is refused; a recording already running goes to the
+    // last onVoice given. The recorder is a leaf (VoiceRecorderHost) that hands its parts up: the tree below is the same
+    // element from the first render, so the box, which is uncontrolled, is never remounted and never drops its words when the
+    // microphone arrives (in a DM that is when the conversation row or the node's answer comes in; PR #3112 review).
     const lastOnVoice = useRef<((voice: VoiceInput) => Promise<void>) | null>(null);
+    if (onVoice) lastOnVoice.current = onVoice;
     const sendVoice = useCallback((voice: VoiceInput) => lastOnVoice.current!(voice), []);
+    const [voice, setVoice] = useState<VoiceRecorderParts | null>(null);
 
-    const body = (voice: VoiceRecorderParts | null) => (
+    return (
         <View>
             {!!notice && <Text style={styles.composerNotice}>{notice}</Text>}
-            {!!voice?.hint && <Text testID="voice-hint" style={styles.composerNotice}>{voice.hint}</Text>}
+            {!!voice?.hint && <Text testID="voice-hint" style={{ fontSize: 11, color: colors.text.muted, paddingHorizontal: 12, paddingTop: 6 }}>{voice.hint}</Text>}
             {attachment}
             {/* One block with the waiting photo above it: the photo's row draws the line between the chat and the box. */}
             <View style={[styles.inputContainer, { paddingBottom: bottomPadding }, attachment ? { borderTopWidth: 0 } : null]}>
@@ -219,14 +221,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                     </Pressable>
                 )}
             </View>
+            {lastOnVoice.current ? <VoiceRecorderHost onSend={sendVoice} disabled={!!disabled || !onVoice} onParts={setVoice} /> : null}
         </View>
     );
-
-    // Once this chat has had the microphone, its recorder stays mounted when onVoice goes for a while (an Edit, a photo
-    // waiting): switching the tree would remount the box, which is uncontrolled, and drop its words. With onVoice absent
-    // the microphone isn't shown and a hold is refused; a recording already running goes to the last onVoice given.
-    if (onVoice) lastOnVoice.current = onVoice;
-    return lastOnVoice.current
-        ? <WithVoice styles={styles} onVoice={sendVoice} disabled={!!disabled || !onVoice}>{body}</WithVoice>
-        : body(null);
 });

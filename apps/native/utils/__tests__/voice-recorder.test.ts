@@ -124,6 +124,20 @@ describe('the recorder: slide left to cancel, slide up to lock', () => {
     it('the recorder failing while recording throws it away, never sends', () => {
         expect(run([hold, { type: 'tick', ms: 3000 }, { type: 'failed' }]).effects).toEqual(['start', 'discard']);
     });
+
+    it('a send that didn\'t go comes back kept, for play, bin or Send, and Send sends it again (PR #3112 review)', () => {
+        const after = run([hold, { type: 'tick', ms: 2300 }, { type: 'release' }]);
+        expect(after.effects).toEqual(['start', 'send']);
+        const back = run([{ type: 'unsent', ms: 2300 }], after.state);
+        expect(back).toEqual({ state: { phase: 'review', ms: 2300, limit: false }, effects: [] });
+        expect(voiceRecorderStep(back.state, { type: 'send' })).toEqual({ state: VOICE_IDLE, effect: 'send', ms: 2300 });
+        expect(run([{ type: 'cancel' }], back.state).effects).toEqual(['discard']);
+        // One at 3:00 comes back as it was: stopped at the limit.
+        expect(run([{ type: 'unsent', ms: VOICE_MAX_MS }]).state).toEqual({ phase: 'review', ms: VOICE_MAX_MS, limit: true });
+        // Only to an idle recorder: never over a recording (nothing new starts while one is going, VoiceRecorder.tsx).
+        const recording = run([hold]).state;
+        expect(voiceRecorderStep(recording, { type: 'unsent', ms: 2300 })).toEqual({ state: recording, effect: null });
+    });
 });
 
 describe('the recorder: the microphone asked at the first hold, never before', () => {

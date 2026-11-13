@@ -82,6 +82,11 @@ export type VoiceRecorderEvent =
     | { type: 'send' }
     /** The recorder failed to start or stopped on its own (a call came in, the system took the microphone). */
     | { type: 'failed' }
+    /**
+     * A send that didn't go (the node refused it, it timed out, the phone is offline, or the screen's own "Wait for the last
+     * message to go."): the recording is kept and back for play, bin or Send, so Send tries again (PR #3112 review).
+     */
+    | { type: 'unsent'; ms: number }
     /** The hint has been shown long enough. */
     | { type: 'dismiss' };
 
@@ -147,6 +152,10 @@ export function voiceRecorderStep(state: VoiceRecorderState, event: VoiceRecorde
         case 'failed':
             if (state.phase !== 'recording') return same;
             return { state: VOICE_IDLE, effect: 'discard' };
+        case 'unsent':
+            // A send leaves the recorder idle, and nothing new can start while it is going (VoiceRecorder.tsx `sending`).
+            if (state.phase !== 'idle') return same;
+            return { state: { phase: 'review', ms: event.ms, limit: event.ms >= VOICE_MAX_MS }, effect: null };
         case 'dismiss':
             return state.phase === 'idle' && state.hint ? { state: VOICE_IDLE, effect: null } : same;
     }

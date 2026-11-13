@@ -44,6 +44,10 @@ describe("the phone's own copy: 200 MB, oldest out", () => {
     it('never the one just kept, even when it is the oldest', () => {
         expect(voiceCacheToEvict([{ id: 'kept', bytes: 150 * MB, at: 1 }, { id: 'b', bytes: 100 * MB, at: 2 }], VOICE_CACHE_MAX_BYTES, 'kept')).toEqual(['b']);
     });
+    it('never any of several just kept (the tidy runs after a few keeps at once)', () => {
+        const entries = [{ id: 'k1', bytes: 90 * MB, at: 1 }, { id: 'k2', bytes: 90 * MB, at: 2 }, { id: 'old', bytes: 60 * MB, at: 3 }];
+        expect(voiceCacheToEvict(entries, VOICE_CACHE_MAX_BYTES, new Set(['k1', 'k2']))).toEqual(['old']);
+    });
 });
 
 describe('the waveform drag and file names', () => {

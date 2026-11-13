@@ -4,11 +4,15 @@
  * on this phone; when one ends, the next voice message after it plays by itself if it isn't mine and this phone hasn't
  * played it (utils/voice-playback.ts nextVoiceToPlay). Sound from the speaker; it stops when the chat closes or the app
  * goes to the background. Nothing about playing is sent anywhere: no "played" tick.
+ *
+ * Nothing plays while the composer records or holds a recording for review: utils/voice-audio.ts owns the audio mode, pauses
+ * this player when a recording starts, and refuses a start, a resume or the next message until the recorder lets go.
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { audioForPlaying, onAudioHeld, voiceAudioHold } from '../../utils/voice-audio';
 import { nextVoiceSpeed, nextVoiceToPlay, voiceSpeedOf, type VoiceInChat, type VoiceSpeed } from '../../utils/voice-playback';
 
 const SPEED_KEY = 'beanpool_voice_speed';
@@ -68,11 +72,12 @@ export function VoicePlaybackProvider({ voices, children }: { voices: readonly V
     }, []);
 
     const start = useCallback(async (id: string, uri: string, at = 0) => {
-        // Out of the speaker, even with the phone on silent, and never the recorder's earpiece route.
-        await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false, shouldPlayInBackground: false }).catch(() => {});
+        // Out of the speaker, even with the phone on silent: never while the composer records or holds a recording.
+        if (!(await audioForPlaying())) return;
         player.replace({ uri });
         player.setPlaybackRate(speed, 'high');
         if (at > 0) await player.seekTo(at).catch(() => {});
+        if (voiceAudioHold()) return; // a recording began while it was being moved
         player.play();
         setCurrentId(id);
         notePlayed(id);
@@ -82,8 +87,12 @@ export function VoicePlaybackProvider({ voices, children }: { voices: readonly V
         uris.current.set(id, uri);
         if (id !== currentId) { start(id, uri).catch(() => {}); return; }
         if (status.playing) { player.pause(); return; }
-        if (status.duration > 0 && status.currentTime >= status.duration - 0.05) player.seekTo(0).catch(() => {});
-        player.play();
+        const fromStart = status.duration > 0 && status.currentTime >= status.duration - 0.05;
+        audioForPlaying().then((ok) => {
+            if (!ok) return;
+            if (fromStart) player.seekTo(0).catch(() => {});
+            player.play();
+        }).catch(() => {});
     }, [currentId, status.playing, status.duration, status.currentTime, player, start]);
 
     const seek = useCallback((id: string, uri: string, share: number) => {
@@ -108,6 +117,9 @@ export function VoicePlaybackProvider({ voices, children }: { voices: readonly V
         const uri = next ? uris.current.get(next) : undefined;
         if (next && uri) start(next, uri).catch(() => {});
     }, [status.didJustFinish, currentId, start]);
+
+    // The composer starts a recording: the sound stops, so it never goes into the new message.
+    useEffect(() => onAudioHeld(() => player.pause()), [player]);
 
     // The app to the background: the sound stops (no background playback, app.json's expo-audio plugin).
     useEffect(() => {

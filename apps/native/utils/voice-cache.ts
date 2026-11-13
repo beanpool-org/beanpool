@@ -10,7 +10,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { encodeBase64 } from './crypto';
 import { VOICE_BARS, VOICE_MAX_MS } from '@beanpool/core';
-import { voiceCacheToEvict, voiceFileId, type VoiceCacheEntry } from './voice-playback';
+import { voiceCacheToEvict, voiceFileId, VOICE_CACHE_MAX_BYTES, type VoiceCacheEntry } from './voice-playback';
 
 /** Read when used, never at import: a test's stand-in file system need not have it. */
 const voiceDir = () => `${FileSystem.documentDirectory}voice/`;
@@ -50,8 +50,10 @@ export async function keptVoice(messageId: string): Promise<KeptVoice | null> {
 }
 
 /**
- * Keep an opened (or just sent) voice message, then take the oldest off past 200 MB. Answers what the player opens, or
- * null when it couldn't be kept (a full disk): nothing half-written stays under its name.
+ * Keep an opened (or just sent) voice message. Answers what the player opens, or null when it couldn't be kept (a full disk):
+ * nothing half-written stays under its name. Taking the oldest off past 200 MB comes after, and is never waited on: the
+ * bubble plays as soon as its file is written (PR #3112 review: a full scan on the playing path was seconds of spinner on
+ * the API 26 phones).
  */
 export async function keepVoice(messageId: string, voice: { durationMs: number; bars: ArrayLike<number>; sound: Uint8Array }): Promise<KeptVoice | null> {
     const id = voiceFileId(messageId);
@@ -64,8 +66,53 @@ export async function keepVoice(messageId: string, voice: { durationMs: number; 
         await forgetVoice(id);
         return null;
     }
-    await trimVoiceCache(id).catch(() => { /* tried again at the next keep */ });
+    tidyAfterKeep(id, voice.sound.length);
     return { uri: soundOf(id), durationMs: voice.durationMs, bars: Array.from(voice.bars) };
+}
+
+/**
+ * The tidy: one at a time, never on the playing path. `knownBytes` is the folder's size as the last scan left it plus every
+ * sound kept since (an over-count when one is kept again or taken off, which only brings the next scan sooner), so while it
+ * is under 200 MB nothing is read at all. The ids kept since the tidy last ran are never the ones it takes off.
+ */
+let knownBytes: number | null = null;
+/** Sound kept while a scan runs, which the scan may not have seen: added to what it found. */
+let keptWhileScanning = 0;
+let tidying: Promise<void> | null = null;
+let tidyAgain = false;
+const justKept = new Set<string>();
+
+function tidyAfterKeep(id: string, bytes: number): void {
+    justKept.add(id);
+    if (knownBytes !== null) knownBytes += bytes;
+    keptWhileScanning += bytes;
+    if (tidying) { tidyAgain = true; return; }
+    tidying = (async () => {
+        do {
+            tidyAgain = false;
+            const keep = new Set(justKept);
+            justKept.clear();
+            if (knownBytes !== null && knownBytes <= VOICE_CACHE_MAX_BYTES) continue;
+            keptWhileScanning = 0;
+            try {
+                knownBytes = (await trimVoiceCache(keep)) + keptWhileScanning;
+            } catch {
+                knownBytes = null; /* scanned again at the next keep */
+            }
+        } while (tidyAgain);
+    })().finally(() => { tidying = null; });
+}
+
+/** The tidy running now, for a test to wait on; resolved when none is. */
+export function voiceTidyForTest(): Promise<void> {
+    return tidying ?? Promise.resolve();
+}
+
+/** Forget what the tidy knows (a test starting from an empty folder). */
+export function resetVoiceTidyForTest(): void {
+    knownBytes = null;
+    tidyAgain = false;
+    justKept.clear();
 }
 
 /** Mark a kept voice message as just played, so it is the last to go. */
@@ -105,7 +152,8 @@ export function forgetRemovedVoices(messages: unknown): void {
     }
 }
 
-async function trimVoiceCache(keep: string): Promise<void> {
+/** Scan the folder and take the oldest off past 200 MB, never one in `keep`. Answers the size that stays. */
+async function trimVoiceCache(keep: ReadonlySet<string>): Promise<number> {
     const names = await FileSystem.readDirectoryAsync(voiceDir());
     const entries: VoiceCacheEntry[] = [];
     for (const name of names) {
@@ -116,5 +164,7 @@ async function trimVoiceCache(keep: string): Promise<void> {
         const facts = await FileSystem.readAsStringAsync(factsOf(id)).then(factsFrom).catch(() => null);
         entries.push({ id, bytes: info.exists ? (info as { size?: number }).size ?? 0 : 0, at: facts?.at ?? 0 });
     }
-    for (const id of voiceCacheToEvict(entries, undefined, keep)) await forgetVoice(id);
+    const out = new Set(voiceCacheToEvict(entries, undefined, keep));
+    for (const id of out) await forgetVoice(id);
+    return entries.reduce((sum, e) => sum + (out.has(e.id) ? 0 : Math.max(0, e.bytes)), 0);
 }

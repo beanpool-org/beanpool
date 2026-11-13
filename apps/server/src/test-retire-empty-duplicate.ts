@@ -9,10 +9,12 @@
  *      since most member columns have no foreign key. A new table must say which; the name rule is what catches a column
  *      with no foreign key, so a member's key under a name it doesn't know (no "pubkey", "_by" or role word) still slips
  *      past: name such a column so it says what it holds.
- *   2. "Empty", a rule at a time: a fresh account may be retired; then one account per rule, each holding only that one
- *      thing, is refused with that rule's code and words (yourself, an enterprise, a suspended account, a role, a balance,
- *      a post, a payment, a message sent, credit, an enterprise kept, someone brought in, a report). Each refusal for what
- *      the account did or holds also says Suspend stays the way.
+ *   2. "Empty", a rule at a time: a fresh account may be retired, and so may a convenor in a group another member made
+ *      who sent nobody an invitation; then one account per rule, each holding only that one thing, is refused with that
+ *      rule's code and words (yourself, an enterprise, the node's own SYSTEM row and a row under another spelling of a
+ *      key, a suspended account, a role, a balance, a post, a group invitation sent as a convenor, waiting or accepted, a
+ *      payment, a message sent, credit, an enterprise kept, someone brought in, a report). Each refusal for what the
+ *      account did or holds also says Suspend stays the way.
  *   3. Who: an owner's own key session only. An admin is refused, an owner's automation token is refused; a refused
  *      retire writes nothing.
  *   4. The retire: 200, no vote or decision opened, nothing deleted (the row and its account stay); 'disabled' with
@@ -37,7 +39,7 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, setUserStatusRow } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, setUserStatusRow, inviteGroupMember, joinGroup } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -84,7 +86,6 @@ const NOT_ACTIVITY: Record<string, string> = {
     'owner_lock_opens.member_pubkey': "an owner's lock: only a role holder has one (`holds_role`)",
     'decision_electors.member_pubkey': 'a jury it was drawn into: not its act (a vote it cast is `votes`)',
     'group_members.member_pubkey': 'a group someone added it to: a group it made is `posts`',
-    'group_members.invited_by': 'whom it invited into a group: needs a group it is in; making one is `posts`',
     'federation_links.treasury_pubkey': "a link's treasury: an enterprise row, never a person's (`not_person`)",
     'federation_link_treasuries.treasury_pubkey': "a link's treasury: an enterprise row, never a person's (`not_person`)",
     'group_invite_declines.invitee_pubkey': 'a group invitation someone else sent it, declined: not its act on anyone',
@@ -163,6 +164,16 @@ function convenorElection(proposer: string, candidate: string, convenor = propos
     return `gp-${tag}`;
 }
 
+/** A group `lead` made and leads, with `convenor` a second convenor in it; its id. */
+function groupWithConvenor(lead: string, convenor: string): string {
+    const tag = crypto.randomBytes(6).toString('hex');
+    db.prepare(`INSERT INTO groups (id, name, slug, created_by, lead_pubkey) VALUES (?, 'A circle', ?, ?, ?)`).run(`g-${tag}`, `circle-${tag}`, lead, lead);
+    const add = db.prepare(`INSERT INTO group_members (group_id, member_pubkey, role, status) VALUES (?, ?, 'convenor', 'active')`);
+    add.run(`g-${tag}`, lead);
+    add.run(`g-${tag}`, convenor);
+    return `g-${tag}`;
+}
+
 function resetLimits(): void {
     resetGatewayRateLimit();
     resetAdminRateLimit();
@@ -216,7 +227,8 @@ async function main(): Promise<void> {
     seedGenesisMember(founder.pk, founder.name);
     const owner = sessionHeaders(founder.pk, 'owner');
     const ada = makeMember('Ada');
-    grantNodeRole(ada.pk, 'admin', 'SYSTEM');
+    // Granted by the founder, not 'SYSTEM': the node's own row stays as a fresh node has it (nothing done under it), as §2 needs.
+    grantNodeRole(ada.pk, 'admin', founder.pk);
     const adaAdmin = sessionHeaders(ada.pk, 'admin');
     const reader = makeMember('Reader');
 
@@ -258,16 +270,48 @@ async function main(): Promise<void> {
     const fresh = makeMember('Fresh');
     const ok = await call('GET', null, `/api/local/admin/users/${fresh.pk}/retire`, undefined, owner);
     assert(ok.status === 200 && ok.body?.allowed === true, `a fresh account with nothing in it may be retired (${show(ok)})`);
+    // Being made a convenor in someone else's group is done to it (group_members.member_pubkey): no act until it invites.
+    const helper = makeMember('Helper');
+    groupWithConvenor(reader.pk, helper.pk);
+    const helperOk = await call('GET', null, `/api/local/admin/users/${helper.pk}/retire`, undefined, owner);
+    assert(helperOk.status === 200 && helperOk.body?.allowed === true,
+        `a convenor in a group another member made, who invited nobody, may be retired (${show(helperOk)})`);
 
     const cases: Array<{ rule: string; label?: string; make: () => Id }> = [
         { rule: 'own_account', make: () => founder },
         { rule: 'not_person', make: () => makeMember('Shop', { treasury: true }) },
+        // The review's finds on 8ea9647a: the node's own row passed as a person (on a fresh node it read as empty: allowed,
+        // and POST 200), and so would a row a door stored under another spelling of a key.
+        { rule: 'not_person', label: "the node's own SYSTEM row", make: () => ({ ...keypair('System'), pk: 'SYSTEM' }) },
+        { rule: 'not_person', label: 'a row under another spelling of a key', make: () => {
+            const caps = keypair('Caps');
+            const pk = caps.pk.toUpperCase();
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'TEST', 'active')`).run(pk, caps.name);
+            return { ...caps, pk };
+        } },
         { rule: 'not_active', make: () => { const m = makeMember('Paused'); db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(m.pk); return m; } },
         { rule: 'holds_role', make: () => { const m = makeMember('Mod'); grantNodeRole(m.pk, 'moderator', 'SYSTEM'); return m; } },
         { rule: 'balance', make: () => { const m = makeMember('Rich'); db.prepare('UPDATE accounts SET balance_c = 500 WHERE public_key = ?').run(m.pk); return m; } },
         { rule: 'posts', make: () => {
             const m = makeMember('Poster');
             db.prepare(`INSERT INTO posts (id, type, category, title, description, author_pubkey) VALUES (?, 'offer', 'other', 'A thing', 'A thing', ?)`).run(`p-${m.pk.slice(0, 8)}`, m.pk);
+            return m;
+        } },
+        // The review's find on 8ea9647a: only a declined invitation counted; one waiting or accepted read as empty.
+        { rule: 'posts', label: 'a group invitation it sent as a convenor in a group another member made, waiting', make: () => {
+            const m = makeMember('Inviting');
+            inviteGroupMember(groupWithConvenor(reader.pk, m.pk), m.pk, makeMember('Invitee').pk);
+            return m;
+        } },
+        { rule: 'posts', label: 'a group invitation it sent as a convenor, accepted', make: () => {
+            const m = makeMember('Admitting');
+            const invitee = makeMember('Invitee');
+            const g = groupWithConvenor(reader.pk, m.pk);
+            inviteGroupMember(g, m.pk, invitee.pk);
+            joinGroup(g, invitee.pk);
+            const row = db.prepare('SELECT status, invited_by FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, invitee.pk) as any;
+            if (row?.status !== 'active' || row?.invited_by !== m.pk) throw new Error(`the invitation was not accepted: ${JSON.stringify(row)}`);
             return m;
         } },
         { rule: 'trades', make: () => {

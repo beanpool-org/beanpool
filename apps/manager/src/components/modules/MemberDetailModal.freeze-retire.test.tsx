@@ -8,7 +8,8 @@
  *   2. A refusal shows the node's own words, and the state stays what the node holds.
  *   3. Retire: shown only when the node says this owner may retire this member; a press confirms, retires, reads the
  *      member back and shows "Retired (empty duplicate)" with Bring back; Bring back reads back active.
- *   4. No Retire button for an admin viewer, or when the node says the account is not empty.
+ *   4. No Retire button for an admin viewer, when the node says the account is not empty, or on the node's own SYSTEM row
+ *      or a row under another key spelling (no person's account; not even asked).
  */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -105,6 +106,18 @@ describe('MemberDetailModal: Freeze shows the node, Retire an empty duplicate', 
         await screen.findByText('⏸️ Suspend');
         expect(check).not.toHaveBeenCalled();
         expect(screen.queryByTestId('retire-button')).toBeNull();
+    });
+
+    it("Retire: no button on the node's own SYSTEM row, nor any row under another key spelling, whatever the check says", async () => {
+        const check = vi.spyOn(nodeClient, 'fetchRetireCheck').mockResolvedValue({ allowed: true });
+        for (const pk of ['SYSTEM', 'A'.repeat(64)]) {
+            const { unmount } = render(<MemberDetailModal member={{ ...member, publicKey: pk, callsign: 'System' }} isFrozen={false}
+                onToggleFreeze={vi.fn()} onClose={vi.fn()} nodeUrl="https://n" viewerRole="owner" />);
+            await screen.findByText('⏸️ Suspend');
+            expect(check).not.toHaveBeenCalled();
+            expect(screen.queryByTestId('retire-button')).toBeNull();
+            unmount();
+        }
     });
 
     it('A retired member opens as Retired (empty duplicate), not as a suspension to lift', async () => {

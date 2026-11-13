@@ -17,6 +17,7 @@ import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { setUserStatusRow, broadcast } from '../state-engine.js';
 import { namesMemberSql } from '../decisions-engine.js';
+import { isMemberKeySpelling } from './member-key.js';
 
 export const RETIRE_WORDS = {
     ownAccount: word("You can't retire your own account."),
@@ -24,7 +25,7 @@ export const RETIRE_WORDS = {
     notActive: word('Only an active account can be retired. This one is already suspended, removed or retired.'),
     holdsRole: word('They hold a role here (owner, admin or moderator). Take the role away first.'),
     balance: word('Their balance is not 0.'),
-    posts: word('They have posted, listed, made a group or answered an event.'),
+    posts: word('They have posted, listed, made a group, invited someone into a group or answered an event.'),
     trades: word('They have traded, paid, been paid or been asked to pay.'),
     messages: word('They have sent messages.'),
     credit: word('They have given credit, been given credit, or owe some.'),
@@ -61,6 +62,9 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'posts', columns: ['author_pubkey', 'created_by', 'accepted_by', 'assigned_to', 'target_pubkey'] },
         { table: 'event_rsvps', columns: ['member_pubkey', 'let_in_by'] },
         { table: 'groups', columns: ['created_by', 'lead_pubkey', 'circle_starter'] },
+        // Whom it invited into a group as a convenor, or let in from a request (engine groups.ts inviteGroupMember): sent,
+        // accepted or declined, each its own act, wherever the group came from.
+        { table: 'group_members', columns: ['invited_by'] },
         { table: 'group_invite_declines', columns: ['invited_by'] },
         { table: 'creator_channels', columns: ['owner_pubkey'] },
         { table: 'pulse_items', columns: ['owner_pubkey'] },
@@ -210,14 +214,19 @@ function hasTable(table: string): boolean {
 
 /**
  * Why this account is not an empty duplicate `actor` may retire, or null when it is (the rules in the order the brief
- * gives them): not yourself; a person's account here (a member's row, no visitor's, no enterprise's); active (not already
- * suspended, removed or retired); holding no role; balance 0; and nothing in any of EMPTY_RULES' tables: no post or listing,
+ * gives them): not yourself; a person's account here (a key in a person's spelling, so never the node's own SYSTEM row,
+ * and a member's row, no visitor's, no enterprise's); active (not already suspended, removed or retired); holding no
+ * role; balance 0; and nothing in any of EMPTY_RULES' tables: no post or listing, no group invitation sent,
  * no trade, payment or deal open or done, no message sent, no credit given, received or owed, no enterprise kept, nobody
  * brought in, no vote, decision, rating or report by or about them, no names-list confirmation, and nothing done as an
  * owner, admin or moderator. A decision that names them (as its subject, or in a branch) counts too.
  */
 export function emptyAccountRefusal(actor: string, target: string): EmptyRefusal | null {
     if (actor === target) return refusal('own_account');
+    // A person's key is 64 lower-case hexadecimal characters (engine/member-key.ts). The node's own SYSTEM row (state-engine
+    // initStateEngine) is a member row with no visitor or enterprise flag, active and, on a fresh node, holding nothing; a
+    // row a door stored under another spelling of a key acts for nobody. Neither is a person's account.
+    if (!isMemberKeySpelling(target)) return refusal('not_person');
     const row = db.prepare('SELECT status, is_visitor, is_treasury FROM members WHERE public_key = ?').get(target) as
         { status: string | null; is_visitor: number | null; is_treasury: number | null } | undefined;
     if (!row || row.is_visitor || row.is_treasury) return refusal('not_person');

@@ -253,14 +253,15 @@ export function MemberDetailModal({
     };
 
     // Whether the node lets this viewer retire this member as an empty duplicate now: asked only of an owner and an active
-    // member; the node answers no for anyone else and for an account that holds or did anything.
+    // person's account (never the node's own SYSTEM row, "System Node Operator", nor any row under another key spelling,
+    // which the node refuses as no person's); the node answers no for anyone else and for an account that holds or did anything.
     useEffect(() => {
         setRetireAllowed(false);
-        if (!nodeUrl || !pubkey || memberStatus !== 'active' || viewerRole !== 'owner') return;
+        if (!nodeUrl || !pubkey || strayRow || memberStatus !== 'active' || viewerRole !== 'owner') return;
         let live = true;
         fetchRetireCheck(nodeUrl, pubkey, credential).then((r) => { if (live) setRetireAllowed(r.allowed); }).catch(() => { });
         return () => { live = false; };
-    }, [nodeUrl, pubkey, credential, memberStatus, viewerRole]);
+    }, [nodeUrl, pubkey, strayRow, credential, memberStatus, viewerRole]);
 
     // After Retire or Bring back: the member's status and mark as the node now holds them.
     const readBackStanding = async () => {

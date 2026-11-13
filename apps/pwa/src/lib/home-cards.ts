@@ -239,7 +239,7 @@ export interface HomeCards {
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
         /**
          * "Keep your 12 words safe" (§2.4): null when a sign-in's copy is linked here (no line), false while open, true once
-         * the member said they still have their words or saved the kit (kept on the account). Absent from a node before D1.
+         * the member said they still have their words, here or after the kit (kept on the account). Absent from a node before D1.
          */
         words?: boolean | null;
     };

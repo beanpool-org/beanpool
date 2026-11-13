@@ -93,6 +93,66 @@ describe('RecoveryKitButton', () => {
     });
 });
 
+// The director's rule (review of #3114): a browser can't tell a print or save cancelled in its dialog from one done, so the
+// kit alone never says "I still have my 12 words". One question after it, in the button's place; only Yes records it.
+describe('after the kit: "Did you keep it somewhere safe?"', () => {
+    const ASK = 'Did you keep it somewhere safe?';
+    function printed(onKept: () => void, print: (w: Window) => void = () => {}) {
+        render(<RecoveryKitButton words={WORDS} print={print} onKept={onKept} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Print or save your recovery kit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    }
+
+    it('the print alone records nothing: the question comes in the button\'s place, with the focus', async () => {
+        const onKept = vi.fn();
+        printed(onKept);
+        const group = await screen.findByRole('group', { name: ASK });
+        expect(onKept).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: "Yes, it's kept" })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Not yet' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Print or save your recovery kit' })).toBeNull();
+        expect(document.activeElement).toBe(group);
+        // Still no success line: the question asks, it says nothing was saved.
+        expect(screen.queryByText(/printed|saved|success/i)).toBeNull();
+    });
+
+    it("Yes, it's kept: kept on the account, once, and the question goes", async () => {
+        const onKept = vi.fn();
+        printed(onKept);
+        fireEvent.click(await screen.findByRole('button', { name: "Yes, it's kept" }));
+        expect(onKept).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(ASK)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Print or save your recovery kit' })).toBeTruthy();
+    });
+
+    it('Not yet: nothing recorded, and nothing asks again (no nag)', async () => {
+        const onKept = vi.fn();
+        printed(onKept);
+        fireEvent.click(await screen.findByRole('button', { name: 'Not yet' }));
+        expect(onKept).not.toHaveBeenCalled();
+        expect(screen.queryByText(ASK)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Print or save your recovery kit' })).toBeTruthy();
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByText(ASK)).toBeNull();
+        expect(onKept).not.toHaveBeenCalled();
+    });
+
+    it('a kit that could not be made asks nothing and records nothing; with no onKept, nothing is asked', async () => {
+        const onKept = vi.fn();
+        printed(onKept, () => { throw new Error('no print here'); });
+        expect(await screen.findByText(FAILED)).toBeTruthy();
+        expect(screen.queryByText(ASK)).toBeNull();
+        expect(onKept).not.toHaveBeenCalled();
+        cleanup();
+        const { printer } = setup(() => {});
+        fireEvent.click(screen.getByRole('button', { name: 'Print or save your recovery kit' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+        await vi.waitFor(() => expect(printer).toHaveBeenCalledTimes(1));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(screen.queryByText(ASK)).toBeNull();
+    });
+});
+
 describe('printKitInFrame', () => {
     const frames = () => document.querySelectorAll('iframe').length;
 

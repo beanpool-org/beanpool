@@ -3725,7 +3725,7 @@ export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknow
  * this browser then, and sends them again at the next landing.
  */
 /**
- * `words_kept`: "I still have my 12 words", or the recovery kit saved or printed (DESIGN-home-default-fable.md §2.5): kept on
+ * `words_kept`: "I still have my 12 words", or Yes after the recovery kit (DESIGN-home-default-fable.md §2.5): kept on
  * the account, one way (a false never clears it), and First steps' words line and the 12-words card on Home end with it.
  */
 export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord; saw_ledger?: boolean; words_kept?: true }): Promise<SavedHomePreferences> {

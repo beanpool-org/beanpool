@@ -2243,6 +2243,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         const before = shownLayout(answered, drawnRef.current, { tourOver: tourOverRef.current });
         const next = make(before);
         if (!next) return false;
+        // Reset's Undo is offered only until the next edit (the director's rule, review of #3114): its line says "Home is back
+        // to how it started", true no longer once a card has moved, gone or come since. Reset itself offers it again after this.
+        setResetUndo(null);
         unsavedRef.current = true;
         layoutRef.current = next;
         draw(next);
@@ -2964,7 +2967,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                                 className={link}>
                                 {tourProgress && tourProgress.step > 0 ? startCardButton(tourProgress, tourTotal) : t(WELCOME_WORDS.tour)}
                             </button>
-                            <button type="button" data-testid="home-start-skip" aria-label={t('Skip the tour')} onClick={() => applyTourEnd('skipped')}
+                            {/* Its name is its words (WCAG 2.5.3 Label in Name, review of #3114 finding 3): next to "Take the tour ›" they say what it skips. */}
+                            <button type="button" data-testid="home-start-skip" onClick={() => applyTourEnd('skipped')}
                                 className={`${link} text-nature-700 dark:text-nature-200`}>
                                 {t('Not now')}
                             </button>

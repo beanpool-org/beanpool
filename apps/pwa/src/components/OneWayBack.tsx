@@ -21,7 +21,7 @@
  * way back" only where it is true (the worldwide community; on a local one an admin can set a member up again with a new
  * key, recovery model point 3). Sign-up counts as the first showing for everyone but the 12-words door's own: their
  * schedule starts as put away, so on day one First steps' line says it, and the card comes once after a post and once
- * when the first week is over. "I still have my 12 words" is kept on the account (`onKept`), as saving the kit is.
+ * when the first week is over. "I still have my 12 words" is kept on the account (`onKept`), as Yes after the kit is.
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
  * on the way back and shows the result here (`result`). Where the community keeps no copies of members' accounts (its

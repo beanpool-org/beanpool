@@ -1606,6 +1606,31 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         await waitFor(() => expect(screen.queryByTestId('home-reset-done')).toBeNull());
     });
 
+    // The director's rule (review of #3114): Undo only until the member's next edit after the reset, so "Home is back to how
+    // it started" is true whenever it is said, and an Undo never takes a later edit back with it.
+    it('Reset\'s Undo goes with the next edit: a card moved after the reset ends the offer, and Reset offers it again', async () => {
+        const mine = { v: 2, cards: [{ id: 'pulse', type: 'pulse' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: mine as never })));
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => ({ success: true, 'home.layout': prefs['home.layout'] }) as never);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        expect(await screen.findByTestId('home-reset-done')).toHaveTextContent('Home is back to how it started.');
+        const saves = vi.mocked(api.saveHomePreferences).mock.calls.length;
+        // An edit after the reset: Home is no longer how it started, so the line and its Undo go, and Reset is back.
+        const down = await screen.findByTestId('home-arrange-down-market');
+        expect(down).not.toBeDisabled();
+        fireEvent.click(down);
+        await waitFor(() => expect(vi.mocked(api.saveHomePreferences).mock.calls.length).toBeGreaterThan(saves));
+        expect(screen.queryByTestId('home-reset-done')).toBeNull();
+        expect(screen.queryByTestId('home-reset-undo')).toBeNull();
+        expect(screen.getByTestId('home-arrange-reset')).toBeInTheDocument();
+        // Reset again offers Undo again.
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        expect(await screen.findByTestId('home-reset-done')).toBeInTheDocument();
+    });
+
     // PR #1694 review 4: the tip follows the reader's text size (a rem size, as every other line on Home), never fixed px.
     it("the tip's text is sized in rem, so it grows with the reader's text size", async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
@@ -2995,6 +3020,9 @@ describe('Welcome in the web app (DESIGN-home-default-fable.md §2.3): first on 
         expect(screen.queryByTestId('home-start-words')).toBeNull();
         expect(screen.getByTestId('home-start-look')).toHaveTextContent('Take the tour ›');
         expect(screen.getByTestId('home-start-skip')).toHaveTextContent('Not now');
+        // Its name is its words (WCAG 2.5.3 Label in Name, review of #3114 finding 3): "click Not now" reaches it.
+        expect(screen.getByTestId('home-start-skip')).toHaveAccessibleName('Not now');
+        expect(within(screen.getByTestId('home-card-start')).getByRole('button', { name: 'Not now' })).toBe(screen.getByTestId('home-start-skip'));
         expect(within(screen.getByTestId('home-card-start')).queryByTestId('home-card-menu')).toBeNull();
         expect(screen.queryByTestId('home-hint')).toBeNull();
         expect(tourStore.currentTour()).toBeNull();

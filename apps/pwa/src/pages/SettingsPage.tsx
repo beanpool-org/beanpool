@@ -1591,7 +1591,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     )}
                                 </div>
 
-                                {/* The kit saved counts as "I still have my 12 words", on the account (lib/words-kept.ts). */}
+                                {/* Yes to the kit's one question counts as "I still have my 12 words", on the account (lib/words-kept.ts). */}
                                 <RecoveryKitButton words={seedWords} onKept={() => keepWordsOnAccount(identity.publicKey, 'Settings')} />
 
                                 <button

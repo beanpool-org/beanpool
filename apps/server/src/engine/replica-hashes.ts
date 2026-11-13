@@ -226,7 +226,14 @@ export interface TableHashes {
  * import writes only the tables its own database has. What an older importer drops is the badges (recognition, no credit):
  * after a take-over from such a copy a badged member shows the tier their own record reads until an admin gives it again.
  */
-export const TABLE_HASHES_VERSION = 37;
+/**
+ * 38: the forum (engine/forum.ts, DESIGN-forums-fable.md §3, slice F1): six new plain tables, forum_sections, forum_topics,
+ * forum_posts, forum_post_photos, forum_post_edits and forum_members. Raised for the same reason as 8: a standby updated before
+ * its main server hashes six more tables. REPLICA_FORMAT stays: each side's import writes only the tables its own database
+ * has. What an older importer drops is the forum: after a take-over from such a copy its sections are made again as at the
+ * start and its topics are gone; no Bean is in it.
+ */
+export const TABLE_HASHES_VERSION = 38;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

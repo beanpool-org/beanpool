@@ -519,9 +519,12 @@ async function main(): Promise<void> {
         // prices, slice P0); no new table.
         // Version 36: a new table, credit_look_log (who looked at whose credit; engine/credit-looks.ts, credit sight C1).
         // Version 37: a new table, member_badges (a tier badge an owner or admin gave: recognition only, engine/badges.ts).
-        assert(snap?.tableHashes?.v === 37 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
+        // Version 38: six new tables, the forum (forum_sections, forum_topics, forum_posts, forum_post_photos, forum_post_edits,
+        // forum_members; engine/forum.ts, slice F1).
+        assert(snap?.tableHashes?.v === 38 &&['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'marketplace_transactions', 'messages', 'poll_answers',
             'vouchers', 'voucher_allocations', 'room_gifts', 'standing_deals', 'standing_period_changes', 'recovery_shares', 'join_requests', 'contact_copies', 'bills',
-            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped', 'credit_look_log', 'member_badges'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+            'knowledge_drafts', 'knowledge_draft_photos', 'knowledge_helped', 'credit_look_log', 'member_badges',
+            'forum_sections', 'forum_topics', 'forum_posts', 'forum_post_photos', 'forum_post_edits', 'forum_members'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

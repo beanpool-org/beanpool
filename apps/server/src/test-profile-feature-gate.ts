@@ -54,6 +54,8 @@ async function main() {
         shareOutside: false,
         knowledge: false,
         bills: false,
+        forum: false,
+        forumPublic: false,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',
@@ -67,6 +69,10 @@ async function main() {
         'federation purchase route identifies "beans" as missing feature');
     assert(featureOffFor('/api/community/info', mockSwitchesOff) === null,
         'non-gated path /api/community/info returns null');
+    // The forum (routes/forum.ts): every route, reads included, off while its owners have it off; on, served.
+    assert(['/api/forum', '/api/forum/topics', '/api/forum/topics/t1/replies', '/api/forum/sections/s1/edit'].every((p) => featureOffFor(p, mockSwitchesOff, 'GET') === 'forum' && featureOffFor(p, mockSwitchesOff, 'POST') === 'forum')
+        && featureOffFor('/api/forum/topics', { ...mockSwitchesOff, forum: true }, 'POST') === null && featureOffFor('/api/forumx', mockSwitchesOff, 'GET') === null,
+        'with the forum off, every /api/forum route is off, reads included; on, served');
 
     const mockSwitchesOn = { ...mockSwitchesOff, beans: true, escrow: true, enterprises: true, treasuries: true, crowdfund: true };
     assert(featureOffFor('/api/treasury/info', mockSwitchesOn) === null,

@@ -66,6 +66,7 @@ import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engi
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices, markKeptNoticesSeen } from './engine/kept-notices.js';
 import { dropKnowledgeOf } from './engine/knowledge-drafts.js';
+import { dropForumOf } from './engine/forum.js';
 import { tidyEndedPins } from './engine/pins.js';
 import {
     newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, markPushNoticesSeen, markPushNoticesSeenWhere, markAllPushNoticesSeen,
@@ -9154,6 +9155,9 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         // And their suggestions of Local knowledge, those photos and their "This helped" taps (engine/knowledge-drafts.ts); the
         // pages already showing are cancelled with all their posts.
         dropKnowledgeOf(publicKey);
+        // Their forum posts blanked as markers, the topics they started with them, their photos and earlier wordings deleted
+        // (engine/forum.ts): taken down with their listings.
+        dropForumOf(publicKey);
         // The moderation notices kept for them, and their pushes' details: nobody can read them now (engine/kept-notices.ts,
         // engine/push-notices.ts).
         dropKeptNoticesOf(publicKey);
@@ -9360,6 +9364,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         scrubKnocksOf(publicKey);
         deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
         dropKnowledgeOf(publicKey);
+        dropForumOf(publicKey);
         dropKeptNoticesOf(publicKey);
         dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).

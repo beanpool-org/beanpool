@@ -152,6 +152,8 @@ export interface ShapeSettings {
     /** Message requests (#2392): only on a build that has the switch. */
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
+    /** The forum (engine/forum.ts; Marty Q3, 14 Nov 2026): on from the start, members only; an owner may switch it off. */
+    forum: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6, engine/peek-tickets.ts): off while the private
      *  preview is on, which shows visitors nothing. */
     shareOutside: ShapeSetting<boolean>;
@@ -228,6 +230,8 @@ export const KIND_ONLY_SWITCHES = [
     'membersOnDemand', 'showcase', 'openMembership', 'retention',
     // Local knowledge (Learn): the server's kind sets it in this build; the owners' setting comes with the Settings slice.
     'knowledge',
+    // Anyone on the web can read the forum (the global community): a local community's forum is for its members.
+    'forumPublic',
 ] as const satisfies readonly ProfileSwitch[];
 
 /** Every profile switch, and the setting of the shape that reads it: a switch added later fails the suite until it has one. */
@@ -246,6 +250,7 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     bills: 'beans',
     dmRequests: 'dmRequests',
     decisions: 'decisions',
+    forum: 'forum',
     shareOutside: 'shareOutside',
     publishToDirectory: 'listed',
     guestListingsOnly: 'visitors',
@@ -565,6 +570,7 @@ export function readShape(): Shape {
         memberGift,
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
+        forum: plain('forum'),
         shareOutside: {
             ...plain('shareOutside'),
             value: s.shareOutside && !preview,

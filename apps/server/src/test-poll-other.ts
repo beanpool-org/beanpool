@@ -552,6 +552,61 @@ async function main() {
         assert(noOtherCopy && !('pollAnswers' in noOtherCopy), 'a poll with no Other carries no such field');
     }
 
+    console.log('── a report of another kind is never parsed for a poll ──');
+    {
+        // A DM line's report keeps what its reporter handed over, up to ~1.25 MB with a voice part (engine/dm-line-report.ts),
+        // and reports are never deleted. A read of a poll's lines, the archive sweep's wait and the trigger a removed poll fires
+        // test how a disclosure begins before a JSON function reads it. SQLite's own json_valid and json_extract are wrapped
+        // here to count what they are handed; each still answers as SQLite's own, from a second connection.
+        const { default: Database } = await import('better-sqlite3');
+        const { pollLineReportWaitsSql } = await import('./engine/poll-other.js');
+        const side = new Database(':memory:');
+        const realValid = side.prepare('SELECT json_valid(?)').pluck();
+        const realExtract = side.prepare('SELECT json_extract(?, ?)').pluck();
+        const dmShaped = JSON.stringify({ kind: 'dm-line', v: 1, ciphertext: 'A'.repeat(100_000), nonce: 'n', conversationId: 'c', words: 'planted', voice: { ciphertext: 'B'.repeat(100_000), nonce: 'n' } });
+        const groupShaped = JSON.stringify({ epoch: 1, mk: 'planted' });
+        const plantedIds = [crypto.randomUUID(), crypto.randomUUID()];
+        const plantRow = db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_message_id, disclosure, reason, created_at, status)
+            VALUES (?, ?, ?, ?, ?, 'Harassment', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'pending')`);
+        plantRow.run(plantedIds[0], reader.pubKeyHex, typist.pubKeyHex, crypto.randomUUID(), dmShaped);
+        plantRow.run(plantedIds[1], reader.pubKeyHex, typist2.pubKeyHex, crypto.randomUUID(), groupShaped);
+        const parsed = { others: 0, polls: 0 };
+        const seen = (d: unknown) => {
+            if (d === dmShaped || d === groupShaped) parsed.others++;
+            else if (typeof d === 'string' && d.startsWith('{"kind":"poll-answer",')) parsed.polls++;
+        };
+        db.function('json_valid', { deterministic: true }, (d: unknown) => (seen(d), realValid.get(d)));
+        db.function('json_extract', { deterministic: true }, (d: unknown, p: unknown) => (seen(d), realExtract.get(d, p)));
+        const counted = async <T>(f: () => T | Promise<T>): Promise<{ value: T; others: number; polls: number }> => {
+            parsed.others = 0;
+            parsed.polls = 0;
+            const value = await f();
+            return { value, ...parsed };
+        };
+
+        const p = await makePoll({ pollOther: true, pollOpenVote: true });
+        const id = p.body.post.id as string;
+        await vote(id, p.body.post.pollOptions.find((o: any) => o.other).id, typist, 'Parsed-only-as-a-poll-line');
+        const line = (await get(`/api/marketplace/posts/${id}/other-answers`, maker)).body.answers[0];
+        const filed = await post(`/api/marketplace/posts/${id}/other-answers/${line.id}/report`, {}, maker);
+        assert(filed.status === 200 && filed.body?.duplicate === false, `the maker reports the line (${filed.status})`);
+        const filedDisclosure = JSON.stringify({ kind: 'poll-answer', postId: id, answerId: line?.id });
+
+        const read = await counted(() => get(`/api/marketplace/posts/${id}/other-answers`, maker));
+        assert(read.value.body.answers[0]?.reported === true && read.polls > 0 && read.others === 0,
+            `a read of the poll's lines finds its reported line, parsing ${read.polls} poll report value(s) and ${read.others} of another kind`);
+        // The sweep asks it of every poll it might archive, most with no report: an EXISTS that finds none reads every report.
+        const waitsFor = db.prepare(`SELECT ${pollLineReportWaitsSql('?')} AS w`).pluck();
+        const waits = await counted(() => [waitsFor.get(id), waitsFor.get(crypto.randomBytes(16).toString('hex'))]);
+        assert(JSON.stringify(waits.value) === '[1,0]' && waits.polls > 0 && waits.others === 0,
+            `the archive sweep's wait finds the report, and none for a poll without one, parsing ${waits.polls} poll report value(s) and ${waits.others} of another kind`);
+        const removed = await counted(() => post('/api/marketplace/posts/remove', { id, authorPublicKey: maker.pubKeyHex }, maker));
+        const status = (db.prepare('SELECT status FROM abuse_reports WHERE disclosure = ?').get(filedDisclosure) as any)?.status;
+        assert(removed.value.status === 200 && status === 'actioned' && removed.polls > 0 && removed.others === 0,
+            `the trigger a removed poll fires closes the report, parsing ${removed.polls} poll report value(s) and ${removed.others} of another kind (${removed.value.status}, ${status})`);
+        db.prepare(`DELETE FROM abuse_reports WHERE id IN (?, ?)`).run(...plantedIds);
+    }
+
     console.log('── the only code that reads the words ──');
     {
         // Every source file that selects from poll_answers. A new reader of the words has to be added here on purpose.

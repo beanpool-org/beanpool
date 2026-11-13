@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { deleteStoredObjects, inlineAttachmentColumns, storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { voiceLineRefusal } from './voice-lines.js';
 import {
     getMember,
     getConversation,
@@ -449,7 +450,7 @@ export function sendMessage(
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
-    type: 'text' | 'image' = 'text',
+    type: 'text' | 'image' | 'voice' = 'text',
     attachment?: { data: string; nonce: string; mime?: string },
     metadata?: string,
     clientId?: string,
@@ -560,6 +561,10 @@ export function sendMessage(
     // format 4 (sealed, their sender's signature beside the seal) or not at all. Checked after the participant check, so
     // an outsider learns nothing from it, and after the idempotent retry above, which stores nothing new.
     if (!opts.nodeAuthored) {
+        // A voice line (engine/voice-lines.ts): its part marked audio/mp4 and within the cap, and no other line's attachment
+        // marked so. Then its part, as a photo, in format 4's form.
+        const voiceRefused = voiceLineRefusal(type, attachment);
+        if (voiceRefused) throw new MessagingError(voiceRefused.message, 400, voiceRefused.code);
         refuseUnencryptedDm(ciphertext, nonce);
         if (attachment?.data) refuseUnencryptedDm(attachment.data, attachment.nonce);
         refuseUnencryptedAbout(metadata);

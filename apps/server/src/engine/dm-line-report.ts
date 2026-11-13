@@ -97,10 +97,14 @@ export function checkDmLineReport(reporter: string, body: { messageId?: unknown;
     const sealed = handedSigned ? handed : stored;
     if (!sealed) throw notFound();
     const signed = handedSigned ?? dmLineSignedBy(sealed, to, signers);
+    // A voice line's sealed voice part, handed over beside it, is kept only when its sender signed it to the reporter as
+    // this message's voice part: else it is left out, as bytes their sender never signed are never filed as the line.
+    const voice = handed.voice && dmLineSignedBy(handed.voice, to, signers, 'voice') ? handed.voice : undefined;
     return {
         messageId: id, authorPubkey: other, reason,
         disclosure: {
             v: 1, ciphertext: sealed.ciphertext, nonce: sealed.nonce, conversationId: signed?.conversationId ?? conversationId, words: handed.words,
+            ...(voice ? { voice: { ciphertext: voice.ciphertext, nonce: voice.nonce } } : {}),
         },
     };
 }
@@ -143,6 +147,12 @@ export interface ReportedDmLine {
     words: { state: 'reported'; text: string };
     /** The line had a photo. It stays sealed: no key for it was handed over. */
     photo: boolean;
+    /**
+     * A voice line's voice part, kept with the report when its reporter handed it over and its sender's signature verified
+     * (checked again here, as the words' is): who sent it to the reporter and when, by their own clock. It stays sealed: no
+     * key for it was handed over. Null when none was kept.
+     */
+    voice: { signature: 'verified' | 'unverified'; signedAt: string | null } | null;
     /** The line now: as reported, changed since (an edit), or gone (deleted, or a request withdrawn). */
     line: 'same' | 'changed' | 'gone';
 }
@@ -163,13 +173,19 @@ export function openReportedDmLine(reportId: string): ReportedDmLine | null {
         conversationId: handed.conversationId, metadata: row?.metadata, recipients: keysOf(formerKeysOf, report.reporter_pubkey), messageId: report.target_message_id,
     }, keysOf(formerKeysOf, report.target_pubkey));
     const lineSig = dmLineSigOf(handed.ciphertext);
+    const voiceSigned = handed.voice ? dmLineSignedBy(handed.voice, {
+        conversationId: handed.conversationId, metadata: row?.metadata, recipients: keysOf(formerKeysOf, report.reporter_pubkey), messageId: report.target_message_id,
+    }, keysOf(formerKeysOf, report.target_pubkey), 'voice') : null;
+    const voice = handed.voice
+        ? { signature: voiceSigned ? 'verified' as const : 'unverified' as const, signedAt: voiceSigned ? dmLineSigOf(handed.voice.ciphertext)?.at ?? null : null }
+        : null;
     const member = db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(report.target_pubkey) as { callsign: string | null } | undefined;
     const gone = !row || row.type === 'removed';
     return {
         kind: 'dm', id: report.target_message_id, sentAt: row?.timestamp ?? null, signedAt: signed ? lineSig?.at ?? null : null,
         authorPubkey: report.target_pubkey, authorCallsign: member?.callsign ?? null, signer: signed?.signer ?? null,
         signature: signed ? 'verified' : lineSig ? 'unverified' : 'unsigned',
-        words: { state: 'reported', text: handed.words }, photo: row?.type === 'image',
+        words: { state: 'reported', text: handed.words }, photo: row?.type === 'image', voice,
         line: gone ? 'gone' : row.ciphertext === handed.ciphertext && row.nonce === handed.nonce ? 'same' : 'changed',
     };
 }

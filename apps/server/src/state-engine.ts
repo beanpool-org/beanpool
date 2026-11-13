@@ -658,9 +658,9 @@ export interface AbuseReport {
      * That message's chat and whether it is a photo line, never its words: the moderators' view opens it on its own
      * (GET /api/local/admin/reports/:id/message). `removed` once it was deleted or removed, or is not on this server.
      */
-    groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; removed: boolean } | null;
+    groupMessage?: { groupId: string | null; groupName: string | null; photo: boolean; voice: boolean; removed: boolean } | null;
     /** The same for a direct message's line, which names no chat: the moderators' view opens it on its own too. */
-    directMessage?: { photo: boolean; removed: boolean } | null;
+    directMessage?: { photo: boolean; voice: boolean; removed: boolean } | null;
 }
 
 export type { FriendEntry };
@@ -7288,7 +7288,7 @@ export function createConversation(type: 'dm', participants: string[], createdBy
     return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite, opts);
 }
 
-export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
+export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' | 'voice' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
     return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId, { beforeStore });
 }
 
@@ -7840,13 +7840,14 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
             : null,
         targetMessageId: r.target_message_id || undefined,
         directMessage: r.disclosure_kind === DM_LINE_DISCLOSURE_KIND
-            ? { photo: r.gm_type === 'image', removed: !r.gm_type || r.gm_type === 'removed' }
+            ? { photo: r.gm_type === 'image', voice: r.gm_type === 'voice', removed: !r.gm_type || r.gm_type === 'removed' }
             : null,
         groupMessage: r.target_message_id && r.disclosure_kind !== DM_LINE_DISCLOSURE_KIND
             ? {
                 groupId: r.gm_group_id ?? null,
                 groupName: r.gm_group_name ?? null,
                 photo: r.gm_type === 'image',
+                voice: r.gm_type === 'voice',
                 removed: !r.gm_type || r.gm_type === 'removed',
             }
             : null,

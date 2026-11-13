@@ -32,6 +32,7 @@ import {
     assertLineEpochIsCurrent, filterDeclaredMentions, fromEpochOf, fromEpochsOf, groupChatEncryption, GroupKeyError, GROUP_CHAT_UPDATE_APP,
 } from './group-keys.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
+import { VOICE_LINE_TYPE, voiceLineRefusal } from './voice-lines.js';
 import { withheldLine } from './withheld-lines.js';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
@@ -389,14 +390,17 @@ export interface GroupLineIn {
     metadata?: unknown;
     /** The id the line was sealed under, if not passed beside it. */
     clientId?: string;
-    /** 'image' for a photo line, 'text' (or nothing) for words: the node checks it against `attachment`. */
+    /** 'image' for a photo line, 'voice' for a voice line, 'text' (or nothing) for words: the node checks it against `attachment`. */
     type?: unknown;
     /** A photo line's photo, { data, nonce, mime? }: the JPEG data URI sealed as part 'attachment' (DESIGN-group-chat-photos-fable.md §2.2). */
     attachment?: unknown;
 }
 
-/** A photo line's photo as the node keeps it: never opened, only checked for its sealed form and its size. */
-interface GroupPhotoIn { data: string; nonce: string; mime: string }
+/**
+ * A photo line's photo, or a voice line's part (`voice`), as the node keeps it: never opened, only checked for its sealed
+ * form and its size.
+ */
+interface GroupPhotoIn { data: string; nonce: string; mime: string; voice?: boolean }
 
 export const GROUP_PHOTO_TOO_LARGE = word('This photo is too large to send. Try another one.');
 export const GROUP_PHOTO_LINE_FORM = "A photo line is sent as type 'image' with its sealed photo, and a text line with none.";
@@ -441,6 +445,15 @@ export function assertSealedGroupLine(groupId: string, ciphertext: unknown, nonc
  */
 function sealedGroupPhotoOf(line: GroupLineIn): GroupPhotoIn | null {
     const has = line.attachment !== undefined && line.attachment !== null;
+    // A voice line (engine/voice-lines.ts): type 'voice', its part marked audio/mp4 within the voice cap; and no photo is
+    // marked audio/mp4. Then its part is sealed as a photo is, under the line's own message key.
+    const voiceRefused = voiceLineRefusal(line.type, line.attachment);
+    if (voiceRefused) throw new GroupKeyError(400, voiceRefused.code, voiceRefused.message);
+    if (line.type === VOICE_LINE_TYPE) {
+        const v = line.attachment as { data: string; nonce: string; mime: string };
+        if (!isGroupEncryptedPayload({ ciphertext: v.data, nonce: v.nonce })) throw new GroupKeyError(400, 'not_encrypted', GROUP_CHAT_UPDATE_APP);
+        return { data: v.data, nonce: v.nonce, mime: v.mime, voice: true };
+    }
     if ((line.type ?? (has ? 'image' : 'text')) !== (has ? 'image' : 'text')) throw new GroupKeyError(400, 'photo_line_form', GROUP_PHOTO_LINE_FORM);
     if (!has) return null;
     const a = line.attachment as { data?: unknown; nonce?: unknown; mime?: unknown };
@@ -519,7 +532,7 @@ export function postGroupThreadMessage(
     const msgId = clientId;
     const ciphertext = line.ciphertext;
     const nonce = line.nonce;
-    const type = photo ? 'image' : 'text';
+    const type = photo ? (photo.voice ? VOICE_LINE_TYPE : 'image') : 'text';
     const timestamp = new Date().toISOString();
     // `replyToId` is stored exactly as a DM stores it, so one component draws a quoted reply in either chat.
     const meta: Record<string, unknown> = { epoch, sender: authorPubkey };

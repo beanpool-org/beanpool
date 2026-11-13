@@ -11,11 +11,16 @@
 //
 // Who may report a line: whoever may read it, by the chat's own bar (groupChatRole + groupLineForReader, as its words and
 // its photo are served). Anything else, and any line that is no sealed member's line, answers as an id nobody has.
+//
+// A voice line (engine/voice-lines.ts) is reported as a photo line is: the same key opens its voice part, named `voice` in
+// its seal and signature, and the moderators hear it. Its part is kept past VOICE_SERVER_KEEP_DAYS while a report on it is
+// pending (expireVoiceOnce).
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { isNodeMember } from '@beanpool/engine';
-import { isGroupEncryptedNonce, openGroupLineWithMessageKey, word, type GroupLineBinding, type GroupLinePart } from '@beanpool/core';
+import { isGroupEncryptedNonce, openGroupLineWithMessageKey, openGroupVoiceWithMessageKey, word, VOICE_MIME, type GroupLineBinding, type GroupLinePart } from '@beanpool/core';
+import { VOICE_LINE_TYPE } from './voice-lines.js';
 import { GROUP_THREAD_TYPE, groupChatRole, groupLineForReader } from './group-thread.js';
 import { fromEpochOf } from './group-keys.js';
 import { attachmentDataOfAsync, type AttachmentRow } from '../storage/image-columns.js';
@@ -103,7 +108,7 @@ export function checkGroupLineReport(groupId: string, reporter: string, body: { 
         JOIN conversations c ON c.id = m.conversation_id
         WHERE m.id = ? AND m.conversation_id = ? AND c.type = ?`).get(id, groupId, GROUP_THREAD_TYPE) as
         { id: string; author_pubkey: string | null; type: string; system_type: string | null; metadata: string | null; nonce: string | null } | undefined;
-    if (!line || line.system_type || (line.type !== 'text' && line.type !== 'image') || !isGroupEncryptedNonce(line.nonce)) throw notFound();
+    if (!line || line.system_type || (line.type !== 'text' && line.type !== 'image' && line.type !== VOICE_LINE_TYPE) || !isGroupEncryptedNonce(line.nonce)) throw notFound();
     const epoch = epochIn(metadataOf(line.metadata));
     if (epoch === null || !groupLineForReader(line.metadata, fromEpochOf(groupId, reporter))) throw notFound();
     if (!line.author_pubkey || !db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(line.author_pubkey)) throw notFound();
@@ -173,6 +178,12 @@ export interface ReportedGroupLine {
      * standby that never had its object (one from before chat photos were copied, gap G4, or its main server's object lost).
      */
     photo: { state: 'verified'; dataUri: string } | { state: 'unverified' } | { state: 'unavailable' } | null;
+    /**
+     * A voice line's voice message (engine/voice-lines.ts), opened with the same key under the same signer, its length and
+     * its sound as an audio/mp4 data URI; null for any other line. 'unavailable': this server no longer holds it (past
+     * VOICE_SERVER_KEEP_DAYS before the report, or never copied here).
+     */
+    voice: { state: 'verified'; durationMs: number; dataUri: string } | { state: 'unverified' } | { state: 'unavailable' } | null;
 }
 
 /** Opened under this binding with the disclosed key, signed by `signer`: its text, or null. */
@@ -201,7 +212,7 @@ export async function openReportedGroupLine(reportId: string): Promise<ReportedG
         id: report.target_message_id, groupId: m?.conversation_id ?? null, groupName: m?.group_name ?? null,
         sentAt: m?.timestamp ?? null, editedAt: m?.edited_at ?? null,
         authorPubkey: m?.author_pubkey ?? null, authorCallsign: m?.author_callsign ?? null,
-        signer: null, words: { state: 'gone', by: null }, photo: null,
+        signer: null, words: { state: 'gone', by: null }, photo: null, voice: null,
     };
     const meta = metadataOf(m?.metadata);
     if (m?.type === 'removed') {
@@ -211,8 +222,10 @@ export async function openReportedGroupLine(reportId: string): Promise<ReportedG
     }
     if (!m || !isGroupEncryptedNonce(m.nonce)) return view;
     const isPhoto = m.type === 'image';
+    const isVoice = m.type === VOICE_LINE_TYPE;
     view.words = { state: 'unverified' };
     if (isPhoto) view.photo = { state: 'unverified' };
+    if (isVoice) view.voice = { state: 'unverified' };
     let disclosure: GroupLineDisclosure | null = null;
     try { disclosure = disclosureOf(JSON.parse(report.disclosure ?? '')); } catch { disclosure = null; }
     const epoch = epochIn(meta);
@@ -228,12 +241,24 @@ export async function openReportedGroupLine(reportId: string): Promise<ReportedG
         view.words = { state: 'verified', text };
         break;
     }
-    if (!isPhoto || !view.signer) return view;
+    if ((!isPhoto && !isVoice) || !view.signer) return view;
     const att = db.prepare('SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?').get(m.id) as AttachmentRow | undefined;
     let data: string | null = null;
     try { data = att ? await attachmentDataOfAsync(att, getImageStore()) : null; } catch { data = null; }
     if (!att || !data) {
-        view.photo = { state: 'unavailable' };
+        if (isVoice) view.voice = { state: 'unavailable' };
+        else view.photo = { state: 'unavailable' };
+        return view;
+    }
+    if (isVoice) {
+        // Its part named `voice` in the seal and the signature (core group-crypto.ts), so a photo or words never open here.
+        try {
+            const v = openGroupVoiceWithMessageKey({ ciphertext: data, nonce: att.nonce ?? '' },
+                { groupId: m.conversation_id, epoch, senderPubHex: view.signer, messageId: m.id, replyToId }, mk);
+            view.voice = { state: 'verified', durationMs: v.durationMs, dataUri: `data:${VOICE_MIME};base64,${Buffer.from(v.sound).toString('base64')}` };
+        } catch {
+            view.voice = { state: 'unverified' };
+        }
         return view;
     }
     const photo = opened({ ciphertext: data, nonce: att.nonce ?? '' }, bound(view.signer, 'attachment'), mk);

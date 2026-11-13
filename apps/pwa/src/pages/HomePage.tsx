@@ -91,7 +91,7 @@ import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { isNodeTooOldError } from '../lib/node-version-gate';
 import {
-    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
+    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
 import {
     keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, tourRecordRefused, useTour,
@@ -2145,7 +2145,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const tourNode = { global: String(answer?.profile) === 'global', beans: answer?.features.beans !== false, showcase: answer?.features.showcase === true };
     const tourTotal = tourSteps('web', tourNode).length;
     const member = !!answer?.me && !answer.welcome && !visitor;
-    const chips = member && answer ? tourChips(frameOf(answer), null, { members: answer.cards.community?.members ?? null }) : [];
+    // The last step offers no chips any more (DESIGN-home-default-fable.md §2.3: Home already holds the default list); the
+    // bar's chip row is removed with Welcome's body in slice D3.
+    const chips: string[] = [];
     const addToHomeRef = useRef<(type: string) => void>(() => {});
     async function sendTourRecord(pk: string, record: ReturnType<typeof tourRecord>) {
         try {
@@ -2165,7 +2167,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         setTourOver(true);
         setTourProgress(null);
         if (answered?.me && !answered.welcome) {
-            changeLayout(() => endTourLayout(drawnRef.current, { pinned: currentPins(frameOf(answered)) }), { reread: true });
+            changeLayout(() => endTourLayout(drawnRef.current), { reread: true });
         }
         if (kind === 'done') { setHintOpen(false); writeFlag(hintKey(publicKey)); }
         else setHintOpen(!readFlag(hintKey(publicKey)));

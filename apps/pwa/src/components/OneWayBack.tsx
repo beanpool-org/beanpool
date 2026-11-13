@@ -8,10 +8,13 @@
  *     week is over, then lives in Settings only;
  *   - in Settings, the same card for as long as the account has no sign-in, with the sign-ins to add.
  *
- * Who it is for is the node's word, never a guess: `GET /api/community/me` says `rules: 'words'` for a member who came
- * in with 12 words and has added no sign-in. Nothing is drawn while it has not answered, for an older node that does
- * not say, or offline. Home's answer says it too (its `safety` card, passed as `known`), so there the card not yet put
- * away is drawn with the answer, and its cell is there from the first paint; a return after ✕ waits for the node's
+ * Who it is for is the node's word, never a guess. In Settings, `GET /api/community/me` says `rules: 'words'` for a
+ * member who came in with 12 words and has added no sign-in; nothing is drawn while it has not answered, for an older
+ * node that does not say, or offline. On Home, the answer's `safety` card (passed as `known`) is the only word on who it
+ * is for: the node builds it by the same rule as `/me`'s `rules` (until slices D2 and D3, which bring the card to every
+ * member whose 12 words are the only way back, offering only what works for them: review of #3110), less a member who
+ * said they still have their words. So the card not yet put away is drawn with the answer, its cell is there from the
+ * first paint, and `/me` arriving later never pulls it nor pops it in; a return after ✕ waits for the node's
  * counts. A ✕ before they have come (still asking, or the request failed) is written at once and settled by the counts
  * when the node next answers, on this visit or a later one; Home is told whether the card is drawn (`onDrawn`).
  *
@@ -305,7 +308,14 @@ interface CardProps {
     refreshKey?: unknown;
     /** What the card stands in (Home's cell, with its "…"): drawn only with the card, so a card with nothing to say takes no place. */
     frame?: (card: ReactNode) => ReactNode;
-    /** The node has already said this member has only their 12 words (Home's answer): drawn without waiting for it again. */
+    /**
+     * Home's answer (its `safety` card): a member who came in with 12 words, has added no sign-in and has not said they
+     * still have their words, the rule `/me`'s `rules` goes by less that last (routes/home-answer.ts `safetyCard`; the
+     * wider rule of DESIGN-home-default-fable.md §2.5 waits for slices D2 and D3, review of #3110). Given, it is the one
+     * word on who the card is for, at the first paint and after: `/api/community/me` then gives only the counts its
+     * schedule goes by, and letting it overrule a word that differed (a sign-in just linked, the words just kept) drew the
+     * card and pulled it again, or popped it in late (the jump PR #2411 fixed). Not given (Settings), `/me` says.
+     */
     known?: boolean;
     /** Told whether the card is drawn, before the page paints (Home: a card not drawn is not a place to move another to). */
     onDrawn?: (drawn: boolean) => void;
@@ -313,7 +323,7 @@ interface CardProps {
     keepsNoCopies?: boolean;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false, onDrawn, keepsNoCopies = false }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known, onDrawn, keepsNoCopies = false }: CardProps) {
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
@@ -321,7 +331,8 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
     const resultRef = useRef<HTMLParagraphElement | null>(null);
     useEffect(() => { if (result) resultRef.current?.scrollIntoView?.({ block: 'center' }); }, [result]);
 
-    const shown = (standing?.words ?? known) && (placement === 'settings' || landingDue(schedule, standing));
+    const forThem = known ?? !!standing?.words;
+    const shown = forThem && (placement === 'settings' || landingDue(schedule, standing));
 
     function update(next: Schedule) {
         setSchedule(next);

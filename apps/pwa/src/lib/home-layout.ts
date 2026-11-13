@@ -20,7 +20,7 @@
 
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
-    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
+    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, resetHomeLayout, starterCards, t, word,
     newInstanceId, readChatSettings,
     knockStillAnswerable, reorderIds,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
@@ -344,17 +344,11 @@ export function moveCardTo(
 }
 
 /**
- * Reset to defaults: the newcomer's list (§1.3). A schedule's dismissal (the `safety` card) is kept, and so is a card of
- * a type this build doesn't know, at the end: Reset is this app's defaults, not a licence to throw away what it can't see.
- * The columns chosen are kept too (W0): columns are no card.
+ * Reset to defaults (core `resetHomeLayout`, DESIGN-home-default-fable.md §3): the default list less Welcome, then the
+ * cards the member made (saved searches, chats, Your tools, tool cards, and a newer app's types) in their order. A
+ * schedule's dismissal (the `safety` card) and the columns chosen (W0) are kept: neither is a card.
  */
-export function resetLayout(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
-    const unknown = listOf(layout).filter(c => !homeCardType(c.type));
-    // The starter set, never Getting started: a Home reset after the tour would otherwise be empty.
-    const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
-    const view = layout?.view ? { view: layout.view } : {};
-    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: iso(editAt(layout, now)), ...view };
-}
+export const resetLayout = (layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 => resetHomeLayout(layout, editAt(layout, now));
 
 /** The `safety` card was put away: when, on the account too. */
 export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
@@ -364,13 +358,12 @@ export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLay
 }
 
 /**
- * Whether a member who never edited sees the one-time line {@link FEWER_CARDS_LINE} (§2.6): neither the account nor this
- * browser holds a layout, and they joined more than a week ago (a newcomer never saw the longer Home).
+ * The one-time line {@link FEWER_CARDS_LINE} is said to nobody now (DESIGN-home-default-fable.md §2.8, review of #3110):
+ * since D0 a Home never saved starts with the whole default list, so it is longer, not shorter. D3 deletes the line and
+ * this; until then it says no to everyone.
  */
-export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2 | null, me: { joinedAt: string | null } | null | undefined, now: number): boolean {
-    if (account || local || !me) return false;
-    const joined = me.joinedAt ? Date.parse(me.joinedAt) : NaN;
-    return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
+export function fewerCardsNews(_account: HomeLayoutV2 | null, _local: HomeLayoutV2 | null, _me: { joinedAt: string | null } | null | undefined, _now: number): boolean {
+    return false;
 }
 
 /** These three are word() keys: Home shows them through t(). */
@@ -466,9 +459,10 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
 export function cardsToAsk(
     layout: HomeLayoutV2 | null, pinned: readonly string[] = [], answer?: Pick<FrameAnswer, 'profile' | 'features' | 'cards'> | null,
 ): string[] {
-    // A Home never saved is Getting started, and the starter set at Skip or Done: their bodies are asked for already, so
-    // the five are drawn the moment the tour ends, with no second read (DESIGN-getting-started-fable.md §1).
-    const base = layout ?? { ...defaultHomeLayout(), cards: [...defaultHomeLayout().cards, ...starterCards()] };
+    // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
+    // has answered, the app can't tell which of them it shows: the node builds none it doesn't (routes/home-answer.ts
+    // `shownHere`), and once an answer is in hand only those it shows are asked (review of #1699, finding 5).
+    const base = layout ?? defaultHomeLayout();
     return frameCardsToAsk(base, pinned).filter(id => {
         const type = base.cards.find(l => l.id === id)?.type ?? id;
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));

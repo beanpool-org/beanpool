@@ -261,10 +261,11 @@ export interface HomeCards {
         tradesThisMonth?: number;
         communities?: number;
         place?: { lat: number; lng: number };
-        joined7d?: number;
-        eventsSoon?: number;
+        /** A member's three figures are null when they are zero: not written (home-answer.ts communityCard, §2.7). */
+        joined7d?: number | null;
+        eventsSoon?: number | null;
         /** The Commons pot, whole hundredths of a Bean (home-answer.ts memberFigures). */
-        commonsPot_c?: number;
+        commonsPot_c?: number | null;
     };
 }
 
@@ -378,11 +379,8 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
     };
     const base = shownLayout(answer, layout, opts);
     const pins = pinnedCards(answer, now, opts);
-    let shown = cardOrder(base, pins).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c));
-    // A Home never saved folds its cards behind Getting started while it is up (§1): Skip or Done brings them.
-    if (!base?.updatedAt && shown.some(c => c.type === 'start')) {
-        shown = shown.filter(c => c.type === 'start' || c.type === 'needs' || c.type === 'community' || pins.includes(c.id));
-    }
+    // Nothing folds behind Welcome on a Home never saved: the default list is there from the first second (DESIGN-home-default §2.2).
+    const shown = cardOrder(base, pins).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c));
     if (opts.interestsOpen && me.standing === 'member' && !shown.some(c => c.type === 'interests')) {
         const market = shown.findIndex(c => c.type === 'market');
         shown.splice(market >= 0 ? market + 1 : shown.length - 1, 0, { id: 'interests', type: 'interests' });

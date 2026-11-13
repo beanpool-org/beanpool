@@ -15,6 +15,8 @@ const TWO_SEARCHES = {
     ...defaultHomeLayout(),
     cards: [...starterCards(), { id: 'search-aaaa', type: 'search', settings: { q: 'eggs' } }, { id: 'search-bbbb', type: 'search', settings: { q: 'jam' } }],
 };
+/** A Home with nothing on it, so every type's Add is offered (a newcomer's holds the default list, DESIGN-home-default-fable.md §2.2). */
+const EMPTY = { ...defaultHomeLayout(), cards: [] };
 
 describe('AddCardDialog', () => {
     it('three groups, this node\'s types only, "On Home" for one already there, "2 of 5 on Home", nothing locked', () => {
@@ -28,7 +30,9 @@ describe('AddCardDialog', () => {
         expect(screen.getByText('New in the Market is already on Home')).toHaveClass('sr-only');
         expect(within(screen.getByTestId('home-add-on-market')).getByText('On Home')).toHaveAttribute('aria-hidden', 'true');
         expect(screen.getByTestId('home-add-count-search')).toHaveTextContent('2 of 5 on Home');
-        expect(screen.getByRole('button', { name: 'Add Your Beans to Home' })).toBeInTheDocument();
+        // Your Beans is in the default list (DESIGN-home-default-fable.md §2.2); The Pulse is the one it leaves out.
+        expect(screen.getByRole('button', { name: 'Add The Pulse to Home' })).toBeInTheDocument();
+        expect(screen.getByTestId('home-add-on-beans')).toHaveTextContent('On Home');
         expect(screen.queryByTestId('home-add-row-community')).toBeNull();
         expect(screen.queryByTestId('home-add-row-needs')).toBeNull();
         expect(dialog.textContent).not.toMatch(/lock|earn|tier|Ʀ/i);
@@ -67,7 +71,7 @@ describe('AddCardDialog', () => {
 
     it('Add on a type without settings adds it at once; a saved search asks its words first, then "Add to Home"', () => {
         const onAdd = vi.fn();
-        const { groups, full } = pickerGroups(LOCAL, null, 'admin');
+        const { groups, full } = pickerGroups(LOCAL, EMPTY, 'admin');
         render(<AddCardDialog groups={groups} full={full} onAdd={onAdd} onClose={vi.fn()} />);
         fireEvent.click(screen.getByRole('button', { name: 'Add Your Beans to Home' }));
         expect(onAdd).toHaveBeenCalledWith('beans', undefined);
@@ -221,7 +225,7 @@ describe('the Decide settings (My votes)', () => {
 
     it("the picker's Add on Decide opens the settings first, since Decide has one", () => {
         const onAdd = vi.fn();
-        const { groups, full } = pickerGroups(LOCAL, null, 'admin');
+        const { groups, full } = pickerGroups(LOCAL, EMPTY, 'admin');
         render(<AddCardDialog groups={groups} full={full} onAdd={onAdd} onClose={vi.fn()} />);
         fireEvent.click(screen.getByRole('button', { name: 'Add Decide to Home' }));
         expect(onAdd).not.toHaveBeenCalled();

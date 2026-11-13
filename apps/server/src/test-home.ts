@@ -199,6 +199,7 @@ async function main(): Promise<void> {
     const homeCardBuilds: Record<string, number> = await import('./routes/home-answer.js' as string)
         .then(m => m.homeCardBuilds as Record<string, number>).catch(() => ({}));
     const { getProfileSwitches } = await import('./config/node-profile.js');
+    const { listedCommunityCount } = await import('./engine/directory-cache.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     beforeCall = () => { resetGatewayRateLimit(); pruneAuthAttempts(Date.now() + 120_000); };
@@ -497,10 +498,15 @@ async function main(): Promise<void> {
         assert(c.beans?.balance_c === hc(42.5) && typeof c.beans?.room_c === 'number' && typeof c.beans?.tier === 'string', `beans: her own 42.5 (${JSON.stringify(c.beans)})`);
         assert(c.notices?.unseen === 1 && c.notices?.first?.id === aliceNotice && c.notices.first.line === 'A moderator kept your post.',
             `notices: hers, its first line (${JSON.stringify(c.notices)})`);
-        assert(typeof c.community?.members === 'number' && c.community.members >= 5 && typeof c.community?.tradesThisMonth === 'number',
-            `community: counts (${JSON.stringify(c.community)})`);
-        assert(c.find === undefined && c.safety === undefined && c.interests === undefined && c.invite === undefined,
-            'no find on a local node, no safety for a member who came in by invite, and nothing for the two cards with no data of their own');
+        // A month with no trade leaves the figure out rather than writing 0 (DESIGN-home-default-fable.md §2.7).
+        assert(typeof c.community?.members === 'number' && c.community.members >= 5
+            && (c.community?.tradesThisMonth === undefined || (typeof c.community.tradesThisMonth === 'number' && c.community.tradesThisMonth > 0)),
+            `community: counts, no zero written (${JSON.stringify(c.community)})`);
+        // Alice came in by invite and has linked no sign-in: her 12 words are her only way back here (`me.wayBack`,
+        // DESIGN-home-default-fable.md §2.5, slice D1), but the safety card keeps the 12-words door's rule until slices D2
+        // and D3: the card both apps draw offers "Add a sign-in", which the node refuses an invited member (review of #3110).
+        assert(c.find === undefined && c.safety === undefined && r.body?.me?.wayBack === 'words' && c.interests === undefined && c.invite === undefined,
+            `no find on a local node, no safety for a member who came in by invite though wayBack is words (${JSON.stringify(c.safety)}, ${r.body?.me?.wayBack}), and nothing for the two cards with no data of their own`);
         assert(JSON.stringify(r.body?.me?.interests) === '["garden"]' && JSON.stringify(r.body?.layout?.order) === '["needs","market"]',
             `me.interests and the layout, unknown ids dropped (${JSON.stringify(r.body?.me?.interests)} ${JSON.stringify(r.body?.layout)})`);
         // The node's stamp beside them (PR #1479 round 2): interests kept before it read as stamped at 1970; none kept, null.
@@ -1063,8 +1069,11 @@ async function main(): Promise<void> {
         const info = se.getPublicCommunityInfo();
         const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                          AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(new Date(Date.now() - 7 * DAY).toISOString()) as { c: number }).c;
+        // A pot under one whole Bean is 0, and a member's figure of 0 is sent as null: there, so the phone's card keeps its
+        // rows, and not written (DESIGN-home-default-fable.md §2.7; review of #3110).
+        const pot = wholeBeans(info.commonsBalance_c) * 100;
         assert(c.community?.listings === info.postCount && c.community.joined7d === joined7d && joined7d === 1 && c.community.eventsSoon === 1
-            && c.community.commonsPot_c === wholeBeans(info.commonsBalance_c) * 100 && c.community.commonsPot_c % 100 === 0,
+            && (pot === 0 ? c.community.commonsPot_c === null : c.community.commonsPot_c === pot && c.community.commonsPot_c % 100 === 0),
             `community: ${info.postCount} listings, ${joined7d} joined this week (Carol), one event in the fortnight, the Commons pot in whole Beans, as hundredths (${JSON.stringify(c.community)}; pot ${info.commonsBalance_c} hundredths)`);
         const d = await get(`/api/home?${ALL}`, dan);
         assert(d.status === 200 && d.body?.cards?.community?.listings === info.postCount
@@ -1462,7 +1471,16 @@ async function main(): Promise<void> {
             `Beans off: no Beans card and her balance nowhere in her answer (${cardsOf(gated).join(',')})`);
         assert(gated.body?.cards?.deals === undefined && !gated.body?.cards?.needs?.items?.some((i: any) => i.kind === 'deal') && !gated.text.includes('tx-home-global'),
             'escrow off: no deals card and no deal line, though a deal waits on her');
-        assert(c.find?.point === 'area' && typeof c.community?.communities === 'number' && c.community?.tradesThisMonth === undefined,
+        // A first read from an app with no answer yet asks for the default list (DESIGN-home-default-fable.md §2.2), Your Beans,
+        // Your deals and Decide among it: the worldwide community builds none of them, nor an enterprise's (review of #1699, finding 5).
+        const builtBefore = ['beans', 'deals', 'enterprise', 'decide'].map(k => homeCardBuilds[k] ?? 0);
+        const firstRead = await get('/api/home?cards=needs,beans,deals,enterprise,decide,market,community', alice);
+        assert(firstRead.status === 200 && ['beans', 'deals', 'enterprise', 'decide'].every(k => firstRead.body?.cards?.[k] === undefined)
+            && JSON.stringify(['beans', 'deals', 'enterprise', 'decide'].map(k => homeCardBuilds[k] ?? 0)) === JSON.stringify(builtBefore),
+            `asked for Beans, deals, enterprise and Decide, global builds none of them (${cardsOf(firstRead).join(',')}; builds ${JSON.stringify(builtBefore)})`);
+        // No community listed yet here: a count of 0 is left out (DESIGN-home-default-fable.md §2.7).
+        const listed = listedCommunityCount();
+        assert(c.find?.point === 'area' && (listed === 0 ? !('communities' in (c.community ?? {})) : c.community?.communities === listed) && c.community?.tradesThisMonth === undefined,
             `find from her area; the community card counts communities, no trades (${JSON.stringify(c.community)})`);
         // W3 (§2): global's figures are members, communities listed and listings; the local ones are not there.
         assert(typeof c.community?.listings === 'number' && ['joined7d', 'eventsSoon', 'commonsPot_c'].every(k => !(k in (c.community ?? {}))),
@@ -1494,8 +1512,10 @@ async function main(): Promise<void> {
                 && JSON.stringify(mktIds) === JSON.stringify([nearOld.id, farNew.id]),
                 `global: a saved search is nearest first, as the Market's search is here (${JSON.stringify(card?.items?.map((i: { title: string }) => i.title))}, Market ${mktIds.length})`);
         }
+        // The safety card by the 12-words door's rule until slices D2 and D3 (review of #3110): no 12-words row is no card,
+        // though with no sign-in linked `me.wayBack` is words (slice D1); a 12-words row is the card.
         const words = await get('/api/home?cards=safety', alice);
-        assert(words.body?.cards?.safety === undefined, 'no safety card for a member with no 12-words row');
+        assert(words.body?.cards?.safety === undefined && words.body?.me?.wayBack === 'words', `no safety card for a member with no 12-words row, wayBack words all the same (${JSON.stringify(words.body?.cards?.safety)}, ${words.body?.me?.wayBack})`);
         db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(alice.pk, `words:${crypto.randomUUID()}`, new Date().toISOString());
         const words2 = await get('/api/home?cards=safety', alice);
         assert(words2.body?.cards?.safety?.words === true, `a 12-words member gets the safety card (${JSON.stringify(words2.body?.cards)})`);

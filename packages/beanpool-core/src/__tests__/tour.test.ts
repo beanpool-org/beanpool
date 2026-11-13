@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { HOME_STARTER_SET, endTourLayout, homeCardType, type HomeLayoutV2, type HomeNodeFacts } from '../home-frame.js';
+import { HOME_DEFAULT_LIST, HOME_STARTER_SET, endTourLayout, type HomeLayoutV2 } from '../home-frame.js';
 import { HOME_TIPS } from '../home-tips.js';
 import {
     TOUR_STEP_MAX_CHARS, TOUR_WORDS, checkTourRecord, newcomerCards, readTourProgress, readTourRecord, resumeStep, startCardButton,
-    tourChips, tourEnded, tourRecord, tourStepCaption, tourStepForTab, tourSteps,
+    tourEnded, tourRecord, tourStepCaption, tourStepForTab, tourSteps,
 } from '../tour.js';
 import { HELP_LINE_MAX_CHARS, HELP_MAP, helpSheetFor, helpTargets, phoneHelpKey, webHelpKey } from '../help-map.js';
 import type { Guide, GuidePage } from '../member-guide.js';
@@ -66,20 +66,12 @@ describe('the tour: steps derived from the tabs this node shows (§2)', () => {
     });
 });
 
-describe('the last step: three chips by profile (§3)', () => {
-    const local: HomeNodeFacts = { profile: 'local', features: { beans: true, invites: true } };
-    it('local with Beans: First steps · New in the Market · Your Beans; Beans off: Coming up instead', () => {
-        expect(tourChips(local, null)).toEqual(['steps', 'market', 'beans']);
-        expect(tourChips({ profile: 'local', features: { beans: false } }, null)).toEqual(['steps', 'market', 'events']);
-    });
-    it('global: First steps · Near you · Coming up (until the showcase draws Your Beans as an example)', () => {
-        expect(tourChips({ profile: 'global', features: { beans: false, invites: false } }, null)).toEqual(['steps', 'market', 'events']);
-    });
-    it('an operator alone on a new node: First steps · Grow your community · New in the Market', () => {
-        expect(tourChips(local, 'owner', { members: 1 })).toEqual(['steps', 'invite', 'market']);
-    });
-    it('every chip is a card this node shows this reader', () => {
-        for (const id of tourChips(local, null)) expect(homeCardType(id)!.onNode(local, null)).toBe(true);
+describe('the last step: one sentence, no chips (DESIGN-home-default-fable.md §2.3)', () => {
+    it('the last step on both apps is Home, with the one sentence', () => {
+        for (const app of ['phone', 'web'] as const) {
+            for (const global of [false, true]) expect(tourSteps(app, { global, beans: !global }).at(-1)).toMatchObject({ id: 'cards', words: TOUR_WORDS.cards });
+        }
+        expect(TOUR_WORDS.cards).toBe("That's the tour. Home starts with a few cards. Add a card and Arrange are at the bottom.");
     });
 });
 
@@ -114,26 +106,24 @@ describe('the account record and the device record (§2 State)', () => {
         expect(startCardButton({ v: 1, step: 2, startedAt: AT }, 8)).toBe('Pick up the tour at step 3 ›');
     });
 
-    it('with no saved layout: Getting started until the tour ends, then the starter set (never an empty Home)', () => {
-        expect(newcomerCards(null).map((c) => c.id)).toEqual(['start']);
-        expect(newcomerCards(tourRecord('open', NOW)).map((c) => c.id)).toEqual(['start']);
+    it('with no saved layout: the default list, Welcome on top, until the tour ends, then the list less Welcome (never an empty Home)', () => {
+        expect(newcomerCards(null).map((c) => c.id)).toEqual([...HOME_DEFAULT_LIST]);
+        expect(newcomerCards(tourRecord('open', NOW)).map((c) => c.id)).toEqual([...HOME_DEFAULT_LIST]);
         expect(newcomerCards(tourRecord('skipped', NOW)).map((c) => c.id)).toEqual([...HOME_STARTER_SET]);
     });
 });
 
-describe('endTourLayout: one layout write as the tour ends (§1, §3)', () => {
+describe('endTourLayout: one layout write as the tour ends (DESIGN-home-default-fable.md §2.3)', () => {
     const lay = (cards: string[], updatedAt: string | null = null): HomeLayoutV2 => ({ v: 2, cards: cards.map((id) => ({ id, type: id })), dismissed: {}, updatedAt });
-    it('Skip, or Done with nothing picked: Getting started goes and the starter set comes', () => {
+    it('Skip, or Done: Welcome goes from the default list and nothing is added', () => {
         expect(endTourLayout(null, { now: NOW }).cards.map((c) => c.id)).toEqual([...HOME_STARTER_SET]);
-        expect(endTourLayout(lay(['start']), { now: NOW })).toMatchObject({ updatedAt: AT });
+        expect(endTourLayout(lay(['start']), { now: NOW })).toMatchObject({ cards: [], updatedAt: AT });
     });
-    it('a pinned Find your community stays on top and does not count as a pick', () => {
-        expect(endTourLayout(lay(['find', 'start']), { pinned: ['find'], now: NOW }).cards.map((c) => c.id)).toEqual(['find', ...HOME_STARTER_SET]);
+    it('a pinned Find your community stays where it is', () => {
+        expect(endTourLayout(lay(['find', 'start']), { now: NOW }).cards.map((c) => c.id)).toEqual(['find']);
     });
-    it('Done with chips picked: the picks stay, nothing else is added', () => {
+    it('a Home the member arranged keeps its cards in its order, less Welcome', () => {
         expect(endTourLayout(lay(['beans', 'market', 'start']), { now: NOW }).cards.map((c) => c.id)).toEqual(['beans', 'market']);
-    });
-    it('a member who set up Home and added Getting started from the picker keeps their Home, less the card', () => {
         expect(endTourLayout(lay(['pulse', 'start', 'sky'], AT), { now: NOW }).cards.map((c) => c.id)).toEqual(['pulse', 'sky']);
     });
 });

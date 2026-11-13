@@ -125,6 +125,7 @@ export * from './removed-line-runs.js';
 export * from './chat-fold.js';
 export * from './chat-links.js';
 export * from './tour.js';
+export * from './first-steps.js';
 export * from './help-map.js';
 export * from './brand-colours.js';
 export * from './look.js';

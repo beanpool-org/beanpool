@@ -25,7 +25,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
+    type SkyToday, featureModeFor, isNearKm, readTourRecord, resetHomeLayout, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatHundredths, isHundredths, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
@@ -247,8 +247,11 @@ export interface HomeCards {
     /** `place`: the community's own, to two decimals (a member's answer on a local community that has one). */
     community?: {
         name: string | null; members: number; listings?: number; tradesThisMonth?: number; communities?: number; place?: { lat: number; lng: number };
-        /** `commonsPot_c`: the pot, whole hundredths of a Bean that are always whole Beans (the node drops its hundredths). */
-        joined7d?: number; eventsSoon?: number; commonsPot_c?: number;
+        /**
+         * `commonsPot_c`: the pot, whole hundredths of a Bean that are always whole Beans (the node drops its hundredths).
+         * Each of the three is null when it is zero: there, so the card keeps its rows, and not written (§2.7).
+         */
+        joined7d?: number | null; eventsSoon?: number | null; commonsPot_c?: number | null;
     };
 }
 
@@ -600,17 +603,11 @@ export function moveCardTo(
 }
 
 /**
- * Reset to defaults: the starter set (§1.3; DESIGN-getting-started-fable.md §1: Getting started is a newcomer's, never a
- * reset's — a Home reset after the tour would otherwise be empty). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
- * A card of a type this build doesn't know (a newer app's) is kept too, at the end: Reset is this app's defaults, not a
- * licence to throw away what it can't see. So are the columns chosen on the web (W0): the phone carries them, never reads them.
+ * Reset to defaults (core `resetHomeLayout`, DESIGN-home-default-fable.md §3): the default list less Welcome, then the
+ * cards the member made (saved searches, chats, Your tools, tool cards, and a newer app's types) in their order. A
+ * schedule's dismissal (the `safety` card) and the columns chosen on the web (W0) are kept: neither is a card.
  */
-export function resetLayout(layout: HomeLayout | null, now: number): HomeLayout {
-    const unknown = listOf(layout).filter(c => !homeCardType(c.type));
-    const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
-    const view = layout?.view ? { view: layout.view } : {};
-    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: at(now), ...view };
-}
+export const resetLayout = (layout: HomeLayout | null, now: number): HomeLayout => resetHomeLayout(layout, now);
 
 /** The `safety` card was put away: when, on the account too (§3.1 "dismissal in home.layout"). */
 export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayout {
@@ -619,14 +616,12 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
 }
 
 /**
- * Whether a member who never edited sees the one-time line "Home now starts with fewer cards. Add a card brings the rest
- * back." (§2.6): neither the account nor the phone holds a layout, and they joined more than a week ago (a newcomer never
- * saw the longer Home, so has nothing to miss).
+ * The one-time line "Home now starts with fewer cards. Add a card brings the rest back." is said to nobody now
+ * (DESIGN-home-default-fable.md §2.8, review of #3110): since D0 a Home never saved starts with the whole default list, so
+ * it is longer, not shorter. D2 deletes the line and this; until then it says no to everyone.
  */
-export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | null, me: Pick<HomeMe, 'joinedAt'> | null | undefined, now: number): boolean {
-    if (account || phone || !me) return false;
-    const joined = me.joinedAt ? Date.parse(me.joinedAt) : NaN;
-    return Number.isFinite(joined) && now - joined > 7 * DAY_MS;
+export function fewerCardsNews(_account: HomeLayout | null, _phone: HomeLayout | null, _me: Pick<HomeMe, 'joinedAt'> | null | undefined, _now: number): boolean {
+    return false;
 }
 
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
@@ -799,9 +794,11 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
 export function cardsToAsk(
     layout: HomeLayout | null, pinned: readonly HomeCardId[] = [], answer?: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards } | null,
 ): string[] {
-    // A Home never saved is Getting started, and the starter set at Skip or Done: their bodies are asked for already, so
-    // the five are drawn the moment the tour ends, with no second read (DESIGN-getting-started-fable.md §1).
-    const base = layout ?? { ...defaultHomeLayout(), cards: [...defaultHomeLayout().cards, ...starterCards()] };
+    // A Home never saved is the default list (DESIGN-home-default-fable.md §2.2), asked in the one first read. Before the node
+    // has answered, the caller passes the global node's profile when the phone's copy says it is that one (index.tsx
+    // `globalAsk`, §2.9); with nothing known, the node builds none it doesn't show (routes/home-answer.ts `shownHere`), and
+    // once an answer is in hand only those it shows are asked (review of #1699, finding 5).
+    const base = layout ?? defaultHomeLayout();
     return frameCardsToAsk(base, pinned).filter(id => {
         const type = base.cards.find(l => l.id === id)?.type ?? id;
         return HOME_DRAWN.has(type) && (!answer || type === 'find' || cardOnNode(type, answer));
@@ -1105,12 +1102,10 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             default: return isToolHomeCard(type) ? !!answer.me : c[id] !== undefined;
         }
     };
-    // No saved layout: Getting started until the tour ends, then the starter set (a Done whose write is still out).
+    // No saved layout: the default list, Welcome on top, until the tour ends, then the same less Welcome (a Done whose
+    // write is still out). Nothing folds behind Welcome: the cards are there from the first second (DESIGN-home-default §2.2).
     const base = shownLayout(answer, layout, ctx);
-    const out = cardOrder(base, pinned).filter(shows);
-    // A Home never saved folds its cards behind Getting started while it is up (§1): Skip or Done brings them.
-    if (!base?.updatedAt && out.some(c => c.type === 'start')) return out.filter(c => c.type === 'start' || FIXED.has(c.type) || pinned.includes(c.id));
-    return out;
+    return cardOrder(base, pinned).filter(shows);
 }
 
 /**

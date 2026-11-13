@@ -6,8 +6,9 @@
  *   3. Standby guard: a backup/standby server (standbyWritesNothing) computes facts without writing 'step_*' to
  *      member_preferences and without bumping members.updated_at.
  *   4. End rule on global community: the card ends (returns undefined) after 14 days OR when every step is done
- *      (young && undone).
- *   5. End rule on local community: contrast with local profile where young || undone keeps the card for 14 days or until done.
+ *      (young && undone), the 12-words line (`words`, DESIGN-home-default-fable.md §2.4) among them.
+ *   5. End rule on local community: the same rule with 30 days (DESIGN-home-default-fable.md §2.4): the card stays while a
+ *      line is open, the 12-words one included, and leaves once every line is done.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx apps/server/src/test-home-steps.ts
@@ -78,8 +79,9 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: 
     return { status: res.status, headers: res.headers, json };
 }
 
-async function getHomeSteps(id: Id) {
-    const res = await signedFetch('GET', '/api/home?cards=steps', id);
+// `lands=words`: an app that draws First steps' 12-words line (DESIGN-home-default-fable.md §2.4); '' for an app that doesn't.
+async function getHomeSteps(id: Id, lands = 'words') {
+    const res = await signedFetch('GET', `/api/home?cards=steps${lands ? `&lands=${lands}` : ''}`, id);
     assert(res.status === 200, `GET /api/home succeeded (${res.status}) for ${id.callsign}`);
     return res.json?.cards?.steps;
 }
@@ -207,8 +209,14 @@ async function main() {
 
     // ── 4. End Rule on Global Community (young && undone) ───────────────────
     console.log('\n── 4. End Rule on Global Community (young && undone) ──');
-    // 4a. Alice completed all 6 steps: area, photo, firstPost, saidHello, watch, sawLedger
-    // Under young && undone, once all steps are done (undone === false), the card ends!
+    // 4a. Alice completed all 6 steps: area, photo, firstPost, saidHello, watch, sawLedger. The 12-words line (DESIGN-home-
+    // default-fable.md §2.4, §2.9: global takes the two new lines) is still open: she linked no sign-in and kept nothing.
+    const aliceWordsOpen = await getHomeSteps(alice);
+    assert(aliceWordsOpen?.words === false, 'global first-week card stays while the 12-words line is open');
+    // An app that doesn't draw that line (no `lands=words`) would show the card with every line it knows ticked: none.
+    assert(await getHomeSteps(alice, '') === undefined, 'an app without the 12-words line is given no card once its own lines are done');
+    // She says she still has her words: under young && undone, once all steps are done (undone === false), the card ends!
+    setMemberPreferences(alice.pubKeyHex, { words_kept: true });
     const aliceStepsEnded = await getHomeSteps(alice);
     assert(aliceStepsEnded === undefined, 'global first-week card ends once every step is done');
 
@@ -223,11 +231,12 @@ async function main() {
     const frankSteps = await getHomeSteps(frank);
     assert(frankSteps !== undefined, 'global first-week card shows while young and steps undone');
 
-    // ── 5. End Rule on Local Community (young || undone) ────────────────────
-    console.log('\n── 5. End Rule on Local Community (young || undone) ──');
+    // ── 5. End Rule on Local Community (DESIGN-home-default-fable.md §2.4: a line left, in the first 30 days) ──
+    console.log('\n── 5. End Rule on Local Community (a line left, in the first 30 days) ──');
     process.env.NODE_PROFILE = 'local';
 
-    // 5a. Young local member who completed all local steps: card stays while young (14 days)
+    // 5a. Young local member who completed the four local steps: the card stays while the 12-words line is open, and leaves
+    // once that is done too (a finished First steps no longer sits on Home ticked).
     const grace = makeMember('GraceLocalYoung');
     // Complete local steps: firstOffer, photo, interests, invited
     db.prepare(`INSERT INTO posts (id, type, category, title, description, price_c, author_pubkey, active, status, origin_node)
@@ -238,7 +247,9 @@ async function main() {
 
     const graceMemberBefore = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(grace.pubKeyHex) as { updated_at: string };
     const graceSteps = await getHomeSteps(grace);
-    assert(graceSteps !== undefined, 'local first-steps card stays while member is young even when all steps are done');
+    assert(graceSteps !== undefined && graceSteps.words === false, 'local first-steps card stays while the 12-words line is open');
+    const graceOldApp = await getHomeSteps(grace, '');
+    assert(graceOldApp === undefined, `local: an app without the 12-words line is given no card once its own lines are done (${JSON.stringify(graceOldApp)})`);
     const graceMemberAfter = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(grace.pubKeyHex) as { updated_at: string };
     assert(graceMemberAfter.updated_at === graceMemberBefore.updated_at, 'local read left members.updated_at untouched');
     assert(!hasStepPref(grace.pubKeyHex, 'step_post'), 'local node wrote NO step_post preference');
@@ -246,8 +257,10 @@ async function main() {
     assert(graceSteps.saidHello === false, 'local steps saidHello is false');
     assert(graceSteps.watch === false, 'local steps watch is false');
     assert(graceSteps.sawLedger === false, 'local steps sawLedger is false');
+    setMemberPreferences(grace.pubKeyHex, { words_kept: true });
+    assert(await getHomeSteps(grace) === undefined, 'local first-steps card leaves once every line is done, young or not');
 
-    // 5b. Older local member (>14 days) with undone steps: card stays while undone
+    // 5b. Older local member (>14 days, inside 30) with undone steps: card stays while undone
     const heidi = makeMember('HeidiLocalOld', fourteenDaysAgo);
     const heidiStepsUndone = await getHomeSteps(heidi);
     assert(heidiStepsUndone !== undefined, 'local first-steps card stays after 14 days while steps are undone');
@@ -258,6 +271,7 @@ async function main() {
     setMemberPhoto(db, heidi.pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     setMemberPreferences(heidi.pubKeyHex, { interests: ['food'] });
     db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('code-heidi', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).run(heidi.pubKeyHex);
+    setMemberPreferences(heidi.pubKeyHex, { words_kept: true });
 
     const heidiStepsDone = await getHomeSteps(heidi);
     assert(heidiStepsDone === undefined, 'local first-steps card ends when older member has done every step');

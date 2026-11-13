@@ -2,7 +2,8 @@
  * The one-minute tour (scratch/global-node/DESIGN-getting-started-fable.md §2–§3): a bar at the bottom of the screen
  * that moves the app to each real tab in turn, one or two sentences a step, Skip and Next, "Step 2 of 7". Nothing is
  * overlaid and nothing behind the bar is blocked. This module is the steps (derived from the tabs this node shows, so
- * no step points at something that isn't there), their words, the last step's three chips, and the two records:
+ * no step points at something that isn't there), their words (the last is one sentence: Home already holds the default
+ * list, DESIGN-home-default-fable.md §2.3), and the two records:
  *
  * - **On the account** (`tour` preference, own-read like `home.layout`): `{ v: 1, state: 'done' | 'skipped' | 'open', at }`.
  *   Done or skipped, the Getting started card never returns on any device; "Take the tour again" writes `open`.
@@ -11,7 +12,7 @@
  *
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone).
  */
-import { defaultCards, homeCardType, starterCards, type HomeNodeFacts, type HomeReaderRole } from './home-frame.js';
+import { defaultCards, starterCards } from './home-frame.js';
 import { t, word, type WordKey } from './words.js';
 
 // ── The steps ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -62,12 +63,13 @@ export const TOUR_WORDS = {
     ledgerGlobal: word('In a local community, help earns Beans and getting help spends them. This is an example ledger.'),
     topPhone: word('Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.'),
     topWeb: word('At the top: ? explains the screen you\'re on; Settings is where the whole guide lives.'),
-    cards: word('Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.'),
+    // The last step (DESIGN-home-default-fable.md §2.3): one sentence; Home already holds the default list, so nothing is picked.
+    cards: word("That's the tour. Home starts with a few cards. Add a card and Arrange are at the bottom."),
 } as const;
 
 /**
  * The tour's steps for this app on this node, in the app's tab order: Home, each tab the node shows, the top bar, and
- * back to Home to add the first cards. Commons and Ledger only where they are tabs (Beans on, or global's previews).
+ * back to Home for the last sentence. Commons and Ledger only where they are tabs (Beans on, or global's previews).
  */
 export function tourSteps(app: TourApp, node: TourNodeFacts): TourStep[] {
     const g = node.global;
@@ -104,26 +106,6 @@ export const tourStepCaption = (index: number, total: number): string => t('Step
  */
 export function tourStepForTab(steps: readonly TourStep[], tab: string): number {
     return steps.findIndex((s) => s.tab === tab);
-}
-
-// ── The last step's chips (§3) ────────────────────────────────────────────────────────────────────────────────────
-
-/**
- * The three cards the last step offers, by profile: local First steps · New in the Market · Your Beans (Coming up where
- * Beans are off); global First steps · Near you · Coming up (Your Beans as an example once the showcase draws it); an
- * operator alone on a new node First steps · Grow your community · New in the Market. Only types this node shows this
- * reader, so nothing is offered that couldn't be drawn; never tier-worded.
- */
-export function tourChips(answer: HomeNodeFacts, role: HomeReaderRole, opts: { members?: number | null } = {}): string[] {
-    const global = answer.profile === 'global';
-    const alone = !global && (role === 'owner' || role === 'admin') && opts.members === 1;
-    const wanted = alone
-        ? ['steps', 'invite', 'market', 'events']
-        : global
-          ? ['steps', 'market', 'events']
-          : ['steps', 'market', 'beans', 'events'];
-    const shown = wanted.filter((id) => homeCardType(id)?.onNode(answer, role) === true);
-    return shown.slice(0, 3);
 }
 
 // ── The account's record ──────────────────────────────────────────────────────────────────────────────────────────
@@ -208,7 +190,7 @@ export function startCardButton(progress: TourProgress | null, total: number): s
 export const START_CARD_WORDS = word('This is your Home. You choose what goes here. Before you start, take a one-minute look at the other tabs.');
 
 /**
- * The cards a Home with no saved layout shows: Getting started while the tour hasn't ended, else the starter set (a Done
- * or Skip whose layout write never reached the node still leaves Home with something on it).
+ * The cards a Home with no saved layout shows (DESIGN-home-default-fable.md §2.2): the default list, Welcome on top, while
+ * the tour hasn't ended, else the same list less Welcome (a Done or Skip whose layout write never reached the node).
  */
 export const newcomerCards = (record: TourRecord | null | undefined) => (tourEnded(record) ? starterCards() : defaultCards());

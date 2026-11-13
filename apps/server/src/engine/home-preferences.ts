@@ -46,10 +46,17 @@ import { db } from '../db/db.js';
 export const HOME_LAYOUT_PREF_KEY = 'home.layout';
 export const INTERESTS_PREF_KEY = 'interests';
 export const SAW_LEDGER_PREF_KEY = 'saw_ledger';
+/**
+ * "I still have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5, slice D1), so the phone and the web
+ * agree: said in Account Protection or on the 12-words card, or written by saving or printing the recovery kit. One way,
+ * as `saw_ledger`: a true is kept and nothing un-sets it (a done step never un-ticks). It ends the safety card and ticks
+ * First steps' `words` line; it is no way back, so `me.wayBack` never reads it.
+ */
+export const WORDS_KEPT_PREF_KEY = 'words_kept';
 /** When the interests last changed, stamped by the node beside them. Not a key an app may send. */
 export const INTERESTS_STAMP_PREF_KEY = 'interests.updatedAt';
 /** The preference keys this module owns, as the apps send and read them (and as they are stored). */
-export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY, TOUR_PREF_KEY, SAW_LEDGER_PREF_KEY];
+export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY, TOUR_PREF_KEY, SAW_LEDGER_PREF_KEY, WORDS_KEPT_PREF_KEY];
 export { TOUR_PREF_KEY };
 
 /** Every card Home can show, in the design's default order (§3.1). A member can't make a card; the catalogue is the catalogue. */
@@ -298,6 +305,11 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
             if (!hasSawLedger(publicKey)) writes.push([SAW_LEDGER_PREF_KEY, 'true']);
         }
     }
+    if (Object.prototype.hasOwnProperty.call(preferences, WORDS_KEPT_PREF_KEY)) {
+        if (preferences[WORDS_KEPT_PREF_KEY] === true || preferences[WORDS_KEPT_PREF_KEY] === 'true') {
+            if (!hasKeptWords(publicKey)) writes.push([WORDS_KEPT_PREF_KEY, 'true']);
+        }
+    }
     return writes;
 }
 
@@ -305,8 +317,15 @@ export function hasSawLedger(publicKey: string): boolean {
     return storedValue(publicKey, SAW_LEDGER_PREF_KEY) === 'true';
 }
 
+/** Whether this member has said they still have their 12 words, or saved the recovery kit (WORDS_KEPT_PREF_KEY). Their own reads only. */
+export function hasKeptWords(publicKey: string): boolean {
+    return storedValue(publicKey, WORDS_KEPT_PREF_KEY) === 'true';
+}
+
 /** A member's Home keys as served: each one saved, through the checks; the interests with the node's stamp for them. */
-export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string; tour?: TourRecord; saw_ledger?: boolean };
+export type OwnHomePreferences = {
+    'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string; tour?: TourRecord; saw_ledger?: boolean; words_kept?: boolean;
+};
 
 /** The Home keys this member has, through the checks, for their own read: a key never saved (or unreadable) is absent. */
 export function ownHomePreferences(publicKey: string): OwnHomePreferences {
@@ -321,6 +340,7 @@ export function ownHomePreferences(publicKey: string): OwnHomePreferences {
     const tour = getTourRecord(publicKey);
     if (tour) out.tour = tour;
     if (hasSawLedger(publicKey)) out[SAW_LEDGER_PREF_KEY] = true;
+    if (hasKeptWords(publicKey)) out[WORDS_KEPT_PREF_KEY] = true;
     return out;
 }
 
@@ -340,6 +360,9 @@ export function homePreferencesNamed(publicKey: string, preferences: unknown): O
     if (Object.prototype.hasOwnProperty.call(preferences, TOUR_PREF_KEY) && own.tour) out.tour = own.tour;
     if (Object.prototype.hasOwnProperty.call(preferences, SAW_LEDGER_PREF_KEY) && own[SAW_LEDGER_PREF_KEY]) {
         out[SAW_LEDGER_PREF_KEY] = own[SAW_LEDGER_PREF_KEY];
+    }
+    if (Object.prototype.hasOwnProperty.call(preferences, WORDS_KEPT_PREF_KEY) && own[WORDS_KEPT_PREF_KEY]) {
+        out[WORDS_KEPT_PREF_KEY] = own[WORDS_KEPT_PREF_KEY];
     }
     return out;
 }

@@ -203,11 +203,33 @@ describe("on Home, the node's word is already in the answer (`known`)", () => {
         expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
     });
 
-    it('the node then says the member has a sign-in now: it goes', async () => {
+    // One word on who it is for (review of #3110). The node builds Home's `safety` by `/me`'s rule, less a member who said
+    // they still have their words (round 2: the wider rule waits for slices D2/D3), but the two reads can still differ: the
+    // 12 words kept (`/me` still 'words'), or a sign-in linked since Home's answer (`/me` now 'ordinary'). Letting `/me`
+    // overrule drew the card at the first paint and pulled it when `/me` answered, re-packing every card after it:
+    // onDrawn [true, false], the jump PR #2411 fixed; or popped it in late: [false, true].
+    it("`/me` says otherwise: the answer's word stands, at the first paint and after, and Home is told once", async () => {
+        for (const [known, rules] of [[true, 'ordinary'], [false, 'words']] as const) {
+            const drawn: boolean[] = [];
+            const answer = pending();
+            render(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} known={known} onDrawn={(d) => drawn.push(d)} />);
+            const atFirstPaint = !!screen.queryByTestId('one-way-back-landing');
+            await answer(standing(rules));
+            await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+            expect([atFirstPaint, !!screen.queryByTestId('one-way-back-landing')], `known ${known}, /me ${rules}`).toEqual([known, known]);
+            expect(drawn, `known ${known}, /me ${rules}`).toEqual([known]);
+            cleanup();
+            localStorage.clear();
+        }
+    });
+
+    it("Home's answer then says the member has a sign-in now: it goes", async () => {
         const answer = pending();
-        landing();
+        const { rerender } = landing();
         expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
         await answer(standing('ordinary'));
+        expect(screen.getByTestId('one-way-back-landing')).toBeInTheDocument();
+        rerender(<OneWayBackCard identity={identity} placement="landing" onSeeWords={() => {}} known={false} />);
         expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
     });
 

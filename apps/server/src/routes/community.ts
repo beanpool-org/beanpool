@@ -37,7 +37,7 @@ import {
     inviterShownOf, setInviterShown, inviterVisibilityFor, INVITER_SHOWN_MEMBERS_ONLY_MESSAGE, isNodeMember, noteBillReported,
 } from '../state-engine.js';
 import { reportableBill, type BillRow } from '../engine/bills.js';
-import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
+import { CallsignNotANameError, NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
 import { CreditGiftError, creditGiftOffer, giveCreditLine } from '../engine/credit-gift.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
@@ -94,7 +94,7 @@ import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { requireAdminRole, type AdminRole } from '../admin-auth.js';
-import { avatarUrlOf, postRulesFor, word } from '@beanpool/core';
+import { avatarUrlOf, postRulesFor, word, CALLSIGN_LINK_CODE, notANameIn, notANameWords } from '@beanpool/core';
 import { isPausedMember, revokeInvite, InviteRevokeError } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
@@ -280,6 +280,14 @@ router.post('/api/local/update-identity', async (ctx) => {
     // another request wrote meanwhile (two-factor setup, a password change).
     const updates: Partial<LocalConfig> = {};
     if (callsign !== undefined) updates.callsign = (callsign || '').slice(0, 20);
+    // The node's own name is a name too (core name-box.ts): a new one that is an invite or a web address is refused,
+    // read whole, before anything is written. The one already stored is never refused for being one.
+    const nameNotAName = typeof callsign === 'string' && callsign !== (getLocalConfig().callsign ?? '') ? notANameIn(callsign) : null;
+    if (nameNotAName) {
+        ctx.status = 400;
+        ctx.body = { error: notANameWords(nameNotAName), code: CALLSIGN_LINK_CODE };
+        return;
+    }
     if (lat !== undefined && lng !== undefined && lat !== null && lng !== null) {
         const parsedLat = parseFloat(lat);
         const parsedLng = parseFloat(lng);
@@ -1044,6 +1052,20 @@ router.get('/api/community/members', async (ctx) => {
     });
 });
 
+/**
+ * A new name refused as an invite or a web address (engine/members.ts CallsignNotANameError): 400 `callsign_link`, in the
+ * words for what the member sent whole. These routes cut a name to 20 first, and a cut invite link ("https://mullum.beanp")
+ * no longer says it was an invite. True when it answered.
+ */
+function respondNotAName(ctx: any, e: unknown, sent: unknown): boolean {
+    if (!(e instanceof CallsignNotANameError)) return false;
+    const kind = typeof sent === 'string' ? notANameIn(sent) : null;
+    const message = kind ? notANameWords(kind) : e.message;
+    ctx.status = e.status;
+    ctx.body = { error: message, message, code: e.code };
+    return true;
+}
+
 router.post('/api/community/register', async (ctx) => {
     const { publicKey, callsign } = (ctx as any).requestBody || {};
     if (!publicKey || !callsign) {
@@ -1060,7 +1082,9 @@ router.post('/api/community/register', async (ctx) => {
         }
         ctx.body = { success: true, member };
     } catch (e: any) {
-        // registerMember turns every refusal into null (above); anything it throws is a server fault, so 500.
+        // An invite or a link as a new name (CallsignNotANameError) is the one refusal it throws: 400 `callsign_link`.
+        if (respondNotAName(ctx, e, callsign)) return;
+        // registerMember turns every other refusal into null (above); anything else it throws is a server fault, so 500.
         console.error('❌ Server Error registering member:', e);
         ctx.status = 500;
         ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
@@ -1268,7 +1292,7 @@ router.post('/api/invite/redeem', async (ctx) => {
 
     // Invites off (the global node): 404 feature_off, from the feature gate before this route, and from the engine.
     let result: ReturnType<typeof redeemInvite>;
-    try { result = redeemInvite(code, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
+    try { result = redeemInvite(code, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondNotAName(ctx, e, callsign) || respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
         ctx.body = result.code ? { error: result.error, code: result.code } : { error: result.error };
@@ -1293,7 +1317,7 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
     if (!joiner) return badRedeemKey(ctx);
     if (!requireRedeemSignature(ctx, joiner)) return;
     let result: ReturnType<typeof redeemOfflineTicket>;
-    try { result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
+    try { result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondNotAName(ctx, e, callsign) || respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
         ctx.body = result.code ? { error: result.error, code: result.code } : { error: result.error };

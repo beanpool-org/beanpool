@@ -150,6 +150,7 @@ import {
     VAULT_TICKET_TTL_MS,
     type DoorWorkDoor,
     type VaultTicketRefusal, word, wordsFor,
+    CALLSIGN_LINK_CODE, notANameIn, notANameWords,
 } from '@beanpool/core';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { alreadyJoined, broadcast, getActingMember } from '../state-engine.js';
@@ -203,6 +204,17 @@ const { t: tr } = wordsFor('en');
 
 /** The same cap `/api/invite/redeem` puts on a joining name; the wizard-on-join renames with the full rules. */
 const MAX_JOIN_CALLSIGN = 20;
+
+/**
+ * 400 `callsign_link` for a name that is an invite or a web address (core name-box.ts), read whole before the cut, so
+ * the door refuses it before any sign-in, nonce or work is spent. True when it answered.
+ */
+function refuseNotAName(ctx: any, raw: unknown): boolean {
+    const kind = typeof raw === 'string' ? notANameIn(raw) : null;
+    if (!kind) return false;
+    badRequest(ctx, notANameWords(kind), CALLSIGN_LINK_CODE);
+    return true;
+}
 
 function joinNonceSubject(actor: string): string {
     return `open-join:${actor}`;
@@ -632,6 +644,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         }
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
         if (callsign.length < 2) return badRequest(ctx, word('Please choose a name of at least 2 characters.'));
+        if (refuseNotAName(ctx, body.callsign)) return;
 
         recordFunnelEvent('open_join_attempt', WORDS_PROVIDER);
         // Refused before the work is checked, so these never spend it. registerOpenJoin checks them again with its writes.
@@ -689,6 +702,7 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         if (!nonce) return badRequest(ctx, "'nonce' is required.");
         const callsign = typeof body.callsign === 'string' ? body.callsign.trim().slice(0, MAX_JOIN_CALLSIGN).trim() : '';
         if (callsign.length < 2) return badRequest(ctx, word('Please choose a name of at least 2 characters.'));
+        if (refuseNotAName(ctx, body.callsign)) return;
 
         const recoveryShares = readRecoveryShares(ctx, body, provider, actor);
         if (recoveryShares === false) return;

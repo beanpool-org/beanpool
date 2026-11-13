@@ -59,6 +59,7 @@ export const SUITES = [
     'test-host-kinds',
     'test-callsign-predicates',
     'test-callsign-any-alphabet',
+    'test-callsign-not-a-link',
     'test-name-writers',
     'test-message-tombstone',
     'test-recovery-shares',

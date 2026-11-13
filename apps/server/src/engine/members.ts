@@ -11,7 +11,7 @@ import { bumpMembersVersion } from './versions.js';
 import { vouchingAfterRoleChange } from './vouchers.js';
 import { PhotoTooBigError, photoValueRefusal } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates, word } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, CALLSIGN_LINK_CODE, fitsTextLimit, notANameIn, notANameWords, replaceLoneSurrogates, word } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 
@@ -117,6 +117,27 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
     bumpMembersVersion();
     return getMember(db, adminPublicKey)!;
+}
+
+/**
+ * A new or changed name that is an invite or a web address (core name-box.ts; Marty, 14 Nov 2026, card
+ * callsign-link-guard: a member's invite link pasted into the name box became her name on Byron). 400 `callsign_link`,
+ * with the one line both apps show (routes/profile-feature-gate.ts respondProfileRefusal, claim-code.ts claimNode), so
+ * an old app or a script can't store one either. A name already held is never refused for being one: only a new name,
+ * or a change of one, is read (no conversion code).
+ */
+export class CallsignNotANameError extends Error {
+    readonly status = 400;
+    readonly code = CALLSIGN_LINK_CODE;
+    constructor(callsign: string) {
+        super(notANameWords(notANameIn(callsign) ?? 'web-link'));
+        this.name = 'CallsignNotANameError';
+    }
+}
+
+/** Throws {@link CallsignNotANameError} when `callsign` is an invite or a web address rather than a name. */
+export function assertCallsignIsAName(callsign: string): void {
+    if (notANameIn(callsign)) throw new CallsignNotANameError(callsign);
 }
 
 /**
@@ -292,6 +313,7 @@ export function registerMemberInternal(
         // this one's (its DMs relayed there, a peer's relay "from" it taken as genuine, its spending refused as a
         // visitor's, and the join funnel leaving it out). A member of another community joining the global community
         // with the same key is that row, so the address goes, as a new member's row has none.
+        assertCallsignIsAName(callsign);
         callsign = uniquifyCallsign(callsign, publicKey);
         db.prepare("UPDATE members SET is_visitor = 0, home_node_url = NULL, invited_by = ?, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?")
             .run(invitedBy, inviteCode, callsign, new Date().toISOString(), publicKey);
@@ -302,6 +324,7 @@ export function registerMemberInternal(
         // Re-registration for a known key. Only touch the callsign if it actually
         // changed, and uniquify it (excluding self) so a re-register never collides.
         if (foldName(callsign) !== foldName(String(existing.callsign || ''))) {
+            assertCallsignIsAName(callsign);
             callsign = uniquifyCallsign(callsign, publicKey);
             db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             broadcast({ type: 'profile_updated', publicKey }, undefined, { ownCard: true });
@@ -315,7 +338,9 @@ export function registerMemberInternal(
     }
 
     // Never block a join on a name clash — land on a unique variant; the
-    // wizard-on-join lets the member pick a proper name straight after.
+    // wizard-on-join lets the member pick a proper name straight after. An invite or a link is no name: refused, thrown
+    // (CallsignNotANameError), so a caller's transaction writes nothing (a code's use, an open door's sign-in).
+    assertCallsignIsAName(callsign);
     callsign = uniquifyCallsign(callsign);
 
     db.transaction(() => {
@@ -513,6 +538,8 @@ export function updateProfile(
         const requested = update.callsign.trim().slice(0, 32);
         if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
+            // Read whole, before the cut: a link cut at 32 may no longer say it was an invite.
+            assertCallsignIsAName(update.callsign);
             // Any change, a change of case included: the member's own row is left out of the check, so "marty" →
             // "Marty" is free, but where a node already holds two names that fold the same,
             // one of them may not take the other's spelling exactly (the unique index on lower(callsign) would refuse

@@ -111,7 +111,8 @@ describe("a tool's Home card", () => {
             const added = hf.addCard(null, 'tool-shed', { now: 0 });
             expect(added.ok).toBe(true);
             if (!added.ok) return;
-            expect(added.layout.cards.map((c) => c.id)).toEqual(['tool-shed', 'start']);
+            // First, on the default list (DESIGN-home-default-fable.md §2.2).
+            expect(added.layout.cards.map((c) => c.id)).toEqual(['tool-shed', ...hf.HOME_DEFAULT_LIST]);
             expect(hf.addCard(added.layout, 'tool-shed')).toEqual({ ok: false, refused: 'on-home' });
             expect(hf.cardsToAsk(added.layout)).not.toContain('tool-shed');
             expect(hf.readHomeLayout(added.layout)?.cards.map((c) => c.type)).toContain('tool-shed');

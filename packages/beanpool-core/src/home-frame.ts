@@ -358,7 +358,8 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
         onNode: (a) => a.features.wordsDoor !== false || !!a.cards?.safety,
     },
     { id: 'find', hue: 'sage', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
-    // A newcomer's Home until the tour ends (tour.ts): drawn by the apps while the account's `tour` says neither done nor skipped.
+    // Welcome (DESIGN-home-default-fable.md §2.3), first in the default list: drawn by the apps while `welcomeDrawn` says.
+    // It hides nothing. Its caption becomes "Welcome" with its body (slice D2) and the words' drafts (D4).
     { id: 'start', hue: 'sky', name: word('Getting started'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
     { id: 'steps', hue: 'sky', name: word('First steps'), globalName: word('Your first week'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
     { id: 'tips', hue: 'indigo', name: word('Tips'), line: word('One tip at a time on how things work.'), group: 'start', asks: 'none', onNode: everywhere },
@@ -417,6 +418,8 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
 
 const TYPES: ReadonlyMap<string, HomeCardType> = new Map(HOME_CARD_TYPES.map((t) => [t.id, t]));
 const RANK: ReadonlyMap<string, number> = new Map(HOME_CARD_TYPES.map((t, i) => [t.id, i]));
+/** Each tool's card type (tools/index.ts): a member's own choice, kept by Reset. */
+const TOOL_CARD_TYPES: ReadonlySet<string> = new Set(toolHomeCardTypes().map((t) => t.id));
 
 /** The registry's entry for a type, or undefined for one this build doesn't know (kept, not drawn, not built). */
 export const homeCardType = (type: string): HomeCardType | undefined => TYPES.get(type);
@@ -461,31 +464,89 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
     'joined', 'pulse', 'beans', 'notices', 'invite', 'community',
 ];
 
-/** The usual five (§3): the same on a local community and on the worldwide one. */
-export const HOME_NEWCOMER_FIVE: readonly string[] = ['steps', 'tips', 'market', 'events', 'notices'];
-/** Cards that ride along in the starter set without counting: each shows only while its own rule says. */
-const NEWCOMER_RIDERS: readonly string[] = ['safety', 'interests', 'asked'];
-
 /**
- * The starter set (DESIGN-getting-started-fable.md §1): the usual five, with "Your way back in" (shown only on its
- * schedule) first and "What are you into?" (shown while nothing is starred) after Tips, and "Asked near you" (drawn only
- * while a neighbour has an open Need to show) after the Market (DESIGN-cold-start-trades-fable.md §2.4). What Home holds
- * after the tour is skipped, or done with no card picked: Home is never left empty.
+ * The default list (scratch/fable-design/DESIGN-home-default-fable.md §2.2, Marty's picks of 13 Nov 2026): a newcomer's
+ * Home from the first second, the community first and the chores second, in the phone's order (the web packs the same
+ * order into its columns). Fifteen of the 24, which leaves nine for the member's own. Each is drawn only while it has
+ * something to say, by the rule it already follows (§2.1 rule 3), so a newcomer sees about six to ten on day one and the
+ * rest arrive in their places as they have something:
+ *
+ * | Card | Drawn when |
+ * |---|---|
+ * | `start` (Welcome) | Until the tour is taken or Not now, seven days at most ({@link welcomeDrawn}) |
+ * | `safety` (Your way back in) | On its schedule only, for an account with no second way back (the node's `me.wayBack`) |
+ * | `market` (New in the Market) | A listing exists, or the community's examples |
+ * | `steps` (First steps) | A line is left, in the first 30 days (first-steps.ts `FIRST_STEPS_DAYS`) |
+ * | `interests` (What are you into?) | Until the first star |
+ * | `events` (Coming up) | An event is coming |
+ * | `beans` (Your Beans) | Beans are on here |
+ * | `asked` (Asked near you) | A neighbour has an open Need |
+ * | `deals` (Your deals) | An open deal |
+ * | `groups` (Your groups) | In a group |
+ * | `decide` (Decide) | A Decision or poll is open |
+ * | `notices` (From your community) | An unseen notice |
+ * | `joined` (Who joined) | Someone joined this week |
+ * | `tips` (Tips) | One a day until all are seen |
+ * | `sky` (Sun and moon) | The community has a place |
+ *
+ * Needs you stays fixed first and the community card fixed last; on the worldwide community Find your community stays
+ * pinned under Needs you, and the cards it has no feature for (Your Beans, Your deals, Decide) are never asked for.
  */
-export const HOME_STARTER_SET: readonly string[] = [
-    NEWCOMER_RIDERS[0], HOME_NEWCOMER_FIVE[0], HOME_NEWCOMER_FIVE[1], NEWCOMER_RIDERS[1], HOME_NEWCOMER_FIVE[2], NEWCOMER_RIDERS[2],
-    ...HOME_NEWCOMER_FIVE.slice(3),
+export const HOME_DEFAULT_LIST: readonly string[] = [
+    'start', 'safety', 'market', 'steps', 'interests', 'events', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky',
 ];
 
-/** The starter set as card instances. */
+/**
+ * The default list less Welcome (§3 "Restore default?"): what Reset to defaults puts back, and what a Home with no saved
+ * layout holds once the tour has ended. Welcome is a newcomer's, never a reset's.
+ */
+export const HOME_STARTER_SET: readonly string[] = HOME_DEFAULT_LIST.filter((id) => id !== 'start');
+
+/** The default list less Welcome, as card instances. */
 export const starterCards = (): HomeCardInstance[] => HOME_STARTER_SET.map((id) => ({ id, type: id }));
 
 /**
- * A newcomer's Home (§1): Getting started alone, between the fixed Needs you and Your community (and under a pinned Find
- * your community on global). The starter set arrives when the tour ends ({@link endTourLayout}).
+ * A newcomer's Home (§2.2): the default list, Welcome on top, between the fixed Needs you and Your community (and under a
+ * pinned Find your community on global). Nothing waits behind the tour: every card is there from the first second.
  */
 export function defaultCards(_profile: 'local' | 'global' | string = 'local'): HomeCardInstance[] {
-    return [{ id: 'start', type: 'start' }];
+    return HOME_DEFAULT_LIST.map((id) => ({ id, type: id }));
+}
+
+/** How long Welcome stays at most, in days after joining (§2.3 "It leaves"). */
+export const WELCOME_DAYS = 7;
+
+/**
+ * Whether Welcome is drawn (§2.3): until the tour is done, Not now (a skip), or seven days after joining, whichever comes
+ * first. `tourOver` is the account's record saying done or skipped (tour.ts `tourEnded`); a join date the node didn't send
+ * or can't be read leaves the card to the tour alone, never hides it.
+ */
+export function welcomeDrawn(tourOver: boolean, joinedAt: string | null | undefined, now: number = Date.now()): boolean {
+    if (tourOver) return false;
+    const joined = typeof joinedAt === 'string' ? Date.parse(joinedAt) : NaN;
+    return !Number.isFinite(joined) || now - joined < WELCOME_DAYS * 86_400_000;
+}
+
+/**
+ * A card the member made rather than took from the catalogue (§3 "Restore default?"): a saved search, a chat, Your tools,
+ * a tool's card, or a type this build doesn't know (a newer app's, kept whatever it is). Reset keeps these, after the defaults.
+ */
+export function isOwnCard(card: Pick<HomeCardInstance, 'type'>): boolean {
+    const t = TYPES.get(card.type);
+    return !t || !!t.multiple || card.type === 'tools' || TOOL_CARD_TYPES.has(card.type);
+}
+
+/**
+ * Reset to defaults (§3): the default list less Welcome, then the cards the member made ({@link isOwnCard}) in their order,
+ * at most 24. The schedule's dismissals (Your way back in) and the view are kept: neither is a card. `now` stamps `updatedAt`.
+ */
+export function resetHomeLayout(layout: HomeLayoutV2 | null, now: number = Date.now()): HomeLayoutV2 {
+    const defaults = starterCards();
+    const have = new Set(defaults.map((c) => c.id));
+    const own = (layout?.cards ?? []).filter((c) => isOwnCard(c) && !have.has(c.id));
+    const cards = [...defaults, ...own].slice(0, HOME_FRAME_LIMITS.cards);
+    const view = layout?.view ? { view: layout.view } : {};
+    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: new Date(now).toISOString(), ...view };
 }
 
 /** A newcomer's whole layout, never edited (`updatedAt` null). */
@@ -726,20 +787,14 @@ export function moveCard(layout: HomeLayoutV2 | null, id: string, delta: -1 | 1,
 }
 
 /**
- * Home as the tour leaves it (§3), in one layout write: Getting started goes; when nothing else is left on Home but a
- * pinned card (the member skipped, or tapped Done with no card picked), the starter set is added after the pinned ones.
- * A member who put Getting started on a Home they had already set up keeps that Home as it was, less the card.
+ * Home as the tour leaves it (DESIGN-home-default-fable.md §2.3), in one layout write: Welcome goes and nothing is added,
+ * since the cards are already there. A Home never saved is the default list less Welcome; a Home the member arranged is
+ * kept as it was, less the card.
  */
-export function endTourLayout(layout: HomeLayoutV2 | null, opts: { pinned?: readonly string[]; now?: number } = {}): HomeLayoutV2 {
+export function endTourLayout(layout: HomeLayoutV2 | null, opts: { now?: number } = {}): HomeLayoutV2 {
     const base = layout ?? defaultHomeLayout();
-    const now = new Date(opts.now ?? Date.now()).toISOString();
     const { start: _gone, ...dismissed } = base.dismissed;
-    const kept = base.cards.filter((c) => c.type !== 'start');
-    const pinned = new Set(opts.pinned ?? []);
-    if (kept.some((c) => !pinned.has(c.id))) return { ...base, cards: kept, dismissed, updatedAt: now };
-    const have = new Set(kept.map((c) => c.id));
-    const cards = [...kept, ...starterCards().filter((c) => !have.has(c.id))].slice(0, HOME_FRAME_LIMITS.cards);
-    return { ...base, cards, dismissed, updatedAt: now };
+    return { ...base, cards: base.cards.filter((c) => c.type !== 'start'), dismissed, updatedAt: new Date(opts.now ?? Date.now()).toISOString() };
 }
 
 /**

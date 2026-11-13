@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     HOME_CARD_TYPES, HOME_CATEGORY_HUES, HOME_CHAT_KIND_HUES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS,
-    HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, HOME_V1_CARD_IDS, addCard, cardSettings,
+    HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_DEFAULT_LIST, HOME_STARTER_SET, HOME_V1_CARD_IDS, addCard, cardSettings,
     cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeCardHue, homeColumns, moveCard, readChatSettings, readDecideSettings, readHomeLayout,
     readSearchSettings, readToolsSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
@@ -224,7 +224,7 @@ describe('home frame W0: the columns a member chose, kept in the layout (DESIGN-
         expect(removeCard(l, 'tips', NOW).view).toEqual(view);
         expect(moveCard(l, 'tips', -1, NOW).view).toEqual(view);
         expect(endTourLayout(l, { now: NOW }).view).toEqual(view);
-        // A Home with only Getting started on it ends the tour on the starter set: the choice stays.
+        // A Home with only Welcome on it ends the tour with nothing added: the choice stays.
         expect(endTourLayout({ ...layout([one('start')]), view }, { now: NOW }).view).toEqual(view);
     });
 
@@ -255,8 +255,8 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
         const l = layout([one('tips'), one('interests'), one('invite'), FUTURE, one('beans')]);
         expect(cardsToAsk(l)).toEqual(['needs', 'beans', 'community']);
         expect(cardsToAsk(l, ['find'])).toEqual(['needs', 'find', 'beans', 'community']);
-        // A newcomer's Home is Getting started alone (drawn from the device, never asked): only the fixed two are asked.
-        expect(cardsToAsk(null)).toEqual(['needs', 'community']);
+        // A newcomer's Home is the default list (DESIGN-home-default-fable.md §2.2): the fixed two and every default card the node builds.
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'events', 'market', 'asked', 'decide', 'groups', 'joined', 'beans', 'notices', 'community']);
     });
 });
 
@@ -264,11 +264,10 @@ describe('home frame §5.2 (3): cardsToAsk', () => {
 const wordDp = (word: string) => word.length * 15 * 1.3 * 0.6;
 
 describe('home frame §5.2 (4): the default and the words', () => {
-    it("defaultCards is Getting started alone on both profiles; the starter set is the usual five with the three that manage themselves", () => {
-        expect(HOME_NEWCOMER_FIVE).toEqual(['steps', 'tips', 'market', 'events', 'notices']);
-        expect(HOME_STARTER_SET).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'events', 'notices']);
-        expect(HOME_STARTER_SET.filter(id => HOME_NEWCOMER_FIVE.includes(id))).toHaveLength(5);
-        for (const p of ['local', 'global'] as const) expect(defaultCards(p)).toEqual([{ id: 'start', type: 'start' }]);
+    it("defaultCards is the default list on both profiles, Welcome first; the starter set is the same list less Welcome", () => {
+        expect(HOME_STARTER_SET).toEqual(['safety', 'market', 'steps', 'interests', 'events', 'beans', 'asked', 'deals', 'groups', 'decide', 'notices', 'joined', 'tips', 'sky']);
+        expect(HOME_DEFAULT_LIST).toEqual(['start', ...HOME_STARTER_SET]);
+        for (const p of ['local', 'global'] as const) expect(defaultCards(p)).toEqual(HOME_DEFAULT_LIST.map(id => ({ id, type: id })));
     });
 
     it('every name and line fits the 320 model, says nothing locked, earned or tiered, and says Beans never a symbol', () => {
@@ -295,7 +294,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(HOME_FRAME_LIMITS.cards).toBe(24);
     });
 
-    it("Asked near you (cold-start N1): one of a kind, Around you, orange, asked of the node, on every node, just after the Market and after it in the starter set; version 1's catalogue is unchanged", () => {
+    it("Asked near you (cold-start N1): one of a kind, Around you, orange, asked of the node, on every node, just after the Market in the catalogue and after it in the default list; version 1's catalogue is unchanged", () => {
         const asked = HOME_CARD_TYPES.find(t => t.id === 'asked')!;
         expect(asked).toMatchObject({
             id: 'asked', hue: 'orange', name: 'Asked near you', line: 'Things neighbours are asking for, what you star first.', group: 'around', asks: 'node',
@@ -312,8 +311,8 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const ids = HOME_CARD_TYPES.map(t => t.id);
         expect(ids.indexOf('asked')).toBe(ids.indexOf('market') + 1);
         expect(cardsToAsk(layout([one('asked'), one('market')]))).toEqual(['needs', 'market', 'asked', 'community']);
-        expect(HOME_STARTER_SET.indexOf('asked')).toBe(HOME_STARTER_SET.indexOf('market') + 1);
-        expect(HOME_NEWCOMER_FIVE).not.toContain('asked');
+        // In the default list it comes after the Market (DESIGN-home-default-fable.md §2.2: #8, after Your Beans).
+        expect(HOME_STARTER_SET.indexOf('asked')).toBeGreaterThan(HOME_STARTER_SET.indexOf('market'));
         // The catalogue of version 1 never grows (its ids are what a version-1 app and the node's old layout read know).
         expect(HOME_V1_CARD_IDS).not.toContain('asked');
         expect(homeCardHue({ type: 'asked' })).toBe('orange');

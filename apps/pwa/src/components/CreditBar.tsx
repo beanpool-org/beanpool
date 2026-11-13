@@ -47,14 +47,14 @@ export function CreditBar({ answer, onOpen, className = '' }: Props) {
             className={`block w-full min-h-[44px] text-left bg-transparent border-0 p-0 m-0 cursor-pointer rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${className}`}
         >
             <span className="flex items-start justify-between gap-2">
-                <span className="text-[16px] leading-tight font-extrabold text-nature-950 dark:text-white" data-testid="credit-headline">{card.headline}</span>
+                <span className="text-base leading-tight font-extrabold text-nature-950 dark:text-white" data-testid="credit-headline">{card.headline}</span>
                 {/* The small "i": the card is a button. Drawn by CSS, so no letter sits outside the words layer. */}
-                <span aria-hidden="true" data-testid="credit-info" className="shrink-0 w-5 h-5 rounded-full border-[1.5px] border-solid border-nature-600 dark:border-nature-300 text-nature-600 dark:text-nature-300 text-[12px] leading-[17px] text-center italic font-bold font-serif after:content-['i']" />
+                <span aria-hidden="true" data-testid="credit-info" className="shrink-0 w-5 h-5 rounded-full border-[1.5px] border-solid border-nature-600 dark:border-nature-300 text-nature-600 dark:text-nature-300 text-xs leading-[1.0625rem] text-center italic font-bold font-serif after:content-['i']" />
             </span>
-            <span className="block mt-1 text-[13.5px] leading-snug text-nature-700 dark:text-nature-200" data-testid="credit-sentence">{card.sentence}</span>
+            <span className="block mt-1 text-[0.84375rem] leading-snug text-nature-700 dark:text-nature-200" data-testid="credit-sentence">{card.sentence}</span>
 
             {/* The drawing: hidden from screen readers, whose label above says it all. */}
-            <span aria-hidden="true" className="block relative mt-2 select-none" style={{ paddingTop: 28 }} data-testid="credit-drawing">
+            <span aria-hidden="true" className="block relative mt-2 pt-7 select-none" data-testid="credit-drawing">
                 <span className="block relative h-[15px] rounded-[9px]" style={{ background: RAINBOW }}>
                     <span className="absolute inset-0 rounded-[9px] overflow-hidden">
                         {pic.stripes && (
@@ -74,7 +74,7 @@ export function CreditBar({ answer, onOpen, className = '' }: Props) {
 
                 {/* The label above the dot, kept inside the card at either end; its pointer stays over the dot. */}
                 <span
-                    className="absolute top-0 px-2 py-[3px] rounded-[7px] text-[12px] font-bold whitespace-nowrap tabular-nums z-[3]"
+                    className="absolute top-0 px-2 py-[3px] rounded-[7px] text-xs font-bold whitespace-nowrap tabular-nums z-[3]"
                     style={{ left: `${pic.dot}%`, transform: `translateX(-${pic.dot}%)`, background: label.fill, color: label.on }}
                     data-testid="credit-label"
                 >
@@ -103,26 +103,29 @@ export function CreditBar({ answer, onOpen, className = '' }: Props) {
                 </span>
 
                 {/* The figures at their marks, then a word or two under each (and each mark's line from 640 px wide). */}
-                <span className="block relative h-4 mt-[3px] text-[12px] leading-4 font-bold tabular-nums whitespace-nowrap">
+                <span className="block relative h-4 mt-[3px] text-xs leading-4 font-bold tabular-nums whitespace-nowrap">
                     {limit.figure && <span className="absolute top-0 left-0" style={{ color: METER.limitInk }}>{limit.figure}</span>}
                     <span className="absolute top-0 -translate-x-1/2" style={{ left: `${zero.at}%`, color: METER.zeroInk }}>⚖️ {zero.figure}</span>
                     <span className="absolute top-0 -translate-x-1/2" style={{ left: `${fee.at}%`, color: METER.feeInk }}>{fee.figure}</span>
                 </span>
-                <span className="grid grid-cols-[36%_28%_36%] mt-px text-[12px] leading-tight text-nature-600 dark:text-nature-300">
-                    <span className="[overflow-wrap:anywhere] pr-1">{limit.words}<span className="hidden sm:block mt-[3px] font-normal">{limit.line}</span></span>
-                    <span className="[overflow-wrap:anywhere] text-center px-1">{zero.words}<span className="hidden sm:block mt-[3px]">{zero.line}</span></span>
-                    <span className="[overflow-wrap:anywhere] pl-1.5">{fee.words}<span className="hidden sm:block mt-[3px]">{fee.line}</span></span>
+                {/* Narrow: the middle word takes its own width, up to 40 % (so "balanced" is never cut inside the word),
+                    and the sides share the rest equally, so it stays under 0. From 640 px wide: fixed columns, each with
+                    its mark's line. */}
+                <span className="grid grid-cols-[minmax(0,1fr)_fit-content(40%)_minmax(0,1fr)] sm:grid-cols-[36%_28%_36%] mt-px text-xs leading-tight text-nature-600 dark:text-nature-300">
+                    <span className="min-w-0 [overflow-wrap:break-word] pr-1">{limit.words}<span className="hidden sm:block mt-[3px]">{limit.line}</span></span>
+                    <span className="min-w-0 [overflow-wrap:break-word] text-center px-1.5">{zero.words}<span className="hidden sm:block mt-[3px]">{zero.line}</span></span>
+                    <span className="min-w-0 [overflow-wrap:break-word] pl-1.5">{fee.words}<span className="hidden sm:block mt-[3px]">{fee.line}</span></span>
                 </span>
             </span>
 
             {note && (
-                <span className="flex gap-2 items-start mt-2.5 px-2.5 py-2 rounded-[9px] text-[12.5px] leading-snug" style={{ background: note.tint, color: note.ink }} data-testid="credit-note">
+                <span className="flex gap-2 items-start mt-2.5 px-2.5 py-2 rounded-[9px] text-[0.78125rem] leading-snug" style={{ background: note.tint, color: note.ink }} data-testid="credit-note">
                     <span aria-hidden="true" className="shrink-0 font-extrabold min-w-[1.1em] text-center">{note.icon}</span>
                     <span>{note.text}</span>
                 </span>
             )}
             {card.parts && (
-                <span className="block mt-2.5 pt-2 border-0 border-t border-solid border-nature-200 dark:border-nature-800 text-[12.5px] leading-normal text-nature-700 dark:text-nature-200" data-testid="credit-parts">
+                <span className="block mt-2.5 pt-2 border-0 border-t border-solid border-nature-200 dark:border-nature-800 text-[0.78125rem] leading-normal text-nature-700 dark:text-nature-200" data-testid="credit-parts">
                     {card.parts}
                 </span>
             )}

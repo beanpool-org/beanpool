@@ -79,11 +79,13 @@ describe('the source', () => {
     it('holds no hex colour', () => {
         expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     });
-    it('holds no size under 12', () => {
-        const sizes = [...src.matchAll(/text-\[(\d+(?:\.\d+)?)px\]|fontSize:\s*(\d+(?:\.\d+)?)/g)].map((m) => Number(m[1] ?? m[2]));
-        expect(sizes.length).toBeGreaterThan(0);
-        expect(sizes.filter((n) => n < 12)).toEqual([]);
-        expect(src).not.toMatch(/text-\[(?:[0-9]|1[01])px\]|text-xxs|text-\[0?\.\d+rem\]/);
+    it('holds no size under 12, and sizes in rem so the member\'s own text size scales them', () => {
+        // Tailwind's text-xs is 0.75rem (12 px at 100 %); text-base 1rem; an arbitrary size is written in rem.
+        const rems = [...src.matchAll(/text-\[(\d*\.?\d+)rem\]/g)].map((m) => Number(m[1]) * 16);
+        expect(rems.length).toBeGreaterThan(0);
+        expect(rems.filter((px) => px < 12)).toEqual([]);
+        expect(src).toMatch(/\btext-xs\b/);
+        expect(src).not.toMatch(/text-\[\d+(?:\.\d+)?px\]|fontSize:|text-xxs|text-2xs/);
     });
     it('reads no old credit variable and draws no meter', () => {
         expect(src).not.toMatch(/--credit-|role="meter"|aria-valuenow/);

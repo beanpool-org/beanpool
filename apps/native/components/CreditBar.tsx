@@ -147,9 +147,11 @@ const styles = (colors: any) => StyleSheet.create({
     block: { flex: 1, borderRadius: 2 },
     stem: { position: 'absolute', top: -5, height: 14, width: 2, marginLeft: -1 },
     marks: { flexDirection: 'row', marginTop: 3 },
-    markLeft: { width: '36%', paddingRight: 4 },
-    markMid: { width: '28%', alignItems: 'center', paddingHorizontal: 2 },
-    markRight: { width: '36%', paddingLeft: 2 },
+    // The middle word takes its own width, up to 40 % ("balanced" is never cut inside the word); the sides share the rest
+    // equally, so it stays under 0.
+    markLeft: { flex: 1, flexBasis: 0, paddingRight: 4 },
+    markMid: { maxWidth: '40%', alignItems: 'center', paddingHorizontal: 6 },
+    markRight: { flex: 1, flexBasis: 0, paddingLeft: 2 },
     figure: { fontSize: 12, lineHeight: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
     words: { fontSize: 12, lineHeight: 15, color: colors.text.secondary },
     note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: 10, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 9 },

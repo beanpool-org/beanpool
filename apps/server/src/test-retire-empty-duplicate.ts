@@ -3,8 +3,12 @@
  * to suspend an account that was set up in error"; engine/retire-duplicate.ts), and the manager's Freeze reading the node's
  * own state ("sort the freeze to frozen button"). Over HTTPS through the real middleware.
  *
- *   1. The schema, measured: every column that references a member's key (each foreign key to members) is either in one of
- *      EMPTY_RULES' checks or named below as no activity of the account's, with why. A new table must say which.
+ *   1. The schema, measured: every column that holds a member's key is either in one of EMPTY_RULES' checks or named below
+ *      as no activity of the account's, with why. "Holds a member's key" is each foreign key to members AND each TEXT
+ *      column whose name says it (MEMBER_KEY_COLUMN: …_pubkey, public_key, …_by, author, keeper, recipient, voter…),
+ *      since most member columns have no foreign key. A new table must say which; the name rule is what catches a column
+ *      with no foreign key, so a member's key under a name it doesn't know (no "pubkey", "_by" or role word) still slips
+ *      past: name such a column so it says what it holds.
  *   2. "Empty", a rule at a time: a fresh account may be retired; then one account per rule, each holding only that one
  *      thing, is refused with that rule's code and words (yourself, an enterprise, a suspended account, a role, a balance,
  *      a post, a payment, a message sent, credit, an enterprise kept, someone brought in, a report). Each refusal for what
@@ -16,6 +20,10 @@
  *      directory and the community's member count leave it out; the owners' list keeps it, marked retiredAt; Lift
  *      suspension is refused (use Bring back); retiring it again is refused (not active).
  *   5. Bring back: active again, the mark cleared, its key signs again, and it is back in the directory and the count.
+ *   5b. Made active another way (what a passed unsuspend or reinstate vote runs, setUserStatusRow 'active'): the mark is
+ *      cleared, with a tombstone, so an admin's later pause is a pause: its key and the owners' list read it as paused, not
+ *      retired; Bring back refuses it (not retired) and leaves the pause and its remove_member vote standing; Lift lifts
+ *      it and closes that vote.
  *   6. Freeze: the owners' member rows carry creditFrozen as the node holds it, after a freeze and after an unfreeze.
  *   7. A standby: retired_accounts is a plain table (copied, Bring back's delete a tombstone), a re-key moves it, and a
  *      standby retires nothing (409 standby).
@@ -29,7 +37,7 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, setUserStatusRow } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -55,12 +63,11 @@ type Res = { status: number; body: any };
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 240)}`;
 
 /**
- * Every column with a foreign key to members that is no activity of the account itself, and why. Anything else must be in
- * EMPTY_RULES. (A column without a foreign key that names a member's key, such as transactions.from_pubkey, is in
- * EMPTY_RULES by hand: the rule's checks list each.)
+ * Every column holding a member's key that is no activity of the account itself, and why: what was done to it, its own
+ * settings and reading, and throwaway keys. Anything else must be in EMPTY_RULES (anything it did, its acts as an owner,
+ * admin or moderator too).
  */
 const NOT_ACTIVITY: Record<string, string> = {
-    'members.invited_by': 'who invited this account: in EMPTY_RULES as `invited` the other way (who it invited)',
     'invite_codes.used_by': 'the code it joined with: every account has one',
     'push_tokens.public_key': "its phone's push address: no act",
     'member_preferences.public_key': 'its own settings: no act',
@@ -76,7 +83,6 @@ const NOT_ACTIVITY: Record<string, string> = {
     'owner_words_checks.member_pubkey': "an owner's 12-word check: only a role holder has one (`holds_role`)",
     'owner_lock_opens.member_pubkey': "an owner's lock: only a role holder has one (`holds_role`)",
     'decision_electors.member_pubkey': 'a jury it was drawn into: not its act (a vote it cast is `votes`)',
-    'decisions.admin_halted_by': 'an admin halting a decision: only a role holder (`holds_role`)',
     'group_members.member_pubkey': 'a group someone added it to: a group it made is `posts`',
     'group_members.invited_by': 'whom it invited into a group: needs a group it is in; making one is `posts`',
     'federation_links.treasury_pubkey': "a link's treasury: an enterprise row, never a person's (`not_person`)",
@@ -85,7 +91,54 @@ const NOT_ACTIVITY: Record<string, string> = {
     'chat_mutes.member_pubkey': 'chats it muted: its own setting',
     'thread_read_cursors.member_pubkey': 'how far it read a thread: its own reading',
     'member_tool_state.public_key': "its own tools' settings",
+    'member_photos.public_key': 'its own profile photo: no act on anyone',
+    'accounts.public_key': 'its own account row: the balance rule reads it (`balance`)',
+    'photo_url_heals.viewer': 'its app refreshing listing-photo links: its own reading',
+    'push_token_leaves.public_key': 'its phone leaving pushes: its own setting',
+    'web_push_subscriptions.public_key': "its browser's push address: no act",
+    'photo_budget_log.member_pubkey': "photo bytes it stored in a day: a post's photo is the post (`posts`), its own photo no act",
+    'recovery_shares.ephemeral_pubkey': "a throwaway key, never a member's",
+    'recovery_collections.requester_ephemeral_pubkey': "a throwaway key, never a member's",
+    'recovery_releases.ephemeral_pubkey': "a throwaway key, never a member's",
+    'names_shares.ephemeral_pubkey': "a throwaway key, never a member's",
+    'names_copies.ephemeral_pubkey': "a throwaway key, never a member's",
+    'recovery_releases.owner_pubkey': 'a piece released for a restore of its own account: no act (releasing one for someone else is `invited`)',
+    'burst_actions.anchor_pubkey': "the moderators' clean-up of a burst of joins opened from it: done to it, not by it",
+    'join_requests.pubkey': 'its own request to join: how it came in',
+    'moderation_notices.recipient': 'a notice the moderators sent it: not its act',
+    'push_notices.recipient': 'a notice sent to it: not its act',
+    'member_blocks.owner_pubkey': 'its own block list: its own setting',
+    'member_blocks.blocked_pubkey': 'someone else blocked it: not its act',
+    'withheld_conversations.other_pubkey': "the member who blocked a sender: not its act (the sender's is `messages`)",
+    'dm_requests.to_pubkey': 'someone asked to message it: not its act (answering is `messages`)',
+    'contact_copies.owner_pubkey': 'its own locked contacts list: its own setting',
+    'health_access_log.subject_pubkey': 'an admin looked at it: not its act',
+    'credit_look_log.subject_pubkey': 'a giver looked at its credit: not its act',
+    'names_access_log.subject_pubkey': 'an admin acted on its names-list entry: not its act (a confirmation is `names_list`)',
+    'known_consent_log.member_pubkey': 'its own consent to be known: its own setting',
+    'retired_accounts.member_pubkey': "the retire's own mark: what this check is for",
+    'member_badges.member_pubkey': 'a badge an owner set on it: not its act',
+    'activity_feed.actor_pubkey': "the community feed's line of an act its own table holds (each counted there), or a joiner's member_joined line",
+    'activity_feed.target_pubkey': "the community feed's line of an act its own table holds (each counted there)",
+    'group_key_epochs.created_by': "its phone making a group chat's key at a membership change: as a member (group_members); what it sent is `messages`",
+    'group_key_epochs.subject_pubkey': 'the member a group key change was for: membership (group_members)',
+    'group_key_wraps.recipient_pubkey': "a group chat's key sealed for it: membership (group_members)",
+    'group_key_wraps.wrapper_pubkey': "its phone sealing a group chat's key for a member: as a member (group_members)",
+    'rekey_requests.old_pubkey': "its own key's replacement: the account moving, no act",
+    'rekey_requests.new_pubkey': "its own key's replacement: the account moving, no act",
+    'rekey_proposals.new_pubkey': "its own key's replacement: the account moving, no act",
+    'rekey_audit_log.old_pubkey': "its own key's replacement: the account moving, no act",
+    'rekey_audit_log.new_pubkey': "its own key's replacement: the account moving, no act",
+    'community_copies.owner_pubkey': 'its own sealed key and 12 words: no act',
+    'bring_back_log.member_pubkey': 'its own account brought back to a new phone by an admin: no act',
+    'invalidated_keys.public_key': "a key closed or replaced: the key's state, no act",
 };
+
+/**
+ * A TEXT column whose name says it holds a member's key (see §1). Read with each foreign key to members; INTEGER and REAL
+ * columns (flags and counts such as agent_takedowns.by_author) are no key.
+ */
+const MEMBER_KEY_COLUMN = /^(?:pubkey|(?:[a-z_]*_)?(?:pubkey|public_key|account|actor|author|owner|member|voter|rater|reporter|target|recipient|keeper|enterprise|subject|holder|sender|payer|payee|buyer|seller|candidate|proposer|creator|lead|convenor|inviter|invitee|viewer)|[a-z_]*_by)$/;
 
 function keypair(name: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -99,6 +152,15 @@ function makeMember(name: string, opts: { treasury?: boolean } = {}): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'TEST', 'active', ?)`).run(id.pk, id.name, opts.treasury ? 1 : 0);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
+}
+
+/** A group led by `convenor` and a lead-convenor election in it, proposed by `proposer` for `candidate`; its id. */
+function convenorElection(proposer: string, candidate: string, convenor = proposer): string {
+    const tag = crypto.randomBytes(6).toString('hex');
+    db.prepare(`INSERT INTO groups (id, name, slug, created_by, lead_pubkey) VALUES (?, 'A circle', ?, ?, ?)`).run(`g-${tag}`, `circle-${tag}`, convenor, convenor);
+    db.prepare(`INSERT INTO group_convenor_proposals (id, group_id, convenor_pubkey, candidate_pubkey, proposer_pubkey, deadline_at)
+                VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+7 days'))`).run(`gp-${tag}`, `g-${tag}`, convenor, candidate, proposer);
+    return `gp-${tag}`;
 }
 
 function resetLimits(): void {
@@ -162,15 +224,29 @@ async function main(): Promise<void> {
     console.log('── 1. Every column naming a member is a rule or named as no activity ──');
     const ruled = new Set(EMPTY_RULES.flatMap(r => r.checks.flatMap(c => c.columns.map(col => `${c.table}.${col}`))));
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").pluck().all() as string[];
-    const unclassified: string[] = [];
+    const memberColumns = new Set<string>();
+    const byForeignKey = new Set<string>();
     for (const t of tables) {
         for (const fk of db.prepare(`SELECT "table" AS ref, "from" AS col FROM pragma_foreign_key_list(?)`).all(t) as Array<{ ref: string; col: string }>) {
-            if (fk.ref !== 'members') continue;
-            const name = `${t}.${fk.col}`;
-            if (!ruled.has(name) && !(name in NOT_ACTIVITY)) unclassified.push(name);
+            if (fk.ref === 'members') { memberColumns.add(`${t}.${fk.col}`); byForeignKey.add(`${t}.${fk.col}`); }
+        }
+        for (const c of db.prepare('SELECT name, upper(type) AS type FROM pragma_table_info(?)').all(t) as Array<{ name: string; type: string }>) {
+            if (MEMBER_KEY_COLUMN.test(c.name) && !/INT|REAL/.test(c.type)) memberColumns.add(`${t}.${c.name}`);
         }
     }
-    assert(unclassified.length === 0, `every foreign key to members is a rule or named as no activity (unclassified: ${unclassified.join(', ') || 'none'})`);
+    const unclassified = [...memberColumns].filter(name => !ruled.has(name) && !(name in NOT_ACTIVITY));
+    assert(memberColumns.size > 150 && byForeignKey.size > 0 && memberColumns.size > 2 * byForeignKey.size,
+        `the schema check sees member columns with and without a foreign key (${memberColumns.size}, ${byForeignKey.size} of them by foreign key)`);
+    assert(unclassified.length === 0, `every column holding a member's key is a rule or named as no activity (unclassified: ${unclassified.join(', ') || 'none'})`);
+    // The name rule finds the columns the review found with no foreign key (convenor elections, a guide page sent, a
+    // names-list confirmation), so a table like them can't slip past again.
+    const noForeignKey = ['group_convenor_proposals.proposer_pubkey', 'group_convenor_proposals.candidate_pubkey', 'group_convenor_votes.voter_pubkey',
+        'knowledge_drafts.member_pubkey', 'confirmations.member_pubkey'];
+    const unseen = noForeignKey.filter(c => byForeignKey.has(c) || !memberColumns.has(c) || !ruled.has(c));
+    assert(unseen.length === 0, `columns with no foreign key are seen by name and ruled (not: ${unseen.join(', ') || 'none'})`);
+    const both = Object.keys(NOT_ACTIVITY).filter(c => ruled.has(c));
+    const stale = Object.keys(NOT_ACTIVITY).filter(c => !memberColumns.has(c));
+    assert(both.length === 0 && stale.length === 0, `no column is both a rule and no activity, and each one named is still a member column (both: ${both.join(', ') || 'none'}; not: ${stale.join(', ') || 'none'})`);
     const missing = EMPTY_RULES.flatMap(r => r.checks).filter(c => {
         const cols = new Set(db.prepare('SELECT name FROM pragma_table_info(?)').pluck().all(c.table) as string[]);
         return cols.size === 0 || c.columns.some(col => !cols.has(col));
@@ -183,7 +259,7 @@ async function main(): Promise<void> {
     const ok = await call('GET', null, `/api/local/admin/users/${fresh.pk}/retire`, undefined, owner);
     assert(ok.status === 200 && ok.body?.allowed === true, `a fresh account with nothing in it may be retired (${show(ok)})`);
 
-    const cases: Array<{ rule: string; make: () => Id; target?: (id: Id) => string }> = [
+    const cases: Array<{ rule: string; label?: string; make: () => Id }> = [
         { rule: 'own_account', make: () => founder },
         { rule: 'not_person', make: () => makeMember('Shop', { treasury: true }) },
         { rule: 'not_active', make: () => { const m = makeMember('Paused'); db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(m.pk); return m; } },
@@ -224,6 +300,40 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason) VALUES (?, ?, ?, 'spam')`).run(`r-${m.pk.slice(0, 8)}`, reader.pk, m.pk);
             return m;
         } },
+        // The review's finds on a67330aa: each of these passed as empty (allowed: true).
+        { rule: 'votes', label: "a group's lead-convenor election it proposed and voted yes in", make: () => {
+            const m = makeMember('Elector');
+            const prop = convenorElection(m.pk, reader.pk, reader.pk);
+            db.prepare(`INSERT INTO group_convenor_votes (proposal_id, voter_pubkey, choice) VALUES (?, ?, 'yes')`).run(prop, m.pk);
+            return m;
+        } },
+        { rule: 'votes', label: "a group's lead-convenor election it stood in, nothing more", make: () => {
+            const m = makeMember('Candidate');
+            convenorElection(reader.pk, m.pk);
+            return m;
+        } },
+        { rule: 'votes', label: "a group's lead-convenor election it only voted in", make: () => {
+            const m = makeMember('Voter');
+            const prop = convenorElection(reader.pk, reader.pk);
+            db.prepare(`INSERT INTO group_convenor_votes (proposal_id, voter_pubkey, choice) VALUES (?, ?, 'no')`).run(prop, m.pk);
+            return m;
+        } },
+        { rule: 'posts', label: 'a guide page it sent, waiting for an admin', make: () => {
+            const m = makeMember('Writer');
+            db.prepare(`INSERT INTO knowledge_drafts (id, kind, member_pubkey, via, title, body, topic, state, created_at)
+                        VALUES (?, 'new', ?, 'app', 'Fixing a tap', 'Turn the water off first.', 'home', 'waiting', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).run(`k-${m.pk.slice(0, 8)}`, m.pk);
+            return m;
+        } },
+        { rule: 'names_list', label: 'confirmed on the names list', make: () => {
+            const m = makeMember('Confirmed');
+            db.prepare(`INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by) VALUES (?, ?, 'entry-1', ?)`).run(`cf-${m.pk.slice(0, 8)}`, m.pk, founder.pk);
+            return m;
+        } },
+        { rule: 'acted_as_role', label: 'a former admin who changed a community setting', make: () => {
+            const m = makeMember('ExAdmin');
+            db.prepare(`INSERT INTO community_settings_log (actor_pubkey, actor_role, setting, old_value, new_value) VALUES (?, 'admin', 'posts_per_day', '5', '6')`).run(m.pk);
+            return m;
+        } },
     ];
     for (const c of cases) {
         const m = c.make();
@@ -235,7 +345,7 @@ async function main(): Promise<void> {
             && tried.status >= 400 && tried.body?.rule === c.rule && typeof tried.body?.error === 'string'
             && (own || tried.body.error.endsWith(RETIRE_WORDS.notEmpty))
             && JSON.stringify(rowOf(m)) === before,
-            `${c.rule}: refused in words, nothing written (${show(tried)})`);
+            `${c.rule}${c.label ? ` (${c.label})` : ''}: refused in words, nothing written (${show(tried)})`);
     }
 
     // ── 3. Who ──
@@ -293,6 +403,43 @@ async function main(): Promise<void> {
     assert(countOf(infoBack) === countOf(infoBefore), `and in the count (${countOf(infoBack)})`);
     const backAgain = await call('POST', null, `/api/local/admin/users/${dup.pk}/unretire`, {}, owner);
     assert(backAgain.status === 409 && backAgain.body?.code === 'not_retired', `bringing back an account that isn't retired is refused (${show(backAgain)})`);
+
+    // ── 5b. Made active another way, then paused ──
+    console.log('\n── 5b. Made active by a vote, then paused: a pause, never "retired" ──');
+    const twice = makeMember('Twice');
+    const retiredTwice = await call('POST', null, `/api/local/admin/users/${twice.pk}/retire`, {}, owner);
+    assert(retiredTwice.status === 200 && !!rowOf(twice)?.retired_at, `setup: retired (${show(retiredTwice)})`);
+    // What a passed unsuspend or reinstate vote runs (decisions-engine.ts executeDecision).
+    setUserStatusRow(twice.pk, 'active');
+    const madeActive = rowOf(twice);
+    assert(madeActive?.status === 'active' && madeActive.retired_at === null && madeActive.retired_by === null,
+        `made active by a vote: the retired mark is cleared (${JSON.stringify(madeActive)})`);
+    assert(!!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'retired_accounts' AND row_key = ?").get(twice.pk),
+        '…with a tombstone, so a standby drops it too');
+    const paused = await call('POST', null, `/api/local/admin/users/${twice.pk}/suspend`, { reason: 'Posting the same offer again and again in the market' }, adaAdmin);
+    const pauseVote = db.prepare(`SELECT id, status FROM decisions WHERE effect = 'remove_member' AND subject = ? ORDER BY created_at DESC LIMIT 1`)
+        .get(twice.pk) as { id: string; status: string } | undefined;
+    assert(paused.status === 200 && rowOf(twice)?.status === 'disabled' && pauseVote?.status === 'open',
+        `an admin pauses it later: paused, its remove_member vote open (${show(paused)}, vote ${pauseVote?.status})`);
+    const pausedRead = await call('GET', twice, '/api/community/info');
+    assert(pausedRead.body?.code !== 'account_retired', `its key reads as paused, not retired (${show(pausedRead)})`);
+    const listedPaused = await adminRow(owner, twice);
+    assert(listedPaused?.status === 'disabled' && listedPaused?.retiredAt === null, `the owners' list shows a pause, not a retire (${JSON.stringify(listedPaused)?.slice(0, 160)})`);
+    const voteOf = () => db.prepare('SELECT status FROM decisions WHERE id = ?').pluck().get(pauseVote?.id ?? '') as string | undefined;
+    const bringBackPaused = await call('POST', null, `/api/local/admin/users/${twice.pk}/unretire`, {}, owner);
+    assert(bringBackPaused.status === 409 && bringBackPaused.body?.code === 'not_retired' && rowOf(twice)?.status === 'disabled' && voteOf() === 'open',
+        `Bring back refuses it: the pause and its vote stand (${show(bringBackPaused)}, vote ${voteOf()})`);
+    const liftPaused = await call('POST', null, `/api/local/admin/users/${twice.pk}/status`, { status: 'active' }, owner);
+    assert(liftPaused.status === 200 && rowOf(twice)?.status === 'active' && voteOf() !== 'open',
+        `Lift lifts the pause and closes its vote (${show(liftPaused)}, vote ${voteOf()})`);
+    // The one way out of 'disabled' that writes the status itself: a retired account deleting itself (allowed, as a
+    // closed account's is). Its mark goes with it, with a tombstone.
+    const leaver = makeMember('Leaver');
+    const retiredLeaver = await call('POST', null, `/api/local/admin/users/${leaver.pk}/retire`, {}, owner);
+    const purged = await call('POST', leaver, '/api/member/purge', {});
+    assert(retiredLeaver.status === 200 && purged.status === 200 && rowOf(leaver)?.status === 'pruned' && rowOf(leaver)?.retired_at === null
+        && !!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'retired_accounts' AND row_key = ?").get(leaver.pk),
+        `a retired account that deletes itself takes its mark with it (${show(purged)} ${JSON.stringify(rowOf(leaver))})`);
 
     // ── 6. Freeze reads the node ──
     console.log('\n── 6. Freeze: the list carries what the node holds ──');

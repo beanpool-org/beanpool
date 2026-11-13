@@ -13,7 +13,7 @@
  * where it votes) stays the way for it.
  */
 import { word } from '@beanpool/core';
-import { db, deletePlainRows } from '../db/db.js';
+import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { setUserStatusRow, broadcast } from '../state-engine.js';
 import { namesMemberSql } from '../decisions-engine.js';
@@ -29,8 +29,10 @@ export const RETIRE_WORDS = {
     messages: word('They have sent messages.'),
     credit: word('They have given credit, been given credit, or owe some.'),
     enterprise: word('They keep an enterprise or started a project.'),
-    invited: word('They brought someone into the community.'),
+    invited: word('They brought someone into the community, answered a request to join, or helped someone back into their account.'),
     votes: word('They have voted, proposed a decision, rated or reported someone, or a decision or report names them.'),
+    namesList: word('They are, or were, confirmed on the names list.'),
+    actedAsRole: word('They have acted here as an owner, admin or moderator.'),
     notEmpty: word('This is not an empty account, so it cannot be retired. Suspend them instead if they must stop.'),
     keyOnly: word('Sign in with your own key to retire an account, so it is logged in your name.'),
     ownerOnly: word('Only an owner can retire an empty duplicate.'),
@@ -40,12 +42,15 @@ export const RETIRE_WORDS = {
 } as const;
 
 export type EmptyRule = 'own_account' | 'not_person' | 'not_active' | 'holds_role' | 'balance' | 'posts' | 'trades' | 'messages'
-    | 'credit' | 'enterprise' | 'invited' | 'votes';
+    | 'credit' | 'enterprise' | 'invited' | 'votes' | 'names_list' | 'acted_as_role';
 
 /**
- * What makes an account not empty, one rule a kind of activity, each the tables and columns that could hold it. Every
- * column of the schema that names a member, or is a key a member acts with, is here or in NOT_ACTIVITY with its reason
- * (test-retire-empty-duplicate.ts measures the schema against both). `@pk` is the account's key.
+ * What makes an account not empty, one rule a kind of activity, each the tables and columns that could hold it. The line:
+ * anything the account did counts, its acts as an owner, admin or moderator too (`acted_as_role`, so a former one's
+ * account is never "empty"); only what was done to it, its own settings and reading, and throwaway keys do not. Every
+ * column of the schema that names a member's key (a foreign key to members, or a TEXT column whose name says it holds
+ * one) is here or in the suite's NOT_ACTIVITY with its reason: test-retire-empty-duplicate.ts measures the schema against
+ * both, so a new table has to say which. `@pk` is the account's key.
  */
 export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray<{ table: string; columns: readonly string[]; where?: string }> }> = [
     { rule: 'holds_role', checks: [
@@ -54,16 +59,25 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
     ] },
     { rule: 'posts', checks: [
         { table: 'posts', columns: ['author_pubkey', 'created_by', 'accepted_by', 'assigned_to', 'target_pubkey'] },
-        { table: 'event_rsvps', columns: ['member_pubkey'] },
+        { table: 'event_rsvps', columns: ['member_pubkey', 'let_in_by'] },
         { table: 'groups', columns: ['created_by', 'lead_pubkey', 'circle_starter'] },
         { table: 'group_invite_declines', columns: ['invited_by'] },
         { table: 'creator_channels', columns: ['owner_pubkey'] },
         { table: 'pulse_items', columns: ['owner_pubkey'] },
+        // A guide page it sent, waiting or answered (engine/knowledge-drafts.ts).
+        { table: 'knowledge_drafts', columns: ['member_pubkey'] },
+        // A listing it shared outside, and a request to join that came by that link (engine/peek-tickets.ts).
+        { table: 'peek_tickets', columns: ['sharer_pubkey'] },
+        { table: 'join_requests', columns: ['via_sharer_pubkey'] },
+        // An assistant took its posts down (engine/agent-takedowns.ts): it posted.
+        { table: 'agent_takedowns', columns: ['member_pubkey'] },
     ] },
     { rule: 'trades', checks: [
         { table: 'transactions', columns: ['from_pubkey', 'to_pubkey'] },
         { table: 'marketplace_transactions', columns: ['buyer_pubkey', 'seller_pubkey'] },
-        { table: 'standing_deals', columns: ['payer_pubkey', 'payee_pubkey'] },
+        { table: 'standing_deals', columns: ['payer_pubkey', 'payee_pubkey', 'stopped_by'] },
+        { table: 'standing_period_changes', columns: ['asked_by', 'answered_by'] },
+        { table: 'money_acts', columns: ['account', 'recipient', 'keeper', 'for_enterprise'] },
         { table: 'bills', columns: ['biller_pubkey', 'payer_pubkey', 'sent_by'] },
         { table: 'settlements', columns: ['buyer_pubkey', 'seller_pubkey'] },
         { table: 'money_requests', columns: ['payer_pubkey'] },
@@ -71,6 +85,10 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
     { rule: 'messages', checks: [
         { table: 'messages', columns: ['author_pubkey'] },
         { table: 'withheld_lines', columns: ['author_pubkey'] },
+        { table: 'withheld_conversations', columns: ['owner_pubkey'] },
+        { table: 'withheld_overlays', columns: ['author_pubkey'] },
+        { table: 'dm_requests', columns: ['from_pubkey', 'accepted_by'] },
+        { table: 'request_limits', columns: ['sender_pubkey'] },
     ] },
     { rule: 'credit', checks: [
         { table: 'members', columns: ['public_key'], where: 'COALESCE(earned_credit_c, 0) != 0' },
@@ -80,6 +98,7 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'names_debts', columns: ['repaying_pubkey'] },
         { table: 'names_debt_payments', columns: ['payer_pubkey'] },
         { table: 'known_floor_exceptions', columns: ['member_pubkey'] },
+        { table: 'known_floor_log', columns: ['member_pubkey'] },
     ] },
     { rule: 'enterprise', checks: [
         { table: 'treasury_operators', columns: ['member_pubkey', 'treasury_pubkey'] },
@@ -88,21 +107,65 @@ export const EMPTY_RULES: ReadonlyArray<{ rule: EmptyRule; checks: ReadonlyArray
         { table: 'deferred_wage_claims', columns: ['keeper_pubkey', 'enterprise_pubkey'] },
         { table: 'shops', columns: ['owner_pubkey'] },
         { table: 'enterprise_keeper_requests', columns: ['member_pubkey', 'enterprise_pubkey', 'decided_by'] },
-        { table: 'enterprise_keeper_changes', columns: ['member_pubkey', 'enterprise_pubkey'] },
+        { table: 'enterprise_keeper_changes', columns: ['member_pubkey', 'enterprise_pubkey', 'proposed_by', 'resolved_by'] },
+        { table: 'keeper_own_posts', columns: ['keeper'] },
+        // An enterprise's row it paused or began to wind up.
+        { table: 'members', columns: ['paused_by', 'wind_up_initiated_by'] },
         { table: 'enterprise_succession_proposals', columns: ['proposer_pubkey', 'candidate_pubkey', 'lead_pubkey', 'enterprise_pubkey'] },
     ] },
     { rule: 'invited', checks: [
         { table: 'members', columns: ['invited_by'] },
         { table: 'invite_codes', columns: ['created_by'], where: 'used_by IS NOT NULL' },
         { table: 'invite_asks', columns: ['asker_pubkey'] },
+        { table: 'join_requests', columns: ['decided_by'] },
+        // A piece of someone's 12 words it released as their keeper (engine/recovery-release.ts).
+        { table: 'recovery_releases', columns: ['released_by'] },
     ] },
     { rule: 'votes', checks: [
         { table: 'decision_votes', columns: ['voter_pubkey'] },
         { table: 'poll_votes', columns: ['voter_pubkey'] },
         { table: 'enterprise_succession_votes', columns: ['voter_pubkey'] },
-        { table: 'decisions', columns: ['author_pubkey'] },
+        { table: 'decisions', columns: ['author_pubkey', 'subject'] },
         { table: 'ratings', columns: ['rater_pubkey', 'target_pubkey'] },
         { table: 'abuse_reports', columns: ['reporter_pubkey', 'target_pubkey'] },
+        // A group's lead-convenor election it proposed, stood in or voted in (engine/group-succession.ts).
+        { table: 'group_convenor_proposals', columns: ['proposer_pubkey', 'candidate_pubkey', 'convenor_pubkey'] },
+        { table: 'group_convenor_votes', columns: ['voter_pubkey'] },
+        { table: 'pricing_reports', columns: ['reporter_pubkey'] },
+        // "This helped" on a guide page.
+        { table: 'knowledge_helped', columns: ['member_pubkey'] },
+    ] },
+    { rule: 'names_list', checks: [
+        // A names-list confirmation binds a person's entry to this key (engine/names-list.ts), live or revoked.
+        { table: 'confirmations', columns: ['member_pubkey'] },
+    ] },
+    { rule: 'acted_as_role', checks: [
+        { table: 'decisions', columns: ['admin_halted_by', 'case_hidden_by', 'reply_hidden_by', 'owner_decided_by'] },
+        { table: 'marketplace_transactions', columns: ['dispute_resolved_by'] },
+        { table: 'invite_codes', columns: ['issued_by'] },
+        { table: 'node_roles', columns: ['granted_by', 'break_glass_made_by'] },
+        { table: 'suspended_node_roles', columns: ['granted_by'] },
+        { table: 'treasury_operators', columns: ['granted_by'] },
+        { table: 'retired_accounts', columns: ['retired_by'] },
+        { table: 'member_badges', columns: ['set_by'] },
+        { table: 'known_floor_exceptions', columns: ['set_by'] },
+        { table: 'known_floor_log', columns: ['actor_pubkey'] },
+        { table: 'credit_look_log', columns: ['actor_pubkey'] },
+        { table: 'vouchers', columns: ['stopped_by'] },
+        { table: 'voucher_allocations', columns: ['actor'] },
+        { table: 'names_debts', columns: ['settled_by'] },
+        { table: 'names_entries', columns: ['created_by', 'updated_by'] },
+        { table: 'names_shares', columns: ['from_pubkey', 'to_pubkey'] },
+        { table: 'names_copies', columns: ['owner_pubkey'] },
+        { table: 'names_dropped_holders', columns: ['holder_pubkey'] },
+        { table: 'names_access_log', columns: ['actor_pubkey'] },
+        { table: 'confirmations', columns: ['confirmed_by', 'seconded_by', 'revoked_by'] },
+        { table: 'health_access_log', columns: ['actor_pubkey'] },
+        { table: 'community_settings_log', columns: ['actor_pubkey'] },
+        { table: 'knowledge_drafts', columns: ['answered_by'] },
+        { table: 'rekey_requests', columns: ['operator_pubkey'] },
+        { table: 'rekey_audit_log', columns: ['operator_pubkey'] },
+        { table: 'bring_back_log', columns: ['operator_pubkey'] },
     ] },
 ];
 
@@ -120,6 +183,8 @@ const RULE_WORDS: Record<EmptyRule, string> = {
     enterprise: RETIRE_WORDS.enterprise,
     invited: RETIRE_WORDS.invited,
     votes: RETIRE_WORDS.votes,
+    names_list: RETIRE_WORDS.namesList,
+    acted_as_role: RETIRE_WORDS.actedAsRole,
 };
 
 export interface EmptyRefusal { rule: EmptyRule; status: number; code: string; error: string }
@@ -146,8 +211,8 @@ function hasTable(table: string): boolean {
  * gives them): not yourself; a person's account here (a member's row, no visitor's, no enterprise's); active (not already
  * suspended, removed or retired); holding no role; balance 0; and nothing in any of EMPTY_RULES' tables: no post or listing,
  * no trade, payment or deal open or done, no message sent, no credit given, received or owed, no enterprise kept, nobody
- * brought in, no vote, decision, rating or report by or about them. A decision that names them (as its subject, or in a
- * branch) counts too.
+ * brought in, no vote, decision, rating or report by or about them, no names-list confirmation, and nothing done as an
+ * owner, admin or moderator. A decision that names them (as its subject, or in a branch) counts too.
  */
 export function emptyAccountRefusal(actor: string, target: string): EmptyRefusal | null {
     if (actor === target) return refusal('own_account');
@@ -190,7 +255,8 @@ export function retireEmptyDuplicate(actor: string, target: string): EmptyRefusa
         const why = emptyAccountRefusal(actor, target);
         if (why) return why;
         setUserStatusRow(target, 'disabled', { actor, how: 'retired as an empty duplicate' });
-        // A row left from an account made active another way (a vote) is written over: this retire is the one in force.
+        // No row is left from before: every way out of 'disabled' clears it (setUserStatusRow). The upsert only keeps a
+        // retire from failing on a stray one.
         db.prepare(`INSERT INTO retired_accounts (member_pubkey, retired_by) VALUES (?, ?)
             ON CONFLICT(member_pubkey) DO UPDATE SET retired_by = excluded.retired_by, retired_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`)
             .run(target, actor);
@@ -205,7 +271,7 @@ export function bringBackRetired(target: string): boolean {
     assertPlainTablesWritable();
     const done = db.transaction(() => {
         if (!isRetiredKey(target)) return false;
-        deletePlainRows('retired_accounts', 'member_pubkey = ?', target);
+        // Active again, and setUserStatusRow clears the mark (with a tombstone, so a standby drops it too).
         setUserStatusRow(target, 'active');
         return true;
     })();

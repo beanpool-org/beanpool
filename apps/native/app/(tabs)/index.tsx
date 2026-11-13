@@ -1587,8 +1587,10 @@ export default function HomeScreen() {
                         {list.filter(c => c.type === 'community').map(listed)}
                         {arrangeOn && <ArrangeReset colors={colors} onPress={() => {
                             if (tips?.dismissedAt) onTipsOn();
-                            // Undo puts back the Home from before, as it was drawn (a Home never saved: its default list).
-                            setUndoReset({ was: layoutRef.current ?? defaultHomeLayout() });
+                            // Undo puts back the Home from before, as it was drawn (a Home never saved: its default list). A second
+                            // Reset while the line is up keeps the first one's Home: the list now is already the reset one.
+                            const before = layoutRef.current ?? defaultHomeLayout();
+                            setUndoReset(u => u ?? { was: before });
                             changeLayout(resetLayout(layoutRef.current, Date.now()));
                         }} />}
                         {arrangeOn && undoReset && (

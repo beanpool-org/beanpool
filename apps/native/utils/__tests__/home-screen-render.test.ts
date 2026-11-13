@@ -1739,6 +1739,22 @@ describe('Arrange', () => {
         expect(cards()).toEqual(NEWCOMER_DRAWN);
     });
 
+    it('Undo after Reset to defaults brings back the Home from before, even after Reset twice (review of #3113)', async () => {
+        await render();
+        await open();
+        await press('home-arrange-events-down');
+        const moved = cards();
+        expect(moved).not.toEqual(NEWCOMER_DRAWN);
+        await press('home-arrange-reset');
+        expect(has('home-reset-undo-line')).toBe(true);
+        // The Reset row is still there under Arrange: a second tap must not make the reset list the one Undo restores.
+        await press('home-arrange-reset');
+        await press('home-reset-undo');
+        expect(has('home-reset-undo-line')).toBe(false);
+        await done();
+        expect(cards()).toEqual(moved);
+    });
+
     it('Done saves nothing, and gives TalkBack back what opened it; from a "…", that "…"', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-card-events-menu"]') as HTMLElement).click(); });

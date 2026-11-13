@@ -21,8 +21,8 @@ import { randomBytes } from 'node:crypto';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock('react-native', () => {
-    const el = (tag: string) => ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) =>
-        createElement(tag, onPress ? { onClick: onPress } : null, children);
+    const el = (tag: string) => ({ children, onPress, accessibilityLabel }: { children?: ReactNode; onPress?: () => void; accessibilityLabel?: string }) =>
+        createElement(tag, { ...(onPress ? { onClick: onPress } : {}), ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}) }, children);
     return {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), Pressable: el('button'), TouchableOpacity: el('button'),
@@ -368,6 +368,10 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
         await drawCard('landing');
         expect(short()).toBe(true);
         expect(warning()).toBe(false);
+        // The card's name for TalkBack says the same, not "one way back" (review of #3113, §2.5).
+        const labels = Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'));
+        expect(labels).toContain('Your 12 words are how you get back in. Check you still have them.');
+        expect(labels.join('\n')).not.toContain('one way back');
         expect(text()).not.toContain('Add a sign-in');
         expect(text()).toContain('Show my 12 words');
         expect(text()).toContain('I still have my 12 words');
@@ -416,6 +420,21 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
         expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'linked' });
     });
 
+    it('a say-so on another device that lands while the card is up ends it on this visit, with no new focus (review of #3113)', async () => {
+        await posted(true);
+        await drawCard('landing');
+        expect(short()).toBe(true);
+        // Home's network answer replaces its stored copy: the same community, `words` still true, `kept` now true.
+        const runs = focus.run;
+        await act(async () => {
+            root!.render(createElement(OneWayBackCard, { place: 'landing', homeWord: homeWord({ kept: true }) }) as unknown as Parameters<Root['render']>[0]);
+        });
+        await settle();
+        expect(focus.run, 'no new focus: only the word changed').toBe(runs);
+        expect(short()).toBe(false);
+        expect(await readOneWayBack(who.identity.publicKey)).toMatchObject({ done: 'checked' });
+    });
+
     it('no record on this phone (signed up elsewhere): Home\'s word starts it put away at the join date, never at once', async () => {
         mem.async.clear();
         await drawCard('landing');
@@ -429,5 +448,6 @@ describe('an invite sign-up that carried on: no card on day one, card after the 
         await drawCard('landing', homeWord({ door: true }));
         expect(warning()).toBe(true);
         expect(text()).toContain('Add a sign-in');
+        expect(Array.from(document.querySelectorAll('[aria-label]')).map(e => e.getAttribute('aria-label'))).toContain('Your account has one way back');
     });
 });

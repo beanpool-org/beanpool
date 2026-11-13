@@ -218,8 +218,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     }, [recordUrl]);
 
     useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
-    // Home's answer arrived with the community's word, or the account's dismissal changed: read again.
-    const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}` : '';
+    // Home's answer arrived with the community's word, or the account's dismissal changed: read again. `kept` too: a
+    // say-so made on another device lands while `words` stays true, and ends the card on this visit (review of #3113).
+    const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}|${!!homeWord.standing.kept}` : '';
     const mounted = useRef(false);
     useEffect(() => {
         if (!mounted.current) { mounted.current = true; return; }
@@ -336,7 +337,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     );
 
     return (
-        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={t(ONE_WAY_BACK_LINES.title)}>
+        // Its name for TalkBack says what its sentence says: "one way back" isn't true for every member (§2.5).
+        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={everyMember ? bodyLine : t(ONE_WAY_BACK_LINES.title)}>
             {band}
             {/* One wrapper whether or not Home's band is up (home/quiet.ts): the card's inside is never rebuilt when Arrange opens. */}
             <View {...quietWrapperProps(!!band)} style={band ? quietInside : undefined}>{content}</View>

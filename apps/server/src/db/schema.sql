@@ -98,6 +98,11 @@ CREATE TABLE IF NOT EXISTS members (
     -- line; owners, admins, the inviter and the member themself still do (state-engine.ts getTrustProfileForViewer,
     -- DESIGN-invites-vouching-review-fable.md §3 ask 2). In members_touch_updated_at's list, so delta sync carries it.
     inviter_shown INTEGER DEFAULT 1,
+    -- An empty duplicate an owner retired (engine/retire-duplicate.ts; Marty, 14 Nov 2026): when, and the owner's key. The
+    -- row is 'disabled' with it (it acts, signs and lists as nothing), no vote opens and nothing is deleted; Bring back
+    -- clears both. NULL on every other row. In members_touch_updated_at's list, so delta sync and a standby carry it.
+    retired_at TEXT,
+    retired_by TEXT,
     -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), an
     -- enterprise's `paused` or an off-board `status`, an account's pause among them (members_touch_board_standing); and, while an enterprise is off the
     -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
@@ -1669,7 +1674,7 @@ AFTER UPDATE OF
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
     area_lat, area_lng, area_updated_at,
-    is_visitor, deleted_by_owner_at, inviter_shown
+    is_visitor, deleted_by_owner_at, inviter_shown, retired_at, retired_by
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at

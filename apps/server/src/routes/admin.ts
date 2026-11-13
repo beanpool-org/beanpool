@@ -75,6 +75,7 @@ import { SIGNED_FOR_HEADER, avatarUrlOf, hundredthsAsDecimalText } from '@beanpo
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import { setMemberBadge, BadgeError } from '../engine/badges.js';
+import { emptyAccountRefusal, retireEmptyDuplicate, bringBackRetired, isRetiredKey, RETIRE_WORDS } from '../engine/retire-duplicate.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { tellVoucherNotice } from '../engine/vouchers.js';
 import type { RouteDeps } from './types.js';
@@ -930,6 +931,13 @@ function adminMemberRows(members: Member[], keys?: string[]) {
     for (const r of rolesList) {
         rolesByPubkey.set(r.member_pubkey, r.role);
     }
+    // The member's credit freeze as the node holds it (members.credit_frozen), so the manager's Freeze shows what the node
+    // did, not a guess (Marty, 14 Nov 2026: four presses each froze, and the panel showed none of them); and a retired
+    // empty duplicate (engine/retire-duplicate.ts), which the list shows as such.
+    const standingRows = (keys
+        ? db.prepare(`SELECT public_key, credit_frozen, retired_at FROM members WHERE public_key IN (SELECT value FROM json_each(?))`).all(JSON.stringify(keys))
+        : db.prepare(`SELECT public_key, credit_frozen, retired_at FROM members`).all()) as Array<{ public_key: string; credit_frozen: number | null; retired_at: string | null }>;
+    const standingOf = new Map(standingRows.map(r => [r.public_key, r]));
 
     return members.filter(m => m.status !== 'pruned').map(m => {
         // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
@@ -955,6 +963,8 @@ function adminMemberRows(members: Member[], keys?: string[]) {
             badge: memberBadge(db, m.publicKey),
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
+            creditFrozen: standingOf.get(m.publicKey)?.credit_frozen === 1,
+            retiredAt: standingOf.get(m.publicKey)?.retired_at ?? null,
         };
     });
 }
@@ -1797,6 +1807,12 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     }
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    // A retired empty duplicate is no suspension: Bring back undoes it (POST …/unretire), which clears its mark too.
+    if (isRetiredKey(ctx.params.pubkey)) {
+        ctx.status = 409;
+        ctx.body = { error: RETIRE_WORDS.useBringBack, code: 'retired' };
+        return;
+    }
     if (!stepUpIfOwnerOnly(ctx, 'lift', ctx.params.pubkey)) return;
     const result = adminLiftSuspension(ctx.params.pubkey, actor);
     if (!result.success) {
@@ -1806,6 +1822,77 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     }
     logger.info('ADMIN', `Lifted the suspension of ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
     ctx.body = { success: true };
+});
+
+/**
+ * Retire an empty duplicate, and bring one back (engine/retire-duplicate.ts; Marty, 14 Nov 2026: an account made in error
+ * should not go to the community's vote). An owner only, by their own key session, which names them in the log and in the
+ * row (retired_by); never an automation token, and from the phone's hand-off the unlock again (requireAdminRole). The GET
+ * says whether this account may be retired now (the manager shows the button only then) and, if not, why in words.
+ * Answers the owner, with its own key session, after the role and session checks; `null` when they fail.
+ */
+function retireActor(ctx: any): string | null {
+    if (!requireAdminRole(ctx, ['owner'], RETIRE_WORDS.ownerOnly)) return null;
+    const actor = (ctx.state as any)?.actor;
+    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: RETIRE_WORDS.keyOnly, code: 'key_session_only' };
+        return null;
+    }
+    return actor;
+}
+
+router.get('/api/local/admin/users/:pubkey/retire', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    const actor = retireActor(ctx);
+    if (!actor) return;
+    const why = emptyAccountRefusal(actor, ctx.params.pubkey);
+    ctx.body = why ? { allowed: false, rule: why.rule, code: why.code, error: why.error } : { allowed: true };
+});
+
+router.post('/api/local/admin/users/:pubkey/retire', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = retireActor(ctx);
+    if (!actor) return;
+    const target = ctx.params.pubkey;
+    try {
+        const why = retireEmptyDuplicate(actor, target);
+        if (why) {
+            ctx.status = why.status;
+            ctx.body = { error: why.error, code: why.code, rule: why.rule };
+            return;
+        }
+    } catch (e) {
+        if (!(e instanceof StandbyLedgerError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
+    // Whom, then by whom (both short keys, and the owner's name); the log row carries when.
+    logger.info('ADMIN', `Retired ${target.substring(0, 12)} as an empty duplicate by ${actor.substring(0, 12)} (@${getMember(actor)?.callsign ?? ''})`);
+    ctx.body = { success: true, retired: true };
+});
+
+router.post('/api/local/admin/users/:pubkey/unretire', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = retireActor(ctx);
+    if (!actor) return;
+    const target = ctx.params.pubkey;
+    try {
+        if (!bringBackRetired(target)) {
+            ctx.status = 409;
+            ctx.body = { error: RETIRE_WORDS.notRetired, code: 'not_retired' };
+            return;
+        }
+    } catch (e) {
+        if (!(e instanceof StandbyLedgerError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+        return;
+    }
+    logger.info('ADMIN', `Brought back ${target.substring(0, 12)} (retired as an empty duplicate) by ${actor.substring(0, 12)} (@${getMember(actor)?.callsign ?? ''})`);
+    ctx.body = { success: true, retired: false };
 });
 
 router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {

@@ -2133,19 +2133,28 @@ export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
 }
 
+/**
+ * A retired empty duplicate's rows leave the directory (engine/retire-duplicate.ts): nobody lists, finds or opens one. The
+ * few retired keys, read once a call (only retired rows carry retired_at).
+ */
+function withoutRetired(rows: DirectoryRow[]): DirectoryRow[] {
+    const retired = new Set(db.prepare("SELECT public_key FROM members WHERE retired_at IS NOT NULL AND status = 'disabled'").pluck().all() as string[]);
+    return retired.size === 0 ? rows : rows.filter(r => !retired.has(r.public_key as string));
+}
+
 /** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
 export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
-    return getMemberDirectoryRowsEngine(db, updatedAfter);
+    return withoutRetired(getMemberDirectoryRowsEngine(db, updatedAfter));
 }
 
 /** The directory's rows of these members, in the order asked; with `updatedAfter`, only those changed after it (engine members.ts). */
 export function getMemberDirectoryRowsByKeys(keys: string[], updatedAfter?: string): DirectoryRow[] {
-    return getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter);
+    return withoutRetired(getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter));
 }
 
 /** The members whose name starts with `prefix`, shortest first, at most `limit` (engine members.ts). */
 export function searchMemberDirectoryRows(prefix: string, limit: number): DirectoryRow[] {
-    return searchMemberDirectoryRowsEngine(db, prefix, limit);
+    return withoutRetired(searchMemberDirectoryRowsEngine(db, prefix, limit));
 }
 
 // ===================== INVITE CODES =====================
@@ -7203,7 +7212,8 @@ interface CommunityCounts { memberCount: number; postCount: number; transactionC
 
 function countCommunity(): CommunityCounts {
     return {
-        memberCount: (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c,
+        // A retired empty duplicate is no member to count (engine/retire-duplicate.ts).
+        memberCount: (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned' AND NOT (retired_at IS NOT NULL AND status = 'disabled')").get() as any).c,
         postCount: getActivePostCount(),
         transactionCount: (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c,
     };

@@ -179,7 +179,7 @@ export const TABLES: Record<string, TableEntry> = {
             profile_updated_at archetype purpose goal_amount_c deadline_at lifecycle paused paused_at paused_by
             paused_floor_snapshot_c wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
             location_updated_at updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at
-            board_standing_changed_at inviter_shown`),
+            board_standing_changed_at inviter_shown retired_at retired_by`),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
             callsign_fold: { reason: "each server makes its own from callsign: the engine's installNameFold's triggers write it on every insert and rename, the import's included; the export leaves it out of `standing` (@beanpool/engine sync.ts memberOfRow) and the import never writes it (engine/sync.ts memberColumns)" },

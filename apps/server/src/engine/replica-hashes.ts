@@ -226,7 +226,14 @@ export interface TableHashes {
  * import writes only the tables its own database has. What an older importer drops is the badges (recognition, no credit):
  * after a take-over from such a copy a badged member shows the tier their own record reads until an admin gives it again.
  */
-export const TABLE_HASHES_VERSION = 37;
+/**
+ * 38: members gains retired_at and retired_by (an empty duplicate an owner retired, engine/retire-duplicate.ts). Raised for
+ * the same reason as 28: a standby updated before its main server hashes `members` over two more columns. REPLICA_FORMAT
+ * stays: each side's import writes only the columns its own table has (engine/sync.ts writeMemberStanding); what an older
+ * importer drops is the mark, and after a take-over from such a copy the account stays 'disabled' (it still acts as
+ * nothing) and shows as suspended until an owner brings it back or retires it again.
+ */
+export const TABLE_HASHES_VERSION = 38;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

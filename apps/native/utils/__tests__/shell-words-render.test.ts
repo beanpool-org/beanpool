@@ -393,8 +393,7 @@ describe('"Update required" in the pseudo-locale: every page, every word through
 
 describe('the tour bar in the pseudo-locale', () => {
     const steps = tourSteps('phone', { global: false, beans: true });
-    const home = { chips: ['offers', 'events'], onHome: (type: string) => type === 'events', chipName: (type: string) => (type === 'offers' ? 'Offers near you' : 'Coming up'), addChip: () => {}, moreCards: () => {} };
-    const bar = (index: number) => createElement(TourBar, { steps, index, home, colors: lightColors, bottomInset: 0, onNext() {}, onSkip() {}, onDone() {} } as any);
+    const bar = (index: number) => createElement(TourBar, { steps, index, colors: lightColors, bottomInset: 0, onNext() {}, onSkip() {}, onDone() {} });
 
     it('a step: its caption in capitals the language\'s way, its words, Skip and Next', async () => {
         await renderIn('xx', bar(0));
@@ -407,13 +406,13 @@ describe('the tour bar in the pseudo-locale', () => {
         expect(bypassing(host)).toEqual([]);
     });
 
-    it('the last step: the chips (a card\'s name is Home\'s), More cards, Done', async () => {
+    it('the last step: its words, Skip and Done, no cards to add (D2)', async () => {
         await renderIn('xx', bar(steps.length - 1));
-        expect(byLabel(xx('Put {name} on Home').replace('{name}', 'Offers near you'))).not.toBeNull();
-        expect(host.textContent).toContain(xx('{name} · On Home ✓').replace('{name}', 'Coming up'));
-        expect(host.textContent).toContain(xx('More cards ›'));
+        expect(host.querySelector('[data-testid="tour-words"]')!.textContent).toBe(xx(steps[steps.length - 1].words));
         expect(byLabel(xx('Done: end the tour'))).not.toBeNull();
-        expect(bypassing(host, ['Offers near you', 'Coming up'])).toEqual([]);
+        expect(byLabel(xx('Skip the tour'))).not.toBeNull();
+        expect(host.querySelector('[data-testid="tour-chips"]')).toBeNull();
+        expect(bypassing(host)).toEqual([]);
     });
 
     it('in English the caption reads "STEP 1 OF n" and the words are the tour\'s', async () => {

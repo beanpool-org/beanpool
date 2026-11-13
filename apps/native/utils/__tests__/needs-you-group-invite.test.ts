@@ -141,7 +141,7 @@ describe('where the line lands (needsTargetHref)', () => {
     });
 
     it('Home asks the node for it: lands=invite', () => {
-        expect(homePath(['needs'])).toBe('/api/home?cards=needs&lands=enterprise,group,invite,people,asks,first-need');
+        expect(homePath(['needs'])).toBe('/api/home?cards=needs&lands=enterprise,group,invite,people,asks,first-need,words');
     });
 });
 

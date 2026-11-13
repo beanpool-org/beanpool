@@ -1,16 +1,19 @@
 /**
- * Front doors S3: notification permission at the tap, never at account creation (Fable design §0, §1.9, §3.9, §7).
+ * Front doors S3: notification permission at the tap, never at account creation (Fable design §0, §1.9, §3.9, §7), as
+ * DESIGN-home-default-fable.md §2.5 changes it (Marty's pick 3, 13 Nov 2026; slice D2):
  *
- * Requirements:
  * - A device permission is asked at the tap that needs it, with the app's own one-line reason first.
  * - Never at install, sign-up or right after an account exists (the identity effect in _layout.tsx is removed).
- * - "Turn on notifications?" card at the end of How it Works and on Home until answered.
+ * - No card on Home. "Turn on notifications?" stays at the end of How it Works (someone reading how it works is asking);
+ *   First steps has a line the member taps when they choose ({@link notifyStep}); the bell's sheet says "Notifications
+ *   are off on this phone. Turn on" while this phone can't buzz.
  * - Words (design §3.9):
  *     Title: "Turn on notifications?"
  *     Body: "So you hear when someone answers you, messages you, or asks to join. Nothing else."
  *     Buttons: "Turn on" · "Not now"
- * - Nothing asked after a restore (the restored member lands on Home; the notifications card asks only when tapped).
- * - Ask at the first knock or message if unanswered or declined; never on subsequent knocks or messages.
+ * - Nothing asked after a restore (the restored member lands on Home; nothing asks until a tap or a first action).
+ * - ONE ask in all, at the first of: the first post, the first message, the first ask to join, while unanswered. After a
+ *   "Not now" (here, in How it Works, or at that ask) nothing asks again.
  */
 import { Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -41,8 +44,11 @@ export type NotificationPermissionState = 'unanswered' | 'granted' | 'declined';
 
 export interface NotificationPermissionRecord {
     state: NotificationPermissionState;
-    knockRetried?: boolean;
-    messageRetried?: boolean;
+    /**
+     * The one ask at a first post, message or ask to join was made, or spent because the phone already allowed them
+     * (DESIGN-home-default-fable.md §2.5: once in all, not once per kind).
+     */
+    actionAsked?: boolean;
     updatedAt: number;
 }
 
@@ -60,8 +66,7 @@ export async function readNotificationPermissionRecord(storage: StorageLike = As
         if (parsed && typeof parsed === 'object') {
             return {
                 state: parsed.state === 'granted' || parsed.state === 'declined' ? parsed.state : 'unanswered',
-                knockRetried: !!parsed.knockRetried,
-                messageRetried: !!parsed.messageRetried,
+                actionAsked: !!parsed.actionAsked,
                 updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : 0,
             };
         }
@@ -77,8 +82,8 @@ export async function writeNotificationPermissionRecord(record: NotificationPerm
 }
 
 /**
- * Checks whether the "Turn on notifications?" card should be displayed.
- * Shown at the end of How it Works and on Home until answered (and only when OS permission is not already granted).
+ * Checks whether the "Turn on notifications?" card should be displayed: at the end of How it Works until answered (and
+ * only when OS permission is not already granted). Home has no such card (DESIGN-home-default-fable.md §2.5).
  */
 export function shouldShowNotificationCard(record: NotificationPermissionRecord | null, osGranted: boolean): boolean {
     if (osGranted) return false;
@@ -264,16 +269,16 @@ function defaultAlertPrompt(kind: 'ask' | 'settings' | 'settings-after-card' = '
 }
 
 /**
- * At the first knock or message:
- * If notifications are unanswered or previously declined, ask with the one-line reason first;
- * never ask on subsequent knocks or messages.
+ * The one ask (DESIGN-home-default-fable.md §2.5): at the FIRST of the member's first post, first message and first ask to
+ * join, the one-line reason, then the phone's own question. Once in all: a later post, message or ask never asks again,
+ * and after any "Not now" (this ask's, How it Works' card's, or the phone's own question declined) nothing asks again.
  * The phone is read first: where it already allows notifications (every Android 8–12 phone, and members who allowed the
  * old boot prompt), the token is registered silently and nothing is shown. Where expo-notifications can't load (no
  * native module in this build), there is nothing to turn on, so nothing is asked either. Where the phone won't show its
  * dialog again, the one prompt says so and its button opens the phone's settings.
  */
 export async function askNotificationPermissionOnAction(
-    action: 'knock' | 'message',
+    _action: 'post' | 'message' | 'knock',
     publicKey?: string | null,
     options?: ActionPromptOptions,
 ): Promise<'granted' | 'declined' | 'unanswered'> {
@@ -281,17 +286,17 @@ export async function askNotificationPermissionOnAction(
     const record = await readNotificationPermissionRecord(storage);
 
     if (record.state === 'granted') return 'granted';
-
-    const alreadyRetried = action === 'knock' ? record.knockRetried : record.messageRetried;
-    if (alreadyRetried) return record.state;
+    if (record.actionAsked) return record.state;
 
     const os = await readOsNotificationPermission();
     if (os.granted) {
         await registerPushToken(publicKey);
-        // Spent, as an answered prompt is: every later DM start (they all ask through createConversationApi) skips at once.
-        await writeNotificationPermissionRecord({ ...record, [action === 'knock' ? 'knockRetried' : 'messageRetried']: true }, storage);
+        // Spent, as an answered prompt is: every later post, DM start or knock skips at once.
+        await writeNotificationPermissionRecord({ ...record, actionAsked: true }, storage);
         return 'granted';
     }
+    // "Not now" is final: never asked again (§2.5).
+    if (record.state === 'declined') return 'declined';
     if (!os.available) return record.state;
 
     const kind = os.canAskAgain ? 'ask' : 'settings';
@@ -302,17 +307,24 @@ export async function askNotificationPermissionOnAction(
     if (choice === 'turn_on') {
         const res = await turnOnNotifications(publicKey, storage, { skipSettingsConfirm: true, openSettings: options?.openSettings });
         const latest = await readNotificationPermissionRecord(storage);
-        await writeNotificationPermissionRecord({
-            ...latest,
-            [action === 'knock' ? 'knockRetried' : 'messageRetried']: true,
-        }, storage);
+        await writeNotificationPermissionRecord({ ...latest, actionAsked: true }, storage);
         return res === 'settings' ? latest.state : res;
     } else {
-        await writeNotificationPermissionRecord({
-            ...updated,
-            state: 'declined',
-            [action === 'knock' ? 'knockRetried' : 'messageRetried']: true,
-        }, storage);
+        await writeNotificationPermissionRecord({ ...updated, state: 'declined', actionAsked: true }, storage);
         return 'declined';
     }
 }
+
+/**
+ * First steps' line "Hear when someone answers you" (DESIGN-home-default-fable.md §2.4), from this phone alone: null where
+ * it has no place (the phone can't load notifications, already allows them without being asked, as Android 8 to 12 does,
+ * or the member said Not now: the line leaves then); false while the phone has to ask; true once allowed through it.
+ */
+export function notifyStep(record: NotificationPermissionRecord, os: OsNotificationPermission): boolean | null {
+    if (!os.available || record.state === 'declined') return null;
+    if (os.granted) return record.state === 'granted' ? true : null;
+    return false;
+}
+
+/** Whether the bell's sheet says notifications are off here: the phone can have them and doesn't allow them now. */
+export const notificationsOffHere = (os: OsNotificationPermission): boolean => os.available && !os.granted;

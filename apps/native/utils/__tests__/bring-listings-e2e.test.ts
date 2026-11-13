@@ -140,6 +140,19 @@ async function startNode(tag: string, env: Record<string, string>): Promise<Test
     };
 }
 
+/** A request line names a node on this machine when it holds its address, a loopback host and that port, decoded. */
+function namesNode(line: string, port: string): boolean {
+    let seen = line;
+    for (let i = 0; i < 4 && seen.includes('%'); i++) {
+        try {
+            const next = decodeURIComponent(seen);
+            if (next === seen) break;
+            seen = next;
+        } catch { break; }
+    }
+    return new RegExp(`(?:127\\.0\\.0\\.1|localhost|\\[::1\\]):${port}(?![0-9])`, 'i').test(seen);
+}
+
 let global_: TestNode;
 let local: TestNode;
 const realFetch = globalThis.fetch;
@@ -289,7 +302,14 @@ describe('bringing listings to a first local community (the phone against two re
         const after = await global_.control<string[]>('requests');
         expect(after.slice(before.length)).toEqual(phoneToGlobal.slice(fromPhone));
         expect(after.slice(before.length).every((r) => r.startsWith('GET '))).toBe(true);
-        expect(JSON.stringify(after)).not.toContain(new URL(local.url).port);
+        // No request global counted names the community's address (its host and port, as written or URL-encoded, anywhere in
+        // the line). Not its bare port: ids, sizes and times can hold those digits by chance (main f7fb13f4, CI run
+        // 43449172845: the community listened on 39935 and a photo's line read posts/e9242b4d-…-586c06b39935/photos/0).
+        const { port } = new URL(local.url);
+        expect(namesNode(`GET /api/marketplace/posts?to=${encodeURIComponent(local.url)}`, port)).toBe(true);
+        expect(namesNode(`GET /api/x?from=localhost:${port}`, port)).toBe(true);
+        expect(namesNode(`GET /api/marketplace/posts/e9242b4d-a0ce-4700-90e6-586c06b${port}/photos/0?v=1794582719387`, port)).toBe(false);
+        expect(after.filter((r) => namesNode(r, port))).toEqual([]);
         expect(local.log()).not.toContain('BLOCKED-FETCH');
     }, START_MS);
 

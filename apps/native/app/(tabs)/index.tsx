@@ -8,12 +8,14 @@ import * as Location from 'expo-location';
 import {
     ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, reorderIds, tipText, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
-    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourEnded, tourRecord, tourSteps, type TourProgress,
+    endTourLayout, resumeStep, startCardButton, tourRecord, tourSteps, welcomeDrawn, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
-    starterSheet, type PricingGuideItem, type StarterRow,
+    starterSheet, type PricingGuideItem, type StarterRow, defaultHomeLayout,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
+import { notifyStep, readNotificationPermissionRecord, readOsNotificationPermission, turnOnNotifications } from '../../utils/notification-permission';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
+import { resendWordsKept } from '../../utils/words-kept';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
@@ -23,7 +25,6 @@ import { AddressFollowCard } from '../../components/AddressFollowCard';
 import { AddressFallbackCard } from '../../components/AddressFallbackCard';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { BringListingsSheet } from '../../components/BringListingsSheet';
-import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
@@ -34,7 +35,7 @@ import { ArrangeGhost } from '../../components/home/ArrangeGhost';
 import { useArrangeDrag } from '../../components/home/useArrangeDrag';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
-import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
+import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeResetUndo, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { StarterOffersSheet } from '../../components/home/StarterOffersSheet';
 import { readPricingGuide } from '../../utils/starter-offers';
@@ -48,13 +49,14 @@ import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { readTypedPlace } from '../../utils/typed-place';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
+    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StepsBody, TipsBody, WelcomeBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
+    HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
-    effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
-    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
+    effectiveInterests, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst,
+    welcomeFacts, welcomeUp,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
@@ -69,7 +71,7 @@ import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-ac
 import { fabClearanceDp, fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
-import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
+import { createConversationApi, fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
 import { ChatBody } from '../../components/home/ChatBody';
 import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
 import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
@@ -125,7 +127,7 @@ type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | '
 
 /** Lines kept as word() in utils/home-cards.ts and core, shown here in the member's language. */
 const LINES = {
-    hint: HOME_HINT_LINE, fewer: FEWER_CARDS_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, start: START_CARD_WORDS, notOnAccount: NOT_ON_ACCOUNT_LINE,
+    hint: HOME_HINT_LINE, saveNotNow: SAVE_SEARCH_NOT_NOW, notOnAccount: NOT_ON_ACCOUNT_LINE,
     skyNoPlace: SKY_NO_PLACE_LINE, tipsAllSeen: TIPS_ALL_SEEN,
 };
 
@@ -217,6 +219,8 @@ export default function HomeScreen() {
     const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     // Arrange (DESIGN-home-arrange-in-place-fable.md): Home itself, its cards carrying their arrows and gone quiet.
     const [arranging, setArranging] = useState(false);
+    /** The Home from before a Reset, while its "Home is back to how it started. Undo" line is up (§3); null: no line. */
+    const [undoReset, setUndoReset] = useState<{ was: HomeLayout } | null>(null);
     const [addOpen, setAddOpen] = useState(false);
     // "What could you offer?" (slice O2): First steps' Post your first Offer opens it; the community's price guide is read as it opens.
     const [starterOpen, setStarterOpen] = useState(false);
@@ -228,8 +232,6 @@ export default function HomeScreen() {
     const [chatRows, setChatRows] = useState<{ rows: ChatChoice[] | null; failed: boolean }>({ rows: null, failed: false });
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
     const [notOnAccount, setNotOnAccount] = useState(false);
-    /** The one-time "Home now starts with fewer cards" line (§2.6). */
-    const [fewer, setFewer] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [offlineNote, setOfflineNote] = useState(false);
     const [postPicker, setPostPicker] = useState(false);
@@ -241,6 +243,8 @@ export default function HomeScreen() {
     const [saveNote, setSaveNote] = useState<string | null>(null);
     /** The tour ended on this phone (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
     const [tourOver, setTourOver] = useState(false);
+    /** The tour was started again here (Take the tour again) before the account's answer says "open": Welcome is back meanwhile. */
+    const [tourOpen, setTourOpen] = useState(false);
     /** A tour part way on this phone, for "Pick up the tour at step n ›". */
     const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
     const { run: tourRun } = useTour();
@@ -254,6 +258,18 @@ export default function HomeScreen() {
     /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
     const [tips, setTips] = useState<TipsRecord | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
+    /** First steps' "Hear when someone answers you" from this phone (utils/notification-permission.ts `notifyStep`); null: no such line. */
+    const [notify, setNotify] = useState<boolean | null>(null);
+    const readNotify = useCallback(async () => {
+        const [record, os] = await Promise.all([readNotificationPermissionRecord(), readOsNotificationPermission()]);
+        setNotify(notifyStep(record, os));
+    }, []);
+    // Read at each landing and on each return to the app (back from the phone's settings after Turn on).
+    useFocusEffect(useCallback(() => {
+        void readNotify();
+        const sub = AppState.addEventListener?.('change', next => { if (next === 'active') void readNotify(); });
+        return () => sub?.remove?.();
+    }, [readNotify]));
     const roleRef = useRef<HomeRole>(undefined);
     roleRef.current = role;
 
@@ -352,6 +368,7 @@ export default function HomeScreen() {
         const id = arrangeFrom.current;
         keepPlace.current = false;
         setArranging(false);
+        setUndoReset(null);
         // After the insides come back: TalkBack lands on what opened Arrange rather than the top of the screen.
         setTimeout(() => {
             const target = (id ? menuRefs.current.get(id)?.current : null) ?? arrangeLink.current;
@@ -414,9 +431,9 @@ export default function HomeScreen() {
         if (await seenOnce(whose.publicKey, 'reveal')) return;
         if (!stillOnPhone(whose)) return;
         void markSeenOnce(whose, 'reveal');
-        // Getting started says the same as the hint: while it is up the hint waits (it shows after a Skip, never after Done).
+        // Welcome says where Add a card and Arrange are: while it is up the hint waits (it shows after a Not now, never after Done).
         const ans = storedRef.current?.answer;
-        const startUp = !!ans?.me && !tourEnded(ans.me.tour);
+        const startUp = !!ans && welcomeUp(ans);
         if (!startUp && !(await seenOnce(whose.publicKey, 'hint')) && stillOnPhone(whose)) {
             setHint(true);
             void markSeenOnce(whose, 'hint');
@@ -426,14 +443,6 @@ export default function HomeScreen() {
         reveal.setValue(0);
         Animated.timing(reveal, { toValue: 1, duration: REVEAL_MS, useNativeDriver: true }).start(() => setBandVersion(v => v + 1));
     }, [reveal]);
-
-    // A member who never edited, here before the frame: one line, once (§2.6).
-    const maybeFewer = useCallback(async (whose: HomeAccount) => {
-        if (await seenOnce(whose.publicKey, 'fewer')) return;
-        if (!stillOnPhone(whose) || identityRef.current?.publicKey !== whose.publicKey) return;
-        setFewer(true);
-        void markSeenOnce(whose, 'fewer');
-    }, []);
 
     // ── The phone's own Needs you lines: its database, no request ──
     const readLocal = useCallback(async (me: string) => {
@@ -582,7 +591,6 @@ export default function HomeScreen() {
             setStored(copy);
             setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1, phoneOver.current).layout : null);
             setNotOnAccount(false);
-            setFewer(false);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
@@ -629,11 +637,6 @@ export default function HomeScreen() {
                 clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
             }
             setLayout(pick.layout);
-            // An empty version-1 list with no copy here moved or hid nothing (a way-back dismissal or a Reset on an older app):
-            // the newcomer's list is drawn, so the line is theirs as for one who never edited (review of #1699 confirmation,
-            // finding 2). On a standby it can't be told from a real list; the line is still true of what is drawn.
-            const fewerFrom = answered.layoutV1?.empty && !phoneLayout.current ? null : answered.layout;
-            if (member && fewerCardsNews(fewerFrom, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
             // The phone's newer list is sent, but one the node refused as a shape it doesn't know yet only at a landing
             // (CARD-FRAME §2.3: "sent again each time you open Home").
             const resend = why === 'focus' || refusedShape.current !== `${id.publicKey}|${u}`;
@@ -690,7 +693,7 @@ export default function HomeScreen() {
         }
         // No answer this time (offline, members only, needs an update): land from what the phone holds.
         if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
-    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips, refreshAsVisitor, askPins]);
+    }, [readLocal, pushLayout, maybeReveal, landTips, refreshAsVisitor, askPins]);
 
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
@@ -750,7 +753,6 @@ export default function HomeScreen() {
         setStored(null);
         setLayout(null);
         setNotOnAccount(false);
-        setFewer(false);
         setArranging(false);
         setRole(undefined);
         setPlace(null);
@@ -966,8 +968,27 @@ export default function HomeScreen() {
         else if (step === 'saidHello') router.push({ pathname: '/(tabs)/people', params: { view: 'community' } });
         else if (step === 'watch') router.push('/find-community');
         else if (step === 'name') { /* already done */ }
+        // Keep your 12 words safe: Account Protection, behind the phone's lock (DESIGN-home-default-fable.md §2.4).
+        else if (step === 'words') router.push({ pathname: '/(tabs)/settings', params: { section: 'protection' } });
+        // Hear when someone answers you: the line is the reason, the tap brings the phone's own question (§2.4, §2.5).
+        else if (step === 'notify') {
+            void turnOnNotifications(identityRef.current?.publicKey).catch(() => 'declined' as const).then(() => readNotify());
+        }
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
-    }, [openTune]);
+    }, [openTune, readNotify]);
+
+    // Welcome's "Say hello ›" (DESIGN-home-default-fable.md §2.3): the chat with whoever's invite brought them, as a
+    // profile's Message opens it (the first message's notifications ask is made there, once in all).
+    const sayHello = useCallback(async (key: string) => {
+        const id = identityRef.current;
+        if (!id) return;
+        try {
+            const conv = await createConversationApi('dm', [id.publicKey, key], id.publicKey);
+            router.push(`/chat/${conv.id}`);
+        } catch {
+            Alert.alert(t('Error'), t('Connect to your community to start a chat.'));
+        }
+    }, []);
 
     const openNeeds = useCallback((e: NeedsYouEntry) => {
         const target = e.target;
@@ -1003,7 +1024,7 @@ export default function HomeScreen() {
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver }) : [];
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver, tourOpen, notify }) : [];
     // Find your community's pin (the global node: a member's first 30 days, then while a knock or watch is open): no "…", no move, at the top.
     const pins = currentPins(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
@@ -1088,20 +1109,21 @@ export default function HomeScreen() {
     };
     const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
-    const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
+    const picker = answer && tailor && addOpen
+        ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}, welcomeUp(answer, { tourOver, tourOpen, now }) ? [] : ['start'])
+        : null;
 
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
-    // The bar is the tab layout's (utils/tour-store.ts); Home lends it the chips (the picker's own add) and the end (one
-    // layout write, then the account's record). Nothing here starts a tour by itself.
-    // The last step offers no chips any more (DESIGN-home-default-fable.md §2.3: Home already holds the default list); the
-    // bar's chip row is removed with Welcome's body in slice D2.
-    const chips: string[] = [];
+    // The bar is the tab layout's (utils/tour-store.ts); Home lends it the end (one layout write, then the account's
+    // record) and Take the tour again. Nothing here starts a tour by itself. The last step offers no cards
+    // (DESIGN-home-default-fable.md §2.3: Home already holds the default list, and Welcome's body is the tour's door).
     const tourEnd = useCallback(async (kind: 'done' | 'skipped') => {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
         if (!id) return;
         const whose = homeAccount(id.publicKey);
         setTourOver(true);
+        setTourOpen(false);
         setTourProgress(null);
         const ans = storedRef.current?.answer;
         if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current), { reread: true });
@@ -1119,43 +1141,39 @@ export default function HomeScreen() {
         const u = storedRef.current?.url ?? url;
         if (!id) return;
         setTourOver(false);
-        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
+        setTourOpen(true);
+        // Welcome returns until the tour ends again, inside the member's first seven days (core `welcomeDrawn`): on a Home
+        // already set up it is put back on top (the end takes it off). After those days the tour starts and nothing is added.
         const ans = storedRef.current?.answer;
-        if (canTailor(ans) && layoutRef.current) {
+        if (canTailor(ans) && layoutRef.current && welcomeDrawn(false, ans!.me!.joinedAt)) {
             const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: currentPins(ans) });
             if (added.ok) changeLayout(added.layout);
         }
         if (u) void saveTourRecord(u, id, tourRecord('open'));
         startTour(id.publicKey, 0);
     }, [url, changeLayout, currentPins]);
-    const tourAddChip = useCallback((type: string) => {
-        const ans = storedRef.current?.answer;
-        const added = addCard(layoutRef.current, type, Date.now(), { pinned: currentPins(ans) });
-        if (added.ok) changeLayout(added.layout, { reread: true });
-    }, [changeLayout, currentPins]);
-    const chipsKey = chips.join(',');
     useEffect(() => {
         if (!answer?.me || !tailor) { lendTourHome(null); return; }
         lendTourHome({
-            chips,
-            chipName: (type) => cardName(type, profile),
-            onHome: (type) => (layoutRef.current?.cards ?? []).some(c => c.type === type),
-            addChip: tourAddChip,
-            moreCards: () => setAddOpen(true),
             end: (kind) => { void tourEnd(kind); },
             restart: tourRestart,
         });
-    }, [answer, tailor, layout, chipsKey, profile, tourAddChip, tourEnd, tourRestart]);
+    }, [answer, tailor, tourEnd, tourRestart]);
     useEffect(() => () => lendTourHome(null), []);
     // Another account on the phone: this one's tour words go; a tour part way here is read again whenever the bar closes.
-    useEffect(() => { setTourOver(false); }, [identity?.publicKey]);
+    useEffect(() => { setTourOver(false); setTourOpen(false); }, [identity?.publicKey]);
     useEffect(() => {
         const pk = identity?.publicKey;
         if (!pk || tourRun) return;
         void readProgress(pk).then(p => { if (identityRef.current?.publicKey === pk) setTourProgress(p); });
     }, [identity?.publicKey, tourRun]);
-    // A Done or Skip the node didn't take (offline) is sent again on the next Home open.
-    useEffect(() => { if (url && identity) void resendTourRecord(url, identity); }, [url, identity?.publicKey]);
+    // A Done or Skip the node didn't take (offline) is sent again on the next Home open, and so is "I still have my 12 words"
+    // (or Yes after the kit) said where the node couldn't hear it (utils/words-kept.ts).
+    useEffect(() => {
+        if (!url || !identity) return;
+        void resendTourRecord(url, identity);
+        void resendWordsKept(url, identity);
+    }, [url, identity?.publicKey]);
 
     /** ↑ or ↓ in Arrange: saved at once through `moveCard`; the place is said, and focus stays on the arrow or its twin. */
     const moveInArrange = (c: HomeCardInstance, dir: 'up' | 'down') => {
@@ -1262,22 +1280,28 @@ export default function HomeScreen() {
             }
             case 'steps': {
                 if (!c.steps) return null;
-                const steps = firstSteps(answer, { interests, role, knocked });
-                return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+                const steps = firstSteps(answer, { interests, role, knocked, notify });
+                return frame(<StepsBody left={steps.left} count={steps.count} note={steps.note} colors={colors} onStep={onStep} />);
             }
             case 'start': {
                 // The same rule the tab layout builds the running tour from: the Ledger step is in whenever its tab shows (the showcase included).
                 const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
+                const welcome = welcomeFacts(answer);
+                const inviter = welcome.inviter;
                 return frame(
-                    <StartBody
-                        words={t(LINES.start)}
-                        button={startCardButton(tourProgress, total)}
+                    <WelcomeBody
+                        place={welcome.place}
+                        inviter={inviter?.name ?? null}
+                        firstHere={welcome.firstHere}
+                        tourLabel={tourProgress ? startCardButton(tourProgress, total) : t('Take the tour ›')}
                         colors={colors}
-                        onLookAround={() => {
+                        onSayHello={() => { if (inviter) void sayHello(inviter.key); }}
+                        onInvite={invitesForReader(answer.features, role) ? () => router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } }) : undefined}
+                        onTour={() => {
                             const pk = identityRef.current?.publicKey;
                             if (pk) startTour(pk, resumeStep(tourProgress, total));
                         }}
-                        onSkip={() => { closeTour(); void tourEnd('skipped'); }}
+                        onNotNow={() => { closeTour(); void tourEnd('skipped'); }}
                     />,
                 );
             }
@@ -1404,7 +1428,7 @@ export default function HomeScreen() {
     // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
     // as the five do: a newcomer's Home is that card alone, and the tour's Ledger step is the example's way in
     // (DESIGN-getting-started-fable.md §0, pick 10).
-    const touring = !!answer && list.some(c => c.type === 'start') && !tourOverFor(answer, { tourOver });
+    const touring = drawn.some(c => c.type === 'start');
     const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
     const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 
@@ -1433,14 +1457,6 @@ export default function HomeScreen() {
                 <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
                     <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.hint)}</Text>
                     <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this tip')}>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
-                    </Pressable>
-                </View>
-            )}
-            {fewer && tailor && c.id === firstDrawn?.id && (
-                <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
-                    <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.fewer)}</Text>
-                    <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this line')}>
                         <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
                     </Pressable>
                 </View>
@@ -1533,7 +1549,8 @@ export default function HomeScreen() {
                     <AddressFallbackCard colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
-                    <NotificationPermissionCard colors={colors} />
+                    {/* No notifications card here (DESIGN-home-default-fable.md §2.5): First steps has the line, the first post,
+                        message or ask to join asks once, and the bell's sheet says so while this phone can't buzz. */}
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             {t("Couldn't reach your community; showing what we had.")}
@@ -1568,7 +1585,21 @@ export default function HomeScreen() {
                             </>
                         )}
                         {list.filter(c => c.type === 'community').map(listed)}
-                        {arrangeOn && <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />}
+                        {arrangeOn && <ArrangeReset colors={colors} onPress={() => {
+                            if (tips?.dismissedAt) onTipsOn();
+                            // Undo puts back the Home from before, as it was drawn (a Home never saved: its default list). A second
+                            // Reset while the line is up keeps the first one's Home: the list now is already the reset one.
+                            const before = layoutRef.current ?? defaultHomeLayout();
+                            setUndoReset(u => u ?? { was: before });
+                            changeLayout(resetLayout(layoutRef.current, Date.now()));
+                        }} />}
+                        {arrangeOn && undoReset && (
+                            <ArrangeResetUndo
+                                colors={colors}
+                                onUndo={() => { const was = undoReset.was; setUndoReset(null); changeLayout({ ...was, updatedAt: new Date().toISOString() }); }}
+                                onClose={() => setUndoReset(null)}
+                            />
+                        )}
                     </Animated.View>
                 </ScrollView>
 

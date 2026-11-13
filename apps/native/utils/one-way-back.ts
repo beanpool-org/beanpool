@@ -17,6 +17,18 @@
  * who came in with 12 words and has added no sign-in, on any phone, as the web app reads it. {@link oneWayBackFromNode}
  * makes the record agree: started on a phone that restored the account, done once a sign-in was added anywhere. With no
  * word from the node (offline, an older node), the phone's own record decides, as before.
+ *
+ * ## Every member whose 12 words are their only way back (DESIGN-home-default-fable.md §2.5, slice D2)
+ *
+ * Who the reminder is for is what the account HAS, not how it joined: Home's answer says `me.wayBack` (`words`: no
+ * sign-in's copy is linked there), for a member who came by invite, the community's first owner, anyone. Their record is
+ * marked `by: 'wayBack'`: only Home's word moves it (`/api/community/me`'s `rules` says how they joined, so its
+ * `ordinary` is no sign-in added). Sign-up counts as the first showing, so it starts put away ({@link startOneWayBackPutAway},
+ * at an invite sign-up, or from Home's word at its join date): day one is First steps' line only, then the card once
+ * after the first post and once after a week, then Settings. Its card offers only what works for the member: "Add a
+ * sign-in" only where the node takes one from them (Home's `cards.safety`, the 12-words door's rule,
+ * routes/open-join.ts `linkState`), else "Show my 12 words" and "I still have my 12 words", which is kept on the account
+ * (utils/words-kept.ts, `words_kept`) so the phone and the web agree.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -49,6 +61,11 @@ export interface OneWayBack {
     postReturnUsed?: boolean;
     /** The return after a week has been seen. */
     weekReturnUsed?: boolean;
+    /**
+     * `wayBack`: a reminder for a member whose words are their only way back however they joined (§2.5 above), moved by
+     * Home's `me.wayBack` alone and started put away. Absent: the 12-words door's own record (global or an open door).
+     */
+    by?: 'wayBack';
 }
 
 /** Where it shows now: the landing screen's card (and Settings), Settings only, or nowhere. */
@@ -109,6 +126,21 @@ export async function startOneWayBack(publicKey: string, url: string, now: numbe
     await write(publicKey, { url, joinedAt: now });
 }
 
+/**
+ * The record of a member whose words are their only way back, started put away (§2.5: sign-up counts as the first
+ * showing): the card comes once after their first post and once a week after `joinedAt`, then lives in Settings.
+ */
+export const putAwayRecord = (url: string, joinedAt: number): OneWayBack => ({ url, joinedAt, dismissedAt: joinedAt, by: 'wayBack' });
+
+/**
+ * An invite sign-up ended (app/welcome.tsx): the reminder starts put away. One that is done or already running is kept
+ * (a Yes after the recovery kit during sign-up has already marked it done).
+ */
+export async function startOneWayBackPutAway(publicKey: string, url: string, now: number = Date.now()): Promise<void> {
+    if (await readOneWayBack(publicKey)) return;
+    await write(publicKey, putAwayRecord(url, now));
+}
+
 /** The card was put away (it comes back as {@link oneWayBackPlace} says). */
 export async function dismissOneWayBack(publicKey: string, hasPosted: boolean, now: number = Date.now()): Promise<void> {
     const record = await readOneWayBack(publicKey);
@@ -130,6 +162,14 @@ export interface OneWayBackStanding {
     words: boolean;
     /** When it joined there, from the end of its new-account limits; null when the node doesn't say. */
     joinedAt: number | null;
+    /**
+     * Home's word only (utils/home-cards.ts `safetyWord`): false when the words are the only way back but the node takes no
+     * sign-in from this member (an invite, the first owner, a sign-in joiner with no copy there: `linkState` refuses them),
+     * so the card offers none and its record is `by: 'wayBack'`. Absent: the 12-words door's word, as before.
+     */
+    door?: boolean;
+    /** Home's word only: the member said they still have their 12 words (on the card, or Yes after the kit), on any device (`words_kept`). */
+    kept?: boolean;
 }
 
 /** How long the card waits for the node's word before the phone's own record decides. */
@@ -187,8 +227,16 @@ export async function oneWayBackFromNode(
         await write(publicKey, done);
         return done;
     }
+    // "I still have my 12 words" said on another device, or Yes after the kit there (kept on the account): done here too.
+    if (standing.kept && record?.done !== 'linked') {
+        if (record?.done === 'checked') return record;
+        const checked: OneWayBack = { ...(record ?? (standing.door === false ? putAwayRecord(url, standing.joinedAt ?? now) : { url, joinedAt: standing.joinedAt ?? now })), done: 'checked' };
+        await write(publicKey, checked);
+        return checked;
+    }
     if (!record) {
-        const started: OneWayBack = { url, joinedAt: standing.joinedAt ?? now };
+        // Every other member whose words are their only way back: put away from the start (sign-up was its first showing).
+        const started: OneWayBack = standing.door === false ? putAwayRecord(url, standing.joinedAt ?? now) : { url, joinedAt: standing.joinedAt ?? now };
         if (!options.vaultCopy) await write(publicKey, started);
         return started;
     }

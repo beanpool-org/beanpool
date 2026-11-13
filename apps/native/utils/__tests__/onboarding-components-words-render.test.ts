@@ -119,14 +119,15 @@ vi.mock('../nodes', async (importOriginal) => {
     const real = await importOriginal<typeof import('../nodes')>();
     return { ...real, getSavedNodes: async () => [{ url: 'https://mullum.beanpool.org', alias: 'Mullum' }] };
 });
-const kit = vi.hoisted(() => ({ print: 'done' as string }));
+/** `save`: what Save as PDF gives without asking first (the share sheet came back), else the real order: asked first. */
+const kit = vi.hoisted(() => ({ print: 'done' as string, save: null as null | string }));
 vi.mock('../recovery-kit', async (importOriginal) => {
     const real = await importOriginal<typeof import('../recovery-kit')>();
     return {
         ...real,
         printRecoveryKit: async () => kit.print,
         // As the real one: asked first, nothing made on Cancel.
-        saveRecoveryKitPdf: async (_kit: unknown, askFirst: () => Promise<boolean>) => ((await askFirst()) ? 'done' : 'cancelled'),
+        saveRecoveryKitPdf: async (_kit: unknown, askFirst: () => Promise<boolean>) => kit.save ?? ((await askFirst()) ? 'done' : 'cancelled'),
     };
 });
 vi.mock('../words-on-screen', async (importOriginal) => {
@@ -140,7 +141,7 @@ import { OnboardingGuide } from '../../components/OnboardingGuide';
 import { ArchetypeQuizModal } from '../../components/ArchetypeQuizModal';
 import { KeeperProtectionPanel, SIGN_IN_ROW, VAULT_COPY_OPENERS } from '../../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
-import { RecoveryKitButtons } from '../../components/RecoveryKitButtons';
+import { KIT_KEPT_LINES, RecoveryKitButtons } from '../../components/RecoveryKitButtons';
 import { CopyClearsNote, NoScreenLockNote } from '../../components/WordsOnScreen';
 import { protectionFrom } from '../protection-state';
 import { VAULT_MESSAGES } from '../vault';
@@ -154,7 +155,7 @@ const AS_WRITTEN = ['Google', 'Apple', 'Facebook', 'Sally', 'mullum.beanpool.org
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-beforeEach(() => { alerts.said.length = 0; prompts.asked.length = 0; sheet.answer = null; sheet.options = null; sheet.real = false; kit.print = 'done'; noVault(); setLanguage('en'); });
+beforeEach(() => { alerts.said.length = 0; prompts.asked.length = 0; sheet.answer = null; sheet.options = null; sheet.real = false; kit.print = 'done'; kit.save = null; noVault(); setLanguage('en'); });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; noVault(); setLanguage('en'); });
 
 const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
@@ -464,5 +465,80 @@ describe("the recovery kit's buttons and the notes under the 12 words", () => {
         await click(all('button').find((b) => b.getAttribute('aria-label') === pseudoLocalise('Save as PDF')), 'Save as PDF');
         expect(alerts.said).toEqual([pseudoLocalise('Save as PDF'), pseudoLocalise('Keep this file off cloud backups and chats. Anyone who has it can sign in as you.'), pseudoLocalise('Cancel'), pseudoLocalise('Save')]);
         check('the kit, before Save as PDF');
+    });
+
+    // Review of #3113 (tier A; the director's rule): Android's print resolves when its dialog OPENS and the share sheet when
+    // it is DISMISSED, so the kit coming back is never "kept". One question in place; only the member's Yes records it.
+    describe('after the kit comes back: one question, and only Yes says the words are kept', () => {
+        const asked = () => !!host!.querySelector('[data-testid="kit-kept-ask"]');
+        const byTest = (id: string) => host!.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+        const kitButton = (label: string) => all('button').find((b) => b.getAttribute('aria-label') === pseudoLocalise(label));
+        async function drawKit(onKept?: () => void) {
+            await mount(createElement(RecoveryKitButtons, { words: WORDS, onKept }));
+        }
+
+        it('Print came back: nothing is kept yet, the question is asked in the member\'s language and holds at 320 dp x 1.3', async () => {
+            const kept = vi.fn();
+            await drawKit(kept);
+            expect(asked()).toBe(false);
+            await click(kitButton('Print your recovery kit'), 'Print your recovery kit');
+            expect(kept).not.toHaveBeenCalled();
+            expect(asked()).toBe(true);
+            expect(host!.textContent).toContain(pseudoLocalise(KIT_KEPT_LINES.ask));
+            expect(byTest('kit-kept-yes')!.textContent).toBe(pseudoLocalise(KIT_KEPT_LINES.yes));
+            expect(byTest('kit-kept-not-yet')!.textContent).toBe(pseudoLocalise(KIT_KEPT_LINES.notYet));
+            check('the kit, asked after Print');
+        });
+
+        it('Yes, it\'s kept: kept once, and the question goes', async () => {
+            const kept = vi.fn();
+            await drawKit(kept);
+            await click(kitButton('Print your recovery kit'), 'Print your recovery kit');
+            await click(byTest('kit-kept-yes') ?? undefined, 'Yes');
+            expect(kept).toHaveBeenCalledTimes(1);
+            expect(asked()).toBe(false);
+        });
+
+        it('Not yet: nothing kept, the question goes and nothing asks again until the kit is used again', async () => {
+            const kept = vi.fn();
+            await drawKit(kept);
+            await click(kitButton('Print your recovery kit'), 'Print your recovery kit');
+            await click(byTest('kit-kept-not-yet') ?? undefined, 'Not yet');
+            expect(kept).not.toHaveBeenCalled();
+            expect(asked()).toBe(false);
+            await settle();
+            expect(asked()).toBe(false);
+            // Used again: asked again, and a Yes then counts.
+            await click(kitButton('Print your recovery kit'), 'Print your recovery kit');
+            expect(asked()).toBe(true);
+            await click(byTest('kit-kept-yes') ?? undefined, 'Yes');
+            expect(kept).toHaveBeenCalledTimes(1);
+        });
+
+        it('Save as PDF\'s share sheet came back: asked the same way, nothing kept on its own', async () => {
+            const kept = vi.fn();
+            kit.save = 'done';
+            await drawKit(kept);
+            await click(kitButton('Save as PDF'), 'Save as PDF');
+            expect(kept).not.toHaveBeenCalled();
+            expect(asked()).toBe(true);
+        });
+
+        it('Save as PDF cancelled, or a kit that couldn\'t be made: no question, nothing kept', async () => {
+            const kept = vi.fn();
+            kit.save = 'cancelled';
+            await drawKit(kept);
+            await click(kitButton('Save as PDF'), 'Save as PDF');
+            kit.print = 'failed';
+            await click(kitButton('Print your recovery kit'), 'Print your recovery kit');
+            expect(asked()).toBe(false);
+            expect(kept).not.toHaveBeenCalled();
+        });
+
+        it('a kit with nowhere to record a Yes asks nothing', async () => {
+            await drawKit(undefined);
+            await click(kitButton('Print your recovery kit'), 'Print your recovery kit');
+            expect(asked()).toBe(false);
+        });
     });
 });

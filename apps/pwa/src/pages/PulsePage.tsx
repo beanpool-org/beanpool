@@ -200,8 +200,9 @@ export function PulsePage({ identity, onOpenProfile, profile }: Props) {
         }
     };
 
-    // The quiet week's page (below): no item in this lane under All.
-    const quiet = !loading && selectedCategory === 'all' && visibleItems.length === 0;
+    // The quiet week's page (below): no item in this lane under All, and the feed was read. A feed that would not load is
+    // no quiet week: the error box says so, with Retry, and the add button stays in its place.
+    const quiet = !loading && !error && selectedCategory === 'all' && visibleItems.length === 0;
 
     const openIntakeWithParam = (param?: string) => {
         if (!param) {
@@ -403,7 +404,7 @@ export function PulsePage({ identity, onOpenProfile, profile }: Props) {
                             {t('Show all categories')}
                         </button>
                     </div>
-                ) : (
+                ) : !quiet ? null : (
                     // A quiet week (§3.4): what there is to do, said plainly, and nothing asked. The add button steps into the
                     // middle so there is still only one; on the worldwide community there is none yet and the Learn chip leads.
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-3xl p-8 text-center my-4 shadow-sm">

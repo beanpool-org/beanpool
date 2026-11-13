@@ -674,6 +674,17 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P2)', () 
         expect(host.textContent).not.toContain('Add a link');
     });
 
+    it('a feed that would not load says so and Retry, never "Nothing new this week": that would be a guess', async () => {
+        feed.items = [];
+        feed.fail = 'Failed to load feed page (503)';
+        await renderIn('en', createElement(PulseScreen));
+        expect(host.textContent).toContain('Failed to load feed page (503)');
+        expect(host.textContent).not.toContain('Nothing new this week.');
+        // The add button stays where it always is: adding does not need the feed.
+        expect(adds()).toHaveLength(1);
+        expect(adds()[0].getAttribute('data-testid')).toBe('pulse-add');
+    });
+
     it('in the pseudo-locale every new word came through t(), on a local community and the worldwide one', async () => {
         await renderIn('xx', createElement(PulseScreen));
         expect(host.textContent).toContain(xx('Your channels'));

@@ -257,8 +257,9 @@ export default function PulseScreen() {
         }
     };
 
-    // The quiet week's page (below): no item in this lane under All, outside the Learn lane.
-    const quiet = !loading && activeLane !== 'learn' && selectedCategory === 'all' && visibleItems.length === 0;
+    // The quiet week's page (below): no item in this lane under All, outside the Learn lane, and the feed was read. A feed
+    // that would not load is no quiet week: the error box says so, with Retry, and the add button stays in its place.
+    const quiet = !loading && !error && activeLane !== 'learn' && selectedCategory === 'all' && visibleItems.length === 0;
 
     const renderEmptyState = () => {
         if (loading) return null;
@@ -297,6 +298,7 @@ export default function PulseScreen() {
 
         // A quiet week (§3.4): what there is to do, said plainly, and nothing asked. The add button steps into the middle so
         // there is still only one; on the worldwide community there is none yet and the Learn lane leads.
+        if (!quiet) return null;
         return (
             <View style={styles.emptyContainer}>
                 <Text style={styles.emptyIcon}>🗞️</Text>

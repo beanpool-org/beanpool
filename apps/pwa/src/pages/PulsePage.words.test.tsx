@@ -134,6 +134,16 @@ describe('the Pulse page: one add button, Your channels, a quiet week (P3)', () 
         expect(document.body.textContent).not.toContain('Add a link');
     });
 
+    it('a feed that would not load says so and Retry, never "Nothing new this week": that would be a guess', async () => {
+        vi.mocked(getPulseFeed).mockRejectedValue(new Error(''));
+        render(<PulsePage identity={identity} onOpenProfile={vi.fn()} profile="local" />);
+        expect(await screen.findByText('Could not load community feed.')).toBeInTheDocument();
+        expect(screen.queryByText('Nothing new this week.')).toBeNull();
+        // The add button stays where it always is: adding does not need the feed.
+        expect(adds()).toHaveLength(1);
+        expect(adds()[0]).toHaveAttribute('data-testid', 'pulse-add');
+    });
+
     it('in the pseudo-locale every new word came through t(), local and worldwide', async () => {
         vi.mocked(getPulseFeed).mockResolvedValue({ items: [], nextCursor: null } as any);
         await showIn('xx');

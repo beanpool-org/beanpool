@@ -2593,7 +2593,7 @@ export default function WelcomeScreen() {
     // --- STEP 3: SAFETY BACKUP (seed phrase — reframed) ---
     if (mode === 'seedBackup' && pendingIdentity) {
         // The member's Yes after the kit (components/RecoveryKitButtons.tsx asks it; the kit alone never counts) is "I still
-        // have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5).
+        // have my 12 words", kept on the account (DESIGN-home-default-fable.md §2.5). So is the tick, carried past Next (below).
         const keptFromKit = () => {
             const who = pendingIdentity;
             void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
@@ -2855,6 +2855,14 @@ export default function WelcomeScreen() {
                         disabled={loading}
                         onPress={() => {
                             recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                            // The tick is the member's own "I've saved these words": kept on the account as the web's tick
+                            // is (DESIGN-home-default-fable.md §2.5), so Home's card and First steps' words line end on every
+                            // device. Not ticked: nothing is said, and the reminder starts put away at the end of sign-up. Sent
+                            // and not waited on: a node that can't hear it yet gets it at the next Home landing (utils/words-kept.ts).
+                            if (seedConfirmed) {
+                                const who = pendingIdentity;
+                                void AsyncStorage.getItem('beanpool_anchor_url').catch(() => null).then(u => keepWords(u, who));
+                            }
                             updatePendingOnboarding({ step: 'onboardingGuide' }).catch(() => {});
                             setMode('onboardingGuide');
                         }}

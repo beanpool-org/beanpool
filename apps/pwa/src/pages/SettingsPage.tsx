@@ -878,9 +878,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <RecoveryAlertBanner identity={identity} />
                         {/* A paused member only, until a moderator lifts it (G3). */}
                         <ModerationPauseCard />
-                        {/* An account made with 12 words alone, for as long as it has no sign-in: one way back, and a
-                            sign-in to add (two-doors design §2.5). With the result of one that just came back. */}
-                        <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} keepsNoCopies={communityInfo?.recoveryCopies === 'none'} />
+                        {/* Every account whose 12 words are its only way back, however it joined, until a sign-in is added or
+                            the member says they still have them (DESIGN-home-default-fable.md §2.5: "then Settings only"), with
+                            a sign-in to add where the node takes one. With the result of one that just came back. */}
+                        <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} keepsNoCopies={communityInfo?.recoveryCopies === 'none'}
+                            onKept={() => keepWordsOnAccount(identity.publicKey, 'Settings')} />
                         {/* A new account only, until the node says its limits are over (G11-e). */}
                         <NewAccountCard />
                         {/* Owners and admins only — the node answers the role. */}

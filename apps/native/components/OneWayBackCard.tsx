@@ -67,9 +67,10 @@ export interface OneWayBackActionsAt {
  * "Your account has one way back: your 12 words" (two-doors design §2.5, utils/one-way-back.ts), for a member who joined
  * the global community with 12 words. A plain card, never a dot and never a gate.
  *
- * - `landing`: the card on the landing screen while utils/one-way-back.ts says `card`: Add a sign-in, Show my 12 words
- *   (Settings' Account Protection, behind the phone's lock), and Not now (it comes back once after the first post and
- *   once after a week).
+ * - `landing`: the card on the landing screen while utils/one-way-back.ts says `card`: Add a sign-in (where the node takes
+ *   one), I still have my 12 words, Show my 12 words (Settings' Account Protection, behind the phone's lock), and Not now
+ *   (it comes back once after the first post and once after a week). "One way back" is said only on the global
+ *   community's door; everywhere else an admin can set a member up again, so the card says "how you get back in" (§2.5).
  * - `settings`: Account Protection's block until a sign-in is added or the member says they still have their words;
  *   after "I still have my 12 words", adding a sign-in is still offered there, without the warning.
  *
@@ -234,6 +235,10 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     const canLink = homeHere ? homeWord!.standing.door !== false : record?.by !== 'wayBack';
     // The door's own words, or every other member's (§2.5).
     const everyMember = record?.by === 'wayBack' || (homeHere && homeWord!.standing.door === false);
+    // "One way back" only where it is true: the worldwide community's door. On any other community an admin can set a member
+    // up again with a new key (recovery model point 3), so its door's members get "how you get back in", as on the web
+    // (components/OneWayBack.tsx: global and a sign-in the node takes).
+    const oneWayBack = !everyMember && !!record && isGlobalInUse(record.url);
     const up = !!identity && !!record && record.done !== 'linked' && (place === 'settings' || (shown === 'card' && !quiet));
     // The floating button learns when the landing card goes (put away, done, or a vault copy found).
     useEffect(() => {
@@ -245,7 +250,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;
-    const bodyLine = !everyMember ? t(ONE_WAY_BACK_LINES.body) : canLink ? t(WORDS_HOW_BACK_LINES.withSignIn) : t(WORDS_HOW_BACK_LINES.noSignIn);
+    const bodyLine = oneWayBack ? t(ONE_WAY_BACK_LINES.body) : canLink ? t(WORDS_HOW_BACK_LINES.withSignIn) : t(WORDS_HOW_BACK_LINES.noSignIn);
     const checkedLine = t(ONE_WAY_BACK_LINES.checked);
     // Said here, kept on the account so every device and the web agree (utils/words-kept.ts), then the card reads again.
     const stillHave = async () => { await keepWords(record.url, identity); void refresh(); };
@@ -306,8 +311,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
                     <Text style={s.primaryText}>{t(ONE_WAY_BACK_LINES.addSignIn)}</Text>
                 </Pressable>
             )}
-            {place === 'landing' && !canLink && (
-                // No sign-in to offer: what works is the words themselves, and saying they are still kept.
+            {place === 'landing' && (
+                // Saying the words are still kept ends the reminder on every device (§2.5 "Done when"), on every card: the
+                // 12-words door's own too, beside its sign-in, as the web's card offers it.
                 <Pressable style={s.secondary} onPress={() => { void stillHave(); }} accessibilityRole="button"
                     accessibilityHint={t('Says you checked you still have your 12 words written down')} testID="one-way-back-still-have">
                     <Text style={s.secondaryText}>✓ {checkedLine}</Text>
@@ -338,7 +344,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
 
     return (
         // Its name for TalkBack says what its sentence says: "one way back" isn't true for every member (§2.5).
-        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={everyMember ? bodyLine : t(ONE_WAY_BACK_LINES.title)}>
+        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={oneWayBack ? t(ONE_WAY_BACK_LINES.title) : bodyLine}>
             {band}
             {/* One wrapper whether or not Home's band is up (home/quiet.ts): the card's inside is never rebuilt when Arrange opens. */}
             <View {...quietWrapperProps(!!band)} style={band ? quietInside : undefined}>{content}</View>

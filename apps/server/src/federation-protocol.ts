@@ -12,6 +12,7 @@ import { peerHomeUrl, isLocalMemberKey } from './federation-origin.js';
 import { assertDmLineFits, WriterLimitError } from './engine/writer-bounds.js';
 import { listingsForPeer } from './federation-listings.js';
 import { logger } from './logger.js';
+import { alreadyClosedBytes } from './p2p-stream-end.js';
 import { getMember, createConversation, sendMessage, registerVisitor } from './state-engine.js';
 import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
 import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
@@ -37,7 +38,8 @@ const decoder = new TextDecoder();
 const MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
 /**
- * Read data from a stream by polling readBuffer until data arrives.
+ * Read a whole message from a stream: every chunk until the remote closes its write side, or, when it closed before
+ * this reader started, every byte it had sent (p2p-stream-end.ts).
  */
 function readFromStream(stream: any, timeoutMs = 10000, maxBytes = MAX_PAYLOAD_SIZE): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -56,11 +58,12 @@ function readFromStream(stream: any, timeoutMs = 10000, maxBytes = MAX_PAYLOAD_S
             reject(err);
         };
         const timer = setTimeout(() => fail(new Error('Read timeout')), timeoutMs);
+        const whole = alreadyClosedBytes(stream);
 
         (async () => {
             let totalLength = 0;
             try {
-                for await (const chunk of stream) {
+                if (whole !== 0) for await (const chunk of stream) {
                     if (settled) return;
                     let parsedChunk: Uint8Array;
                     if (chunk instanceof Uint8Array) {
@@ -78,6 +81,7 @@ function readFromStream(stream: any, timeoutMs = 10000, maxBytes = MAX_PAYLOAD_S
                     }
 
                     chunks.push(parsedChunk);
+                    if (whole !== null && totalLength >= whole) break;
                 }
                 if (settled) return;
 

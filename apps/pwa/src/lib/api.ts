@@ -238,7 +238,7 @@ export async function signedFetch(method: string, path: string, body?: unknown, 
 /** How the group chat keyring reaches this node: signed as this browser's member. */
 export const groupKeysNet = {
     get: (path: string) => signedFetch('GET', path),
-    post: (path: string, body: unknown) => signedFetch('POST', path, body),
+    post: (path: string, body: unknown, signal?: AbortSignal) => signedFetch('POST', path, body, signal),
 };
 
 /** What `request` throws for an answer that isn't ok. */
@@ -1399,7 +1399,7 @@ export interface ApiMessage {
     authorPubkey: string;
     ciphertext: string;
     nonce: string;
-    type?: 'text' | 'system' | 'image' | 'removed';
+    type?: 'text' | 'system' | 'image' | 'voice' | 'removed';
     systemType?: SystemMessageType;
     metadata?: string;
     timestamp: string;
@@ -1433,13 +1433,15 @@ export async function sendMessageApi(
     authorPubkey: string,
     ciphertext: string,
     nonce: string,
-    type?: 'text' | 'image',
+    type?: 'text' | 'image' | 'voice',
     attachment?: MessageAttachment,
     metadata?: string,
     /** The message's own id (a lower-case UUID v4), which a DM line is sealed to: the node stores the line under it. */
     id?: string,
+    /** The caller giving up (a voice send's 60 s, lib/voice.ts voiceSendWithin): the request is aborted. */
+    signal?: AbortSignal,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id });
+    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id }, signal);
 }
 
 /** Edit a line: a DM line's new words carry their new signature in their own ciphertext (core dm-crypto.ts, format 4). */

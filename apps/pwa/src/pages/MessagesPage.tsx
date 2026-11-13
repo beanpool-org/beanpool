@@ -9,7 +9,7 @@
 import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo, type CSSProperties, type ReactNode } from 'react';
 import {
     getConversations, getConversationMessages, createConversationApi, decideMessageRequest,
-    sendMessageApi, editMessageApi, toggleMessageReactionApi,
+    sendMessageApi, editMessageApi, toggleMessageReactionApi, getMessageAttachmentApi,
     markConversationReadApi, getMyMarketplaceTransactions, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     getEventChat, getGroupChat, getGroupMembers, groupKeysNet, getFriends,
     deleteMessageApi, removeGroupChatMessage, muteChatApi, type YourChatMute,
@@ -39,9 +39,14 @@ import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITI
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
     chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
-    groupLineShown, groupRemovedRuns, getDecryptedGroupAttachment, reportSealedGroupLine, GROUP_CHAT_OLD_NODE_NOTICE, type GroupLineShown,
+    groupLineShown, groupRemovedRuns, getDecryptedGroupAttachment, getDecryptedGroupVoice, reportSealedGroupLine, GROUP_CHAT_OLD_NODE_NOTICE, type GroupLineShown,
     type OpenedGroupThread,
 } from '../lib/group-chat-lines';
+import { browserRecordsVoice, nodeTakesVoice, openDmVoiceLine, voiceCantRecordWords, VoiceNotSentError, VOICE_WORDS } from '../lib/voice';
+import { setVoiceOrder, stopVoicePlayer } from '../lib/voice-player';
+import { VoiceBubble } from '../components/VoiceBubble';
+import { useVoiceRecorder, VoiceMicButton, VoiceRecorderBar, VoiceRecorderNote } from '../components/VoiceRecorder';
+import { sealDmVoice, VoiceRefusedError, VOICE_MIME, type VoiceInput } from '@beanpool/core';
 import { resizePhotoFile } from '../lib/photo-resize';
 import {
     usePendingChatLines, sendChatLine, retryChatLine, discardChatLine, forgetLinesWithRows, noteChatRead, lineAfter, chatSettled,
@@ -310,7 +315,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [showCreateGroup, setShowCreateGroup] = useState(false);
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
     // Beans off (the phone's CreateGroupModal, and Commons' own Create form). Unknown counts as on, as everywhere.
-    const beansOn = useCommunityInfo()?.features?.beans !== false;
+    const communityInfo = useCommunityInfo();
+    const beansOn = communityInfo?.features?.beans !== false;
+    // Voice messages (V4): the microphone only where this community says it takes voice lines (lib/voice.ts nodeTakesVoice),
+    // and only where this browser writes AAC in .m4a; read once, as the browser's abilities don't change while the page is open.
+    const nodeVoice = nodeTakesVoice(communityInfo);
+    const [voiceRecordable] = useState(() => browserRecordsVoice());
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
     // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
@@ -544,6 +554,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     // loaded lines of this chat only (never the last chat's, still in `messages` until this one's arrive): until they do,
     // the opener's is not known, rather than taken for one with no line in it yet.
     const requestMode = requestModeOf(activeConv, identity.publicKey, activeConv && loadedDmId === activeConv.id ? shownMessages : null);
+    // Voice messages (V4): the open chat's recorder, started over for each chat; one voice send at a time.
+    const voiceSendingRef = useRef(false);
+    const voiceRec = useVoiceRecorder(sendVoice, activeConv?.id ?? null);
+    // The open chat's voice lines in the order they are drawn, for the next one to play on; leaving the chat stops it.
+    useEffect(() => {
+        setVoiceOrder(shownMessages.filter((m) => m.type === 'voice').map((m) => ({ id: m.id, mine: m.authorPubkey === identity.publicKey })));
+    }, [shownMessages, identity.publicKey]);
+    useEffect(() => () => stopVoicePlayer(), [activeConvId]);
     // Each line of a locked group chat as drawn (lib/group-chat-lines.ts groupLineShown): a sealed line under the name of
     // the key that signed it, a node line in the app's words, anything else nobody's. Null for every other chat.
     const groupShown = useMemo(() => {
@@ -1668,6 +1686,77 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
+    /**
+     * A voice message (DESIGN-cross-chat-voice-fable.md §5.4, V4), as the phone sends it: in a DM, sealed here as the message's
+     * part `voice` (core sealDmVoice) beside empty words sealed as part 'body', so the thread check reads it like any line and
+     * the sound opens only once its words have; in a locked group's chat, under the line's own message key (sendSealedGroupLine).
+     * Only in a DM both have accepted and a locked group (the microphone shows nowhere else); never as a request, never in an
+     * event's or an enterprise's chat. `lineId` is the recording's own, the same on every try, so a Send after a try that timed
+     * out but landed is the node's duplicate: one line. `signal` is the recorder's 60 s: it aborts the request, and an answer
+     * after it changes nothing here. Every refusal is said above the box and thrown as VoiceNotSentError, so the recorder keeps
+     * the recording for another try and says nothing more.
+     */
+    async function sendVoice(voice: VoiceInput, lineId: string, signal: AbortSignal): Promise<void> {
+        const conv0 = activeConv;
+        if (!conv0) throw new VoiceNotSentError(t(VOICE_WORDS.failedToSend));
+        const notSent = (sentence: string): never => { sayRefusal(conv0.id, sentence); throw new VoiceNotSentError(sentence); };
+        if (voiceSendingRef.current) notSent(t(VOICE_WORDS.waitForLast));
+        voiceSendingRef.current = true;
+        try {
+            const route = conv0.type === 'group_thread' ? 'group' : await sendRouteOf(identity.publicKey, conv0.id);
+            if (route === 'refuse') notSent(GROUP_HOLD_UNREAD_TEXT);
+            const replyToId = replyToMessage?.id ?? null;
+            if (route === 'group') {
+                const conv = { ...conv0, type: 'group_thread' } as Conversation;
+                const check = await groupSendCheck(conv);
+                if (!check) throw new VoiceNotSentError(chatRefusal ?? '');
+                if (check.plan === 'readable') notSent(GROUP_CHAT_OLD_NODE_NOTICE);
+                await chatSettled(conv.id);
+                try {
+                    await sendSealedGroupLine(groupKeysNet, identity, indexedDbGroupLockStore, {
+                        groupId: groupIdKey(conv.id), text: '', voice, clientId: lineId, replyToId, after: lineAfter(conv.id).group, signal,
+                    });
+                } catch (e) {
+                    if (e instanceof VoiceRefusedError) notSent(t(VOICE_WORDS.cantSend));
+                    if (saidGroupRefusal(e, conv.id, check.chat, check.chatErr)) throw new VoiceNotSentError('');
+                    throw e;
+                }
+            } else {
+                // An event's or an enterprise's chat (the node reads it by design), or a request: no voice (§3.5, §5.3).
+                if (conv0.type !== 'dm' || requestMode !== 'none') notSent(t(VOICE_WORDS.notInThisChat));
+                const conv = dmCtxFor(conv0) ? conv0 : await freshConversation(conv0);
+                const ctx = dmCtxFor(conv);
+                if (!ctx) notSent(dmNotLockedLine(peerNameFor(conv0)));
+                await chatSettled(conv.id);
+                let sealed: { ciphertext: string; nonce: string };
+                try {
+                    sealed = sealDmVoice(voice, ctx!, { senderPubHex: identity.publicKey, messageId: lineId, replyToId });
+                } catch (e) {
+                    notSent(e instanceof VoiceRefusedError ? t(VOICE_WORDS.cantSend) : dmNotLockedLine(peerNameFor(conv0)));
+                    throw e;
+                }
+                // Its words: empty, sealed as part 'body' to the same id and reply, after the newest line this browser had (a try
+                // that landed is answered by the node as the line it stored, whatever this one says).
+                const words = lockForDm('', conv, identity, { messageId: lineId, part: 'body', after: lineAfter(conv.id).dm, replyToId });
+                await sendMessageApi(conv0.id, identity.publicKey, words.ciphertext, words.nonce, 'voice',
+                    { data: sealed.ciphertext, nonce: sealed.nonce, mime: VOICE_MIME }, lineMetadata(replyToId), lineId, signal);
+                if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
+                ownLineTaken(conv0.id);
+            }
+            if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
+            if (activeConvIdRef.current === conv0.id) { setReplyToMessage(null); setChatRefusal(null); }
+            await loadMessages(conv0.id);
+        } catch (err: any) {
+            if (err instanceof VoiceNotSentError) throw err;
+            if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
+            if (isDmNotLocked(err)) notSent(dmNotLockedLine(peerNameFor(conv0)));
+            const refusal = nodeRefusal(err) ?? null;
+            notSent(refusal?.message ?? (err?.message ? chatLineWords(err.message) : t(VOICE_WORDS.failedToSend)));
+        } finally {
+            voiceSendingRef.current = false;
+        }
+    }
+
     /** Let go of the preview and the object URL behind its thumbnail. */
     function clearPendingImage() {
         setPendingImage(prev => {
@@ -1842,7 +1931,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : chatAuthorWords(g.name ?? GROUP_LINE_UNVERIFIED_NAME);
             // A photo line quotes as a DM's does: "🔒 Photo" (DESIGN-group-chat-photos-fable.md §2.3).
             const text = g.text === null ? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId)
-                : g.unattributed || g.nodeLine ? chatLineWords(g.text) : parent.type === 'image' ? t('🔒 Photo') : g.text;
+                : g.unattributed || g.nodeLine ? chatLineWords(g.text) : parent.type === 'image' ? t('🔒 Photo') : parent.type === 'voice' ? t(VOICE_WORDS.line) : g.text;
             return { author, text, note: null, named: false };
         }
         const view = lineViews?.get(parent.id);
@@ -1854,7 +1943,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         return {
             author: membersByPublicKey.get(parent.authorPubkey)?.callsign
                 || (parent.authorPubkey === identity.publicKey ? t('You') : parent.authorPubkey.substring(0, 8)),
-            text: parent.type === 'image' ? t('🔒 Photo') : decryptMessage(parent),
+            // A voice line's words are empty: it quotes as what it is (V4), as the phone's quote does.
+            text: parent.type === 'image' ? t('🔒 Photo') : parent.type === 'voice' ? t(VOICE_WORDS.line) : decryptMessage(parent),
             note: chatLineWords(dmLineMarkText(view?.mark)) ?? null,
             named: true,
         };
@@ -2174,6 +2264,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             : '';
         const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
         const inRequest = requestMode !== 'none';
+        // Voice messages (V4, the phone's rules): in a DM both have accepted and a locked group's chat this member may write in,
+        // where the community takes voice lines; never in a request, an event's or an enterprise's chat, or while editing.
+        const voiceChat = nodeVoice && !editingMessage && !pendingImage && !isPeerBlocked && (
+            (activeConv.type === 'dm' && requestMode === 'none')
+            || (activeConv.type === 'group_thread' && groupLocked && openGroup?.answer?.canPost !== false));
+        const showMic = voiceChat && voiceRecordable === 'yes' && !draft.trim();
+        const cantRecordVoice = voiceChat ? voiceCantRecordWords(voiceRecordable) : null;
 
         // Dropping onto a blocked conversation would only produce a message the
         // person cannot send, so the chat takes no drops at all while blocked; nor
@@ -2735,7 +2832,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         // From before 1.4.0 (conversion code, log row OLDCHAT, remove after 12 Dec 2026): read-only. Copy and Report stay.
                         const oldLine = isOldLine(msg);
                         const isConvenor = isGroupChat && !!openGroup?.answer?.isConvenor;
-                        const isTextEditable = isMe && !isTombstone && !oldLine && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                        const isTextEditable = isMe && !isTombstone && !oldLine && msg.type !== 'image' && msg.type !== 'voice' && msg.type !== 'system' && !msg.systemType &&
                             (!isGroupChat || openGroup?.answer?.canPost !== false);
                         const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
                         const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
@@ -2926,6 +3023,35 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         </div>
                                                     )}
                                                 </>
+                                            );
+                                        })() : msg.type === 'voice' && !isTombstone ? (() => {
+                                            // A voice message (V4): its words (empty) opened first; then its sealed part, under the same key
+                                            // and sender (a DM's thread check, a group's view). One from a request stays closed, unfetched.
+                                            if (groupLine && openGroup) {
+                                                if (groupLine.unattributed) return <FoldedChatText text={decryptMessage(msg)} enabled={false} mine={isMe} links={false} />;
+                                                const view = openGroup.thread?.views.get(msg.id);
+                                                return (
+                                                    <VoiceBubble
+                                                        key={`${msg.id}|${view?.signer ?? ''}|${view?.epoch ?? ''}`}
+                                                        messageId={msg.id}
+                                                        load={() => getDecryptedGroupVoice(groupKeysNet, identity, indexedDbGroupLockStore, {
+                                                            groupId: groupIdKey(activeConv.id), line: { ...msg, type: 'voice' }, view,
+                                                        })}
+                                                    />
+                                                );
+                                            }
+                                            if (requestMode === 'to-me') {
+                                                return <span data-testid="request-voice-closed" style={{ fontStyle: 'italic', opacity: 0.8 }}><span aria-hidden="true">🎤 </span>{t(VOICE_WORDS.closed)}</span>;
+                                            }
+                                            const ctx = dmCtxFor(activeConv);
+                                            if (!ctx || lineView?.format !== 4) return <FoldedChatText text={decryptMessage(msg)} enabled={false} mine={isMe} links={false} />;
+                                            return (
+                                                <VoiceBubble
+                                                    key={`${msg.id}|${ctx.peerEdPubHex}|${msg.authorPubkey}`}
+                                                    messageId={msg.id}
+                                                    load={() => openDmVoiceLine(() => getMessageAttachmentApi(msg.id), { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex },
+                                                        { conversationId: ctx.conversationId, senderPubHex: msg.authorPubkey, messageId: msg.id, metadata: msg.metadata }, true)}
+                                                />
                                             );
                                         })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} links={linkable} />}
                                     </div>
@@ -3552,6 +3678,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             {t('Your first message goes to {name} as a request. You can write more once they accept.', { name: getConversationTitle(activeConv) })}
                         </div>
                     )}
+                    <VoiceRecorderNote rec={voiceRec} />
                     <div style={{
                         display: 'flex', gap: '0.5rem',
                         padding: '0.5rem 1rem',
@@ -3560,7 +3687,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         background: 'var(--bg-secondary)',
                     }}>
                         {/* A DM's photo, and a locked group's (sealed here); none in an old node's group chat (design §2.6). */}
-                        {(activeConv.type === 'dm' || groupLocked) && requestTakesPhoto(requestMode) && (
+                        {!voiceRec.active && (activeConv.type === 'dm' || groupLocked) && requestTakesPhoto(requestMode) && (
                             <label title={t('Send photo')} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: '40px', height: '40px', borderRadius: '50%',
@@ -3579,7 +3706,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 />
                             </label>
                         )}
-                        <textarea
+                        {/* A recording going, waiting for Send, or being sent: its bar in the box's place (the box is empty then). */}
+                        {voiceRec.active ? <VoiceRecorderBar rec={voiceRec} /> : <textarea
                             ref={draftRef}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
@@ -3610,8 +3738,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 paddingTop: '0.55rem',
                                 paddingBottom: '0.55rem',
                             }}
-                        />
-                        <button
+                        />}
+                        {voiceRec.active ? null : showMic ? <VoiceMicButton rec={voiceRec} disabled={sending} /> : <button
                             type="button"
                             onClick={handleSend}
                             disabled={sending || !draft.trim()}
@@ -3634,8 +3762,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             }}
                         >
                             {sending ? '…' : (editingMessage ? '✓' : '↑')}
-                        </button>
+                        </button>}
                     </div>
+                    {cantRecordVoice && (
+                        // Firefox (no AAC recorder), or a plain http address: one line in the microphone's place (§5.5).
+                        <div data-testid="voice-cant-record" style={{
+                            padding: '0 1rem 0.4rem', background: 'var(--bg-secondary)', fontSize: '0.75rem', color: 'var(--text-muted)', overflowWrap: 'anywhere',
+                        }}>
+                            <span aria-hidden="true">🎤 </span>{t(cantRecordVoice)}
+                        </div>
+                    )}
                     </>
                 )}
 

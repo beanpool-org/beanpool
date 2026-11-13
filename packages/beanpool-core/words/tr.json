@@ -2540,5 +2540,10 @@
     "one": "Sen düzenlerken biri bir kısmını aldı. Şimdi {n} adet kaldı. Sayıyı kontrol et ve yeniden kaydet.",
     "other": "Sen düzenlerken biri bir kısmını aldı. Şimdi {n} adet kaldı. Sayıyı kontrol et ve yeniden kaydet."
   },
-  "To stop selling, pause or remove the listing.": "Satışı durdurmak için ilanı duraklat ya da kaldır."
+  "To stop selling, pause or remove the listing.": "Satışı durdurmak için ilanı duraklat ya da kaldır.",
+  "Newest\u0004member sort": "En yeni",
+  "Name\u0004member sort": "İsim",
+  "Friends\u0004member sort": "Arkadaşlar",
+  "Trusted\u0004member sort": "Güvenilenler",
+  "Active\u0004member sort": "Aktif"
 }

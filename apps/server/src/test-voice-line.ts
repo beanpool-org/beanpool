@@ -6,6 +6,8 @@
  * Two processes, each its own data dir (takeover-test-harness.ts), over REAL HTTPS through the real signature middleware,
  * with real Ed25519 identities and parts sealed as the apps seal them. Nothing leaves this machine.
  *
+ *  0. The node says it takes voice lines: `features.voiceLines: true` on GET /api/community/info (unsigned) and on a member's
+ *     GET /api/community/me. The phone offers its microphone only there.
  *  1. Stored: Anna's DM voice line and her group voice line are stored where a photo is (message_attachments, the image
  *     store), counted in her day of photo bytes; Ben and Dan read them back and open them as voice.
  *  2. Refused, and nothing stored (no line, no attachment row, no object, no budget): a readable part, a part over 1.15 MB,
@@ -270,6 +272,16 @@ async function main(): Promise<void> {
         const mainPeerId = main.ready.peerId;
         for (const m of [ben, cat, dan, eve]) await main.send('member', { pk: m.pk, name: m.name, owner: anna.pk });
         const M = `https://localhost:${await main.send('serve')}`;
+
+        // The node says outright that it takes voice lines, where both apps read a community's switches: its public info, and
+        // a member's own answer. A node from before V2 says nothing and stores a voice line as words with a sound no one can
+        // play (Byron, 14 Nov), so the phone offers its microphone only where this says true.
+        const infoPublic = await adminGet(M, '/api/community/info', { Accept: 'application/json' });
+        assert(infoPublic.status === 200 && infoPublic.body?.features?.voiceLines === true,
+            `GET /api/community/info, unsigned, says features.voiceLines: true (${infoPublic.status} ${JSON.stringify(infoPublic.body?.features?.voiceLines)})`);
+        const meAnswer = await call(M, 'GET', ben, '/api/community/me');
+        assert(meAnswer.status === 200 && meAnswer.body?.features?.voiceLines === true,
+            `GET /api/community/me, signed by Ben, says features.voiceLines: true (${meAnswer.status} ${JSON.stringify(meAnswer.body?.features?.voiceLines)})`);
 
         const convo = await call(M, 'POST', anna, '/api/messages/conversation', { type: 'dm', participants: [anna.pk, ben.pk], createdBy: anna.pk });
         const convoId: string = convo.body?.conversation?.id ?? convo.body?.id;

@@ -2430,5 +2430,10 @@
   "Someone took some while you were editing. There is {n} left now. Check the number and save again.|Someone took some while you were editing. There are {n} left now. Check the number and save again.": {
     "other": "Có người vừa nhận một phần trong lúc bạn sửa. Hiện còn {n}. Hãy kiểm tra số lượng rồi lưu lại."
   },
-  "To stop selling, pause or remove the listing.": "Để ngừng bán, hãy tạm dừng hoặc xóa tin đăng."
+  "To stop selling, pause or remove the listing.": "Để ngừng bán, hãy tạm dừng hoặc xóa tin đăng.",
+  "Newest\u0004member sort": "Mới nhất",
+  "Name\u0004member sort": "Tên",
+  "Friends\u0004member sort": "Bạn bè",
+  "Trusted\u0004member sort": "Được tin cậy",
+  "Active\u0004member sort": "Hoạt động"
 }

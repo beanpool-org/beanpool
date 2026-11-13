@@ -2540,5 +2540,10 @@
     "one": "Jemand hat etwas übernommen, während du bearbeitet hast. Jetzt ist {n} übrig. Prüfe die Zahl und speichere erneut.",
     "other": "Jemand hat etwas übernommen, während du bearbeitet hast. Jetzt sind {n} übrig. Prüfe die Zahl und speichere erneut."
   },
-  "To stop selling, pause or remove the listing.": "Um nicht mehr zu verkaufen, pausiere oder entferne den Eintrag."
+  "To stop selling, pause or remove the listing.": "Um nicht mehr zu verkaufen, pausiere oder entferne den Eintrag.",
+  "Newest\u0004member sort": "Neueste",
+  "Name\u0004member sort": "Name",
+  "Friends\u0004member sort": "Freunde",
+  "Trusted\u0004member sort": "Vertraut",
+  "Active\u0004member sort": "Aktiv"
 }

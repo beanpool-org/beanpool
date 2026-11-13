@@ -2540,5 +2540,10 @@
     "one": "Qualcuno ne ha presi alcuni mentre modificavi. Ora ne resta {n}. Controlla il numero e salva di nuovo.",
     "other": "Qualcuno ne ha presi alcuni mentre modificavi. Ora ne restano {n}. Controlla il numero e salva di nuovo."
   },
-  "To stop selling, pause or remove the listing.": "Per smettere di vendere, metti in pausa o rimuovi l'annuncio."
+  "To stop selling, pause or remove the listing.": "Per smettere di vendere, metti in pausa o rimuovi l'annuncio.",
+  "Newest\u0004member sort": "Più recenti",
+  "Name\u0004member sort": "Nome",
+  "Friends\u0004member sort": "Amici",
+  "Trusted\u0004member sort": "Affidabili",
+  "Active\u0004member sort": "Attivi"
 }

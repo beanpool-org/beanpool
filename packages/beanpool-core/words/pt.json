@@ -2540,5 +2540,10 @@
     "one": "Alguém pegou alguns enquanto você editava. Agora resta {n}. Confira o número e salve de novo.",
     "other": "Alguém pegou alguns enquanto você editava. Agora restam {n}. Confira o número e salve de novo."
   },
-  "To stop selling, pause or remove the listing.": "Para parar de vender, pause ou remova o anúncio."
+  "To stop selling, pause or remove the listing.": "Para parar de vender, pause ou remova o anúncio.",
+  "Newest\u0004member sort": "Recentes",
+  "Name\u0004member sort": "Nome",
+  "Friends\u0004member sort": "Amigos",
+  "Trusted\u0004member sort": "De confiança",
+  "Active\u0004member sort": "Ativos"
 }

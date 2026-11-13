@@ -198,10 +198,10 @@ async function main() {
     setMemberPhoto(db, done.pk, 'data:image/png;base64,iVBORw0KGgo=');
     setMemberPreferences(done.pk, { interests: ['food'] });
     db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('code-wayback-done', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).run(done.pk);
-    const notYet = await signed('GET', '/api/home?cards=steps&lands=first-need', done);
+    const notYet = await signed('GET', '/api/home?cards=steps&lands=first-need,words', done);
     assert(notYet.json?.cards?.steps?.words === false, 'setup: everything done but the words');
     await savePrefs(done, { words_kept: true });
-    const allDone = await signed('GET', '/api/home?cards=steps&lands=first-need', done);
+    const allDone = await signed('GET', '/api/home?cards=steps&lands=first-need,words', done);
     assert(allDone.json?.cards?.steps === undefined, `every line done while young: First steps leaves (${JSON.stringify(allDone.json?.cards?.steps)})`);
 
     // ── 6. no zero figure on the community card ──────────────────────────────────────────────────────────────────

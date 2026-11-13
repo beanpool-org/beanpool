@@ -458,10 +458,11 @@ export interface HomeReader {
 /**
  * The landings an app may say it opens (`lands=`), beyond the ones every app has. `first-need`: the First steps line "Ask for
  * one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N1): an app that does not say it draws
- * that line is not given a First steps card kept up for it alone.
+ * that line is not given a First steps card kept up for it alone. `words`: First steps' line "Keep your 12 words safe"
+ * (DESIGN-home-default-fable.md §2.4), the same way.
  */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need' | 'bills' | 'learn';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need', 'bills', 'learn']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need' | 'bills' | 'learn' | 'words';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need', 'bills', 'learn', 'words']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -928,9 +929,12 @@ function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
     // draw this card with every line it knows ticked), an invite (once they have an Offer); global — the seven steps of §3.2
     // (name, area, photo, sawLedger, post, saidHello, watch).
     const needLine = steps.firstOffer && !steps.firstNeed && c.lands.has('first-need');
-    // "Keep your 12 words safe" is a line on both (§2.4, §2.9), open while the words are the only way back and not kept.
+    // "Keep your 12 words safe" is a line on both (§2.4, §2.9), open while the words are the only way back and not kept, and
+    // kept up only for an app that says it draws it (`lands=words`, the phone's D2 and the web's D3): an app without the line
+    // would draw this card with every line it knows ticked, as `first-need` above. `steps.words` is sent either way.
     // "Hear when someone answers you" is the phone's own (it alone knows its permission) and keeps no card up here.
-    const undone = steps.words === false || (global
+    const wordsLine = steps.words === false && c.lands.has('words');
+    const undone = wordsLine || (global
         ? (!steps.area || !steps.photo || !steps.sawLedger || !steps.firstPost || !steps.saidHello || !steps.watch)
         : (!steps.firstOffer || !steps.photo || !steps.interests || needLine || (steps.invited === false && steps.firstOffer)));
     // The card leaves when every line is done or its days are up, on both (DESIGN-home-default-fable.md §2.4; global's

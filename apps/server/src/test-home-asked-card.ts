@@ -55,12 +55,12 @@ async function main(): Promise<void> {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    function makeIdentity(callsign: string): Id {
+    function makeIdentity(callsign: string, days = 60): Id {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
         db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, updated_at)
                     VALUES (?, ?, 'active', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-            .run(pubKeyHex, callsign, new Date(Date.now() - 60 * DAY).toISOString());
+            .run(pubKeyHex, callsign, new Date(Date.now() - days * DAY).toISOString());
         setMemberPhoto(db, pubKeyHex, AVATAR);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance_c, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         return { pubKeyHex, privateKey };
@@ -221,7 +221,8 @@ async function main(): Promise<void> {
     assert(suspended.status === 200 && suspended.body?.cards?.asked === undefined, `a suspended member gets no community card (${suspended.status} ${show(suspended.body?.cards?.asked)})`);
 
     // ── 4. steps.firstNeed ─────────────────────────────────────────────────────────────────────────────────────────────
-    const fresh = makeIdentity('AskFay');
+    // First steps ends 30 days after joining (DESIGN-home-default-fable.md §2.4): Fay and Gus are 20 days in.
+    const fresh = makeIdentity('AskFay', 20);
     const stepsOf = async (id: Id, lands = '') => (await home(id, 'cards=needs,steps,community', lands)).body?.cards?.steps;
     const s0 = await stepsOf(fresh);
     assert(s0?.firstOffer === false && s0?.firstNeed === false, `a new member: no Offer, no Need yet (${show(s0)})`);
@@ -230,11 +231,12 @@ async function main(): Promise<void> {
     const s1 = await stepsOf(fresh);
     assert(s1?.firstOffer === true && s1?.firstNeed === false, `after her first Offer: still no Need (${show(s1)})`);
 
-    // Another member's Need is not hers.
+    // Another member's Need is not hers. Ben is read inside his 30 days too, so he has a card to read it from.
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - 20 * DAY).toISOString(), ben.pubKeyHex);
     assert((await stepsOf(fresh))?.firstNeed === false && (await stepsOf(ben))?.firstNeed === true, `Ben's Need is Ben's, not Fay's (${show((await stepsOf(fresh))?.firstNeed)})`);
 
-    // The card is kept up for the line only for an app that says it draws it. Fay is long past her first days (14).
-    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - 60 * DAY).toISOString(), fresh.pubKeyHex);
+    // The card is kept up for the line only for an app that says it draws it. Fay is inside her 30 days, so only a line
+    // left keeps it (the 12-words line too only for an app that says `lands=words`, which neither read here does).
     setInterests(fresh, ['food']);
     db.prepare("INSERT OR REPLACE INTO invite_codes (code, created_by, created_at) VALUES ('INV-FAY-1', ?, ?)").run(fresh.pubKeyHex, new Date().toISOString());
     const oldApp = await home(fresh, 'cards=needs,steps,community');
@@ -252,7 +254,7 @@ async function main(): Promise<void> {
     assert((await home(fresh, 'cards=needs,steps,community', 'first-need')).body?.cards?.steps === undefined, 'and it stays gone when that Need is called off');
 
     // Only after the first Offer: a member with a Need and no Offer is not asked for one more; a new member without an Offer is asked for the Offer first.
-    const early = makeIdentity('AskGus');
+    const early = makeIdentity('AskGus', 20);
     assert((await stepsOf(early, 'first-need'))?.firstOffer === false, 'a member with no Offer is still on the Offer line, not asked for a Need');
 
     // ── 5. Nothing private on a row ──────────────────────────────────────────────────────────────────────────────────────

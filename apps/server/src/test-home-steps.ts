@@ -79,8 +79,9 @@ async function signedFetch(method: 'GET' | 'POST', path: string, id: Id, body?: 
     return { status: res.status, headers: res.headers, json };
 }
 
-async function getHomeSteps(id: Id) {
-    const res = await signedFetch('GET', '/api/home?cards=steps', id);
+// `lands=words`: an app that draws First steps' 12-words line (DESIGN-home-default-fable.md §2.4); '' for an app that doesn't.
+async function getHomeSteps(id: Id, lands = 'words') {
+    const res = await signedFetch('GET', `/api/home?cards=steps${lands ? `&lands=${lands}` : ''}`, id);
     assert(res.status === 200, `GET /api/home succeeded (${res.status}) for ${id.callsign}`);
     return res.json?.cards?.steps;
 }
@@ -212,6 +213,8 @@ async function main() {
     // default-fable.md §2.4, §2.9: global takes the two new lines) is still open: she linked no sign-in and kept nothing.
     const aliceWordsOpen = await getHomeSteps(alice);
     assert(aliceWordsOpen?.words === false, 'global first-week card stays while the 12-words line is open');
+    // An app that doesn't draw that line (no `lands=words`) would show the card with every line it knows ticked: none.
+    assert(await getHomeSteps(alice, '') === undefined, 'an app without the 12-words line is given no card once its own lines are done');
     // She says she still has her words: under young && undone, once all steps are done (undone === false), the card ends!
     setMemberPreferences(alice.pubKeyHex, { words_kept: true });
     const aliceStepsEnded = await getHomeSteps(alice);
@@ -245,6 +248,8 @@ async function main() {
     const graceMemberBefore = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(grace.pubKeyHex) as { updated_at: string };
     const graceSteps = await getHomeSteps(grace);
     assert(graceSteps !== undefined && graceSteps.words === false, 'local first-steps card stays while the 12-words line is open');
+    const graceOldApp = await getHomeSteps(grace, '');
+    assert(graceOldApp === undefined, `local: an app without the 12-words line is given no card once its own lines are done (${JSON.stringify(graceOldApp)})`);
     const graceMemberAfter = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(grace.pubKeyHex) as { updated_at: string };
     assert(graceMemberAfter.updated_at === graceMemberBefore.updated_at, 'local read left members.updated_at untouched');
     assert(!hasStepPref(grace.pubKeyHex, 'step_post'), 'local node wrote NO step_post preference');

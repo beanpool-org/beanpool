@@ -49,11 +49,14 @@ function node(role: 'member' | 'owner' | 'voucher', beans = true) {
         : { voucher: false, presets: [], vouchMax: 10000, budgetMax: 200000, vouchedBy: [] });
 }
 
-/** A stand-in IntersectionObserver: each one made is kept, and `see()` tells the newest that its target came into view. */
+/**
+ * A stand-in IntersectionObserver: each one made is kept, and `see()` tells the newest watching an element still on the page
+ * that it came into view (as a browser would: an element taken off the page never comes into view).
+ */
 const observers: { cb: IntersectionObserverCallback; targets: Element[]; gone: boolean }[] = [];
 function see() {
-    const live = observers.filter((o) => !o.gone && o.targets.length > 0).at(-1);
-    if (!live) throw new Error('nothing is observed');
+    const live = observers.filter((o) => !o.gone && o.targets.length > 0 && o.targets.every((t) => t.isConnected)).at(-1);
+    if (!live) throw new Error('nothing on the page is observed');
     act(() => live.cb(live.targets.map((target) => ({ isIntersecting: true, target }) as IntersectionObserverEntry), {} as IntersectionObserver));
 }
 class FakeObserver {
@@ -173,6 +176,21 @@ describe('People → Community: a long list', () => {
         see();
         expect(rows()).toHaveLength(120);
         expect(observers.every((o) => o.gone || o.targets.length === 0)).toBe(true);
+    });
+
+    it('still draws more as the end comes into view after Community is left and opened again (the list read again)', async () => {
+        vi.stubGlobal('IntersectionObserver', FakeObserver);
+        node('member');
+        render(<PeoplePage identity={identity} initialView="community" />);
+        await screen.findByText('P119');
+        fireEvent.click(screen.getByRole('tab', { name: '👫 Friends' }));
+        fireEvent.click(screen.getByRole('tab', { name: '🏘️ Community' }));
+        await waitFor(() => expect(membersOnDemand.getMembersWhole).toHaveBeenCalledTimes(2));
+        await screen.findByText('P119');
+        expect(rows()).toHaveLength(50);
+        see();
+        expect(rows()).toHaveLength(100);
+        // Red when the observer is left watching the end the reload took off the page.
     });
 
     it('goes back to the first 50 when the sort or the search changes', async () => {

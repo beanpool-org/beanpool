@@ -4,7 +4,7 @@
  * Multi-view People tab with search, avatars, and relative dates.
  */
 
-import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent } from 'react';
 import {
     getFriends, addFriendApi, removeFriendApi, getAddedYou, getJoinRequests, request,
     type FriendEntry, type Member, type MemberCard, type AddedYou, type CommunityInfo,
@@ -373,16 +373,21 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
     const drawnCount = drawn.for === drawnFor ? drawn.count : MEMBERS_DRAWN_STEP;
     const moreToDraw = sortedMembers.length > drawnCount;
     const drawMore = () => setDrawn({ for: drawnFor, count: drawnCount + MEMBERS_DRAWN_STEP });
-    const listEndRef = useRef<HTMLDivElement | null>(null);
-    useEffect(() => {
-        const end = listEndRef.current;
-        // No observer (an older browser): Show more, which is always there while more remain, is the way on.
-        if (!moreToDraw || !end || typeof IntersectionObserver === 'undefined') return;
-        // Made again after each step, so an end still in view after one (a tall screen) draws the next.
-        const seen = new IntersectionObserver((entries) => { if (entries.some(e => e.isIntersecting)) drawMore(); }, { rootMargin: '0px 0px 400px 0px' });
+    const drawMoreNow = useRef(drawMore);
+    drawMoreNow.current = drawMore;
+    // The list's end, watched from the moment it is on the page until it leaves (a callback ref, so an end drawn again, after a
+    // reload's "Loading" or Show credit, is the one watched). It is keyed by the step, so each step watches a new end: one still
+    // in view after a step (a tall screen) draws the next. No observer (an older browser): Show more, always there while more
+    // remain, is the way on.
+    const endWatch = useRef<IntersectionObserver | null>(null);
+    const watchListEnd = useCallback((end: HTMLDivElement | null) => {
+        endWatch.current?.disconnect();
+        endWatch.current = null;
+        if (!end || typeof IntersectionObserver === 'undefined') return;
+        const seen = new IntersectionObserver((entries) => { if (entries.some(e => e.isIntersecting)) drawMoreNow.current(); }, { rootMargin: '0px 0px 400px 0px' });
         seen.observe(end);
-        return () => seen.disconnect();
-    }, [moreToDraw, drawnCount, drawnFor, creditShowing, view]);
+        endWatch.current = seen;
+    }, []);
 
     return (
         <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
@@ -639,7 +644,8 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                                     type="button"
                                     aria-pressed={sort === s}
                                     onClick={() => pickSort(s)}
-                                    className={`min-h-[44px] px-3 rounded-xl border text-[13px] font-bold cursor-pointer break-words focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${sort === s
+                                    // A rem size (13 px at the browser's default), so a larger text setting grows the words too.
+                                    className={`min-h-[44px] px-3 rounded-xl border text-[0.8125rem] font-bold cursor-pointer break-words focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${sort === s
                                         ? 'border-transparent bg-bp-commit-fill text-bp-commit-on'
                                         : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white'}`}
                                 >
@@ -716,8 +722,8 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                         </div>
                         {moreToDraw && (
                             <>
-                                {/* The list's end: coming into view draws the next 50 (the observer above). */}
-                                <div ref={listEndRef} aria-hidden="true" className="h-px" />
+                                {/* The list's end: coming into view draws the next 50 (watchListEnd above). */}
+                                <div key={`${drawnFor}\u0000${drawnCount}`} ref={watchListEnd} aria-hidden="true" className="h-px" />
                                 <button type="button" onClick={drawMore} className="mt-3 w-full min-h-[48px] rounded-xl border border-bp-accent-fill bg-transparent text-text-primary text-sm font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                     {t('Show more people')}
                                 </button>

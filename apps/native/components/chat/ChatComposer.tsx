@@ -20,7 +20,8 @@ import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-nativ
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_INPUT_MAX_HEIGHT, CHAT_INPUT_MIN_HEIGHT, CHAT_INPUT_V_PADDING, type ChatStyles } from './styles';
-import { t } from '@beanpool/core';
+import { t, type VoiceInput } from '@beanpool/core';
+import { useVoiceRecorder, type VoiceRecorderParts } from './VoiceRecorder';
 
 export interface ChatComposerHandle {
     /** Put text in the box and in both mirrors — the way an Edit fills it. */
@@ -60,10 +61,21 @@ interface Props {
     canSend?: () => boolean;
     maxLength?: number;
     bottomPadding: number;
+    /**
+     * Voice messages (DESIGN-cross-chat-voice-fable.md §5.3, slice V3): with the box empty and no photo waiting, Send becomes a
+     * microphone; while a recording runs or waits, it takes the box's place. Absent (an event's or enterprise's chat, a
+     * request), no microphone. Throw and the recorder says the voice message wasn't sent.
+     */
+    onVoice?: (voice: VoiceInput) => Promise<void>;
+}
+
+/** The recorder's hooks, only in a chat that takes voice messages: nothing of the microphone exists in the others. */
+function WithVoice({ styles, onVoice, disabled, children }: { styles: ChatStyles; onVoice: (voice: VoiceInput) => Promise<void>; disabled: boolean; children: (voice: VoiceRecorderParts) => React.ReactElement }) {
+    return children(useVoiceRecorder({ styles, onSend: onVoice, disabled }));
 }
 
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatComposer(
-    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding }, ref,
+    { styles, onSend, placeholder, accessibilityLabel, leading, onAttach, attachment, notice, busy, disabled, maxLength, canSend: canSendNow, bottomPadding, onVoice }, ref,
 ) {
     const { colors } = useTheme();
     const inputRef = useRef<TextInput>(null);
@@ -152,15 +164,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
     };
 
     const canSend = (draft.trim().length > 0 || !!attachment) && !disabled && !busy;
+    // The microphone in Send's place: the box empty, no photo waiting, nothing being waited on.
+    const micInsteadOfSend = !!onVoice && !draft.trim() && !attachment && !busy;
 
-    return (
+    const body = (voice: VoiceRecorderParts | null) => (
         <View>
             {!!notice && <Text style={styles.composerNotice}>{notice}</Text>}
+            {!!voice?.hint && <Text testID="voice-hint" style={styles.composerNotice}>{voice.hint}</Text>}
             {attachment}
             {/* One block with the waiting photo above it: the photo's row draws the line between the chat and the box. */}
             <View style={[styles.inputContainer, { paddingBottom: bottomPadding }, attachment ? { borderTopWidth: 0 } : null]}>
-                {leading}
-                {!!onAttach && (
+                {voice?.bar}
+                {!voice?.bar && leading}
+                {!voice?.bar && !!onAttach && (
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={t('Attach image')}
@@ -175,7 +191,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                 <TextInput
                     ref={inputRef}
                     accessibilityLabel={accessibilityLabel}
-                    style={[styles.input, { height: inputHeight }]}
+                    // Kept mounted while a recording takes its place, so nothing typed or focused is lost.
+                    style={[styles.input, { height: inputHeight }, voice?.bar ? { display: 'none' } : null]}
                     onContentSizeChange={e => setInputHeight(Math.min(CHAT_INPUT_MAX_HEIGHT,
                         Math.max(CHAT_INPUT_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height) + CHAT_INPUT_V_PADDING)))}
                     placeholder={placeholder}
@@ -186,18 +203,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                     multiline
                     submitBehavior="newline"
                 />
-                <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Send message')}
-                    accessibilityState={{ disabled: !canSend, busy: !!busy }}
-                    style={[styles.sendBtn, canSend ? styles.sendBtnActive : styles.sendBtnInactive]}
-                    onPress={handleSend}
-                >
-                    {busy
-                        ? <ActivityIndicator size="small" color={canSend ? colors.text.onAccent : colors.text.inverse} />
-                        : <MaterialCommunityIcons name="send" size={20} color={canSend ? colors.text.onAccent : colors.text.muted} />}
-                </Pressable>
+                {voice && (micInsteadOfSend || voice.bar) ? voice.mic : (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Send message')}
+                        accessibilityState={{ disabled: !canSend, busy: !!busy }}
+                        style={[styles.sendBtn, canSend ? styles.sendBtnActive : styles.sendBtnInactive]}
+                        onPress={handleSend}
+                    >
+                        {busy
+                            ? <ActivityIndicator size="small" color={canSend ? colors.text.onAccent : colors.text.inverse} />
+                            : <MaterialCommunityIcons name="send" size={20} color={canSend ? colors.text.onAccent : colors.text.muted} />}
+                    </Pressable>
+                )}
             </View>
         </View>
     );
+
+    return onVoice ? <WithVoice styles={styles} onVoice={onVoice} disabled={!!disabled}>{body}</WithVoice> : body(null);
 });

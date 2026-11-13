@@ -64,8 +64,11 @@ import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplaced
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import {
     sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
-    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT,
+    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT, getDecryptedGroupVoiceLine,
 } from './group-chat-lines';
+import { sealDmVoice, VoiceRefusedError, VOICE_MIME, type VoiceInput } from '@beanpool/core';
+import { openDmVoiceWithFormer } from './dm-voice';
+import { keepVoice, keptVoice, type KeptVoice } from './voice-cache';
 import { groupPhotoCache, forgetGroupPhotos, forgetRemovedGroupPhotos } from './group-photo-cache';
 import type { GroupLineView, ServedGroupLine } from './group-line-display';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -7405,6 +7408,139 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     } catch {
         return null;
     }
+}
+
+/** A chat the node reads by design (an event's, an enterprise's) takes no voice message yet (§5.3: direct and group chats first). */
+const VOICE_NOT_IN_THIS_CHAT_TEXT = "Voice messages can't be sent in this chat.";
+/** The recording didn't pass core's checks (a file that isn't an .m4a, too long, too big): nothing was sent. */
+export const VOICE_CANT_SEND_TEXT = "This voice message can't be sent. Record it again.";
+
+/**
+ * Send a voice message (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed on this phone as its message's own part
+ * `voice`, as bytes (core sealDmVoice), under the DM's key, beside its words (empty), sealed as part 'body' as a photo's
+ * caption is, so the thread check reads it like any line and the voice opens only once its words have. The node keeps the
+ * sealed part where it keeps photos and serves it at GET /api/messages/:id/attachment, as `type: 'voice'` with the mime
+ * VOICE_MIME (the node's side is slice V2). Then kept on this phone, so the sender plays it without fetching it.
+ *
+ * A group's chat goes as a group's voice line (postGroupChatVoice), decided as sendImageMessage decides; an event's or an
+ * enterprise's chat is refused, nothing sent.
+ */
+export async function sendVoiceMessage(conversationId: string, voice: VoiceInput, metadata?: string): Promise<void> {
+    const database = await getDb();
+    const nodeReadable = await isNodeReadableConversation(conversationId);
+    const groupChat = await isHeldGroupChat(conversationId)
+        || (nodeReadable && (await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]))?.type === 'group_thread');
+    if (groupChat) {
+        await postGroupChatVoice(conversationId, { voice, replyToId: replyToIdOf(metadata) });
+        return;
+    }
+    if (nodeReadable) throw new Error(VOICE_NOT_IN_THIS_CHAT_TEXT);
+    const dmCtx = await requireDmKeyContext(conversationId);
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const messageId = Crypto.randomUUID().toLowerCase();
+    const line = { senderPubHex: identity.publicKey, messageId, replyToId: replyToIdOf(metadata) };
+    let encVoice: { ciphertext: string; nonce: string };
+    try {
+        encVoice = sealDmVoice(voice, dmCtx, line);
+    } catch (e) {
+        if (e instanceof VoiceRefusedError) throw new Error(VOICE_CANT_SEND_TEXT);
+        throw new DmNotLockedError();
+    }
+    const encBody = lockWith(dmCtx, '', { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });
+
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
+    const bodyString = JSON.stringify({
+        id: messageId, conversationId, authorPubkey: identity.publicKey, ciphertext: encBody.ciphertext, nonce: encBody.nonce,
+        type: 'voice', attachment: { data: encVoice.ciphertext, nonce: encVoice.nonce, mime: VOICE_MIME }, metadata,
+    });
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/send`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}/api/messages/send`, { method: 'POST', headers, body: bodyString });
+    if (!res.ok) {
+        let errMsg = 'Failed to send the voice message.';
+        try { const j = JSON.parse(await res.text()); if (j.error) errMsg = j.error; } catch {}
+        throw new Error(errMsg);
+    }
+    ownLineTaken(conversationId);
+    const serverMsg = (await res.json()).message;
+    await database.runAsync(
+        'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [serverMsg.id, conversationId, identity.publicKey, encBody.ciphertext, encBody.nonce, 'voice', metadata || null, serverMsg.timestamp]
+    );
+    await requestLineTaken(database, conversationId, identity.publicKey);
+    await keepVoice(serverMsg.id, voice);
+}
+
+/**
+ * Send a voice message in a group's chat: sealed under the group line's own message key as part `voice` (core
+ * sealGroupVoice), beside empty words, through the group's sealed-line path (utils/group-chat-lines.ts), then kept here.
+ */
+export async function postGroupChatVoice(groupId: string, input: { voice: VoiceInput; clientId?: string; replyToId?: string | null; after?: string | null }): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    const clientId = (input.clientId || Crypto.randomUUID()).toLowerCase();
+    let answer: any;
+    try {
+        answer = await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, text: '', voice: input.voice, clientId, replyToId: input.replyToId, after: input.after });
+    } catch (e) {
+        if (e instanceof VoiceRefusedError) throw new Error(VOICE_CANT_SEND_TEXT);
+        if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+        throw e;
+    }
+    await keepVoice(clientId, input.voice);
+    return answer;
+}
+
+/**
+ * What a voice bubble plays: the phone's own copy, else the node's, opened and kept. 'gone': the node no longer has it
+ * (after 30 days, §5.4) and this phone never kept it. 'refused': it didn't open or pass core's checks ("can't be played").
+ * 'unavailable': the node couldn't be asked; try again later.
+ */
+export type VoiceOpenResult = { kind: 'ok'; voice: KeptVoice } | { kind: 'gone' } | { kind: 'refused' } | { kind: 'unavailable' };
+
+/** A node's answer for an attachment that no longer exists: the 30-day expiry (V2) answers 404 or 410. */
+const isGoneStatus = (status: number) => status === 404 || status === 410;
+
+/**
+ * A DM voice line's sound, in getDecryptedAttachment's order: its words first, opened under the pinned key or a former one
+ * (so a kept copy never plays under a line the node re-attributed or moved), then the phone's own copy, then the node's,
+ * opened as the part `voice` under the pinned key or a former one (utils/dm-voice.ts) and only under the key and sender its
+ * words opened under: both parts of one message, one key.
+ */
+export async function getDecryptedVoice(conversationId: string, messageId: string): Promise<VoiceOpenResult> {
+    let dmCtx: PinnedDmKeyContext | null;
+    try { dmCtx = await getDmKeyContext(conversationId, 'open'); } catch { return { kind: 'unavailable' }; }
+    if (!dmCtx) return { kind: 'refused' };
+    const database = await getDb();
+    const msgRow = await database.getFirstAsync<any>('SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]).catch(() => null);
+    if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return { kind: 'refused' };
+    const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
+    let words: ReturnType<typeof openDmPartWithFormer>;
+    try { words = openDmPartWithFormer({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' }); } catch { return { kind: 'refused' }; }
+    const kept = await keptVoice(messageId);
+    if (kept) return { kind: 'ok', voice: kept };
+    let res: Response;
+    try { res = await signedGet(`/api/messages/${encodeURIComponent(messageId)}/attachment`); } catch { return { kind: 'unavailable' }; }
+    if (isGoneStatus(res.status)) return { kind: 'gone' };
+    if (!res.ok) return { kind: 'unavailable' };
+    try {
+        const { data, nonce } = await res.json();
+        const opened = openDmVoiceWithFormer({ ciphertext: data, nonce }, dmCtx, ref);
+        if (opened.peerEdPubHex !== words.keys.peerEdPubHex || opened.senderPubHex !== words.senderPubHex) return { kind: 'refused' };
+        const voice = await keepVoice(messageId, opened.voice);
+        // Not kept (a full disk): played from a file this once is not possible without one, so it says so.
+        return voice ? { kind: 'ok', voice } : { kind: 'unavailable' };
+    } catch {
+        return { kind: 'refused' };
+    }
+}
+
+/** A group voice line's sound for GroupChatView: the phone's own copy, else the node's, opened under the line's epoch key. */
+export async function getDecryptedGroupVoice(groupId: string, line: ServedGroupLine, view: GroupLineView): Promise<VoiceOpenResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return getDecryptedGroupVoiceLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, line, view }, { kept: keptVoice, keep: keepVoice });
 }
 
 /**

@@ -33,6 +33,8 @@ interface Live {
     timer: ReturnType<typeof setInterval> | null;
     context: AudioContext | null;
     stopped: Promise<void>;
+    /** Settles `stopped`: the recorder's stop or error, or a start that threw (a recorder that never started fires neither). */
+    settle: () => void;
 }
 
 interface Kept {
@@ -131,24 +133,28 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
         try {
             const recorder = new MediaRecorder(stream, { mimeType: VOICE_RECORD_TYPE, audioBitsPerSecond: VOICE_BITS_PER_SECOND });
             const chunks: Blob[] = [];
-            let done: () => void = () => {};
-            const stopped = new Promise<void>((resolve) => { done = resolve; });
+            let settle: () => void = () => {};
+            const stopped = new Promise<void>((resolve) => { settle = resolve; });
             recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
-            recorder.onstop = () => done();
-            recorder.onerror = () => { done(); if (mounted.current) dispatch({ type: 'failed' }); };
+            recorder.onstop = () => settle();
+            recorder.onerror = () => { settle(); if (mounted.current) dispatch({ type: 'failed' }); };
             // The microphone taken away (unplugged, another app): what was heard is not sent.
             for (const tr of stream.getTracks()) tr.onended = () => { if (mounted.current && stateRef.current.phase === 'recording') dispatch({ type: 'failed' }); };
             let context: AudioContext | null = null;
             let analyser: AnalyserNode | null = null;
             try {
                 context = new AudioContext();
+                // Made after the microphone's answer, outside the click: Safari can start it suspended, and the waveform is flat.
+                if (context.state === 'suspended') void context.resume().catch(() => {});
                 analyser = context.createAnalyser();
                 analyser.fftSize = 1024;
                 context.createMediaStreamSource(stream).connect(analyser);
             } catch { context = null; analyser = null; }
-            const l: Live = { stream, recorder, chunks, startedAt: 0, levels: [], timer: null, context, stopped };
+            const l: Live = { stream, recorder, chunks, startedAt: 0, levels: [], timer: null, context, stopped, settle };
             live.current = l;
             dispatch({ type: 'permission', granted: true });
+            // A start that threw has already failed and let the microphone go (begin, then discard): no clock for it.
+            if (live.current !== l) return;
             const frame = analyser ? new Float32Array(analyser.fftSize) : null;
             l.startedAt = performance.now();
             l.timer = setInterval(() => {
@@ -164,7 +170,11 @@ export function useVoiceRecorder(onSend: VoiceSend, chatId: string | null): Voic
     function begin() {
         const l = live.current;
         if (!l) return;
-        try { l.recorder.start(); } catch { dispatch({ type: 'failed' }); }
+        try { l.recorder.start(); } catch {
+            // It never started, so no stop or error will come: settle here, or stopLive waits for ever with the microphone on.
+            l.settle();
+            dispatch({ type: 'failed' });
+        }
     }
 
     /** Stop and keep what was recorded; a Send pressed while it is being collected waits for it (`keeping`). */

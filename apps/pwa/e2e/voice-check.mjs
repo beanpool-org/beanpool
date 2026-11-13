@@ -13,8 +13,8 @@
  * The node says features.voiceLines: true itself (#3120); step 4's browser has it taken out of GET /api/community/info's
  * answer, as a node from before V2 answers (counted in the log). Everything else is the node's own.
  *
- * Fails on any sideways scroll at 320 px, or a request to any host but this machine (the shipped index.html's Google Fonts
- * link aside: aborted, as every other host is). VOICE_SHOTS names a folder for screenshots.
+ * Fails on any sideways scroll at 320 px, or a request to any host but this machine (aborted; the app's Inter is the node's
+ * own files). Chrome's fake microphone beeps, so Chrome runs muted. VOICE_SHOTS names a folder for screenshots.
  *
  * Run: node e2e/voice-check.mjs (from apps/pwa). Needs Google Chrome, and Playwright's WebKit and Firefox once:
  * pnpm --filter @beanpool/pwa exec playwright install webkit firefox
@@ -210,7 +210,7 @@ async function main() {
         console.log(`  (this node's own features.voiceLines: ${JSON.stringify(own?.features?.voiceLines)})`);
 
         console.log('1. Chrome records; the node stores it sealed');
-        const chrome = await chromium.launch({ channel: 'chrome', args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
+        const chrome = await chromium.launch({ channel: 'chrome', args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--mute-audio'] });
         browsers.push(chrome);
         const recordable = await (await chrome.newPage()).evaluate(() => MediaRecorder.isTypeSupported('audio/mp4;codecs=mp4a.40.2'));
         check(recordable, 'Chrome writes AAC in .m4a (MediaRecorder audio/mp4;codecs=mp4a.40.2)');
@@ -303,7 +303,7 @@ async function main() {
         check(await g.page.getByTestId('voice-cant-record').count() === 0, 'and no line about the browser either');
         await g.context.close();
         console.log(`  (community info answers with features.voiceLines taken out: ${infoChanged})`);
-        check([...otherHosts].every((h) => h === 'fonts.googleapis.com' || h === 'fonts.gstatic.com'), `no request left this machine but the aborted font link (${[...otherHosts].join(', ') || 'none'})`);
+        check(otherHosts.size === 0, `no request left this machine (${[...otherHosts].join(', ') || 'none'})`);
     } finally {
         for (const b of browsers) await b.close().catch(() => {});
         if (node) {

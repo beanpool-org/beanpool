@@ -1749,7 +1749,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
             if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));
             if (activeConvIdRef.current === conv0.id) { setReplyToMessage(null); setChatRefusal(null); }
-            await loadMessages(conv0.id);
+            // The node has it: the 60 s give-up stops here. The chat's reload goes on without it (as the phone's does), so a
+            // slow reload never says a sent voice message is taking too long; one that fails leaves it to the next poll.
+            void loadMessages(conv0.id).catch(() => false);
         } catch (err) {
             if (err instanceof VoiceNotSentError) throw err;
             if (signal.aborted) throw new Error(t(VOICE_WORDS.givenUp));

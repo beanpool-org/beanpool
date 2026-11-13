@@ -3,7 +3,9 @@
  * in a direct and a group chat (its words opened first), the 30-day 410 is said in plain words, quotes say "🎤 Voice
  * message", a voice line has no Edit; the microphone shows only where the community says it takes voice lines and the
  * browser writes AAC in .m4a, never in a request, and Firefox gets one line instead; and a recording is sent sealed, under one
- * line id on every try, and kept when a send is refused.
+ * line id on every try, and kept when a send is refused. A recorder that won't start lets the microphone go; the 60 s give-up
+ * stops when the node takes the line, not after the chat's reload; the waveform's sound is started where Safari leaves it
+ * suspended.
  */
 import { render, screen, waitFor, fireEvent, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -60,6 +62,8 @@ const groupConversation = {
 let node: FakeGroupNode;
 let benEpoch: { epoch: number; key: Uint8Array };
 let dmMessages: ApiMessage[] = [];
+/** The chat's reload never answering (a slow uplink), from the moment the node takes a line. */
+let reloadHangs = false;
 const dmAttachments = new Map<string, { data: string; nonce: string; mime: string } | { status: number; code?: string }>();
 
 /** The head of an .m4a: an `ftyp` box (16 bytes) and more of the file, which is all core's checks ask of the sound. */
@@ -68,7 +72,10 @@ const BARS = Array.from({ length: VOICE_BARS }, (_, i) => (i * 5) % 256);
 
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [dmConversation, groupConversation], totalUnread: 0 })),
-    getConversationMessages: vi.fn(async (id: string) => (id === DM_CONV ? { conversation: dmConversation, messages: dmMessages } : { conversation: null, messages: [] })),
+    getConversationMessages: vi.fn(async (id: string) => {
+        if (reloadHangs) return new Promise(() => {});
+        return id === DM_CONV ? { conversation: dmConversation, messages: dmMessages } : { conversation: null, messages: [] };
+    }),
     getGroupChat: vi.fn(async (id: string) => {
         if (id !== G) return { conversation: null, messages: [], canPost: false };
         return {
@@ -145,6 +152,8 @@ function benGroupVoice(durationMs = 4100): string {
 /** A browser that writes AAC in .m4a (Chrome, Edge, Safari), or not (Firefox), on a secure page. */
 let recorderWrites = true;
 let recorderOptions: unknown[] = [];
+/** A recorder whose start() throws (an encoder the browser turns down at start, a track that ended before it). */
+let startThrows = false;
 class FakeMediaRecorder {
     static isTypeSupported(type: string) { return recorderWrites && type.startsWith('audio/mp4'); }
     state: 'inactive' | 'recording' = 'inactive';
@@ -152,12 +161,25 @@ class FakeMediaRecorder {
     onstop: (() => void) | null = null;
     onerror: (() => void) | null = null;
     constructor(_stream: unknown, opts: unknown) { recorderOptions.push(opts); }
-    start() { this.state = 'recording'; }
+    start() {
+        if (startThrows) throw new DOMException('The encoder was turned down.', 'NotSupportedError');
+        this.state = 'recording';
+    }
     stop() {
         this.state = 'inactive';
         this.ondataavailable?.({ data: new Blob([M4A]) });
         this.onstop?.();
     }
+}
+/** The waveform's sound; made suspended, as Safari can make one outside a click. */
+class FakeAudioContext {
+    static made: FakeAudioContext[] = [];
+    state: AudioContextState = 'suspended';
+    resume = vi.fn(async () => { this.state = 'running'; });
+    close = vi.fn(async () => { this.state = 'closed'; });
+    constructor() { FakeAudioContext.made.push(this); }
+    createAnalyser() { return { fftSize: 1024, getFloatTimeDomainData: (f: Float32Array) => f.fill(0.1) }; }
+    createMediaStreamSource() { return { connect: () => {} }; }
 }
 const track = { stop: vi.fn(), onended: null as null | (() => void) };
 const getUserMedia = vi.fn(async () => ({ getTracks: () => [track] }));
@@ -174,6 +196,9 @@ describe('voice messages on the web (V4)', () => {
         communityInfo = { features: { voiceLines: true } };
         recorderWrites = true;
         recorderOptions = [];
+        startThrows = false;
+        reloadHangs = false;
+        FakeAudioContext.made = [];
         dmConversation = {
             id: DM_CONV, type: 'dm', name: null, participants: [ana.publicKey, ben.publicKey], createdBy: ana.publicKey, peerCallsign: 'Ben',
             unreadCount: 0, createdAt: '2026-09-01T00:00:00Z',
@@ -343,6 +368,50 @@ describe('voice messages on the web (V4)', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }));
         expect(await screen.findByText('Too short to send. Record for at least a second.')).toBeTruthy();
         expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('a recorder that won\'t start lets the microphone go: the track stopped, the sound closed, no clock left running', async () => {
+        startThrows = true;
+        vi.stubGlobal('AudioContext', FakeAudioContext);
+        const started = vi.spyOn(globalThis, 'setInterval');
+        const cleared = vi.spyOn(globalThis, 'clearInterval');
+        render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));
+        expect(await screen.findByText('The recording stopped. Nothing was sent.')).toBeTruthy();
+        await waitFor(() => expect(track.stop).toHaveBeenCalled());
+        await waitFor(() => expect(FakeAudioContext.made[0]?.close).toHaveBeenCalled());
+        // The recorder's clock ticks every 100 ms: any it started was stopped.
+        const clocks = started.mock.calls.flatMap((c, i) => (c[1] === 100 ? [started.mock.results[i].value] : []));
+        expect(clocks.filter((id) => !cleared.mock.calls.some((c) => c[0] === id))).toEqual([]);
+        expect(screen.getByRole('button', { name: 'Record a voice message' })).toBeTruthy();
+    });
+
+    it('the minute for a send stops when the node takes the line: a slow reload after it doesn\'t hold the recorder', async () => {
+        vi.mocked(sendMessageApi).mockImplementation(async (...args: any[]) => {
+            reloadHangs = true;
+            return { success: true, message: { id: args[7] } } as any;
+        });
+        render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));
+        await screen.findByRole('button', { name: 'Stop recording' });
+        clock += 2300;
+        fireEvent.click(screen.getByRole('button', { name: 'Send voice message' }));
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        // Sent, with the chat's reload still out: the recorder is done and the microphone is back.
+        expect(await screen.findByRole('button', { name: 'Record a voice message' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Play recording' })).toBeNull();
+        expect(reloadHangs).toBe(true);
+    });
+
+    it('the waveform\'s sound is started where the browser makes it suspended (Safari)', async () => {
+        vi.stubGlobal('AudioContext', FakeAudioContext);
+        render(<MessagesPage identity={identity} openConversationId={DM_CONV} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Record a voice message' }));
+        await screen.findByRole('button', { name: 'Stop recording' });
+        expect(FakeAudioContext.made).toHaveLength(1);
+        expect(FakeAudioContext.made[0].resume).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Delete recording' }));
+        await waitFor(() => expect(FakeAudioContext.made[0].close).toHaveBeenCalled());
     });
 
     it('nothing plays while a recording is going', async () => {

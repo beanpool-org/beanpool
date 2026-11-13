@@ -102,6 +102,17 @@ describe('every sentence the key and line code writes is in the table', () => {
         expect(db).toContain(`const PHOTOS_NOT_IN_THIS_CHAT_TEXT = "${noPhotos}";`);
         expect(chatLineWords(noPhotos)).toBe(noPhotos);
         expect(known(noPhotos)).toBe(true);
+        // A voice message where none goes, one core refused to seal, and the send's own failure (slice V3).
+        const noVoice = "Voice messages can't be sent in this chat.";
+        const cantSend = "This voice message can't be sent. Record it again.";
+        expect(db).toContain(`const VOICE_NOT_IN_THIS_CHAT_TEXT = "${noVoice}";`);
+        expect(db).toContain(`const VOICE_CANT_SEND_TEXT = "${cantSend}";`);
+        expect(db).toContain(`'Failed to send the voice message.'`);
+        expect(db).toContain(`displayMsg = '🎤 Voice message';`);
+        for (const s of [noVoice, cantSend, 'Failed to send the voice message.', '🎤 Voice message']) {
+            expect(chatLineWords(s), s).toBe(s);
+            expect(known(s), s).toBe(true);
+        }
         // signedRequestWithMethod's refusal with no words of the node's, by its status.
         expect(db).toContain('`Request failed: ${res.status}`');
         expect(known('Request failed: 502')).toBe(true);

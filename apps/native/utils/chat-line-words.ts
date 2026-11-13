@@ -58,6 +58,12 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'Failed to deliver message.': word('Failed to deliver message.'),
     'Failed to send image.': word('Failed to send image.'),
     "Photos can't be sent in this chat.": word("Photos can't be sent in this chat."),
+    // utils/db.ts sendVoiceMessage, postGroupChatVoice (voice messages, slice V3).
+    "Voice messages can't be sent in this chat.": word("Voice messages can't be sent in this chat."),
+    // utils/db.ts getConversations: a voice line's preview in the chat list.
+    '🎤 Voice message': word('🎤 Voice message'),
+    "This voice message can't be sent. Record it again.": word("This voice message can't be sent. Record it again."),
+    'Failed to send the voice message.': word('Failed to send the voice message.'),
     'Could not open this group chat.': word('Could not open this group chat.'),
     'Could not open this enterprise chat.': word('Could not open this enterprise chat.'),
     'Could not open this event chat.': word('Could not open this event chat.'),

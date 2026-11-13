@@ -103,6 +103,7 @@ import { startAddressCheck } from './services/address-check.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
 import { initHarvester } from './services/harvester.js';
 import { startImageEvacuation } from './services/image-evacuation.js';
+import { startVoiceExpiry } from './engine/voice-lines.js';
 import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
@@ -378,6 +379,10 @@ async function main() {
     // admin pressed Clean, so on a node nobody administers a member's deleted photo stayed on the disk
     // indefinitely. Same pair of calls the button makes, same one-hour grace period, snapshots out of reach.
     startOrphanObjectSweep();
+
+    // Step 8.67: Delete voice messages' sealed parts past 30 days on the main server (engine/voice-lines.ts): the line stays,
+    // and a standby follows the tombstones. Every six hours, the first ten minutes after boot.
+    startVoiceExpiry();
 
     // Step 8.7: Daily Pulse scheduler (auto-rotates daily 0-Bean inspirational offer at 5 AM)
     scheduleDailyPulse();

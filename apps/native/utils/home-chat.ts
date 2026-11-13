@@ -31,6 +31,7 @@ export const CHAT_CARD_WORDS = {
     locked: word('🔒 Message'),
     openToRead: word('🔒 Message · open to read'),
     photo: word('📷 Photo'),
+    voice: word('🎤 Voice message'),
     filter: word('Find a chat'),
     none: word('No chats yet.'),
     failed: word("Couldn't load your chats. Try again."),
@@ -152,16 +153,16 @@ export function chatLineView(line: HomeChatLine, kind: HomeChatKind, me: string 
     if (line.sealed) {
         if (!got || got.kind === 'waiting') return { ...base, who: null, text: kind === 'dm' ? t(CHAT_CARD_WORDS.locked) : t(CHAT_CARD_WORDS.openToRead) };
         const who = mine(got.signer) ? t('You') : (got.name ? chatAuthorWords(got.name) : line.who);
-        return { ...base, who, text: line.type === 'image' ? t(CHAT_CARD_WORDS.photo) : got.text };
+        return { ...base, who, text: line.type === 'image' ? t(CHAT_CARD_WORDS.photo) : line.type === 'voice' ? t(CHAT_CARD_WORDS.voice) : got.text };
     }
     // A sealed line too long to carry: no bytes came, so nothing opens and nobody is named.
     if (line.text === NODE_LOCKED_PREVIEW && !('metadata' in line)) return { ...base, who: null, text: t(CHAT_CARD_WORDS.locked) };
     // A readable line. In a DM the device judges it (home-chat-open.ts hands back `nobody` or the admins' words); in a
     // group chat this phone holds keys of, a readable line in a member's name is nobody's, as the chat shows it.
-    if (got?.kind === 'words') return { ...base, who: mine(got.signer) ? t('You') : (got.name ? chatAuthorWords(got.name) : line.who), text: line.type === 'image' ? t(CHAT_CARD_WORDS.photo) : got.text };
+    if (got?.kind === 'words') return { ...base, who: mine(got.signer) ? t('You') : (got.name ? chatAuthorWords(got.name) : line.who), text: line.type === 'image' ? t(CHAT_CARD_WORDS.photo) : line.type === 'voice' ? t(CHAT_CARD_WORDS.voice) : got.text };
     if (kind === 'dm') return { ...base, who: null, text: chatLineWords(DM_LINE_NOT_ENCRYPTED_TEXT) };
     if (kind === 'group' && opened?.locked) return { ...base, who: null, text: chatLineWords(GROUP_LINE_UNVERIFIED_TEXT) };
-    return { ...base, who: mine(line.author) ? t('You') : line.who, text: line.type === 'image' ? t(CHAT_CARD_WORDS.photo) : (line.text ?? '') };
+    return { ...base, who: mine(line.author) ? t('You') : line.who, text: line.type === 'image' ? t(CHAT_CARD_WORDS.photo) : line.type === 'voice' ? t(CHAT_CARD_WORDS.voice) : (line.text ?? '') };
 }
 
 /** utils/group-line-display.ts GROUP_LINE_UNVERIFIED_TEXT, said again here (chat-line-words translates it by its English). */

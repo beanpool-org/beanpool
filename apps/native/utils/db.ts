@@ -64,8 +64,11 @@ import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplaced
 import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import {
     sendSealedGroupLine, editSealedGroupLine, reportSealedGroupLine, chatIsLocked, getDecryptedGroupAttachment, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT,
-    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT,
+    GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT, getDecryptedGroupVoiceLine,
 } from './group-chat-lines';
+import { sealDmVoice, VoiceRefusedError, VOICE_MIME, type VoiceInput } from '@beanpool/core';
+import { openDmVoiceWithFormer } from './dm-voice';
+import { forgetRemovedVoices, forgetVoice, keepVoice, keptVoice, type KeptVoice } from './voice-cache';
 import { groupPhotoCache, forgetGroupPhotos, forgetRemovedGroupPhotos } from './group-photo-cache';
 import type { GroupLineView, ServedGroupLine } from './group-line-display';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -91,6 +94,8 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
     try {
         await FileSystem.deleteAsync(`${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`, { idempotent: true });
     } catch { /* nothing to do: the message is gone either way */ }
+    // A voice message's kept sound goes the same way (utils/voice-cache.ts; it never throws).
+    await forgetVoice(messageId);
 }
 
 /**
@@ -1368,6 +1373,11 @@ export async function getConversations(myPubkey: string) {
                 // Only a line that opened (format 4, signed by its author, or a line from before 1.4.0 opened as it was then)
                 // holds their words; a deleted line's text is fixed. (The old line: conversion code, log row OLDCHAT, remove after 12 Dec 2026.)
                 fromApp = lastView.format === null && !dmLineIsOld(lastView);
+                // A voice message's words are empty: the list says what it is (slice V3), in the member's language.
+                if (row.lastMsgType === 'voice' && lastView.format !== null) {
+                    displayMsg = '🎤 Voice message';
+                    fromApp = true;
+                }
             }
         } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
             try {
@@ -7407,6 +7417,163 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
     }
 }
 
+/** A chat the node reads by design (an event's, an enterprise's) takes no voice message yet (§5.3: direct and group chats first). */
+const VOICE_NOT_IN_THIS_CHAT_TEXT = "Voice messages can't be sent in this chat.";
+/** The recording didn't pass core's checks (a file that isn't an .m4a, too long, too big): nothing was sent. */
+const VOICE_CANT_SEND_TEXT = "This voice message can't be sent. Record it again.";
+/**
+ * The caller gave up on a send (the screen's 60 s) before its answer came, and has already said so: the word for an answer
+ * that came too late.
+ */
+const VOICE_GIVEN_UP_TEXT = 'Sending the voice message is taking too long — please try again.';
+
+/**
+ * Send a voice message (DESIGN-cross-chat-voice-fable.md §5.4, slice V3): sealed on this phone as its message's own part
+ * `voice`, as bytes (core sealDmVoice), under the DM's key, beside its words (empty), sealed as part 'body' as a photo's
+ * caption is, so the thread check reads it like any line and the voice opens only once its words have. The node keeps the
+ * sealed part where it keeps photos and serves it at GET /api/messages/:id/attachment, as `type: 'voice'` with the mime
+ * VOICE_MIME (the node's side is slice V2). Then kept on this phone, so the sender plays it without fetching it.
+ *
+ * A group's chat goes as a group's voice line (postGroupChatVoice), decided as sendImageMessage decides; an event's or an
+ * enterprise's chat is refused, nothing sent.
+ *
+ * Idempotent on the line's id (PR #3112 review, round 2): `opts.messageId` is the recording's own, the same on every try, so
+ * a Send after a try that timed out but landed is the node's duplicate (engine/messaging.ts answers the line it stored), one
+ * line, never two. The local row is written only if it isn't there yet. `opts.signal` is the caller giving up (the screen's
+ * 60 s): it aborts the POST, and an answer that comes after it writes nothing here, so a late first try never shows its line
+ * while the recorder says it wasn't sent.
+ */
+export async function sendVoiceMessage(conversationId: string, voice: VoiceInput, metadata?: string, opts: { messageId?: string; signal?: AbortSignal } = {}): Promise<void> {
+    const database = await getDb();
+    const nodeReadable = await isNodeReadableConversation(conversationId);
+    const groupChat = await isHeldGroupChat(conversationId)
+        || (nodeReadable && (await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]))?.type === 'group_thread');
+    if (groupChat) {
+        await postGroupChatVoice(conversationId, { voice, replyToId: replyToIdOf(metadata), clientId: opts.messageId, signal: opts.signal });
+        return;
+    }
+    if (nodeReadable) throw new Error(VOICE_NOT_IN_THIS_CHAT_TEXT);
+    const dmCtx = await requireDmKeyContext(conversationId);
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const messageId = (opts.messageId && UUID_V4_RE.test(opts.messageId) ? opts.messageId : Crypto.randomUUID()).toLowerCase();
+    const line = { senderPubHex: identity.publicKey, messageId, replyToId: replyToIdOf(metadata) };
+    let encVoice: { ciphertext: string; nonce: string };
+    try {
+        encVoice = sealDmVoice(voice, dmCtx, line);
+    } catch (e) {
+        if (e instanceof VoiceRefusedError) throw new Error(VOICE_CANT_SEND_TEXT);
+        throw new DmNotLockedError();
+    }
+    // Never after itself: a try that landed may already be on this phone.
+    const encBody = lockWith(dmCtx, '', { ...line, part: 'body', after: await lineToWriteAfter(conversationId, messageId) });
+
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
+    const bodyString = JSON.stringify({
+        id: messageId, conversationId, authorPubkey: identity.publicKey, ciphertext: encBody.ciphertext, nonce: encBody.nonce,
+        type: 'voice', attachment: { data: encVoice.ciphertext, nonce: encVoice.nonce, mime: VOICE_MIME }, metadata,
+    });
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/messages/send`, bodyString, identity.privateKey, identity.publicKey);
+    const res = await fetch(`${anchorUrl}/api/messages/send`, { method: 'POST', headers, body: bodyString, ...(opts.signal ? { signal: opts.signal } : {}) });
+    if (!res.ok) {
+        let errMsg = 'Failed to send the voice message.';
+        try { const j = JSON.parse(await res.text()); if (j.error) errMsg = j.error; } catch {}
+        throw new Error(errMsg);
+    }
+    const serverMsg = (await res.json()).message;
+    // Given up while the answer came: nothing written here; the recorder holds the recording for Send, the same line again.
+    if (opts.signal?.aborted) throw new Error(VOICE_GIVEN_UP_TEXT);
+    ownLineTaken(conversationId);
+    // A retry the node answered with the line it stored: that line's own seal, and a row already here (the sync's) stays.
+    const stored = typeof serverMsg?.ciphertext === 'string' && typeof serverMsg?.nonce === 'string';
+    await database.runAsync(
+        'INSERT OR IGNORE INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [serverMsg.id, conversationId, identity.publicKey, stored ? serverMsg.ciphertext : encBody.ciphertext, stored ? serverMsg.nonce : encBody.nonce,
+            'voice', (stored ? (typeof serverMsg.metadata === 'string' ? serverMsg.metadata : null) : metadata) || null, serverMsg.timestamp]
+    );
+    await requestLineTaken(database, conversationId, identity.publicKey);
+    await keepVoice(serverMsg.id, voice);
+}
+
+/**
+ * Send a voice message in a group's chat: sealed under the group line's own message key as part `voice` (core
+ * sealGroupVoice), beside empty words, through the group's sealed-line path (utils/group-chat-lines.ts), then kept here.
+ *
+ * `clientId` is the recording's own line id, the same on every try, so a Send after a try that timed out but landed is the
+ * node's duplicate (engine/group-thread.ts answers the line it stored): one line. `signal` is the caller giving up: it aborts
+ * the POST, and an answer after it keeps nothing here (PR #3112 review, round 2).
+ */
+export async function postGroupChatVoice(groupId: string, input: { voice: VoiceInput; clientId?: string; replyToId?: string | null; after?: string | null; signal?: AbortSignal }): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    const clientId = (input.clientId && UUID_V4_RE.test(input.clientId) ? input.clientId : Crypto.randomUUID()).toLowerCase();
+    let answer: any;
+    try {
+        answer = await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
+            groupId, text: '', voice: input.voice, clientId, replyToId: input.replyToId, after: input.after, signal: input.signal,
+        });
+    } catch (e) {
+        if (e instanceof VoiceRefusedError) throw new Error(VOICE_CANT_SEND_TEXT);
+        if (e instanceof GroupKeysRequestError && e.status === 404 && await ring.seenLocked()) throw await heldGroupRefusal(groupId);
+        throw e;
+    }
+    if (input.signal?.aborted) throw new Error(VOICE_GIVEN_UP_TEXT);
+    await keepVoice(clientId, input.voice);
+    return answer;
+}
+
+/**
+ * What a voice bubble plays: the phone's own copy, else the node's, opened and kept. 'gone': the node no longer has it
+ * (after 30 days, §5.4) and this phone never kept it. 'refused': it didn't open or pass core's checks ("can't be played").
+ * 'unavailable': the node couldn't be asked; try again later.
+ */
+export type VoiceOpenResult = { kind: 'ok'; voice: KeptVoice } | { kind: 'gone' } | { kind: 'refused' } | { kind: 'unavailable' };
+
+/** A node's answer for an attachment that no longer exists: the 30-day expiry (V2) answers 404 or 410. */
+const isGoneStatus = (status: number) => status === 404 || status === 410;
+
+/**
+ * A DM voice line's sound, in getDecryptedAttachment's order: its words first, opened under the pinned key or a former one
+ * (so a kept copy never plays under a line the node re-attributed or moved), then the phone's own copy, then the node's,
+ * opened as the part `voice` under the pinned key or a former one (utils/dm-voice.ts) and only under the key and sender its
+ * words opened under: both parts of one message, one key.
+ */
+export async function getDecryptedVoice(conversationId: string, messageId: string): Promise<VoiceOpenResult> {
+    let dmCtx: PinnedDmKeyContext | null;
+    try { dmCtx = await getDmKeyContext(conversationId, 'open'); } catch { return { kind: 'unavailable' }; }
+    if (!dmCtx) return { kind: 'refused' };
+    const database = await getDb();
+    const msgRow = await database.getFirstAsync<any>('SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]).catch(() => null);
+    if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return { kind: 'refused' };
+    const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
+    let words: ReturnType<typeof openDmPartWithFormer>;
+    try { words = openDmPartWithFormer({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' }); } catch { return { kind: 'refused' }; }
+    const kept = await keptVoice(messageId);
+    if (kept) return { kind: 'ok', voice: kept };
+    let res: Response;
+    try { res = await signedGet(`/api/messages/${encodeURIComponent(messageId)}/attachment`); } catch { return { kind: 'unavailable' }; }
+    if (isGoneStatus(res.status)) return { kind: 'gone' };
+    if (!res.ok) return { kind: 'unavailable' };
+    try {
+        const { data, nonce } = await res.json();
+        const opened = openDmVoiceWithFormer({ ciphertext: data, nonce }, dmCtx, ref);
+        if (opened.peerEdPubHex !== words.keys.peerEdPubHex || opened.senderPubHex !== words.senderPubHex) return { kind: 'refused' };
+        const voice = await keepVoice(messageId, opened.voice);
+        // Not kept (a full disk): played from a file this once is not possible without one, so it says so.
+        return voice ? { kind: 'ok', voice } : { kind: 'unavailable' };
+    } catch {
+        return { kind: 'refused' };
+    }
+}
+
+/** A group voice line's sound for GroupChatView: the phone's own copy, else the node's, opened under the line's epoch key. */
+export async function getDecryptedGroupVoice(groupId: string, line: ServedGroupLine, view: GroupLineView): Promise<VoiceOpenResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return getDecryptedGroupVoiceLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId, line, view }, { kept: keptVoice, keep: keepVoice });
+}
+
 /**
  * Old chat's photo (conversion code, log row OLDCHAT, remove after 12 Dec 2026; Marty, 13 Nov 2026: "if they are there why
  * not view them?"): the photo of a line getMessages showed old, in getDecryptedAttachment's order. Its words first, opened as
@@ -9660,6 +9827,7 @@ export async function getGroupChat(groupId: string, limit = 50, offset = 0): Pro
         throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
     }
     forgetRemovedGroupPhotos(groupId, body?.messages);
+    forgetRemovedVoices(body?.messages);
     return body;
 }
 

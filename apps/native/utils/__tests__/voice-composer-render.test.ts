@@ -13,13 +13,13 @@
  * The 320 dp layout itself (nothing past the edge, 44 dp targets) is measured in Chromium by e2e/voice-320.mjs.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement, forwardRef, useImperativeHandle } from 'react';
+import { act, createElement, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const box: { onChangeText?: (t: string) => void } = {};
+const box: { onChangeText?: (t: string) => void; mounts: number } = { mounts: 0 };
 /** The microphone's touch responder, as the View was handed it: the test's finger. */
 const pan: { config?: Record<string, (...a: any[]) => any> } = {};
 const theme = vi.hoisted(() => ({ scheme: 'light' as 'light' | 'dark' }));
@@ -43,6 +43,8 @@ vi.mock('react-native', () => {
     };
     const TextInput = forwardRef((props: Record<string, any>, ref) => {
         box.onChangeText = props.onChangeText;
+        // Counted once per mount: the box is uncontrolled, so a remount drops its words on a phone.
+        useEffect(() => { box.mounts += 1; }, []);
         useImperativeHandle(ref, () => ({ clear: () => { }, setNativeProps: () => { }, focus: () => { } }));
         return createElement('input', { 'aria-label': props.accessibilityLabel, 'data-hidden': flat(props.style).display === 'none' ? '1' : undefined });
     });
@@ -133,6 +135,14 @@ describe('ChatComposer: the microphone in Send\'s place', () => {
         expect(q('voice-mic')).not.toBeNull();
         await act(async () => { render(false); });
         expect(q('voice-mic')).toBeNull();
+    });
+
+    it('the box is never remounted when the microphone comes and goes (Edit, a photo waiting): its words stay', async () => {
+        const before = box.mounts;
+        await act(async () => { render(false); });
+        await act(async () => { render(true); });
+        await act(async () => { render(false); });
+        expect(box.mounts).toBe(before);
     });
 
     it('the first hold only asks for the microphone; the next hold records', async () => {

@@ -15,7 +15,7 @@
  *    See scheduleClearSweep for the three designs that failed before this one.
  */
 
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
@@ -166,6 +166,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
     const canSend = (draft.trim().length > 0 || !!attachment) && !disabled && !busy;
     // The microphone in Send's place: the box empty, no photo waiting, nothing being waited on.
     const micInsteadOfSend = !!onVoice && !draft.trim() && !attachment && !busy;
+    const lastOnVoice = useRef<((voice: VoiceInput) => Promise<void>) | null>(null);
+    const sendVoice = useCallback((voice: VoiceInput) => lastOnVoice.current!(voice), []);
 
     const body = (voice: VoiceRecorderParts | null) => (
         <View>
@@ -220,5 +222,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
         </View>
     );
 
-    return onVoice ? <WithVoice styles={styles} onVoice={onVoice} disabled={!!disabled}>{body}</WithVoice> : body(null);
+    // Once this chat has had the microphone, its recorder stays mounted when onVoice goes for a while (an Edit, a photo
+    // waiting): switching the tree would remount the box, which is uncontrolled, and drop its words. With onVoice absent
+    // the microphone isn't shown and a hold is refused; a recording already running goes to the last onVoice given.
+    if (onVoice) lastOnVoice.current = onVoice;
+    return lastOnVoice.current
+        ? <WithVoice styles={styles} onVoice={sendVoice} disabled={!!disabled || !onVoice}>{body}</WithVoice>
+        : body(null);
 });

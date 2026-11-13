@@ -2980,5 +2980,10 @@
     "many": "أخذ أحدهم بعضها أثناء تعديلك. المتبقي الآن {n}. راجع العدد واحفظ مجددًا.",
     "other": "أخذ أحدهم بعضها أثناء تعديلك. المتبقي الآن {n}. راجع العدد واحفظ مجددًا."
   },
-  "To stop selling, pause or remove the listing.": "لإيقاف البيع، أوقف الإعلان مؤقتًا أو أزله."
+  "To stop selling, pause or remove the listing.": "لإيقاف البيع، أوقف الإعلان مؤقتًا أو أزله.",
+  "Newest\u0004member sort": "الأحدث",
+  "Name\u0004member sort": "الاسم",
+  "Friends\u0004member sort": "الأصدقاء",
+  "Trusted\u0004member sort": "الموثوق بهم",
+  "Active\u0004member sort": "النشطون"
 }

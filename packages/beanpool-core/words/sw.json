@@ -2540,5 +2540,10 @@
     "one": "Mtu amechukua baadhi ulipokuwa unahariri. Sasa baki ni {n}. Angalia idadi kisha uhifadhi tena.",
     "other": "Mtu amechukua baadhi ulipokuwa unahariri. Sasa baki ni {n}. Angalia idadi kisha uhifadhi tena."
   },
-  "To stop selling, pause or remove the listing.": "Ili kuacha kuuza, sitisha au ondoa tangazo."
+  "To stop selling, pause or remove the listing.": "Ili kuacha kuuza, sitisha au ondoa tangazo.",
+  "Newest\u0004member sort": "Wapya zaidi",
+  "Name\u0004member sort": "Jina",
+  "Friends\u0004member sort": "Marafiki",
+  "Trusted\u0004member sort": "Wanaoaminika",
+  "Active\u0004member sort": "Wanaoshiriki"
 }

@@ -42,7 +42,7 @@ import { releaseLineTradeId, type PhoneTradeRow } from '../../utils/release-line
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { VoiceBubble } from '../../components/chat/VoiceBubble';
 import { VoicePlaybackProvider } from '../../components/chat/VoicePlayback';
-import type { VoiceInput } from '@beanpool/core';
+import { VOICE_LINES_WORDS, voiceLinesOn, type VoiceInput } from '@beanpool/core';
 import { VoiceNotSentError, voiceSendWithin } from '../../utils/voice-recorder';
 import { newVoiceAudioOwner } from '../../utils/voice-audio';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
@@ -145,6 +145,12 @@ function ChatScreen({ id }: { id: string }) {
     // On a community with Beans off (the worldwide one) a post has no price: the header under it says none.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Voice messages only where the community says it takes them (core voiceLinesOn; Byron, 14 Nov): a node from before
+    // voice V2 stores one as words with a sound no one can play. Read at send time from the ref, as the recorder holds the
+    // onVoice it was given while a recording waits.
+    const voiceHere = voiceLinesOn(nodeProfile?.features);
+    const voiceHereRef = useRef(voiceHere);
+    voiceHereRef.current = voiceHere;
     // `amount_c`: what the deal holds, whole hundredths of a Bean (null when the phone holds no figure for it).
     const [pendingTx, setPendingTx] = useState<{ id: string; amount_c: number | null; isPayer: boolean } | null>(null);
     const [isDynamicContext, setIsDynamicContext] = useState(false);
@@ -879,6 +885,12 @@ function ChatScreen({ id }: { id: string }) {
     // the same line id (`lineId`, the recording's own) on every try, and the 60 s gives the send up for real (its POST
     // aborted, nothing written here after), so a Send after a timeout is the node's duplicate, never a second message.
     const sendVoice = async (voice: VoiceInput, lineId: string) => {
+        // The community no longer says it takes voice messages (asked again since the recording began): kept, not sent.
+        if (!voiceHereRef.current) {
+            const why = t(VOICE_LINES_WORDS.notTaken);
+            setLockNotice(why);
+            throw new VoiceNotSentError(why);
+        }
         if (!identity?.publicKey || sendingRef.current) throw new Error(t('Wait for the last message to go.'));
         sendingRef.current = true;
         try {
@@ -1870,7 +1882,7 @@ function ChatScreen({ id }: { id: string }) {
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}
-                        onVoice={requestMode === 'none' && !requestLineId && !editingMessage ? sendVoice : undefined}
+                        onVoice={voiceHere && requestMode === 'none' && !requestLineId && !editingMessage ? sendVoice : undefined}
                         voiceOwner={voiceOwner}
                         leading={
                             <Pressable accessibilityRole="button" accessibilityLabel={t('Attach image')} style={chat.attachBtn} onPress={pickAndSendImage}>

@@ -26,7 +26,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, MEMBER_SORT_WORDS, formatDate, formatNumber, inviteRevokeWords, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type InviteRowSource, type MemberSort, type WaitingVoucherRow, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
@@ -69,7 +69,7 @@ import { usePeopleVisitEnds } from '../../utils/people-visit';
 import { useShowCredit } from '../../utils/use-show-credit';
 
 type SubView = PeopleView;
-type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
+type SortOption = MemberSort;
 
 const MEMBER_ROW_HEIGHT = 66;
 
@@ -79,13 +79,13 @@ const PANE_WORDS: Readonly<Record<'friends' | 'community', WordKey>> = {
     community: word('🏘️ Community'),
 };
 
-/** The community list's sorts: word() keys, shown through t(). */
+/** The community list's sorts: their words are core's (MEMBER_SORT_WORDS, shown through t()), one set with the web's. */
 const SORT_OPTIONS: ReadonlyArray<{ key: SortOption; icon: string; label: WordKey }> = [
-    { key: 'newest', icon: 'clock-outline', label: word('Newest', 'member sort') },
-    { key: 'name', icon: 'sort-alphabetical-ascending', label: word('Name', 'member sort') },
-    { key: 'friends', icon: 'account-heart-outline', label: word('Friends', 'member sort') },
-    { key: 'trusted', icon: 'shield-star-outline', label: word('Trusted', 'member sort') },
-    { key: 'active', icon: 'lightning-bolt', label: word('Active', 'member sort') },
+    { key: 'newest', icon: 'clock-outline', label: MEMBER_SORT_WORDS.newest },
+    { key: 'name', icon: 'sort-alphabetical-ascending', label: MEMBER_SORT_WORDS.name },
+    { key: 'friends', icon: 'account-heart-outline', label: MEMBER_SORT_WORDS.friends },
+    { key: 'trusted', icon: 'shield-star-outline', label: MEMBER_SORT_WORDS.trusted },
+    { key: 'active', icon: 'lightning-bolt', label: MEMBER_SORT_WORDS.active },
 ];
 
 /** A date in the member's language, as core writes dates ("3 Oct 2026"); nothing for one it can't read. */

@@ -2430,5 +2430,10 @@
   "Someone took some while you were editing. There is {n} left now. Check the number and save again.|Someone took some while you were editing. There are {n} left now. Check the number and save again.": {
     "other": "편집하는 동안 누군가 일부를 맡았어요. 지금은 {n}개 남았어요. 개수를 확인하고 다시 저장해 주세요."
   },
-  "To stop selling, pause or remove the listing.": "판매를 멈추려면 게시물을 일시 중지하거나 제거하세요."
+  "To stop selling, pause or remove the listing.": "판매를 멈추려면 게시물을 일시 중지하거나 제거하세요.",
+  "Newest\u0004member sort": "최신순",
+  "Name\u0004member sort": "이름순",
+  "Friends\u0004member sort": "친구순",
+  "Trusted\u0004member sort": "신뢰순",
+  "Active\u0004member sort": "활동순"
 }

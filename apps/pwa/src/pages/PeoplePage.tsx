@@ -4,7 +4,7 @@
  * Multi-view People tab with search, avatars, and relative dates.
  */
 
-import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type KeyboardEvent } from 'react';
 import {
     getFriends, addFriendApi, removeFriendApi, getAddedYou, getJoinRequests, request,
     type FriendEntry, type Member, type MemberCard, type AddedYou, type CommunityInfo,
@@ -18,7 +18,8 @@ import {
     useMembersOnDemand, useMemberSearch, membersNear, dayBudgetWords, getMembersWhole, isMembersOnDemandRefusal,
     MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
 } from '../lib/members-on-demand';
-import { t, tn, word, type WordKey } from '@beanpool/core';
+import { MEMBER_SORT_WORDS, t, tn, word, type MemberSort, type WordKey } from '@beanpool/core';
+import { MEMBERS_DRAWN_STEP, keepMemberSort, keptMemberSort, memberSortsFor, orderMembers } from '../lib/member-sort';
 import { readMyArea } from '../lib/member-area';
 import { type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { Sentence } from '../components/Sentence';
@@ -109,6 +110,12 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
     const [creditShowing, setCreditShowing] = useState(false);
     // The credit start (the bell's ask, the Invites door) already used in this visit: Community opened by hand starts with credit off.
     const [creditUsed, setCreditUsed] = useState<number | null>(null);
+    // The Show credit panel says this viewer's credit view is an owner's or admin's: only then is Trusted offered (lib/member-sort).
+    const [seesGrantedCredit, setSeesGrantedCredit] = useState(false);
+    // The Community list's sort, the phone's five (Newest first): the last one picked, kept for the life of the page as the
+    // phone keeps it (lib/member-sort).
+    const [sortPicked, setSortPicked] = useState<MemberSort>(keptMemberSort);
+    const pickSort = (s: MemberSort) => { keepMemberSort(s); setSortPicked(s); };
 
     const [blocklistVersion, setBlocklistVersion] = useState(0);
 
@@ -352,6 +359,36 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
         return base.filter(m => m.callsign.toLowerCase().includes(q));
     }, [members, searchQuery, identity.publicKey, blockedSet]);
 
+    // The sorts this viewer is offered, and the one in force: a pick it isn't offered (Trusted, kept from an owner's visit, or
+    // before the node has said who this is) is Newest, never an order by a figure this viewer may not see.
+    const sorts = memberSortsFor(seesGrantedCredit);
+    const sort: MemberSort = sorts.includes(sortPicked) ? sortPicked : sorts[0];
+    // Search filters the whole list, then the sort applies.
+    const sortedMembers = useMemo(() => orderMembers(filteredMembers, sort, friendPubkeys), [filteredMembers, sort, friendPubkeys]);
+
+    // Drawn 50 at a time (the whole list is already here: no request), more as its end comes into view or with Show more. A new
+    // sort or search starts again from the first 50.
+    const drawnFor = `${sort}\u0000${searchQuery}`;
+    const [drawn, setDrawn] = useState({ for: drawnFor, count: MEMBERS_DRAWN_STEP });
+    const drawnCount = drawn.for === drawnFor ? drawn.count : MEMBERS_DRAWN_STEP;
+    const moreToDraw = sortedMembers.length > drawnCount;
+    const drawMore = () => setDrawn({ for: drawnFor, count: drawnCount + MEMBERS_DRAWN_STEP });
+    const drawMoreNow = useRef(drawMore);
+    drawMoreNow.current = drawMore;
+    // The list's end, watched from the moment it is on the page until it leaves (a callback ref, so an end drawn again, after a
+    // reload's "Loading" or Show credit, is the one watched). It is keyed by the step, so each step watches a new end: one still
+    // in view after a step (a tall screen) draws the next. No observer (an older browser): Show more, always there while more
+    // remain, is the way on.
+    const endWatch = useRef<IntersectionObserver | null>(null);
+    const watchListEnd = useCallback((end: HTMLDivElement | null) => {
+        endWatch.current?.disconnect();
+        endWatch.current = null;
+        if (!end || typeof IntersectionObserver === 'undefined') return;
+        const seen = new IntersectionObserver((entries) => { if (entries.some(e => e.isIntersecting)) drawMoreNow.current(); }, { rootMargin: '0px 0px 400px 0px' });
+        seen.observe(end);
+        endWatch.current = seen;
+    }, []);
+
     return (
         <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
             {/* Sub-nav pills */}
@@ -579,7 +616,7 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                     </p>
 
                     {/* Show credit: only for someone who can give credit, the node's word; off at every visit (components/CreditPeoplePanel). */}
-                    {!preview && <CreditPeoplePanel query={searchQuery} blocked={blockedSet} onOpenProfile={onOpenProfile} start={creditStart && creditStart.nonce !== creditUsed ? creditStart : null} onShowing={setCreditShowing} onStartUsed={setCreditUsed} />}
+                    {!preview && <CreditPeoplePanel query={searchQuery} blocked={blockedSet} onOpenProfile={onOpenProfile} start={creditStart && creditStart.nonce !== creditUsed ? creditStart : null} onShowing={setCreditShowing} onStartUsed={setCreditUsed} onFullSight={setSeesGrantedCredit} />}
 
                     {/* Search */}
                     <div className="mb-4">
@@ -597,6 +634,27 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                         )}
                     </div>
 
+                    {/* The phone's sort row (people.tsx), gone while the credit list replaces this one. It wraps: five sorts in a
+                        longer language need more than 320 px at 130 % text. */}
+                    {!creditShowing && (
+                        <div className="flex flex-wrap gap-2 mb-4" role="group" aria-label={t('Sort by')} data-testid="member-sort">
+                            {sorts.map(s => (
+                                <button
+                                    key={s}
+                                    type="button"
+                                    aria-pressed={sort === s}
+                                    onClick={() => pickSort(s)}
+                                    // A rem size (13 px at the browser's default), so a larger text setting grows the words too.
+                                    className={`min-h-[44px] px-3 rounded-xl border text-[0.8125rem] font-bold cursor-pointer break-words focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${sort === s
+                                        ? 'border-transparent bg-bp-commit-fill text-bp-commit-on'
+                                        : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white'}`}
+                                >
+                                    {t(MEMBER_SORT_WORDS[s])}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {creditShowing ? null : loading || onDemand === null ? (
                         <p className="text-center text-nature-500 p-8 font-medium animate-pulse">{t('Loading community...')}</p>
                     ) : membersFailed && members.length === 0 ? (
@@ -605,9 +663,10 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                             <button type="button" onClick={() => loadMembers()} className={linkButton}>{t('Try again')}</button>
                         </p>
                     ) : (
+                        <>
                         <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
-                            {filteredMembers.map(m => (
-                                    <div key={m.publicKey} className="p-3 px-4 flex flex-wrap items-center justify-between gap-2 transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30">
+                            {sortedMembers.slice(0, drawnCount).map(m => (
+                                    <div key={m.publicKey} data-testid="community-row" className="p-3 px-4 flex flex-wrap items-center justify-between gap-2 transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <button 
                                                 type="button"
@@ -661,6 +720,16 @@ export function PeoplePage({ identity, initialView = 'friends', navNonce, onView
                                     </div>
                                 ))}
                         </div>
+                        {moreToDraw && (
+                            <>
+                                {/* The list's end: coming into view draws the next 50 (watchListEnd above). */}
+                                <div key={`${drawnFor}\u0000${drawnCount}`} ref={watchListEnd} aria-hidden="true" className="h-px" />
+                                <button type="button" onClick={drawMore} className="mt-3 w-full min-h-[48px] rounded-xl border border-bp-accent-fill bg-transparent text-text-primary text-sm font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                    {t('Show more people')}
+                                </button>
+                            </>
+                        )}
+                        </>
                     )}
                 </div>
             )}

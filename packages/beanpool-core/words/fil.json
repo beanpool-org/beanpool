@@ -2540,5 +2540,10 @@
     "one": "May kumuha ng ilan habang nag-e-edit ka. {n} na lang ang natitira ngayon. Tingnan ang bilang at i-save ulit.",
     "other": "May kumuha ng ilan habang nag-e-edit ka. {n} na lang ang natitira ngayon. Tingnan ang bilang at i-save ulit."
   },
-  "To stop selling, pause or remove the listing.": "Para ihinto ang pagbebenta, i-pause o alisin ang listing."
+  "To stop selling, pause or remove the listing.": "Para ihinto ang pagbebenta, i-pause o alisin ang listing.",
+  "Newest\u0004member sort": "Pinakabago",
+  "Name\u0004member sort": "Pangalan",
+  "Friends\u0004member sort": "Mga Kaibigan",
+  "Trusted\u0004member sort": "Pinagkakatiwalaan",
+  "Active\u0004member sort": "Aktibo"
 }

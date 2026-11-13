@@ -57,10 +57,12 @@ const ANDROID_PACKAGE = 'org.beanpool.pillar';
 
 /**
  * The oldest app build this node works with, as served to clients: 1.4.1, the release that offers a price for each one
- * (DESIGN-per-item-price-fable.md §6: a phone from before it draws such a listing wrongly; config/node-profile.ts
- * PER_ITEM_BUILT). It was 1.4.0, the clean-slate cutover (DESIGN-clean-slate-cutover-fable.md §1), until both stores
- * carried phone 1.4.1 (13 Nov 2026). In code, not .env, so every self-hoster's node holds old apps off without
- * configuring anything. It is also the lowest floor there is: a floor set in .env (MIN_APP_VERSION, or per platform) can
+ * (config/node-profile.ts PER_ITEM_BUILT). DESIGN-per-item-price-fable.md §6: that release raises the floor to the phone
+ * build that goes with it, so an older phone is told to update rather than shown such a listing wrongly (a build from
+ * before the slices draws it as a bare price and asks for hours). It was 1.4.0, the clean-slate cutover
+ * (DESIGN-clean-slate-cutover-fable.md §1), until both stores carried phone 1.4.1 (13 Nov 2026). In code, not .env, so
+ * every self-hoster's node holds old apps off without configuring anything. It is also the lowest floor there is: a
+ * floor set in .env (MIN_APP_VERSION, or per platform) can
  * raise it and never lower it. One below it is ignored, and the log says so once, at start (noteFloorsBelowBuiltIn). It
  * brings no grace date of its own: unless the operator sets one (MIN_APP_VERSION_FROM), it stops apps below it as soon
  * as their store has 1.4.1, and never before (getPlatformFloorDetail). What a stopped app then does: the file comment above.

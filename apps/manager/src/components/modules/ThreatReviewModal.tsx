@@ -169,8 +169,8 @@ export function ThreatReviewModal({
         const amount = beansFigure(p.amount_c);
         const name = nameOf(p.from);
         const line = p.kind === 'earned' ? t(W.partEarned, { amount })
-            : p.kind === 'vouch' ? t(p.counted ? W.partVouch : W.partOwnerVouch, { name, amount })
-            : p.kind === 'gift' ? t(p.counted ? W.partGift : W.partOwnerGift, { name, amount })
+            : p.kind === 'vouch' ? (p.counted ? t(W.partVouch, { name, amount }) : t(W.partOwnerVouch, { name, amount }))
+            : p.kind === 'gift' ? (p.counted ? t(W.partGift, { name, amount }) : t(W.partOwnerGift, { name, amount }))
             : p.kind === 'known' ? t(W.partKnown, { amount })
             : t(W.partGranted, { amount });
         return p.counted ? line : t(W.notCounted, { part: line });
@@ -360,7 +360,7 @@ export function ThreatReviewModal({
                                         <div className="flex items-center gap-2 shrink-0">
                                             {notYours && canFreeze && (
                                                 <span className="text-[10px] text-nature-300 text-right">
-                                                    {t(notYours === 'self' ? W.cantFreezeSelf : W.cantFreezeOwner)}
+                                                    {notYours === 'self' ? t(W.cantFreezeSelf) : t(W.cantFreezeOwner)}
                                                 </span>
                                             )}
                                             {isItemFrozen && (

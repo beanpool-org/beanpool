@@ -10197,12 +10197,12 @@ export function runLedgerAudit(): { sumBalances: number; baseline: number; drift
 }
 
 /** Null where Beans are off: the audit does not run there (engine/audit.ts). */
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
+export function runWashSybilMetricsAudit(): engine.WashSybilMetrics | null {
     return runWashSybilMetricsEngine();
 }
 
 /** runWashSybilMetricsAudit a slice at a time, as the node's timers run it (engine/audit.ts). */
-export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<{ totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null> {
+export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<engine.WashSybilMetrics | null> {
     return runWashSybilMetricsAuditInSlices(opts);
 }
 

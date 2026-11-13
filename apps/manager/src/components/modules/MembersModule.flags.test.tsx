@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MembersModule } from './MembersModule';
 
 /**
@@ -48,6 +48,18 @@ describe('MembersModule flags', () => {
         expect(screen.getByRole('button', { name: 'Dismiss Flag' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Freeze/ })).not.toBeInTheDocument();
         expect(document.body.textContent).not.toContain(KEY_A);
+    });
+
+    it('a freeze the node refuses is said in the window, and nobody it refused shows as frozen (Marty, 14 Nov 2026)', async () => {
+        const onFreezeUser = vi.fn(async (pk: string) => {
+            if (pk === KEY_A) throw new Error('Only an owner can freeze or unfreeze an owner.');
+        });
+        render(<MembersModule nodeData={nodeData([wash])} nodeDataLoading={false} onRefresh={vi.fn()} onFreezeUser={onFreezeUser} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ })); });
+        expect(onFreezeUser).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('alert')).toHaveTextContent('Only an owner can freeze or unfreeze an owner.');
+        expect(screen.queryByText('Member access rights frozen. Moderation event logged.')).not.toBeInTheDocument();
     });
 
     it('a real flag opens a window that offers Freeze', () => {

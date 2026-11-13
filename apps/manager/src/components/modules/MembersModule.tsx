@@ -347,20 +347,27 @@ export function MembersModule({
         }
     }, [nodeData]);
 
+    // Each member the window sends, one at a time; only those the node froze show as frozen. A refusal (the node's own
+    // words: your own account, an owner, the phone's unlock again) is thrown back to the window, which shows it and stays
+    // open, after the rest have been tried (Marty, 14 Nov 2026).
     const handleFreezePubkeys = async (pubkeys: string[]) => {
-        setFrozenPubkeys((prev) => {
-            const next = new Set(prev);
-            pubkeys.forEach((p) => next.add(p));
-            return next;
-        });
-        if (onFreezeUser) {
-            for (const p of pubkeys) {
-                try {
-                    await onFreezeUser(p, true);
-                } catch {}
-            }
-            onRefresh();
+        if (!onFreezeUser) {
+            setFrozenPubkeys((prev) => new Set([...prev, ...pubkeys]));
+            return;
         }
+        const froze: string[] = [];
+        let refused: unknown = null;
+        for (const p of pubkeys) {
+            try {
+                await onFreezeUser(p, true);
+                froze.push(p);
+            } catch (e) {
+                refused = refused ?? e;
+            }
+        }
+        setFrozenPubkeys((prev) => new Set([...prev, ...froze]));
+        onRefresh();
+        if (refused) throw refused;
     };
 
     const handleToggleFreezeMember = async (pubkey: string) => {

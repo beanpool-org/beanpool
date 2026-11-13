@@ -245,6 +245,7 @@ export function useVoiceRecorder({ onSend, owner, disabled }: { onSend: VoiceSen
                         await recorder.prepareToRecordAsync();
                         recorder.record();
                     } catch {
+                        // 'failed' answers 'discard', which lets go of the hold (voice-composer-render.test.ts pins it).
                         dispatch({ type: 'failed' });
                         Alert.alert(t(VOICE_RECORDER_WORDS.micFailed));
                     }

@@ -21,7 +21,7 @@
  *   - a recording waiting in one chat holds only that chat's player, and another chat's send never lets go of it.
  * The 320 dp layout itself (nothing past the edge, 44 dp targets) is measured in Chromium by e2e/voice-320.mjs.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -159,6 +159,11 @@ async function reopen(withVoice = true) {
     await flush();
 }
 
+// What the recorder loads at its first send (the file, its bytes, the line id): loaded once here, so the first test that sends
+// waits on no module load the flush below doesn't cover (a send that had gone read as not sent on a busy machine).
+beforeAll(async () => {
+    await Promise.all([import('expo-crypto'), import('expo-file-system/legacy'), import('../crypto')]);
+});
 beforeEach(async () => {
     expoAudioStub.reset();
     expoAudioStub.permission = { granted: true, canAskAgain: true, status: 'granted' };
@@ -520,6 +525,21 @@ describe('ChatComposer: a hold reaches its own chat only (PR #3112 review, round
         expect(expoAudioStub.player.played).toBe(played + 1);
         await act(async () => { q('voice-bin')!.click(); });
         await flush();
+    });
+
+    it('the microphone fails to start: its hold goes (the reducer\'s discard), so no chat on the phone is left quiet', async () => {
+        const prepare = expoAudioStub.recorder.prepareToRecordAsync;
+        expoAudioStub.recorder.prepareToRecordAsync = async () => { throw new Error('the microphone is busy'); };
+        try {
+            await hold();
+        } finally {
+            expoAudioStub.recorder.prepareToRecordAsync = prepare;
+        }
+        expect(Alert.alert).toHaveBeenCalledWith("The microphone couldn't start. Try again.");
+        expect(voiceAudioHold(OWNER)).toBeNull();
+        expect(voiceAudioHold('another-chat')).toBeNull();
+        await release();
+        expect(sent).toEqual([]);
     });
 
     it('this chat sends its recording: a recording waiting in the chat underneath stays held', async () => {

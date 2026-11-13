@@ -98,11 +98,6 @@ CREATE TABLE IF NOT EXISTS members (
     -- line; owners, admins, the inviter and the member themself still do (state-engine.ts getTrustProfileForViewer,
     -- DESIGN-invites-vouching-review-fable.md §3 ask 2). In members_touch_updated_at's list, so delta sync carries it.
     inviter_shown INTEGER DEFAULT 1,
-    -- An empty duplicate an owner retired (engine/retire-duplicate.ts; Marty, 14 Nov 2026): when, and the owner's key. The
-    -- row is 'disabled' with it (it acts, signs and lists as nothing), no vote opens and nothing is deleted; Bring back
-    -- clears both. NULL on every other row. In members_touch_updated_at's list, so delta sync and a standby carry it.
-    retired_at TEXT,
-    retired_by TEXT,
     -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), an
     -- enterprise's `paused` or an off-board `status`, an account's pause among them (members_touch_board_standing); and, while an enterprise is off the
     -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
@@ -1674,7 +1669,7 @@ AFTER UPDATE OF
     lat, lng, location_auth_signer, auth_signer, location_updated_at,
     moderation_muted_until,
     area_lat, area_lng, area_updated_at,
-    is_visitor, deleted_by_owner_at, inviter_shown, retired_at, retired_by
+    is_visitor, deleted_by_owner_at, inviter_shown
 ON members
 FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
@@ -2234,6 +2229,17 @@ CREATE TABLE IF NOT EXISTS known_floor_exceptions (
     frozen         INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1)),
     set_by         TEXT NOT NULL,
     set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- An empty duplicate an owner retired (engine/retire-duplicate.ts; Marty, 14 Nov 2026): who and when. While the member's
+-- row is 'disabled' with this row beside it, the account acts, signs and lists as nothing; no vote opened and nothing was
+-- deleted. Bring back deletes this row and makes the account active. No row: not retired.
+CREATE TABLE IF NOT EXISTS retired_accounts (
+    member_pubkey  TEXT PRIMARY KEY,
+    retired_by     TEXT NOT NULL,
+    retired_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

@@ -2135,10 +2135,11 @@ export function getAllMembers(): Member[] {
 
 /**
  * A retired empty duplicate's rows leave the directory (engine/retire-duplicate.ts): nobody lists, finds or opens one. The
- * few retired keys, read once a call (only retired rows carry retired_at).
+ * few retired keys, read once a call.
  */
 function withoutRetired(rows: DirectoryRow[]): DirectoryRow[] {
-    const retired = new Set(db.prepare("SELECT public_key FROM members WHERE retired_at IS NOT NULL AND status = 'disabled'").pluck().all() as string[]);
+    const retired = new Set(db.prepare(`SELECT r.member_pubkey FROM retired_accounts r JOIN members m ON m.public_key = r.member_pubkey
+        WHERE m.status = 'disabled'`).pluck().all() as string[]);
     return retired.size === 0 ? rows : rows.filter(r => !retired.has(r.public_key as string));
 }
 
@@ -7213,7 +7214,8 @@ interface CommunityCounts { memberCount: number; postCount: number; transactionC
 function countCommunity(): CommunityCounts {
     return {
         // A retired empty duplicate is no member to count (engine/retire-duplicate.ts).
-        memberCount: (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned' AND NOT (retired_at IS NOT NULL AND status = 'disabled')").get() as any).c,
+        memberCount: (db.prepare(`SELECT COUNT(*) as c FROM members WHERE status != 'pruned'
+            AND NOT (status = 'disabled' AND public_key IN (SELECT member_pubkey FROM retired_accounts))`).get() as any).c,
         postCount: getActivePostCount(),
         transactionCount: (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c,
     };

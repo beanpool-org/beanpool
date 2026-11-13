@@ -934,9 +934,10 @@ function adminMemberRows(members: Member[], keys?: string[]) {
     // The member's credit freeze as the node holds it (members.credit_frozen), so the manager's Freeze shows what the node
     // did, not a guess (Marty, 14 Nov 2026: four presses each froze, and the panel showed none of them); and a retired
     // empty duplicate (engine/retire-duplicate.ts), which the list shows as such.
+    const STANDING_SQL = 'SELECT m.public_key, m.credit_frozen, r.retired_at FROM members m LEFT JOIN retired_accounts r ON r.member_pubkey = m.public_key';
     const standingRows = (keys
-        ? db.prepare(`SELECT public_key, credit_frozen, retired_at FROM members WHERE public_key IN (SELECT value FROM json_each(?))`).all(JSON.stringify(keys))
-        : db.prepare(`SELECT public_key, credit_frozen, retired_at FROM members`).all()) as Array<{ public_key: string; credit_frozen: number | null; retired_at: string | null }>;
+        ? db.prepare(`${STANDING_SQL} WHERE m.public_key IN (SELECT value FROM json_each(?))`).all(JSON.stringify(keys))
+        : db.prepare(STANDING_SQL).all()) as Array<{ public_key: string; credit_frozen: number | null; retired_at: string | null }>;
     const standingOf = new Map(standingRows.map(r => [r.public_key, r]));
 
     return members.filter(m => m.status !== 'pruned').map(m => {

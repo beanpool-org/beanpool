@@ -17,8 +17,8 @@
  *      suspension is refused (use Bring back); retiring it again is refused (not active).
  *   5. Bring back: active again, the mark cleared, its key signs again, and it is back in the directory and the count.
  *   6. Freeze: the owners' member rows carry creditFrozen as the node holds it, after a freeze and after an unfreeze.
- *   7. A standby: the members row's copy carries retired_at and retired_by (the manifest), and a standby retires nothing
- *      (409 standby).
+ *   7. A standby: retired_accounts is a plain table (copied, Bring back's delete a tombstone), a re-key moves it, and a
+ *      standby retires nothing (409 standby).
  *
  * Run: SERVER_SUITES_ONLY=test-retire-empty-duplicate TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -134,7 +134,8 @@ function sessionHeaders(pub: string, role: 'owner' | 'admin'): Record<string, st
     return { 'X-Admin-Session': s.sessionId };
 }
 
-const rowOf = (who: Id) => db.prepare('SELECT status, retired_at, retired_by, credit_frozen FROM members WHERE public_key = ?').get(who.pk) as
+const rowOf = (who: Id) => db.prepare(`SELECT m.status, r.retired_at, r.retired_by, m.credit_frozen FROM members m
+    LEFT JOIN retired_accounts r ON r.member_pubkey = m.public_key WHERE m.public_key = ?`).get(who.pk) as
     { status: string; retired_at: string | null; retired_by: string | null; credit_frozen: number } | undefined;
 const decisionCount = () => db.prepare('SELECT COUNT(*) FROM decisions').pluck().get() as number;
 
@@ -308,8 +309,9 @@ async function main(): Promise<void> {
 
     // ── 7. A standby ──
     console.log('\n── 7. A standby ──');
-    const copied = TABLES.members.kind === 'replicated-except' || TABLES.members.kind === 'replicated' ? (TABLES.members as any).columns as string[] : [];
-    assert(copied.includes('retired_at') && copied.includes('retired_by'), "the members row's copy carries retired_at and retired_by");
+    const entry = TABLES.retired_accounts as any;
+    assert(entry?.plain === true && ['member_pubkey', 'retired_by', 'retired_at'].every(c => entry.columns.includes(c)), 'retired_accounts is a plain table a standby copies, every column');
+    assert(!!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'retired_accounts'").get(), "Bring back's delete left a tombstone, so a standby drops the row too");
     const spare = makeMember('Spare');
     setNodeRole('backup');
     try {

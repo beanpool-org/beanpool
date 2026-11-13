@@ -521,14 +521,6 @@ export function initSchema() {
     // Born with per-item prices (DESIGN-per-item-price-fable.md §3, §6; Marty's Q5, 12 Nov 2026): four empty columns, each with
     // schema.sql's own CHECK, NULL on every row that is there. Nothing is read, filled in or rewritten: a listing becomes
     // per-item only by its seller's own edit. On a fresh install each finds its column and does nothing.
-    // Born with Retire an empty duplicate (engine/retire-duplicate.ts; Marty, 14 Nov 2026): two empty columns on members, NULL
-    // on every row that is there. Additions, as Local knowledge's above (Marty's pick 6, 11 Nov 2026): nothing is read or
-    // rewritten; an account is retired only by an owner's own press. Before the schema.sql exec, whose
-    // members_touch_updated_at (dropped and made again at every boot) lists them. On a fresh install each finds its column.
-    for (const column of ['retired_at TEXT', 'retired_by TEXT']) {
-        try { db.prepare(`ALTER TABLE members ADD COLUMN ${column}`).run(); } catch { }
-    }
-
     // CONVERSION CODE (schema step), log row PERITEM-S1, remove in the release after the one that ships per-item.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN units_left INTEGER CHECK (units_left IS NULL OR (units_left >= 0 AND units_left <= 9999))`).run(); } catch { }
     // CONVERSION CODE (schema step), log row PERITEM-S2, remove in the release after the one that ships per-item.

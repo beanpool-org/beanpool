@@ -3,16 +3,17 @@
  * to suspend an account that was set up in error"). An owner, by their own key session, retires an account that holds
  * nothing and did nothing (emptyAccountRefusal): no vote opens and nothing is deleted. The row goes 'disabled', the one
  * status every reader already treats as acting for nothing (it posts, pays, messages and brings in nobody), and carries
- * retired_at and retired_by: its key is refused at every signed route as a closed account's is (https-server.ts), it
- * leaves the member directory, and the owners' member list shows it as "Retired (empty duplicate)". Bring back
- * (bringBackRetired) undoes it exactly. The two columns are the members row's, so a standby and a backup carry them as
- * they carry every other status change (engine/replication-manifest.ts members).
+ * a row in retired_accounts (who, when): its key is refused at every signed route as a closed account's is
+ * (https-server.ts), it leaves the member directory and the community's member count, and the owners' member list shows
+ * it as "Retired (empty duplicate)". Bring back (bringBackRetired) undoes it exactly. The status travels in the members
+ * row as every status change does, and retired_accounts is a plain table, so a standby and a backup carry both
+ * (engine/replication-manifest.ts). A new table, not new columns: no schema step on any node.
  *
  * An account that is not empty is refused in a plain sentence naming what it holds, and Suspend (the community's vote,
  * where it votes) stays the way for it.
  */
 import { word } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { setUserStatusRow, broadcast } from '../state-engine.js';
 import { namesMemberSql } from '../decisions-engine.js';
@@ -150,10 +151,10 @@ function hasTable(table: string): boolean {
  */
 export function emptyAccountRefusal(actor: string, target: string): EmptyRefusal | null {
     if (actor === target) return refusal('own_account');
-    const row = db.prepare('SELECT status, is_visitor, is_treasury, retired_at FROM members WHERE public_key = ?').get(target) as
-        { status: string | null; is_visitor: number | null; is_treasury: number | null; retired_at: string | null } | undefined;
+    const row = db.prepare('SELECT status, is_visitor, is_treasury FROM members WHERE public_key = ?').get(target) as
+        { status: string | null; is_visitor: number | null; is_treasury: number | null } | undefined;
     if (!row || row.is_visitor || row.is_treasury) return refusal('not_person');
-    if ((row.status ?? 'active') !== 'active' || row.retired_at) return refusal('not_active');
+    if ((row.status ?? 'active') !== 'active') return refusal('not_active');
     const balance = db.prepare('SELECT balance_c FROM accounts WHERE public_key = ?').pluck().get(target) as number | undefined;
     for (const { rule, checks } of EMPTY_RULES) {
         // The balance right after the role (the brief's order): a row in `accounts`, never a ledger row, so not a table check.
@@ -174,7 +175,8 @@ export function emptyAccountRefusal(actor: string, target: string): EmptyRefusal
 /** Whether this key's account is a retired empty duplicate. */
 export function isRetiredKey(pubkey: string): boolean {
     if (!pubkey) return false;
-    return !!db.prepare("SELECT 1 FROM members WHERE public_key = ? AND retired_at IS NOT NULL AND status = 'disabled'").get(pubkey);
+    return !!db.prepare(`SELECT 1 FROM retired_accounts r JOIN members m ON m.public_key = r.member_pubkey
+        WHERE r.member_pubkey = ? AND m.status = 'disabled'`).get(pubkey);
 }
 
 /**
@@ -188,7 +190,10 @@ export function retireEmptyDuplicate(actor: string, target: string): EmptyRefusa
         const why = emptyAccountRefusal(actor, target);
         if (why) return why;
         setUserStatusRow(target, 'disabled', { actor, how: 'retired as an empty duplicate' });
-        db.prepare(`UPDATE members SET retired_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), retired_by = ? WHERE public_key = ?`).run(actor, target);
+        // A row left from an account made active another way (a vote) is written over: this retire is the one in force.
+        db.prepare(`INSERT INTO retired_accounts (member_pubkey, retired_by) VALUES (?, ?)
+            ON CONFLICT(member_pubkey) DO UPDATE SET retired_by = excluded.retired_by, retired_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`)
+            .run(target, actor);
         return null;
     })();
     if (!refused) broadcast({ type: 'profile_updated', publicKey: target });
@@ -200,7 +205,7 @@ export function bringBackRetired(target: string): boolean {
     assertPlainTablesWritable();
     const done = db.transaction(() => {
         if (!isRetiredKey(target)) return false;
-        db.prepare('UPDATE members SET retired_at = NULL, retired_by = NULL WHERE public_key = ?').run(target);
+        deletePlainRows('retired_accounts', 'member_pubkey = ?', target);
         setUserStatusRow(target, 'active');
         return true;
     })();

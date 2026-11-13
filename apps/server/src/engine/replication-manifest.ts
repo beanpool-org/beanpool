@@ -179,7 +179,7 @@ export const TABLES: Record<string, TableEntry> = {
             profile_updated_at archetype purpose goal_amount_c deadline_at lifecycle paused paused_at paused_by
             paused_floor_snapshot_c wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
             location_updated_at updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at
-            board_standing_changed_at inviter_shown retired_at retired_by`),
+            board_standing_changed_at inviter_shown`),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
             callsign_fold: { reason: "each server makes its own from callsign: the engine's installNameFold's triggers write it on every insert and rename, the import's included; the export leaves it out of `standing` (@beanpool/engine sync.ts memberOfRow) and the import never writes it (engine/sync.ts memberColumns)" },
@@ -496,6 +496,9 @@ export const TABLES: Record<string, TableEntry> = {
     credit_look_log: plain('actor_pubkey subject_pubkey surface day sight at updated_at', { agedOut: { column: 'at', days: CREDIT_LOOK_KEPT_DAYS } }),
     // A member's tier badge (engine/badges.ts): recognition only, no credit. A take-over shows every member the same badge.
     member_badges: plain('member_pubkey tier set_by set_at updated_at'),
+    // An empty duplicate an owner retired (engine/retire-duplicate.ts): a take-over keeps it retired, and Bring back's
+    // delete reaches a standby as a tombstone. The account's 'disabled' travels in its members row, as every status does.
+    retired_accounts: plain('member_pubkey retired_by retired_at updated_at'),
     // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
     // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
     vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),

@@ -8,7 +8,7 @@ import * as Location from 'expo-location';
 import {
     ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, reorderIds, tipText, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
-    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
+    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourEnded, tourRecord, tourSteps, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
     starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
@@ -1087,9 +1087,9 @@ export default function HomeScreen() {
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
     // The bar is the tab layout's (utils/tour-store.ts); Home lends it the chips (the picker's own add) and the end (one
     // layout write, then the account's record). Nothing here starts a tour by itself.
-    const chips = answer?.me && tailor
-        ? tourChips({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> }, role, { members: answer.cards.community?.members ?? null })
-        : [];
+    // The last step offers no chips any more (DESIGN-home-default-fable.md §2.3: Home already holds the default list); the
+    // bar's chip row is removed with Welcome's body in slice D2.
+    const chips: string[] = [];
     const tourEnd = useCallback(async (kind: 'done' | 'skipped') => {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
@@ -1098,7 +1098,7 @@ export default function HomeScreen() {
         setTourOver(true);
         setTourProgress(null);
         const ans = storedRef.current?.answer;
-        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: currentPins(ans) }), { reread: true });
+        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current), { reread: true });
         if (kind === 'done') {
             setHint(false);
             void markSeenOnce(whose, 'hint');

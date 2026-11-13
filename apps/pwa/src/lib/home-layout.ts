@@ -20,7 +20,7 @@
 
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
-    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
+    homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, resetHomeLayout, starterCards, t, word,
     newInstanceId, readChatSettings,
     knockStillAnswerable, reorderIds,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
@@ -344,17 +344,11 @@ export function moveCardTo(
 }
 
 /**
- * Reset to defaults: the newcomer's list (§1.3). A schedule's dismissal (the `safety` card) is kept, and so is a card of
- * a type this build doesn't know, at the end: Reset is this app's defaults, not a licence to throw away what it can't see.
- * The columns chosen are kept too (W0): columns are no card.
+ * Reset to defaults (core `resetHomeLayout`, DESIGN-home-default-fable.md §3): the default list less Welcome, then the
+ * cards the member made (saved searches, chats, Your tools, tool cards, and a newer app's types) in their order. A
+ * schedule's dismissal (the `safety` card) and the columns chosen (W0) are kept: neither is a card.
  */
-export function resetLayout(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {
-    const unknown = listOf(layout).filter(c => !homeCardType(c.type));
-    // The starter set, never Getting started: a Home reset after the tour would otherwise be empty.
-    const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
-    const view = layout?.view ? { view: layout.view } : {};
-    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: iso(editAt(layout, now)), ...view };
-}
+export const resetLayout = (layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 => resetHomeLayout(layout, editAt(layout, now));
 
 /** The `safety` card was put away: when, on the account too. */
 export function dismissSafety(layout: HomeLayoutV2 | null, now: number): HomeLayoutV2 {

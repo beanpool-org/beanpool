@@ -25,7 +25,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
+    type SkyToday, featureModeFor, isNearKm, readTourRecord, resetHomeLayout, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatHundredths, isHundredths, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine, freePriceWords,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
@@ -600,17 +600,11 @@ export function moveCardTo(
 }
 
 /**
- * Reset to defaults: the starter set (§1.3; DESIGN-getting-started-fable.md §1: Getting started is a newcomer's, never a
- * reset's — a Home reset after the tour would otherwise be empty). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
- * A card of a type this build doesn't know (a newer app's) is kept too, at the end: Reset is this app's defaults, not a
- * licence to throw away what it can't see. So are the columns chosen on the web (W0): the phone carries them, never reads them.
+ * Reset to defaults (core `resetHomeLayout`, DESIGN-home-default-fable.md §3): the default list less Welcome, then the
+ * cards the member made (saved searches, chats, Your tools, tool cards, and a newer app's types) in their order. A
+ * schedule's dismissal (the `safety` card) and the columns chosen on the web (W0) are kept: neither is a card.
  */
-export function resetLayout(layout: HomeLayout | null, now: number): HomeLayout {
-    const unknown = listOf(layout).filter(c => !homeCardType(c.type));
-    const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
-    const view = layout?.view ? { view: layout.view } : {};
-    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: at(now), ...view };
-}
+export const resetLayout = (layout: HomeLayout | null, now: number): HomeLayout => resetHomeLayout(layout, now);
 
 /** The `safety` card was put away: when, on the account too (§3.1 "dismissal in home.layout"). */
 export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayout {
@@ -1105,12 +1099,10 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             default: return isToolHomeCard(type) ? !!answer.me : c[id] !== undefined;
         }
     };
-    // No saved layout: Getting started until the tour ends, then the starter set (a Done whose write is still out).
+    // No saved layout: the default list, Welcome on top, until the tour ends, then the same less Welcome (a Done whose
+    // write is still out). Nothing folds behind Welcome: the cards are there from the first second (DESIGN-home-default §2.2).
     const base = shownLayout(answer, layout, ctx);
-    const out = cardOrder(base, pinned).filter(shows);
-    // A Home never saved folds its cards behind Getting started while it is up (§1): Skip or Done brings them.
-    if (!base?.updatedAt && out.some(c => c.type === 'start')) return out.filter(c => c.type === 'start' || FIXED.has(c.type) || pinned.includes(c.id));
-    return out;
+    return cardOrder(base, pinned).filter(shows);
 }
 
 /**

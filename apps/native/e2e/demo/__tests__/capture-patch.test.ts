@@ -96,7 +96,7 @@ describe('capture.mjs patchTree', () => {
         expect(src.match(/demoBarStyle\(theme/g)).toHaveLength(1);
     });
 
-    it("says the version a 1.4.0 node expects in the copy's app.json, and no older than the node's own floor", () => {
+    it("says the version a 1.4.1 node expects in the copy's app.json, and no older than the node's own floor", () => {
         patchTree(tree, { ios: false });
         const copy = JSON.parse(read('app.json'));
         expect(copy.expo.version).toBe(DEMO_APP_VERSION);

@@ -12,7 +12,7 @@
  *   3. no request to a store it names: every fetch this process makes goes through a recorder that refuses any host
  *      but this machine, so a store asked is a store counted
  *   4. the start: one line naming the versions it gives and that those stores are not asked
- *   5. over HTTPS: with android=1.4.0 a 1.3.4 Android app is refused a gated read and a write, 426 app_too_old, while its
+ *   5. over HTTPS: with android=1.4.1 a 1.3.4 Android app is refused a gated read and a write, 426 app_too_old, while its
  *      way out (the push token's DELETE) still answers; without it the same request is answered (today's behaviour);
  *      health's appVersions and appFloors show the versions given, blocking true or false accordingly
  *   6. it reaches a node and its operator: docker-compose.yml passes it, .env.example lists it empty, and the operator
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     const storesAnswered = v.checkedAt;
     assert(v.android === '1.3.4' && v.ios === '1.3.4', `none: the stores' own versions, as today (${JSON.stringify(v)})`);
     assert(getPlatformFloorDetail('android').blocking === false && getPlatformFloorDetail('android').held === true,
-        `none: the floor 1.4.0 is held for Google Play's 1.3.4, stopping nobody (${detail('android')})`);
+        `none: the floor 1.4.1 is held for Google Play's 1.3.4, stopping nobody (${detail('android')})`);
     assert(floorRefusing('android', '1.3.4') === null, 'none: a 1.3.4 Android app is refused nothing');
 
     setEnv({ APP_STORE_VERSIONS: '' });
@@ -145,48 +145,50 @@ async function main(): Promise<void> {
     assert(v.android === '1.3.4' && v.ios === '1.3.4' && getPlatformFloorDetail('android').blocking === false,
         `set but empty: the same as unset (${JSON.stringify(v)})`);
 
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0,ios=1.4.0' });
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1,ios=1.4.1' });
     v = getAppStoreVersions();
-    assert(v.android === '1.4.0' && v.ios === '1.4.0', `both: the versions given, in place of the stores' (${JSON.stringify(v)})`);
+    assert(v.android === '1.4.1' && v.ios === '1.4.1', `both: the versions given, in place of the stores' (${JSON.stringify(v)})`);
     for (const p of ['android', 'ios'] as const) {
         const d = getPlatformFloorDetail(p);
-        assert(d.store === '1.4.0' && d.enforced === '1.4.0' && d.held === false && d.blocking === true,
-            `both: ${p}'s floor 1.4.0 is enforced and blocks (${detail(p)})`);
+        assert(d.store === '1.4.1' && d.enforced === '1.4.1' && d.held === false && d.blocking === true,
+            `both: ${p}'s floor 1.4.1 is enforced and blocks (${detail(p)})`);
     }
-    assert(floorRefusing('android', '1.3.4') === '1.4.0' && floorRefusing('ios', '1.3.4') === '1.4.0',
-        'both: a 1.3.4 app on either is refused below 1.4.0');
-    assert(floorRefusing('android', '1.4.0') === null, 'both: an app at the floor is refused nothing');
+    assert(floorRefusing('android', '1.3.4') === '1.4.1' && floorRefusing('ios', '1.3.4') === '1.4.1',
+        'both: a 1.3.4 app on either is refused below 1.4.1');
+    assert(floorRefusing('android', '1.4.1') === null, 'both: an app at the floor is refused nothing');
+    assert(floorRefusing('android', '1.4.0') === '1.4.1' && floorRefusing('ios', '1.4.0') === '1.4.1',
+        'both: a 1.4.0 app, at the floor before this one, is refused below 1.4.1 on either');
     assert(typeof storesAnswered === 'string' && v.checkedAt === storesAnswered,
         `checkedAt stays the stores' own, when one last answered, not moved by the setting (${v.checkedAt} vs ${storesAnswered})`);
     __resetAppStoreVersionsForTest();
     v = getAppStoreVersions();
-    assert(v.android === '1.4.0' && v.ios === '1.4.0' && v.checkedAt === null,
+    assert(v.android === '1.4.1' && v.ios === '1.4.1' && v.checkedAt === null,
         `on a node whose stores never answered: the versions given, and checkedAt still null (${JSON.stringify(v)})`);
     storesHave134();
 
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0' });
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1' });
     v = getAppStoreVersions();
-    assert(v.android === '1.4.0' && v.ios === '1.3.4', `one (android): android's given, iOS the App Store's own (${JSON.stringify(v)})`);
+    assert(v.android === '1.4.1' && v.ios === '1.3.4', `one (android): android's given, iOS the App Store's own (${JSON.stringify(v)})`);
     assert(getPlatformFloorDetail('android').blocking === true && getPlatformFloorDetail('ios').blocking === false
         && getPlatformFloorDetail('ios').held === true,
         `one: Android blocks, iOS is held for its store as today (${detail('android')}; ${detail('ios')})`);
-    assert(floorRefusing('android', '1.3.4') === '1.4.0' && floorRefusing('ios', '1.3.4') === null,
+    assert(floorRefusing('android', '1.3.4') === '1.4.1' && floorRefusing('ios', '1.3.4') === null,
         'one: a 1.3.4 Android app is refused, a 1.3.4 iPhone app is not');
 
-    setEnv({ APP_STORE_VERSIONS: ' Android = v1.4.0 , ios=1.4 ,' });
+    setEnv({ APP_STORE_VERSIONS: ' Android = v1.4.1 , ios=1.5 ,' });
     v = getAppStoreVersions();
-    assert(v.android === '1.4.0' && v.ios === '1.4', `spaces, a capital, a leading v, a two-part version and a trailing comma read as a store's would (${JSON.stringify(v)})`);
-    assert(getPlatformFloorDetail('ios').blocking === true, `ios=1.4 meets the floor 1.4.0 (${detail('ios')})`);
+    assert(v.android === '1.4.1' && v.ios === '1.5', `spaces, a capital, a leading v, a two-part version and a trailing comma read as a store's would (${JSON.stringify(v)})`);
+    assert(getPlatformFloorDetail('ios').blocking === true, `ios=1.5 meets the floor 1.4.1 (${detail('ios')})`);
 
     // What it can't read stops nobody on the platforms it could mean, and asks no store for them (3).
     const unreadable: Array<{ value: string; android: string | null; ios: string | null; says: string; why: string }> = [
         { value: 'android=banana', android: null, ios: '1.3.4', says: '"android=banana" is not a version', why: 'a version that isn\'t one' },
         { value: 'android=', android: null, ios: '1.3.4', says: '"android=" is not a version', why: 'no version' },
-        { value: 'android=1.4.0,android=1.4.1', android: null, ios: '1.3.4', says: 'android is named twice', why: 'a platform named twice' },
-        { value: 'android=1.4.0,ios=nope', android: '1.4.0', ios: null, says: '"ios=nope" is not a version', why: 'one good, one not' },
-        { value: '1.4.0', android: null, ios: null, says: '"1.4.0" names neither android nor ios', why: 'no platform' },
-        { value: 'android:1.4.0', android: null, ios: null, says: '"android:1.4.0" names neither', why: 'the wrong separator' },
-        { value: 'web=1.4.0,android=1.4.0', android: null, ios: null, says: '"web=1.4.0" names neither', why: 'a platform that isn\'t one, beside a good one' },
+        { value: 'android=1.4.1,android=1.4.2', android: null, ios: '1.3.4', says: 'android is named twice', why: 'a platform named twice' },
+        { value: 'android=1.4.1,ios=nope', android: '1.4.1', ios: null, says: '"ios=nope" is not a version', why: 'one good, one not' },
+        { value: '1.4.1', android: null, ios: null, says: '"1.4.1" names neither android nor ios', why: 'no platform' },
+        { value: 'android:1.4.1', android: null, ios: null, says: '"android:1.4.1" names neither', why: 'the wrong separator' },
+        { value: 'web=1.4.1,android=1.4.1', android: null, ios: null, says: '"web=1.4.1" names neither', why: 'a platform that isn\'t one, beside a good one' },
     ];
     for (const u of unreadable) {
         storesHave134();
@@ -210,7 +212,7 @@ async function main(): Promise<void> {
     setEnv({ APP_STORE_VERSIONS: 'android=banana' });
     getAppStoreVersions();
     const changedBefore = settingWarnings().length;
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0' });
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1' });
     getAppStoreVersions();
     setEnv({ APP_STORE_VERSIONS: 'android=pear' });
     getAppStoreVersions();
@@ -221,20 +223,27 @@ async function main(): Promise<void> {
     storesHave134();
     setEnv({ APP_STORE_VERSIONS: 'android=1.3.9' });
     let d = getPlatformFloorDetail('android');
-    assert(d.floor === '1.4.0' && d.store === '1.3.9' && d.held === true && d.enforced === null && d.blocking === false,
+    assert(d.floor === '1.4.1' && d.store === '1.3.9' && d.held === true && d.enforced === null && d.blocking === false,
         `a version below the floor holds the floor, as a store behind it does (${detail('android')})`);
-    assert(warnings.some(w => w.includes('android floor 1.4.0 is held') && w.includes('has 1.3.9 (as APP_STORE_VERSIONS says)')),
+    assert(warnings.some(w => w.includes('android floor 1.4.1 is held') && w.includes('has 1.3.9 (as APP_STORE_VERSIONS says)')),
         'and the log says it is held, by the version the setting gives');
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0', MIN_APP_VERSION: '1.5.0' });
+    // The value a test community gave for the 1.4.0 release, still in its .env: below this floor, so it holds it on both.
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0,ios=1.4.0' });
+    for (const p of ['android', 'ios'] as const) {
+        d = getPlatformFloorDetail(p);
+        assert(d.floor === '1.4.1' && d.store === '1.4.0' && d.held === true && d.blocking === false && floorRefusing(p, '1.3.4') === null,
+            `android=1.4.0,ios=1.4.0, left from the last release: ${p}'s floor 1.4.1 is held, stopping nobody (${detail(p)})`);
+    }
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1', MIN_APP_VERSION: '1.5.0' });
     d = getPlatformFloorDetail('android');
-    assert(d.floor === '1.5.0' && d.held === true && d.blocking === false && floorRefusing('android', '1.4.0') === null,
-        `MIN_APP_VERSION=1.5.0 stands above the 1.4.0 given: held, never lowered to it (${detail('android')})`);
+    assert(d.floor === '1.5.0' && d.held === true && d.blocking === false && floorRefusing('android', '1.4.1') === null,
+        `MIN_APP_VERSION=1.5.0 stands above the 1.4.1 given: held, never lowered to it (${detail('android')})`);
     setEnv({ MIN_APP_VERSION: '1.2.0' });
     d = getPlatformFloorDetail('android');
-    assert(d.floor === '1.4.0', `a MIN_APP_VERSION below the built-in floor is ignored as without it (${d.floor})`);
+    assert(d.floor === '1.4.1', `a MIN_APP_VERSION below the built-in floor is ignored as without it (${d.floor})`);
     setEnv({ MIN_APP_VERSION: undefined, MIN_APP_VERSION_FROM: new Date(Date.now() + 7 * DAY_MS).toISOString().slice(0, 10) });
     d = getPlatformFloorDetail('android');
-    assert(d.enforced === '1.4.0' && d.blocking === false && floorRefusing('android', '1.3.4') === null,
+    assert(d.enforced === '1.4.1' && d.blocking === false && floorRefusing('android', '1.3.4') === null,
         `a grace date still ahead: enforced, not yet blocking, nothing refused (${detail('android')})`);
     setEnv({ MIN_APP_VERSION_FROM: 'soon' });
     d = getPlatformFloorDetail('android');
@@ -245,11 +254,11 @@ async function main(): Promise<void> {
     console.log('\n--- 3. no request to a store it names ---');
     const checks: Array<{ value: string | undefined; asked: string; why: string }> = [
         { value: undefined, asked: [APPLE, PLAY].sort().join(','), why: 'unset: both stores, as today' },
-        { value: 'android=1.4.0', asked: APPLE, why: 'android named: the App Store only' },
-        { value: 'ios=1.4.0', asked: PLAY, why: 'ios named: Google Play only' },
-        { value: 'android=1.4.0,ios=1.4.0', asked: '', why: 'both named: neither' },
+        { value: 'android=1.4.1', asked: APPLE, why: 'android named: the App Store only' },
+        { value: 'ios=1.4.1', asked: PLAY, why: 'ios named: Google Play only' },
+        { value: 'android=1.4.1,ios=1.4.1', asked: '', why: 'both named: neither' },
         { value: 'android=banana', asked: APPLE, why: 'android named but unreadable: Google Play still not asked' },
-        { value: '1.4.0', asked: '', why: 'unreadable for both: neither' },
+        { value: '1.4.1', asked: '', why: 'unreadable for both: neither' },
     ];
     for (const c of checks) {
         storesHave134();
@@ -257,12 +266,12 @@ async function main(): Promise<void> {
         const at = outside.length;
         const result = await checkAppStoreVersions();
         assert(askedSince(at) === c.asked, `${c.why} (asked: ${askedSince(at) || 'none'})`);
-        if (c.value === 'android=1.4.0') {
-            assert(result.android === '1.4.0' && result.ios === '1.3.4',
+        if (c.value === 'android=1.4.1') {
+            assert(result.android === '1.4.1' && result.ios === '1.3.4',
                 `  the check answers the version given, and keeps the App Store's last answer when it is refused (${JSON.stringify(result)})`);
         }
     }
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0', DISABLE_APP_STORE_CHECK: 'true' });
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1', DISABLE_APP_STORE_CHECK: 'true' });
     storesHave134();
     const offAt = outside.length;
     await checkAppStoreVersions();
@@ -273,7 +282,7 @@ async function main(): Promise<void> {
     // ── 4. the start ─────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 4. the start ---');
     __resetAppStoreVersionsForTest();
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0,ios=1.4.1' });
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1,ios=1.4.2' });
     const startAt = warnings.length;
     // The boot's own call, with its timers caught rather than armed, so no later check runs inside this suite.
     const realTimeout = globalThis.setTimeout, realInterval = globalThis.setInterval;
@@ -289,7 +298,7 @@ async function main(): Promise<void> {
     const startLines = warnings.slice(startAt).filter(w => w.includes('APP_STORE_VERSIONS'));
     assert(startLines.length === 1, `the start says it in one line (${startLines.length}: ${startLines.join(' | ') || 'nothing'})`);
     const line = startLines[0] ?? '';
-    assert(line.includes('android=1.4.0') && line.includes('ios=1.4.1'), 'naming each version given');
+    assert(line.includes('android=1.4.1') && line.includes('ios=1.4.2'), 'naming each version given');
     assert(line.includes('does not ask') && line.includes('Google Play') && line.includes('the App Store'), 'and that those stores are not asked');
     assert(line.includes('test community only'), 'and that it is for a test community only');
     assert(armed.length === 2, `the boot still arms its two timers; each check asks only a store the setting doesn't name (${armed.join(', ')} ms)`);
@@ -322,28 +331,31 @@ async function main(): Promise<void> {
     let r = await call('GET', balancePath, ann, app('1.3.4', 'android'));
     assert(r.status === 200 && r.text === plain.text, `without it, her 1.3.4 Android app's balance read is answered, as today (got ${r.status} ${r.text})`);
 
-    // With android=1.4.0: the block, on Android only.
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0' });
+    // With android=1.4.1: the block, on Android only.
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1' });
     h = await health();
-    assert(h.appVersions?.android === '1.4.0' && h.appVersions?.ios === '1.3.4',
-        `android=1.4.0: health serves android 1.4.0, ios the App Store's 1.3.4 (${JSON.stringify(h.appVersions)})`);
-    assert(JSON.stringify(h.appFloors?.android) === '{"min":"1.4.0","blocking":true}' && JSON.stringify(h.appFloors?.ios) === '{"min":null,"blocking":false}',
+    assert(h.appVersions?.android === '1.4.1' && h.appVersions?.ios === '1.3.4',
+        `android=1.4.1: health serves android 1.4.1, ios the App Store's 1.3.4 (${JSON.stringify(h.appVersions)})`);
+    assert(JSON.stringify(h.appFloors?.android) === '{"min":"1.4.1","blocking":true}' && JSON.stringify(h.appFloors?.ios) === '{"min":null,"blocking":false}',
         `appFloors: Android enforced and blocking, iOS not (${JSON.stringify(h.appFloors)})`);
     r = await call('GET', balancePath, ann, app('1.3.4', 'android'));
-    assert(r.status === 426 && r.body?.code === 'app_too_old' && r.body?.minAppVersion === '1.4.0' && !r.text.includes('balance'),
-        `her 1.3.4 Android app's balance read: 426 app_too_old with the floor 1.4.0 (got ${r.status} ${r.text})`);
+    assert(r.status === 426 && r.body?.code === 'app_too_old' && r.body?.minAppVersion === '1.4.1' && !r.text.includes('balance'),
+        `her 1.3.4 Android app's balance read: 426 app_too_old with the floor 1.4.1 (got ${r.status} ${r.text})`);
     r = await call('POST', '/api/ledger/transfer', null, app('1.3.4', 'android'), {});
     assert(r.status === 426 && r.body?.code === 'app_too_old', `and a write from it: 426 app_too_old (got ${r.status})`);
     r = await call('GET', balancePath, ann, app('1.4.0', 'android'));
-    assert(r.status === 200 && r.text === plain.text, `an Android app at 1.4.0 is answered (got ${r.status})`);
+    assert(r.status === 426 && r.body?.code === 'app_too_old' && r.body?.minAppVersion === '1.4.1' && !r.text.includes('balance'),
+        `an Android app at 1.4.0, the floor before this one: 426 app_too_old with the floor 1.4.1 (got ${r.status} ${r.text})`);
+    r = await call('GET', balancePath, ann, app('1.4.1', 'android'));
+    assert(r.status === 200 && r.text === plain.text, `an Android app at 1.4.1 is answered (got ${r.status})`);
     r = await call('GET', balancePath, ann, app('1.3.4', 'ios'));
     assert(r.status === 200 && r.text === plain.text, `a 1.3.4 iPhone app is answered: iOS is not named (got ${r.status})`);
     r = await call('GET', '/api/community/health', ann, app('1.3.4', 'android'));
-    assert(r.status === 200 && r.body?.minAppVersion === '1.4.0', `her health ping, a public read, is answered with the floor (got ${r.status} ${r.body?.minAppVersion})`);
+    assert(r.status === 200 && r.body?.minAppVersion === '1.4.1', `her health ping, a public read, is answered with the floor (got ${r.status} ${r.body?.minAppVersion})`);
     // The way out: "Update required"'s Leave this community drops the phone's push token (floorLetsThrough).
     const TOKEN = 'ExponentPushToken[ann-given]';
-    r = await call('POST', '/api/push-tokens', ann, app('1.4.0', 'android'), { publicKey: ann.pub, token: TOKEN, platform: 'android', registeredAt: 1000 });
-    assert(r.status === 200 && registered(TOKEN), `her phone registers a push token from 1.4.0 (got ${r.status} ${r.text})`);
+    r = await call('POST', '/api/push-tokens', ann, app('1.4.1', 'android'), { publicKey: ann.pub, token: TOKEN, platform: 'android', registeredAt: 1000 });
+    assert(r.status === 200 && registered(TOKEN), `her phone registers a push token from 1.4.1 (got ${r.status} ${r.text})`);
     r = await call('POST', '/api/push-tokens', ann, app('1.3.4', 'android'), { publicKey: ann.pub, token: 'ExponentPushToken[ann-new]', platform: 'android' });
     assert(r.status === 426, `a registration from 1.3.4 is no way out: 426 (got ${r.status})`);
     r = await call('DELETE', '/api/push-tokens', ann, app('1.3.4', 'android'), { publicKey: ann.pub, token: TOKEN });
@@ -353,15 +365,15 @@ async function main(): Promise<void> {
     // The manager's route reads the same detail.
     const managerView = await call('GET', '/api/local/admin/app-versions', null, ownerSessionHeaders());
     const ma = managerView.body?.platforms?.android;
-    assert(managerView.status === 200 && ma?.store === '1.4.0' && ma?.enforced === '1.4.0' && ma?.blocking === true,
-        `the manager's route shows Android's store as 1.4.0, enforced and blocking (got ${managerView.status} ${JSON.stringify(ma)})`);
+    assert(managerView.status === 200 && ma?.store === '1.4.1' && ma?.enforced === '1.4.1' && ma?.blocking === true,
+        `the manager's route shows Android's store as 1.4.1, enforced and blocking (got ${managerView.status} ${JSON.stringify(ma)})`);
 
     // Both.
-    setEnv({ APP_STORE_VERSIONS: 'android=1.4.0,ios=1.4.0' });
+    setEnv({ APP_STORE_VERSIONS: 'android=1.4.1,ios=1.4.1' });
     h = await health();
-    assert(h.appVersions?.android === '1.4.0' && h.appVersions?.ios === '1.4.0'
-        && JSON.stringify(h.appFloors) === '{"android":{"min":"1.4.0","blocking":true},"ios":{"min":"1.4.0","blocking":true}}',
-        `both: health serves both 1.4.0, both blocking (${JSON.stringify(h.appVersions)} ${JSON.stringify(h.appFloors)})`);
+    assert(h.appVersions?.android === '1.4.1' && h.appVersions?.ios === '1.4.1'
+        && JSON.stringify(h.appFloors) === '{"android":{"min":"1.4.1","blocking":true},"ios":{"min":"1.4.1","blocking":true}}',
+        `both: health serves both 1.4.1, both blocking (${JSON.stringify(h.appVersions)} ${JSON.stringify(h.appFloors)})`);
     r = await call('GET', balancePath, ann, app('1.3.4', 'ios'));
     assert(r.status === 426 && r.body?.code === 'app_too_old', `both: a 1.3.4 iPhone app is refused too (got ${r.status})`);
 

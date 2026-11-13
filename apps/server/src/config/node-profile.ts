@@ -405,12 +405,18 @@ export interface NodeFeatures {
     bills?: true;
     /** Present, and true, only once this build takes up an Offer priced for each one (DESIGN-per-item-price-fable.md §6;
      *  engine/per-item.ts): the create and edit forms offer the unit Each only where it is (@beanpool/core perItemOffered).
-     *  Absent until every slice (P1 deals, P2 cards, P3 the take-up box, P4 the forms) is merged: PER_ITEM_BUILT. */
+     *  Present on every node from 1.4.1 (PER_ITEM_BUILT); absent on an older one, so a phone's forms offer Each only there. */
     perItem?: true;
 }
 
-/** Every per-item slice is merged (DESIGN-per-item-price-fable.md §8): the last of them sets this, and the forms offer Each. */
-const PER_ITEM_BUILT = false;
+/**
+ * On from node 1.4.1: the forms offer Each (DESIGN-per-item-price-fable.md §6, §8). It was false while the slices went in
+ * (P1 deals, P2 cards, P3 the take-up box, P4 the forms), and stayed false until both stores carried phone 1.4.1 (Marty,
+ * decided.md 12 Nov, per-item Q6): a phone build from before the slices draws an Each listing as a bare price and asks
+ * for hours, and its take-up is refused (design §6). The same release raises the app floor to 1.4.1
+ * (app-store-versions.ts DEFAULT_MIN_APP_VERSION), so such a phone is told "Update required" instead.
+ */
+const PER_ITEM_BUILT = true;
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
 const OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
@@ -674,7 +680,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
         ...(s.knowledge ? { knowledge: true as const } : {}),
         ...(s.bills ? { bills: true as const } : {}),
-        // A capability of the build, as pins are: off on every node until the per-item slices are all in.
+        // A capability of the build, as pins are: on every node from 1.4.1.
         ...(PER_ITEM_BUILT ? { perItem: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
